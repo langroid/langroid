@@ -1,19 +1,19 @@
-#-----------------------------------------------------#
+# -----------------------------------------------------#
 #                   Library imports                   #
-#-----------------------------------------------------#
+# -----------------------------------------------------#
 from pathlib import Path
 import mkdocs_gen_files
 
-#-----------------------------------------------------#
+# -----------------------------------------------------#
 #                    Configuration                    #
-#-----------------------------------------------------#
+# -----------------------------------------------------#
 src_dir = "llmagent"
-repo_root="https://github.com/godelian-xyz/llmagent/tree/main/"
+repo_root = "https://github.com/godelian-xyz/llmagent/tree/main/"
 nav = mkdocs_gen_files.Nav()
 
-#-----------------------------------------------------#
+# -----------------------------------------------------#
 #                       Runner                        #
-#-----------------------------------------------------#
+# -----------------------------------------------------#
 """ Generate code reference pages and navigation
 
     Based on the recipe of mkdocstrings:
@@ -52,4 +52,3 @@ for path in sorted(Path(src_dir).rglob("*.py")):
 
 with mkdocs_gen_files.open("reference/SUMMARY.md", "w") as nav_file:
     nav_file.writelines(nav.build_literate_nav())
-
