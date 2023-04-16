@@ -28,14 +28,19 @@ def find_urls(
     try:
         response = requests.get(url)
         response.raise_for_status()
-    except (requests.exceptions.HTTPError, requests.exceptions.RequestException):
+    except (
+        requests.exceptions.HTTPError,
+        requests.exceptions.RequestException,
+    ):
         print(f"Failed to fetch '{url}'")
         return visited
 
     soup = BeautifulSoup(response.content, "html.parser")
     links = soup.find_all("a", href=True)
 
-    urls = [urljoin(url, link["href"]) for link in links]  # Construct full URLs
+    urls = [
+        urljoin(url, link["href"]) for link in links
+    ]  # Construct full URLs
 
     if depth < max_depth:
         for link_url in urls:
