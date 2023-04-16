@@ -10,6 +10,17 @@ def find_urls(
     depth=0,
     max_depth=2,
 ):
+    """
+    Recursively find all URLs on a given page.
+    Args:
+        url:
+        visited:
+        depth:
+        max_depth:
+
+    Returns:
+
+    """
     if visited is None:
         visited = set()
     visited.add(url)
@@ -17,7 +28,8 @@ def find_urls(
     try:
         response = requests.get(url)
         response.raise_for_status()
-    except (requests.exceptions.HTTPError, requests.exceptions.RequestException):
+    except (requests.exceptions.HTTPError,
+            requests.exceptions.RequestException):
         print(f"Failed to fetch '{url}'")
         return visited
 
