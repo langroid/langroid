@@ -26,8 +26,7 @@ from langchain.chains import (
 from langchain.chains.qa_with_sources import load_qa_with_sources_chain
 from langchain.chains import LLMChain
 from langchain.chains.summarize import load_summarize_chain
-from langchain.chains.conversational_retrieval.prompts import \
-    CONDENSE_QUESTION_PROMPT
+from langchain.chains.conversational_retrieval.prompts import CONDENSE_QUESTION_PROMPT
 
 import hydra
 from omegaconf import DictConfig
