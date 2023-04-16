@@ -130,9 +130,7 @@ def main(config: DictConfig) -> None:
             print("Source document content:")
             print(source_doc0.page_content)
             print(f"Source document URL: {source_doc0.metadata['source']}")
-        elif (query.startswith("sumar") or query.startswith("?")) and len(
-            response
-        ) == 0:
+        elif query.startswith(("summar", "?")) and len(response) == 0:
             # CAUTION: SUMMARIZATION is very expensive: the entire
             # document is sent to the API --
             # this will easily shoot up the number of tokens sent
