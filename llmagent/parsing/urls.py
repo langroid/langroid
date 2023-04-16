@@ -28,8 +28,7 @@ def find_urls(
     try:
         response = requests.get(url)
         response.raise_for_status()
-    except (requests.exceptions.HTTPError,
-            requests.exceptions.RequestException):
+    except (requests.exceptions.HTTPError, requests.exceptions.RequestException):
         print(f"Failed to fetch '{url}'")
         return visited
 
