@@ -1,0 +1,14 @@
+settings:
+  chunk_size: 1000
+  chunk_overlap: 0
+  chain_type: stuff
+  debug: False
+  urls:
+    - https://www.cmu.edu/sfs/tuition/undergraduate/index.html
+    - https://www.cmu.edu/sfs/financial-aid/undergraduate/index.html
+    - https://www.cmu.edu/sfs/financial-aid/types/index.html
+    - https://www.cmu.edu/sfs/financial-aid/your-award/index.html
+    - https://www.cmu.edu/sfs/billing/invoice/index.html
+
+
+
