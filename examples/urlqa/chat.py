@@ -13,27 +13,30 @@
 # (7) make web-ui for this
 
 
-import fire
 from langchain.document_loaders import UnstructuredURLLoader
-from langchain.document_loaders import SeleniumURLLoader
-
 from langchain.embeddings.openai import OpenAIEmbeddings
 from langchain.vectorstores import FAISS
 from langchain.text_splitter import CharacterTextSplitter
 from langchain.llms import OpenAI
-from langchain.chains import RetrievalQA, ConversationalRetrievalChain
+from langchain.chains import (
+    ConversationalRetrievalChain,
+    #    RetrievalQA,
+)
+
 from langchain.chains.qa_with_sources import load_qa_with_sources_chain
 from langchain.chains import LLMChain
 from langchain.chains.summarize import load_summarize_chain
-from langchain.chains.question_answering import load_qa_chain
-from langchain.chains.conversational_retrieval.prompts import CONDENSE_QUESTION_PROMPT
+from langchain.chains.conversational_retrieval.prompts import \
+    CONDENSE_QUESTION_PROMPT
 
 import hydra
 from omegaconf import DictConfig
 
 URLS = [
-    "https://www.understandingwar.org/backgrounder/russian-offensive-campaign-assessment-february-8-2023",
-    "https://www.understandingwar.org/backgrounder/russian-offensive-campaign-assessment-february-9-2023",
+    "https://www.understandingwar.org/backgrounder/russian-offensive"
+    "-campaign-assessment-february-8-2023",
+    "https://www.understandingwar.org/backgrounder/russian-offensive-campaign"
+    "-assessment-february-9-2023",
 ]
 
 

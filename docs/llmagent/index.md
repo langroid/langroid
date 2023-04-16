@@ -1,4 +1,4 @@
 # LangMagic API Reference
 
-::: llmagent.langchain.web_scraper
+::: llmagent.parsing.urls.find_urls
 
