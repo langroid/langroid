@@ -29,6 +29,7 @@ flake8 = "^6.0.0"
 mypy = "^1.2.0"
 bs4 = "^0.0.1"
 autopep8 = "^2.0.2"
+python-dotenv = "^1.0.0"
 
 
 

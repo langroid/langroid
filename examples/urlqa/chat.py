@@ -12,7 +12,7 @@
 # (6) streaming response (i.e. word by word output)
 # (7) make web-ui for this
 
-
+from llmagent.parsing.urls import get_urls_from_user
 from langchain.document_loaders import UnstructuredURLLoader
 from langchain.embeddings.openai import OpenAIEmbeddings
 from langchain.vectorstores import FAISS
@@ -42,25 +42,6 @@ URLS = [
 ]
 
 
-def get_urls_from_user():
-    # Create an empty set to store the URLs.
-    url_set = set()
-
-    # Use a while loop to continuously ask the user for URLs.
-    while True:
-        # Prompt the user for input.
-        url = input("Enter a URL (type 'done' or hit return to finish): ")
-
-        # Check if the user wants to exit the loop.
-        if url.lower() == "done" or url == "":
-            break
-
-        # Add the URL to the set.
-        url_set.add(url)
-
-    return url_set
-
-
 def get_chat_history(inputs) -> str:
     res = []
     for human, ai in inputs:
@@ -88,7 +69,7 @@ def main(config: DictConfig) -> None:
     embeddings = OpenAIEmbeddings()
     vectorstore = FAISS.from_documents(texts, embeddings)
 
-    # qa = RetrievalQA.from_chain_type(llm=OpenAI(),
+    # qa = RetrievalQA.from_chain_type(language_models=OpenAI(),
     #                                  chain_type=config.chain_type,
     #                                  retriever=vectorstore.as_retriever())
     #
