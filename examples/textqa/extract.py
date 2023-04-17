@@ -14,12 +14,12 @@ def get_verbatim_extract(
     passages, this function uses the LLM itself to first generate a prompt for
     extracting verbatim text from a passage. The prompt is templatized to
     include the provided question.
-    This has 2 advantages:
-        (a) we don't hard-code lengthy prompts, and only
-    state our INTENTION here, and
-        (b) this opens up the possibility that the
-    prompt could be TAILORED to the question and passage, this could
-    improve the quality of the answer.
+    This has a few advantages:
+    (a) we don't hard-code lengthy prompts, and only state our INTENTION here,
+    (b) this opens up the possibility that the prompt could be TAILORED to
+    the question and passage, this could improve the quality of the answer,
+    (c) we don't have to come up with the few-shot demos -- the LLM can do it!
+
 
     If the delay or cost of the extra "prompt-generation" step is a concern,
     we could always use a cache mechanism to simply retrieve an older
@@ -34,9 +34,9 @@ def get_verbatim_extract(
 
     # Initial question for invoking LLM.generate (to get the templatized prompt)
     initial_question = f"""
-    You are a language model. I need a prompt template that includes 
+    You are a language model. I a prompt template that includes 
     placeholders for a question '{{question}}' and a passage '{{passage}}'. 
-    The template should be designed to ask the model to extract verbatim any 
+    The template should be designed so that you can extract verbatim any 
     parts of the passage that are relevant to the question. Please generate 
     the prompt template with {num_shots} few-shot demonstrations. The 
     few-shot demos should come first, each demo should contain 
