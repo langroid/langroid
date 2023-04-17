@@ -35,7 +35,7 @@ Copy the `.env-template` file to `.env` and insert your OpenAI API key.
 
 ### Run some examples
 
-1."Chat" with a set of URLs
+1. "Chat" with a set of URLs
 
 This is just a very simple script, for myself to understand the flow, to see 
 what issues and difficulties I run into, and to inspire ideas. This uses 
