@@ -34,7 +34,7 @@ def get_verbatim_extract(
 
     # Initial question for invoking LLM.generate (to get the templatized prompt)
     initial_question = f"""
-    You are a language model. I a prompt template that includes 
+    You are a language model. I need a prompt template that includes 
     placeholders for a question '{{question}}' and a passage '{{passage}}'. 
     The template should be designed so that you can extract verbatim any 
     parts of the passage that are relevant to the question. Please generate 
