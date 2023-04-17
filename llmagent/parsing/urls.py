@@ -4,6 +4,25 @@ from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 
 
+def get_urls_from_user():
+    # Create an empty set to store the URLs.
+    url_set = set()
+
+    # Use a while loop to continuously ask the user for URLs.
+    while True:
+        # Prompt the user for input.
+        url = input("Enter a URL (type 'done' or hit return to finish): ")
+
+        # Check if the user wants to exit the loop.
+        if url.lower() == "done" or url == "":
+            break
+
+        # Add the URL to the set.
+        url_set.add(url)
+
+    return url_set
+
+
 def find_urls(
     url="https://en.wikipedia.org/wiki/Generative_pre-trained_transformer",
     visited=None,
