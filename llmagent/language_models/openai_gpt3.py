@@ -3,6 +3,10 @@ from llmagent.language_models.base import LanguageModel
 
 # Define a class for OpenAI GPT-3 that extends the base class
 class OpenAIGPT3(LanguageModel):
+    """
+    Class for OpenAI GPT-3.
+    """
+
     def __init__(self, api_key: str):
         self.api_key = api_key
 

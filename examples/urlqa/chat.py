@@ -29,7 +29,8 @@ from langchain.chains.summarize import load_summarize_chain
 from langchain.chains.conversational_retrieval.prompts import (
     CONDENSE_QUESTION_PROMPT,
 )
-
+from dotenv import load_dotenv
+import os
 
 import hydra
 from omegaconf import DictConfig
@@ -59,7 +60,9 @@ def main(config: DictConfig) -> None:
     loader = UnstructuredURLLoader(urls=urls)
     # loader = SeleniumURLLoader(urls=urls)
     documents = loader.load()
-    llm = OpenAI(temperature=0)
+    load_dotenv()
+    api_key = os.getenv("OPENAI_API_KEY")
+    llm = OpenAI(temperature=0, openai_api_key=api_key)
 
     text_splitter = CharacterTextSplitter(
         chunk_size=config.chunk_size, chunk_overlap=config.chunk_overlap
