@@ -30,6 +30,8 @@ mypy = "^1.2.0"
 bs4 = "^0.0.1"
 autopep8 = "^2.0.2"
 python-dotenv = "^1.0.0"
+wget = "^3.2"
+pymilvus = "^2.2.7"
 
 
 
