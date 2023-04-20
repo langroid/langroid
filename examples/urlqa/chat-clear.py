@@ -1,24 +1,20 @@
-# query URL(s) using langchain utilities
+# A version of chat.py that makes all steps clear, with minimal reliance
+# on langchain.
 
-# TODO:
-# see chat_vector_db.ipynb in langchain for reference.
-# (1) expose the prompt and allow customizing it, so we can explicitly see
-#   how context, chat-history, and query are combined
-# (2) what happens when query history becomes long?
-# (3) look into summarization of previous responses or context, to ensure we
-#    fit into token limit (context-length)
-# (4) monitor our api cost
-# (5) response should show "source_documents" in addition to "answer"
-# (6) streaming response (i.e. word by word output)
-# (7) make web-ui for this
+# todo:
+# [] doc splitting, collecting splits
+# [] split -> embedding (via LLM embedding API)
+# [] embedding -> vectorstore insertion
+# [] query -> vectorstore retrieval of k nearest neighbors
+# [] k nearest neighbor vectors -> documents (splits) retrieval
+# [] compose query + splits -> LLM query
 
 from llmagent.parsing.urls import get_urls_from_user
+from llama_index import GPTFaissIndex
 from langchain.document_loaders import UnstructuredURLLoader
 from langchain.embeddings.openai import OpenAIEmbeddings
 from langchain.vectorstores import FAISS
-from transformers import GPT2TokenizerFast
-
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.text_splitter import CharacterTextSplitter
 from langchain.llms import OpenAI
 from langchain.chains import (
     ConversationalRetrievalChain,
@@ -59,24 +55,10 @@ def main(config: DictConfig) -> None:
     api_key = os.getenv("OPENAI_API_KEY")
     llm = OpenAI(temperature=0, openai_api_key=api_key)
 
-
-    tokenizer = GPT2TokenizerFast.from_pretrained("gpt2")
-    # text_splitter = RecursiveCharacterTextSplitter(
-    #     separators=["\n\n", "\n", " ", ""],
-    #     chunk_size=config.chunk_size,
-    #     chunk_overlap=config.chunk_overlap,
-    #     length_function=len,
-    # )
-
-    text_splitter = RecursiveCharacterTextSplitter.from_huggingface_tokenizer(
-        tokenizer,
-        chunk_size=config.chunk_size,
-        chunk_overlap=config.chunk_overlap,
-        separators=["\n\n", "\n", " ", ""],
+    text_splitter = CharacterTextSplitter(
+        chunk_size=config.chunk_size, chunk_overlap=config.chunk_overlap
     )
-
     texts = text_splitter.split_documents(documents)
-
     embeddings = OpenAIEmbeddings()
     vectorstore = FAISS.from_documents(texts, embeddings)
 
@@ -86,6 +68,33 @@ def main(config: DictConfig) -> None:
     #
     # qa.run()
 
+    """
+    question = "What is total cost for undergrads at Rutgers"?
+    chat_history = [] # later could be [(human,ai)] pairs
+    chat_history_str = ""
+
+    Here are the steps
+    
+    docs = self.retriever.get_relevant_documents(question, k=4) # get relevant splits
+    # only take first m docs so we are within limits
+    docs = reduce_tokens_below_limit(docs)
+    
+    chat_history = chat_history_str(chat_history)
+    if chat_history:
+        # use LLM to rephrase question as stand-alone, given chat_history
+        question = LLM.convert_standalone(chat_history, question)
+        chat_history = ""
+    prompts = [ {"context": d.page_content,
+                 "question": question} for d in docs
+                ]
+    # parallel API calls to get verbatim extracts from each doc, relevant to question
+    doc_extracts = LLM.parallel_generate(prompts)
+    
+    # compose final answer using LLM
+    ans = LLM.compose(doc_extracts, question)
+
+    """
+    
     question_generator = LLMChain(
         llm=llm,
         prompt=CONDENSE_QUESTION_PROMPT,
