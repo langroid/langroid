@@ -16,7 +16,8 @@ from llmagent.parsing.urls import get_urls_from_user
 from langchain.document_loaders import UnstructuredURLLoader
 from langchain.embeddings.openai import OpenAIEmbeddings
 from langchain.vectorstores import FAISS
-from transformers import GPT2TokenizerFast
+from transformers import GPT2TokenizerFast, AutoTokenizer
+from transformers.utils import logging
 
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from langchain.llms import OpenAI
@@ -33,7 +34,8 @@ from langchain.chains.conversational_retrieval.prompts import (
 )
 from dotenv import load_dotenv
 import os
-
+from rich import print
+import warnings
 import hydra
 from omegaconf import DictConfig
 
@@ -44,11 +46,11 @@ URLS = [
     "-assessment-february-9-2023",
 ]
 
-
+logging.set_verbosity(logging.ERROR)
 @hydra.main(version_base=None, config_path="../configs", config_name="params")
 def main(config: DictConfig) -> None:
     config = config.settings
-    print(config)
+    #print(config)
     debug = config.debug
     default_urls = config.get("urls", URLS)
     urls = get_urls_from_user() or default_urls
@@ -59,24 +61,31 @@ def main(config: DictConfig) -> None:
     api_key = os.getenv("OPENAI_API_KEY")
     llm = OpenAI(temperature=0, openai_api_key=api_key)
 
+    tokenizer_model = "gpt2"
+    tokenizer = AutoTokenizer.from_pretrained(tokenizer_model)
+    max_len = tokenizer.model_max_length
 
-    tokenizer = GPT2TokenizerFast.from_pretrained("gpt2")
-    # text_splitter = RecursiveCharacterTextSplitter(
-    #     separators=["\n\n", "\n", " ", ""],
-    #     chunk_size=config.chunk_size,
-    #     chunk_overlap=config.chunk_overlap,
-    #     length_function=len,
-    # )
-
-    text_splitter = RecursiveCharacterTextSplitter.from_huggingface_tokenizer(
-        tokenizer,
+    #tokenizer = GPT2TokenizerFast.from_pretrained("gpt2")
+    text_splitter = RecursiveCharacterTextSplitter(
+        separators=["\n\n", "\n", " ", ""],
         chunk_size=config.chunk_size,
         chunk_overlap=config.chunk_overlap,
-        separators=["\n\n", "\n", " ", ""],
+        length_function=lambda text: len(
+            tokenizer(text, truncation=True, max_length=max_len)["input_ids"]
+        ),
     )
+
+
+    # text_splitter = RecursiveCharacterTextSplitter.from_huggingface_tokenizer(
+    #     tokenizer,
+    #     chunk_size=config.chunk_size,
+    #     chunk_overlap=config.chunk_overlap,
+    #     separators=["\n\n", "\n", " ", ""],
+    # )
 
     texts = text_splitter.split_documents(documents)
 
+    os.environ["TOKENIZERS_PARALLELISM"] = "false"
     embeddings = OpenAIEmbeddings()
     vectorstore = FAISS.from_documents(texts, embeddings)
 
@@ -104,17 +113,26 @@ def main(config: DictConfig) -> None:
         return_source_documents=True,
     )
 
-    print("Welcome to the URL chatbot [x or q to quit, ? for explanation]")
+    print("[green] Welcome to the URL chatbot "
+          "[x or q to quit, ? for explanation]")
     chat_history = []
-    print(f"I have processed the following {len(urls)} URLs:")
+    print(f"[green] I have processed the following {len(urls)} URLs:")
     print("\n".join(urls))
 
     response = dict()
 
+    warnings.filterwarnings(
+        'ignore',
+        message='Token indices sequence length.*',
+        #category=UserWarning,
+        module='transformers'
+    )
+
     while True:
-        query = input("Query: ")
+        print("[blue]Query: ", end="")
+        query = input("")
         if query in ["exit", "quit", "q", "x", "bye"]:
-            print("Bye, hope this was useful!")
+            print("[green] Bye, hope this was useful!")
             break
         if query == "?" and len(response) > 0:
             # show evidence for last response
@@ -126,7 +144,7 @@ def main(config: DictConfig) -> None:
             # CAUTION: SUMMARIZATION is very expensive: the entire
             # document is sent to the API --
             # this will easily shoot up the number of tokens sent
-            print("The summary of these urls is:")
+            print("[green] The summary of these urls is:")
             chain = load_summarize_chain(
                 llm,
                 chain_type="map_reduce",
@@ -134,11 +152,11 @@ def main(config: DictConfig) -> None:
             )
             chain.verbose = debug
             summary = chain.run(documents)
-            print(summary)
+            print("[green]" + summary)
         else:
             response = qa(dict(question=query, chat_history=chat_history))
             chat_history.append((query, response["answer"]))
-            print(response["answer"])
+            print("[green]" + response["answer"])
 
 
 if __name__ == "__main__":
