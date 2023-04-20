@@ -2,7 +2,7 @@ import fire
 import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
-
+from rich import print
 
 def get_urls_from_user():
     # Create an empty set to store the URLs.
@@ -11,7 +11,11 @@ def get_urls_from_user():
     # Use a while loop to continuously ask the user for URLs.
     while True:
         # Prompt the user for input.
-        url = input("Enter a URL (type 'done' or hit return to finish): ")
+        print(
+            "[blue]Enter a URL (type 'done' or hit return to finish): ",
+            end=""
+        )
+        url = input("")
 
         # Check if the user wants to exit the loop.
         if url.lower() == "done" or url == "":

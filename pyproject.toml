@@ -32,6 +32,7 @@ autopep8 = "^2.0.2"
 python-dotenv = "^1.0.0"
 wget = "^3.2"
 pymilvus = "^2.2.7"
+rich = "^13.3.4"
 
 
 
