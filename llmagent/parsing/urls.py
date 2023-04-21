@@ -4,6 +4,7 @@ from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 from rich import print
 
+
 def get_urls_from_user():
     # Create an empty set to store the URLs.
     url_set = set()
@@ -11,10 +12,7 @@ def get_urls_from_user():
     # Use a while loop to continuously ask the user for URLs.
     while True:
         # Prompt the user for input.
-        print(
-            "[blue]Enter a URL (type 'done' or hit return to finish): ",
-            end=""
-        )
+        print("[blue]Enter a URL (type 'done' or hit return to finish): ", end="")
         url = input("")
 
         # Check if the user wants to exit the loop.
@@ -61,9 +59,7 @@ def find_urls(
     soup = BeautifulSoup(response.content, "html.parser")
     links = soup.find_all("a", href=True)
 
-    urls = [
-        urljoin(url, link["href"]) for link in links
-    ]  # Construct full URLs
+    urls = [urljoin(url, link["href"]) for link in links]  # Construct full URLs
 
     if depth < max_depth:
         for link_url in urls:
