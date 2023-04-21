@@ -10,3 +10,6 @@ class LanguageModel(ABC):
     @abstractmethod
     def generate(self, prompt: str, max_tokens: int) -> str:
         pass
+
+    def __call__(self, prompt: str, max_tokens: int) -> str:
+        return self.generate(prompt, max_tokens)
