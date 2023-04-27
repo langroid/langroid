@@ -3,7 +3,7 @@ import requests
 from bs4 import BeautifulSoup
 from urllib.parse import urljoin
 from rich import print
-
+import trafilatura as tfl
 
 def get_urls_from_user():
     # Create an empty set to store the URLs.

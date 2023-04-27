@@ -1,120 +1,91 @@
-# query URL(s) using langchain utilities
-
 # TODO:
-# see chat_vector_db.ipynb in langchain for reference.
-# (1) expose the prompt and allow customizing it, so we can explicitly see
-#   how context, chat-history, and query are combined
-# (2) what happens when query history becomes long?
-# (3) look into summarization of previous responses or context, to ensure we
+# - what happens when query history becomes long?
+# - look into summarization of previous responses or context, to ensure we
 #    fit into token limit (context-length)
-# (4) monitor our api cost
-# (5) response should show "source_documents" in addition to "answer"
-# (6) streaming response (i.e. word by word output)
-# (7) make web-ui for this
+# - monitor our api cost
+# - streaming response (i.e. word by word output)
+# - make web-ui for this
 
 from llmagent.parsing.urls import get_urls_from_user
-from langchain.document_loaders import UnstructuredURLLoader
-from langchain.embeddings.openai import OpenAIEmbeddings
-from langchain.vectorstores import FAISS
-from transformers import GPT2TokenizerFast, AutoTokenizer
+from llmagent.prompts.transforms import (
+    get_verbatim_extracts,
+    get_summary_answer,
+    followup_to_standalone
+)
+from examples.urlqa.config import URLQAConfig
+from llmagent.mytypes import Document
+from langchain.schema import Document as LDocument
+from llmagent.parsing.url_loader import URLLoader
+import tiktoken
+from halo import Halo
+from llmagent.language_models.openai_gpt3 import OpenAIGPT
+from llmagent.vector_store.chromadb import ChromaDB
+from llmagent.vector_store.qdrantdb import Qdrant
+from llmagent.vector_store.faissdb import FAISSDB
+from llmagent.utils import configuration
 from transformers.utils import logging
-
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-from langchain.llms import OpenAI
-from langchain.chains import (
-    ConversationalRetrievalChain,
-    #    RetrievalQA,
-)
 
-from langchain.chains.qa_with_sources import load_qa_with_sources_chain
-from langchain.chains import LLMChain
-from langchain.chains.summarize import load_summarize_chain
-from langchain.chains.conversational_retrieval.prompts import (
-    CONDENSE_QUESTION_PROMPT,
-)
 from dotenv import load_dotenv
 import os
 from rich import print
 import warnings
 import hydra
+from hydra.core.config_store import ConfigStore
+
 from omegaconf import DictConfig
 
-URLS = [
-    "https://www.understandingwar.org/backgrounder/russian-offensive"
-    "-campaign-assessment-february-8-2023",
-    "https://www.understandingwar.org/backgrounder/russian-offensive-campaign"
-    "-assessment-february-9-2023",
-]
+logging.set_verbosity(logging.ERROR) # for transformers logging
 
-logging.set_verbosity(logging.ERROR)
-@hydra.main(version_base=None, config_path="../configs", config_name="params")
-def main(config: DictConfig) -> None:
-    config = config.settings
-    #print(config)
-    debug = config.debug
-    default_urls = config.get("urls", URLS)
+
+# Register the config with Hydra's ConfigStore
+cs = ConfigStore.instance()
+cs.store(name=URLQAConfig.__name__, node=URLQAConfig)
+
+@hydra.main(version_base=None, config_name=URLQAConfig.__name__)
+def main(config: URLQAConfig) -> None:
+    configuration.update_global_settings(config, keys=["debug"])
+
+    default_urls = config.urls
+
+    print("[blue]Welcome to the URL chatbot " "[x or q to quit, ? for evidence]")
+    print("[blue]Enter some URLs below (or leave empty for default URLs)")
     urls = get_urls_from_user() or default_urls
-    loader = UnstructuredURLLoader(urls=urls)
+    loader = URLLoader(urls=urls)
     # loader = SeleniumURLLoader(urls=urls)
     documents = loader.load()
     load_dotenv()
     api_key = os.getenv("OPENAI_API_KEY")
-    llm = OpenAI(temperature=0, openai_api_key=api_key)
+    llm = OpenAIGPT(api_key=api_key)
+    encoding = tiktoken.encoding_for_model(llm.completion_model)
 
-    tokenizer_model = "gpt2"
-    tokenizer = AutoTokenizer.from_pretrained(tokenizer_model)
-    max_len = tokenizer.model_max_length
+    # tokenizer_model = "gpt2"
+    # tokenizer = AutoTokenizer.from_pretrained(tokenizer_model)
+    # max_len = tokenizer.model_max_length
 
-    #tokenizer = GPT2TokenizerFast.from_pretrained("gpt2")
     text_splitter = RecursiveCharacterTextSplitter(
         separators=["\n\n", "\n", " ", ""],
         chunk_size=config.chunk_size,
         chunk_overlap=config.chunk_overlap,
-        length_function=lambda text: len(
-            tokenizer(text, truncation=True, max_length=max_len)["input_ids"]
-        ),
+        length_function=lambda text: len(encoding.encode(text)),
     )
+    lc_docs = [LDocument(page_content = d.content, metadata = d.metadata)
+               for d in documents]
+    texts = text_splitter.split_documents(lc_docs)
 
-
-    # text_splitter = RecursiveCharacterTextSplitter.from_huggingface_tokenizer(
-    #     tokenizer,
-    #     chunk_size=config.chunk_size,
-    #     chunk_overlap=config.chunk_overlap,
-    #     separators=["\n\n", "\n", " ", ""],
-    # )
-
-    texts = text_splitter.split_documents(documents)
+    # convert texts to list of Documents
+    texts = [Document(content=text.page_content, metadata=text.metadata)
+             for text in texts]
 
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
-    embeddings = OpenAIEmbeddings()
-    vectorstore = FAISS.from_documents(texts, embeddings)
+    #embedding_models = OpenAIEmbeddings()
 
-    # qa = RetrievalQA.from_chain_type(language_models=OpenAI(),
-    #                                  chain_type=config.chain_type,
-    #                                  retriever=vectorstore.as_retriever())
-    #
-    # qa.run()
-
-    question_generator = LLMChain(
-        llm=llm,
-        prompt=CONDENSE_QUESTION_PROMPT,
-        verbose=debug,
+    vecstore_class = dict(faiss = FAISSDB, qdrant = Qdrant, chroma = ChromaDB).get(
+        config.index.type, ChromaDB
     )
-    doc_chain = load_qa_with_sources_chain(
-        llm,
-        chain_type="map_reduce",
-        verbose=debug,
-    )
+    vectorstore = vecstore_class.from_documents("urls", texts)
 
-    qa = ConversationalRetrievalChain(
-        retriever=vectorstore.as_retriever(),
-        question_generator=question_generator,
-        combine_docs_chain=doc_chain,
-        return_source_documents=True,
-    )
 
-    print("[green] Welcome to the URL chatbot "
-          "[x or q to quit, ? for explanation]")
     chat_history = []
     print(f"[green] I have processed the following {len(urls)} URLs:")
     print("\n".join(urls))
@@ -122,41 +93,60 @@ def main(config: DictConfig) -> None:
     response = dict()
 
     warnings.filterwarnings(
-        'ignore',
-        message='Token indices sequence length.*',
-        #category=UserWarning,
-        module='transformers'
+        "ignore",
+        message="Token indices sequence length.*",
+        # category=UserWarning,
+        module="transformers",
     )
 
     while True:
-        print("[blue]Query: ", end="")
+        print("\n[blue]Query: ", end="")
         query = input("")
         if query in ["exit", "quit", "q", "x", "bye"]:
             print("[green] Bye, hope this was useful!")
             break
         if query == "?" and len(response) > 0:
             # show evidence for last response
-            source_doc0 = response["source_documents"][0]
-            print("Source document content:")
-            print(source_doc0.page_content)
-            print(f"Source document URL: {source_doc0.metadata['source']}")
+            source = response.metadata["source"]
+            if len(source) > 0:
+                print("[orange]" + source)
+            else:
+                print("[orange]No source found")
         elif query.startswith(("summar", "?")) and len(response) == 0:
             # CAUTION: SUMMARIZATION is very expensive: the entire
             # document is sent to the API --
             # this will easily shoot up the number of tokens sent
-            print("[green] The summary of these urls is:")
-            chain = load_summarize_chain(
-                llm,
-                chain_type="map_reduce",
-                verbose=debug,
-            )
-            chain.verbose = debug
-            summary = chain.run(documents)
-            print("[green]" + summary)
+            print("[green] Summaries not ready, coming soon!")
         else:
-            response = qa(dict(question=query, chat_history=chat_history))
-            chat_history.append((query, response["answer"]))
-            print("[green]" + response["answer"])
+            if len(chat_history) > 0:
+                with Halo(text="Converting to stand-alone query...",  spinner="dots"):
+                    query = followup_to_standalone(llm, chat_history, query)
+                print(f"[orange1]New query: {query}")
+
+            with Halo(text="Searching VecDB for relevant doc passages...",
+                      spinner="dots"):
+                docs_and_scores = vectorstore.similar_texts_with_scores(
+                    query, k=4,
+                    debug=config.debug
+                )
+            passages: List[Document] = [
+                Document(content=d.content, metadata=d.metadata)
+                for (d, s) in docs_and_scores
+            ]
+            max_score = max([s[1] for s in docs_and_scores])
+            with Halo(text="LLM Extracting verbatim passages...",  spinner="dots"):
+                verbatim_texts: List[Document] = get_verbatim_extracts(
+                    query, passages, llm
+                )
+            with Halo(text="LLM Generating final answer...",
+                      spinner="dots"):
+                response = get_summary_answer(query, verbatim_texts, llm, k=4)
+            print("[green]relevance = ", max_score)
+            print("[green]" + response.content)
+            source = response.metadata["source"]
+            if len(source) > 0:
+                print("[orange]" + source)
+            chat_history.append((query, response.content))
 
 
 if __name__ == "__main__":
