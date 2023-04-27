@@ -32,16 +32,14 @@ from rich import print
 import warnings
 import hydra
 from hydra.core.config_store import ConfigStore
-
 from omegaconf import DictConfig
 
 logging.set_verbosity(logging.ERROR) # for transformers logging
 
 
 # Register the config with Hydra's ConfigStore
-config_dict = URLQAConfig().dict()
 cs = ConfigStore.instance()
-cs.store(name=URLQAConfig.__name__, node=config_dict)
+cs.store(name=URLQAConfig.__name__, node=URLQAConfig)
 
 @hydra.main(version_base=None, config_name=URLQAConfig.__name__)
 def main(config: URLQAConfig) -> None:

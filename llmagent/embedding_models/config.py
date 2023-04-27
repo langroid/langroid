@@ -1,6 +1,7 @@
-from pydantic import BaseModel
+from dataclasses import dataclass, field
 
-class EmbeddingModelsConfig(BaseModel):
+@dataclass
+class EmbeddingModelsConfig:
     model_type: str = "openai"
 
 

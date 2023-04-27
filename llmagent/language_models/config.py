@@ -1,6 +1,7 @@
-from pydantic import BaseModel
+from dataclasses import dataclass
 
-class LLMConfig(BaseModel):
+@dataclass
+class LLMConfig:
     type: str = "openai"
 
 
