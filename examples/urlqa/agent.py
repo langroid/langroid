@@ -14,7 +14,9 @@ class DocChatAgent(Agent):
         docs = self.parser.split(docs)
         self.vecdb.add_documents(docs)
 
-    def answer_from_docs(self, query:str):
+    def respond(self, query:str):
+        if query == "":
+            return 
         if len(self.chat_history) > 0:
             with Halo(text="Converting to stand-alone query...",  spinner="dots"):
                 query = self.llm.followup_to_standalone(llm, self.chat_history, query)

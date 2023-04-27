@@ -30,3 +30,7 @@ class Agent(ABC):
 
     def get_history(self):
         return self.chat_history
+
+    @abstractmethod
+    def respond(self, query:str):
+        pass
