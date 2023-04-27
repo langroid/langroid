@@ -39,12 +39,12 @@ Currently only OpenAI models are supported. Others will be added later.
 
 1. "Chat" with a set of URLs. 
 ```bash
-python3 examples/urlqa/chatter.py
+python3 examples/urlqa/chat.py
 ```
 
 To see more output, run with `debug=True`:
 ```bash
-python3 examples/urlqa/chatter.py debug=True
+python3 examples/urlqa/chat.py debug=True
 ```
 
 Ask a question you want answered based on the URLs content. The default 
