@@ -1,11 +1,13 @@
 from llmagent.language_models.base import LanguageModel
+from llmagent.prompts.dialog import collate_chat_history
+from llmagent.mytypes import Document
 import aiohttp
 import asyncio
-from typing import List
+from typing import List, Tuple
 
 
-def make_extraction_prompt(question: str, passage: str) -> str:
-    prompt = """
+
+EXTRACTION_PROMPT = """
     Given the content and question below, extract text verbatim from the content that
     is relevant to answering the question (if such text exists). Do not make up an
     answer.
@@ -30,9 +32,7 @@ def make_extraction_prompt(question: str, passage: str) -> str:
     Content: {content}
     Question: {question}
     Relevant text, if any:
-    """
-
-    return prompt.strip()
+    """.strip()
 
 
 def get_single_verbatim_extract(
@@ -71,7 +71,7 @@ def get_single_verbatim_extract(
     templatized_prompt = LLM.generate(prompt=prompt, max_tokens=1024)
 
     # Substitute provided question and passage into the templatized prompt
-    final_prompt = templatized_prompt.format(question=question, passage=passage)
+    final_prompt = templatized_prompt.format(question=question, passage=passage.content)
 
     # Generate the final verbatim extract based on the final prompt
     final_extract = LLM.generate(prompt=final_prompt, max_tokens=1024)
@@ -81,14 +81,14 @@ def get_single_verbatim_extract(
 
 async def get_verbatim_extract_async(
     question: str,
-    passage: str,
+    passage: Document,
     LLM: LanguageModel,
 ) -> str:
     """
     Asynchronously, get verbatim extract from passage that is relevant to a question.
     """
     async with aiohttp.ClientSession():
-        templatized_prompt = make_extraction_prompt(question, passage)
+        templatized_prompt = EXTRACTION_PROMPT
         final_prompt = templatized_prompt.format(question=question, content=passage)
         final_extract = await LLM.agenerate(prompt=final_prompt, max_tokens=1024)
 
@@ -97,19 +97,22 @@ async def get_verbatim_extract_async(
 
 async def _get_verbatim_extracts(
     question: str,
-    passages: List[str],
+    passages: List[Document],
     LLM: LanguageModel,
 ) -> List[str]:
     async with aiohttp.ClientSession():
         verbatim_extracts = await asyncio.gather(
             *(get_verbatim_extract_async(question, P, LLM) for P in passages)
         )
-    return verbatim_extracts
+    metadatas = [P.metadata for P in passages]
+    # return with metadata so we can use it downstream, e.g. to cite sources
+    return [Document(content=e, metadata=m) for
+            e, m in zip(verbatim_extracts, metadatas)]
 
 
 def get_verbatim_extracts(
     question: str,
-    passages: List[str],
+    passages: List[Document],
     LLM: LanguageModel,
 ) -> List[str]:
     """
@@ -197,71 +200,101 @@ def make_summarizer_demos(k):
 
 
 def get_summary_answer(
-    question: str, passages: List[str], LLM: LanguageModel, k: int = 1
-) -> str:
-    templatized_prompt = """
-    You are tasked with answering a question based on provided 
-    extracts from a long document. You will receive a question followed by a 
-    series of extracts. If the extracts contain information relevant to the 
-    question, use the information to produce an accurate answer. If none of 
-    the extracts contain information relevant to the question, respond with 
-    "I don't know." Below are three examples. 
-
-    Question: What is the capital city of France and what is a famous landmark 
-        located in this city? 
-    Extract: France is a country located in Western Europe. It is known for its rich 
-        history, diverse culture, and world-renowned cuisine. The French language is 
-        spoken by the majority of the population.  
-    Extract: The Eiffel Tower is an iconic landmark located in Paris, France. It was 
-        designed and built by the engineer Gustave Eiffel for the 1889 Exposition 
-        Universelle, a world's fair held to celebrate the 100th anniversary of the 
-        French Revolution. The tower is made of iron and stands at 324 meters tall.    
-    Answer: The capital city of France is Paris, and the Eiffel Tower is a famous 
-        landmark located in this city. 
+    question: str, passages: List[Document], LLM: LanguageModel, k: int = 1
+) -> Document:
+    templatized_prompt ="""
+    Use the provided extracts (with sources)  to answer the question. If there's not 
+    enough information, respond with "I don't know." Justify your answer by citing 
+    your sources, as in these examples:
     
-    Demo 2
-    Question: How does photosynthesis work in plants?
-    Extract: Photosynthesis is the process by which plants convert carbon dioxide and 
-        water into glucose and oxygen using sunlight as an energy source. This process 
-        occurs in specialized structures called chloroplasts, which are found in plant 
-        cells.            
-    Extract: During photosynthesis, chlorophyll molecules in the chloroplasts absorb 
-        sunlight and energize electrons. The excited electrons are used to drive a 
-        series of chemical reactions that ultimately produce glucose and release 
-        oxygen as a byproduct.  
-    Answer: Photosynthesis is the process by which plants convert carbon dioxide and 
-        water into glucose and oxygen using sunlight as an energy source. This process 
-        occurs in chloroplasts, where chlorophyll molecules absorb sunlight and energize 
-        electrons. These excited electrons drive chemical reactions that produce glucose 
-        and release oxygen as a byproduct.    
+    Extract: The tree species in the garden include oak, maple, and birch.
+    Source: https://en.wikipedia.org/wiki/Tree
+    Extract: The oak trees are known for their longevity and strength.
+    Source: https://en.wikipedia.org/wiki/Oak
+    Question: What types of trees are in the garden?
+    Answer: The types of trees in the garden include oak, maple, and birch.
+    SOURCE: https://en.wikipedia.org/wiki/Tree
+    TEXT: The tree species in the garden include oak, maple, and birch.
     
-    Demo 3
-    Question: What are the symptoms of the common cold?
-    Extract: The common cold is a viral infection that affects the upper respiratory 
-        tract. It is caused by various viruses, the most common of which is the 
-        rhinovirus. The infection is usually mild and self-limiting.  
-    Extract: Penguins are flightless birds that inhabit the polar regions of the 
-        Earth. They are known for their distinct black and white plumage and their 
-        unique waddling gait. Penguins are excellent swimmers and divers.   
+    Extract: The experiment involved three groups: control, low dose, and high dose.
+    Source: https://en.wikipedia.org/wiki/Experiment
+    Extract: The high dose group showed significant improvement in symptoms.
+    Source: https://en.wikipedia.org/wiki/Experiment
+    Extract: The control group did not receive any treatment and served as a baseline.
+    Source: https://en.wikipedia.org/wiki/Experiment
+    Question: How many groups were involved which group showed significant improvement?
+    Answer: There were three groups and the high dose group showed significant 
+    improvement in symptoms.
+    SOURCE: https://en.wikipedia.org/wiki/Experiment
+    TEXT: The experiment involved three groups: control, low dose, and high dose.
+    SOURCE: https://en.wikipedia.org/wiki/Experiment
+    TEXT: The high dose group showed significant improvement in symptoms.
+    
+    
+    Extract: The CEO announced several new initiatives during the company meeting.
+    Source: https://en.wikipedia.org/wiki/CEO
+    Extract: The financial performance of the company has been strong this year.
+    Source: https://en.wikipedia.org/wiki/CEO
+    Question: What new initiatives did the CEO announce?
     Answer: I don't know.
     
-    YOUR TURN:
-    
-    Question: {question}
     {extracts}
-    Answer:   
+    {question}
+    Answer:
     """.strip()
+
+
 
     # templatized_prompt = LLM.generate(prompt=prompt, max_tokens=1024)
     # Define an auxiliary function to transform the list of passages into a single string
     def stringify_passages(passages):
-        return "\n".join([f"Extract:{p}" for p in passages])
+        return "\n".join([
+            f"""
+            Extract: {p.content}
+            Source: {p.metadata["source"]}
+            """
+            for p in passages])
 
     passages = stringify_passages(passages)
     # Substitute Q and P into the templatized prompt
-    final_prompt = templatized_prompt.format(question=question, extracts=passages)
+    final_prompt = templatized_prompt.format(
+        question=f"Question:{question}",
+        extracts=passages
+    )
 
     # Generate the final verbatim extract based on the final prompt
-    final_answer = LLM.generate(prompt=final_prompt, max_tokens=1024)
+    final_answer = LLM.generate(prompt=final_prompt, max_tokens=1024).strip()
+    parts = final_answer.split("SOURCE:", maxsplit=1)
+    if len(parts) > 1:
+        content = parts[0].strip()
+        sources = parts[1].strip()
+    else:
+        content = final_answer
+        sources = ""
+    return Document(content=content, metadata={"source": "SOURCE: " + sources})
 
-    return final_answer.strip()
+
+def followup_to_standalone(
+        LLM: LanguageModel,
+        chat_history: List[Tuple[str]],
+        question:str
+) -> str:
+    """
+    Given a chat history and a question, convert it to a standalone question.
+    Args:
+        chat_history: list of tuples of (question, answer)
+        query: follow-up question
+
+    Returns: standalone version of the question
+    """
+    history = collate_chat_history(chat_history)
+
+    prompt = f"""
+    Given the conversationn below, and a follow-up question, rephrase the follow-up 
+    question as a standalone question.
+    
+    Chat history: {history}
+    Follow-up question: {question} 
+    """.strip()
+    standalone = LLM.generate(prompt=prompt, max_tokens=1024).strip()
+    return standalone

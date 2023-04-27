@@ -1,5 +1,7 @@
 from abc import ABC, abstractmethod
+import logging
 
+logging.getLogger("openai").setLevel(logging.ERROR)
 
 # Define an abstract base class for language models
 class LanguageModel(ABC):
