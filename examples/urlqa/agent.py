@@ -6,6 +6,9 @@ from halo import Halo
 from rich import print
 
 class DocChatAgent(Agent):
+    """
+    Agent for chatting with a collection of documents.
+    """
 
     def ingest_docs(self, docs: List[Document]):
         """

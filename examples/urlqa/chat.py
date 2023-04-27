@@ -25,7 +25,8 @@ def main(config: URLQAConfig) -> None:
 
     default_urls = config.urls
 
-    print("[blue]Welcome to the URL chatbot " "[x or q to quit, ? for evidence]")
+    print("[blue]Welcome to the URL chatbot!")
+    print("[cyan]Enter x or q to quit, or ? for evidence")
     print("[blue]Enter some URLs below (or leave empty for default URLs)")
     urls = get_urls_from_user() or default_urls
     loader = URLLoader(urls=urls)
