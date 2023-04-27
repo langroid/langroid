@@ -15,6 +15,8 @@ Fix these badge links later
 
 ### Set up dev env
 
+First install `poetry`, then create virtual env and install dependencies:
+
 ```bash
 # clone the repo
 git clone ...
@@ -30,8 +32,9 @@ poetry install
 
 ```
 Copy the `.env-template` file to `.env` and insert your OpenAI API key.
+Currently only OpenAI models are supported. Others will be added later.
 
-
+```bash
 
 ### Run some examples
 
@@ -47,19 +50,7 @@ URLs are about CMU financial aid. You can try asking:
 
 
 ```bash
-python3 examples/urlqa/chat.py settings.debug=False
-```
-
-2. Extract relevant text from a passage, relevant to a question.
-
-This is not interactive, just look at the code to see how it works on a 
-hard-coded example. This showcases how we can use the LLM itself to generate 
-the templatized prompt, so that we don't bother setting it up.
-
-Probably more informative to step through it via debugger.
-
-```bash
-python3 examples/textqa/extract.py
+python3 examples/urlqa/chat-flat.py debug=False
 ```
 
 
