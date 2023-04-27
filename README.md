@@ -18,16 +18,17 @@ Fix these badge links later
 First install `poetry`, then create virtual env and install dependencies:
 
 ```bash
-# clone the repo
+# clone the repo and cd into repo root
 git clone ...
+cd llmagent
 
-# create a virtual env
+# create a virtual env under project root, .venv directory
 python3 -m venv .venv
 
 # activate the virtual env
 . .venv/bin/activate
 
-# use poetry to install dependencies
+# use poetry to install dependencies (these go into .venv dir)
 poetry install
 ```
 Copy the `.env-template` file to `.env` and insert your OpenAI API key.
