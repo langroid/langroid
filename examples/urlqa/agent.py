@@ -46,7 +46,7 @@ class DocChatAgent(Agent):
 
     def summarize_docs(self):
         """Summarize all docs"""
-        print("[red] Summaries not ready, coming soon!")
+        print("[red] Summarization is very token-costly, sorry!")
 
     def justify_response(self):
         """Show evidence for last response"""
