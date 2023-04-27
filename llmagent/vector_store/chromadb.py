@@ -42,10 +42,7 @@ class ChromaDB(VectorStore):
         )
         return instance
 
-    def add_documents(self,
-                      embeddings=None,
-                      documents:List[Document]=None,
-                      ):
+    def add_documents(self, documents:List[Document]=None):
         contents: List[str]  = [document.content for document in documents]
         metadatas: dict = [document.metadata for document in documents]
         ids = range(len(documents))

@@ -1,83 +1,10 @@
 from llmagent.language_models.base import LanguageModel
 from llmagent.prompts.dialog import collate_chat_history
 from llmagent.mytypes import Document
+from llmagent.prompts.templates import EXTRACTION_PROMPT
 import aiohttp
 import asyncio
 from typing import List, Tuple
-
-
-
-EXTRACTION_PROMPT = """
-    Given the content and question below, extract text verbatim from the content that
-    is relevant to answering the question (if such text exists). Do not make up an
-    answer.
-    
-    Content: The Eiffel Tower is a wrought-iron lattice tower on the Champ de Mars in
-    Paris, France. It is named after Gustave Eiffel, whose company designed and built
-    the tower. It is a recognizable landmark.
-    Question: Where is the Eiffel Tower located?
-    Relevant text, if any: on the Champ de Mars in Paris, France.
-    
-    Content: Apples and oranges are both fruits, but differ in taste and texture.
-    Apples are sweet and crisp, while oranges are citrusy and juicy. Both are
-    nutritious and commonly consumed worldwide.
-    Question: What are the similarities between apples and oranges?
-    Relevant text, if any: both fruits
-    
-    Content: The sun rises in the east and sets in the west. It is a source of light
-    and warmth for the Earth.
-    Question: What is the color of the sun?
-    Relevant text, if any: I don't know.
-    
-    Content: {content}
-    Question: {question}
-    Relevant text, if any:
-    """.strip()
-
-
-def get_single_verbatim_extract(
-    question: str, passage: str, LLM: LanguageModel, num_shots: int = 0
-) -> str:
-    """
-    Extract verbatim text from a passage that is relevant to a question.
-
-    Rather than have a "frozen" prompt that we use for all questions and
-    passages, this function uses the LLM itself to first generate a prompt for
-    extracting verbatim text from a passage. The prompt is templatized to
-    include the provided question.
-    This has a few advantages:
-    (a) we don't hard-code lengthy prompts, and only state our INTENTION here,
-    (b) this opens up the possibility that the prompt could be TAILORED to
-    the question and passage, this could improve the quality of the answer,
-    (c) we don't have to come up with the few-shot demos -- the LLM can do it!
-
-
-    If the delay or cost of the extra "prompt-generation" step is a concern,
-    we could always use a cache mechanism to simply retrieve an older
-    templatized prompt.
-    Args:
-        question: question to be answered
-        passage: text from which to extract relevant verbatim text
-        LLM: language model to use for generating the prompt and extract
-        num_shots: number of few-shot demonstrations to use in prompt
-
-    Returns:
-        verbatim extract from passage that is relevant to question, if any
-    """
-
-    # Initial question for invoking LLM.generate (to get the templatized prompt)
-    # Generate the templatized prompt
-    prompt = make_verbatim_templatized_prompt(num_shots)
-    templatized_prompt = LLM.generate(prompt=prompt, max_tokens=1024)
-
-    # Substitute provided question and passage into the templatized prompt
-    final_prompt = templatized_prompt.format(question=question, passage=passage.content)
-
-    # Generate the final verbatim extract based on the final prompt
-    final_extract = LLM.generate(prompt=final_prompt, max_tokens=1024)
-
-    return final_extract.strip()
-
 
 async def get_verbatim_extract_async(
     question: str,

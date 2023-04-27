@@ -38,6 +38,7 @@ trafilatura = "^1.5.0"
 halo = "^0.0.31"
 qdrant-client = "^1.1.5"
 docker = "^6.0.1"
+typer = "^0.7.0"
 
 
 

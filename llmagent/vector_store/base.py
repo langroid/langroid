@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from llmagent.vector_store.config import VectorStoreConfig
 from llmagent.utils.output.printing import print_long_text
 from llmagent.utils.logging import setup_logger
 from llmagent.utils.configuration import settings
@@ -11,7 +12,23 @@ class VectorStore(ABC):
     def __init__(self, collection_name):
         self.collection_name = collection_name
 
-    @classmethod
+    @staticmethod
+    def create(config: VectorStoreConfig):
+        from llmagent.vector_store.qdrantdb import Qdrant
+        from llmagent.vector_store.faissdb import FAISSDB
+        from llmagent.vector_store.chromadb import ChromaDB
+        vecstore_class = dict(faiss = FAISSDB, qdrant = Qdrant, chroma = ChromaDB).get(
+            config.type, ChromaDB
+        )
+        return vecstore_class(
+            collection_name=config.collection_name,
+            embedding_fn_type=config.embedding_fn_type,
+            host=config.host,
+            port=config.port,
+        )
+
+
+
     @abstractmethod
     def from_documents(cls, collection_name, documents, embeddings=None,
                        metadatas=None, ids=None):
