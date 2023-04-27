@@ -39,8 +39,9 @@ logging.set_verbosity(logging.ERROR) # for transformers logging
 
 
 # Register the config with Hydra's ConfigStore
+config_dict = URLQAConfig().dict()
 cs = ConfigStore.instance()
-cs.store(name=URLQAConfig.__name__, node=URLQAConfig)
+cs.store(name=URLQAConfig.__name__, node=config_dict)
 
 @hydra.main(version_base=None, config_name=URLQAConfig.__name__)
 def main(config: URLQAConfig) -> None:
@@ -52,21 +53,16 @@ def main(config: URLQAConfig) -> None:
     print("[blue]Enter some URLs below (or leave empty for default URLs)")
     urls = get_urls_from_user() or default_urls
     loader = URLLoader(urls=urls)
-    # loader = SeleniumURLLoader(urls=urls)
     documents = loader.load()
     load_dotenv()
     api_key = os.getenv("OPENAI_API_KEY")
     llm = OpenAIGPT(api_key=api_key)
     encoding = tiktoken.encoding_for_model(llm.completion_model)
 
-    # tokenizer_model = "gpt2"
-    # tokenizer = AutoTokenizer.from_pretrained(tokenizer_model)
-    # max_len = tokenizer.model_max_length
-
     text_splitter = RecursiveCharacterTextSplitter(
         separators=["\n\n", "\n", " ", ""],
-        chunk_size=config.chunk_size,
-        chunk_overlap=config.chunk_overlap,
+        chunk_size=config.parsing.chunk_size,
+        chunk_overlap=config.parsing.chunk_overlap,
         length_function=lambda text: len(encoding.encode(text)),
     )
     lc_docs = [LDocument(page_content = d.content, metadata = d.metadata)
@@ -81,7 +77,7 @@ def main(config: URLQAConfig) -> None:
     #embedding_models = OpenAIEmbeddings()
 
     vecstore_class = dict(faiss = FAISSDB, qdrant = Qdrant, chroma = ChromaDB).get(
-        config.index.type, ChromaDB
+        config.vecdb.type, ChromaDB
     )
     vectorstore = vecstore_class.from_documents("urls", texts)
 
