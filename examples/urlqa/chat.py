@@ -18,7 +18,7 @@ from langchain.schema import Document as LDocument
 from llmagent.parsing.url_loader import URLLoader
 import tiktoken
 from halo import Halo
-from llmagent.language_models.openai_gpt3 import OpenAIGPT
+from llmagent.language_models.openai_gpt import OpenAIGPT
 from llmagent.vector_store.chromadb import ChromaDB
 from llmagent.vector_store.qdrantdb import Qdrant
 from llmagent.vector_store.faissdb import FAISSDB
@@ -119,10 +119,7 @@ def main(config: URLQAConfig) -> None:
 
             with Halo(text="Searching VecDB for relevant doc passages...",
                       spinner="dots"):
-                docs_and_scores = vectorstore.similar_texts_with_scores(
-                    query, k=4,
-                    debug=config.debug
-                )
+                docs_and_scores = vectorstore.similar_texts_with_scores(query, k=4)
             passages: List[Document] = [
                 Document(content=d.content, metadata=d.metadata)
                 for (d, s) in docs_and_scores

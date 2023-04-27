@@ -88,7 +88,7 @@ class Qdrant(VectorStore):
         )
 
     def similar_texts_with_scores(
-            self, text: str, k: int = None, where: str = None, debug: bool = False
+            self, text: str, k: int = None, where: str = None,
     ) -> List[Tuple[Document, float]]:
         embedding = self.embedding_fn([text])[0]
         #TODO filter may not work yet

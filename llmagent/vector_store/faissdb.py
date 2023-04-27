@@ -38,10 +38,7 @@ class FAISSDB(VectorStore):
         )
         return instance
 
-    def add_documents(self,
-                      embeddings=None,
-                      documents:List[Document]=None,
-                      ):
+    def add_documents(self, documents:List[Document]=None):
         raise NotImplementedError
 
     def similar_texts_with_scores(self, text:str, k:int=None, where:str=None):
