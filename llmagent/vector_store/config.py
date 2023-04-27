@@ -1,6 +1,7 @@
-from pydantic import BaseModel
+from dataclasses import dataclass
 
-class VectorStoreConfig(BaseModel):
+@dataclass
+class VectorStoreConfig:
     type: str = "qdrant"
     compose_file: str = "llmagent/vector_store/docker-compose-qdrant.yml"
 

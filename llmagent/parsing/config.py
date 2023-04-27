@@ -1,6 +1,7 @@
-from pydantic import BaseModel
+from dataclasses import dataclass
 
-class ParsingConfig(BaseModel):
+@dataclass
+class ParsingConfig:
     chunk_size: int = 500
     chunk_overlap: int = 50
     
