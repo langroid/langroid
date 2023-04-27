@@ -57,7 +57,7 @@ def main(config: URLQAConfig) -> None:
         elif query.startswith(("summar", "?")) and len(response) == 0:
             agent.summarize_docs()
         else:
-            agent.answer_from_docs(query)
+            agent.respond(query)
 
 if __name__ == "__main__":
     main()

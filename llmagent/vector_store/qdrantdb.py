@@ -1,5 +1,3 @@
-import logging
-
 from llmagent.vector_store.base import VectorStore
 from llmagent.mytypes import Document
 from llmagent.utils.configuration import settings
@@ -18,8 +16,6 @@ from chromadb.api.types import EmbeddingFunction
 
 import logging
 logger = logging.getLogger(__name__)
-# from llmagent.utils.logging import setup_logger
-# logger = setup_logger(__name__, logging.NOTSET)
 
 class Qdrant(VectorStore):
     def __init__(
