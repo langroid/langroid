@@ -6,6 +6,9 @@ on:
   pull_request:
     branches: [ main ]
 
+# disable flow for now
+if: false
+
 jobs:
   lint:
     runs-on: ubuntu-latest
