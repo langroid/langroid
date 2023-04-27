@@ -26,6 +26,7 @@ class Qdrant(VectorStore):
             self,
             collection_name: str="qdrant",
             embedding_fn_type:str="openai",
+            storage_path: str = ".qdrant/data",
             host: str = "127.0.0.1",
             port: int = 6333,
     ):
@@ -36,9 +37,10 @@ class Qdrant(VectorStore):
         self.host = host
         self.port = port
         self.client = QdrantClient(
-            host=self.host,
-            port=self.port,
-            prefer_grpc=True,
+            path=storage_path,
+            # host=self.host,
+            # port=self.port,
+            # prefer_grpc=True,
         )
 
         self.client.recreate_collection(
@@ -54,24 +56,6 @@ class Qdrant(VectorStore):
         if settings.debug:
             logger.info(collection_info)
 
-
-    @classmethod
-    def from_documents(
-            cls,
-            collection_name: str,
-            documents: List[Document],
-            embedding_fn_type:str="openai",
-            host: str = "127.0.0.1",
-            port: int = 6333,
-    ):
-        instance = cls(
-            collection_name,
-            embedding_fn_type=embedding_fn_type,
-            host=host,
-            port=port,
-        )
-        instance.add_documents(documents)
-        return instance
 
     def add_documents(self, documents: List[Document]):
         embedding_vecs = self.embedding_fn(

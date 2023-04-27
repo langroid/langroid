@@ -12,6 +12,7 @@ class FAISSDB(VectorStore):
     def __init__(self,
                  collection_name: str,
                  embedding_fn_type:str="openai",
+                 storage_path: str = ".faissdb/data/",
                  embedding_model:str="text-embedding-ada-002",
                  ):
         super().__init__(collection_name)
@@ -25,11 +26,15 @@ class FAISSDB(VectorStore):
     def from_documents(cls,
                        collection_name:str,
                        documents: List[Document],
+                       storage_path: str = ".faissdb/data/",
                        embedding_fn_type:str ="openai",
                        embedding_model:str ="text-embedding-ada-002",
                        embeddings=None,
                        ):
-        instance = cls(collection_name, embedding_fn_type, embedding_model)
+        instance = cls(collection_name=collection_name,
+                       storage_path=storage_path,
+                       embedding_fn_type=embedding_fn_type,
+                       embedding_model=embedding_model)
         lc_docs = [LDocument(page_content=d.content, metadata=d.metadata) for d in
                    documents]
         instance.collection = instance.collection.from_documents(

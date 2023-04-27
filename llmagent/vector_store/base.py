@@ -1,36 +1,33 @@
-from abc import ABC, abstractmethod
+from abc import abstractmethod
+from dataclasses import dataclass
 from llmagent.vector_store.config import VectorStoreConfig
 from llmagent.utils.output.printing import print_long_text
-from llmagent.utils.logging import setup_logger
 from llmagent.utils.configuration import settings
 import logging
 logger = logging.getLogger(__name__)
-#logger = setup_logger(__name__, logging.NOTSET)
 
-
-class VectorStore(ABC):
-    def __init__(self, collection_name):
-        self.collection_name = collection_name
-
-    @staticmethod
-    def create(config: VectorStoreConfig):
+@dataclass
+class VectorStore(VectorStoreConfig):
+    def create(self):
         from llmagent.vector_store.qdrantdb import Qdrant
         from llmagent.vector_store.faissdb import FAISSDB
         from llmagent.vector_store.chromadb import ChromaDB
         vecstore_class = dict(faiss = FAISSDB, qdrant = Qdrant, chroma = ChromaDB).get(
-            config.type, ChromaDB
+            self.type, ChromaDB
         )
+
         return vecstore_class(
-            collection_name=config.collection_name,
-            embedding_fn_type=config.embedding_fn_type,
-            host=config.host,
-            port=config.port,
+            collection_name=self.collection_name,
+            embedding_fn_type=self.embedding_fn_type,
+            host=self.host,
+            port=self.port,
         )
 
 
 
     @abstractmethod
     def from_documents(cls, collection_name, documents, embeddings=None,
+                       storage_path=None,
                        metadatas=None, ids=None):
         pass
 

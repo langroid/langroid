@@ -1,6 +1,8 @@
 from abc import ABC, abstractmethod
 from typing import List, Tuple
 from llmagent.mytypes import Document
+from llmagent.utils.configuration import settings
+from llmagent.utils.output.printing import show_if_debug
 from llmagent.language_models.config import LLMConfig
 from llmagent.prompts.templates import EXTRACTION_PROMPT, SUMMARY_ANSWER_PROMPT
 from llmagent.prompts.dialog import collate_chat_history
@@ -58,7 +60,9 @@ class LanguageModel(ABC):
         Chat history: {history}
         Follow-up question: {question} 
         """.strip()
+        show_if_debug(prompt, "FOLLOWUP->STANDALONE-PROMPT= ")
         standalone = self.generate(prompt=prompt, max_tokens=1024).strip()
+        show_if_debug(prompt, "FOLLOWUP->STANDALONE-RESPONSE= ")
         return standalone
 
     async def get_verbatim_extract_async(self, question: str, passage: Document) -> str:
@@ -69,10 +73,11 @@ class LanguageModel(ABC):
         """
         async with aiohttp.ClientSession():
             templatized_prompt = EXTRACTION_PROMPT
+            show_if_debug(EXTRACTION_PROMPT, "EXTRACT-PROMPT= ")
             final_prompt = templatized_prompt.format(question=question, content=passage)
             final_extract = await self.agenerate(prompt=final_prompt,
                                                     max_tokens=1024)
-
+            show_if_debug(final_extract, "EXTRACT-RESPONSE= ")
         return final_extract.strip()
 
 
@@ -94,7 +99,7 @@ class LanguageModel(ABC):
             self,
             question: str,
             passages: List[Document]
-    ) -> List[str]:
+    ) -> List[Document]:
         """
         From each passage, extract verbatim text that is relevant to a question,
         using concurrent API calls to the LLM.
@@ -105,7 +110,8 @@ class LanguageModel(ABC):
         Returns:
             list of verbatim extracts from passages that are relevant to question
         """
-        return asyncio.run(self._get_verbatim_extracts(question, passages))
+        docs = asyncio.run(self._get_verbatim_extracts(question, passages))
+        return docs
 
     def get_summary_answer(self, question: str, passages: List[Document]) -> Document:
         """
@@ -136,9 +142,10 @@ class LanguageModel(ABC):
             question=f"Question:{question}",
             extracts=passages
         )
-
+        show_if_debug(final_prompt, "SUMMARIZE_PROMPT= ")
         # Generate the final verbatim extract based on the final prompt
         final_answer = self.generate(prompt=final_prompt, max_tokens=1024).strip()
+        show_if_debug(final_answer, "SUMMARIZE_RESPONSE= ")
         parts = final_answer.split("SOURCE:", maxsplit=1)
         if len(parts) > 1:
             content = parts[0].strip()

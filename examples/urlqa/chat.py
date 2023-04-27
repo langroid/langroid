@@ -54,7 +54,7 @@ def main(config: URLQAConfig) -> None:
     documents = loader.load()
     load_dotenv()
     api_key = os.getenv("OPENAI_API_KEY")
-    llm = OpenAIGPT(api_key=api_key)
+    llm = OpenAIGPT()
     encoding = tiktoken.encoding_for_model(llm.completion_model)
 
     text_splitter = RecursiveCharacterTextSplitter(
