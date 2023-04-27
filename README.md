@@ -29,29 +29,30 @@ python3 -m venv .venv
 
 # use poetry to install dependencies
 poetry install
-
 ```
 Copy the `.env-template` file to `.env` and insert your OpenAI API key.
 Currently only OpenAI models are supported. Others will be added later.
 
-```bash
+
 
 ### Run some examples
 
-1. "Chat" with a set of URLs
-
-This is just a very simple script, for myself to understand the flow, to see 
-what issues and difficulties I run into, and to inspire ideas. This uses 
-langchain's `ConversationalRetrievalChain` chain.
-
-"Ask a question" you want answered based on the URLs content. The default 
-URLs are about CMU financial aid. You can try asking:
-> what is total undergrad cost?
-
-
+1. "Chat" with a set of URLs. 
 ```bash
-python3 examples/urlqa/chat-flat.py debug=False
+python3 examples/urlqa/chatter.py
 ```
+
+To see more output, run with `debug=True`:
+```bash
+python3 examples/urlqa/chatter.py debug=True
+```
+
+Ask a question you want answered based on the URLs content. The default 
+URLs are about various articles and discussions on LLM-based agents, 
+compression and intelligence. Try asking:
+> who is Pattie Maes?
+
+
 
 
 

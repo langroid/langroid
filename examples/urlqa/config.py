@@ -19,7 +19,8 @@ class URLQAConfig(AgentConfig):
         default_factory=lambda:
         VectorStoreConfig(
             type="qdrant",
-            compose_file="llmagent/vector_store/docker-compose-qdrant.yml",
+            storage_path=".qdrant/data/",
+            #compose_file="llmagent/vector_store/docker-compose-qdrant.yml",
         ))
     llm: LLMConfig = field(
         default_factory=lambda:

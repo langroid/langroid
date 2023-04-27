@@ -9,13 +9,14 @@ class ChromaDB(VectorStore):
     def __init__(self,
                  collection_name: str,
                  embedding_fn_type:str="openai",
+                 storage_path: str = ".chromadb/data/",
                  ):
         super().__init__(collection_name)
         emb_model = embedding_model(embedding_fn_type)
         self.embedding_fn: EmbeddingFunction = emb_model.embedding_fn()
         self.client = chromadb.Client(chromadb.config.Settings(
             #chroma_db_impl="duckdb+parquet",
-            persist_directory='./urls-data-chroma/'
+            persist_directory=storage_path,
         ))
         self.collection = self.client.get_or_create_collection(
             name=collection_name,
@@ -32,11 +33,17 @@ class ChromaDB(VectorStore):
     def from_documents(cls,
                        collection_name:str,
                        documents: List[Document],
+                       storage_path: str = ".chromadb/data/",
                        embedding_fn_type:str ="openai",
                        embedding_model:str ="text-embedding-ada-002",
                        embeddings=None,
                        ):
-        instance = cls(collection_name, embedding_fn_type, embedding_model)
+        instance = cls(
+            collection_name=collection_name,
+            embedding_fn_type=embedding_fn_type,
+            storage_path=storage_path
+        )
+
         instance.add_documents(
             embeddings=embeddings, documents=documents,
         )
