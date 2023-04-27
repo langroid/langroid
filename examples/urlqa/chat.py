@@ -52,9 +52,9 @@ def main(config: URLQAConfig) -> None:
         if query in ["exit", "quit", "q", "x", "bye"]:
             print("[green] Bye, hope this was useful!")
             break
-        if query == "?" and len(response) > 0:
+        if query == "?" and agent.response is not None:
             agent.justify_response()
-        elif query.startswith(("summar", "?")) and len(response) == 0:
+        elif query.startswith(("summar", "?")) and agent.response is None:
             agent.summarize_docs()
         else:
             agent.respond(query)
