@@ -6,6 +6,7 @@ from llmagent.parsing.parser import Parser
 from pydantic import BaseModel
 from dataclasses import asdict
 from llmagent.mytypes import Document
+from rich import print
 
 class Message(BaseModel):
     role: str
@@ -31,6 +32,6 @@ class Agent(ABC):
     def get_history(self):
         return self.chat_history
 
-    @abstractmethod
     def respond(self, query:str):
-        pass
+        response = self.llm.generate(query, self.config.llm.max_tokens)
+        print("[green]", response)

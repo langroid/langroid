@@ -22,7 +22,7 @@ class DocChatAgent(Agent):
             return 
         if len(self.chat_history) > 0:
             with Halo(text="Converting to stand-alone query...",  spinner="dots"):
-                query = self.llm.followup_to_standalone(llm, self.chat_history, query)
+                query = self.llm.followup_to_standalone(self.chat_history, query)
             print(f"[orange2]New query: {query}")
 
         with Halo(text="Searching VecDB for relevant doc passages...",
