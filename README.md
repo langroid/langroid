@@ -1,19 +1,6 @@
 # llmagent
 
-<!--
-Fix these badge links later
-
-[![Documentation](https://readthedocs.org/projects/project-name/badge/)](https://project-name.readthedocs.io/)
-
-
-
-[![codecov](https://codecov.io/gh/username/repository-name/branch/main/graph/badge.svg)](https://codecov.io/gh/username/repository-name)
-
-[![License](https://img.shields.io/github/license/username/repository-name)](https://github.com/username/repository-name/blob/main/LICENSE)
-
--->
-[![Lint Status](https://github.com/langroid/llmagent/actions/workflows/lint.yml/badge.svg)](https://github.com/langroid/llmagent/actions/workflows/validate.yml)
-
+[![Lint](https://github.com/langroid/llmagent/actions/workflows/validate.yml/badge.svg)](https://github.com/langroid/llmagent/actions/workflows/validate.yml)
 [![Deploy MkDocs to Pages](https://github.com/langroid/llmagent/actions/workflows/mkdocs-deploy.yml/badge.svg)](https://github.com/langroid/llmagent/actions/workflows/mkdocs-deploy.yml)
 
 ### Set up dev env
