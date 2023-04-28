@@ -10,12 +10,13 @@ class DocChatAgent(Agent):
     Agent for chatting with a collection of documents.
     """
 
-    def ingest_docs(self, docs: List[Document]):
+    def ingest_docs(self, docs: List[Document]) -> int:
         """
         Chunk docs into pieces, map each chunk to vec-embedding, store in vec-db
         """
         docs = self.parser.split(docs)
         self.vecdb.add_documents(docs)
+        return len(docs)
 
     def respond(self, query:str):
         if query == "":
