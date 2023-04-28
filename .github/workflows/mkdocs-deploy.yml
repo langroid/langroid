@@ -33,7 +33,7 @@ jobs:
 
 
       - name: Build MkDocs documentation
-        run: mkdocs gh-deploy
+        run: mkdocs gh-deploy --force
 
 
 #      - name: Deploy to GitHub Pages
