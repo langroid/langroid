@@ -10,6 +10,7 @@ from typing import List
 
 @dataclass
 class URLQAConfig(AgentConfig):
+    max_tokens: int = 10000
     # embeddings: EmbeddingModelsConfig = field(
     #     default_factory=lambda:
     #     EmbeddingModelsConfig(

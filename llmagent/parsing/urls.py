@@ -20,7 +20,7 @@ def get_urls_from_user():
             break
 
         # Add the URL to the set.
-        url_set.add(url)
+        url_set.add(url.strip())
 
     return url_set
 
