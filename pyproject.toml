@@ -39,6 +39,7 @@ halo = "^0.0.31"
 qdrant-client = "^1.1.5"
 typer = "^0.7.0"
 docker = "^6.0.1"
+ghp-import = "^2.1.0"
 
 
 
