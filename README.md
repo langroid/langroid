@@ -5,6 +5,9 @@
 
 ### Set up dev env
 
+We use [`poetry`](https://python-poetry.org/docs/#installation) 
+to manage dependencies, and `python 3.11` for development.
+
 First install `poetry`, then create virtual env and install dependencies:
 
 ```bash
@@ -21,7 +24,13 @@ python3 -m venv .venv
 # use poetry to install dependencies (these go into .venv dir)
 poetry install
 ```
-Copy the `.env-template` file to `.env` and insert your OpenAI API key.
+Copy the `.env-template` file to a new file `.env` and 
+insert your OpenAI API key:
+```bash
+cp .env-template .env
+# now edit the .env file, insert your OpenAI API key
+``` 
+
 Currently only OpenAI models are supported. Others will be added later.
 
 
