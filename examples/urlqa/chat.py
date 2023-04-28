@@ -33,11 +33,13 @@ def main(config: URLQAConfig) -> None:
     documents:List[Document] = loader.load()
 
     agent = DocChatAgent(config)
-    agent.ingest_docs(documents)
+    nsplits = agent.ingest_docs(documents)
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
     #embedding_models = OpenAIEmbeddings()
 
-    print(f"[green] I have processed the following {len(urls)} URLs:")
+    print(f"""
+    [green]I have processed the following {len(urls)} URLs into {nsplits} parts:
+    """.strip())
     print("\n".join(urls))
 
     warnings.filterwarnings(
