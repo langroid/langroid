@@ -12,7 +12,7 @@ Fix these badge links later
 [![License](https://img.shields.io/github/license/username/repository-name)](https://github.com/username/repository-name/blob/main/LICENSE)
 
 -->
-[![Lint Status](https://github.com/langroid/llmagent/actions/workflows/lint.yml/badge.svg)](https://github.com/langroid/llmagent/actions/workflows/lint.yml)
+[![Lint Status](https://github.com/langroid/llmagent/actions/workflows/lint.yml/badge.svg)](https://github.com/langroid/llmagent/actions/workflows/validate.yml)
 
 [![Deploy MkDocs to Pages](https://github.com/langroid/llmagent/actions/workflows/mkdocs-deploy.yml/badge.svg)](https://github.com/langroid/llmagent/actions/workflows/mkdocs-deploy.yml)
 
