@@ -23,6 +23,7 @@ class OpenAIGPT(LanguageModel):
         """
         self.chat_model = chat_model
         self.completion_model = completion_model
+        self.max_tokens = 4096
         load_dotenv()
         self.api_key = os.getenv("OPENAI_API_KEY")
 

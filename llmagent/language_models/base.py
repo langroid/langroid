@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 from abc import ABC, abstractmethod
 from typing import List, Tuple
 from llmagent.mytypes import Document
@@ -12,10 +13,12 @@ import asyncio
 
 
 # Define an abstract base class for language models
+@dataclass
 class LanguageModel(ABC):
     """
     Abstract base class for language models.
     """
+    max_tokens: int = None
 
     @staticmethod
     def create(config: LLMConfig):
