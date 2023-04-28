@@ -5,6 +5,9 @@ on:
     branches:
       - main
 
+permissions:
+  contents: write
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -32,7 +35,7 @@ jobs:
           pip install mkdocs-jupyter
 
       - name: Build MkDocs documentation
-        run: mkdocs gh-deploy -b pages
+        run: mkdocs gh-deploy -b pages --force
 
 
 #      - name: Deploy to GitHub Pages
