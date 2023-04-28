@@ -31,7 +31,6 @@ jobs:
           pip install mkdocs-redirects
           pip install mkdocs-jupyter
 
-
       - name: Build MkDocs documentation
         run: mkdocs gh-deploy --force
 
