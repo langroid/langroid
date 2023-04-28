@@ -5,13 +5,14 @@ Fix these badge links later
 
 [![Documentation](https://readthedocs.org/projects/project-name/badge/)](https://project-name.readthedocs.io/)
 
-[![Build Status](https://github.com/username/repository-name/actions/workflows/workflow-name.yml/badge.svg)](https://github.com/username/repository-name/actions)
+
 
 [![codecov](https://codecov.io/gh/username/repository-name/branch/main/graph/badge.svg)](https://codecov.io/gh/username/repository-name)
 
 [![License](https://img.shields.io/github/license/username/repository-name)](https://github.com/username/repository-name/blob/main/LICENSE)
 
 -->
+[![Build Status](https://github.com/langroid/llmagent/actions/workflows/lint.yml/badge.svg)](https://github.com/langroid/llmagent/actions)
 
 [![Deploy MkDocs to Pages](https://github.com/langroid/llmagent/actions/workflows/mkdocs-deploy.yml/badge.svg)](https://github.com/langroid/llmagent/actions/workflows/mkdocs-deploy.yml)
 
