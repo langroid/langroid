@@ -19,19 +19,25 @@ jobs:
           python-version: 3.x
 
       - name: Install dependencies
-        run: pip install mkdocs
-      - name: Install project dependencies
         run: |
-          python -m pip install --upgrade pip
-          python -m pip install poetry
-          poetry install        
+          pip install mkdocs-material
+          pip install mkdocs-minify-plugin
+          pip install mkdocs-autorefs
+          pip install mkdocstrings[python]
+          pip install mkdocs-awesome-pages-plugin
+          pip install mkdocs-gen-files
+          pip install mkdocs-literate-nav
+          pip install mkdocs-section-index
+          pip install mkdocs-redirects
+          pip install mkdocs-jupyter
+
 
       - name: Build MkDocs documentation
-        run: mkdocs build
+        run: mkdocs gh-deploy --force
 
-      - name: Deploy to GitHub Pages
-        uses: peaceiris/actions-gh-pages@v3
-        with:
-          deploy_key: ${{ secrets.GITHUB_TOKEN }}
-          publish_branch: gh-pages
-          publish_dir: ./site
+#      - name: Deploy to GitHub Pages
+#        uses: peaceiris/actions-gh-pages@v3
+#        with:
+#          deploy_key: ${{ secrets.GITHUB_TOKEN }}
+#          publish_branch: gh-pages
+#          publish_dir: ./site
