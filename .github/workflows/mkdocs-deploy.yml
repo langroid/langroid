@@ -32,7 +32,7 @@ jobs:
           pip install mkdocs-jupyter
 
       - name: Build MkDocs documentation
-        run: mkdocs gh-deploy --force
+        run: mkdocs gh-deploy -b pages
 
 
 #      - name: Deploy to GitHub Pages
