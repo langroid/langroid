@@ -22,7 +22,7 @@ class LanguageModel(ABC):
         """
         Create a language model.
         Args:
-            name:
+            config: configuration for language model
         Returns: instance of language model
         """
         from llmagent.language_models.openai_gpt import OpenAIGPT

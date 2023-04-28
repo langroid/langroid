@@ -10,16 +10,17 @@ from typing import List
 
 @dataclass
 class URLQAConfig(AgentConfig):
-    embeddings: EmbeddingModelsConfig = field(
-        default_factory=lambda:
-        EmbeddingModelsConfig(
-            model_type="openai",
-        ))
+    # embeddings: EmbeddingModelsConfig = field(
+    #     default_factory=lambda:
+    #     EmbeddingModelsConfig(
+    #         model_type="openai",
+    #     ))
     vecdb: VectorStoreConfig = field(
         default_factory=lambda:
         VectorStoreConfig(
             type="qdrant",
             storage_path=".qdrant/data/",
+            embedding_fn_type="openai",
             #compose_file="llmagent/vector_store/docker-compose-qdrant.yml",
         ))
     llm: LLMConfig = field(

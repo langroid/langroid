@@ -1,5 +1,4 @@
 from llmagent.agent.base import Agent, Message
-from llmagent.agent.config import AgentConfig
 from llmagent.mytypes import Document
 from typing import List
 from halo import Halo
