@@ -13,6 +13,10 @@ Fix these badge links later
 
 -->
 
+[![Deploy MkDocs to Pages]
+(https://github.com/langroid/llmagent/actions/workflows/mkdocs-deploy.yml/badge.svg)]
+(https://github.com/langroid/llmagent/actions/workflows/mkdocs-deploy.yml)
+
 ### Set up dev env
 
 First install `poetry`, then create virtual env and install dependencies:
