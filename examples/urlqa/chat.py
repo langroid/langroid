@@ -1,6 +1,7 @@
 from llmagent.parsing.urls import get_urls_from_user
 from examples.urlqa.config import URLQAConfig
 from examples.urlqa.agent import DocChatAgent
+from llmagent.agent.base import Agent
 from llmagent.mytypes import Document
 from llmagent.parsing.url_loader import URLLoader
 from llmagent.utils import configuration
@@ -55,13 +56,7 @@ def main(config: URLQAConfig) -> None:
         if query in ["exit", "quit", "q", "x", "bye"]:
             print("[green] Bye, hope this was useful!")
             break
-        if query == "?" and agent.response is not None:
-            agent.justify_response()
-        elif ((query.startswith(("summar", "?")) and agent.response is None) or
-              (query == "??")):
-            agent.summarize_docs()
-        else:
-            agent.respond(query)
+        agent.respond(query)
 
 if __name__ == "__main__":
     main()
