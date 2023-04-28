@@ -1,4 +1,5 @@
-from llmagent.agent.base import Agent, Message
+from llmagent.agent.base import Agent
+from llmagent.agent.config import AgentConfig
 from llmagent.mytypes import Document
 from typing import List
 from halo import Halo
@@ -8,16 +9,21 @@ class DocChatAgent(Agent):
     """
     Agent for chatting with a collection of documents.
     """
+    def __init__(self, config:AgentConfig):
+        super().__init__(config)
+        self.original_docs: List[Document] = None
+
 
     def ingest_docs(self, docs: List[Document]) -> int:
         """
         Chunk docs into pieces, map each chunk to vec-embedding, store in vec-db
         """
+        self.original_docs = docs
         docs = self.parser.split(docs)
         self.vecdb.add_documents(docs)
         return len(docs)
 
-    def respond(self, query:str):
+    def respond(self, query:str) -> Document:
         if query == "":
             return 
         if len(self.chat_history) > 0:
@@ -46,10 +52,20 @@ class DocChatAgent(Agent):
             print("[orange]" + source)
         self.update_history(query, response.content)
         self.response = response # save last response
+        return response
 
     def summarize_docs(self):
         """Summarize all docs"""
-        print("[red] Summarization is very token-costly, sorry!")
+        full_text = "\n\n".join([d.content for d in self.original_docs])
+        tot_tokens = self.parser.num_tokens(full_text)
+        if tot_tokens < 1000:
+            prompt=f"""
+            Give a concise summary of the following text:
+            {full_text}
+            """.strip()
+            super().respond(prompt) # raw LLM call
+        else:
+            print(f"[red] No summarization for more than 1000 tokens, sorry!")
 
     def justify_response(self):
         """Show evidence for last response"""

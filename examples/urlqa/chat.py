@@ -57,7 +57,8 @@ def main(config: URLQAConfig) -> None:
             break
         if query == "?" and agent.response is not None:
             agent.justify_response()
-        elif query.startswith(("summar", "?")) and agent.response is None:
+        elif ((query.startswith(("summar", "?")) and agent.response is None) or
+              (query == "??")):
             agent.summarize_docs()
         else:
             agent.respond(query)

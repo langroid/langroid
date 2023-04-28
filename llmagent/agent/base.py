@@ -5,6 +5,7 @@ from llmagent.vector_store.base import VectorStore
 from llmagent.parsing.parser import Parser
 from pydantic import BaseModel
 from dataclasses import asdict
+from halo import Halo
 from llmagent.mytypes import Document
 from rich import print
 
@@ -32,6 +33,16 @@ class Agent(ABC):
     def get_history(self):
         return self.chat_history
 
-    def respond(self, query:str):
-        response = self.llm.generate(query, self.config.llm.max_tokens)
-        print("[green]", response)
+    def respond(self, query:str) -> Document:
+        """
+        Respond to a query.
+        Args:
+            query:
+
+        Returns:
+            Document
+        """
+        with Halo(text="LLM Generating summary...", spinner="dots"):
+            response = self.llm.generate(query, self.config.llm.max_tokens)
+        print("[green]" + response)
+        return Document(content=response, metadata={"source": "LLM"})
