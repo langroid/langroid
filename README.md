@@ -49,10 +49,10 @@ python3 examples/urlqa/chat.py debug=True
 
 Ask a question you want answered based on the URLs content. The default 
 URLs are about various articles and discussions on LLM-based agents, 
-compression and intelligence. Try asking:
+compression and intelligence. If you are using the default URLs, try asking:
 > who is Pattie Maes?
-
-
+and then a follow-up question:
+> what did she build?
 
 
 
