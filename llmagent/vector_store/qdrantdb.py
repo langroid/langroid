@@ -17,7 +17,7 @@ from chromadb.api.types import EmbeddingFunction
 import logging
 logger = logging.getLogger(__name__)
 
-class Qdrant(VectorStore):
+class QdrantDB(VectorStore):
     def __init__(
             self,
             collection_name: str="qdrant",

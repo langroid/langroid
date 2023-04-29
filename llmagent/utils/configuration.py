@@ -4,7 +4,8 @@ from pydantic import BaseModel
 from typing import List
 
 class Settings(BaseModel):
-    debug: bool = False
+    debug: bool = False # show debug messages?
+    progress: bool = False # show progress spinners/bars?
     class Config:
         extra = "forbid"
 

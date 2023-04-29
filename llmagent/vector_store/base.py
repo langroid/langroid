@@ -9,10 +9,10 @@ logger = logging.getLogger(__name__)
 @dataclass
 class VectorStore(VectorStoreConfig):
     def create(self):
-        from llmagent.vector_store.qdrantdb import Qdrant
+        from llmagent.vector_store.qdrantdb import QdrantDB
         from llmagent.vector_store.faissdb import FAISSDB
         from llmagent.vector_store.chromadb import ChromaDB
-        vecstore_class = dict(faiss = FAISSDB, qdrant = Qdrant, chroma = ChromaDB).get(
+        vecstore_class = dict(faiss = FAISSDB, qdrant = QdrantDB, chroma = ChromaDB).get(
             self.type, ChromaDB
         )
 
@@ -26,7 +26,7 @@ class VectorStore(VectorStoreConfig):
 
 
     @abstractmethod
-    def from_documents(cls, collection_name, documents, embeddings=None,
+    def from_documents(self, collection_name, documents, embeddings=None,
                        storage_path=None,
                        metadatas=None, ids=None):
         pass
@@ -42,7 +42,6 @@ class VectorStore(VectorStoreConfig):
         pass
 
     def show_if_debug(self, doc_score_pairs):
-        #if logger.isEnabledFor(logging.DEBUG):
         if settings.debug:
             for i, (d, s) in enumerate(doc_score_pairs):
                 print_long_text("red", "italic red", f"MATCH-{i}", d.content)
