@@ -1,6 +1,6 @@
 from llmagent.parsing.urls import get_urls_from_user
 from examples.urlqa.config import URLQAConfig
-from examples.urlqa.agent import DocChatAgent
+from examples.urlqa.doc_chat_agent import DocChatAgent
 from llmagent.mytypes import Document
 from llmagent.parsing.url_loader import URLLoader
 from llmagent.utils import configuration

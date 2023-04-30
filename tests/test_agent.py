@@ -3,7 +3,7 @@ from llmagent.embedding_models.models import OpenAIEmbeddingsConfig
 from llmagent.vector_store.qdrantdb import QdrantDBConfig
 from llmagent.language_models.base import LLMConfig
 from llmagent.parsing.parser import ParsingConfig
-from llmagent.prompts.config import PromptsConfig
+from llmagent.prompts.prompts_config import PromptsConfig
 
 
 def test_agent():

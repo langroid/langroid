@@ -51,4 +51,10 @@ build-backend = "poetry.core.masonry.api"
 line-length = 88
 
 
+[tool.mypy]
+python_version = "3.11"
+strict = true
+exclude = [".venv", "venv", "examples", "llmagent/utils/web"]
+files=["llmagent/*"]
+
 
