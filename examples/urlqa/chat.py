@@ -7,14 +7,11 @@ from llmagent.parsing.url_loader import URLLoader
 from llmagent.utils import configuration
 from typing import List
 import typer
-import logging
+
 
 import os
 from rich import print
 import warnings
-
-# import hydra
-# from hydra.core.config_store import ConfigStore
 
 app = typer.Typer()
 
@@ -36,7 +33,6 @@ def chat(config: URLQAConfig) -> None:
     agent = DocChatAgent(config)
     nsplits = agent.ingest_docs(documents)
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
-    # embedding_models = OpenAIEmbeddings()
 
     print(
         f"""
@@ -60,11 +56,12 @@ def chat(config: URLQAConfig) -> None:
             break
         agent.respond(query)
 
+
 @app.command()
-def main(debug: bool=typer.Option(False, "--debug", "-d", help="debug mode")) -> None:
+def main(debug: bool = typer.Option(False, "--debug", "-d", help="debug mode")) -> None:
     config = URLQAConfig(debug=debug)
     chat(config)
 
+
 if __name__ == "__main__":
     app()
-
