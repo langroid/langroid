@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from pydantic import BaseSettings
 import tiktoken
 from langchain.text_splitter import RecursiveCharacterTextSplitter
 from llmagent.mytypes import Document
@@ -6,11 +6,10 @@ from langchain.schema import Document as LDocument
 from typing import List
 
 
-@dataclass
-class ParsingConfig:
+class ParsingConfig (BaseSettings):
     chunk_size: int = 500
     chunk_overlap: int = 50
-    separators: List[str] = field(default_factory=lambda: ["\n\n", "\n", " ", ""])
+    separators: List[str] = ["\n\n", "\n", " ", ""]
     token_encoding_model: str = "text-davinci-003"
 
 

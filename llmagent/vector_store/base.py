@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from pydantic import BaseSettings
 from abc import ABC, abstractmethod
 import logging
 from llmagent.embedding_models.base import EmbeddingModelsConfig
@@ -8,15 +8,12 @@ from llmagent.utils.configuration import settings
 logger = logging.getLogger(__name__)
 
 
-@dataclass
-class VectorStoreConfig:
+class VectorStoreConfig (BaseSettings):
     collection_name: str = "default"
-    storage_path: str = (".qdrant/data",)
-    embedding: EmbeddingModelsConfig = field(
-        default_factory=lambda: EmbeddingModelsConfig(
+    storage_path: str = ".qdrant/data"
+    embedding: EmbeddingModelsConfig = EmbeddingModelsConfig(
             model_type="openai",
         )
-    )
     type: str = "qdrant"
     host: str = "127.0.0.1"
     port: int = 6333
