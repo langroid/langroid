@@ -1,8 +1,8 @@
-from pydantic import BaseModel, BaseSettings
+from pydantic import BaseSettings
 from typing import List
 
 
-class Settings(BaseModel):
+class Settings(BaseSettings):
     debug: bool = False  # show debug messages?
     progress: bool = False  # show progress spinners/bars?
 

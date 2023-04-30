@@ -64,7 +64,10 @@ class QdrantDB(VectorStore):
         assert collection_info.status == CollectionStatus.GREEN
         assert collection_info.vectors_count == 0
         if settings.debug:
+            level = logger.getEffectiveLevel()
+            logger.setLevel(logging.INFO)
             logger.info(collection_info)
+            logger.setLevel(level)
 
     def add_documents(self, documents: List[Document]) -> None:
         embedding_vecs = self.embedding_fn([doc.content for doc in documents])

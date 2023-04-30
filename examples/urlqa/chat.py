@@ -1,11 +1,13 @@
 from llmagent.parsing.urls import get_urls_from_user
+from llmagent.utils.logging import setup_colored_logging
 from examples.urlqa.config import URLQAConfig
 from examples.urlqa.doc_chat_agent import DocChatAgent
 from llmagent.mytypes import Document
 from llmagent.parsing.url_loader import URLLoader
 from llmagent.utils import configuration
-from transformers.utils import logging
 from typing import List
+import typer
+import logging
 
 import os
 from rich import print
@@ -14,16 +16,12 @@ import warnings
 # import hydra
 # from hydra.core.config_store import ConfigStore
 
-logging.set_verbosity(logging.ERROR)  # for transformers logging
+app = typer.Typer()
+
+setup_colored_logging()
 
 
-# Register the config with Hydra's ConfigStore
-# cs = ConfigStore.instance()
-# cs.store(name=URLQAConfig.__name__, node=URLQAConfig)
-
-
-# @hydra.main(version_base=None, config_name=URLQAConfig.__name__)
-def main(config: URLQAConfig) -> None:
+def chat(config: URLQAConfig) -> None:
     configuration.update_global_settings(config, keys=["debug"])
 
     default_urls = config.urls
@@ -62,7 +60,11 @@ def main(config: URLQAConfig) -> None:
             break
         agent.respond(query)
 
+@app.command()
+def main(debug: bool=typer.Option(False, "--debug", "-d", help="debug mode")) -> None:
+    config = URLQAConfig(debug=debug)
+    chat(config)
 
 if __name__ == "__main__":
-    config = URLQAConfig()
-    main(config)
+    app()
+
