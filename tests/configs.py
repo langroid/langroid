@@ -1,30 +1,34 @@
 from dataclasses import dataclass, field
 from llmagent.agent.base import AgentConfig
-from llmagent.vector_store.qdrantdb import QdrantDBConfig
 from llmagent.embedding_models.models import OpenAIEmbeddingsConfig
+from llmagent.vector_store.qdrantdb import QdrantDBConfig
 from llmagent.vector_store.base import VectorStoreConfig
 from llmagent.language_models.base import LLMConfig
 from llmagent.parsing.parser import ParsingConfig
 from llmagent.prompts.config import PromptsConfig
-
+from hydra.core.config_store import ConfigStore
 from typing import List
 
 @dataclass
-class URLQAConfig(AgentConfig):
+class CustomAgentConfig(AgentConfig):
     max_tokens: int = 10000
     vecdb: VectorStoreConfig = field(
         default_factory=lambda:
         QdrantDBConfig(
             type="qdrant",
-            collection_name="llmagent-urls",
-            storage_path=".qdrant/data/",
+            collection_name="test",
+            storage_path=".qdrant/test/",
             embedding=OpenAIEmbeddingsConfig(
                 model_type="openai",
                 model_name="text-embedding-ada-002",
                 dims=1536,
-            )
-        ))
-
+            )))
+            # embedding=SentenceTransformerEmbeddingsConfig(
+            #     model_type="sentence-transformer",
+            #     model_name="all-MiniLM-L6-v2",
+            #     dims=384,
+            # )
+        ##))
     llm: LLMConfig = field(
         default_factory=lambda:
         LLMConfig(
@@ -55,3 +59,5 @@ class URLQAConfig(AgentConfig):
     ])
 
 
+cs = ConfigStore.instance()
+cs.store(name="tests.configs.config", node=CustomAgentConfig)

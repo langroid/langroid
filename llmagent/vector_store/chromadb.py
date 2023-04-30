@@ -1,22 +1,39 @@
-from llmagent.vector_store.base import VectorStore
+from dataclasses import dataclass, field
+from llmagent.vector_store.base import VectorStore, VectorStoreConfig
+from llmagent.embedding_models.base import (
+    EmbeddingModelsConfig,
+    EmbeddingModel,
+)
 from llmagent.mytypes import Document
 from llmagent.utils.output.printing import print_long_text
 from llmagent.embedding_models.models import embedding_model
 from typing import List, Tuple
 import chromadb
+import logging
+logger = logging.getLogger(__name__)
+
+@dataclass
+class ChromaDBConfig(VectorStoreConfig):
+    type: str = "chroma"
+    collection_name: str = "chroma-llmagent"
+    storage_path: str = ".chroma/data"
+    embedding: EmbeddingModelsConfig = field(default_factory=lambda:
+        EmbeddingModelsConfig(
+            model_type="openai",
+        ))
+    host: str = "127.0.0.1"
+    port: int = 6333
+
 
 class ChromaDB(VectorStore):
-    def __init__(self,
-                 collection_name: str,
-                 embedding_fn_type:str="openai",
-                 storage_path: str = ".chromadb/data/",
-                 ):
-        super().__init__(collection_name)
-        emb_model = embedding_model(embedding_fn_type)
+    def __init__(self, config: ChromaDBConfig):
+        super().__init__()
+        self.config = config
+        emb_model = EmbeddingModel.create(config.embedding)
         self.embedding_fn: EmbeddingFunction = emb_model.embedding_fn()
         self.client = chromadb.Client(chromadb.config.Settings(
             #chroma_db_impl="duckdb+parquet",
-            persist_directory=storage_path,
+            persist_directory=config.storage_path,
         ))
         self.collection = self.client.get_or_create_collection(
             name=collection_name,

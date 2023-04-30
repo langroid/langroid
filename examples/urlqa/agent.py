@@ -1,5 +1,4 @@
-from llmagent.agent.base import Agent
-from llmagent.agent.config import AgentConfig
+from llmagent.agent.base import Agent, AgentConfig
 from llmagent.mytypes import Document
 from typing import List, Union
 from halo import Halo

@@ -1,16 +1,34 @@
-from abc import  ABCMeta
+from dataclasses import dataclass
+from abc import  ABC, abstractmethod
 import logging
 from chromadb.api.types import EmbeddingFunction
 logging.getLogger("openai").setLevel(logging.ERROR)
 
 
-class EmbeddingModel(metaclass=ABCMeta):
+@dataclass
+class EmbeddingModelsConfig:
+    model_type: str = "openai"
+
+class EmbeddingModel(ABC):
+
+    #factory method
     @classmethod
-    def embedding_fn(cls) -> EmbeddingFunction:
+    def create(cls, config: EmbeddingModelsConfig):
+        from llmagent.embedding_models.models import (
+            OpenAIEmbeddings,
+            SentenceTransformerEmbeddings,
+        )
+        emb_class = {
+            "openai": OpenAIEmbeddings,
+            "sentence-transformer": SentenceTransformerEmbeddings,
+        }.get(config.model_type, OpenAIEmbeddings)
+        return emb_class(config)
+
+    @abstractmethod
+    def embedding_fn(self) -> EmbeddingFunction:
         pass
 
-    @classmethod
-    @property
-    def embedding_dims(cls) -> int:
+    @abstractmethod
+    def embedding_dims(self) -> int:
         pass
 

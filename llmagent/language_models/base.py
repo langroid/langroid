@@ -4,12 +4,15 @@ from typing import List, Tuple
 from llmagent.mytypes import Document
 from llmagent.utils.configuration import settings
 from llmagent.utils.output.printing import show_if_debug
-from llmagent.language_models.config import LLMConfig
 from llmagent.prompts.templates import EXTRACTION_PROMPT, SUMMARY_ANSWER_PROMPT
 from llmagent.prompts.dialog import collate_chat_history
 import aiohttp
 import asyncio
 
+@dataclass
+class LLMConfig:
+    type: str = "openai"
+    max_tokens:int = 1024
 
 
 # Define an abstract base class for language models
