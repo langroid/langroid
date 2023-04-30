@@ -22,6 +22,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 @dataclass
 class QdrantDBConfig(VectorStoreConfig):
     type: str = "qdrant"
