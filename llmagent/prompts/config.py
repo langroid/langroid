@@ -1,6 +1,5 @@
-from dataclasses import dataclass
+from pydantic import BaseSettings
 
 
-@dataclass
-class PromptsConfig:
+class PromptsConfig(BaseSettings):
     max_tokens: int = 1000
