@@ -6,21 +6,23 @@ from llmagent.embedding_models.base import (
 )
 from llmagent.mytypes import Document
 from llmagent.utils.output.printing import print_long_text
-from llmagent.embedding_models.models import embedding_model
 from typing import List, Tuple
 import chromadb
 import logging
+
 logger = logging.getLogger(__name__)
+
 
 @dataclass
 class ChromaDBConfig(VectorStoreConfig):
     type: str = "chroma"
     collection_name: str = "chroma-llmagent"
     storage_path: str = ".chroma/data"
-    embedding: EmbeddingModelsConfig = field(default_factory=lambda:
-        EmbeddingModelsConfig(
+    embedding: EmbeddingModelsConfig = field(
+        default_factory=lambda: EmbeddingModelsConfig(
             model_type="openai",
-        ))
+        )
+    )
     host: str = "127.0.0.1"
     port: int = 6333
 
@@ -30,13 +32,15 @@ class ChromaDB(VectorStore):
         super().__init__()
         self.config = config
         emb_model = EmbeddingModel.create(config.embedding)
-        self.embedding_fn: EmbeddingFunction = emb_model.embedding_fn()
-        self.client = chromadb.Client(chromadb.config.Settings(
-            #chroma_db_impl="duckdb+parquet",
-            persist_directory=config.storage_path,
-        ))
+        self.embedding_fn = emb_model.embedding_fn()
+        self.client = chromadb.Client(
+            chromadb.config.Settings(
+                # chroma_db_impl="duckdb+parquet",
+                persist_directory=config.storage_path,
+            )
+        )
         self.collection = self.client.get_or_create_collection(
-            name=collection_name,
+            name=self.config.collection_name,
             embedding_function=self.embedding_fn,
             # metadata={
             #     "hnsw:space": "cosine",
@@ -47,41 +51,40 @@ class ChromaDB(VectorStore):
         )
 
     @classmethod
-    def from_documents(cls,
-                       collection_name:str,
-                       documents: List[Document],
-                       storage_path: str = ".chromadb/data/",
-                       embedding_fn_type:str ="openai",
-                       embedding_model:str ="text-embedding-ada-002",
-                       embeddings=None,
-                       ):
+    def from_documents(
+        cls,
+        collection_name: str,
+        documents: List[Document],
+        storage_path: str = ".chromadb/data/",
+        embedding_fn_type: str = "openai",
+        embeddings=None,
+    ):
         instance = cls(
             collection_name=collection_name,
             embedding_fn_type=embedding_fn_type,
-            storage_path=storage_path
+            storage_path=storage_path,
         )
 
         instance.add_documents(
-            embeddings=embeddings, documents=documents,
+            embeddings=embeddings,
+            documents=documents,
         )
         return instance
 
-    def add_documents(self, documents:List[Document]=None):
-        contents: List[str]  = [document.content for document in documents]
+    def add_documents(self, documents: List[Document] = None):
+        contents: List[str] = [document.content for document in documents]
         metadatas: dict = [document.metadata for document in documents]
         ids = range(len(documents))
         ids = ["id" + str(id) for id in ids]
         self.collection.add(
-            #embedding_models=embedding_models,
+            # embedding_models=embedding_models,
             documents=contents,
             metadatas=metadatas,
             ids=ids,
         )
 
     def similar_texts_with_scores(
-            self,
-            text:str, k:int=None,
-            where:str=None, debug:bool=False
+        self, text: str, k: int = None, where: str = None, debug: bool = False
     ) -> List[Tuple[Document, float]]:
         results = self.collection.query(
             query_texts=[text],

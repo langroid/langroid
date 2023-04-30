@@ -2,17 +2,17 @@ from dataclasses import dataclass
 from abc import ABC, abstractmethod
 from typing import List, Tuple
 from llmagent.mytypes import Document
-from llmagent.utils.configuration import settings
 from llmagent.utils.output.printing import show_if_debug
 from llmagent.prompts.templates import EXTRACTION_PROMPT, SUMMARY_ANSWER_PROMPT
 from llmagent.prompts.dialog import collate_chat_history
 import aiohttp
 import asyncio
 
+
 @dataclass
 class LLMConfig:
     type: str = "openai"
-    max_tokens:int = 1024
+    max_tokens: int = 1024
 
 
 # Define an abstract base class for language models
@@ -21,6 +21,7 @@ class LanguageModel(ABC):
     """
     Abstract base class for language models.
     """
+
     max_tokens: int = None
 
     @staticmethod
@@ -32,6 +33,7 @@ class LanguageModel(ABC):
         Returns: instance of language model
         """
         from llmagent.language_models.openai_gpt import OpenAIGPT
+
         cls = dict(
             openai=OpenAIGPT,
         ).get(config.type, OpenAIGPT)
@@ -45,9 +47,7 @@ class LanguageModel(ABC):
         return self.generate(prompt, max_tokens)
 
     def followup_to_standalone(
-            self,
-            chat_history: List[Tuple[str]],
-            question:str
+        self, chat_history: List[Tuple[str]], question: str
     ) -> str:
         """
         Given a chat history and a question, convert it to a standalone question.
@@ -81,16 +81,14 @@ class LanguageModel(ABC):
             templatized_prompt = EXTRACTION_PROMPT
             show_if_debug(EXTRACTION_PROMPT, "EXTRACT-PROMPT= ")
             final_prompt = templatized_prompt.format(question=question, content=passage)
-            final_extract = await self.agenerate(prompt=final_prompt,
-                                                    max_tokens=1024)
+            final_extract = await self.agenerate(prompt=final_prompt, max_tokens=1024)
             show_if_debug(final_extract, "EXTRACT-RESPONSE= ")
         return final_extract.strip()
 
-
     async def _get_verbatim_extracts(
-            self,
-            question: str,
-            passages: List[Document],
+        self,
+        question: str,
+        passages: List[Document],
     ) -> List[str]:
         async with aiohttp.ClientSession():
             verbatim_extracts = await asyncio.gather(
@@ -98,13 +96,13 @@ class LanguageModel(ABC):
             )
         metadatas = [P.metadata for P in passages]
         # return with metadata so we can use it downstream, e.g. to cite sources
-        return [Document(content=e, metadata=m) for
-                e, m in zip(verbatim_extracts, metadatas)]
+        return [
+            Document(content=e, metadata=m)
+            for e, m in zip(verbatim_extracts, metadatas)
+        ]
 
     def get_verbatim_extracts(
-            self,
-            question: str,
-            passages: List[Document]
+        self, question: str, passages: List[Document]
     ) -> List[Document]:
         """
         From each passage, extract verbatim text that is relevant to a question,
@@ -135,18 +133,20 @@ class LanguageModel(ABC):
 
         # Define an auxiliary function to transform the list of passages into a single string
         def stringify_passages(passages):
-            return "\n".join([
-                f"""
+            return "\n".join(
+                [
+                    f"""
                 Extract: {p.content}
                 Source: {p.metadata["source"]}
                 """
-                for p in passages])
+                    for p in passages
+                ]
+            )
 
         passages = stringify_passages(passages)
         # Substitute Q and P into the templatized prompt
         final_prompt = SUMMARY_ANSWER_PROMPT.format(
-            question=f"Question:{question}",
-            extracts=passages
+            question=f"Question:{question}", extracts=passages
         )
         show_if_debug(final_prompt, "SUMMARIZE_PROMPT= ")
         # Generate the final verbatim extract based on the final prompt
@@ -160,4 +160,3 @@ class LanguageModel(ABC):
             content = final_answer
             sources = ""
         return Document(content=content, metadata={"source": "SOURCE: " + sources})
-

@@ -11,24 +11,28 @@ import pytest
 load_dotenv()
 api_key = os.getenv("OPENAI_API_KEY")
 openai_cfg = OpenAIEmbeddingsConfig(
-        model_type="openai",
-        api_key=api_key,
+    model_type="openai",
+    api_key=api_key,
 )
 
 sentence_cfg = SentenceTransformerEmbeddingsConfig(
-        model_type="sentence-transformer",
+    model_type="sentence-transformer",
 )
 
-@pytest.mark.parametrize("embed_cfg", [
-    # pytest.param(openai_cfg, id="openai"), disable for cost reasons
-    pytest.param(sentence_cfg, id="sentencetransformer"),
-])
+
+@pytest.mark.parametrize(
+    "embed_cfg",
+    [
+        # pytest.param(openai_cfg, id="openai"), disable for cost reasons
+        pytest.param(sentence_cfg, id="sentencetransformer"),
+    ],
+)
 def test_vector_stores(embed_cfg):
     qd_cfg = QdrantDBConfig(
-        type = "qdrant",
-        collection_name = "test",
-        storage_path = ".qdrant/testdata",
-        embedding = embed_cfg,
+        type="qdrant",
+        collection_name="test",
+        storage_path=".qdrant/testdata",
+        embedding=embed_cfg,
     )
 
     qd = QdrantDB(qd_cfg)
@@ -40,9 +44,6 @@ def test_vector_stores(embed_cfg):
     ]
     qd.add_documents(docs)
     docs_and_scores = qd.similar_texts_with_scores("hello", k=2)
-    assert ( set([docs_and_scores[0][0].content, docs_and_scores[1][0].content]) ==
-             set(["hello", "hi there"]))
-
-
-
-
+    assert set([docs_and_scores[0][0].content, docs_and_scores[1][0].content]) == set(
+        ["hello", "hi there"]
+    )

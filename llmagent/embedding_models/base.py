@@ -1,7 +1,8 @@
 from dataclasses import dataclass
-from abc import  ABC, abstractmethod
+from abc import ABC, abstractmethod
 import logging
 from chromadb.api.types import EmbeddingFunction
+
 logging.getLogger("openai").setLevel(logging.ERROR)
 
 
@@ -9,15 +10,16 @@ logging.getLogger("openai").setLevel(logging.ERROR)
 class EmbeddingModelsConfig:
     model_type: str = "openai"
 
-class EmbeddingModel(ABC):
 
-    #factory method
+class EmbeddingModel(ABC):
+    # factory method
     @classmethod
     def create(cls, config: EmbeddingModelsConfig):
         from llmagent.embedding_models.models import (
             OpenAIEmbeddings,
             SentenceTransformerEmbeddings,
         )
+
         emb_class = {
             "openai": OpenAIEmbeddings,
             "sentence-transformer": SentenceTransformerEmbeddings,
@@ -31,4 +33,3 @@ class EmbeddingModel(ABC):
     @abstractmethod
     def embedding_dims(self) -> int:
         pass
-

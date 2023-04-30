@@ -1,4 +1,4 @@
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from chromadb.utils import embedding_functions
 from chromadb.api.types import EmbeddingFunction
 from llmagent.embedding_models.base import EmbeddingModel, EmbeddingModelsConfig
@@ -8,14 +8,16 @@ import os
 
 @dataclass
 class OpenAIEmbeddingsConfig(EmbeddingModelsConfig):
-    model_name:str = "text-embedding-ada-002"
-    api_key: str = "" # field(default_factory=lambda: os.getenv("OPENAI_API_KEY"))
+    model_name: str = "text-embedding-ada-002"
+    api_key: str = ""  # field(default_factory=lambda: os.getenv("OPENAI_API_KEY"))
     dims: int = 1536
+
 
 @dataclass
 class SentenceTransformerEmbeddingsConfig(EmbeddingModelsConfig):
-    model_name:str = "all-MiniLM-L6-v2"
+    model_name: str = "all-MiniLM-L6-v2"
     dims: int = 384
+
 
 class OpenAIEmbeddings(EmbeddingModel):
     def __init__(self, config: OpenAIEmbeddingsConfig):
@@ -23,7 +25,6 @@ class OpenAIEmbeddings(EmbeddingModel):
         self.config = config
         load_dotenv()
         self.config.api_key = os.getenv("OPENAI_API_KEY")
-
 
     def embedding_fn(self) -> EmbeddingFunction:
         load_dotenv()
@@ -35,6 +36,7 @@ class OpenAIEmbeddings(EmbeddingModel):
     @property
     def embedding_dims(self) -> int:
         return self.config.dims
+
 
 class SentenceTransformerEmbeddings(EmbeddingModel):
     def __init__(self, config: SentenceTransformerEmbeddingsConfig):
@@ -51,9 +53,7 @@ class SentenceTransformerEmbeddings(EmbeddingModel):
         return self.config.dims
 
 
-def embedding_model(
-        embedding_fn_type:str="openai"
-) -> EmbeddingModel:
+def embedding_model(embedding_fn_type: str = "openai") -> EmbeddingModel:
     """
     Thin wrapper around chromadb.utils.embedding_functions.
     Args:
@@ -63,5 +63,5 @@ def embedding_model(
     """
     if embedding_fn_type == "openai":
         return OpenAIEmbeddings
-    else: # default sentence transformer
+    else:  # default sentence transformer
         return SentenceTransformerEmbeddings

@@ -1,7 +1,6 @@
 from dataclasses import dataclass
 
+
 @dataclass
 class PromptsConfig:
-    max_tokens:int = 1000
-
-
+    max_tokens: int = 1000

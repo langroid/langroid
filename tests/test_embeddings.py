@@ -7,7 +7,6 @@ from llmagent.embedding_models.models import (
 import os
 
 
-
 def test_embeddings():
     load_dotenv()
     openai_cfg = OpenAIEmbeddingsConfig(
@@ -30,7 +29,5 @@ def test_embeddings():
     sentence_fn = sentence_model.embedding_fn()
 
     # Disable openai test to save on API calls
-    #assert len(openai_fn("hello")[0]) == openai_cfg.dims
+    assert len(openai_fn("hello")[0]) == openai_cfg.dims
     assert len(sentence_fn("hello")[0]) == sentence_cfg.dims
-
-

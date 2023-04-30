@@ -4,39 +4,40 @@ from llmagent.embedding_models.base import (
     EmbeddingModelsConfig,
     EmbeddingModel,
 )
-
 from llmagent.mytypes import Document
 from llmagent.utils.configuration import settings
-
-
-from llmagent.embedding_models.models import embedding_model
 from qdrant_client import QdrantClient
 from qdrant_client.http.models import (
-    Distance, VectorParams, Filter,
-    CollectionStatus, Batch, SearchParams
+    Distance,
+    VectorParams,
+    Filter,
+    CollectionStatus,
+    Batch,
+    SearchParams,
 )
-
 from qdrant_client.conversions.common_types import ScoredPoint
 from typing import List, Tuple
 from chromadb.api.types import EmbeddingFunction
+import logging
+
+logger = logging.getLogger(__name__)
+
 
 @dataclass
 class QdrantDBConfig(VectorStoreConfig):
     type: str = "qdrant"
     collection_name: str = "qdrant-llmagent"
     storage_path: str = ".qdrant/data"
-    embedding: EmbeddingModelsConfig = field(default_factory=lambda:
-        EmbeddingModelsConfig(
+    embedding: EmbeddingModelsConfig = field(
+        default_factory=lambda: EmbeddingModelsConfig(
             model_type="openai",
-        ))
-    distance:str = Distance.COSINE
-    #host: str = "127.0.0.1"
-    #port: int = 6333
-    #compose_file: str = "llmagent/vector_store/docker-compose-qdrant.yml"
+        )
+    )
+    distance: str = Distance.COSINE
+    # host: str = "127.0.0.1"
+    # port: int = 6333
+    # compose_file: str = "llmagent/vector_store/docker-compose-qdrant.yml"
 
-
-import logging
-logger = logging.getLogger(__name__)
 
 class QdrantDB(VectorStore):
     def __init__(self, config: QdrantDBConfig):
@@ -55,11 +56,11 @@ class QdrantDB(VectorStore):
         )
 
         self.client.recreate_collection(
-                collection_name=config.collection_name,
-                vectors_config=VectorParams(
-                    size = self.embedding_dim,
-                    distance=Distance.COSINE,
-                )
+            collection_name=config.collection_name,
+            vectors_config=VectorParams(
+                size=self.embedding_dim,
+                distance=Distance.COSINE,
+            ),
         )
         collection_info = self.client.get_collection(
             collection_name=config.collection_name
@@ -69,26 +70,26 @@ class QdrantDB(VectorStore):
         if settings.debug:
             logger.info(collection_info)
 
-
     def add_documents(self, documents: List[Document]) -> None:
-        embedding_vecs = self.embedding_fn(
-            [doc.content for doc in documents]
-        )
+        embedding_vecs = self.embedding_fn([doc.content for doc in documents])
         ids = list(range(len(documents)))
         self.client.upsert(
             collection_name=self.config.collection_name,
             points=Batch(
-                ids=ids, #TODO do we need ids?
+                ids=ids,  # TODO do we need ids?
                 vectors=embedding_vecs,
                 payloads=documents,
-            )
+            ),
         )
 
     def similar_texts_with_scores(
-            self, text: str, k: int = None, where: str = None,
+        self,
+        text: str,
+        k: int = None,
+        where: str = None,
     ) -> List[Tuple[Document, float]]:
         embedding = self.embedding_fn([text])[0]
-        #TODO filter may not work yet
+        # TODO filter may not work yet
         filter = Filter() if where is None else Filter.from_json(where)
         search_result: List[ScoredPoint] = self.client.search(
             collection_name=self.config.collection_name,
@@ -97,8 +98,8 @@ class QdrantDB(VectorStore):
             limit=k,
             search_params=SearchParams(
                 hnsw_ef=128,
-                exact=False, # use Apx NN, not exact NN
-            )
+                exact=False,  # use Apx NN, not exact NN
+            ),
         )
         scores = [match.score for match in search_result]
         docs = [Document(**(match.payload)) for match in search_result]

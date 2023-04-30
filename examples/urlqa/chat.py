@@ -5,6 +5,7 @@ from llmagent.mytypes import Document
 from llmagent.parsing.url_loader import URLLoader
 from llmagent.utils import configuration
 from transformers.utils import logging
+from typing import List
 
 import os
 from rich import print
@@ -12,12 +13,13 @@ import warnings
 import hydra
 from hydra.core.config_store import ConfigStore
 
-logging.set_verbosity(logging.ERROR) # for transformers logging
+logging.set_verbosity(logging.ERROR)  # for transformers logging
 
 
 # Register the config with Hydra's ConfigStore
 cs = ConfigStore.instance()
 cs.store(name=URLQAConfig.__name__, node=URLQAConfig)
+
 
 @hydra.main(version_base=None, config_name=URLQAConfig.__name__)
 def main(config: URLQAConfig) -> None:
@@ -30,16 +32,18 @@ def main(config: URLQAConfig) -> None:
     print("[blue]Enter some URLs below (or leave empty for default URLs)")
     urls = get_urls_from_user() or default_urls
     loader = URLLoader(urls=urls)
-    documents:List[Document] = loader.load()
+    documents: List[Document] = loader.load()
 
     agent = DocChatAgent(config)
     nsplits = agent.ingest_docs(documents)
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
-    #embedding_models = OpenAIEmbeddings()
+    # embedding_models = OpenAIEmbeddings()
 
-    print(f"""
+    print(
+        f"""
     [green]I have processed the following {len(urls)} URLs into {nsplits} parts:
-    """.strip())
+    """.strip()
+    )
     print("\n".join(urls))
 
     warnings.filterwarnings(
@@ -56,6 +60,7 @@ def main(config: URLQAConfig) -> None:
             print("[green] Bye, hope this was useful!")
             break
         agent.respond(query)
+
 
 if __name__ == "__main__":
     main()
