@@ -23,7 +23,7 @@ sentence_cfg = SentenceTransformerEmbeddingsConfig(
 @pytest.mark.parametrize(
     "embed_cfg",
     [
-        # pytest.param(openai_cfg, id="openai"), disable for cost reasons
+        pytest.param(openai_cfg, id="openai"),
         pytest.param(sentence_cfg, id="sentencetransformer"),
     ],
 )

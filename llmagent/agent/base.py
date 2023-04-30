@@ -1,6 +1,5 @@
 from abc import ABC
-from dataclasses import dataclass, field
-from pydantic import BaseModel
+from pydantic import BaseModel, BaseSettings
 from halo import Halo
 from llmagent.mytypes import Document
 from rich import print
@@ -14,8 +13,8 @@ from llmagent.parsing.parser import ParsingConfig
 from llmagent.prompts.config import PromptsConfig
 
 
-@dataclass
-class AgentConfig:
+
+class AgentConfig(BaseSettings):
     """
     General config settings for an LLM agent. This is nested, combining configs of
     various components, in a hierarchy. Let us see how this works.
@@ -23,10 +22,10 @@ class AgentConfig:
 
     name: str = "llmagent"
     debug: bool = False
-    vecdb: VectorStoreConfig = field(default_factory=VectorStoreConfig)
-    llm: LLMConfig = field(default_factory=LLMConfig)
-    parsing: ParsingConfig = field(default_factory=ParsingConfig)
-    prompts: PromptsConfig = field(default_factory=PromptsConfig)
+    vecdb: VectorStoreConfig = VectorStoreConfig()
+    llm: LLMConfig = LLMConfig()
+    parsing: ParsingConfig = ParsingConfig()
+    prompts: PromptsConfig = PromptsConfig()
 
 
 class Message(BaseModel):

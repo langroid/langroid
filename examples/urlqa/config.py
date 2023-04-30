@@ -1,4 +1,3 @@
-from dataclasses import dataclass, field
 from llmagent.agent.base import AgentConfig
 from llmagent.vector_store.qdrantdb import QdrantDBConfig
 from llmagent.embedding_models.models import OpenAIEmbeddingsConfig
@@ -10,11 +9,10 @@ from llmagent.prompts.config import PromptsConfig
 from typing import List
 
 
-@dataclass
 class URLQAConfig(AgentConfig):
+    debug: bool = False,
     max_tokens: int = 10000
-    vecdb: VectorStoreConfig = field(
-        default_factory=lambda: QdrantDBConfig(
+    vecdb: VectorStoreConfig = QdrantDBConfig(
             type="qdrant",
             collection_name="llmagent-urls",
             storage_path=".qdrant/data/",
@@ -24,29 +22,18 @@ class URLQAConfig(AgentConfig):
                 dims=1536,
             ),
         )
-    )
 
-    llm: LLMConfig = field(
-        default_factory=lambda: LLMConfig(
-            type="openai",
-        )
-    )
-
-    parsing: ParsingConfig = field(
-        default_factory=lambda: ParsingConfig(
+    llm: LLMConfig = LLMConfig(type="openai")
+    parsing: ParsingConfig = ParsingConfig(
             chunk_size=500,
             chunk_overlap=50,
-        )
     )
 
-    prompts: PromptsConfig = field(
-        default_factory=lambda: PromptsConfig(
+    prompts: PromptsConfig = PromptsConfig(
             max_tokens=1000,
-        )
     )
 
-    urls: List[str] = field(
-        default_factory=lambda: [
+    urls: List[str] = [
             "https://news.ycombinator.com/item?id=35629033",
             "https://www.newyorker.com/tech/annals-of-technology/chatgpt-is-a-blurry-jpeg-of-the-web",
             "https://www.wired.com/1995/04/maes/",
@@ -55,4 +42,3 @@ class URLQAConfig(AgentConfig):
             "https://www.quantamagazine.org/the-unpredictable-abilities-emerging-from-large-ai-models-20230316/",
             "https://ai.googleblog.com/2022/11/characterizing-emergent-phenomena-in.html",
         ]
-    )
