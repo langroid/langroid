@@ -6,7 +6,7 @@ from langchain.schema import Document as LDocument
 from typing import List
 
 
-class ParsingConfig (BaseSettings):
+class ParsingConfig(BaseSettings):
     chunk_size: int = 500
     chunk_overlap: int = 50
     separators: List[str] = ["\n\n", "\n", " ", ""]

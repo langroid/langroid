@@ -13,7 +13,6 @@ from llmagent.parsing.parser import ParsingConfig
 from llmagent.prompts.config import PromptsConfig
 
 
-
 class AgentConfig(BaseSettings):
     """
     General config settings for an LLM agent. This is nested, combining configs of

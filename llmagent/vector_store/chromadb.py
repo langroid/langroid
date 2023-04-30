@@ -17,7 +17,7 @@ class ChromaDBConfig(VectorStoreConfig):
     collection_name: str = "chroma-llmagent"
     storage_path: str = ".chroma/data"
     embedding: EmbeddingModelsConfig = EmbeddingModelsConfig(
-            model_type="openai",
+        model_type="openai",
     )
     host: str = "127.0.0.1"
     port: int = 6333
