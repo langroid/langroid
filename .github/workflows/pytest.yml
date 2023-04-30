@@ -11,6 +11,8 @@ on:
 jobs:
   pytest:
     runs-on: ubuntu-latest
+    env:
+      OPENAI_API_KEY: ${{ secrets.OPENAI_KEY }}
 
     steps:
     - name: Check out repository
