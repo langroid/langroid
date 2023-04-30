@@ -34,6 +34,11 @@ cp .env-template .env
 
 Currently only OpenAI models are supported. Others will be added later.
 
+### Pull requests
+
+To check for issues locally, run `make check`, it runs linters `black`, 
+`flake8` and type-checker `mypy`. The `mypy` flags lots of issues, but 
+ignore those for now. 
 
 
 ### Run some examples
