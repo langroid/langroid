@@ -1,4 +1,3 @@
-from dataclasses import dataclass, field
 from llmagent.vector_store.base import VectorStore, VectorStoreConfig
 from llmagent.embedding_models.base import (
     EmbeddingModelsConfig,
@@ -13,15 +12,12 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-@dataclass
 class ChromaDBConfig(VectorStoreConfig):
     type: str = "chroma"
     collection_name: str = "chroma-llmagent"
     storage_path: str = ".chroma/data"
-    embedding: EmbeddingModelsConfig = field(
-        default_factory=lambda: EmbeddingModelsConfig(
+    embedding: EmbeddingModelsConfig = EmbeddingModelsConfig(
             model_type="openai",
-        )
     )
     host: str = "127.0.0.1"
     port: int = 6333

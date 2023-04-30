@@ -1,4 +1,3 @@
-from dataclasses import dataclass
 from chromadb.utils import embedding_functions
 from chromadb.api.types import EmbeddingFunction
 from llmagent.embedding_models.base import EmbeddingModel, EmbeddingModelsConfig
@@ -6,14 +5,12 @@ from dotenv import load_dotenv
 import os
 
 
-@dataclass
 class OpenAIEmbeddingsConfig(EmbeddingModelsConfig):
     model_name: str = "text-embedding-ada-002"
-    api_key: str = ""  # field(default_factory=lambda: os.getenv("OPENAI_API_KEY"))
+    api_key: str = ""
     dims: int = 1536
 
 
-@dataclass
 class SentenceTransformerEmbeddingsConfig(EmbeddingModelsConfig):
     model_name: str = "all-MiniLM-L6-v2"
     dims: int = 384

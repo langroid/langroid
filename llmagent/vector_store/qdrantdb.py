@@ -1,4 +1,3 @@
-from dataclasses import dataclass, field
 from llmagent.vector_store.base import VectorStore, VectorStoreConfig
 from llmagent.embedding_models.base import (
     EmbeddingModelsConfig,
@@ -23,15 +22,12 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-@dataclass
 class QdrantDBConfig(VectorStoreConfig):
     type: str = "qdrant"
     collection_name: str = "qdrant-llmagent"
     storage_path: str = ".qdrant/data"
-    embedding: EmbeddingModelsConfig = field(
-        default_factory=lambda: EmbeddingModelsConfig(
+    embedding: EmbeddingModelsConfig = EmbeddingModelsConfig(
             model_type="openai",
-        )
     )
     distance: str = Distance.COSINE
     # host: str = "127.0.0.1"

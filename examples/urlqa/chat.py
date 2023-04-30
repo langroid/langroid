@@ -10,18 +10,18 @@ from typing import List
 import os
 from rich import print
 import warnings
-import hydra
-from hydra.core.config_store import ConfigStore
+#import hydra
+#from hydra.core.config_store import ConfigStore
 
 logging.set_verbosity(logging.ERROR)  # for transformers logging
 
 
 # Register the config with Hydra's ConfigStore
-cs = ConfigStore.instance()
-cs.store(name=URLQAConfig.__name__, node=URLQAConfig)
+#cs = ConfigStore.instance()
+#cs.store(name=URLQAConfig.__name__, node=URLQAConfig)
 
 
-@hydra.main(version_base=None, config_name=URLQAConfig.__name__)
+#@hydra.main(version_base=None, config_name=URLQAConfig.__name__)
 def main(config: URLQAConfig) -> None:
     configuration.update_global_settings(config, keys=["debug"])
 
@@ -63,4 +63,5 @@ def main(config: URLQAConfig) -> None:
 
 
 if __name__ == "__main__":
-    main()
+    config = URLQAConfig()
+    main(config)

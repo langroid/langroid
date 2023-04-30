@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from pydantic import BaseSettings
 from abc import ABC, abstractmethod
 import logging
 from chromadb.api.types import EmbeddingFunction
@@ -6,8 +6,7 @@ from chromadb.api.types import EmbeddingFunction
 logging.getLogger("openai").setLevel(logging.ERROR)
 
 
-@dataclass
-class EmbeddingModelsConfig:
+class EmbeddingModelsConfig (BaseSettings):
     model_type: str = "openai"
 
 
