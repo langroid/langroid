@@ -3,12 +3,17 @@ from omegaconf import OmegaConf, DictConfig
 from pydantic import BaseModel
 from typing import List
 
+
 class Settings(BaseModel):
-    debug: bool = False
+    debug: bool = False  # show debug messages?
+    progress: bool = False  # show progress spinners/bars?
+
     class Config:
         extra = "forbid"
 
+
 settings = Settings()
+
 
 def update_global_settings(cfg: DictConfig, keys: List[str]) -> None:
     """
@@ -32,7 +37,3 @@ def update_global_settings(cfg: DictConfig, keys: List[str]) -> None:
 
     # Update the unique global settings object
     settings.__dict__.update(new_settings.__dict__)
-
-
-
-

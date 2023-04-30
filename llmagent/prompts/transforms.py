@@ -6,6 +6,7 @@ import aiohttp
 import asyncio
 from typing import List, Tuple
 
+
 async def get_verbatim_extract_async(
     question: str,
     passage: Document,
@@ -33,8 +34,9 @@ async def _get_verbatim_extracts(
         )
     metadatas = [P.metadata for P in passages]
     # return with metadata so we can use it downstream, e.g. to cite sources
-    return [Document(content=e, metadata=m) for
-            e, m in zip(verbatim_extracts, metadatas)]
+    return [
+        Document(content=e, metadata=m) for e, m in zip(verbatim_extracts, metadatas)
+    ]
 
 
 def get_verbatim_extracts(
@@ -129,7 +131,7 @@ def make_summarizer_demos(k):
 def get_summary_answer(
     question: str, passages: List[Document], LLM: LanguageModel, k: int = 1
 ) -> Document:
-    templatized_prompt ="""
+    templatized_prompt = """
     Use the provided extracts (with sources)  to answer the question. If there's not 
     enough information, respond with "I don't know." Justify your answer by citing 
     your sources, as in these examples:
@@ -170,23 +172,23 @@ def get_summary_answer(
     Answer:
     """.strip()
 
-
-
     # templatized_prompt = LLM.generate(prompt=prompt, max_tokens=1024)
     # Define an auxiliary function to transform the list of passages into a single string
     def stringify_passages(passages):
-        return "\n".join([
-            f"""
+        return "\n".join(
+            [
+                f"""
             Extract: {p.content}
             Source: {p.metadata["source"]}
             """
-            for p in passages])
+                for p in passages
+            ]
+        )
 
     passages = stringify_passages(passages)
     # Substitute Q and P into the templatized prompt
     final_prompt = templatized_prompt.format(
-        question=f"Question:{question}",
-        extracts=passages
+        question=f"Question:{question}", extracts=passages
     )
 
     # Generate the final verbatim extract based on the final prompt
@@ -202,9 +204,7 @@ def get_summary_answer(
 
 
 def followup_to_standalone(
-        LLM: LanguageModel,
-        chat_history: List[Tuple[str]],
-        question:str
+    LLM: LanguageModel, chat_history: List[Tuple[str]], question: str
 ) -> str:
     """
     Given a chat history and a question, convert it to a standalone question.

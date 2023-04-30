@@ -1,52 +1,55 @@
 from llmagent.vector_store.base import VectorStore
 from llmagent.mytypes import Document
-from llmagent.utils.output.printing import print_long_text
 from langchain.schema import Document as LDocument
 from typing import List
 from langchain.vectorstores import FAISS
 from langchain.embeddings import OpenAIEmbeddings
-import dotenv
-import os
+
 
 class FAISSDB(VectorStore):
-    def __init__(self,
-                 collection_name: str,
-                 embedding_fn_type:str="openai",
-                 storage_path: str = ".faissdb/data/",
-                 embedding_model:str="text-embedding-ada-002",
-                 ):
+    def __init__(
+        self,
+        collection_name: str,
+        embedding_fn_type: str = "openai",
+        storage_path: str = ".faissdb/data/",
+        embedding_model: str = "text-embedding-ada-002",
+    ):
         super().__init__(collection_name)
 
-
-        assert embedding_fn_type == "openai", "FAISSDB only supports OpenAI embedding function"
+        assert (
+            embedding_fn_type == "openai"
+        ), "FAISSDB only supports OpenAI embedding function"
         self.embedding_fn = OpenAIEmbeddings()
-        self.collection:FAISS = FAISS
+        self.collection: FAISS = FAISS
 
     @classmethod
-    def from_documents(cls,
-                       collection_name:str,
-                       documents: List[Document],
-                       storage_path: str = ".faissdb/data/",
-                       embedding_fn_type:str ="openai",
-                       embedding_model:str ="text-embedding-ada-002",
-                       embeddings=None,
-                       ):
-        instance = cls(collection_name=collection_name,
-                       storage_path=storage_path,
-                       embedding_fn_type=embedding_fn_type,
-                       embedding_model=embedding_model)
-        lc_docs = [LDocument(page_content=d.content, metadata=d.metadata) for d in
-                   documents]
+    def from_documents(
+        cls,
+        collection_name: str,
+        documents: List[Document],
+        storage_path: str = ".faissdb/data/",
+        embedding_fn_type: str = "openai",
+        embedding_model: str = "text-embedding-ada-002",
+        embeddings=None,
+    ):
+        instance = cls(
+            collection_name=collection_name,
+            storage_path=storage_path,
+            embedding_fn_type=embedding_fn_type,
+            embedding_model=embedding_model,
+        )
+        lc_docs = [
+            LDocument(page_content=d.content, metadata=d.metadata) for d in documents
+        ]
         instance.collection = instance.collection.from_documents(
-            lc_docs,
-            instance.embedding_fn
+            lc_docs, instance.embedding_fn
         )
         return instance
 
-    def add_documents(self, documents:List[Document]=None):
+    def add_documents(self, documents: List[Document] = None):
         raise NotImplementedError
 
-    def similar_texts_with_scores(self, text:str, k:int=None, where:str=None):
+    def similar_texts_with_scores(self, text: str, k: int = None, where: str = None):
         doc_score_pairs = self.collection.similarity_search_with_score(text, k=k)
         # convert langchain docs to our docs
         doc_score_pairs = [

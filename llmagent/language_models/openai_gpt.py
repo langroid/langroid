@@ -6,15 +6,17 @@ import logging
 
 logging.getLogger("openai").setLevel(logging.ERROR)
 
+
 # Define a class for OpenAI GPT-3 that extends the base class
 class OpenAIGPT(LanguageModel):
     """
     Class for OpenAI LLMs
     """
+
     def __init__(
-            self,
-            chat_model: str = "gpt-3.5-turbo",
-            completion_model: str = "text-davinci-003",
+        self,
+        chat_model: str = "gpt-3.5-turbo",
+        completion_model: str = "text-davinci-003",
     ):
         """
         Args:
@@ -27,17 +29,16 @@ class OpenAIGPT(LanguageModel):
         load_dotenv()
         self.api_key = os.getenv("OPENAI_API_KEY")
 
-
-    def _completion_args(self, prompt:str, max_tokens:int):
+    def _completion_args(self, prompt: str, max_tokens: int):
         return dict(
             model=self.completion_model,
             prompt=prompt,
             max_tokens=max_tokens,
             temperature=0,
-            echo=False
+            echo=False,
         )
 
-    def generate(self, prompt:str, max_tokens:int) -> str:
+    def generate(self, prompt: str, max_tokens: int) -> str:
         openai.api_key = self.api_key
         response = openai.Completion.create(**self._completion_args(prompt, max_tokens))
         return response.choices[0].text.strip()

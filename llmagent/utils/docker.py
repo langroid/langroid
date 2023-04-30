@@ -1,13 +1,13 @@
-from llmagent.utils.configuration import settings
 import docker
 import os
 import logging
 import subprocess
+
 logger = logging.getLogger(__name__)
 
 
-def docker_compose_up(file_path:str, name:str) -> None:
-    '''
+def docker_compose_up(file_path: str, name: str) -> None:
+    """
     Launch docker-compose file with given name, using python SDK rather than CLI.
     This lets us eliminate the extra step of having to `run docker-compose up` on the
     command line before running the main script.
@@ -16,7 +16,7 @@ def docker_compose_up(file_path:str, name:str) -> None:
         file_path: relative path to docker-compose file
         name: name of docker-compose project (i.e. container prefix)
 
-    '''
+    """
     # Load docker-compose file
     compose_file = os.path.abspath(file_path)
 
@@ -32,5 +32,5 @@ def docker_compose_up(file_path:str, name:str) -> None:
             logging.info(f"Containers are already running, e.g.: {container.name}")
             return
 
-    compose_command = ['docker-compose', '-f', compose_file, 'up', '-d']
+    compose_command = ["docker-compose", "-f", compose_file, "up", "-d"]
     subprocess.run(compose_command)
