@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from pydantic import BaseSettings
 from abc import ABC, abstractmethod
 from typing import List, Tuple
 from llmagent.mytypes import Document
@@ -9,14 +9,14 @@ import aiohttp
 import asyncio
 
 
-@dataclass
-class LLMConfig:
+class LLMConfig(BaseSettings):
     type: str = "openai"
     max_tokens: int = 1024
+    chat_model: str = "gpt-3.5-turbo"
+    completion_model: str = "text-davinci-003"
 
 
 # Define an abstract base class for language models
-@dataclass
 class LanguageModel(ABC):
     """
     Abstract base class for language models.
@@ -37,7 +37,7 @@ class LanguageModel(ABC):
         cls = dict(
             openai=OpenAIGPT,
         ).get(config.type, OpenAIGPT)
-        return cls()
+        return cls(config)
 
     @abstractmethod
     def generate(self, prompt: str, max_tokens: int) -> str:
