@@ -27,7 +27,7 @@ class QdrantDBConfig(VectorStoreConfig):
     collection_name: str = "qdrant-llmagent"
     storage_path: str = ".qdrant/data"
     embedding: EmbeddingModelsConfig = EmbeddingModelsConfig(
-            model_type="openai",
+        model_type="openai",
     )
     distance: str = Distance.COSINE
     # host: str = "127.0.0.1"
