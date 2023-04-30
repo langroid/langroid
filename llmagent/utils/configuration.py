@@ -1,5 +1,3 @@
-# will be set by main script at run-time
-from omegaconf import OmegaConf, DictConfig
 from pydantic import BaseModel, BaseSettings
 from typing import List
 
@@ -24,10 +22,10 @@ def update_global_settings(cfg: BaseSettings, keys: List[str]) -> None:
     ```
     Caution we do not want to have too many such global settings!
     Args:
-        cfg: DictConfig, typically in a main script via Hydra
+        cfg: pydantic config, typically from a main script
         keys: which keys from cfg to use, to update the global settings object
     """
-    config_dict = cfg.dict() # OmegaConf.to_container(cfg, resolve=True)
+    config_dict = cfg.dict()
 
     # Filter the config_dict based on the keys
     filtered_config = {key: config_dict[key] for key in keys if key in config_dict}

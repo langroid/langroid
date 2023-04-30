@@ -6,7 +6,7 @@ from chromadb.api.types import EmbeddingFunction
 logging.getLogger("openai").setLevel(logging.ERROR)
 
 
-class EmbeddingModelsConfig (BaseSettings):
+class EmbeddingModelsConfig(BaseSettings):
     model_type: str = "openai"
 
 
