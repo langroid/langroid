@@ -15,9 +15,11 @@ class LLMConfig(BaseSettings):
     chat_model: str = "gpt-3.5-turbo"
     completion_model: str = "text-davinci-003"
 
+
 class LLMResponse(BaseModel):
     message: str
     usage: int
+
 
 # Define an abstract base class for language models
 class LanguageModel(ABC):
@@ -153,8 +155,9 @@ class LanguageModel(ABC):
         )
         show_if_debug(final_prompt, "SUMMARIZE_PROMPT= ")
         # Generate the final verbatim extract based on the final prompt
-        final_answer = self.generate(prompt=final_prompt,
-                                     max_tokens=1024).message.strip()
+        final_answer = self.generate(
+            prompt=final_prompt, max_tokens=1024
+        ).message.strip()
         show_if_debug(final_answer, "SUMMARIZE_RESPONSE= ")
         parts = final_answer.split("SOURCE:", maxsplit=1)
         if len(parts) > 1:
