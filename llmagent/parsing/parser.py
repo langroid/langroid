@@ -1,12 +1,13 @@
 from pydantic import BaseSettings
 import tiktoken
-from langchain.text_splitter import RecursiveCharacterTextSplitter
+from functools import reduce
+from llmagent.parsing.para_sentence_split import create_chunks
 from llmagent.mytypes import Document
-from langchain.schema import Document as LDocument
 from typing import List
 
 
 class ParsingConfig(BaseSettings):
+    splitter: str = "para_sentence"
     chunk_size: int = 500
     chunk_overlap: int = 50
     separators: List[str] = ["\n\n", "\n", " ", ""]
@@ -22,19 +23,20 @@ class Parser:
         return len(encoding.encode(text))
 
     def split(self, docs: List[Document]) -> List[Document]:
-        text_splitter = RecursiveCharacterTextSplitter(
-            separators=self.config.separators,
-            chunk_size=self.config.chunk_size,
-            chunk_overlap=self.config.chunk_overlap,
-            length_function=self.num_tokens,
-        )
-        # list of LangChain Documents
-        lc_docs = [LDocument(page_content=d.content, metadata=d.metadata) for d in docs]
-        texts = text_splitter.split_documents(lc_docs)
+        if self.config.splitter == "para_sentence":
+            return self.split_para_sentence(docs)
+        else:
+            raise ValueError(f"Unknown splitter: {self.config.splitter}")
 
-        # convert texts to list of Documents
-        texts = [
-            Document(content=text.page_content, metadata=text.metadata)
-            for text in texts
+    def split_para_sentence(self, docs: List[Document]) -> List[Document]:
+        chunked_docs = [
+            [Document(content=chunk.strip(), metadata=d.metadata) for
+             chunk in create_chunks(
+                d.content,
+                self.config.chunk_size,
+                self.num_tokens)
+             if chunk.strip() != ""
+             ]
+            for d in docs
         ]
-        return texts
+        return reduce(lambda x, y: x + y, chunked_docs)

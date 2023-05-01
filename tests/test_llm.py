@@ -11,14 +11,14 @@ def test_openai_gpt():
 
     mdl = OpenAIGPT(config=cfg)
 
-    prompt = "What is the capital of france?"
+    question = "What is the capital of france?"
 
-    response = mdl.generate(prompt=prompt, max_tokens=10)
+    response = mdl.generate(prompt=question, max_tokens=10)
     assert "Paris" in response.message
 
     messages = [
         dict(role="system", content="You are a helpful assitant"),
-        dict(role="user", content="What is the capital of France?"),
+        dict(role="user", content=question),
     ]
     response = mdl.chat(messages=messages, max_tokens=10)
     assert "Paris" in response.message
