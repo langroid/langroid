@@ -49,9 +49,9 @@ ignore those for now.
 python3 examples/urlqa/chat.py
 ```
 
-To see more output, run with `debug=True`:
+To see more output, run with `--debug` or `-d`:
 ```bash
-python3 examples/urlqa/chat.py debug=True
+python3 examples/urlqa/chat.py -d
 ```
 
 Ask a question you want answered based on the URLs content. The default 
