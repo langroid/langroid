@@ -1,5 +1,6 @@
 from pydantic import BaseSettings, BaseModel
 from abc import ABC, abstractmethod
+from enum import Enum
 from typing import List, Tuple
 from llmagent.mytypes import Document
 from llmagent.utils.output.printing import show_if_debug
@@ -19,6 +20,21 @@ class LLMConfig(BaseSettings):
 class LLMResponse(BaseModel):
     message: str
     usage: int
+
+
+class Role(Enum):
+    USER = "user"
+    SYSTEM = "system"
+    ASSISTANT = "assistant"
+
+
+class LLMMessage(BaseModel):
+    role: Role
+    name: str = "xyz"
+    content: str
+
+    class Config:
+        use_enum_values = True
 
 
 # Define an abstract base class for language models
@@ -46,6 +62,10 @@ class LanguageModel(ABC):
 
     @abstractmethod
     def generate(self, prompt: str, max_tokens: int) -> LLMResponse:
+        pass
+
+    @abstractmethod
+    def chat(self, messages: List[LLMMessage], max_tokens: int) -> LLMResponse:
         pass
 
     def __call__(self, prompt: str, max_tokens: int) -> LLMResponse:
