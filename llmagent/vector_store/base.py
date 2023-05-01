@@ -24,10 +24,9 @@ class VectorStore(ABC):
     @staticmethod
     def create(config: VectorStoreConfig):
         from llmagent.vector_store.qdrantdb import QdrantDB
-        from llmagent.vector_store.faissdb import FAISSDB
         from llmagent.vector_store.chromadb import ChromaDB
 
-        vecstore_class = dict(faiss=FAISSDB, qdrant=QdrantDB, chroma=ChromaDB).get(
+        vecstore_class = dict(qdrant=QdrantDB, chroma=ChromaDB).get(
             config.type, QdrantDB
         )
 
