@@ -30,13 +30,13 @@ class Parser:
 
     def split_para_sentence(self, docs: List[Document]) -> List[Document]:
         chunked_docs = [
-            [Document(content=chunk.strip(), metadata=d.metadata) for
-             chunk in create_chunks(
-                d.content,
-                self.config.chunk_size,
-                self.num_tokens)
-             if chunk.strip() != ""
-             ]
+            [
+                Document(content=chunk.strip(), metadata=d.metadata)
+                for chunk in create_chunks(
+                    d.content, self.config.chunk_size, self.num_tokens
+                )
+                if chunk.strip() != ""
+            ]
             for d in docs
         ]
         return reduce(lambda x, y: x + y, chunked_docs)
