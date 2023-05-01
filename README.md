@@ -61,4 +61,9 @@ and then a follow-up question:
 > what did she build?
 
 
+2. "chat"-based dockerfile creator. This is just a prelim starting point.
+
+```bash
+python3 examples/dockerfile/chat.py
+```
 
