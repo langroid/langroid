@@ -3,17 +3,17 @@ from typing import Callable, List
 
 
 def custom_sent_tokenize(text):
-    sentences = [sentence.strip()  for sentence in re.split(r'\.\s|\.\n', text)
-                 if sentence.strip()]
+    sentences = [
+        sentence.strip()
+        for sentence in re.split(r"\.\s|\.\n", text)
+        if sentence.strip()
+    ]
     # append a period if the sentence does not end with one
-    return [s + "." if s[-1] != "." else s
-            for s in sentences]
+    return [s + "." if s[-1] != "." else s for s in sentences]
 
 
 def create_chunks(
-        text: str,
-        chunk_size: int,
-        length_fn: Callable[[str], int]
+    text: str, chunk_size: int, length_fn: Callable[[str], int]
 ) -> List[str]:
     def _chunk_sentences(sentences: List[str], chunk_size: int) -> List[str]:
         chunks = []
@@ -49,4 +49,3 @@ def create_chunks(
         chunks = paragraphs
 
     return chunks
-
