@@ -69,4 +69,3 @@ class OpenAIGPT(LanguageModel):
         usage = response["usage"]["total_tokens"]
         msg = response["choices"][0]["message"]["content"].strip()
         return LLMResponse(message=msg, usage=usage)
-
