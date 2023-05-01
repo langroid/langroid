@@ -1,4 +1,4 @@
-from pydantic import BaseSettings
+from pydantic import BaseSettings, BaseModel
 from abc import ABC, abstractmethod
 from typing import List, Tuple
 from llmagent.mytypes import Document
@@ -15,6 +15,9 @@ class LLMConfig(BaseSettings):
     chat_model: str = "gpt-3.5-turbo"
     completion_model: str = "text-davinci-003"
 
+class LLMResponse(BaseModel):
+    message: str
+    usage: int
 
 # Define an abstract base class for language models
 class LanguageModel(ABC):
@@ -40,10 +43,10 @@ class LanguageModel(ABC):
         return cls(config)
 
     @abstractmethod
-    def generate(self, prompt: str, max_tokens: int) -> str:
+    def generate(self, prompt: str, max_tokens: int) -> LLMResponse:
         pass
 
-    def __call__(self, prompt: str, max_tokens: int) -> str:
+    def __call__(self, prompt: str, max_tokens: int) -> LLMResponse:
         return self.generate(prompt, max_tokens)
 
     def followup_to_standalone(
@@ -67,7 +70,7 @@ class LanguageModel(ABC):
         Follow-up question: {question} 
         """.strip()
         show_if_debug(prompt, "FOLLOWUP->STANDALONE-PROMPT= ")
-        standalone = self.generate(prompt=prompt, max_tokens=1024).strip()
+        standalone = self.generate(prompt=prompt, max_tokens=1024).message.strip()
         show_if_debug(prompt, "FOLLOWUP->STANDALONE-RESPONSE= ")
         return standalone
 
@@ -82,8 +85,8 @@ class LanguageModel(ABC):
             show_if_debug(EXTRACTION_PROMPT, "EXTRACT-PROMPT= ")
             final_prompt = templatized_prompt.format(question=question, content=passage)
             final_extract = await self.agenerate(prompt=final_prompt, max_tokens=1024)
-            show_if_debug(final_extract, "EXTRACT-RESPONSE= ")
-        return final_extract.strip()
+            show_if_debug(final_extract.message.strip(), "EXTRACT-RESPONSE= ")
+        return final_extract.message.strip()
 
     async def _get_verbatim_extracts(
         self,
@@ -150,7 +153,8 @@ class LanguageModel(ABC):
         )
         show_if_debug(final_prompt, "SUMMARIZE_PROMPT= ")
         # Generate the final verbatim extract based on the final prompt
-        final_answer = self.generate(prompt=final_prompt, max_tokens=1024).strip()
+        final_answer = self.generate(prompt=final_prompt,
+                                     max_tokens=1024).message.strip()
         show_if_debug(final_answer, "SUMMARIZE_RESPONSE= ")
         parts = final_answer.split("SOURCE:", maxsplit=1)
         if len(parts) > 1:

@@ -62,5 +62,5 @@ class Agent(ABC):
         """
         with Halo(text="LLM query...", spinner="dots"):
             response = self.llm.generate(query, self.config.llm.max_tokens)
-        print("[green]" + response)
-        return Document(content=response, metadata={"source": "LLM"})
+        print("[green]" + response.message)
+        return Document(content=response.message, metadata={"source": "LLM"})
