@@ -1,4 +1,5 @@
-from llmagent.language_models.base import LanguageModel, LLMConfig
+from llmagent.language_models.base import LanguageModel, LLMConfig, LLMResponse
+from typing import List, Dict, Any
 import openai
 from dotenv import load_dotenv
 import os
@@ -39,14 +40,33 @@ class OpenAIGPT(LanguageModel):
             echo=False,
         )
 
-    def generate(self, prompt: str, max_tokens: int) -> str:
+    def generate(self, prompt: str, max_tokens: int) -> LLMResponse:
         openai.api_key = self.api_key
         response = openai.Completion.create(**self._completion_args(prompt, max_tokens))
-        return response.choices[0].text.strip()
+        usage = response["usage"]["total_tokens"]
+        msg = response["choices"][0]["text"].strip()
+        return LLMResponse(message=msg, usage=usage)
 
-    async def agenerate(self, prompt: str, max_tokens: int) -> str:
+    async def agenerate(self, prompt: str, max_tokens: int) -> LLMResponse:
         openai.api_key = self.api_key
         response = await openai.Completion.acreate(
             **self._completion_args(prompt, max_tokens)
         )
-        return response.choices[0].text.strip()
+        usage = response["usage"]["total_tokens"]
+        msg = response["choices"][0]["text"].strip()
+        return LLMResponse(message=msg, usage=usage)
+
+    def chat(self, messages: List[Dict[str, Any]], max_tokens: int) -> LLMResponse:
+        openai.api_key = self.api_key
+        response = openai.ChatCompletion.create(
+            model=self.config.chat_model,
+            messages=messages,
+            max_tokens=max_tokens,
+            n=1,
+            stop=None,
+            temperature=0.5,
+        )
+        usage = response["usage"]["total_tokens"]
+        msg = response["choices"][0]["message"]["content"].strip()
+        return LLMResponse(message=msg, usage=usage)
+
