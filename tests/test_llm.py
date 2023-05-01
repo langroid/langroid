@@ -17,10 +17,8 @@ def test_openai_gpt():
     assert "Paris" in response.message
 
     messages = [
-        dict(role="system",
-             content="You are a helpful assitant"),
-        dict(role="user",
-             content="What is the capital of France?"),
+        dict(role="system", content="You are a helpful assitant"),
+        dict(role="user", content="What is the capital of France?"),
     ]
     response = mdl.chat(messages=messages, max_tokens=10)
     assert "Paris" in response.message
