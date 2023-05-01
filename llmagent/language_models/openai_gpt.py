@@ -1,5 +1,10 @@
-from llmagent.language_models.base import LanguageModel, LLMConfig, LLMResponse
-from typing import List, Dict, Any
+from llmagent.language_models.base import (
+    LanguageModel,
+    LLMConfig,
+    LLMResponse,
+    LLMMessage,
+)
+from typing import List
 import openai
 from dotenv import load_dotenv
 import os
@@ -56,16 +61,38 @@ class OpenAIGPT(LanguageModel):
         msg = response["choices"][0]["text"].strip()
         return LLMResponse(message=msg, usage=usage)
 
-    def chat(self, messages: List[Dict[str, Any]], max_tokens: int) -> LLMResponse:
+    def chat(self, messages: List[LLMMessage], max_tokens: int) -> LLMResponse:
         openai.api_key = self.api_key
         response = openai.ChatCompletion.create(
             model=self.config.chat_model,
-            messages=messages,
+            messages=[m.dict() for m in messages],
             max_tokens=max_tokens,
             n=1,
             stop=None,
             temperature=0.5,
         )
         usage = response["usage"]["total_tokens"]
+        # open ai response will look like this:
+        """
+        {
+            "id": "chatcmpl-123",
+            "object": "chat.completion",
+            "created": 1677652288,
+            "choices": [{
+                "index": 0,
+                "message": {
+                    "role": "assistant",
+                    "content": "\n\nHello there, how may I help you?",
+                },
+                "finish_reason": "stop"
+            }],
+            "usage": {
+                "prompt_tokens": 9,
+                "completion_tokens": 12,
+                "total_tokens": 21
+            }
+        }
+        """
+
         msg = response["choices"][0]["message"]["content"].strip()
         return LLMResponse(message=msg, usage=usage)

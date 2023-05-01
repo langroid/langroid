@@ -1,10 +1,11 @@
 from abc import ABC
+from typing import List
 from pydantic import BaseModel, BaseSettings
 from halo import Halo
 from llmagent.mytypes import Document
 from rich import print
 
-from llmagent.language_models.base import LanguageModel
+from llmagent.language_models.base import LanguageModel, LLMMessage
 from llmagent.vector_store.base import VectorStore
 from llmagent.parsing.parser import Parser
 from llmagent.vector_store.base import VectorStoreConfig
@@ -63,4 +64,21 @@ class Agent(ABC):
         with Halo(text="LLM query...", spinner="dots"):
             response = self.llm.generate(query, self.config.llm.max_tokens)
         print("[green]" + response.message)
-        return Document(content=response.message, metadata={"source": "LLM"})
+        return Document(
+            content=response.message, metadata=dict(source="LLM", usage=response.usage)
+        )
+
+    def respond_messages(self, messages: List[LLMMessage]) -> Document:
+        """
+        Respond to a series of messages, e.g. with OpenAI ChatCompletion
+        Args:
+            messages: seq of messages (with role, content fields) sent to LLM
+        Returns:
+            Document (i.e. with fields "content", "metadata")
+        """
+        with Halo(text="LLM responding to messages...", spinner="dots"):
+            response = self.llm.chat(messages, self.config.llm.max_tokens)
+        print("[green]" + response.message)
+        return Document(
+            content=response.message, metadata=dict(source="LLM", usage=response.usage)
+        )
