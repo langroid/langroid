@@ -4,7 +4,7 @@
 [![Lint](https://github.com/langroid/llmagent/actions/workflows/validate.yml/badge.svg)](https://github.com/langroid/llmagent/actions/workflows/validate.yml)
 [![Docs](https://github.com/langroid/llmagent/actions/workflows/mkdocs-deploy.yml/badge.svg)](https://github.com/langroid/llmagent/actions/workflows/mkdocs-deploy.yml)
 
-### Set up dev env
+## Set up dev env
 
 We use [`poetry`](https://python-poetry.org/docs/#installation) 
 to manage dependencies, and `python 3.11` for development.
@@ -34,16 +34,17 @@ cp .env-template .env
 
 Currently only OpenAI models are supported. Others will be added later.
 
-### Pull requests
+## Pull requests
 
 To check for issues locally, run `make check`, it runs linters `black`, 
 `flake8` and type-checker `mypy`. The `mypy` flags lots of issues, but 
 ignore those for now. 
 
 
-### Run some examples
+## Run some examples
 
-1. "Chat" with a set of URLs. 
+### "Chat" with a set of URLs.
+
 ```bash
 python3 examples/urlqa/chat.py
 ```
@@ -60,8 +61,13 @@ compression and intelligence. If you are using the default URLs, try asking:
 and then a follow-up question:
 > what did she build?
 
-
-2. "chat"-based dockerfile creator. This is just a prelim starting point.
+### "chat"-based dockerfile creator. 
+  
+This is just a prelim starting point, 
+where we leverage the knowledge, reasoning and planning ability of the LLM.
+We don't hard-code any logic, and all the smarts are in the initial prompt.
+The LLM generates questions to help it generate the dockerfile, the humans 
+answers them one by one.
 
 ```bash
 python3 examples/dockerfile/chat.py
