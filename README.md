@@ -1,8 +1,10 @@
 # llmagent
 
 [![Pytest](https://github.com/langroid/llmagent/actions/workflows/pytest.yml/badge.svg)](https://github.com/langroid/llmagent/actions/workflows/pytest.yml)
+
 [![Lint](https://github.com/langroid/llmagent/actions/workflows/validate.yml/badge.svg)](https://github.com/langroid/llmagent/actions/workflows/validate.yml)
-[![Deploy MkDocs to Pages](https://github.com/langroid/llmagent/actions/workflows/mkdocs-deploy.yml/badge.svg)](https://github.com/langroid/llmagent/actions/workflows/mkdocs-deploy.yml)
+
+[![Docs](https://github.com/langroid/llmagent/actions/workflows/mkdocs-deploy.yml/badge.svg)](https://github.com/langroid/llmagent/actions/workflows/mkdocs-deploy.yml)
 
 ### Set up dev env
 

@@ -25,6 +25,7 @@ class URLQAConfig(AgentConfig):
 
     llm: LLMConfig = LLMConfig(type="openai")
     parsing: ParsingConfig = ParsingConfig(
+        splitter="para_sentence",
         chunk_size=500,
         chunk_overlap=50,
     )
