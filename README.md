@@ -57,17 +57,25 @@ python3 examples/urlqa/chat.py debug=True
 Ask a question you want answered based on the URLs content. The default 
 URLs are about various articles and discussions on LLM-based agents, 
 compression and intelligence. If you are using the default URLs, try asking:
+
 > who is Pattie Maes?
+
 and then a follow-up question:
+
 > what did she build?
 
 ### "chat"-based dockerfile creator. 
   
 This is just a prelim starting point, 
 where we leverage the knowledge, reasoning and planning ability of the LLM.
-We don't hard-code any logic, and all the smarts are in the initial prompt.
-The LLM generates questions to help it generate the dockerfile, the humans 
-answers them one by one.
+We don't hard-code any logic. All the smarts are in the initial prompt, 
+which instructs the LLM to _ask any info it needs_ to help it build the 
+dockerfile. The LLM then generates a series of questions, answered by the 
+human. The next step will be to nearly eliminate the human from this loop, 
+and have the LLM questions trigger scripts or semantic lookups in the 
+sharded + vectorized code-repo. The LLM could then show the answer it found 
+or give a set of possible options, and ask the human to confirm/choose.  
+
 
 ```bash
 python3 examples/dockerfile/chat.py
