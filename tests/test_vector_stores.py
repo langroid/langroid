@@ -11,7 +11,6 @@ from llmagent.utils.system import rmdir
 from dotenv import load_dotenv
 import os
 import pytest
-import shutil
 
 load_dotenv()
 api_key = os.getenv("OPENAI_API_KEY")
