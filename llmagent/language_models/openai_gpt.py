@@ -52,17 +52,16 @@ class OpenAIGPT(LanguageModel):
         """Get streaming status"""
         return self.config.stream
 
-    def _completion_args(self, prompt: str, max_tokens: int):
-        return dict(
-            model=self.config.completion_model,
-            prompt=prompt,
-            max_tokens=max_tokens,
-            temperature=0,
-            echo=False,
-            stream=self.config.stream,
-        )
-
     def _stream_response(self, response, chat=False):
+        """
+        Grab and print streaming response from API.
+        Args:
+            response: event-sequence emitted by API
+            chat: whether in chat-mode (or else completion-mode)
+        Returns:
+            LLMResponse object (with message, usage)
+
+        """
         completion = ""
         sys.stdout.write(Colors().GREEN)
         sys.stdout.flush()
