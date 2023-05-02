@@ -7,9 +7,11 @@ from llmagent.embedding_models.models import (
 )
 from llmagent.embedding_models.base import EmbeddingModelsConfig
 from llmagent.mytypes import Document
+from llmagent.utils.system import rmdir
 from dotenv import load_dotenv
 import os
 import pytest
+import shutil
 
 load_dotenv()
 api_key = os.getenv("OPENAI_API_KEY")
@@ -24,17 +26,21 @@ sentence_cfg = SentenceTransformerEmbeddingsConfig(
 
 
 def generate_vecdbs(embed_cfg: EmbeddingModelsConfig) -> VectorStore:
+    qd_dir = ".qdrant/testdata" + embed_cfg.model_type
+    rmdir(qd_dir)
     qd_cfg = QdrantDBConfig(
         type="qdrant",
         collection_name="test" + embed_cfg.model_type,
-        storage_path=".qdrant/testdata" + embed_cfg.model_type,
+        storage_path=qd_dir,
         embedding=embed_cfg,
     )
 
+    cd_dir = ".chroma/testdata" + embed_cfg.model_type
+    rmdir(cd_dir)
     cd_cfg = ChromaDBConfig(
         type="chroma",
         collection_name="test" + embed_cfg.model_type,
-        storage_path=".chroma/testdata" + embed_cfg.model_type,
+        storage_path=cd_dir,
         embedding=embed_cfg,
     )
 
