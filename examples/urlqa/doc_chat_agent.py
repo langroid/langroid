@@ -1,4 +1,7 @@
 from llmagent.agent.base import Agent, AgentConfig
+from llmagent.language_models.base import StreamingIfAllowed
+from llmagent.utils.configuration import settings
+from contextlib import ExitStack
 from llmagent.mytypes import Document
 from typing import List, Union
 from halo import Halo
@@ -27,7 +30,8 @@ class DocChatAgent(Agent):
         if query.startswith("!"):
             # direct query to LLM
             query = query[1:]
-            response = super().respond(query)
+            with StreamingIfAllowed(self.llm):
+                response = super().respond(query)
             self.update_history(query, response.content)
             return response
         if query == "":
@@ -56,15 +60,23 @@ class DocChatAgent(Agent):
         ]
         max_score = max([s[1] for s in docs_and_scores])
         with Halo(text="LLM Extracting verbatim passages...", spinner="dots"):
-            verbatim_texts: List[Document] = self.llm.get_verbatim_extracts(
-                query, passages
+            with StreamingIfAllowed(self.llm, False):
+                verbatim_texts: List[Document] = self.llm.get_verbatim_extracts(
+                    query, passages
+                )
+        with ExitStack() as stack:
+            # conditionally use Streaming or Halo context
+            cm = (
+                StreamingIfAllowed(self.llm)
+                if settings.stream
+                else (Halo(text="LLM Generating final answer...", spinner="dots"))
             )
-        with Halo(text="LLM Generating final answer...", spinner="dots"):
+            stack.enter_context(cm)
             response = self.llm.get_summary_answer(query, verbatim_texts)
         print("[green]relevance = ", max_score)
-        print("[green]" + response.content)
-        # if len(source) > 0:
-        #     print("[cyan]" + source)
+        if not settings.stream:
+            # if we didn't stream it, print it now
+            print("[green]" + response.content)
         self.update_history(query, response.content)
         self.response = response  # save last response
         return response
@@ -79,7 +91,8 @@ class DocChatAgent(Agent):
             Give a concise summary of the following text:
             {full_text}
             """.strip()
-            super().respond(prompt)  # raw LLM call
+            with StreamingIfAllowed(self.llm):
+                super().respond(prompt)  # raw LLM call
         else:
             print("[red] No summarization for more than 1000 tokens, sorry!")
 

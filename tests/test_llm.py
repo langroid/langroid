@@ -1,5 +1,6 @@
 from llmagent.language_models.openai_gpt import OpenAIGPT, OpenAIGPTConfig
 from llmagent.language_models.base import LLMMessage, Role
+from llmagent.utils.configuration import Settings, set_global
 
 
 def test_openai_gpt():
@@ -25,3 +26,7 @@ def test_openai_gpt():
     ]
     response = mdl.chat(messages=messages, max_tokens=10)
     assert "Paris" in response.message
+
+    # streaming output
+    set_global(Settings(stream=True))
+    response = mdl.generate(prompt=question, max_tokens=10)
