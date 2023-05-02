@@ -54,3 +54,5 @@ exclude = [".venv", "venv", "examples", "llmagent/utils/web"]
 files=["llmagent/*"]
 
 
+[tool.pytest.ini_options]
+filterwarnings = ["ignore::DeprecationWarning"]

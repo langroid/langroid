@@ -1,8 +1,11 @@
 from llmagent.vector_store.qdrantdb import QdrantDBConfig, QdrantDB
+from llmagent.vector_store.chromadb import ChromaDBConfig, ChromaDB
+from llmagent.vector_store.base import VectorStore
 from llmagent.embedding_models.models import (
     OpenAIEmbeddingsConfig,
     SentenceTransformerEmbeddingsConfig,
 )
+from llmagent.embedding_models.base import EmbeddingModelsConfig
 from llmagent.mytypes import Document
 from dotenv import load_dotenv
 import os
@@ -20,14 +23,7 @@ sentence_cfg = SentenceTransformerEmbeddingsConfig(
 )
 
 
-@pytest.mark.parametrize(
-    "embed_cfg",
-    [
-        pytest.param(openai_cfg, id="openai"),
-        pytest.param(sentence_cfg, id="sentencetransformer"),
-    ],
-)
-def test_vector_stores(embed_cfg):
+def generate_vecdbs(embed_cfg: EmbeddingModelsConfig) -> VectorStore:
     qd_cfg = QdrantDBConfig(
         type="qdrant",
         collection_name="test",
@@ -35,15 +31,30 @@ def test_vector_stores(embed_cfg):
         embedding=embed_cfg,
     )
 
-    qd = QdrantDB(qd_cfg)
+    cd_cfg = ChromaDBConfig(
+        type="chroma",
+        collection_name="test",
+        storage_path=".chroma/testdata",
+        embedding=embed_cfg,
+    )
 
+    qd = QdrantDB(qd_cfg)
+    cd = ChromaDB(cd_cfg)
+
+    return [qd, cd]
+
+
+@pytest.mark.parametrize(
+    "vecdb", generate_vecdbs(openai_cfg) + generate_vecdbs(sentence_cfg)
+)
+def test_vector_stores(vecdb):
     docs = [
         Document(content="hello", metadata={"id": 1}),
         Document(content="world", metadata={"id": 2}),
         Document(content="hi there", metadata={"id": 2}),
     ]
-    qd.add_documents(docs)
-    docs_and_scores = qd.similar_texts_with_scores("hello", k=2)
+    vecdb.add_documents(docs)
+    docs_and_scores = vecdb.similar_texts_with_scores("hello", k=2)
     assert set([docs_and_scores[0][0].content, docs_and_scores[1][0].content]) == set(
         ["hello", "hi there"]
     )
