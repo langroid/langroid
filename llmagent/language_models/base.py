@@ -3,6 +3,7 @@ from abc import ABC, abstractmethod
 from enum import Enum
 from typing import List, Tuple
 from llmagent.mytypes import Document
+from llmagent.utils.configuration import settings
 from llmagent.utils.output.printing import show_if_debug
 from llmagent.prompts.templates import EXTRACTION_PROMPT, SUMMARY_ANSWER_PROMPT
 from llmagent.prompts.dialog import collate_chat_history
@@ -15,6 +16,7 @@ class LLMConfig(BaseSettings):
     max_tokens: int = 1024
     chat_model: str = "gpt-3.5-turbo"
     completion_model: str = "text-davinci-003"
+    stream: bool = False  # stream output from API?
 
 
 class LLMResponse(BaseModel):
@@ -59,6 +61,17 @@ class LanguageModel(ABC):
             openai=OpenAIGPT,
         ).get(config.type, OpenAIGPT)
         return cls(config)
+
+    @abstractmethod
+    def set_stream(self, stream: bool) -> bool:
+        """Enable or disable streaming output from API.
+        Return previous value of stream."""
+        pass
+
+    @abstractmethod
+    def get_stream(self) -> bool:
+        """Get streaming status"""
+        pass
 
     @abstractmethod
     def generate(self, prompt: str, max_tokens: int) -> LLMResponse:
@@ -187,3 +200,18 @@ class LanguageModel(ABC):
             content = final_answer
             sources = ""
         return Document(content=content, metadata={"source": "SOURCE: " + sources})
+
+
+class StreamingIfAllowed:
+    """Context to temporarily enable streaming, if allowed globally via
+    `settings.stream`"""
+
+    def __init__(self, llm: LanguageModel, stream: bool = True):
+        self.llm = llm
+        self.stream = stream
+
+    def __enter__(self):
+        self.old_stream = self.llm.set_stream(settings.stream and self.stream)
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.llm.set_stream(self.old_stream)

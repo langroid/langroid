@@ -19,7 +19,7 @@ setup_colored_logging()
 
 
 def chat(config: URLQAConfig) -> None:
-    configuration.update_global_settings(config, keys=["debug"])
+    configuration.update_global_settings(config, keys=["debug", "stream"])
 
     default_urls = config.urls
 

@@ -11,6 +11,7 @@ from typing import List
 
 class URLQAConfig(AgentConfig):
     debug: bool = False
+    stream: bool = True  # allow streaming where needed
     max_tokens: int = 10000
     vecdb: VectorStoreConfig = QdrantDBConfig(
         type="qdrant",

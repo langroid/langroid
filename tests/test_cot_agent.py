@@ -1,5 +1,5 @@
 from llmagent.agent.cot_agent import COTAgent
-from llmagent.language_models.base import LLMMessage, Role
+from llmagent.language_models.base import LLMMessage, Role, StreamingIfAllowed
 from llmagent.agent.base import AgentConfig
 from llmagent.vector_store.qdrantdb import QdrantDBConfig
 from llmagent.embedding_models.models import OpenAIEmbeddingsConfig
@@ -78,3 +78,6 @@ def test_cot_agent():
     agent = COTAgent(cfg, task)
     agent.start()
     agent.respond("I am not sure")
+
+    with StreamingIfAllowed(agent.llm, False):
+        agent.respond("how are you?")

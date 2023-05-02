@@ -19,6 +19,7 @@ setup_colored_logging()
 
 class COTAgentConfig(AgentConfig):
     debug: bool = False
+    stream: bool = True
     max_tokens: int = 200
     vecdb: VectorStoreConfig = QdrantDBConfig(
         type="qdrant",
@@ -42,7 +43,7 @@ class COTAgentConfig(AgentConfig):
 
 
 def chat(config: COTAgentConfig) -> None:
-    configuration.update_global_settings(config, keys=["debug"])
+    configuration.update_global_settings(config, keys=["debug", "stream"])
 
     print("[blue]Hello I am here to make your dockerfile!")
     print("[cyan]Enter x or q to quit")
@@ -88,6 +89,7 @@ def chat(config: COTAgentConfig) -> None:
     ]
 
     agent = COTAgent(config, task)
+    agent.llm.set_stream(config.stream)
     agent.start()
     while True:
         print("\n[blue]Human: ", end="")

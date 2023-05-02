@@ -4,6 +4,8 @@ from llmagent.language_models.base import (
     LLMResponse,
     LLMMessage,
 )
+import sys
+from llmagent.utils.constants import Colors
 from typing import List
 import openai
 from dotenv import load_dotenv
@@ -36,6 +38,20 @@ class OpenAIGPT(LanguageModel):
         load_dotenv()
         self.api_key = os.getenv("OPENAI_API_KEY")
 
+    def set_stream(self, stream: bool) -> bool:
+        """Enable or disable streaming output from API.
+        Args:
+            stream: enable streaming output from API
+        Returns: previous value of stream
+        """
+        tmp = self.config.stream
+        self.config.stream = stream
+        return tmp
+
+    def get_stream(self) -> bool:
+        """Get streaming status"""
+        return self.config.stream
+
     def _completion_args(self, prompt: str, max_tokens: int):
         return dict(
             model=self.config.completion_model,
@@ -43,19 +59,57 @@ class OpenAIGPT(LanguageModel):
             max_tokens=max_tokens,
             temperature=0,
             echo=False,
+            stream=self.config.stream,
         )
+
+    def _stream_response(self, response, chat=False):
+        completion = ""
+        sys.stdout.write(Colors().GREEN)
+        sys.stdout.flush()
+        for event in response:
+            if chat:
+                event_text = event["choices"][0]["delta"].get("content", "")
+            else:
+                event_text = event["choices"][0]["text"]
+            if event_text:
+                completion += event_text
+                sys.stdout.write(Colors().GREEN + event_text)
+                sys.stdout.flush()
+
+        print(Colors().RESET)
+        # TODO- get usage info in stream mode (?)
+        return LLMResponse(message=completion, usage=0)
 
     def generate(self, prompt: str, max_tokens: int) -> LLMResponse:
         openai.api_key = self.api_key
-        response = openai.Completion.create(**self._completion_args(prompt, max_tokens))
-        usage = response["usage"]["total_tokens"]
-        msg = response["choices"][0]["text"].strip()
-        return LLMResponse(message=msg, usage=usage)
+        response = openai.Completion.create(
+            model=self.config.completion_model,
+            prompt=prompt,
+            max_tokens=max_tokens,
+            temperature=0,
+            echo=False,
+            stream=self.config.stream,
+        )
+        if self.config.stream:
+            return self._stream_response(response)
+        else:
+            usage = response["usage"]["total_tokens"]
+            msg = response["choices"][0]["text"].strip()
+            return LLMResponse(message=msg, usage=usage)
 
     async def agenerate(self, prompt: str, max_tokens: int) -> LLMResponse:
         openai.api_key = self.api_key
+        # note we typically will not have self.config.stream = True
+        # when issuing several api calls concurrently/asynchronously.
+        # The calling fn should use the context `with Streaming(..., False)` to
+        # disable streaming.
         response = await openai.Completion.acreate(
-            **self._completion_args(prompt, max_tokens)
+            model=self.config.completion_model,
+            prompt=prompt,
+            max_tokens=max_tokens,
+            temperature=0,
+            echo=False,
+            stream=self.config.stream,
         )
         usage = response["usage"]["total_tokens"]
         msg = response["choices"][0]["text"].strip()
@@ -70,9 +124,13 @@ class OpenAIGPT(LanguageModel):
             n=1,
             stop=None,
             temperature=0.5,
+            stream=self.config.stream,
         )
+        if self.config.stream:
+            return self._stream_response(response, chat=True)
+
         usage = response["usage"]["total_tokens"]
-        # open ai response will look like this:
+        # openAI response will look like this:
         """
         {
             "id": "chatcmpl-123",
