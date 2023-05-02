@@ -32,7 +32,7 @@ class DocChatAgent(Agent):
             query = query[1:]
             with StreamingIfAllowed(self.llm):
                 response = super().respond(query)
-            self.update_history(query, response.content)
+            self.update_dialog(query, response.content)
             return response
         if query == "":
             return None
@@ -47,9 +47,9 @@ class DocChatAgent(Agent):
 
     def answer_from_docs(self, query: str) -> Document:
         """Answer query based on docs in vecdb, and conv history"""
-        if len(self.chat_history) > 0:
+        if len(self.dialog) > 0:
             with Halo(text="Converting to stand-alone query...", spinner="dots"):
-                query = self.llm.followup_to_standalone(self.chat_history, query)
+                query = self.llm.followup_to_standalone(self.dialog, query)
             print(f"[orange2]New query: {query}")
 
         with Halo(text="Searching VecDB for relevant doc passages...", spinner="dots"):
@@ -77,7 +77,7 @@ class DocChatAgent(Agent):
         if not settings.stream:
             # if we didn't stream it, print it now
             print("[green]" + response.content)
-        self.update_history(query, response.content)
+        self.update_dialog(query, response.content)
         self.response = response  # save last response
         return response
 

@@ -24,6 +24,25 @@ class COTAgent(Agent):
             config: settings for the agent
             task: seq of messages to start with
                 Note these messages are not yet issued to LLM at agent init.
+
+        !!! note
+             `self.message_history` is different from `self.dialog` (in Agent class):
+
+            - `self.message_history` is the sequence of messages sent to the LLM in
+            **chat mode** (e.g. when using OpenAI `ChatCompletion.create()`)
+                Typically we send a sequence of such messages to "prime"
+            the LLM context for some task, and we extend and re-send this sequence to
+            continue interaction. Note that consecutive messages in the sequence could
+            have different or same roles (e.g. "user", "assistant"). Each message has a
+            "dict" structure, which we call LLMMessage.
+
+            - `self.dialog` is the sequence of (prompt, response) tuples produced
+            when interacting with an LLM in **completion mode.**,
+            where prompt (str) is sent TO the LLM, and response (str) is received
+            FROM the LLM. Typically as an LLM conversation goes on, we collate
+            `self.dialog` into a single string, and insert it into the context part
+            of the next prompt to the LLM.
+
         """
         super().__init__(config)
         self.message_history: List[LLMMessage] = []
