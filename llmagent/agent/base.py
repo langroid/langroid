@@ -1,5 +1,6 @@
 from abc import ABC
 from typing import List
+from contextlib import ExitStack
 from pydantic import BaseModel, BaseSettings
 from halo import Halo
 from llmagent.mytypes import Document
@@ -22,6 +23,7 @@ class AgentConfig(BaseSettings):
 
     name: str = "llmagent"
     debug: bool = False
+    stream: bool = False  # stream LLM output?
     vecdb: VectorStoreConfig = VectorStoreConfig()
     llm: LLMConfig = LLMConfig()
     parsing: ParsingConfig = ParsingConfig()
@@ -56,14 +58,20 @@ class Agent(ABC):
         """
         Respond to a query.
         Args:
-            query:
-
+            query: query string
         Returns:
             Document
         """
-        with Halo(text="LLM query...", spinner="dots"):
+
+        with ExitStack() as stack:  # for conditionally using Halo spinner
+            if not self.llm.get_stream():
+                # show Halo spinner only if not streaming!
+                cm = Halo(text="LLM responding to message...", spinner="dots")
+                stack.enter_context(cm)
             response = self.llm.generate(query, self.config.llm.max_tokens)
-        print("[green]" + response.message)
+        if not self.llm.get_stream():
+            print("[green]" + response.message)
+
         return Document(
             content=response.message, metadata=dict(source="LLM", usage=response.usage)
         )
@@ -76,9 +84,14 @@ class Agent(ABC):
         Returns:
             Document (i.e. with fields "content", "metadata")
         """
-        with Halo(text="LLM responding to messages...", spinner="dots"):
+        with ExitStack() as stack:  # for conditionally using Halo spinner
+            if not self.llm.get_stream():
+                # show Halo spinner only if not streaming!
+                cm = Halo(text="LLM responding to messages...", spinner="dots")
+                stack.enter_context(cm)
             response = self.llm.chat(messages, self.config.llm.max_tokens)
-        print("[green]" + response.message)
+        if not self.llm.get_stream():
+            print("[green]" + response.message)
         return Document(
             content=response.message, metadata=dict(source="LLM", usage=response.usage)
         )

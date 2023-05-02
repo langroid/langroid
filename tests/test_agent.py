@@ -1,7 +1,7 @@
 from llmagent.agent.base import Agent, AgentConfig
 from llmagent.embedding_models.models import OpenAIEmbeddingsConfig
 from llmagent.vector_store.qdrantdb import QdrantDBConfig
-from llmagent.language_models.base import LLMConfig
+from llmagent.language_models.base import LLMConfig, StreamingIfAllowed
 from llmagent.parsing.parser import ParsingConfig
 from llmagent.prompts.prompts_config import PromptsConfig
 
@@ -31,4 +31,8 @@ def test_agent():
 
     agent = Agent(cfg)
     response = agent.respond("what is the capital of France?")  # direct LLM question
+    assert "Paris" in response.content
+
+    with StreamingIfAllowed(agent.llm, False):
+        response = agent.respond("what is the capital of France?")
     assert "Paris" in response.content

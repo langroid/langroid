@@ -1,4 +1,4 @@
-from llmagent.language_models.base import LLMMessage, Role
+from llmagent.language_models.base import LLMMessage, Role, StreamingIfAllowed
 from llmagent.agent.base import Agent, AgentConfig
 from llmagent.mytypes import Document
 from typing import List
@@ -35,7 +35,8 @@ class COTAgent(Agent):
         Returns:
             Document (i.e. with fields "content", "metadata")
         """
-        response = self.respond_messages(self.task_messages)
+        with StreamingIfAllowed(self.llm):
+            response = self.respond_messages(self.task_messages)
         self.message_history = self.task_messages + [
             LLMMessage(
                 role=Role.ASSISTANT,
@@ -53,7 +54,8 @@ class COTAgent(Agent):
         Returns:
         """
         self.message_history.append(LLMMessage(role=Role.USER, content=message))
-        response = self.respond_messages(self.message_history)
+        with StreamingIfAllowed(self.llm):
+            response = self.respond_messages(self.message_history)
         self.message_history.append(
             LLMMessage(role=Role.ASSISTANT, content=response.content)
         )
