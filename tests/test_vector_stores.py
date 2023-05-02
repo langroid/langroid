@@ -9,6 +9,7 @@ from llmagent.embedding_models.base import EmbeddingModelsConfig
 from llmagent.mytypes import Document
 from llmagent.utils.system import rmdir
 from dotenv import load_dotenv
+from typing import Union
 import os
 import pytest
 
@@ -52,7 +53,7 @@ def generate_vecdbs(embed_cfg: EmbeddingModelsConfig) -> VectorStore:
 @pytest.mark.parametrize(
     "vecdb", generate_vecdbs(openai_cfg) + generate_vecdbs(sentence_cfg)
 )
-def test_vector_stores(vecdb):
+def test_vector_stores(vecdb: Union[ChromaDB, QdrantDB]):
     docs = [
         Document(content="hello", metadata={"id": 1}),
         Document(content="world", metadata={"id": 2}),
@@ -63,3 +64,4 @@ def test_vector_stores(vecdb):
     assert set([docs_and_scores[0][0].content, docs_and_scores[1][0].content]) == set(
         ["hello", "hi there"]
     )
+    rmdir(vecdb.config.storage_path)
