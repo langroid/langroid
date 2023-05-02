@@ -11,6 +11,7 @@ from llmagent.language_models.base import LLMConfig
 from llmagent.parsing.parser import ParsingConfig
 from llmagent.prompts.prompts_config import PromptsConfig
 from rich import print
+import textwrap
 
 app = typer.Typer()
 
@@ -50,32 +51,50 @@ def chat(config: COTAgentConfig) -> None:
     task = [
         LLMMessage(
             role=Role.SYSTEM,
-            content="""you are a devops engineer. 
-                   You have access to a repo. You have to write a docker file to 
-                   containerize it. Come up with a plan to do this, 
-                   breaking it down into small steps. 
-                   You have to ask me what you need to know in order to complete 
-                   your task, ONE STEP AT A TIME. 
-                   At any time you can ONLY ASK me a SINGLE QUESTION.
-                   I will answer it, and then you will ASK another QUESTION,
-                   and son on, until you say you are DONE, and show me the completed 
-                   dockerfile.""",
+            content="""You are a devops engineer. For a given repo URL, you have to 
+            write a dockerfile to containerize it. Come up with a plan to do this,
+            breaking it down into small steps. At each step, show what you are 
+            THINKING, and ask me what you need to know in order to complete your task. 
+            When I answer it, think about your next step, show me your THINKING, 
+            ASK me another question, and so on, until you say you are DONE, and show 
+            me the completed dockerfile.""",
+        ),
+        LLMMessage(
+            role=Role.SYSTEM,
+            name="example_assistant",
+            content="""
+            THINKING: I first need to know which repo to containerize, 
+            so I need to know the URL.
+            QUESTION: What is the URL of the repo?
+            """.strip(),
         ),
         LLMMessage(
             role=Role.SYSTEM,
             name="example_user",
-            content="Please send me your first QUESTION",
+            content="The URL is https://github.com/blah/bar",
         ),
         LLMMessage(
             role=Role.SYSTEM,
             name="example_assistant",
-            content="What language is the repo written in?",
+            content="""
+            THINKING: thank you. The dockerfile setup depends on the 
+            language.
+            QUESTION: What language is the repo written in?
+            """.strip(),
         ),
-        LLMMessage(role=Role.SYSTEM, name="example_user", content="Python"),
+        LLMMessage(
+            role=Role.SYSTEM,
+            name="example_user",
+            content="Python"
+        ),
         LLMMessage(
             role=Role.SYSTEM,
             name="example_assistant",
-            content="What version of Python?",
+            content="""
+            THINKING: thank you. The python version can make a big difference to the 
+            docker file structure and dependencies.
+            QUESTION: What version of python is the repo written in?
+            """.strip(),
         ),
         LLMMessage(role=Role.SYSTEM, name="example_user", content="3.8"),
         LLMMessage(
@@ -84,7 +103,7 @@ def chat(config: COTAgentConfig) -> None:
                            need to write a dockerfile for a repo. Please think 
                            in small steps, and do this gradually, and focus on what 
                            information you need to know to accomplish your task.
-                           Please send me your first QUESTION""",
+                           Please send me your first THINKING, and QUESTION""",
         ),
     ]
 
