@@ -26,15 +26,15 @@ sentence_cfg = SentenceTransformerEmbeddingsConfig(
 def generate_vecdbs(embed_cfg: EmbeddingModelsConfig) -> VectorStore:
     qd_cfg = QdrantDBConfig(
         type="qdrant",
-        collection_name="test-" + embed_cfg.model_type,
-        storage_path=".qdrant/testdata-" + embed_cfg.model_type,
+        collection_name="test" + embed_cfg.model_type,
+        storage_path=".qdrant/testdata" + embed_cfg.model_type,
         embedding=embed_cfg,
     )
 
     cd_cfg = ChromaDBConfig(
         type="chroma",
-        collection_name="test-" + embed_cfg.model_type,
-        storage_path=".chroma/testdata-" + embed_cfg.model_type,
+        collection_name="test" + embed_cfg.model_type,
+        storage_path=".chroma/testdata" + embed_cfg.model_type,
         embedding=embed_cfg,
     )
 
