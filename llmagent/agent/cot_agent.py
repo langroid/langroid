@@ -34,11 +34,11 @@ class COTAgent(Agent):
             the LLM context for some task, and we extend and re-send this sequence to
             continue interaction. Note that consecutive messages in the sequence could
             have different or same roles (e.g. "user", "assistant"). Each message has a
-            "dict" structure, which we call LLMMessage.
+            "dict" structure, which we call :class:`LLMMessage`.
 
-            - `self.dialog` is the sequence of (prompt, response) tuples produced
-            when interacting with an LLM in **completion mode.**,
-            where prompt (str) is sent TO the LLM, and response (str) is received
+            - `self.dialog` is the sequence of `(prompt, response)` tuples produced
+            when interacting with an LLM in **completion mode**,
+            where `prompt (str)` is sent TO the LLM, and `response (str)` is received
             FROM the LLM. Typically as an LLM conversation goes on, we collate
             `self.dialog` into a single string, and insert it into the context part
             of the next prompt to the LLM.
