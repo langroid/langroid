@@ -34,6 +34,18 @@ cp .env-template .env
 
 Currently only OpenAI models are supported. Others will be added later.
 
+## Run tests
+To verify your env is correctly setup, run all tests using `make test`.
+
+## Generate docs (private only for now)
+
+Generate docs: `make docs`, then go to the IP address shown at the end, like 
+`http://127.0.0.1:8000/`
+Note this runs a docs server in the background.
+To stop it, run `make nodocs`. Also, running `make docs` next time will kill 
+any previously running `mkdocs` server.
+
+
 ## Pull requests
 
 To check for issues locally, run `make check`, it runs linters `black`, 

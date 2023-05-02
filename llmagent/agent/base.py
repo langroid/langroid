@@ -41,18 +41,18 @@ class Message(BaseModel):
 class Agent(ABC):
     def __init__(self, config: AgentConfig):
         self.config = config
-        self.chat_history = []  # list of (prompt, response) tuples
+        self.dialog = []  # seq of LLM (prompt, response) tuples
         self.response: Document = None  # last response
 
         self.llm = LanguageModel.create(config.llm)
         self.vecdb = VectorStore.create(config.vecdb)
         self.parser = Parser(config.parsing)
 
-    def update_history(self, prompt, output):
-        self.chat_history.append((prompt, output))
+    def update_dialog(self, prompt, output):
+        self.dialog.append((prompt, output))
 
-    def get_history(self):
-        return self.chat_history
+    def get_dialog(self):
+        return self.dialog
 
     def respond(self, query: str) -> Document:
         """
