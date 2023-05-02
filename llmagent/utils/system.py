@@ -3,6 +3,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+
 def rmdir(path) -> bool:
     """
     Remove a directory recursively.
@@ -19,4 +20,3 @@ def rmdir(path) -> bool:
     except Exception as e:
         logger.error(f"Error while removing directory '{path}': {e}")
     return True
-
