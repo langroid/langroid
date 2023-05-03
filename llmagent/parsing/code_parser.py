@@ -1,7 +1,6 @@
 from pydantic import BaseSettings
 import tiktoken
 from functools import reduce
-from llmagent.parsing.code_processor import chunk_code
 from llmagent.mytypes import Document
 from typing import List
 from pygments import lex
@@ -9,8 +8,10 @@ from pygments.token import Token
 from pygments.lexers import get_lexer_by_name
 from typing import Callable
 
-def chunk_code(code: str, language: str, max_tokens: int,
-               len_fn: Callable[[str], int]) -> List[str]:
+
+def chunk_code(
+    code: str, language: str, max_tokens: int, len_fn: Callable[[str], int]
+) -> List[str]:
     lexer = get_lexer_by_name(language)
     tokens = list(lex(code, lexer))
 
@@ -35,10 +36,22 @@ def chunk_code(code: str, language: str, max_tokens: int,
 
 class CodeParsingConfig(BaseSettings):
     extensions: List[str] = [
-        "py", "java", "c", "cpp", "h", "hpp", "yml", "yaml",
-        "toml", "ini", "json", "rst", "sh", "bash",
+        "py",
+        "java",
+        "c",
+        "cpp",
+        "h",
+        "hpp",
+        "yml",
+        "yaml",
+        "toml",
+        "ini",
+        "json",
+        "rst",
+        "sh",
+        "bash",
     ]
-    chunk_size: int = 500 # tokens
+    chunk_size: int = 500  # tokens
     token_encoding_model: str = "text-embedding-ada-002"
 
 
@@ -78,12 +91,15 @@ class CodeParser:
             [
                 Document(content=chunk, metadata=d.metadata)
                 for chunk in chunk_code(
-                    d.content, d.metadata["language"],
-                    self.config.chunk_size, self.num_tokens
+                    d.content,
+                    d.metadata["language"],
+                    self.config.chunk_size,
+                    self.num_tokens,
                 )
                 if chunk.strip() != ""
             ]
-            for d in docs if d.metadata["language"] in self.config.extensions
+            for d in docs
+            if d.metadata["language"] in self.config.extensions
         ]
         # collapse the list of lists into a single list
         return reduce(lambda x, y: x + y, chunked_docs)
