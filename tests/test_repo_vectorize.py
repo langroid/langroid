@@ -67,17 +67,17 @@ def generate_vecdbs(embed_cfg: EmbeddingModelsConfig) -> VectorStore:
 def test_repo_vectorize(vecdb: Union[ChromaDB, QdrantDB]):
     url = "https://github.com/eugeneyan/testing-ml"
     repo_loader = RepoLoader(url)
-    docs = repo_loader.load()
+    docs = repo_loader.load(10)
     assert len(docs) > 0
 
     parse_cfg = CodeParsingConfig(
         chunk_size=MAX_CHUNK_SIZE,
-        extensions=["py", "sh", "md", "txt"], # include text, code
+        extensions=["py", "sh", "md", "txt"],  # include text, code
         token_encoding_model="text-embedding-ada-002",
     )
 
     parser = CodeParser(parse_cfg)
     split_docs = parser.split(docs)
     vecdb.add_documents(split_docs)
-    docs_and_scores = vecdb.similar_texts_with_scores("hello", k=2)
+    vecdb.similar_texts_with_scores("hello", k=2)
     rmdir(vecdb.config.storage_path)
