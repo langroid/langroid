@@ -52,6 +52,18 @@ To check for issues locally, run `make check`, it runs linters `black`,
 `flake8` and type-checker `mypy`. The `mypy` flags lots of issues, but 
 ignore those for now. 
 
+- When you run this, `black` may warn that some files _would_ be reformatted. 
+If so, you should just run `black .` to reformat them. Also,
+- `flake8` may warn about some issues; read about each one and fix those 
+  issues.
+
+When done with these, git-commit, push to github and submit the PR. If this 
+is an ongoing PR, just push to github again and the PR will be updated. 
+
+Strongly recommend to use the `gh` command-line utility when working with git.
+Read more here:
+
+
 
 ## Run some examples
 
