@@ -44,7 +44,7 @@ class VectorStore(ABC):
 
     @abstractmethod
     def similar_texts_with_scores(
-        self, text: str, k: int = None, where: str = None, debug: bool = False
+        self, text: str, k: int = 1, where: str = None, debug: bool = False
     ):
         pass
 

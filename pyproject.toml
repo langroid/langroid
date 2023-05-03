@@ -33,6 +33,8 @@ typer = "^0.7.0"
 colorlog = "^6.7.0"
 openai = "^0.27.5"
 tiktoken = "^0.3.3"
+pygithub = "^1.58.1"
+pygments = "^2.15.1"
 
 
 
