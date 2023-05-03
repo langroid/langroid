@@ -61,7 +61,7 @@ When done with these, git-commit, push to github and submit the PR. If this
 is an ongoing PR, just push to github again and the PR will be updated. 
 
 Strongly recommend to use the `gh` command-line utility when working with git.
-Read more here:
+Read more [here](docs/writeups/github-cli.md).
 
 
 
