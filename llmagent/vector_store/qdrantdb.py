@@ -84,7 +84,7 @@ class QdrantDB(VectorStore):
     def similar_texts_with_scores(
         self,
         text: str,
-        k: int = None,
+        k: int = 1,
         where: str = None,
     ) -> List[Tuple[Document, float]]:
         embedding = self.embedding_fn([text])[0]

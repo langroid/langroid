@@ -80,7 +80,7 @@ class ChromaDB(VectorStore):
         )
 
     def similar_texts_with_scores(
-        self, text: str, k: int = None, where: str = None, debug: bool = False
+        self, text: str, k: int = 1, where: str = None, debug: bool = False
     ) -> List[Tuple[Document, float]]:
         results = self.collection.query(
             query_texts=[text],
