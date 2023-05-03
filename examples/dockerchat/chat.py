@@ -95,10 +95,14 @@ def chat(config: COTAgentConfig) -> None:
         LLMMessage(
             role=Role.USER,
             content="""You are a sophisticated devops engineer, and you 
-                           need to write a dockerfile for a repo. Please think 
-                           in small steps, and do this gradually, and focus on what 
+                           need to write a dockerfile for a repo. IGNORE ALL DETAILS 
+                           in the above conversation, which was only an example.
+                           Keep in mind your task and start FRESH.
+                           Please think in small steps, and do this gradually, and focus on what 
                            information you need to know to accomplish your task.
-                           Please send me your first THINKING, and QUESTION""",
+                           Please send me your first THINKING, and QUESTION.
+                           For each question, whenever possile, give me a numbered 
+                           list of choices so I can easily select one or a few.""",
         ),
     ]
 
