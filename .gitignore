@@ -4,7 +4,6 @@ __pycache__/
 *$py.class
 
 poetry.lock
-.qdrant/
 
 # C extensions
 *.so

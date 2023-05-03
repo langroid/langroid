@@ -82,11 +82,7 @@ def chat(config: COTAgentConfig) -> None:
             QUESTION: What language is the repo written in?
             """.strip(),
         ),
-        LLMMessage(
-            role=Role.SYSTEM,
-            name="example_user",
-            content="Python"
-        ),
+        LLMMessage(role=Role.SYSTEM, name="example_user", content="Python"),
         LLMMessage(
             role=Role.SYSTEM,
             name="example_assistant",

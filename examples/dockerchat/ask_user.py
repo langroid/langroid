@@ -9,13 +9,23 @@ def get_entry_startup_cmd():
 
 def get_env_vars():
     env_vars = []
-    print("\n[blue]Please specify ENV variables for running your app: ", end="")
-    query = input("")
-    return env_vars
+    print(
+        "\n[blue]Please specify ENV variables for running your app, seperated by comma: ",
+        end="",
+    )
+    env_vars = input("")
+    result = None
+    if env_vars not in ["No", "no"]:
+        result = env_vars.split(",")
+    print(result)
+    return result
 
 
 def get_expose_port():
-    print("\n[blue]Please specify port number to expose your app, otherwise type No: ", end="")
+    print(
+        "\n[blue]Please specify port number to expose your app, otherwise type No: ",
+        end="",
+    )
     query = input("")
     port = None
     if query not in ["No"]:

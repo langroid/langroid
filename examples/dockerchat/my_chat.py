@@ -68,18 +68,19 @@ def chat(config: COTAgentConfig) -> None:
     exit_code, repo_metadata = pr.extract_repo_metadata(repo_url)
 
     if exit_code == 200:
-        print("Success!")
         print(repo_metadata)
     else:
         print(f"Extraction faild exit code: {exit_code}")
         exit(1)
 
-    # get some info from the user
+    # get some info from the user,
+    # TODO maybe better later to put these stuff in a JSON object
     entry_cmd = au.get_entry_startup_cmd()
     port = au.get_expose_port()
+    env_vars = au.get_env_vars()
 
     # construct a new LLMMessage based on the provided inputs and extracted data
-    new_task = llmmsg.construct_LLMMEssage(repo_metadata, port, entry_cmd)
+    new_task = llmmsg.construct_LLMMEssage(repo_metadata, port, entry_cmd, env_vars)
     task.append(new_task)
 
     agent = COTAgent(config, task)
