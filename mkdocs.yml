@@ -40,6 +40,9 @@ nav:
   - Resources: Resources.md
   - Writeups:
     - Specifying LLM Agents: writeups/specifying-llm-agents.md
+  - Development:
+    - GitHub CLI: development/github-cli.md
+    - Releases: development/releases.md
   # defer to gen-files + literate-nav
   - Code Reference: reference/  #
 
