@@ -38,7 +38,7 @@ def get_urls_from_user(
         if i == n:
             break
 
-    return url_set
+    return list(url_set)
 
 
 def find_urls(
