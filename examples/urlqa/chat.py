@@ -48,13 +48,7 @@ def chat(config: URLQAConfig) -> None:
         module="transformers",
     )
 
-    while True:
-        print("\n[blue]Query: ", end="")
-        query = input("")
-        if query in ["exit", "quit", "q", "x", "bye"]:
-            print("[green] Bye, hope this was useful!")
-            break
-        agent.respond(query)
+    agent.run()
 
 
 @app.command()

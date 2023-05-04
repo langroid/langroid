@@ -5,14 +5,27 @@ from urllib.parse import urljoin
 from rich import print
 
 
-def get_urls_from_user():
+def get_urls_from_user(
+    prompt="Enter a URL (type 'done' or hit return to finish): ",
+    n=None,
+) -> set:
+    """
+    Prompt the user for URLs.
+    Args:
+        prompt: printed prompt
+        n: how many URLs to prompt for. If None, then prompt until done, otherwise
+            quit after n URLs have been entered.
+    Returns:
+        set of URLs
+    """
     # Create an empty set to store the URLs.
     url_set = set()
 
     # Use a while loop to continuously ask the user for URLs.
+    i = 0
     while True:
         # Prompt the user for input.
-        print("[blue]Enter a URL (type 'done' or hit return to finish): ", end="")
+        print(f"[blue]{prompt} ", end="")
         url = input("")
 
         # Check if the user wants to exit the loop.
@@ -21,6 +34,9 @@ def get_urls_from_user():
 
         # Add the URL to the set.
         url_set.add(url.strip())
+        i += 1
+        if i == n:
+            break
 
     return url_set
 

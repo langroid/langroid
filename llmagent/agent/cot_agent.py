@@ -48,6 +48,16 @@ class COTAgent(Agent):
         self.message_history: List[LLMMessage] = []
         self.task_messages = task
 
+    def run(self):
+        self.start()
+        while True:
+            print("\n[blue]Human: ", end="")
+            msg = input("")
+            if msg in ["exit", "quit", "q", "x", "bye"]:
+                print("[green] Bye, hope this was useful!")
+                break
+            self.respond(msg)
+
     def start(self) -> Document:
         """
         Start the agent, by sending the initial task spec to LLM

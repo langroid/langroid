@@ -70,11 +70,18 @@ class RepoLoader:
                     # need to decode the file content, which is in bytes
                     text = _get_decoded_content(repo.get_contents(file_content.path))
                     i += 1
+
+                    # Note `source` is important, it may be used to cite
+                    # evidence for an answer.
+                    # See  URLLoader
+                    # TODO we should use Pydantic to enforce/standardize this
+
                     docs.append(
                         Document(
                             content=text,
                             metadata=dict(
                                 repo=self.url,
+                                source=file_content.html_url,
                                 url=file_content.html_url,
                                 filename=file_content.name,
                                 extension=file_extension,

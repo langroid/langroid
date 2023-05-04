@@ -54,6 +54,15 @@ class Agent(ABC):
     def get_dialog(self):
         return self.dialog
 
+    def run(self):
+        while True:
+            print("\n[blue]Query: ", end="")
+            query = input("")
+            if query in ["exit", "quit", "q", "x", "bye"]:
+                print("[green] Bye, it has been a pleasure, hope this was useful!")
+                break
+            self.respond(query)
+
     def respond(self, query: str) -> Document:
         """
         Respond to a query.
