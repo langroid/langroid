@@ -4,18 +4,22 @@ from llmagent.vector_store.qdrantdb import QdrantDBConfig
 from llmagent.language_models.base import LLMConfig, StreamingIfAllowed
 from llmagent.parsing.parser import ParsingConfig
 from llmagent.prompts.prompts_config import PromptsConfig
+from llmagent.utils.system import rmdir
 
 
 def test_agent():
     """
     Test whether the combined configs work as expected.
     """
+    qd_dir = ".qdrant/testdata_test_agent"
+    rmdir(qd_dir)
     cfg = AgentConfig(
         name="test-llmagent",
         debug=False,
         vecdb=QdrantDBConfig(
             type="qdrant",
             collection_name="test",
+            storage_path=qd_dir,
             embedding=OpenAIEmbeddingsConfig(
                 model_type="openai",
                 model_name="text-embedding-ada-002",
@@ -36,3 +40,4 @@ def test_agent():
     with StreamingIfAllowed(agent.llm, False):
         response = agent.respond("what is the capital of France?")
     assert "Paris" in response.content
+    rmdir(qd_dir)
