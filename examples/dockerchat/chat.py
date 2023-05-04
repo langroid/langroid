@@ -107,15 +107,7 @@ def chat(config: COTAgentConfig) -> None:
     ]
 
     agent = COTAgent(config, task)
-    agent.llm.set_stream(config.stream)
-    agent.start()
-    while True:
-        print("\n[blue]Human: ", end="")
-        msg = input("")
-        if msg in ["exit", "quit", "q", "x", "bye"]:
-            print("[green] Bye, hope this was useful!")
-            break
-        agent.respond(msg)
+    agent.run()
 
 
 @app.command()
