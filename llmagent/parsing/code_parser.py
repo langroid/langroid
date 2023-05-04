@@ -12,6 +12,17 @@ from typing import Callable
 def chunk_code(
     code: str, language: str, max_tokens: int, len_fn: Callable[[str], int]
 ) -> List[str]:
+    """
+    Chunk code into smaller pieces, so that we don't exceed the maximum
+    number of tokens allowed by the embedding model.
+    Args:
+        code: string of code
+        language: str as a file extension, e.g. "py", "yml"
+        max_tokens: max tokens per chunk
+        len_fn: function to get the length of a string in token units
+    Returns:
+
+    """
     lexer = get_lexer_by_name(language)
     tokens = list(lex(code, lexer))
 
