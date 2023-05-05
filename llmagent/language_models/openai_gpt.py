@@ -5,6 +5,7 @@ from llmagent.language_models.base import (
     LLMMessage,
 )
 import sys
+from llmagent.utils.llms.rate_limits import retry_with_exponential_backoff
 from llmagent.utils.constants import Colors
 from typing import List
 import openai
@@ -81,7 +82,12 @@ class OpenAIGPT(LanguageModel):
 
     def generate(self, prompt: str, max_tokens: int) -> LLMResponse:
         openai.api_key = self.api_key
-        response = openai.Completion.create(
+
+        @retry_with_exponential_backoff
+        def completions_with_backoff(**kwargs):
+            return openai.Completion.create(**kwargs)
+
+        response = completions_with_backoff(
             model=self.config.completion_model,
             prompt=prompt,
             max_tokens=max_tokens,
@@ -116,7 +122,12 @@ class OpenAIGPT(LanguageModel):
 
     def chat(self, messages: List[LLMMessage], max_tokens: int) -> LLMResponse:
         openai.api_key = self.api_key
-        response = openai.ChatCompletion.create(
+
+        @retry_with_exponential_backoff
+        def completions_with_backoff(**kwargs):
+            return openai.ChatCompletion.create(**kwargs)
+
+        response = completions_with_backoff(
             model=self.config.chat_model,
             messages=[m.dict() for m in messages],
             max_tokens=max_tokens,
