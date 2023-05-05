@@ -11,7 +11,7 @@ class ParsingConfig(BaseSettings):
     chunk_size: int = 500
     chunk_overlap: int = 50
     separators: List[str] = ["\n\n", "\n", " ", ""]
-    token_encoding_model: str = "text-davinci-003"
+    token_encoding_model: str = "text-embedding-ada-002"
 
 
 class Parser:

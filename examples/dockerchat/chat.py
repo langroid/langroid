@@ -102,7 +102,13 @@ def chat(config: COTAgentConfig) -> None:
                            information you need to know to accomplish your task.
                            Please send me your first THINKING, and QUESTION.
                            For each question, whenever possile, give me a numbered 
-                           list of choices so I can easily select one or a few.""",
+                           list of choices so I can easily select one or a few.
+                           VERY IMPORTANT: 
+                           (a) Make sure you have everything you need 
+                               before you start generating a dockerfile.
+                           (b) Be EXHAUSTIVE: ask me about ALL the INFO you may 
+                           possibly need to generate the docker file!!
+                           """,
         ),
     ]
 

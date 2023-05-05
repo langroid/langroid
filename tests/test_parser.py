@@ -11,7 +11,7 @@ def test_parser():
         chunk_size=1000,
         chunk_overlap=2,
         separators=["."],
-        token_encoding_model="text-davinci-003",
+        token_encoding_model="text-embedding-ada-002",
     )
 
     parser = Parser(cfg)
