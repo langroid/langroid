@@ -42,11 +42,11 @@ jobs:
 
     - name: Run tests with coverage
       run: |
-        coverage run --source=llmagent -m pytest
+        poetry run coverage run --source=llmagent -m pytest
         coverage report
     - name: Generate HTML coverage report
       run: |
-        coverage html
+        poetry run coverage html
     - name: Upload coverage report as artifact
       uses: actions/upload-artifact@v2
       with:
