@@ -5,7 +5,7 @@ from llmagent.language_models.base import (
     LLMMessage,
 )
 import sys
-from llmagent.utils.llms.rate_limits import retry_with_exponential_backoff
+from llmagent.language_models.utils import retry_with_exponential_backoff
 from llmagent.utils.constants import Colors
 from typing import List
 import openai
