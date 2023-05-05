@@ -4,6 +4,8 @@ from llmagent.mytypes import Document
 from typing import List
 from rich import print
 
+import re
+
 
 class COTAgent(Agent):
     """
@@ -90,3 +92,16 @@ class COTAgent(Agent):
             LLMMessage(role=Role.ASSISTANT, content=response.content)
         )
         return Document(content=response.content, metadata=response.metadata)
+
+    def response_contain_dockerfile(self, response_message):
+        """
+        Identify if Dockerfile snippet exists inside LLM response
+        Args:
+            response_message: received LLM response
+        Returns:
+        """
+        pattern = r"```((?:\n|.)+?)```"
+        dockerfile_snippet = re.search(pattern, response_message, re.IGNORECASE)
+        if dockerfile_snippet:
+            dockerfile = dockerfile_snippet.group(1)
+            print(dockerfile)
