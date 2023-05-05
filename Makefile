@@ -14,7 +14,7 @@ check:
 .PHONY: tests
 
 tests:
-	pytest -s tests/
+	pytest tests/
 
 .PHONY: docs nodocs
 
