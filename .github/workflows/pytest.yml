@@ -43,7 +43,7 @@ jobs:
     - name: Run tests with coverage
       run: |
         poetry run coverage run --source=llmagent -m pytest
-        coverage report
+        poetry run coverage report
     - name: Generate HTML coverage report
       run: |
         poetry run coverage html
