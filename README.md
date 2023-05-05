@@ -75,10 +75,12 @@ To ensure this, please adhere to the following guidelines when contributing:
    lines to a maximum of 80 characters. This improves readability and ensures
    consistency across the codebase.
 
-If you are using an LLM to write code for you, instructing it briefly with 
-something like this will usually get code compliant with the above guidelines:
-> use type-annotations, google-style docstrings, and pep8 compliant max 80 
-> chars per line.
+If you are using an LLM to write code for you, adding these 
+instructions will usually get you code compliant with the above:
+```
+use type-annotations, google-style docstrings, and pep8 compliant max 80 
+     chars per line.
+```     
 
 
 By following these practices, we can create a clean, consistent, and

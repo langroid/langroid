@@ -36,6 +36,7 @@ tiktoken = "^0.3.3"
 pygithub = "^1.58.1"
 pygments = "^2.15.1"
 faiss-cpu = "^1.7.4"
+coverage = "^7.2.5"
 
 
 
