@@ -42,7 +42,7 @@ nav:
     - Specifying LLM Agents: writeups/specifying-llm-agents.md
   - Development:
     - GitHub CLI: development/github-cli.md
-    - Releases: development/releases.md
+    - Releases from your poetry project: development/releases.md
   # defer to gen-files + literate-nav
   - Code Reference: reference/  #
 

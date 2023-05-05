@@ -36,6 +36,7 @@ class LLMMessage(BaseModel):
     content: str
 
     class Config:
+        # use string value of enums, e.g. Role rather than int
         use_enum_values = True
 
 

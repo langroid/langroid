@@ -1,4 +1,6 @@
-### GitHub CLI
+!!! note
+    By GPT4. Caveat Lector. May not be fully accurate. Trust but Verify!
+
 
 `gh` is the GitHub CLI (Command Line Interface) tool that helps you interact
 with GitHub directly from your command line. It enhances your Git workflow by
