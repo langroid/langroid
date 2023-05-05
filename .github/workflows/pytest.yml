@@ -36,6 +36,20 @@ jobs:
         echo "$HOME/.local/bin" >> $GITHUB_PATH
         poetry install
 
-    - name: Run pytest
+#    - name: Run pytest
+#      run: |
+#        poetry run pytest
+
+    - name: Run tests with coverage
       run: |
-        poetry run pytest
+        coverage run --source=llmagent -m pytest
+        coverage report
+    - name: Generate HTML coverage report
+      run: |
+        coverage html
+    - name: Upload coverage report as artifact
+      uses: actions/upload-artifact@v2
+      with:
+        name: htmlcov
+        path: htmlcov/
+
