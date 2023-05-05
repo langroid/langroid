@@ -26,7 +26,7 @@ def retry_with_exponential_backoff(
                 return func(*args, **kwargs)
 
             # Retry on specified errors
-            except errors as e:
+            except errors:
                 # Increment retries
                 num_retries += 1
 
