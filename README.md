@@ -46,7 +46,44 @@ To stop it, run `make nodocs`. Also, running `make docs` next time will kill
 any previously running `mkdocs` server.
 
 
-## Pull requests
+## Contributing, and Pull requests
+
+In this Python repository, we prioritize code readability and maintainability.
+To ensure this, please adhere to the following guidelines when contributing:
+
+1. **Type-Annotate Code:** Add type annotations to function signatures and
+   variables to make the code more self-explanatory and to help catch potential
+   issues early. For example, `def greet(name: str) -> str:`.
+
+2. **Google-Style Docstrings:** Use Google-style docstrings to clearly describe
+   the purpose, arguments, and return values of functions. For example:
+
+   ```python
+   def greet(name: str) -> str:
+       """Generate a greeting message.
+
+       Args:
+           name (str): The name of the person to greet.
+
+       Returns:
+           str: The greeting message.
+       """
+       return f"Hello, {name}!"
+   ```
+
+3. **PEP8-Compliant 80-Char Max per Line:** Follow the PEP8 style guide and keep
+   lines to a maximum of 80 characters. This improves readability and ensures
+   consistency across the codebase.
+
+If you are using an LLM to write code for you, instructing it briefly with 
+something like this will usually get code compliant with the above guidelines:
+> use type-annotations, google-style docstrings, and pep8 compliant max 80 
+> chars per line.
+
+
+By following these practices, we can create a clean, consistent, and
+easy-to-understand codebase for all contributors. Thank you for your
+cooperation!
 
 To check for issues locally, run `make check`, it runs linters `black`, 
 `flake8` and type-checker `mypy`. The `mypy` flags lots of issues, but 
