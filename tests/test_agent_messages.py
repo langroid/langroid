@@ -134,6 +134,7 @@ def test_llm_agent_message():
     """
     agent.enable_message(FileExistsMessage)
     agent.enable_message(PythonVersionMessage)
+    instructions = agent.message_instructions()
     task = [
         LLMMessage(
             role=Role.SYSTEM,
@@ -141,14 +142,17 @@ def test_llm_agent_message():
         ),
         LLMMessage(
             role=Role.USER,
-            content=f"""You are a devops engineer, trying to understand a Python 
-            repo. You 
-        can ask me questions about the repo, one at a time, and I will try to answer 
-        them. Focus on aspects like the dependencies of the project.
-        You can ask questions in natural language, EXCEPT:
-        (a) {FileExistsMessage().usage_instruction()}
-        (b) {PythonVersionMessage().usage_instruction()}
-
+            content="""You are a devops engineer, trying to understand a Python repo  
+        can ask me questions about the repo, one at a time, and I will try to answer.
+        """,
+        ),
+        LLMMessage(
+            role=Role.USER,
+            content=instructions,
+        ),
+        LLMMessage(
+            role=Role.USER,
+            content="""
         Now start asking me questions!
         Remember you have to ask in JSON format if it fits one of the cases above.
         """,
