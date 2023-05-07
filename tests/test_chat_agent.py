@@ -1,4 +1,4 @@
-from llmagent.agent.cot_agent import COTAgent
+from llmagent.agent.chat_agent import ChatAgent
 from llmagent.language_models.base import LLMMessage, Role, StreamingIfAllowed
 from llmagent.agent.base import AgentConfig
 from llmagent.vector_store.qdrantdb import QdrantDBConfig
@@ -75,7 +75,7 @@ def test_cot_agent():
         ),
     ]
     # just testing that these don't fail
-    agent = COTAgent(cfg, task)
+    agent = ChatAgent(cfg, task)
     agent.start()
     agent.respond("I am not sure")
 

@@ -24,7 +24,7 @@ class LLMResponse(BaseModel):
     usage: int
 
 
-class Role(Enum):
+class Role(str, Enum):
     USER = "user"
     SYSTEM = "system"
     ASSISTANT = "assistant"
@@ -34,10 +34,6 @@ class LLMMessage(BaseModel):
     role: Role
     name: str = "xyz"
     content: str
-
-    class Config:
-        # use string value of enums, e.g. Role rather than int
-        use_enum_values = True
 
 
 # Define an abstract base class for language models

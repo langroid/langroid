@@ -3,7 +3,7 @@ from llmagent.utils import configuration
 import typer
 from llmagent.language_models.base import LLMMessage, Role
 from llmagent.agent.base import AgentConfig
-from llmagent.agent.cot_agent import COTAgent
+from llmagent.agent.chat_agent import ChatAgent
 from llmagent.vector_store.qdrantdb import QdrantDBConfig
 from llmagent.embedding_models.models import OpenAIEmbeddingsConfig
 from llmagent.vector_store.base import VectorStoreConfig
@@ -17,7 +17,7 @@ app = typer.Typer()
 setup_colored_logging()
 
 
-class COTAgentConfig(AgentConfig):
+class DockerChatAgentConfig(AgentConfig):
     debug: bool = False
     stream: bool = True
     max_tokens: int = 200
@@ -42,7 +42,7 @@ class COTAgentConfig(AgentConfig):
     )
 
 
-def chat(config: COTAgentConfig) -> None:
+def chat(config: DockerChatAgentConfig) -> None:
     configuration.update_global_settings(config, keys=["debug", "stream"])
 
     print("[blue]Hello I am here to make your dockerfile!")
@@ -112,13 +112,13 @@ def chat(config: COTAgentConfig) -> None:
         ),
     ]
 
-    agent = COTAgent(config, task)
+    agent = ChatAgent(config, task)
     agent.run()
 
 
 @app.command()
 def main(debug: bool = typer.Option(False, "--debug", "-d", help="debug mode")) -> None:
-    config = COTAgentConfig(debug=debug)
+    config = DockerChatAgentConfig(debug=debug)
     chat(config)
 
 
