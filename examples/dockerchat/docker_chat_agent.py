@@ -37,6 +37,24 @@ class PythonVersionMessage(AgentMessage):
         return "When you want to find out which version of Python is needed"
 
 
+class DockerfileMessage(AgentMessage):
+    request: str = "dockerfile"
+    contents: str = """
+        # Use an existing base image
+        FROM ubuntu:latest
+        # Set the maintainer information
+        LABEL maintainer="your_email@example.com"
+        # Set the working directory
+        """  # contents of dockerfile
+
+    def use_when(self):
+        return """
+        When you want to show me a dockerfile you have created, send it in 
+        JSON Format. For example, to send me a dockerfile with the contents
+        {self.contents}
+        """
+
+
 class DockerChatAgent(ChatAgent):
     def python_version(self, PythonVersionMessage):
         # dummy result for testing: fill in with actual code that calls PyGitHub fn
@@ -47,5 +65,11 @@ class DockerChatAgent(ChatAgent):
         # dummy result, fill with actual code.
         return True if message.filename == "requirements.txt" else False
 
+    def dockerfile(self, message: DockerfileMessage):
+        # dummy result, fill with actual code., like testing it, etc.
+        # The response should be some feedback to LLM on validity, etc.
+        return "Dockerfile received and validated"
+
     # ... other such methods.
+
     # There should be a 1-1 correspondence between message types and agent methods.
