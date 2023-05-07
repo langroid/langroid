@@ -53,14 +53,27 @@ class ChatAgent(Agent):
         self.task_messages = task
 
     def run(self):
-        self.start()
+        llm_msg = self.start().content
         while True:
-            print("\n[blue]Human: ", end="")
-            msg = input("")
+            agent_result = self.handle_message(llm_msg)
+            if agent_result is None:
+                llm_msg = self.respond(
+                    """
+                    If your question fits one of the JSON templates I gave, 
+                    rewrite using that format please
+                    """
+                ).content
+                agent_result = self.handle_message(llm_msg)
+            if agent_result is not None:
+                msg = f"{agent_result}"
+                print(f"[red]Agent: {agent_result}")
+            else:
+                print("\n[blue]Human: ", end="")
+                msg = input("")
             if msg in ["exit", "quit", "q", "x", "bye"]:
                 print("[green] Bye, hope this was useful!")
                 break
-            self.respond(msg)
+            llm_msg = self.respond(msg).content
 
     def start(self) -> Document:
         """

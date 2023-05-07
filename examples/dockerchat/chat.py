@@ -1,9 +1,13 @@
 from llmagent.utils.logging import setup_colored_logging
 from llmagent.utils import configuration
+from examples.dockerchat.docker_chat_agent import (
+    DockerChatAgent,
+    FileExistsMessage,
+    PythonVersionMessage,
+)
 import typer
 from llmagent.language_models.base import LLMMessage, Role
 from llmagent.agent.base import AgentConfig
-from llmagent.agent.chat_agent import ChatAgent
 from llmagent.vector_store.qdrantdb import QdrantDBConfig
 from llmagent.embedding_models.models import OpenAIEmbeddingsConfig
 from llmagent.vector_store.base import VectorStoreConfig
@@ -47,6 +51,11 @@ def chat(config: DockerChatAgentConfig) -> None:
 
     print("[blue]Hello I am here to make your dockerfile!")
     print("[cyan]Enter x or q to quit")
+    agent = DockerChatAgent(config)
+    agent.enable_message(FileExistsMessage)
+    agent.enable_message(PythonVersionMessage)
+    message_instructions = agent.message_instructions()
+
     task = [
         LLMMessage(
             role=Role.SYSTEM,
@@ -110,9 +119,12 @@ def chat(config: DockerChatAgentConfig) -> None:
                            possibly need to generate the docker file!!
                            """,
         ),
+        LLMMessage(
+            role=Role.USER,
+            content=message_instructions,
+        ),
     ]
-
-    agent = ChatAgent(config, task)
+    agent.task_messages = task
     agent.run()
 
 

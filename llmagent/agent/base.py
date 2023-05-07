@@ -78,6 +78,25 @@ class Agent(ABC):
         if request in self.handled_classes:
             del self.handled_classes[request]
 
+    def message_instructions(self):
+        """
+        Generate a string containing instructions to the LLM on when to format
+        responses as JSON, based on enabled message classes.
+
+        Returns:
+            str: The instructions string.
+        """
+        enabled_classes: List[Type[AgentMessage]] = self.handled_classes.values()
+        instructions = [
+            f"({i+1}) " + c().usage_instruction() for i, c in enumerate(enabled_classes)
+        ]
+        return """
+        You can write messages or questions in natural language, EXCEPT in the 
+        situations below, you have to use a JSON format to get better results:
+        """ + "\n\n".join(
+            instructions
+        )
+
     @staticmethod
     def _extract_json(input_str: str) -> Optional[str]:
         """
