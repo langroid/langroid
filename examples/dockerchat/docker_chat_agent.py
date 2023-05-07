@@ -60,16 +60,16 @@ class DockerfileMessage(AgentMessage):
 
 
 class DockerChatAgent(ChatAgent):
-    def python_version(self, PythonVersionMessage):
+    def python_version(self, PythonVersionMessage) -> str:
         # dummy result for testing: fill in with actual code that calls PyGitHub fn
         # to search for python version in requirements.txt or pyproject.toml, etc.
-        return 3.9
+        return "3.9"
 
-    def file_exists(self, message: FileExistsMessage):
+    def file_exists(self, message: FileExistsMessage) -> str:
         # dummy result, fill with actual code.
-        return True if message.filename == "requirements.txt" else False
+        return "yes" if message.filename == "requirements.txt" else "no"
 
-    def dockerfile(self, message: DockerfileMessage):
+    def dockerfile(self, message: DockerfileMessage) -> str:
         # dummy result, fill with actual code., like testing it, etc.
         # The response should be some feedback to LLM on validity, etc.
         return "Dockerfile received and validated"
