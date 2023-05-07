@@ -1,5 +1,5 @@
 from abc import ABC
-from typing import Any, Dict, Optional, Type, List
+from typing import Dict, Optional, Type, List
 from contextlib import ExitStack
 from pydantic import BaseSettings, ValidationError
 from halo import Halo
@@ -115,7 +115,7 @@ class Agent(ABC):
         except ValueError:
             return None
 
-    def handle_message(self, input_str: str) -> Optional[Any]:
+    def handle_message(self, input_str: str) -> Optional[str]:
         """
         Route the input string to the appropriate handler method based on the
         message class.
@@ -124,8 +124,9 @@ class Agent(ABC):
             input_str (str): The input string containing JSON.
 
         Returns:
-            Optional[Any]: The result of the handler method, or None if the input
-                string does not contain a JSON message with a "request" field.
+            Optional[Str]: The result of the handler method in string form so it can
+            be sent back to the LLM, or None if the input string was not successfully
+            by a method.
         """
         json_str = self._extract_json(input_str)
         if json_str is None:
