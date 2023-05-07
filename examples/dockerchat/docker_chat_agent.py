@@ -8,6 +8,7 @@ from llmagent.agent.base import AgentMessage
 
 class FileExistsMessage(AgentMessage):
     request: str = "file_exists"  # name should exactly match method name in agent
+    # below will be fields that will be used by the agent method to handle the message.
     filename: str = "test.txt"
 
     def use_when(self):
@@ -46,4 +47,5 @@ class DockerChatAgent(ChatAgent):
         # dummy result, fill with actual code.
         return True if message.filename == "requirements.txt" else False
 
-    # ... other such methods. For each message,
+    # ... other such methods.
+    # There should be a 1-1 correspondence between message types and agent methods.
