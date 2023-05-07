@@ -20,6 +20,8 @@ class FileExistsMessage(AgentMessage):
         - "When you want to check whether file foo.txt exists"
         The returned phrase P should be such that the extended phrase
         "{P}, write the JSON string: ..." is a valid instruction for the LLM.
+        Do NOT include the JSON string for the message in this string, that will be
+        done automatically by the methods in AgentMessage class.
         Returns:
             str: description of when the message should be used.
         """
@@ -28,6 +30,8 @@ class FileExistsMessage(AgentMessage):
                  you have to ask in JSON format to get an accorate answer. For example, 
                  to ask whether file '{self.filename}' exists
                  """
+        # notice how this sentence can be extended by
+        # ", you should write in this JSON format: "
 
 
 class PythonVersionMessage(AgentMessage):
