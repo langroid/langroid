@@ -1,13 +1,13 @@
 from llmagent.language_models.base import LLMMessage, Role, StreamingIfAllowed
 from llmagent.agent.base import Agent, AgentConfig
 from llmagent.mytypes import Document
-from typing import List
+from typing import List, Optional
 from rich import print
 
 
-class COTAgent(Agent):
+class ChatAgent(Agent):
     """
-    Chain-of-thought Agent interacting with external env
+    Chat Agent interacting with external env
     (could be human, or external tools).
     The agent (the LLM actually) is provided with a "Task Spec", and told to think in
     small steps. It may be given a set of possible "Actions", and if so it is told to
@@ -18,12 +18,13 @@ class COTAgent(Agent):
     - LLM thinks
     """
 
-    def __init__(self, config: AgentConfig, task: List[LLMMessage]):
+    def __init__(self, config: AgentConfig, task: Optional[List[LLMMessage]] = None):
         """
-        Agent initialized with task spec as the initial message sequence
+        Chat-mode agent initialized with task spec as the initial message sequence
         Args:
             config: settings for the agent
-            task: seq of messages to start with
+            task: seq of messages to start with. If empty a "system" msg is
+                constructed by default.
                 Note these messages are not yet issued to LLM at agent init.
 
         !!! note
@@ -47,6 +48,8 @@ class COTAgent(Agent):
         """
         super().__init__(config)
         self.message_history: List[LLMMessage] = []
+        if task is None:
+            task = [LLMMessage(role=Role.SYSTEM, content="You are a helpful assistant")]
         self.task_messages = task
 
     def run(self):
