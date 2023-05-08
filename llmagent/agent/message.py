@@ -20,6 +20,7 @@ class AgentMessage(ABC, BaseModel):
     """
 
     request: str  # name of agent method to map to
+    result: str  # result of agent method
 
     class Config:
         arbitrary_types_allowed = True
@@ -61,15 +62,28 @@ class AgentMessage(ABC, BaseModel):
     @abstractmethod
     def use_when(self):
         """
-        Return a string describing when the message should be used, possibly
+        Return a string example of when the message should be used, possibly
         parameterized by the field values. This should be a valid english phrase for
         example,
-        - "To check whether the number 3 is smaller than 4", or
-        - "When you want to check whether file foo.txt exists"
-        The returned phrase P should be such that the extended phrase
-        "{P}, write the JSON string: ..." is a valid instruction for the LLM.
+        - "I want to know whether the file blah.txt is in the repo"
+        - "What is the python version?"
         Returns:
             str: description of when the message should be used.
+        """
+        pass
+
+    @abstractmethod
+    def not_use_when(self):
+        """
+        Return a string example of when the message should NOT be JSON formatted.
+        This should be a valid 1st person phrase or question as in `use_when`.
+        This method will be used to generate sample conversations of JSON-formatted
+        questions, mixed in with questions that are not JSON-formatted.
+        Example:
+            THINKING: I need to know the population of the US
+            QUESTION: What is the population of the US?
+        Returns:
+            str: example of a situation when the message should NOT be JSON formatted.
         """
         pass
 
@@ -80,18 +94,24 @@ class AgentMessage(ABC, BaseModel):
             str: description of how to use the message.
         """
         return f"""
-        {self.use_when()}, write the JSON string:        
-        {self.json_example()}
+        QUESTION: {self.use_when()}        
+        FORMATTED: {self.json_example()}
         """
 
     def json_example(self):
-        return self.json(indent=4)
+        return self.json(indent=4, exclude={"result"})
 
     def sample_conversation(self):
-        # todo need to think about whether to allow a "result" field.
-        pass
-        # return f"""
-        # ExampleAssistant: {self.json_example()}
-        #
-        # ExampleUser: {self.result}
-        # """
+        return f"""
+        ExampleAssistant:
+
+        THINKING: {self.use_when()}
+        QUESTION: {self.json_example()}
+
+        ExampleUser: {self.result}
+        
+        ExampleAssistant:
+        {self.not_use_when()}
+        
+        ExampleUser: I don't know.
+        """

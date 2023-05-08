@@ -14,19 +14,32 @@ import pytest
 class FileExistsMessage(AgentMessage):
     request: str = "file_exists"
     filename: str = "test.txt"
+    result: str = "yes"  # or "no"
 
     def use_when(self):
-        return f"""If you want to know whether a certain file exists in the repo,
-                 you have to ask in JSON format to get an accorate answer. For example, 
-                 to ask whether file '{self.filename}' exists
-                 """
+        return f"""I want to know whether the repo 
+        contains the file '{self.filename}' 
+        """
+
+    def not_use_when(self):
+        return """
+        THINKING: I need to know the capital of France.
+        QUESTION: What is the capital of France?
+        """
 
 
 class PythonVersionMessage(AgentMessage):
     request: str = "python_version"
+    result: str = "3.9"
 
     def use_when(self):
-        return "When you want to find out which version of Python is needed"
+        return "I want to know which version of Python is needed"
+
+    def not_use_when(self):
+        return """
+        THINKING: I need to add 3 + 4.
+        QUESTION: What is the sum of 3 and 4?
+        """
 
 
 class MessageHandlingAgent(ChatAgent):
@@ -143,19 +156,15 @@ def test_llm_agent_message():
         LLMMessage(
             role=Role.USER,
             content="""You are a devops engineer, trying to understand a Python repo  
-        can ask me questions about the repo, one at a time, and I will try to answer.
+            can ask me questions about the repo, one at a time, and I will try to answer.
+            You have to think in small steps, and at each stage, show me your 
+            THINKING, and the QUESTION you want to ask. Based on my answer, you will 
+            generate a new THINKING and  QUESTION.          
         """,
         ),
         LLMMessage(
             role=Role.USER,
             content=instructions,
-        ),
-        LLMMessage(
-            role=Role.USER,
-            content="""
-        Now start asking me questions!
-        Remember you have to ask in JSON format if it fits one of the cases above.
-        """,
         ),
     ]
     agent.task_messages = task
