@@ -51,80 +51,33 @@ def chat(config: DockerChatAgentConfig) -> None:
 
     print("[blue]Hello I am here to make your dockerfile!")
     print("[cyan]Enter x or q to quit")
-    agent = DockerChatAgent(config)
-    agent.enable_message(FileExistsMessage)
-    agent.enable_message(PythonVersionMessage)
-    message_instructions = agent.message_instructions()
 
-    task = [
+    task_messages = [
         LLMMessage(
             role=Role.SYSTEM,
-            content="""You are a devops engineer. For a given repo URL, you have to 
-            write a dockerfile to containerize it. Come up with a plan to do this,
-            breaking it down into small steps. At each step, show what you are 
-            THINKING, and ask me what you need to know in order to complete your task. 
-            When I answer it, think about your next step, show me your THINKING, 
-            ASK me another question, and so on, until you say you are DONE, and show 
-            me the completed dockerfile.""",
-        ),
-        LLMMessage(
-            role=Role.SYSTEM,
-            name="example_assistant",
             content="""
-            THINKING: I first need to know which repo to containerize, 
-            so I need to know the URL.
-            QUESTION: What is the URL of the repo?
-            """.strip(),
-        ),
-        LLMMessage(
-            role=Role.SYSTEM,
-            name="example_user",
-            content="The URL is https://github.com/blah/bar",
-        ),
-        LLMMessage(
-            role=Role.SYSTEM,
-            name="example_assistant",
-            content="""
-            THINKING: thank you. The dockerfile setup depends on the 
-            language.
-            QUESTION: What language is the repo written in?
-            """.strip(),
-        ),
-        LLMMessage(role=Role.SYSTEM, name="example_user", content="Python"),
-        LLMMessage(
-            role=Role.SYSTEM,
-            name="example_assistant",
-            content="""
-            THINKING: thank you. The python version can make a big difference to the 
-            docker file structure and dependencies.
-            QUESTION: What version of python is the repo written in?
-            """.strip(),
-        ),
-        LLMMessage(role=Role.SYSTEM, name="example_user", content="3.8"),
-        LLMMessage(
-            role=Role.USER,
-            content="""You are a sophisticated devops engineer, and you 
-                           need to write a dockerfile for a repo. IGNORE ALL DETAILS 
-                           in the above conversation, which was only an example.
-                           Keep in mind your task and start FRESH.
-                           Please think in small steps, and do this gradually, and focus on what 
-                           information you need to know to accomplish your task.
-                           Please send me your first THINKING, and QUESTION.
-                           For each question, whenever possile, give me a numbered 
-                           list of choices so I can easily select one or a few.
-                           VERY IMPORTANT: 
-                           (a) Make sure you have everything you need 
-                               before you start generating a dockerfile.
-                           (b) Be EXHAUSTIVE: ask me about ALL the INFO you may 
-                           possibly need to generate the docker file!!
-                           """,
+            You are a devops engineer, and your task is to create a docker file to 
+            containerize a PYTHON repo. Plan this out step by step, and ask me questions 
+            for any info you need to create the docker file, such as Operating system, 
+            python version, etc. Start by asking the user the URL of the repo
+            """,
         ),
         LLMMessage(
             role=Role.USER,
-            content=message_instructions,
+            content="""
+            You are an assistant whose task is to write a Dockerfile for a python repo.
+
+            You have to think in small steps, and at each stage, show me your 
+            THINKING, and the QUESTION you want to ask. Based on my answer, you will 
+            generate a new THINKING and QUESTION.  
+            """,
         ),
     ]
-    agent.task_messages = task
+
+    agent = DockerChatAgent(config, task_messages)
+    agent.enable_message(FileExistsMessage)
+    agent.enable_message(PythonVersionMessage)
+
     agent.run()
 
 

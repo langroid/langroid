@@ -1,7 +1,7 @@
 from llmagent.language_models.base import LLMMessage, Role, StreamingIfAllowed
-from llmagent.agent.base import Agent, AgentConfig
+from llmagent.agent.base import Agent, AgentConfig, AgentMessage
 from llmagent.mytypes import Document
-from typing import List, Optional
+from typing import List, Optional, Type
 from rich import print
 
 
@@ -48,22 +48,60 @@ class ChatAgent(Agent):
         """
         super().__init__(config)
         self.message_history: List[LLMMessage] = []
+        self.json_instructions_idx: int = -1
         if task is None:
             task = [LLMMessage(role=Role.SYSTEM, content="You are a helpful assistant")]
         self.task_messages = task
+
+    def enable_message(self, message_class: Type[AgentMessage]) -> None:
+        super().enable_message(message_class)
+        self.update_message_instructions()
+
+    def disable_message(self, message_class: Type[AgentMessage]) -> None:
+        super().disable_message(message_class)
+        self.update_message_instructions()
+
+    def update_message_instructions(self) -> None:
+        """
+        Add special instructions on situations when the LLM should send JSON-formatted
+        messages, and save the index position of these instructions in the
+        message history.
+        """
+        # note according to the openai-cookbook, GPT-3.5 pays less attention to the
+        # system messages, so we add the instructions as a user message
+        # TODO need to adapt this based on model type.
+        json_instructions = super().message_instructions()
+        if self.json_instructions_idx < 0:
+            self.task_messages.append(
+                LLMMessage(role=Role.USER, content=json_instructions)
+            )
+            self.json_instructions_idx = len(self.task_messages) - 1
+        else:
+            self.task_messages[self.json_instructions_idx].content = json_instructions
+
+        # Note that task_messages is the initial set of messages created to set up
+        # the task, and they may not yet have been sent to the LLM at this point.
+
+        # But if the task_messages have already been sent to the LLM, then we need to
+        # update the self.message_history as well, since this history will be sent to
+        # the LLM on each round, after appending the latest assistant, user msgs.
+        if len(self.message_history) > 0:
+            self.message_history[self.json_instructions_idx].content = json_instructions
 
     def run(self):
         llm_msg = self.start().content
         while True:
             agent_result = self.handle_message(llm_msg)
-            if agent_result is None:
-                llm_msg = self.respond(
-                    """
-                    If your question fits one of the JSON templates I gave, 
-                    rewrite using that format please
-                    """
-                ).content
-                agent_result = self.handle_message(llm_msg)
+            # if agent_result is None:
+            #     llm_msg = self.respond(
+            #         """
+            #         Please check if your message matches the JSON CONDITIONS I
+            #         mentioned above. If your message fits one of those JSON
+            #         CONDITIONS, please re-send your message in JSON format,
+            #         other simply REPEAT your last message.
+            #         """
+            #     ).content
+            #     agent_result = self.handle_message(llm_msg)
             if agent_result is not None:
                 msg = f"{agent_result}"
                 print(f"[red]Agent: {agent_result}")
