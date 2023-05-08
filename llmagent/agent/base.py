@@ -88,14 +88,41 @@ class Agent(ABC):
         """
         enabled_classes: List[Type[AgentMessage]] = self.handled_classes.values()
         instructions = [
-            f"({i+1}) " + c().usage_instruction() for i, c in enumerate(enabled_classes)
+            f"JSON CONDITION {i+1}: " + c().usage_instruction()
+            for i, c in enumerate(enabled_classes)
         ]
-        return """
-        You can write messages or questions in natural language, EXCEPT in the 
-        situations below, you have to use a JSON format to get better results:
+        json_conditions = """
+        If your QUESTION fits one of the  below JSON CONDITIONS, then FORMAT the 
+        question in the JSON format indicated; otherwise, keep it in the original form.
         """ + "\n\n".join(
             instructions
         )
+        conversation_example = self.sample_dialog()
+
+        return f"""
+        FORMATTING RULES:
+        {json_conditions}
+        
+        SAMPLE CONVERSATION:
+        {conversation_example}
+        
+        Now start asking me questions. Ignore all specific details above, those were 
+        just examples. Start from scratch, assume you know nothing. Remember to 
+        format the question in JSON if it fits one of the JSON CONDITIONs above.          
+        """
+
+    def sample_dialog(self):
+        """
+        Generate a sample dialog based on enabled message classes.
+        Returns:
+            str: The sample dialog string.
+        """
+        enabled_classes: List[Type[AgentMessage]] = self.handled_classes.values()
+        # use at most 2 sample conversations, no need to be exhaustive
+        sample_convo = [
+            c().sample_conversation() for i, c in enumerate(enabled_classes) if i < 2
+        ]
+        return "\n\n".join(sample_convo)
 
     @staticmethod
     def _extract_json(input_str: str) -> Optional[str]:
