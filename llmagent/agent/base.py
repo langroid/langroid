@@ -29,9 +29,9 @@ class AgentConfig(BaseSettings):
     name: str = "llmagent"
     debug: bool = False
     stream: bool = False  # stream LLM output?
-    vecdb: VectorStoreConfig = VectorStoreConfig()
+    vecdb: Optional[VectorStoreConfig] = VectorStoreConfig()
     llm: LLMConfig = LLMConfig()
-    parsing: ParsingConfig = ParsingConfig()
+    parsing: Optional[ParsingConfig] = ParsingConfig()
     prompts: PromptsConfig = PromptsConfig()
 
 
@@ -43,8 +43,8 @@ class Agent(ABC):
         self.handled_classes: Dict[str, Type[AgentMessage]] = {}
 
         self.llm = LanguageModel.create(config.llm)
-        self.vecdb = VectorStore.create(config.vecdb)
-        self.parser = Parser(config.parsing)
+        self.vecdb = VectorStore.create(config.vecdb) if config.vecdb else None
+        self.parser = Parser(config.parsing) if config.parsing else None
 
     def update_dialog(self, prompt, output):
         self.dialog.append((prompt, output))

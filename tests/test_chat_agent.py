@@ -11,22 +11,9 @@ from llmagent.prompts.prompts_config import PromptsConfig
 
 class COTAgentConfig(AgentConfig):
     max_tokens: int = 200
-    vecdb: VectorStoreConfig = QdrantDBConfig(
-        type="qdrant",
-        collection_name="test",
-        storage_path=".qdrant/test/",
-        embedding=OpenAIEmbeddingsConfig(
-            model_type="openai",
-            model_name="text-embedding-ada-002",
-            dims=1536,
-        ),
-    )
+    vecdb: VectorStoreConfig = None
     llm: LLMConfig = LLMConfig(type="openai")
-    parsing: ParsingConfig = ParsingConfig(
-        chunk_size=100,
-        chunk_overlap=10,
-    )
-
+    parsing: ParsingConfig = None
     prompts: PromptsConfig = PromptsConfig(
         max_tokens=200,
     )

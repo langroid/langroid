@@ -16,20 +16,11 @@ def test_agent():
     cfg = AgentConfig(
         name="test-llmagent",
         debug=False,
-        vecdb=QdrantDBConfig(
-            type="qdrant",
-            collection_name="test",
-            storage_path=qd_dir,
-            embedding=OpenAIEmbeddingsConfig(
-                model_type="openai",
-                model_name="text-embedding-ada-002",
-                dims=1536,
-            ),
-        ),
+        vecdb=None,
         llm=LLMConfig(
             type="openai",
         ),
-        parsing=ParsingConfig(),
+        parsing=None,
         prompts=PromptsConfig(),
     )
 
