@@ -213,11 +213,3 @@ class DockerChatAgent(ChatAgent):
 
         except Exception as e:
             return f"An error occurred during the Docker build: {e}"
-
-
-# df = """
-#                 FROM ubuntu:latest
-#                 LABEL maintainer=blah
-#                 """
-
-# mm = DockerChatAgent.build_docker_image(df, "/nobackup/cml")
