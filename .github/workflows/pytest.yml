@@ -29,10 +29,12 @@ jobs:
 
     - name: Install dependencies
       run: |
-        sudo apt-get install libcublas
         echo "$HOME/.local/bin" >> $GITHUB_PATH
         python -m pip install --upgrade pip
         poetry install
+        pip uninstall sentence-transformers
+        pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+        pip3 install sentence-transformers
 
     - name: Run tests with coverage
       run: |
