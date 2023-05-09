@@ -41,6 +41,7 @@ nav:
   - Writeups:
     - Specifying LLM Agents: writeups/specifying-llm-agents.md
   - Development:
+    - Dockerfile Generation: development/dockerfile-generation.md
     - GitHub CLI: development/github-cli.md
     - Clustering Vectors: development/clustering-vectors.md
     - Code Chunking: development/code-chunking.md
