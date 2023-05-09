@@ -72,11 +72,32 @@ class DockerfileMessage(AgentMessage):
         """  # contents of dockerfile
     result: str = "received, but there are errors"
 
-    def use_when(self):
-        return f"""
-        Here is the dockerfile I have written:
-        {self.contents}
-        """
+    @classmethod
+    def examples(cls) -> List["AgentMessage"]:
+        return [
+            cls(
+                contents="""
+                FROM ubuntu:latest
+                LABEL maintainer=blah
+                """,
+                result="received, but there are errors",
+            ),
+            cls(
+                contents="""
+                # Use an official Python runtime as a parent image
+                FROM python:3.7-slim
+                # Set the working directory in the container
+                WORKDIR /app
+                """,
+                result="docker file looks fine",
+            ),
+        ]
+
+    def use_when(self) -> List[str]:
+        return [
+            f"I need to show the dockerfile I have written: {self.contents}",
+            f"I want to send a dockerfile: {self.contents}",
+        ]
 
 
 class DockerChatAgent(ChatAgent):
