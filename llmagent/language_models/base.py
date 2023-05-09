@@ -35,6 +35,9 @@ class LLMMessage(BaseModel):
     name: str = "xyz"
     content: str
 
+    def __str__(self):
+        return f"{self.role} ({self.name}): {self.content}"
+
 
 # Define an abstract base class for language models
 class LanguageModel(ABC):
