@@ -28,11 +28,9 @@ class OpenAIEmbeddings(EmbeddingModel):
 
     def embedding_fn(self) -> Callable[[List[str]], Embeddings]:
         def fn(texts: List[str]) -> Embeddings:
-            result = openai.Embedding.create(
-                input=texts,
-                model=self.config.model_name
-            )
+            result = openai.Embedding.create(input=texts, model=self.config.model_name)
             return [d["embedding"] for d in result["data"]]
+
         return fn
 
     @property
@@ -49,6 +47,7 @@ class SentenceTransformerEmbeddings(EmbeddingModel):
     def embedding_fn(self) -> Callable[[List[str]], Embeddings]:
         def fn(texts: List[str]) -> Embeddings:
             return self.model.encode(texts, convert_to_numpy=True).tolist()
+
         return fn
 
     @property
