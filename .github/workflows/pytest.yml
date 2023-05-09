@@ -34,7 +34,9 @@ jobs:
     - name: Install dependencies
       run: |
         echo "$HOME/.local/bin" >> $GITHUB_PATH
+        python -m pip install --upgrade pip
         poetry install
+        pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
 
 #    - name: Run pytest
 #      run: |
