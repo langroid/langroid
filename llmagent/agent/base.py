@@ -121,7 +121,7 @@ class Agent(ABC):
         # use at most 2 sample conversations, no need to be exhaustive;
         # include non-JSON sample only for the first message class
         sample_convo = [
-            msg_cls().sample_conversation(include_non_json=(i == 0))
+            msg_cls().sample_conversation(json_only=(i == 0))
             for i, msg_cls in enumerate(enabled_classes)
             if i < 2
         ]
@@ -174,7 +174,9 @@ class Agent(ABC):
             ]
         )
         first_enabled_class = list(enabled_classes)[0]
-        no_reformat_examples = first_enabled_class().not_use_when()
+        no_reformat_examples = first_enabled_class().non_usage_example(
+            conversation=False
+        )
         return f"""See the THINKING statement below, and check if the following 
         JSON formatting rules apply to this statement. 
         If one of these rules applies, 
