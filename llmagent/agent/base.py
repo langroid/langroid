@@ -13,6 +13,7 @@ from llmagent.parsing.parser import Parser
 from llmagent.vector_store.base import VectorStoreConfig
 from llmagent.language_models.base import LLMConfig
 from llmagent.parsing.parser import ParsingConfig
+from llmagent.parsing.json import extract_top_level_json
 from llmagent.prompts.prompts_config import PromptsConfig
 import logging
 
@@ -78,87 +79,144 @@ class Agent(ABC):
         if request in self.handled_classes:
             del self.handled_classes[request]
 
-    def message_instructions(self):
+    def json_format_rules(self) -> str:
         """
-        Generate a string containing instructions to the LLM on when to format
-        responses as JSON, based on enabled message classes.
+        Specification of JSON formatting rules, based on the currently enabled
+        message classes.
 
         Returns:
-            str: The instructions string.
+            str: formatting rules
         """
         enabled_classes: List[Type[AgentMessage]] = self.handled_classes.values()
-        instructions = [
-            f"JSON CONDITION {i+1}: " + c().usage_instruction()
-            for i, c in enumerate(enabled_classes)
-        ]
-        json_conditions = """
-        If your QUESTION fits one of the  below JSON CONDITIONS, then FORMAT the 
-        question in the JSON format indicated; otherwise, keep it in the original form.
-        """ + "\n\n".join(
-            instructions
+        if len(enabled_classes) == 0:
+            return "You can ask questions in natural language."
+
+        handled_requests: str = list(self.handled_classes.keys())
+        json_conditions = "\n\n".join(
+            [
+                f"JSON CONDITION {i+1}: " + msg_cls().usage_example()
+                for i, msg_cls in enumerate(enabled_classes)
+            ]
         )
-        conversation_example = self.sample_dialog()
-
-        return f"""
-        FORMATTING RULES:
-        {json_conditions}
+        json_rules = (
+            f"""
+        If the THINKING fits one of the  below JSON CONDITIONS, then FORMAT the 
+        QUESTION in the JSON format indicated; otherwise, keep it in the original form.
+        In case of JSON formatting, the only permissible values of the 'request' field
+        are {handled_requests}.
         
-        SAMPLE CONVERSATION:
-        {conversation_example}
-        
-        Now start asking me questions. Ignore all specific details above, those were 
-        just examples. Start from scratch, assume you know nothing. Remember to 
-        format the question in JSON if it fits one of the JSON CONDITIONs above.          
         """
+            + json_conditions
+        )
 
-    def sample_dialog(self):
+        return json_rules
+
+    def sample_multi_round_dialog(self):
         """
-        Generate a sample dialog based on enabled message classes.
+        Generate a sample multi-round dialog based on enabled message classes.
         Returns:
             str: The sample dialog string.
         """
         enabled_classes: List[Type[AgentMessage]] = self.handled_classes.values()
-        # use at most 2 sample conversations, no need to be exhaustive
+        # use at most 2 sample conversations, no need to be exhaustive;
+        # include non-JSON sample only for the first message class
         sample_convo = [
-            c().sample_conversation() for i, c in enumerate(enabled_classes) if i < 2
+            msg_cls().sample_conversation(include_non_json=(i == 0))
+            for i, msg_cls in enumerate(enabled_classes)
+            if i < 2
         ]
         return "\n\n".join(sample_convo)
 
-    @staticmethod
-    def _extract_json(input_str: str) -> Optional[str]:
+    def message_format_instructions(self) -> str:
         """
-        Extract the JSON string from the input string.
-
-        Args:
-            input_str (str): The input string containing JSON.
+        Generate a string containing instructions to the LLM on when to format
+        requests/questions as JSON, based on the currently enabled message classes.
 
         Returns:
-            Optional[str]: The JSON string if found, otherwise None.
+            str: The instructions string.
         """
-        try:
-            start_index = input_str.index("{")
-            end_index = input_str.rindex("}")
-            return input_str[start_index : (end_index + 1)]
-        except ValueError:
-            return None
+        format_rules = self.json_format_rules()
+        conversation_example = self.sample_multi_round_dialog()
+
+        return f"""
+        FORMATTING RULES:
+        {format_rules}
+        
+        SAMPLE CONVERSATION:
+        {conversation_example}
+        
+        Now start showing me your THINKING and QUESTION steps.
+        Ignore all specific details above, 
+        those were just examples. Start from scratch, assume you know nothing. 
+        Remember to format the QUESTION in JSON if it fits one of the JSON 
+        CONDITIONs above.          
+        """
+
+    def request_reformat_prompt(self, request: str) -> str:
+        """
+        Prompt to send to (non-chat) completion model, to ask it to format a
+        THINKING phrase as a QUESTION in JSON format if it matches one of the
+        patterns of the enabled message classes.
+
+        Args:
+            request (str): The request to reformat.
+        """
+        format_rules = self.json_format_rules()
+        enabled_classes: List[Type[AgentMessage]] = self.handled_classes.values()
+        if len(enabled_classes) == 0:
+            return "You can ask questions in natural language."
+        # use at most 2 usage examples, no need to be exhaustive;
+        reformat_examples = "\n\n".join(
+            [
+                msg_cls().usage_example()
+                for i, msg_cls in enumerate(enabled_classes)
+                if i < 2
+            ]
+        )
+        first_enabled_class = list(enabled_classes)[0]
+        no_reformat_examples = first_enabled_class().not_use_when()
+        return f"""See the THINKING statement below, and check if the following 
+        JSON formatting rules apply to this statement. 
+        If one of these rules applies, 
+            then format the THINKING statement 
+                as a QUESTION in the JSON format indicated;
+            otherwise return the QUESTION as identical to the THINKING statement. 
+        
+        
+        {format_rules}
+        
+        FORMATTING EXAMPLES:
+        
+        {reformat_examples}
+        
+        {no_reformat_examples}
+        
+        THINKING: {request}
+        """
 
     def handle_message(self, input_str: str) -> Optional[str]:
         """
-        Route the input string to the appropriate handler method based on the
-        message class.
+        Extract JSON substrings from input message, handle each by the appropriate
+        handler method, and return the results as a combined string.
 
         Args:
-            input_str (str): The input string containing JSON.
+            input_str (str): The input string possibly containing JSON.
 
         Returns:
             Optional[Str]: The result of the handler method in string form so it can
             be sent back to the LLM, or None if the input string was not successfully
-            by a method.
+            handled by a method.
         """
-        json_str = self._extract_json(input_str)
-        if json_str is None:
+        json_substrings = extract_top_level_json(input_str)
+        if len(json_substrings) == 0:
             return None
+        results = [self._handle_one_json_message(j) for j in json_substrings]
+        results = [r for r in results if r is not None]
+        if len(results) == 0:
+            return None
+        return "\n".join(results)
 
+    def _handle_one_json_message(self, json_str: str) -> Optional[str]:
         json_str = json_str.replace("'", '"')
         json_data = json.loads(json_str)
         request = json_data.get("request")
@@ -181,8 +239,18 @@ class Agent(ABC):
 
         return handler_method(message)
 
-    def run(self):
+    def run(self, iters: int = -1) -> None:
+        """
+        Run the LLM in interactive mode, asking for input and generating responses.
+        If iters > 0, quit after that many iterations.
+        Args:
+            iters: number of iterations to run, if > 0
+        """
+        niters = 0
         while True:
+            if iters > 0 and niters >= iters:
+                break
+            niters += 1
             print("\n[blue]Query: ", end="")
             query = input("")
             if query in ["exit", "quit", "q", "x", "bye"]:

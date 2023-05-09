@@ -27,25 +27,13 @@ class FileExistsMessage(AgentMessage):
         named '{self.filename}' in the repo. 
         """
 
-    def not_use_when(self):
-        return """
-        THINKING: I need to know the capital of France.
-        QUESTION: What is the capital of France?
-        """
-
 
 class PythonVersionMessage(AgentMessage):
     request: str = "python_version"
     result: str = "3.9"
 
     def use_when(self):
-        return "What is the python version needed for this repo?"
-
-    def not_use_when(self):
-        return """
-        THINKING: I need to add 3 + 4.
-        QUESTION: What is the sum of 3 and 4?
-        """
+        return "I need to know which version of Python is needed."
 
 
 class DockerfileMessage(AgentMessage):
@@ -60,15 +48,9 @@ class DockerfileMessage(AgentMessage):
     result: str = "received, but there are errors"
 
     def use_when(self):
-        return """
+        return f"""
         Here is the dockerfile I have written:
         {self.contents}
-        """
-
-    def not_use_when(self):
-        return """
-        THINKING: I need to know the number of files in the repo.
-        QUESTION: How many files are in the repo?
         """
 
 
@@ -76,11 +58,16 @@ class DockerChatAgent(ChatAgent):
     def python_version(self, PythonVersionMessage) -> str:
         # dummy result for testing: fill in with actual code that calls PyGitHub fn
         # to search for python version in requirements.txt or pyproject.toml, etc.
-        return "3.9"
+        return "The python version is 3.9."
 
     def file_exists(self, message: FileExistsMessage) -> str:
         # dummy result, fill with actual code.
-        return "yes" if message.filename == "requirements.txt" else "no"
+        if message.filename == "requirements.txt":
+            return f"""
+            Yes, there is a file named {message.filename} in the repo."""
+        else:
+            return f"""
+            No, there is no file named {message.filename} in the repo."""
 
     def dockerfile(self, message: DockerfileMessage) -> str:
         # dummy result, fill with actual code., like testing it, etc.
