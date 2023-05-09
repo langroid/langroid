@@ -9,6 +9,43 @@ an agent. The messages could represent, for example:
 from abc import ABC, abstractmethod
 from pydantic import BaseModel
 from typing import List
+from random import choice
+
+
+class ThoughtQuestionAnswer(BaseModel):
+    """
+    Represents a round in a conversation, with a
+    thought & question from the assistant, and an answer from user (human or agent).
+    """
+
+    thought: str
+    question: str
+    answer: str
+
+    def example(self) -> str:
+        """
+        Example to use in few-shot demos of JSON formatting instructions, or in
+             sample conversations.
+        Returns:
+            string example of the message
+        """
+        return f"""
+        THINKING: {self.thought}
+        QUESTION: {self.question}
+        """
+
+    def conversation(self):
+        """
+        Example to use in a sample conversation between assistant and user.
+        Returns:
+            string example of the message
+        """
+        return f"""
+        ExampleAssistant:
+        {self.example()}
+        
+        ExampleUser:{self.answer}
+        """
 
 
 class AgentMessage(ABC, BaseModel):
@@ -17,10 +54,13 @@ class AgentMessage(ABC, BaseModel):
     the agent. The message could represent
     - information or data given to the agent
     - request for information or data from the agent
+    Attributes:
+        request (str): name of agent method to map to
+        result (str): result of agent method
     """
 
-    request: str  # name of agent method to map to
-    result: str  # result of agent method
+    request: str
+    result: str
 
     class Config:
         arbitrary_types_allowed = True
@@ -30,100 +70,100 @@ class AgentMessage(ABC, BaseModel):
     @classmethod
     def examples(cls) -> List["AgentMessage"]:
         """
-        Generate a list of instances of the subclass with example field values.
-        If the fields have different numbers of examples, the minimum number
-        of examples is used for all fields.
-
+        Examples to use in few-shot demos with JSON formatting instructions.
         Returns:
-            List[AgentMessage]: List of instances of the subclass.
         """
-        examples = {}
-        min_num_examples = 1000
-        for field_name, field in cls.__fields__.items():
-            if field_name == "request":
-                continue
-            field_examples = field.field_info.extra.get("examples")
-            if field_examples:
-                examples[field_name] = field_examples
-                min_num_examples = min(min_num_examples, len(field_examples))
-
-        if not examples or min_num_examples == 0:
-            return []
-
-        field_names = examples.keys()
-        combined_examples = [
-            dict(zip(field_names, example_values[:min_num_examples]))
-            for example_values in zip(*examples.values())
-        ]
-        instance_list = [cls(**example) for example in combined_examples]
-
-        return instance_list
+        pass
 
     @abstractmethod
     def use_when(self):
         """
-        Return a string example of when the message should be used, possibly
-        parameterized by the field values. This should be a valid english phrase for
-        example,
-        - "I want to know whether the file blah.txt is in the repo"
-        - "What is the python version?"
+        Return a LIST of string examples (at least one, but ideally at least 2)
+        of when the message should be used, possibly parameterized by the field
+        values. This should be a valid english phrase for example,
+        [ "I want to know which python version is needeed.",
+          "I need to check the Python version."]
+
+        The phrases should be in first person, and should be valid completions of
+        "I will use this message when...".
         Returns:
-            str: description of when the message should be used.
+            str: list of phrases showing when to use the message.
         """
         pass
 
-    def not_use_when(self):
+    def non_usage_examples(self) -> List[ThoughtQuestionAnswer]:
         """
-        Return a string example of when the message should NOT be JSON formatted.
+        Return a List of examples where the request should NOT be JSON formatted.
         This should be a valid 1st person phrase or question as in `use_when`.
         This method will be used to generate sample conversations of JSON-formatted
         questions, mixed in with questions that are not JSON-formatted.
         Unlike `use_when`, this method should not be parameterized by the field
         values, and also it should include THINKING and QUESTION lines.
 
-        We supply default THINKING/QUESTION pairs, but subclasses can override these.
-        Example:
-            THINKING: I need to know the population of the US
-            QUESTION: What is the population of the US?
+        We supply defaults here, but subclasses can override these.
+        It is important to adhere to the
         Returns:
-            str: example of a situation when the message should NOT be JSON formatted.
-        """
-        return """
-        THINKING: I need to know the population of the US
-        QUESTION: What is the population of the US?
+            List of ThoughtRequestAnswer examples showing when
+            the message should NOT be JSON formatted.
         """
 
-    def usage_example(self):
+        examples = [
+            ThoughtQuestionAnswer(
+                thought="I need to know the population of the US",
+                question="What is the population of the US?",
+                answer="328,239,523",
+            ),
+            ThoughtQuestionAnswer(
+                thought="I want to check how many files are in the repo",
+                question="How many files are in the repo?",
+                answer="1,000",
+            ),
+        ]
+        return examples
+
+    def non_usage_example(self, conversation: bool = True) -> str:
+        if conversation:
+            return choice(self.non_usage_examples()).conversation()
+        else:
+            return choice(self.non_usage_examples()).example()
+
+    def usage_example(self, conversation: bool = False) -> str:
         """
         Instruction to the LLM showing an example of how to use the message.
+        Args:
+            conversation (bool): whether the example is to be used in a sample
+            conversation, in which case we should include roles (Assistant, User) and
+            sample answer.
         Returns:
-            str: description of how to use the message.
+            str: description of how to use the message, or a sample conversation.
         """
-        return f"""
-        THINKING: {self.use_when()}        
-        QUESTION: {self.json_example()}
-        """
+        # pick a random example of the fields
+        ex = choice(self.examples())
+        # pick a random template of when to use the message
+        template = choice(ex.use_when())
+        tqa = ThoughtQuestionAnswer(
+            thought=template,
+            question=ex.json_example(),
+            answer=ex.result,
+        )
+        if conversation:
+            return tqa.conversation()
+        else:
+            return tqa.example()
 
     def json_example(self):
         return self.json(indent=4, exclude={"result"})
 
-    def sample_conversation(self, include_non_json=False):
-        json_qa = f"""
-        ExampleAssistant:
-        {self.usage_example()}
-        
-        ExampleUser: {self.result}
+    def sample_conversation(self, json_only=True):
         """
+        Generate a sample conversation with the message, possibly including non-JSON
+            formatted questions.
+        Args:
+            json_only: whether to only include JSON formatted example
+        Returns:
 
-        if not include_non_json:
+        """
+        json_qa = self.usage_example(conversation=True)
+        if json_only:
             return json_qa
-
-        return (
-            json_qa
-            + f"""
-        ExampleAssistant:
-        {self.not_use_when()}
-        
-        ExampleUser: I don't know.
-        """
-        )
+        return json_qa + "\n\n" + self.non_usage_example(conversation=True)
