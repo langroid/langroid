@@ -22,7 +22,7 @@ def find_docker_repos(stars: int = 10000, k: int = 10, access_token=None):
         if len(filtered_repos) >= k:
             break
 
-        try:            
+        try:
             dockerfile = repo.get_contents("Dockerfile")
             if dockerfile and dockerfile.type == "file":
                 filtered_repos.append(repo)

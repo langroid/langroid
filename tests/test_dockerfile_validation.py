@@ -5,7 +5,7 @@ import tempfile
 
 
 def test_save_dockerfile():
-    content = '''
+    content = """
     FROM python:3.8-slim
 
     WORKDIR /app
@@ -16,7 +16,7 @@ def test_save_dockerfile():
     COPY . .
 
     CMD ["python", "app.py"]
-    '''
+    """
     with tempfile.TemporaryDirectory() as temp_dir:
         dockerfile_path = DockerChatAgent.save_dockerfile(content, temp_dir)
         assert os.path.exists(dockerfile_path), "Dockerfile not saved"
@@ -26,7 +26,7 @@ def test_save_dockerfile():
 
 
 def test_build_docker_image():
-    content = '''
+    content = """
     FROM python:3.8-slim
 
     WORKDIR /app
@@ -34,7 +34,7 @@ def test_build_docker_image():
     COPY . .
 
     CMD ["python", "-c", "print('Hello, Docker!')"]
-    '''
+    """
     with tempfile.TemporaryDirectory() as temp_dir:
         result = DockerChatAgent.build_docker_image(content, temp_dir)
         assert "Docker build was successful" == result, "Docker build failed"
