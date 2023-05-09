@@ -31,17 +31,24 @@ jobs:
 #      run: |
 #        curl -sSL https://install.python-poetry.org | python3 -
 
+    - name: Install CUDA
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends \
+          build-essential \
+          software-properties-common \
+          curl
 
-    - uses: Jimver/cuda-toolkit@v0.2.10
-      id: cuda-toolkit
-      with:
-        cuda: '12.1.0'
-
-    - run: echo "Installed cuda version is: ${{steps.cuda-toolkit.outputs.cuda}}"
-
-    - run: echo "Cuda install location: ${{steps.cuda-toolkit.outputs.CUDA_PATH}}"
-
-    - run: nvcc -V
+    - name: Install NVIDIA CUDA 10.x
+      run: |
+        curl -sL https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64/7fa2af80.pub | sudo apt-key add -
+        echo "deb http://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64/ /" | sudo tee /etc/apt/sources.list.d/cuda.list
+        sudo apt-get update
+        sudo apt-get install -y --no-install-recommends \
+          cuda-10-0 \
+          libcudnn7=7.6.5.32-1+cuda10.0 \
+          libnccl2=2.4.8-1+cuda10.0 \
+          libcurand10
 
     - name: Install dependencies
       run: |
