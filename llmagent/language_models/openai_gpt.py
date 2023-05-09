@@ -6,6 +6,7 @@ from llmagent.language_models.base import (
 )
 import sys
 from llmagent.language_models.utils import retry_with_exponential_backoff
+from llmagent.utils.configuration import settings
 from llmagent.utils.constants import Colors
 from typing import List
 import openai
@@ -78,6 +79,12 @@ class OpenAIGPT(LanguageModel):
 
         print(Colors().RESET)
         # TODO- get usage info in stream mode (?)
+        if settings.debug:
+            sys.stdout.write(Colors().RED)
+            sys.stdout.flush()
+            print(f"LLM: {completion}")
+            print(Colors().RESET)
+
         return LLMResponse(message=completion, usage=0)
 
     def generate(self, prompt: str, max_tokens: int) -> LLMResponse:
@@ -100,6 +107,11 @@ class OpenAIGPT(LanguageModel):
         else:
             usage = response["usage"]["total_tokens"]
             msg = response["choices"][0]["text"].strip()
+            if settings.debug:
+                sys.stdout.write(Colors().RED)
+                sys.stdout.flush()
+                print(f"[red]LLM: {msg}")
+                print(Colors().RESET)
             return LLMResponse(message=msg, usage=usage)
 
     async def agenerate(self, prompt: str, max_tokens: int) -> LLMResponse:
