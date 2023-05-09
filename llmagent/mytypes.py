@@ -1,4 +1,9 @@
 from pydantic import BaseModel, Field
+from typing import Union, List
+
+Number = Union[int, float]
+Embedding = List[Number]
+Embeddings = List[Embedding]
 
 
 class Document(BaseModel):
