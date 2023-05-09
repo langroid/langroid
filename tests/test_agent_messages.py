@@ -2,10 +2,7 @@ from llmagent.agent.base import AgentConfig, Agent
 from llmagent.language_models.base import Role, LLMMessage
 from llmagent.agent.chat_agent import ChatAgent
 from llmagent.agent.message import AgentMessage, ThoughtQuestionAnswer
-from llmagent.embedding_models.models import OpenAIEmbeddingsConfig
-from llmagent.vector_store.qdrantdb import QdrantDBConfig
 from llmagent.language_models.base import LLMConfig
-from llmagent.parsing.parser import ParsingConfig
 from llmagent.parsing.json import extract_top_level_json
 from llmagent.prompts.prompts_config import PromptsConfig
 from llmagent.utils.system import rmdir
@@ -192,8 +189,7 @@ def test_llm_agent_message():
     agent.enable_message(PythonVersionMessage)
 
     agent.run(
-        iters=2,
-        default_human_response="I don't know, please ask your next question."
+        iters=2, default_human_response="I don't know, please ask your next question."
     )
 
 

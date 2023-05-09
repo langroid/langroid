@@ -1,8 +1,6 @@
 from llmagent.agent.chat_agent import ChatAgent
 from llmagent.language_models.base import LLMMessage, Role, StreamingIfAllowed
 from llmagent.agent.base import AgentConfig
-from llmagent.vector_store.qdrantdb import QdrantDBConfig
-from llmagent.embedding_models.models import OpenAIEmbeddingsConfig
 from llmagent.vector_store.base import VectorStoreConfig
 from llmagent.language_models.base import LLMConfig
 from llmagent.parsing.parser import ParsingConfig
