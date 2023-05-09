@@ -26,7 +26,9 @@ python3 -m venv .venv
 poetry install
 ```
 Copy the `.env-template` file to a new file `.env` and 
-insert your OpenAI API key:
+insert your OpenAI API key, and GitHub Personal Access Token (needed by 
+PyGithub to analyze git repos; token-based API calls are less rate-limited).
+
 ```bash
 cp .env-template .env
 # now edit the .env file, insert your OpenAI API key
