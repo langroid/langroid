@@ -1,6 +1,7 @@
 from llmagent.language_models.base import LLMMessage, Role, StreamingIfAllowed
 from llmagent.agent.base import Agent, AgentConfig, AgentMessage
 from llmagent.mytypes import Document
+from llmagent.utils.configuration import settings
 from typing import List, Optional, Type
 from rich import print
 
@@ -70,7 +71,7 @@ class ChatAgent(Agent):
         # note according to the openai-cookbook, GPT-3.5 pays less attention to the
         # system messages, so we add the instructions as a user message
         # TODO need to adapt this based on model type.
-        json_instructions = super().message_instructions()
+        json_instructions = super().message_format_instructions()
         if self.json_instructions_idx < 0:
             self.task_messages.append(
                 LLMMessage(role=Role.USER, content=json_instructions)
@@ -88,26 +89,39 @@ class ChatAgent(Agent):
         if len(self.message_history) > 0:
             self.message_history[self.json_instructions_idx].content = json_instructions
 
-    def run(self):
+    def run(
+        self, iters: int = -1, default_human_response: Optional[str] = None
+    ) -> None:
+        """
+        Run the agent in chat mode, until the user types "exit", "quit", "q", "x",
+        "bye", or, when iters > 0,  until this number of iterations is reached.
+        Args:
+            iters: number of iterations to run the agent for. If -1, run until user
+                types "exit", "quit", "q", "x", "bye"
+            default_human_response: if not None, this means we are running this
+                agent without human input, and we use this string as the default
+                human response when the agent's `handle_method` returns None.
+                This can be useful for automated/non-interactive testing.
+        """
         llm_msg = self.start().content
+        if settings.debug:
+            print(f"[red]{self.message_history_str()}")
+        niters = 0
         while True:
+            niters += 1
+            if iters > 0 and niters > iters:
+                break
             agent_result = self.handle_message(llm_msg)
-            # if agent_result is None:
-            #     llm_msg = self.respond(
-            #         """
-            #         Please check if your message matches the JSON CONDITIONS I
-            #         mentioned above. If your message fits one of those JSON
-            #         CONDITIONS, please re-send your message in JSON format,
-            #         other simply REPEAT your last message.
-            #         """
-            #     ).content
-            #     agent_result = self.handle_message(llm_msg)
             if agent_result is not None:
                 msg = f"{agent_result}"
                 print(f"[red]Agent: {agent_result}")
             else:
-                print("\n[blue]Human: ", end="")
-                msg = input("")
+                if default_human_response is not None:
+                    msg = default_human_response
+                    print(f"[blue]Human: {default_human_response}")
+                else:
+                    print("\n[blue]Human: ", end="")
+                    msg = input("")
             if msg in ["exit", "quit", "q", "x", "bye"]:
                 print("[green] Bye, hope this was useful!")
                 break
@@ -144,3 +158,18 @@ class ChatAgent(Agent):
             LLMMessage(role=Role.ASSISTANT, content=response.content)
         )
         return Document(content=response.content, metadata=response.metadata)
+
+    def message_history_str(self, i: Optional[int] = None) -> str:
+        """
+        Return a string representation of the message history
+        Args:
+            i: if provided, return only the i-th message when i is postive,
+                or last k messages when i = -k.
+        Returns:
+        """
+        if i is None:
+            return "\n".join([str(m) for m in self.message_history])
+        elif i > 0:
+            return str(self.message_history[i])
+        else:
+            return "\n".join([str(m) for m in self.message_history[i:]])

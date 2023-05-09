@@ -72,46 +72,58 @@ class AgentMessage(ABC, BaseModel):
         """
         pass
 
-    @abstractmethod
     def not_use_when(self):
         """
         Return a string example of when the message should NOT be JSON formatted.
         This should be a valid 1st person phrase or question as in `use_when`.
         This method will be used to generate sample conversations of JSON-formatted
         questions, mixed in with questions that are not JSON-formatted.
+        Unlike `use_when`, this method should not be parameterized by the field
+        values, and also it should include THINKING and QUESTION lines.
+
+        We supply default THINKING/QUESTION pairs, but subclasses can override these.
         Example:
             THINKING: I need to know the population of the US
             QUESTION: What is the population of the US?
         Returns:
             str: example of a situation when the message should NOT be JSON formatted.
         """
-        pass
+        return """
+        THINKING: I need to know the population of the US
+        QUESTION: What is the population of the US?
+        """
 
-    def usage_instruction(self):
+    def usage_example(self):
         """
         Instruction to the LLM showing an example of how to use the message.
         Returns:
             str: description of how to use the message.
         """
         return f"""
-        QUESTION: {self.use_when()}        
-        FORMATTED: {self.json_example()}
+        THINKING: {self.use_when()}        
+        QUESTION: {self.json_example()}
         """
 
     def json_example(self):
         return self.json(indent=4, exclude={"result"})
 
-    def sample_conversation(self):
-        return f"""
+    def sample_conversation(self, include_non_json=False):
+        json_qa = f"""
         ExampleAssistant:
-
-        THINKING: {self.use_when()}
-        QUESTION: {self.json_example()}
-
-        ExampleUser: {self.result}
+        {self.usage_example()}
         
+        ExampleUser: {self.result}
+        """
+
+        if not include_non_json:
+            return json_qa
+
+        return (
+            json_qa
+            + f"""
         ExampleAssistant:
         {self.not_use_when()}
         
         ExampleUser: I don't know.
         """
+        )
