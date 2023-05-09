@@ -1,6 +1,9 @@
 from llmagent.agent.chat_agent import ChatAgent
 from llmagent.agent.base import AgentMessage
 
+import os
+import subprocess
+
 
 # Message types that can be handled by the agent;
 # each corresponds to a method in the agent.
@@ -77,3 +80,47 @@ class DockerChatAgent(ChatAgent):
     # ... other such methods.
 
     # There should be a 1-1 correspondence between message types and agent methods.
+
+    @classmethod
+    def save_dockerfile(cls, dockerfile: str, repo_path: str) -> str:
+        try:
+            full_path = os.path.join(repo_path, "Dockerfile")
+            with open(full_path, 'w') as f:
+                f.write(dockerfile)
+            return full_path
+        except Exception as e:
+            return f"An error occurred while saving the Dockerfile: {e}"
+    
+    @classmethod
+    def build_docker_image(cls, message: str, repo_path: str) -> str:
+        """
+        validates the proposed Dockerfile by LLM.
+        Args:
+            message (DockerfileMessage): LLM message contains the Dockerfile
+            repo_path (str): path to the cloned repo
+        Returns:
+            str: a string indicates whether the Dockerfile 
+        """
+        try:
+            dockerfile_path = DockerChatAgent.save_dockerfile(message, repo_path)
+            if dockerfile_path.startswith("An error"):
+                return dockerfile_path
+            # Change to the specified directory
+            original_path = os.getcwd()
+            os.chdir(repo_path)
+
+            # Build the Docker image
+            command = f'docker build -t your_image_name -f {dockerfile_path} .'
+            process = subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+
+            # Restore the original working directory
+            os.chdir(original_path)
+
+            # Check the result of the build process
+            if process.returncode == 0:
+                return "Docker build was successful"
+            else:
+                return f"Docker build failed with error message: {process.stderr}"
+
+        except Exception as e:
+            return f"An error occurred during the Docker build: {e}"
