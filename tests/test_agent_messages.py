@@ -81,21 +81,12 @@ rmdir(qd_dir)
 cfg = AgentConfig(
     debug=True,
     name="test-llmagent",
-    vecdb=QdrantDBConfig(
-        type="qdrant",
-        collection_name="test",
-        storage_path=qd_dir,
-        embedding=OpenAIEmbeddingsConfig(
-            model_type="openai",
-            model_name="text-embedding-ada-002",
-            dims=1536,
-        ),
-    ),
+    vecdb=None,
     llm=LLMConfig(
         type="openai",
         chat_model="gpt-3.5-turbo",
     ),
-    parsing=ParsingConfig(),
+    parsing=None,
     prompts=PromptsConfig(),
 )
 agent = MessageHandlingAgent(cfg)
@@ -201,7 +192,8 @@ def test_llm_agent_message():
     agent.enable_message(PythonVersionMessage)
 
     agent.run(
-        iters=4, default_human_response="I don't know, please ask your next question."
+        iters=2,
+        default_human_response="I don't know, please ask your next question."
     )
 
 
