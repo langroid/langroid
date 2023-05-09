@@ -1,5 +1,6 @@
 from llmagent.agent.chat_agent import ChatAgent
 from llmagent.agent.base import AgentMessage
+from typing import List
 
 
 # Message types that can be handled by the agent;
@@ -12,28 +13,52 @@ class FileExistsMessage(AgentMessage):
     filename: str = "test.txt"
     result: str = "yes"
 
-    def use_when(self):
+    @classmethod
+    def examples(cls) -> List["AgentMessage"]:
         """
-        Return a string showing an example of when the message should be used, possibly
-        parameterized by the field values. This should be a valid english phrase in
-        first person, in the form of a question or a request.
-        - "I want to know whether the file blah.txt is in the repo"
-        - "What is the python version needed for this repo?"
+        Return a list of example messages of this type, for use in testing.
         Returns:
-            str: example of a situation when the message should be used.
+            List[AgentMessage]: list of example messages of this type
+        """
+        return [
+            cls(filename="requirements.txt", result="yes"),
+            cls(filename="test.txt", result="yes"),
+            cls(filename="Readme.md", result="no"),
+        ]
+
+    def use_when(self) -> List[str]:
+        """
+        Return a List of strings showing an example of when the message should be used,
+        possibly parameterized by the field values. This should be a valid english
+        phrase in first person, in the form of a phrase that can legitimately
+        complete "I can use this message when..."
+        Returns:
+            str: list of examples of a situation when the message should be used,
+                in first person, possibly parameterized by the field values.
         """
 
-        return f"""I want to know whether there is a file 
-        named '{self.filename}' in the repo. 
-        """
+        return [
+            f"I want to know if there is a file named '{self.filename}' in the repo.",
+            f"I need to check if the repo contains a the file '{self.filename}'",
+        ]
 
 
 class PythonVersionMessage(AgentMessage):
     request: str = "python_version"
     result: str = "3.9"
 
-    def use_when(self):
-        return "I need to know which version of Python is needed."
+    @classmethod
+    def examples(cls) -> List["AgentMessage"]:
+        return [
+            cls(result="3.7"),
+            cls(result="3.8"),
+        ]
+
+    def use_when(self) -> List[str]:
+        return [
+            "I need to know which version of Python is needed.",
+            "I want to check the Python version.",
+        ]
 
 
 class DockerfileMessage(AgentMessage):

@@ -1,7 +1,7 @@
 from llmagent.agent.base import AgentConfig, Agent
 from llmagent.language_models.base import Role, LLMMessage
 from llmagent.agent.chat_agent import ChatAgent
-from llmagent.agent.message import AgentMessage
+from llmagent.agent.message import AgentMessage, ThoughtQuestionAnswer
 from llmagent.embedding_models.models import OpenAIEmbeddingsConfig
 from llmagent.vector_store.qdrantdb import QdrantDBConfig
 from llmagent.language_models.base import LLMConfig
@@ -11,6 +11,8 @@ from llmagent.prompts.prompts_config import PromptsConfig
 from llmagent.utils.system import rmdir
 from llmagent.utils.configuration import settings, update_global_settings
 from rich import print
+from typing import List
+from functools import reduce
 import pytest
 import json
 
@@ -20,18 +22,50 @@ class FileExistsMessage(AgentMessage):
     filename: str = "test.txt"
     result: str = "yes"  # or "no"
 
+    @classmethod
+    def examples(cls) -> List["FileExistsMessage"]:
+        return [
+            cls(filename="README.md", result="yes"),
+            cls(filename="Dockerfile", result="no"),
+        ]
+
     def use_when(self):
-        return f"""I want to know whether the repo 
-        contains the file '{self.filename}' 
-        """
+        return [
+            f"I want to know if a file {self.filename} is in the repo",
+            f"I need to check if the repo contains the file {self.filename}",
+        ]
+
+    def non_usage_examples(self) -> List[ThoughtQuestionAnswer]:
+        return [
+            ThoughtQuestionAnswer(
+                thought="I want to see how many files are in the repo",
+                question="How many files are in the repo?",
+                answer="34",
+            ),
+            ThoughtQuestionAnswer(
+                thought="I need to know the URL of the repo",
+                question="What is the URL of the repo?",
+                answer="https://a.github.com/b/c",
+            ),
+        ]
 
 
 class PythonVersionMessage(AgentMessage):
     request: str = "python_version"
     result: str = "3.9"
 
+    @classmethod
+    def examples(cls) -> List["PythonVersionMessage"]:
+        return [
+            cls(result="3.7"),
+            cls(result="3.8"),
+        ]
+
     def use_when(self):
-        return "I want to know which version of Python is needed"
+        return [
+            "I want to know which version of Python is needed",
+            "I need to check the Python version",
+        ]
 
 
 class MessageHandlingAgent(ChatAgent):
@@ -88,12 +122,15 @@ def test_disable_message():
     assert "python_version" not in agent.handled_classes
 
 
-def test_usage_instruction():
-    usage = PythonVersionMessage().usage_example()
-    assert PythonVersionMessage().use_when() in usage
-
-    usage = FileExistsMessage().usage_example()
-    assert FileExistsMessage().use_when() in usage
+@pytest.mark.parametrize("msg_cls", [PythonVersionMessage, FileExistsMessage])
+def test_usage_instruction(msg_cls: AgentMessage):
+    usage = msg_cls().usage_example()
+    assert any(
+        template in usage
+        for template in reduce(
+            lambda x, y: x + y, [ex.use_when() for ex in msg_cls.examples()]
+        )
+    )
 
 
 rmdir(qd_dir)  # don't need it here
