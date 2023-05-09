@@ -29,8 +29,8 @@ def extract_top_level_json(s: str) -> List[str]:
         List[str]: A list of top-level JSON-formatted substrings.
     """
     # Find JSON object and array candidates using regular expressions
-    json_candidates = regex.findall(r"\{(?:[^{}]|(?R))*\}", s)
-    json_candidates += regex.findall(r"\[(?:[^\[\]]|(?R))*\]", s)
+    json_candidates = regex.findall(r"(?<!\\)(?:\\\\)*\{(?:[^{}]|(?R))*\}", s)
+
     json_candidates = [candidate.replace("'", '"') for candidate in json_candidates]
 
     top_level_jsons = [
