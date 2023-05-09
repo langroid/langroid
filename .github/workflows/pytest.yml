@@ -32,8 +32,7 @@ jobs:
 #        curl -sSL https://install.python-poetry.org | python3 -
 
 
-    - name: Install CUDA related
-      uses: Jimver/cuda-toolkit@v0.2.10
+    - uses: Jimver/cuda-toolkit@v0.2.10
       id: cuda-toolkit
       with:
         cuda: '12.1.0'
