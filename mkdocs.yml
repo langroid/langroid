@@ -42,7 +42,22 @@ nav:
     - Specifying LLM Agents: writeups/specifying-llm-agents.md
   - Development:
     - GitHub CLI: development/github-cli.md
+    - Clustering Vectors: development/clustering-vectors.md
+    - Code Chunking: development/code-chunking.md
     - Releases from your poetry project: development/releases.md
+    - Autofixing Lint Errors: development/autofix-lints.md
+    - Coverage Badge: development/coverage-badge.md
+    - Code Coverage: development/code-coverage.md
+    - Ghost Blog Migration: development/ghost-blog-migration.md
+    - Git Branch Divergence: development/git-branch-divergence.md
+    - GitHub Workflow Testing: development/github-workflow-testing.md
+    - Poetry Package Building: development/poetry-package-building.md
+    - Pydantic Abstract Classes: development/pydantic-abstract-class.md
+    - Pydantic Class As Arg: development/pydantic-class-as-arg.md
+    - Pydantic DocString: development/pydantic-docstring.md
+    - Pydantic Fields: development/pydantic-fields.md
+    - Searching Github: development/search-github.md
+
   # defer to gen-files + literate-nav
   - Code Reference: reference/  #
 
