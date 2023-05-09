@@ -83,6 +83,14 @@ class DockerChatAgent(ChatAgent):
 
     @classmethod
     def save_dockerfile(cls, dockerfile: str, repo_path: str) -> str:
+        """
+        Save the proposed Dockerfile in the root directory of a repo
+        Args:
+            dockerfile (str): content of the dockerfile
+            repo_path (str): path to the cloned repo
+        Returns:
+            str: a string indicates whether the Dockerfile has been saved successfully
+        """
         try:
             full_path = os.path.join(repo_path, "Dockerfile")
             with open(full_path, 'w') as f:
@@ -99,7 +107,7 @@ class DockerChatAgent(ChatAgent):
             message (DockerfileMessage): LLM message contains the Dockerfile
             repo_path (str): path to the cloned repo
         Returns:
-            str: a string indicates whether the Dockerfile 
+            str: a string indicates whether the Dockerfile has been built successfully 
         """
         try:
             dockerfile_path = DockerChatAgent.save_dockerfile(message, repo_path)
@@ -110,7 +118,7 @@ class DockerChatAgent(ChatAgent):
             os.chdir(repo_path)
 
             # Build the Docker image
-            command = f'docker build -t your_image_name -f {dockerfile_path} .'
+            command = f'docker build -t verify_img -f {dockerfile_path} .'
             process = subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
 
             # Restore the original working directory
@@ -118,6 +126,9 @@ class DockerChatAgent(ChatAgent):
 
             # Check the result of the build process
             if process.returncode == 0:
+                #remove the Docker image
+                command = 'docker rmi -f verify_img'
+                process = subprocess.run(command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
                 return "Docker build was successful"
             else:
                 return f"Docker build failed with error message: {process.stderr}"
