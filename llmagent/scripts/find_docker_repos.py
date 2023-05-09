@@ -30,8 +30,10 @@ def find_docker_repos(stars: int = 10000, k: int = 10, access_token=None):
             pass
 
     # Print the filtered repository names and URLs
+    c = 0
     for repo in filtered_repos:
-        print(f"{repo.name}: {repo.html_url}")
+        print(f"{c}: {repo.name}: {repo.html_url}: {repo.stargazers_count}")
+        c += 1
 
 
 if __name__ == "__main__":

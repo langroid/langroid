@@ -2,6 +2,8 @@ from llmagent.agent.chat_agent import ChatAgent
 from llmagent.agent.base import AgentMessage
 from typing import List
 
+import subprocess
+import os
 
 # Message types that can be handled by the agent;
 # each corresponds to a method in the agent.
@@ -123,3 +125,99 @@ class DockerChatAgent(ChatAgent):
     # ... other such methods.
 
     # There should be a 1-1 correspondence between message types and agent methods.
+
+    @staticmethod
+    def cleanup_dockerfile(img_name: str, dockerfile_path: str) -> None:
+        """
+        Remove Dockefile and built image after performing the verification process
+        Args:
+            img_name (str): the name of the Docker image
+            dockerfile_path (str): path to the saved Dockerfile
+        """
+        try:
+            # Remove Dockerfile
+            if os.path.exists(dockerfile_path):
+                os.remove(dockerfile_path)
+                print(f"Dockerfile at path '{dockerfile_path}' has been removed.")
+            else:
+                print(f"No Dockerfile found at path '{dockerfile_path}'.")
+
+            # Remove Docker image
+            command = f"docker rmi -f {img_name}"
+            result = subprocess.run(
+                command, shell=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+            )
+
+            # Check if the command was successful
+            if result.returncode == 0:
+                print(f"Docker image '{img_name}' has been removed.")
+            else:
+                print(
+                    f"Failed to remove Docker image '{img_name}'. Error: {result.stderr.decode()}"
+                )
+
+        except Exception as e:
+            print(f"An error occurred: {str(e)}")
+
+    @staticmethod
+    def save_dockerfile(dockerfile: str, repo_path: str) -> str:
+        """
+        Save the proposed Dockerfile in the root directory of a repo
+        Args:
+            dockerfile (str): content of the dockerfile
+            repo_path (str): path to the cloned repo
+        Returns:
+            str: a string indicates whether the Dockerfile has been saved successfully
+        """
+        try:
+            full_path = os.path.join(repo_path, "Dockerfile")
+            with open(full_path, "w") as f:
+                f.write(dockerfile)
+            return full_path
+        except Exception as e:
+            return f"An error occurred while saving the Dockerfile: {e}"
+
+    @staticmethod
+    def build_docker_image(message: str, repo_path: str) -> str:
+        """
+        validates the proposed Dockerfile by LLM.
+        Args:
+            message (DockerfileMessage): LLM message contains the Dockerfile
+            repo_path (str): path to the cloned repo
+        Returns:
+            str: a string indicates whether the Dockerfile has been built successfully
+        """
+        try:
+            dockerfile_path = DockerChatAgent.save_dockerfile(message, repo_path)
+            if dockerfile_path.startswith("An error"):
+                return dockerfile_path
+
+            # Build the Docker image
+            img_name = "verify_img"
+            command = f"docker build -t {img_name} -f {dockerfile_path} ."
+            process = subprocess.run(
+                command,
+                shell=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+            )
+
+            # Check the result of the build process
+            if process.returncode == 0:
+                # do some cleaning: the Docker image and remove the Dockerfile
+                DockerChatAgent.cleanup_dockerfile(img_name, dockerfile_path)
+                return "Docker build was successful"
+            else:
+                return f"Docker build failed with error message: {process.stderr}"
+
+        except Exception as e:
+            return f"An error occurred during the Docker build: {e}"
+
+
+# df = """
+#                 FROM ubuntu:latest
+#                 LABEL maintainer=blah
+#                 """
+
+# mm = DockerChatAgent.build_docker_image(df, "/nobackup/cml")
