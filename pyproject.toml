@@ -38,6 +38,7 @@ pygments = "^2.15.1"
 faiss-cpu = "^1.7.4"
 torch = "^2.0.1"
 torchvision = "^0.15.2"
+sentence-transformers = "^2.2.2"
 
 
 
