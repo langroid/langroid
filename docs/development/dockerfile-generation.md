@@ -1,3 +1,8 @@
+# Dockerfile Generation
+
+!!! note
+    By GPT4. Caveat Lector. May not be fully accurate. Trust but Verify!
+
 To build a Dockerfile for a Python repo, you will need the following
 information:
 
