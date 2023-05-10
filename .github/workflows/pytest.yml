@@ -29,7 +29,7 @@ jobs:
 
     - name: Install PyTorch CPU
       run: |
-        pip install -r .github/workflows/requirements-torch.txt
+        pip3 install -r .github/workflows/requirements-torch.txt
 
     - name: Install dependencies
       run: |

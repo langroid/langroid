@@ -1,2 +1,4 @@
-torch==1.9.1+cpu -f https://download.pytorch.org/whl/cpu/torch_stable.html
-torchvision==0.10.1+cpu -f https://download.pytorch.org/whl/cpu/torch_stable.html
+--index-url https://download.pytorch.org/whl/cpu
+torch
+torchvision
+torchaudio
