@@ -24,10 +24,6 @@ jobs:
       with:
         python-version: 3.11  # Replace with your desired Python version
 
-    - name: Clear pip cache
-      run: |
-        rm -rf ~/.cache/pip
-
     - name: Install Poetry
       uses: snok/install-poetry@v1
 
@@ -35,7 +31,8 @@ jobs:
       run: |
         echo "$HOME/.local/bin" >> $GITHUB_PATH
         python -m pip install --upgrade pip
-        poetry install --no-root
+        poetry pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+        poetry install
 
     - name: Run tests with coverage
       run: |
