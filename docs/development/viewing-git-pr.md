@@ -105,4 +105,53 @@ git branch -D pr-view
 This approach keeps your main branch clean and lets you view the changes from
 the PR branch as "dirty" changes in a separate branch.
 
+# Ensuring main branch remains unaffected
 
+The previous instructions I provided will not
+affect your main branch, as you are merging the PR branch into the "pr-view"
+branch. However, if you want to ensure the main branch remains unaffected, you
+can follow these updated steps:
+
+1. Checkout the main branch using the following command in your terminal or
+   command prompt:
+
+```
+git checkout main
+```
+
+2. Create a new branch called "pr-view" and switch to it:
+
+```
+git checkout -b pr-view
+```
+
+3. Merge the PR branch into the "pr-view" branch without committing, using
+   the `--no-commit` and `--no-ff` options:
+
+```
+git merge --no-commit --no-ff <pr-branch-name>
+```
+
+Replace `<pr-branch-name>` with the name of the branch corresponding to the PR.
+
+4. Open the project in PyCharm. Now, all the changes from the PR branch will be
+   shown as "dirty" changes relative to the "pr-view" branch. You can see the
+   changes with gutter indicators in the editor, just like when you make changes
+   to your files.
+
+5. After reviewing the changes, you can switch back to the main branch without
+   affecting it:
+
+```
+git reset --hard HEAD
+git checkout main
+```
+
+6. Then, delete the "pr-view" branch:
+
+```
+git branch -D pr-view
+```
+
+By performing a hard reset before switching back to the main branch, you ensure
+that any "dirty" changes are discarded and the main branch remains unaffected.
