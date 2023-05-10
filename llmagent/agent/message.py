@@ -68,6 +68,7 @@ class AgentMessage(ABC, BaseModel):
         validate_assignment = True
 
     @classmethod
+    @abstractmethod
     def examples(cls) -> List["AgentMessage"]:
         """
         Examples to use in few-shot demos with JSON formatting instructions.
