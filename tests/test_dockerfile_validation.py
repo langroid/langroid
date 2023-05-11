@@ -1,82 +1,243 @@
-from examples.dockerchat.docker_chat_agent import DockerChatAgent
+# from examples.dockerchat.docker_chat_agent import DockerChatAgent
 
-import os
-import tempfile
-import subprocess
+# import os
+# import tempfile
+# import subprocess
 
 import pytest
-from unittest.mock import patch, MagicMock
+# from unittest.mock import patch, MagicMock
+
+from llmagent.parsing.json import extract_top_level_json
+from llmagent.utils.configuration import settings, update_global_settings
+from llmagent.language_models.base import Role, LLMMessage
+from llmagent.agent.base import AgentConfig, Agent
+from llmagent.vector_store.base import VectorStoreConfig
+from llmagent.language_models.base import LLMConfig
+from llmagent.parsing.parser import ParsingConfig
+from llmagent.prompts.prompts_config import PromptsConfig
+from llmagent.agent.base import AgentMessage
+from llmagent.agent.chat_agent import ChatAgent
+from llmagent.utils.system import rmdir
+
+from typing import List
+from functools import reduce
+
+import json
 
 
-@pytest.fixture
-def mock_functions():
-    with patch("os.path.exists") as mock_exists, patch(
-        "os.remove"
-    ) as mock_remove, patch("subprocess.run") as mock_run:
-        mock_exists.return_value = True
-        mock_run.return_value = MagicMock()
-        yield mock_exists, mock_remove, mock_run
+class ValidateDockerfileMessage(AgentMessage):
+    request: str = "validate_dockerfile"
+    proposed_dockerfile: str = """
+        # Use an existing base image
+        FROM ubuntu:latest
+        # Set the maintainer information
+        LABEL maintainer="your_email@example.com"
+        # Set the working directory
+        """  # contents of dockerfile
+    result: str = "build succeed"
+
+    @classmethod
+    def examples(cls) -> List["AgentMessage"]:
+        return [
+            cls(
+                proposed_dockerfile="""
+                FROM ubuntu:latest
+                LABEL maintainer=blah
+                """,
+                result="received, but there are errors",
+            ),
+            cls(
+                proposed_dockerfile="""
+                # Use an official Python runtime as a parent image
+                FROM python:3.7-slim
+                # Set the working directory in the container
+                WORKDIR /app
+                """,
+                result="docker file looks fine",
+            ),
+        ]
+    
+    def use_when(self) -> List[str]:
+        """
+        Return a List of strings showing an example of when the message should be used,
+        possibly parameterized by the field values. This should be a valid english
+        phrase in first person, in the form of a phrase that can legitimately
+        complete "I can use this message when..."
+        Returns:
+            str: list of examples of a situation when the message should be used,
+                in first person, possibly parameterized by the field values.
+        """
+
+        return [
+            f"I want to know if there is a file named '{self.proposed_dockerfile}' in the repo.",
+            f"I need to check if the repo contains a the file '{self.proposed_dockerfile}'",
+        ]
 
 
-@pytest.mark.parametrize(
-    "img_name, dockerfile_path, returncode",
-    [
-        ("test_image", "test_path", 0),
-        ("another_image", "another_path", 1),
-    ],
+class MessageHandlingAgent(ChatAgent):
+    def validate_dockerfile(self, ValidateDockerfileMessage) -> str:
+        return "Built successfully"
+    
+
+qd_dir = ".qdrant/testdata_test_agent"
+rmdir(qd_dir)
+cfg = AgentConfig(
+    debug=True,
+    name="test-llmagent",
+    vecdb=None,
+    llm=LLMConfig(
+        type="openai",
+        chat_model="gpt-3.5-turbo",
+    ),
+    parsing=None,
+    prompts=PromptsConfig(),
 )
-def test_remove_dockerfile_and_image(
-    mock_functions, img_name, dockerfile_path, returncode
-):
-    mock_exists, mock_remove, mock_run = mock_functions
+agent = MessageHandlingAgent(cfg)
 
-    # Set returncode on the subprocess.run mock
-    mock_run.return_value.returncode = returncode
 
-    # Call the function
-    DockerChatAgent.cleanup_dockerfile(img_name, dockerfile_path)
+def test_enable_message():
+    agent.enable_message(ValidateDockerfileMessage)
+    assert "validate_dockerfile" in agent.handled_classes
+    assert agent.handled_classes["validate_dockerfile"] == ValidateDockerfileMessage
 
-    # Assert that os.remove and subprocess.run were called with the correct arguments
-    mock_remove.assert_called_once_with(dockerfile_path)
-    mock_run.assert_called_once_with(
-        f"docker rmi -f {img_name}",
-        shell=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
+
+def test_disable_message():
+    agent.enable_message(ValidateDockerfileMessage)
+    agent.disable_message(ValidateDockerfileMessage)
+    assert "validate_dockerfile" not in agent.handled_classes
+
+
+@pytest.mark.parametrize("msg_cls", [ValidateDockerfileMessage])
+def test_usage_instruction(msg_cls: AgentMessage):
+    usage = msg_cls().usage_example()
+    assert any(
+        template in usage
+        for template in reduce(
+            lambda x, y: x + y, [ex.use_when() for ex in msg_cls.examples()]
+        )
     )
 
 
-def test_save_dockerfile():
-    content = """
-    FROM python:3.8-slim
+rmdir(qd_dir)  # don't need it here
 
-    WORKDIR /app
+df = """
+                FROM ubuntu:latest
+                LABEL maintainer=blah
+                """ 
 
-    COPY requirements.txt requirements.txt
-    RUN pip install -r requirements.txt
 
-    COPY . .
-
-    CMD ["python", "app.py"]
+@pytest.mark.parametrize(
+    "message, expected",
+    [
+        ("nothing to see here", None),
+        (
+            """Ok, thank you. 
+                {
+                'request': 'validate_dockerfile',
+                'proposed_dockerfile':'doeckfile definition'
+                } 
+                this is the Dockerfile!
+                """,
+            "Built successfully",
+        )
+    ],
+)
+def test_agent_actions(message, expected):
     """
-    with tempfile.TemporaryDirectory() as temp_dir:
-        dockerfile_path = DockerChatAgent.save_dockerfile(content, temp_dir)
-        assert os.path.exists(dockerfile_path), "Dockerfile not saved"
-        with open(dockerfile_path, "r") as f:
-            saved_content = f.read()
-        assert content == saved_content, "Dockerfile content mismatch"
-
-
-def test_build_docker_image():
-    content = """
-    FROM python:3.8-slim
-
-    WORKDIR /app
-
-    COPY . .
-
-    CMD ["python", "-c", "print('Hello, Docker!')"]
+    Test whether messages are handled correctly.
     """
-    with tempfile.TemporaryDirectory() as temp_dir:
-        result = DockerChatAgent.build_docker_image(content, temp_dir)
-        assert "Docker build was successful" == result, "Docker build failed"
+    agent.enable_message(ValidateDockerfileMessage)
+    result = agent.handle_message(message)
+    assert result == expected
+
+
+def test_llm_agent_message():
+    """
+    Test whether LLM is able to generate message in required format, and the
+    agent handles the message correctly.
+    """
+    update_global_settings(cfg, keys=["debug"])
+    task_messages = [
+        LLMMessage(
+            role=Role.SYSTEM,
+            content="""
+            You are a devops engineer, and your task is to understand a PYTHON 
+            repo. Plan this out step by step, and ask me questions 
+            for any info you need to understand the repo. 
+            """,
+        ),
+        LLMMessage(
+            role=Role.USER,
+            content="""
+            You are an assistant whose task is to understand a Python repo.
+
+            You have to think in small steps, and at each stage, show me your 
+            THINKING, and the QUESTION you want to ask. Based on my answer, you will 
+            generate a new THINKING and QUESTION.  
+            """,
+        ),
+    ]
+    agent = MessageHandlingAgent(cfg, task_messages)
+    agent.enable_message(ValidateDockerfileMessage)
+
+    agent.run(
+        iters=2, default_human_response="I don't know, please ask your next question."
+    )
+
+
+def test_llm_agent_reformat():
+    """
+    Test whether the LLM completion mode is able to reformat the request based
+    on the auto-generated reformat instructions.
+    """
+    update_global_settings(cfg, keys=["debug"])
+    task_messages = [
+        LLMMessage(
+            role=Role.SYSTEM,
+            content="""
+            You are a devops engineer, and your task is to understand a PYTHON 
+            repo. Plan this out step by step, and ask me questions 
+            for any info you need to understand the repo. 
+            """,
+        ),
+        LLMMessage(
+            role=Role.USER,
+            content="""
+            You are an assistant whose task is to understand a Python repo.
+
+            You have to think in small steps, and at each stage, show me your 
+            THINKING, and the QUESTION you want to ask. Based on my answer, you will 
+            generate a new THINKING and QUESTION.  
+            """,
+        ),
+    ]
+    agent = MessageHandlingAgent(cfg, task_messages)
+    agent.enable_message(ValidateDockerfileMessage)
+
+    df = """
+        # Use an existing base image
+        FROM ubuntu:latest
+        # Set the maintainer information
+        LABEL maintainer="your_email@example.com"
+        # Set the working directory
+    """
+    msg = """
+    here is the dockerfile
+    {"request": "validate_dockerfile",
+    "proposed_dockerfile": "%s"}
+    """ % df
+
+    prompt = agent.request_reformat_prompt(msg)
+    reformat_agent = Agent(cfg)
+    reformatted = reformat_agent.respond(prompt)
+    reformatted_jsons = extract_top_level_json(reformatted.content)
+    assert len(reformatted_jsons) == 1
+    assert json.loads(reformatted_jsons[0]) == ValidateDockerfileMessage(
+        proposed_dockerfile="""
+        # Use an existing base image
+        FROM ubuntu:latest
+        # Set the maintainer information
+        LABEL maintainer="your_email@example.com"
+        # Set the working directory
+        """
+    ).dict(exclude={"result"})
