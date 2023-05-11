@@ -1,3 +1,6 @@
+# Code coverage using coverage.py
+
+
 You can use `coverage.py` locally to measure the code coverage
 of your Python project.
 

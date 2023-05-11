@@ -1,8 +1,10 @@
+# Automatically fixing pep8 issues raised by `flake8`
+
 
 !!! note
    Caveat Lector. May not be fully accurate. Trust but Verify!
 
-# Automatically fixing pep8 issues raised by `flake8`
+
 
 To automatically fix PEP8 issues found by Flake8, you can use a tool
 called `autopep8`. `autopep8` is a command-line utility that automatically

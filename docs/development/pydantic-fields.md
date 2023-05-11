@@ -1,3 +1,6 @@
+# Fields in Pydantic Classes
+
+
 When defining a Pydantic class with `Field(.., title, description, etc.)`, you
 can provide additional metadata for your class attributes, which can be helpful
 for various purposes, such as documentation, validation, and serialization.

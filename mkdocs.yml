@@ -42,6 +42,7 @@ nav:
     - Specifying LLM Agents: writeups/specifying-llm-agents.md
   - Development:
     - Dockerfile Generation: development/dockerfile-generation.md
+    - Code Analysis Packages: development/code-analysis-packages.md
     - GitHub CLI: development/github-cli.md
     - Clustering Vectors: development/clustering-vectors.md
     - Code Chunking: development/code-chunking.md
@@ -58,6 +59,7 @@ nav:
     - Pydantic DocString: development/pydantic-docstring.md
     - Pydantic Fields: development/pydantic-fields.md
     - Searching Github: development/search-github.md
+    - MkDocs Macros: development/mkdocs-macros.md
 
   # defer to gen-files + literate-nav
   - Code Reference: reference/  #

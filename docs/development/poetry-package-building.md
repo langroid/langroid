@@ -1,8 +1,9 @@
+# Building a package from a poetry-based project
 
 !!! note
     Caveat Lector. May not be fully accurate. Trust but Verify!
 
-# Building a package from a poetry-based project
+
 
 Great! If you already have a `pyproject.toml` file and a Poetry-based virtual
 environment setup, you can follow these steps to create a package that can be
