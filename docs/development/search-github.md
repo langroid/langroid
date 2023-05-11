@@ -1,3 +1,6 @@
+# Searching on GitHub
+
+
 !!! note
     Caveat Lector. May not be fully accurate. Trust but Verify!
 
