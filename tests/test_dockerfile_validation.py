@@ -9,12 +9,10 @@ import pytest
 # from unittest.mock import patch, MagicMock
 
 from llmagent.parsing.json import extract_top_level_json
-from llmagent.utils.configuration import settings, update_global_settings
+from llmagent.utils.configuration import update_global_settings
 from llmagent.language_models.base import Role, LLMMessage
 from llmagent.agent.base import AgentConfig, Agent
-from llmagent.vector_store.base import VectorStoreConfig
 from llmagent.language_models.base import LLMConfig
-from llmagent.parsing.parser import ParsingConfig
 from llmagent.prompts.prompts_config import PromptsConfig
 from llmagent.agent.base import AgentMessage
 from llmagent.agent.chat_agent import ChatAgent
