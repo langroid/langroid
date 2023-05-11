@@ -5,6 +5,7 @@
 # import subprocess
 
 import pytest
+
 # from unittest.mock import patch, MagicMock
 
 from llmagent.parsing.json import extract_top_level_json
@@ -56,7 +57,7 @@ class ValidateDockerfileMessage(AgentMessage):
                 result="docker file looks fine",
             ),
         ]
-    
+
     def use_when(self) -> List[str]:
         """
         Return a List of strings showing an example of when the message should be used,
@@ -77,7 +78,7 @@ class ValidateDockerfileMessage(AgentMessage):
 class MessageHandlingAgent(ChatAgent):
     def validate_dockerfile(self, ValidateDockerfileMessage) -> str:
         return "Built successfully"
-    
+
 
 qd_dir = ".qdrant/testdata_test_agent"
 rmdir(qd_dir)
@@ -123,7 +124,7 @@ rmdir(qd_dir)  # don't need it here
 df = """
                 FROM ubuntu:latest
                 LABEL maintainer=blah
-                """ 
+                """
 
 
 @pytest.mark.parametrize(
@@ -139,7 +140,7 @@ df = """
                 this is the Dockerfile!
                 """,
             "Built successfully",
-        )
+        ),
     ],
 )
 def test_agent_actions(message, expected):
@@ -221,23 +222,29 @@ def test_llm_agent_reformat():
         LABEL maintainer="your_email@example.com"
         # Set the working directory
     """
-    msg = """
+    msg = (
+        """
     here is the dockerfile
     {"request": "validate_dockerfile",
     "proposed_dockerfile": "%s"}
-    """ % df
+    """
+        % df
+    )
 
     prompt = agent.request_reformat_prompt(msg)
     reformat_agent = Agent(cfg)
     reformatted = reformat_agent.respond(prompt)
     reformatted_jsons = extract_top_level_json(reformatted.content)
     assert len(reformatted_jsons) == 1
-    assert json.loads(reformatted_jsons[0]) == ValidateDockerfileMessage(
-        proposed_dockerfile="""
+    assert (
+        json.loads(reformatted_jsons[0])
+        == ValidateDockerfileMessage(
+            proposed_dockerfile="""
         # Use an existing base image
         FROM ubuntu:latest
         # Set the maintainer information
         LABEL maintainer="your_email@example.com"
         # Set the working directory
         """
-    ).dict(exclude={"result"})
+        ).dict(exclude={"result"})
+    )
