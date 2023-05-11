@@ -1,3 +1,5 @@
+# Pydantic message class
+
 Pydantic is a popular library for data validation in Python. It allows you to
 create data models and perform automatic validation of the data. To create
 the `Message` class with the `recognize` method, you can use the following code:

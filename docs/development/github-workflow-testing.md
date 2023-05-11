@@ -1,3 +1,5 @@
+# GitHub Actions Workflows: Local testing
+
 You can test GitHub Actions workflows locally using a tool
 called `act`. `act` allows you to run your GitHub Actions workflows on your
 local machine without pushing your changes to the repository. You can find more
