@@ -1,3 +1,5 @@
+# Chunking code repository for embedding in a vector database
+
 !!! note
 Caveat Lector. May not be fully accurate. Trust but Verify!
 

@@ -1,3 +1,5 @@
+# Using the GitHub CLI
+
 !!! note
     By GPT4. Caveat Lector. May not be fully accurate. Trust but Verify!
 

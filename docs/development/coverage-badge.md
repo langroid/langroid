@@ -1,3 +1,4 @@
+# Coverage Badge on GitHub
 
 GitHub Pages are public by default. If you want to keep your
 private repo's information private, you can use create a coverage badge

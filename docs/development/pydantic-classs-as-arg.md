@@ -1,3 +1,5 @@
+# Pydantic Class as an Argument
+
 Yes, you can use the class A itself as an argument to the register method of
 class B without needing an instance of class A. You can achieve this by using
 Python's first-class object support, which allows you to pass classes as

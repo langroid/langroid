@@ -1,3 +1,5 @@
+# Git Branch Divergence
+
 To avoid divergence from and conflicts with the main branch, your collaborator
 should frequently run the following Git commands while working on their feature
 branch:
