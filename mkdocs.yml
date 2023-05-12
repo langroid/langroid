@@ -53,6 +53,7 @@ nav:
     - Ghost Blog Migration: development/ghost-blog-migration.md
     - Git Branch Divergence: development/git-branch-divergence.md
     - GitHub Workflow Testing: development/github-workflow-testing.md
+    - GitHub Actions CUDA Install: development/github-workflow-cuda.md
     - Poetry Package Building: development/poetry-package-building.md
     - Pydantic Abstract Classes: development/pydantic-abstract-class.md
     - Pydantic Class As Arg: development/pydantic-class-as-arg.md
