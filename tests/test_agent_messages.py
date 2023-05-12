@@ -240,6 +240,8 @@ def test_llm_agent_reformat():
     """
 
     prompt = agent.request_reformat_prompt(msg)
+    if settings.debug:
+        print(f"[red]Prompt:[/red] {prompt}")
     reformat_agent = Agent(cfg)
     reformatted = reformat_agent.respond(prompt)
     reformatted_jsons = extract_top_level_json(reformatted.content)
@@ -252,6 +254,8 @@ def test_llm_agent_reformat():
     I want to know which version of Python is needed
     """
     prompt = agent.request_reformat_prompt(msg)
+    if settings.debug:
+        print(f"[red]Prompt:[/red] {prompt}")
     reformat_agent = Agent(cfg)
     reformatted = reformat_agent.respond(prompt)
     reformatted_jsons = extract_top_level_json(reformatted.content)
