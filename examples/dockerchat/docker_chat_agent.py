@@ -106,6 +106,8 @@ class ValidateDockerfileMessage(AgentMessage):
             "Does this look good to you",
             "Here is the Dockerfile",
             "This Dockerfile installs",
+            "the above Dockerfile",
+            "I will create a Dockerfile"
         ]
 
 
@@ -188,6 +190,9 @@ class DockerChatAgent(ChatAgent):
             if dockerfile_path.startswith("An error"):
                 return dockerfile_path
 
+            original_path = os.getcwd()
+            os.chdir(self.repo_path)
+
             # Build the Docker image
             img_name = "validate_img"
             command = f"docker build -t {img_name} -f {dockerfile_path} ."
@@ -198,6 +203,9 @@ class DockerChatAgent(ChatAgent):
                 stderr=subprocess.PIPE,
                 text=True,
             )
+
+            os.chdir(original_path)
+
             # Check the result of the build process
             if process.returncode == 0:
                 # do some cleaning: remove the Docker image and the Dockerfile
