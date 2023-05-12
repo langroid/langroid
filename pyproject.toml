@@ -39,8 +39,6 @@ faiss-cpu = "^1.7.4"
 sentence-transformers = "^2.2.2"
 
 
-
-
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.3.1"
 coverage = "^7.2.5"
