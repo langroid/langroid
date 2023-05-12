@@ -11,13 +11,6 @@ on:
 jobs:
   pytest:
     runs-on: ubuntu-latest
-
-    container:
-      image: nvidia/cuda:12.1.1-devel-ubuntu22.04
-      env:
-        DEBIAN_FRONTEND: noninteractive
-        LD_LIBRARY_PATH: /usr/local/cuda/lib64:$LD_LIBRARY_PATH
-
     env:
       OPENAI_API_KEY: ${{ secrets.OPENAI_KEY }}
       GITHUB_ACCESS_TOKEN: ${{ secrets.GH_ACCESS_TOKEN }}
@@ -25,15 +18,6 @@ jobs:
     steps:
     - name: Check out repository
       uses: actions/checkout@v2
-
-    - name: Install dependencies
-      run: |
-        apt-get update
-        apt-get install -y build-essential cmake curl
-
-    - name: Verify CUDA installation
-      run: |
-        nvcc --version      
 
     - name: Set up Python
       uses: actions/setup-python@v2
@@ -47,6 +31,7 @@ jobs:
       run: |
         echo "$HOME/.local/bin" >> $GITHUB_PATH
         python -m pip install --upgrade pip
+        poetry run pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu/torch_stable.html
         poetry install
 
     - name: Run tests with coverage
