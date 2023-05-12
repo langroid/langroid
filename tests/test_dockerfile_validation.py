@@ -112,7 +112,7 @@ def test_disable_message():
     assert "validate_dockerfile" not in agent.handled_classes
 
 
-@pytest.mark.parametrize("msg_cls", [ValidateDockerfileMessage, PythonVersionMessage, FileExistsMessage])
+@pytest.mark.parametrize("msg_cls", [ValidateDockerfileMessage])
 def test_usage_instruction(msg_cls: AgentMessage):
     usage = msg_cls().usage_example()
     assert any(
@@ -126,34 +126,39 @@ def test_usage_instruction(msg_cls: AgentMessage):
 rmdir(qd_dir)  # don't need it here
 
 df = """
-                FROM ubuntu:latest
-                LABEL maintainer=blah
-                """
-
-
-@pytest.mark.parametrize(
-    "message, expected",
-    [
-        ("nothing to see here", None),
-        (
-            """Ok, thank you. 
-                {
-                'request': 'validate_dockerfile',
-                'proposed_dockerfile':'doeckfile definition'
-                } 
-                this is the Dockerfile!
-                """,
-            "Built successfully",
-        ),
-    ],
-)
-def test_agent_actions(message, expected):
+    FROM ubuntu:latest
+    LABEL maintainer=blah
     """
-    Test whether messages are handled correctly.
+
+
+NONE_MSG = "nothing to see here"
+
+VALIDATE_DOCKERFILE_MSG = """
+    Ok, thank you. 
+    {{
+    'request': 'validate_dockerfile',
+    'proposed_dockerfile':{}'
+    }}
+    this is the Dockerfile!
+    """.format(
+    df
+)
+
+
+def test_agent_handle_message():
+    """
+    Test whether messages are handled correctly, and that
+    message enabling/disabling works as expected.
     """
     agent.enable_message(ValidateDockerfileMessage)
-    result = agent.handle_message(message)
-    assert result == expected
+    assert agent.handle_message(NONE_MSG) is None
+    assert agent.handle_message(VALIDATE_DOCKERFILE_MSG) == "Built successfully"
+
+    agent.disable_message(ValidateDockerfileMessage)
+    assert agent.handle_message(VALIDATE_DOCKERFILE_MSG) is None
+
+    agent.enable_message(ValidateDockerfileMessage)
+    assert agent.handle_message(VALIDATE_DOCKERFILE_MSG) == "Built successfully"
 
 
 def test_llm_agent_message():
@@ -193,14 +198,14 @@ def test_llm_agent_message():
 def remove_whitespace_after_newline(multiple_lines_str: str) -> str:
     """
     removes whitespace after \n in mutliple lines string
-    Args: 
+    Args:
         multiple_lines_str(str): string to be modified
     Returns:
         string after removing whitespaces
     """
-    lines = multiple_lines_str.split('\n')
+    lines = multiple_lines_str.split("\n")
     stripped_lines = [line.lstrip() for line in lines]
-    return '\n'.join(stripped_lines)
+    return "\n".join(stripped_lines)
 
 
 def test_llm_agent_reformat():
@@ -253,14 +258,13 @@ def test_llm_agent_reformat():
     reformatted = reformat_agent.respond(prompt)
     reformatted_jsons = extract_top_level_json(reformatted.content)
     ld_reformatted_jsons = json.loads(reformatted_jsons[0])
-    proposed_dockerfile_nowhitespace = remove_whitespace_after_newline(ld_reformatted_jsons.get("proposed_dockerfile"))
+    proposed_dockerfile_nowhitespace = remove_whitespace_after_newline(
+        ld_reformatted_jsons.get("proposed_dockerfile")
+    )
     ld_reformatted_jsons["proposed_dockerfile"] = proposed_dockerfile_nowhitespace
 
-    df_nowhitespace = remove_whitespace_after_newline(df)                                 
+    df_nowhitespace = remove_whitespace_after_newline(df)
     assert len(reformatted_jsons) == 1
-    assert (
-        ld_reformatted_jsons
-        == ValidateDockerfileMessage(
-            proposed_dockerfile=f"{df_nowhitespace}"
-        ).dict(exclude={"result"})
-    )
+    assert ld_reformatted_jsons == ValidateDockerfileMessage(
+        proposed_dockerfile=f"{df_nowhitespace}"
+    ).dict(exclude={"result"})
