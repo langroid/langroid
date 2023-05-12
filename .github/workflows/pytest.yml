@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
 
     container:
-      image: nvidia/cuda:11.7.0-devel-ubuntu20.04
+      image: nvidia/cuda:12.1.1-devel-ubuntu20.04
       env:
         DEBIAN_FRONTEND: noninteractive
 
