@@ -11,6 +11,10 @@ on:
 jobs:
   pytest:
     runs-on: ubuntu-latest
+
+    container:
+      image: nvidia/cuda:11.7.0-devel-ubuntu20.04
+
     env:
       OPENAI_API_KEY: ${{ secrets.OPENAI_KEY }}
       GITHUB_ACCESS_TOKEN: ${{ secrets.GH_ACCESS_TOKEN }}
@@ -18,6 +22,15 @@ jobs:
     steps:
     - name: Check out repository
       uses: actions/checkout@v2
+
+    - name: Install dependencies
+      run: |
+        apt-get update
+        apt-get install -y build-essential cmake
+
+    - name: Verify CUDA installation
+      run: |
+        nvcc --version      
 
     - name: Set up Python
       uses: actions/setup-python@v2
@@ -31,7 +44,7 @@ jobs:
       run: |
         echo "$HOME/.local/bin" >> $GITHUB_PATH
         python -m pip install --upgrade pip
-        poetry run pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+#        poetry run pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
         poetry install
 
     - name: Run tests with coverage
