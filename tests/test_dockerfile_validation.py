@@ -68,8 +68,11 @@ class ValidateDockerfileMessage(AgentMessage):
         """
 
         return [
-            f"I want to know if there is a file named '{self.proposed_dockerfile}' in the repo.",
-            f"I need to check if the repo contains a the file '{self.proposed_dockerfile}'",
+            "Here is a sample Dockerfile",
+            "You can modify this Dockerfile",
+            "Does this look good to you",
+            "Here is the Dockerfile",
+            "This Dockerfile installs",
         ]
 
 

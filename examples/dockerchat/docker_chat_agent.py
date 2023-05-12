@@ -5,7 +5,9 @@ from typing import List
 
 import subprocess
 import os
+import logging
 
+logger = logging.getLogger(__name__)
 
 # Message types that can be handled by the agent;
 # each corresponds to a method in the agent.
@@ -99,8 +101,11 @@ class ValidateDockerfileMessage(AgentMessage):
 
     def use_when(self) -> List[str]:
         return [
-            f"I need to show the dockerfile I have written: {self.proposed_dockerfile}",
-            f"I want to send a dockerfile: {self.proposed_dockerfile}",
+            "Here is a sample Dockerfile",
+            "You can modify this Dockerfile",
+            "Does this look good to you",
+            "Here is the Dockerfile",
+            "This Dockerfile installs",
         ]
 
 
@@ -132,9 +137,9 @@ class DockerChatAgent(ChatAgent):
             # Remove Dockerfile
             if os.path.exists(dockerfile_path):
                 os.remove(dockerfile_path)
-                print(f"Dockerfile at path '{dockerfile_path}' has been removed.")
+                logger.info(f"Dockerfile at path '{dockerfile_path}' has been removed.")
             else:
-                print(f"No Dockerfile found at path '{dockerfile_path}'.")
+                logger.error(f"No Dockerfile found at path '{dockerfile_path}'.")
 
             # Remove Docker image
             command = f"docker rmi -f {img_name}"
@@ -144,14 +149,14 @@ class DockerChatAgent(ChatAgent):
 
             # Check if the command was successful
             if result.returncode == 0:
-                print(f"Docker image '{img_name}' has been removed.")
+                logger.info(f"Docker image '{img_name}' has been removed.")
             else:
-                print(
+                logger.error(
                     f"Failed to remove Docker image '{img_name}'. Error: {result.stderr.decode()}"
                 )
 
         except Exception as e:
-            print(f"An error occurred: {str(e)}")
+            logger.error(f"An error occurred: {str(e)}")
 
     def _save_dockerfile(self, dockerfile: str) -> str:
         """
