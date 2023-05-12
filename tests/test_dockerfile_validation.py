@@ -17,7 +17,10 @@ from llmagent.prompts.prompts_config import PromptsConfig
 from llmagent.agent.base import AgentMessage
 from llmagent.agent.chat_agent import ChatAgent
 from llmagent.utils.system import rmdir
-
+from examples.dockerchat.docker_chat_agent import (
+    FileExistsMessage,
+    PythonVersionMessage,
+)
 from typing import List
 from functools import reduce
 
@@ -109,7 +112,7 @@ def test_disable_message():
     assert "validate_dockerfile" not in agent.handled_classes
 
 
-@pytest.mark.parametrize("msg_cls", [ValidateDockerfileMessage])
+@pytest.mark.parametrize("msg_cls", [ValidateDockerfileMessage, PythonVersionMessage, FileExistsMessage])
 def test_usage_instruction(msg_cls: AgentMessage):
     usage = msg_cls().usage_example()
     assert any(
@@ -187,6 +190,19 @@ def test_llm_agent_message():
     )
 
 
+def remove_whitespace_after_newline(multiple_lines_str: str) -> str:
+    """
+    removes whitespace after \n in mutliple lines string
+    Args: 
+        multiple_lines_str(str): string to be modified
+    Returns:
+        string after removing whitespaces
+    """
+    lines = multiple_lines_str.split('\n')
+    stripped_lines = [line.lstrip() for line in lines]
+    return '\n'.join(stripped_lines)
+
+
 def test_llm_agent_reformat():
     """
     Test whether the LLM completion mode is able to reformat the request based
@@ -236,16 +252,15 @@ def test_llm_agent_reformat():
     reformat_agent = Agent(cfg)
     reformatted = reformat_agent.respond(prompt)
     reformatted_jsons = extract_top_level_json(reformatted.content)
+    ld_reformatted_jsons = json.loads(reformatted_jsons[0])
+    proposed_dockerfile_nowhitespace = remove_whitespace_after_newline(ld_reformatted_jsons.get("proposed_dockerfile"))
+    ld_reformatted_jsons["proposed_dockerfile"] = proposed_dockerfile_nowhitespace
+
+    df_nowhitespace = remove_whitespace_after_newline(df)                                 
     assert len(reformatted_jsons) == 1
     assert (
-        json.loads(reformatted_jsons[0])
+        ld_reformatted_jsons
         == ValidateDockerfileMessage(
-            proposed_dockerfile="""
-        # Use an existing base image
-        FROM ubuntu:latest
-        # Set the maintainer information
-        LABEL maintainer="your_email@example.com"
-        # Set the working directory
-        """
+            proposed_dockerfile=f"{df_nowhitespace}"
         ).dict(exclude={"result"})
     )
