@@ -40,9 +40,9 @@ jobs:
         poetry install --no-root --no-interaction
 
     - name: Install Sentence-Transformers
-        run: | 
-          pip3 install transformers tqdm numpy scikit-learn scipy nltk sentencepiece
-          pip3 install --no-deps sentence-transformers
+      run: | 
+        pip3 install transformers tqdm numpy scikit-learn scipy nltk sentencepiece
+        pip3 install --no-deps sentence-transformers
         
 
     - name: Run tests with coverage
