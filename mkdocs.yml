@@ -59,6 +59,7 @@ nav:
     - Pydantic DocString: development/pydantic-docstring.md
     - Pydantic Fields: development/pydantic-fields.md
     - Searching Github: development/search-github.md
+    - View GitHub PR Locally: development/viewing-git-pr.md
     - MkDocs Macros: development/mkdocs-macros.md
 
   # defer to gen-files + literate-nav
