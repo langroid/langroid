@@ -38,7 +38,7 @@ jobs:
         python-version: 3.11  # Replace with your desired Python version
 
     - name: Install Poetry
-      uses: snok/install-poetry@v1
+      uses: snok/install-poetry@v1 # why syntax err after this line
 
     - name: Install dependencies
       run: |
