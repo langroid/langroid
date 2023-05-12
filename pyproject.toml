@@ -36,10 +36,7 @@ tiktoken = "^0.3.3"
 pygithub = "^1.58.1"
 pygments = "^2.15.1"
 faiss-cpu = "^1.7.4"
-sentence-transformers = "^2.2.2"
-torch = "2.0.1+cpu"
-
-
+sentence-transformers = {version = "^2.2.2", markers = "os_env('INCLUDE_TRANSFORMERS', default='true') == 'true'"}
 
 
 [tool.poetry.group.dev.dependencies]
