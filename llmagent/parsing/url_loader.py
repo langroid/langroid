@@ -23,8 +23,8 @@ class URLLoader:
         dl_dict = add_to_compressed_dict(self.urls)
         # processing loop
         while dl_dict:
-            buffer, threads, dl_dict = load_download_buffer(
-                dl_dict, backoff_dict, threads=threads
+            buffer, dl_dict = load_download_buffer(
+                dl_dict, backoff_dict,
             )
             if len(buffer) == 0:
                 break
