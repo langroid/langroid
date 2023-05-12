@@ -27,23 +27,17 @@ jobs:
     - name: Install Poetry
       uses: snok/install-poetry@v1
 
-    - name: Install torch* CPU versions
+    - name: Install Poetry dependencies
       run: |
         echo "$HOME/.local/bin" >> $GITHUB_PATH
         python -m pip install --upgrade pip
-        pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
-
-    - name: Install dependencies with Poetry
-      run: |
-        poetry config virtualenvs.create false
-        export INCLUDE_TRANSFORMERS=false
-        poetry install --no-root --no-interaction
-
-    - name: Install Sentence-Transformers
-      run: | 
-        pip3 install transformers tqdm numpy scikit-learn scipy nltk sentencepiece
-        pip3 install --no-deps sentence-transformers
         
+        poetry install
+
+    - name: Override PyTorch with CPU version
+      run: |
+        pip uninstall torch -y
+        pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
 
     - name: Run tests with coverage
       run: |
