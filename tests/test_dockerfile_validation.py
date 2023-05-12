@@ -122,24 +122,28 @@ def test_usage_instruction(msg_cls: AgentMessage):
 
 rmdir(qd_dir)  # don't need it here
 
-df = """
-    FROM ubuntu:latest
-    LABEL maintainer=blah
-    """
+df = "FROM ubuntu:latest\nLABEL maintainer=blah"
 
 
 NONE_MSG = "nothing to see here"
 
 VALIDATE_DOCKERFILE_MSG = """
-    Ok, thank you. 
-    {{
-    'request': 'validate_dockerfile',
-    'proposed_dockerfile':{}'
-    }}
-    this is the Dockerfile!
-    """.format(
-    df
-)
+Ok, thank you.
+{
+'request': 'validate_dockerfile',
+'proposed_dockerfile': '%s'
+} 
+this is the dockerfile
+""" % df
+
+FILE_EXISTS_MSG = """
+Ok, thank you.
+{
+'request': 'file_exists',
+'filename': 'test.txt'
+} 
+Hope you can tell me!
+"""
 
 
 def test_agent_handle_message():
