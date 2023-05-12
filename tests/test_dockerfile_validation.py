@@ -17,10 +17,7 @@ from llmagent.prompts.prompts_config import PromptsConfig
 from llmagent.agent.base import AgentMessage
 from llmagent.agent.chat_agent import ChatAgent
 from llmagent.utils.system import rmdir
-from examples.dockerchat.docker_chat_agent import (
-    FileExistsMessage,
-    PythonVersionMessage,
-)
+
 from typing import List
 from functools import reduce
 
