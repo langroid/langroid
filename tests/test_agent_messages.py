@@ -123,39 +123,51 @@ def test_usage_instruction(msg_cls: AgentMessage):
 
 rmdir(qd_dir)  # don't need it here
 
+NONE_MSG = "nothing to see here"
 
-@pytest.mark.parametrize(
-    "message, expected",
-    [
-        ("nothing to see here", None),
-        (
-            """Ok, thank you. 
-                {
-                'request': 'file_exists',
-                'filename': 'test.txt'
-                } 
-                Hope you can tell me!
-                """,
-            "no",
-        ),
-        (
-            """great, please tell me this --
-                {
-                'request': 'python_version'
-                }/if you know it
-                """,
-            "3.9",
-        ),
-    ],
-)
-def test_agent_actions(message, expected):
+FILE_EXISTS_MSG = """
+Ok, thank you.
+{
+'request': 'file_exists',
+'filename': 'test.txt'
+} 
+Hope you can tell me!
+"""
+
+PYTHON_VERSION_MSG = """
+great, please tell me this --
+{
+'request': 'python_version'
+}/if you know it
+"""
+
+
+def test_agent_handle_message():
     """
-    Test whether messages are handled correctly.
+    Test whether messages are handled correctly, and that
+    message enabling/disabling works as expected.
     """
     agent.enable_message(FileExistsMessage)
     agent.enable_message(PythonVersionMessage)
-    result = agent.handle_message(message)
-    assert result == expected
+    assert agent.handle_message(NONE_MSG) is None
+    assert agent.handle_message(FILE_EXISTS_MSG) == "no"
+    assert agent.handle_message(PYTHON_VERSION_MSG) == "3.9"
+
+    agent.disable_message(FileExistsMessage)
+    assert agent.handle_message(FILE_EXISTS_MSG) is None
+    assert agent.handle_message(PYTHON_VERSION_MSG) == "3.9"
+
+    agent.disable_message(PythonVersionMessage)
+    assert agent.handle_message(FILE_EXISTS_MSG) is None
+    assert agent.handle_message(PYTHON_VERSION_MSG) is None
+
+    agent.enable_message(FileExistsMessage)
+    assert agent.handle_message(FILE_EXISTS_MSG) == "no"
+    assert agent.handle_message(PYTHON_VERSION_MSG) is None
+
+    agent.enable_message(PythonVersionMessage)
+    assert agent.handle_message(FILE_EXISTS_MSG) == "no"
+    assert agent.handle_message(PYTHON_VERSION_MSG) == "3.9"
 
 
 def test_llm_agent_message():
