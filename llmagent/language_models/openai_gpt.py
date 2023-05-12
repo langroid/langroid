@@ -8,6 +8,7 @@ import sys
 from llmagent.language_models.utils import retry_with_exponential_backoff
 from llmagent.utils.configuration import settings
 from llmagent.utils.constants import Colors
+from llmagent.utils.output.printing import PrintColored
 from typing import List
 import openai
 from dotenv import load_dotenv
@@ -80,15 +81,17 @@ class OpenAIGPT(LanguageModel):
         print(Colors().RESET)
         # TODO- get usage info in stream mode (?)
         if settings.debug:
-            sys.stdout.write(Colors().RED)
-            sys.stdout.flush()
-            print(f"LLM: {completion}")
-            print(Colors().RESET)
+            with PrintColored(Colors().RED):
+                print(Colors().RED + f"LLM: {completion}")
 
         return LLMResponse(message=completion, usage=0)
 
     def generate(self, prompt: str, max_tokens: int) -> LLMResponse:
         openai.api_key = self.api_key
+
+        if settings.debug:
+            with PrintColored(Colors().RED):
+                print(Colors().RED + f"PROMPT: {prompt}")
 
         @retry_with_exponential_backoff
         def completions_with_backoff(**kwargs):
@@ -108,10 +111,8 @@ class OpenAIGPT(LanguageModel):
             usage = response["usage"]["total_tokens"]
             msg = response["choices"][0]["text"].strip()
             if settings.debug:
-                sys.stdout.write(Colors().RED)
-                sys.stdout.flush()
-                print(f"[red]LLM: {msg}")
-                print(Colors().RESET)
+                with PrintColored(Colors().RED):
+                    print(Colors().RED + f"LLM: {msg}")
             return LLMResponse(message=msg, usage=usage)
 
     async def agenerate(self, prompt: str, max_tokens: int) -> LLMResponse:
