@@ -16,6 +16,7 @@ jobs:
       image: nvidia/cuda:12.1.1-devel-ubuntu22.04
       env:
         DEBIAN_FRONTEND: noninteractive
+        LD_LIBRARY_PATH: /usr/local/cuda/lib64:$LD_LIBRARY_PATH
 
     env:
       OPENAI_API_KEY: ${{ secrets.OPENAI_KEY }}
