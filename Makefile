@@ -36,3 +36,9 @@ nodocs:
 pytorch_cpu:
 	poetry install
 pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+
+.PHONY: loc
+
+loc:
+	@echo "Lines of python code in git-tracked files:"
+	@git ls-files | grep '\.py$$' | xargs cat | grep -v '^\s*$$' | wc -l
