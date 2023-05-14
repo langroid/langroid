@@ -33,7 +33,6 @@ nodocs:
 	@pkill -f "mkdocs serve" 2>/dev/null || echo "No 'mkdocs serve' process found."
 	@echo "Stopped serving documentation."
 
-
 .PHONY: loc
 
 loc:
