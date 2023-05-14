@@ -33,9 +33,6 @@ nodocs:
 	@pkill -f "mkdocs serve" 2>/dev/null || echo "No 'mkdocs serve' process found."
 	@echo "Stopped serving documentation."
 
-pytorch_cpu:
-	poetry install
-pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
 
 .PHONY: loc
 

@@ -25,22 +25,14 @@ jobs:
         python-version: 3.11  # Replace with your desired Python version
 
     - name: Install Poetry
-      uses: snok/install-poetry@v1
+      uses: snok/install-poetry@v1 # why syntax err after this line
 
-    - name: Install Poetry dependencies
+    - name: Install dependencies
       run: |
         echo "$HOME/.local/bin" >> $GITHUB_PATH
         python -m pip install --upgrade pip
-        
+        poetry run pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
         poetry install
-
-    - name: Override PyTorch with CPU version
-      run: |
-        pip3 uninstall torch -y
-        pip3 uninstall sentence-transformers -y
-        pip3 install transformers -y
-        pip3 install transformers tqdm numpy scikit-learn scipy nltk sentencepiece
-        pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
 
     - name: Run tests with coverage
       run: |
