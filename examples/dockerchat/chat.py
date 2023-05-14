@@ -4,6 +4,7 @@ from examples.dockerchat.docker_chat_agent import (
     DockerChatAgent,
     FileExistsMessage,
     PythonVersionMessage,
+    ValidateDockerfileMessage,
 )
 import typer
 from llmagent.language_models.base import LLMMessage, Role
@@ -77,6 +78,7 @@ def chat(config: DockerChatAgentConfig) -> None:
     agent = DockerChatAgent(config, task_messages)
     agent.enable_message(FileExistsMessage)
     agent.enable_message(PythonVersionMessage)
+    agent.enable_message(ValidateDockerfileMessage)
 
     agent.run()
 

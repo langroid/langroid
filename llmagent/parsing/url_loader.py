@@ -24,7 +24,8 @@ class URLLoader:
         # processing loop
         while dl_dict:
             buffer, dl_dict = load_download_buffer(
-                dl_dict, backoff_dict,
+                dl_dict,
+                backoff_dict,
             )
             if len(buffer) == 0:
                 break
