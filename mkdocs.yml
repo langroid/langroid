@@ -44,6 +44,7 @@ nav:
     - Dockerfile Generation: development/dockerfile-generation.md
     - Code Analysis Packages: development/code-analysis-packages.md
     - GitHub CLI: development/github-cli.md
+    - Cacheing for API Calls: development/cache-api.md
     - Clustering Vectors: development/clustering-vectors.md
     - Code Chunking: development/code-chunking.md
     - Releases from your poetry project: development/releases.md
@@ -52,6 +53,7 @@ nav:
     - Code Coverage: development/code-coverage.md
     - Ghost Blog Migration: development/ghost-blog-migration.md
     - Git Branch Divergence: development/git-branch-divergence.md
+    - Git Add files from a PR: development/git-add-files-from-pr.md
     - GitHub Workflow Testing: development/github-workflow-testing.md
     - GitHub Actions CUDA Install: development/github-workflow-cuda.md
     - Poetry Package Building: development/poetry-package-building.md
