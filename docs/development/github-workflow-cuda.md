@@ -1,5 +1,3 @@
-# Installing CUDA, esp in GitHub Actions Workflows
-
 To install CUDA 11.7 in a GitHub Actions workflow, you need to create or update
 your `.github/workflows/main.yml` file with the necessary steps. Here's an
 example of a basic workflow configuration that installs CUDA 11.7 on an

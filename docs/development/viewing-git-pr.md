@@ -1,5 +1,3 @@
-# Viewing a GitHub PR locally
-
 To checkout a pull request (PR) using the GitHub CLI (`gh`), follow these steps:
 
 1. First, ensure you have the GitHub CLI installed. If not,

@@ -124,17 +124,18 @@ rmdir(qd_dir)  # don't need it here
 
 df = "FROM ubuntu:latest\nLABEL maintainer=blah"
 
+df_json = json.dumps(df)
 
 NONE_MSG = "nothing to see here"
 
-VALIDATE_DOCKERFILE_MSG = """
+VALIDATE_DOCKERFILE_MSG = f"""
 Ok, thank you.
-{
+{{
 'request': 'validate_dockerfile',
-'proposed_dockerfile': '%s'
-} 
+'proposed_dockerfile': {df_json}
+}} 
 this is the dockerfile
-""" % df
+""" 
 
 FILE_EXISTS_MSG = """
 Ok, thank you.
@@ -198,14 +199,14 @@ def test_llm_agent_message():
 
 def remove_whitespace_after_newline(multiple_lines_str: str) -> str:
     """
-    removes whitespace after \n in mutliple lines string
+    removes whitespace in mutliple lines string
     Args:
         multiple_lines_str(str): string to be modified
     Returns:
         string after removing whitespaces
     """
     lines = multiple_lines_str.split("\n")
-    stripped_lines = [line.lstrip() for line in lines]
+    stripped_lines = [line.strip() for line in lines]
     return "\n".join(stripped_lines)
 
 
@@ -261,11 +262,12 @@ def test_llm_agent_reformat():
     ld_reformatted_jsons = json.loads(reformatted_jsons[0])
     proposed_dockerfile_nowhitespace = remove_whitespace_after_newline(
         ld_reformatted_jsons.get("proposed_dockerfile")
-    )
+    )    
     ld_reformatted_jsons["proposed_dockerfile"] = proposed_dockerfile_nowhitespace
-
     df_nowhitespace = remove_whitespace_after_newline(df)
+ 
     assert len(reformatted_jsons) == 1
     assert ld_reformatted_jsons == ValidateDockerfileMessage(
         proposed_dockerfile=f"{df_nowhitespace}"
     ).dict(exclude={"result"})
+
