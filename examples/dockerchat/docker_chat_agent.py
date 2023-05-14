@@ -107,7 +107,7 @@ class ValidateDockerfileMessage(AgentMessage):
             "Here is the Dockerfile",
             "This Dockerfile installs",
             "the above Dockerfile",
-            "I will create a Dockerfile"
+            "I will create a Dockerfile",
         ]
 
 

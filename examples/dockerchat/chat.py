@@ -4,7 +4,7 @@ from examples.dockerchat.docker_chat_agent import (
     DockerChatAgent,
     FileExistsMessage,
     PythonVersionMessage,
-    ValidateDockerfileMessage
+    ValidateDockerfileMessage,
 )
 import typer
 from llmagent.language_models.base import LLMMessage, Role

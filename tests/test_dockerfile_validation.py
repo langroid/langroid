@@ -22,7 +22,6 @@ from typing import List
 from functools import reduce
 
 import json
-import re
 
 
 class ValidateDockerfileMessage(AgentMessage):
@@ -136,7 +135,7 @@ Ok, thank you.
 'proposed_dockerfile': {df_json}
 }} 
 this is the dockerfile
-""" 
+"""
 
 FILE_EXISTS_MSG = """
 Ok, thank you.
@@ -206,8 +205,9 @@ def clean_string(string: str) -> str:
     Returns:
         string after cleaning up whitespace
     """
-    pieces = [s.replace("\\n", "") for s in  string.split()]
+    pieces = [s.replace("\\n", "") for s in string.split()]
     return "".join(pieces)
+
 
 def test_llm_agent_reformat():
     """
@@ -268,9 +268,8 @@ def test_llm_agent_reformat():
 
     ld_reformatted_json["proposed_dockerfile"] = proposed_dockerfile_nowhitespace
     df_nowhitespace = clean_string(df)
- 
+
     assert len(reformatted_jsons) == 1
     assert ld_reformatted_json == ValidateDockerfileMessage(
         proposed_dockerfile=f"{df_nowhitespace}"
     ).dict(exclude={"result"})
-
