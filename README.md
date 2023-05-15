@@ -13,7 +13,7 @@ First install `poetry`, then create virtual env and install dependencies:
 
 ```bash
 # clone the repo and cd into repo root
-git clone ...
+git clone https://github.com/langroid/llmagent.git
 cd llmagent
 
 # create a virtual env under project root, .venv directory
@@ -26,7 +26,7 @@ python3 -m venv .venv
 poetry install
 ```
 Copy the `.env-template` file to a new file `.env` and 
-insert your 
+insert these secrets:
 - OpenAI API key, 
 - GitHub Personal Access Token (needed by  PyGithub to analyze git repos; 
   token-based API calls are less rate-limited).
@@ -34,7 +34,7 @@ insert your
 
 ```bash
 cp .env-template .env
-# now edit the .env file, insert your OpenAI API key
+# now edit the .env file, insert your secrets as above
 ``` 
 
 Currently only OpenAI models are supported. Others will be added later.
