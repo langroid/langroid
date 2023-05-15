@@ -1,13 +1,3 @@
-# from examples.dockerchat.docker_chat_agent import DockerChatAgent
-
-# import os
-# import tempfile
-# import subprocess
-
-import pytest
-
-# from unittest.mock import patch, MagicMock
-
 from llmagent.parsing.json import extract_top_level_json
 from llmagent.utils.configuration import update_global_settings
 from llmagent.language_models.base import Role, LLMMessage
@@ -20,7 +10,7 @@ from llmagent.utils.system import rmdir
 
 from typing import List
 from functools import reduce
-
+import pytest
 import json
 
 
@@ -135,15 +125,6 @@ Ok, thank you.
 'proposed_dockerfile': {df_json}
 }} 
 this is the dockerfile
-"""
-
-FILE_EXISTS_MSG = """
-Ok, thank you.
-{
-'request': 'file_exists',
-'filename': 'test.txt'
-} 
-Hope you can tell me!
 """
 
 
