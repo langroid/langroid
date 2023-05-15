@@ -5,12 +5,16 @@ from llmagent.vector_store.base import VectorStoreConfig
 from llmagent.language_models.base import LLMConfig
 from llmagent.parsing.parser import ParsingConfig
 from llmagent.prompts.prompts_config import PromptsConfig
+from llmagent.cachedb.redis_cachedb import RedisCacheConfig
 
 
 class COTAgentConfig(AgentConfig):
     max_tokens: int = 200
     vecdb: VectorStoreConfig = None
-    llm: LLMConfig = LLMConfig(type="openai")
+    llm: LLMConfig = LLMConfig(
+        type="openai",
+        cache_config=RedisCacheConfig(fake=True),
+    )
     parsing: ParsingConfig = None
     prompts: PromptsConfig = PromptsConfig(
         max_tokens=200,
