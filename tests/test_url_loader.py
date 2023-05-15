@@ -2,10 +2,12 @@ from llmagent.parsing.url_loader import URLLoader
 
 
 def test_url_loader():
-    loader = URLLoader(urls=[
-        "https://pytorch.org",
-        "https://openai.com",
-    ])
+    loader = URLLoader(
+        urls=[
+            "https://pytorch.org",
+            "https://openai.com",
+        ]
+    )
 
     docs = loader.load()
 

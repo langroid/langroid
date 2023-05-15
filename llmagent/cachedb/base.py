@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 
+
 class CacheDB(ABC):
     """Abstract base class for a cache database."""
 
@@ -26,5 +27,3 @@ class CacheDB(ABC):
             dict: The value associated with the key.
         """
         pass
-
-
