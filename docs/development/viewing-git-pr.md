@@ -157,3 +157,47 @@ git branch -D pr-view
 
 By performing a hard reset before switching back to the main branch, you ensure
 that any "dirty" changes are discarded and the main branch remains unaffected.
+
+# Editing a PR in pr-view branch and pushing changes to PR
+
+Say you are in the pr-view branch, and made some edits, and committed your 
+changes. How do you push your modifications to the PR branch?
+Note that `pr-view` and `<pr-branch-name>` are two separate branches. The 
+changes you've committed are on the `pr-view` branch, not on the 
+`<pr-branch-name>` branch. 
+
+Here's what you need to do:
+
+1. First, make sure you've committed your changes on the `pr-view` branch:
+
+```bash
+git add .
+git commit -m "Your commit message"
+```
+
+2. Then, checkout to the `<pr-branch-name>`:
+
+```bash
+git checkout <pr-branch-name>
+```
+
+3. Now, you need to merge the changes you made on the `pr-view` branch into
+   the `<pr-branch-name>`:
+
+```bash
+git merge pr-view
+```
+
+4. Finally, you can push the changes to the remote `<pr-branch-name>`:
+
+```bash
+git push origin <pr-branch-name>
+```
+
+Remember, replace `<pr-branch-name>` with the name of the branch corresponding
+to the PR.
+
+These steps should ensure that your changes show up in the PR. I apologize for
+the misunderstanding earlier. The key thing to remember is that changes need to
+be merged into the branch associated with the PR before they can be pushed to
+the PR.
