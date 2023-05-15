@@ -35,14 +35,6 @@ jobs:
         
         poetry install
 
-    - name: Override PyTorch with CPU version
-      run: |
-        pip3 uninstall torch -y
-        pip3 uninstall sentence-transformers -y
-        pip3 install transformers -y
-        pip3 install transformers tqdm numpy scikit-learn scipy nltk sentencepiece
-        pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
-
     - name: Run tests with coverage
       run: |
         poetry run coverage run --source=llmagent -m pytest
