@@ -1,12 +1,4 @@
-# from examples.dockerchat.docker_chat_agent import DockerChatAgent
-
-# import os
-# import tempfile
-# import subprocess
-
 import pytest
-
-# from unittest.mock import patch, MagicMock
 
 from llmagent.parsing.json import extract_top_level_json
 from llmagent.utils.configuration import update_global_settings
@@ -17,6 +9,7 @@ from llmagent.prompts.prompts_config import PromptsConfig
 from llmagent.agent.base import AgentMessage
 from llmagent.agent.chat_agent import ChatAgent
 from llmagent.utils.system import rmdir
+from llmagent.cachedb.redis_cachedb import RedisCacheConfig
 
 from typing import List
 from functools import reduce
@@ -90,6 +83,7 @@ cfg = AgentConfig(
     llm=LLMConfig(
         type="openai",
         chat_model="gpt-3.5-turbo",
+        cache_config=RedisCacheConfig(fake=True),
     ),
     parsing=None,
     prompts=PromptsConfig(),

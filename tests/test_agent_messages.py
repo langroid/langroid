@@ -5,6 +5,7 @@ from llmagent.agent.message import AgentMessage, ThoughtQuestionAnswer
 from llmagent.language_models.base import LLMConfig
 from llmagent.parsing.json import extract_top_level_json
 from llmagent.prompts.prompts_config import PromptsConfig
+from llmagent.cachedb.redis_cachedb import RedisCacheConfig
 from llmagent.utils.system import rmdir
 from llmagent.utils.configuration import update_global_settings
 from typing import List
@@ -81,6 +82,7 @@ cfg = AgentConfig(
     llm=LLMConfig(
         type="openai",
         chat_model="gpt-3.5-turbo",
+        cache_config=RedisCacheConfig(fake=True),
     ),
     parsing=None,
     prompts=PromptsConfig(),

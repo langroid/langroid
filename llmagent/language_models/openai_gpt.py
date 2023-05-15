@@ -9,7 +9,10 @@ from llmagent.language_models.utils import retry_with_exponential_backoff
 from llmagent.utils.configuration import settings
 from llmagent.utils.constants import Colors
 from llmagent.utils.output.printing import PrintColored
-from typing import List
+from llmagent.cachedb.redis_cachedb import RedisCache
+from pydantic import BaseModel
+import hashlib
+from typing import List, Tuple, Dict
 import openai
 from dotenv import load_dotenv
 import os
@@ -17,12 +20,18 @@ import logging
 
 logging.getLogger("openai").setLevel(logging.ERROR)
 
-
 class OpenAIGPTConfig(LLMConfig):
     type: str = "openai"
     max_tokens: int = 1024
     chat_model: str = "gpt-3.5-turbo"
     completion_model: str = "text-davinci-003"
+
+
+class OpenAIResponse(BaseModel):
+    """OpenAI response model, either completion or chat."""
+
+    choices: List[Dict]
+    usage: Dict
 
 
 # Define a class for OpenAI GPT-3 that extends the base class
@@ -40,6 +49,7 @@ class OpenAIGPT(LanguageModel):
         self.config = config
         load_dotenv()
         self.api_key = os.getenv("OPENAI_API_KEY")
+        self.cache = RedisCache(config.cache_config)
 
     def set_stream(self, stream: bool) -> bool:
         """Enable or disable streaming output from API.
@@ -55,14 +65,16 @@ class OpenAIGPT(LanguageModel):
         """Get streaming status"""
         return self.config.stream
 
-    def _stream_response(self, response, chat=False):
+    def _stream_response(self, response, chat=False) -> Tuple[LLMResponse, OpenAIResponse]:
         """
         Grab and print streaming response from API.
         Args:
             response: event-sequence emitted by API
             chat: whether in chat-mode (or else completion-mode)
         Returns:
-            LLMResponse object (with message, usage)
+            Tuple consisting of:
+                LLMResponse object (with message, usage),
+                OpenAIResponse object (with choices, usage)
 
         """
         completion = ""
@@ -84,7 +96,30 @@ class OpenAIGPT(LanguageModel):
             with PrintColored(Colors().RED):
                 print(Colors().RED + f"LLM: {completion}")
 
-        return LLMResponse(message=completion, usage=0)
+        # mock openai response so we can cache it
+        if chat:
+            msg = dict(message = dict(content=completion))
+        else:
+            msg = dict(text=completion)
+        openai_response = OpenAIResponse(
+                choices=[msg],
+                usage=dict(total_tokens=0),
+        )
+        return LLMResponse(message=completion, usage=0), openai_response.dict()
+
+    def _cache_lookup(self, fn_name:str, **kwargs):
+        if not settings.cache:
+            return None, None
+        # Use the kwargs as the cache key
+        sorted_kwargs_str = str(sorted(kwargs.items()))
+        raw_key = f"{fn_name}:{sorted_kwargs_str}"
+
+        # Hash the key to a fixed length using SHA256
+        hashed_key = hashlib.sha256(raw_key.encode()).hexdigest()
+
+        # Try to get the result from the cache
+        return hashed_key, self.cache.retrieve(hashed_key)
+
 
     def generate(self, prompt: str, max_tokens: int) -> LLMResponse:
         openai.api_key = self.api_key
@@ -95,9 +130,26 @@ class OpenAIGPT(LanguageModel):
 
         @retry_with_exponential_backoff
         def completions_with_backoff(**kwargs):
-            return openai.Completion.create(**kwargs)
+            cached = False
+            hashed_key, result = self._cache_lookup("Completion", **kwargs)
+            if result is not None:
+                cached = True
+                if settings.debug:
+                    with PrintColored(Colors().RED):
+                        print(Colors().RED + "CACHED")
+            else:
+                # If it's not in the cache, call the API
+                result = openai.Completion.create(**kwargs)
+                if not self.config.stream:
+                    # if streaming, cannot cache result
+                    # since it is a generator. Instead,
+                    # we hold on to the hashed_key and
+                    # cache the result later
+                    self.cache.store(hashed_key, result)
+            return cached, hashed_key, result
 
-        response = completions_with_backoff(
+
+        cached, hashed_key, response = completions_with_backoff(
             model=self.config.completion_model,
             prompt=prompt,
             max_tokens=max_tokens,
@@ -105,17 +157,19 @@ class OpenAIGPT(LanguageModel):
             echo=False,
             stream=self.config.stream,
         )
-        if self.config.stream:
-            return self._stream_response(response)
-        else:
-            usage = response["usage"]["total_tokens"]
-            msg = response["choices"][0]["text"].strip()
-            if settings.debug:
-                with PrintColored(Colors().RED):
-                    print(Colors().RED + f"LLM: {msg}")
-            return LLMResponse(message=msg, usage=usage)
+        if self.config.stream and not cached:
+            llm_response, openai_response =  self._stream_response(response)
+            self.cache.store(hashed_key, openai_response)
+            return llm_response
+        usage = response["usage"]["total_tokens"]
+        msg = response["choices"][0]["text"].strip()
+        if settings.debug:
+            with PrintColored(Colors().RED):
+                print(Colors().RED + f"LLM: {msg}")
+        return LLMResponse(message=msg, usage=usage, cached=cached)
 
     async def agenerate(self, prompt: str, max_tokens: int) -> LLMResponse:
+        #TODO: implement caching, streaming, retry for async
         openai.api_key = self.api_key
         # note we typically will not have self.config.stream = True
         # when issuing several api calls concurrently/asynchronously.
@@ -138,9 +192,25 @@ class OpenAIGPT(LanguageModel):
 
         @retry_with_exponential_backoff
         def completions_with_backoff(**kwargs):
-            return openai.ChatCompletion.create(**kwargs)
+            cached = False
+            hashed_key, result = self._cache_lookup("Completion", **kwargs)
+            if result is not None:
+                cached = True
+                if settings.debug:
+                    with PrintColored(Colors().RED):
+                        print(Colors().RED + "CACHED")
+            else:
+                # If it's not in the cache, call the API
+                result = openai.ChatCompletion.create(**kwargs)
+                if not self.config.stream:
+                    # if streaming, cannot cache result
+                    # since it is a generator. Instead,
+                    # we hold on to the hashed_key and
+                    # cache the result later
+                    self.cache.store(hashed_key, result)
+            return cached, hashed_key, result
 
-        response = completions_with_backoff(
+        cached, hashed_key, response = completions_with_backoff(
             model=self.config.chat_model,
             messages=[m.dict() for m in messages],
             max_tokens=max_tokens,
@@ -149,8 +219,10 @@ class OpenAIGPT(LanguageModel):
             temperature=0.5,
             stream=self.config.stream,
         )
-        if self.config.stream:
-            return self._stream_response(response, chat=True)
+        if self.config.stream and not cached:
+            llm_response, openai_response = self._stream_response(response, chat=True)
+            self.cache.store(hashed_key, openai_response)
+            return llm_response
 
         usage = response["usage"]["total_tokens"]
         # openAI response will look like this:
@@ -176,4 +248,4 @@ class OpenAIGPT(LanguageModel):
         """
 
         msg = response["choices"][0]["message"]["content"].strip()
-        return LLMResponse(message=msg, usage=usage)
+        return LLMResponse(message=msg, usage=usage, cached=cached)

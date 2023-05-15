@@ -6,6 +6,7 @@ class Settings(BaseSettings):
     debug: bool = False  # show debug messages?
     progress: bool = False  # show progress spinners/bars?
     stream: bool = False  # stream output?
+    cache: bool = True  # use cache?
 
     class Config:
         extra = "forbid"
