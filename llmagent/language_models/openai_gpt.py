@@ -20,6 +20,7 @@ import logging
 
 logging.getLogger("openai").setLevel(logging.ERROR)
 
+
 class OpenAIGPTConfig(LLMConfig):
     type: str = "openai"
     max_tokens: int = 1024
@@ -65,7 +66,9 @@ class OpenAIGPT(LanguageModel):
         """Get streaming status"""
         return self.config.stream
 
-    def _stream_response(self, response, chat=False) -> Tuple[LLMResponse, OpenAIResponse]:
+    def _stream_response(
+        self, response, chat=False
+    ) -> Tuple[LLMResponse, OpenAIResponse]:
         """
         Grab and print streaming response from API.
         Args:
@@ -98,16 +101,16 @@ class OpenAIGPT(LanguageModel):
 
         # mock openai response so we can cache it
         if chat:
-            msg = dict(message = dict(content=completion))
+            msg = dict(message=dict(content=completion))
         else:
             msg = dict(text=completion)
         openai_response = OpenAIResponse(
-                choices=[msg],
-                usage=dict(total_tokens=0),
+            choices=[msg],
+            usage=dict(total_tokens=0),
         )
         return LLMResponse(message=completion, usage=0), openai_response.dict()
 
-    def _cache_lookup(self, fn_name:str, **kwargs):
+    def _cache_lookup(self, fn_name: str, **kwargs):
         if not settings.cache:
             return None, None
         # Use the kwargs as the cache key
@@ -119,7 +122,6 @@ class OpenAIGPT(LanguageModel):
 
         # Try to get the result from the cache
         return hashed_key, self.cache.retrieve(hashed_key)
-
 
     def generate(self, prompt: str, max_tokens: int) -> LLMResponse:
         openai.api_key = self.api_key
@@ -148,7 +150,6 @@ class OpenAIGPT(LanguageModel):
                     self.cache.store(hashed_key, result)
             return cached, hashed_key, result
 
-
         cached, hashed_key, response = completions_with_backoff(
             model=self.config.completion_model,
             prompt=prompt,
@@ -158,7 +159,7 @@ class OpenAIGPT(LanguageModel):
             stream=self.config.stream,
         )
         if self.config.stream and not cached:
-            llm_response, openai_response =  self._stream_response(response)
+            llm_response, openai_response = self._stream_response(response)
             self.cache.store(hashed_key, openai_response)
             return llm_response
         usage = response["usage"]["total_tokens"]
@@ -169,7 +170,7 @@ class OpenAIGPT(LanguageModel):
         return LLMResponse(message=msg, usage=usage, cached=cached)
 
     async def agenerate(self, prompt: str, max_tokens: int) -> LLMResponse:
-        #TODO: implement caching, streaming, retry for async
+        # TODO: implement caching, streaming, retry for async
         openai.api_key = self.api_key
         # note we typically will not have self.config.stream = True
         # when issuing several api calls concurrently/asynchronously.

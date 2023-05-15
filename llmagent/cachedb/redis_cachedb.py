@@ -6,8 +6,10 @@ from llmagent.cachedb.base import CacheDB
 from dotenv import load_dotenv
 import os
 
+
 class RedisCacheConfig(BaseModel):
     """Configuration model for RedisCache."""
+
     fake: bool = False
     hostname: str = "redis-11524.c251.east-us-mz.azure.cloud.redislabs.com"
     port: int = 11524

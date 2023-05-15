@@ -7,16 +7,14 @@ import pytest
 # allow streaming globally, but can be turned off by individual models
 set_global(Settings(stream=True, cache=True))
 
+
 @pytest.mark.parametrize(
     "streaming, country, capital",
-     [
-         (True, "France", "Paris"),
-         (False, "India", "Delhi")
-])
+    [(True, "France", "Paris"), (False, "India", "Delhi")],
+)
 def test_openai_gpt(streaming, country, capital):
-
     cfg = OpenAIGPTConfig(
-        stream=streaming, # use streaming output if enabled globally
+        stream=streaming,  # use streaming output if enabled globally
         type="openai",
         max_tokens=100,
         chat_model="gpt-3.5-turbo",
@@ -28,7 +26,6 @@ def test_openai_gpt(streaming, country, capital):
 
     # completion mode
     question = "What is the capital of " + country + "?"
-
 
     response = mdl.generate(prompt=question, max_tokens=10)
     assert capital in response.message
@@ -52,5 +49,3 @@ def test_openai_gpt(streaming, country, capital):
     response = mdl.chat(messages=messages, max_tokens=10)
     assert capital in response.message
     assert response.cached
-
-

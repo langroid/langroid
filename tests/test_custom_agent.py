@@ -9,7 +9,7 @@ def test_agent():
     Test whether the combined configs work as expected.
     """
     agent_config = CustomAgentConfig(
-        llm = LLMConfig(
+        llm=LLMConfig(
             type="openai",
             cache_config=RedisCacheConfig(fake=True),
         )
