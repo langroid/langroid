@@ -2,6 +2,7 @@ from llmagent.agent.base import Agent, AgentConfig
 from llmagent.language_models.base import LLMConfig, StreamingIfAllowed
 from llmagent.prompts.prompts_config import PromptsConfig
 from llmagent.utils.system import rmdir
+from llmagent.cachedb.redis_cachedb import RedisCacheConfig
 
 
 def test_agent():
@@ -16,6 +17,7 @@ def test_agent():
         vecdb=None,
         llm=LLMConfig(
             type="openai",
+            cache_config=RedisCacheConfig(fake=True),
         ),
         parsing=None,
         prompts=PromptsConfig(),

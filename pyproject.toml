@@ -37,6 +37,8 @@ pygithub = "^1.58.1"
 pygments = "^2.15.1"
 faiss-cpu = "^1.7.4"
 sentence-transformers = "^2.2.2"
+redis = "^4.5.5"
+fakeredis = "^2.12.1"
 
 
 [tool.poetry.group.dev.dependencies]

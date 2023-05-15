@@ -44,7 +44,7 @@ nav:
     - Dockerfile Generation: development/dockerfile-generation.md
     - Code Analysis Packages: development/code-analysis-packages.md
     - GitHub CLI: development/github-cli.md
-    - Cacheing for API Calls: development/cache-api.md
+    - Caching for API Calls: development/cache-api.md
     - Clustering Vectors: development/clustering-vectors.md
     - Code Chunking: development/code-chunking.md
     - Releases from your poetry project: development/releases.md

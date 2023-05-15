@@ -3,6 +3,7 @@ from abc import ABC, abstractmethod
 from enum import Enum
 from typing import List, Tuple
 from llmagent.mytypes import Document
+from llmagent.cachedb.redis_cachedb import RedisCacheConfig
 from llmagent.utils.configuration import settings
 from llmagent.utils.output.printing import show_if_debug
 from llmagent.prompts.templates import EXTRACTION_PROMPT, SUMMARY_ANSWER_PROMPT
@@ -17,11 +18,16 @@ class LLMConfig(BaseSettings):
     chat_model: str = "gpt-3.5-turbo"
     completion_model: str = "text-davinci-003"
     stream: bool = False  # stream output from API?
+    cache_config: RedisCacheConfig = RedisCacheConfig(
+        hostname="redis-11524.c251.east-us-mz.azure.cloud.redislabs.com",
+        port=11524,
+    )
 
 
 class LLMResponse(BaseModel):
     message: str
     usage: int
+    cached: bool = False
 
 
 class Role(str, Enum):
