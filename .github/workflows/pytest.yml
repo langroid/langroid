@@ -11,6 +11,10 @@ on:
 jobs:
   pytest:
     runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version:
+          - "3.11"
     env:
       OPENAI_API_KEY: ${{ secrets.OPENAI_KEY }}
       GITHUB_ACCESS_TOKEN: ${{ secrets.GH_ACCESS_TOKEN }}
@@ -18,18 +22,19 @@ jobs:
 
     steps:
     - name: Check out repository
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
 
     - name: Set up Python
-      uses: actions/setup-python@v2
+      uses: actions/setup-python@v4
       with:
         python-version: 3.11  # Replace with your desired Python version
 
     - name: Install Poetry
-      uses: snok/install-poetry@v1
+      uses: Gr1N/setup-poetry@v8
 
     - name: Install Poetry dependencies
       run: |
+        poetry --version
         echo "$HOME/.local/bin" >> $GITHUB_PATH
         python -m pip install --upgrade pip
         
