@@ -1,5 +1,6 @@
 from llmagent.agent.chat_agent import ChatAgent
 from llmagent.agent.base import AgentMessage
+import llmagent.parsing.identify_python_version as pyver
 from typing import List
 
 
@@ -108,16 +109,38 @@ class ValidateDockerfileMessage(AgentMessage):
             "This Dockerfile installs",
             "the above Dockerfile",
             "I will create a Dockerfile",
+            "review the proposed Dockerfile",
         ]
 
 
 class DockerChatAgent(ChatAgent):
     repo_path: str
 
-    def python_version(self, PythonVersionMessage) -> str:
-        # dummy result for testing: fill in with actual code that calls PyGitHub fn
-        # to search for python version in requirements.txt or pyproject.toml, etc.
-        return "The python version is 3.9."
+    def python_version(self) -> str:
+        """
+        Identifies Python version for a given repo
+        Args:
+        Returns:
+            str: a string indicates the identified python version or indicate the version can't be identified
+        """
+        python_version = pyver.get_python_version_from_pyproject(self.repo_path)
+        if not python_version:
+            python_version = pyver.get_python_version_from_requirements(self.repo_path)
+
+        if not python_version:
+            python_version = pyver.get_python_version_from_runtime(self.repo_path)
+
+        if not python_version:
+            python_version = pyver.get_python_version_from_setup_cfg(self.repo_path)
+
+        if not python_version:
+            python_version = pyver.get_python_version_from_setup_py(self.repo_path)
+
+        if python_version:
+            return python_version
+        else:
+            logger.error("Could not determine Python version.")
+        return "Couldn't identify the python version"
 
     def file_exists(self, message: FileExistsMessage) -> str:
         # dummy result, fill with actual code.
