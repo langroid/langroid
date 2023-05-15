@@ -1,6 +1,6 @@
 import openai
 from llmagent.mytypes import Embeddings
-
+from sentence_transformers import SentenceTransformer
 from llmagent.embedding_models.base import EmbeddingModel, EmbeddingModelsConfig
 from dotenv import load_dotenv
 from typing import Callable, List
@@ -40,11 +40,9 @@ class OpenAIEmbeddings(EmbeddingModel):
 
 class SentenceTransformerEmbeddings(EmbeddingModel):
     def __init__(self, config: SentenceTransformerEmbeddingsConfig):
-        import sentence_transformers
-
         super().__init__()
         self.config = config
-        self.model = sentence_transformers.SentenceTransformer(self.config.model_name)
+        self.model = SentenceTransformer(self.config.model_name)
 
     def embedding_fn(self) -> Callable[[List[str]], Embeddings]:
         def fn(texts: List[str]) -> Embeddings:
