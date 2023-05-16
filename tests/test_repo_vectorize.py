@@ -37,26 +37,21 @@ sentence_cfg = SentenceTransformerEmbeddingsConfig(
 )
 
 
-def add_write_permission(directory):
-    current_permissions = stat.S_IMODE(os.lstat(directory).st_mode)
-    os.chmod(directory, current_permissions | stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH)
-
-
 def generate_vecdbs(embed_cfg: EmbeddingModelsConfig) -> VectorStore:
-    qd_dir = ".qdrant/testdata" + embed_cfg.model_type
+    qd_dir = ".qdrant-" + embed_cfg.model_type
     rmdir(qd_dir)
     qd_cfg = QdrantDBConfig(
         type="qdrant",
-        collection_name="test" + embed_cfg.model_type,
+        collection_name="test-" + embed_cfg.model_type,
         storage_path=qd_dir,
         embedding=embed_cfg,
     )
 
-    cd_dir = ".chroma/testdata" + embed_cfg.model_type
+    cd_dir = ".chroma-" + embed_cfg.model_type
     rmdir(cd_dir)
     cd_cfg = ChromaDBConfig(
         type="chroma",
-        collection_name="test" + embed_cfg.model_type,
+        collection_name="test-" + embed_cfg.model_type,
         storage_path=cd_dir,
         embedding=embed_cfg,
     )
@@ -86,7 +81,6 @@ def test_repo_vectorize(vecdb: Union[ChromaDB, QdrantDB]):
     split_docs = parser.split(docs)[:5]
 
     os.makedirs(vecdb.config.storage_path, exist_ok=True)
-    add_write_permission(vecdb.config.storage_path)
 
     vecdb.add_documents(split_docs)
     vecdb.similar_texts_with_scores("hello", k=2)
