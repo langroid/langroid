@@ -82,7 +82,7 @@ cfg = AgentConfig(
     llm=LLMConfig(
         type="openai",
         chat_model="gpt-3.5-turbo",
-        cache_config=RedisCacheConfig(fake=True),
+        cache_config=RedisCacheConfig(fake=False),
     ),
     parsing=None,
     prompts=PromptsConfig(),

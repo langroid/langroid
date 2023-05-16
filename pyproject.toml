@@ -39,6 +39,7 @@ faiss-cpu = "^1.7.4"
 sentence-transformers = "^2.2.2"
 redis = "^4.5.5"
 fakeredis = "^2.12.1"
+torch = "2.0.0"
 
 
 [tool.poetry.group.dev.dependencies]
@@ -55,8 +56,10 @@ line-length = 88
 
 [tool.mypy]
 python_version = "3.11"
+disallow_untyped_defs = "True"
+ignore_missing_imports = "True"
 strict = true
-exclude = [".venv", "venv", "examples", "llmagent/utils/web"]
+exclude = [".venv", "venv", "examples", "llmagent/utils/web", "notebooks"]
 files=["llmagent/*"]
 
 

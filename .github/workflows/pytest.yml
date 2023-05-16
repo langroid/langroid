@@ -18,30 +18,23 @@ jobs:
 
     steps:
     - name: Check out repository
-      uses: actions/checkout@v2
+      uses: actions/checkout@v3
 
     - name: Set up Python
-      uses: actions/setup-python@v2
+      uses: actions/setup-python@v4
       with:
         python-version: 3.11  # Replace with your desired Python version
 
     - name: Install Poetry
-      uses: snok/install-poetry@v1
+      uses: Gr1N/setup-poetry@v8
 
     - name: Install Poetry dependencies
       run: |
+        poetry --version
         echo "$HOME/.local/bin" >> $GITHUB_PATH
         python -m pip install --upgrade pip
         
         poetry install
-
-    - name: Override PyTorch with CPU version
-      run: |
-        pip3 uninstall torch -y
-        pip3 uninstall sentence-transformers -y
-        pip3 install transformers -y
-        pip3 install transformers tqdm numpy scikit-learn scipy nltk sentencepiece
-        pip3 install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
 
     - name: Run tests with coverage
       run: |

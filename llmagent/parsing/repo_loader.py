@@ -36,11 +36,17 @@ class RepoLoader:
         self.url = url
         self.extensions = extensions
 
-    def load(self, k: int = None) -> List[Document]:
+    def load(
+        self, k: int = None, depth: int = None, lines: int = None
+    ) -> List[Document]:
         """
-        Recursively get all files in a repo that have one of the extensions.
+        Recursively get all files in a repo that have one of the extensions,
+        possibly up to a max number of files, max depth, and max number of lines per
+        file (if any of these are specified).
         Args:
-            k: max number of files to load, or None for all files
+            k(int): max number of files to load, or None for all files
+            depth(int): max depth to recurse, or None for infinite depth
+            lines (int): max number of lines to get, from a file, or None for all lines
         Returns:
             list of Document objects, each has fields `content` and `metadata`,
             and `metadata` has fields `url`, `filename`, `extension`, `language`
@@ -55,20 +61,26 @@ class RepoLoader:
         g = Github(token)
         repo = g.get_repo(repo_name)
         contents = repo.get_contents("")
+        stack = list(zip(contents, [0] * len(contents)))  # stack of (content, depth)
         # recursively get all files in repo that have one of the extensions
         docs = []
         i = 0
-        while contents:
+
+        while stack:
             if k is not None and i == k:
                 break
-            file_content = contents.pop(0)
+            file_content, d = stack.pop()
             if file_content.type == "dir":
-                contents.extend(repo.get_contents(file_content.path))
+                if depth is None or d <= depth:
+                    items = repo.get_contents(file_content.path)
+                    stack.extend(list(zip(items, [d + 1] * len(items))))
             else:
                 file_extension = os.path.splitext(file_content.name)[1][1:]
-                if file_extension in self.extensions:
+                if file_extension in self.extensions and (d <= depth or depth is None):
                     # need to decode the file content, which is in bytes
                     text = _get_decoded_content(repo.get_contents(file_content.path))
+                    if lines is not None:
+                        text = "\n".join(text.split("\n")[:lines])
                     i += 1
 
                     # Note `source` is important, it may be used to cite
