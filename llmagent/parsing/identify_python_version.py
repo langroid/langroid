@@ -133,9 +133,9 @@ def get_python_version_from_pipfile(directory=".") -> str:
         with open(os.path.join(directory, "Pipfile")) as file:
             content = toml.load(file)
         starter_response = "According to Pipfile "
-        python_version = content.get('requires', {}).get('python_version')
+        python_version = content.get("requires", {}).get("python_version")
         if python_version:
-            return starter_response + 'python' + python_version
+            return starter_response + "python" + python_version
     except FileNotFoundError:
         return None
 
@@ -152,9 +152,10 @@ def get_python_version_from_pipfile_lock(directory=".") -> str:
         with open(os.path.join(directory, "Pipfile.lock")) as file:
             content = json.load(file)
         starter_response = "According to Pipfile.lock "
-        python_version = content.get('_meta', {}).get('requires', {}).get('python_version')
+        python_version = (
+            content.get("_meta", {}).get("requires", {}).get("python_version")
+        )
         if python_version:
-            return starter_response + 'python' + python_version
+            return starter_response + "python" + python_version
     except FileNotFoundError:
         return None
-
