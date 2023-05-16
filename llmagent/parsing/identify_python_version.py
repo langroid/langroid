@@ -5,7 +5,7 @@ import os
 import json
 
 
-def get_python_version_from_pyproject(directory='.') -> str:
+def get_python_version_from_pyproject(directory=".") -> str:
     """
     Inspect the file pyproject.toml in the root directory for a given repo to extract python version whether listed under [build-system], [tool.poetry.dependencies], or [tool.mypy]
     Args:
@@ -13,28 +13,46 @@ def get_python_version_from_pyproject(directory='.') -> str:
     Returns:
         str: python version
     """
-    pyproject_file = os.path.join(directory, 'pyproject.toml')
+    pyproject_file = os.path.join(directory, "pyproject.toml")
 
-    starter_response = 'According to pyproject.toml '
+    starter_response = "According to pyproject.toml "
 
     if os.path.exists(pyproject_file):
-        with open(pyproject_file, 'r') as f:
+        with open(pyproject_file, "r") as f:
             content = toml.load(f)
 
-        if 'build-system' in content and 'requires' in content['build-system']:
-            for requirement in content['build-system']['requires']:
-                if requirement.startswith('python'):
-                    return starter_response + 'build-system requires ' + requirement
+        if "build-system" in content and "requires" in content["build-system"]:
+            for requirement in content["build-system"]["requires"]:
+                if requirement.startswith("python"):
+                    return starter_response + "build-system requires " + requirement
 
-        if 'tool' in content:
-            if 'mypy' in content['tool'] and 'python_version' in content['tool']['mypy']:
-                return starter_response + 'tool.mypy python_version is ' + content['tool']['mypy']['python_version']
-            if 'poetry' in content['tool'] and 'dependencies' in content['tool']['poetry']:
-                if 'python' in content['tool']['poetry']['dependencies']:
-                    return starter_response + 'tool.poetry.dependencies python is ' + content['tool']['poetry']['dependencies']['python']
+        if "tool" in content:
+            if (
+                "mypy" in content["tool"]
+                and "python_version" in content["tool"]["mypy"]
+            ):
+                return (
+                    starter_response
+                    + "tool.mypy python_version is "
+                    + content["tool"]["mypy"]["python_version"]
+                )
+            if (
+                "poetry" in content["tool"]
+                and "dependencies" in content["tool"]["poetry"]
+            ):
+                if "python" in content["tool"]["poetry"]["dependencies"]:
+                    return (
+                        starter_response
+                        + "tool.poetry.dependencies python is "
+                        + content["tool"]["poetry"]["dependencies"]["python"]
+                    )
 
-        if 'project' in content and 'requires-python' in content['project']:
-            return starter_response + 'project requires-python ' + content['project']['requires-python']
+        if "project" in content and "requires-python" in content["project"]:
+            return (
+                starter_response
+                + "project requires-python "
+                + content["project"]["requires-python"]
+            )
 
     return None
 
