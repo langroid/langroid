@@ -70,7 +70,8 @@ def chat(config: DockerChatAgentConfig) -> None:
 
             You have to think in small steps, and at each stage, show me your 
             THINKING, and the QUESTION you want to ask. Based on my answer, you will 
-            generate a new THINKING and QUESTION.  
+            generate a new THINKING and QUESTION.  Ask only one question at a time, 
+            and wait for my answer before asking the next question.
             """,
         ),
     ]
