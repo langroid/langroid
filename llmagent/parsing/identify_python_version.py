@@ -2,6 +2,7 @@ import toml
 import configparser
 import re
 import os
+import json
 
 
 def get_python_version_from_pyproject(directory: str = ".") -> str:
@@ -118,3 +119,42 @@ def get_python_version_from_setup_py(directory=".") -> str:
             return starter_response + "python" + match.group(1)
     except FileNotFoundError:
         return None
+
+
+def get_python_version_from_pipfile(directory=".") -> str:
+    """
+    Inspect the file Pipfile in the root directory for a given repo to extract python version
+    Args:
+        directory (str): location of Pipfile, by default the root directory
+    Returns:
+        str: python version
+    """
+    try:
+        with open(os.path.join(directory, "Pipfile")) as file:
+            content = toml.load(file)
+        starter_response = "According to Pipfile "
+        python_version = content.get('requires', {}).get('python_version')
+        if python_version:
+            return starter_response + 'python' + python_version
+    except FileNotFoundError:
+        return None
+
+
+def get_python_version_from_pipfile_lock(directory=".") -> str:
+    """
+    Inspect the file Pipfile.lock in the root directory for a given repo to extract python version
+    Args:
+        directory (str): location of Pipfile.lock, by default the root directory
+    Returns:
+        str: python version
+    """
+    try:
+        with open(os.path.join(directory, "Pipfile.lock")) as file:
+            content = json.load(file)
+        starter_response = "According to Pipfile.lock "
+        python_version = content.get('_meta', {}).get('requires', {}).get('python_version')
+        if python_version:
+            return starter_response + 'python' + python_version
+    except FileNotFoundError:
+        return None
+

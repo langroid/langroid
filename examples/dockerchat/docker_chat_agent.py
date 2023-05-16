@@ -136,6 +136,12 @@ class DockerChatAgent(ChatAgent):
         if not python_version:
             python_version = pyver.get_python_version_from_setup_py(self.repo_path)
 
+        if not python_version:
+            python_version = pyver.get_python_version_from_pipfile_lock(self.repo_path)
+
+        if not python_version:
+            python_version = pyver.get_python_version_from_pipfile(self.repo_path)
+
         if python_version:
             return python_version
         else:
