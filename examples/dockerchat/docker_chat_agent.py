@@ -1,6 +1,9 @@
 from llmagent.agent.chat_agent import ChatAgent
 from llmagent.agent.base import AgentMessage
 from examples.dockerchat.identify_python_version import get_python_version
+from examples.dockerchat.identify_python_dependency import (
+    identify_dependency_management,
+)
 from typing import List
 
 
@@ -65,6 +68,9 @@ class PythonVersionMessage(AgentMessage):
         return [
             "I need to know which version of Python is needed.",
             "I want to check the Python version.",
+            "Is there a specific version of Python",
+            "What version of Python should be used",
+            "What version of Python",
         ]
 
 
@@ -113,10 +119,46 @@ class ValidateDockerfileMessage(AgentMessage):
         ]
 
 
-class DockerChatAgent(ChatAgent):
-    repo_path: str
+class PythonDependencyMessage(AgentMessage):
+    request: str = "python_dependency"
+    result: str = "yes"
 
-    def python_version(self) -> str:
+    @classmethod
+    def examples(cls) -> List["AgentMessage"]:
+        """
+        Return a list of example messages of this type, for use in testing.
+        Returns:
+            List[AgentMessage]: list of example messages of this type
+        """
+        return [
+            cls(result="This repo uses requirements.txt for managing dependencies"),
+            cls(result="This repo uses pyproject.toml for managing dependencies"),
+            cls(result="This repo doesn't contain any dependacy manager"),
+        ]
+
+    def use_when(self) -> List[str]:
+        """
+        Return a List of strings showing an example of when the message should be used,
+        possibly parameterized by the field values. This should be a valid english
+        phrase in first person, in the form of a phrase that can legitimately
+        complete "I can use this message when..."
+        Returns:
+            str: list of examples of a situation when the message should be used,
+                in first person, possibly parameterized by the field values.
+        """
+
+        return [
+            "what are the dependencies in the repo.",
+            "I need to check if the repo contains dependencies",
+            "we need to specify the dependencies",
+            "Can you tell me the dependencies used in the repo",
+        ]
+
+
+class DockerChatAgent(ChatAgent):
+    repo_path: str = "/nobackup/images_repos/Auto-GPT"
+
+    def python_version(self, PythonVersionMessage) -> str:
         """
         Identifies Python version for a given repo
         Args:
@@ -138,6 +180,19 @@ class DockerChatAgent(ChatAgent):
         else:
             return f"""
             No, there is no file named {message.filename} in the repo."""
+
+    def python_dependency(self, PythonDependencyMessage) -> str:
+        """
+        Identifies Python dependencies in a given repo by inspecting various artifacts like requirements.txt
+        Args:
+        Returns:
+            str: a string indicates the identified the dependency management approach
+        """
+        python_dependency = identify_dependency_management(self.repo_path)
+        if python_dependency:
+            return f"Dependencies in this repo are managed using: {python_dependency}"
+        else:
+            return "Dependencies are not defined in this repo"
 
     def _cleanup_dockerfile(self, img_name: str, dockerfile_path: str) -> None:
         """
