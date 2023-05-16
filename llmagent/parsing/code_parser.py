@@ -56,6 +56,7 @@ class CodeParsingConfig(BaseSettings):
         "yml",
         "yaml",
         "toml",
+        "cfg",  # e.g. setup.cfg
         "ini",
         "json",
         "rst",
