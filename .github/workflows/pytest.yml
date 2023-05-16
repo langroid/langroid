@@ -38,7 +38,7 @@ jobs:
 
     - name: Run tests with coverage
       run: |
-        poetry run coverage run --source=llmagent -m pytest
+        sudo poetry run coverage run --source=llmagent -m pytest
         poetry run coverage report
     - name: Generate HTML coverage report
       run: |
