@@ -27,7 +27,7 @@ class URLLoader:
                 dl_dict,
                 backoff_dict,
             )
-            if len(buffer) == 0:
+            if dl_dict.done:
                 break
             for url, result in buffered_downloads(buffer, threads):
                 text = trafilatura.extract(result, no_fallback=True)
