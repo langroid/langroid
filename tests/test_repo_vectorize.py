@@ -19,6 +19,7 @@ from llmagent.parsing.repo_loader import RepoLoader
 from llmagent.parsing.code_parser import CodeParsingConfig, CodeParser
 from dotenv import load_dotenv
 import os
+import stat
 
 
 MAX_CHUNK_SIZE = 200
@@ -34,6 +35,11 @@ openai_cfg = OpenAIEmbeddingsConfig(
 sentence_cfg = SentenceTransformerEmbeddingsConfig(
     model_type="sentence-transformer",
 )
+
+
+def add_write_permission(directory):
+    current_permissions = stat.S_IMODE(os.lstat(directory).st_mode)
+    os.chmod(directory, current_permissions | stat.S_IWUSR | stat.S_IWGRP | stat.S_IWOTH)
 
 
 def generate_vecdbs(embed_cfg: EmbeddingModelsConfig) -> VectorStore:
@@ -78,6 +84,10 @@ def test_repo_vectorize(vecdb: Union[ChromaDB, QdrantDB]):
 
     parser = CodeParser(parse_cfg)
     split_docs = parser.split(docs)[:5]
+
+    os.makedirs(vecdb.config.storage_path, exist_ok=True)
+    add_write_permission(vecdb.config.storage_path)
+
     vecdb.add_documents(split_docs)
     vecdb.similar_texts_with_scores("hello", k=2)
     rmdir(vecdb.config.storage_path)
