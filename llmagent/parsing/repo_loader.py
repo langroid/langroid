@@ -76,7 +76,7 @@ class RepoLoader:
                     stack.extend(list(zip(items, [d + 1] * len(items))))
             else:
                 file_extension = os.path.splitext(file_content.name)[1][1:]
-                if file_extension in self.extensions and (d <= depth or depth is None):
+                if file_extension in self.extensions and (depth is None or d <= depth):
                     # need to decode the file content, which is in bytes
                     text = _get_decoded_content(repo.get_contents(file_content.path))
                     if lines is not None:
