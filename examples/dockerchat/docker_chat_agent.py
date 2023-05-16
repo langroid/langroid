@@ -1,6 +1,6 @@
 from llmagent.agent.chat_agent import ChatAgent
 from llmagent.agent.base import AgentMessage
-import llmagent.parsing.identify_python_version as pyver
+from llmagent.parsing.identify_python_version import get_python_version
 from typing import List
 
 
@@ -123,25 +123,7 @@ class DockerChatAgent(ChatAgent):
         Returns:
             str: a string indicates the identified python version or indicate the version can't be identified
         """
-        python_version = pyver.get_python_version_from_pyproject(self.repo_path)
-        if not python_version:
-            python_version = pyver.get_python_version_from_requirements(self.repo_path)
-
-        if not python_version:
-            python_version = pyver.get_python_version_from_runtime(self.repo_path)
-
-        if not python_version:
-            python_version = pyver.get_python_version_from_setup_cfg(self.repo_path)
-
-        if not python_version:
-            python_version = pyver.get_python_version_from_setup_py(self.repo_path)
-
-        if not python_version:
-            python_version = pyver.get_python_version_from_pipfile_lock(self.repo_path)
-
-        if not python_version:
-            python_version = pyver.get_python_version_from_pipfile(self.repo_path)
-
+        python_version = get_python_version(self.repo_path)
         if python_version:
             return python_version
         else:

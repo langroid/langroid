@@ -5,7 +5,7 @@ import os
 import json
 
 
-def get_python_version_from_pyproject(directory: str = ".") -> str:
+def get_python_version_from_pyproject(directory='.') -> str:
     """
     Inspect the file pyproject.toml in the root directory for a given repo to extract python version whether listed under [build-system], [tool.poetry.dependencies], or [tool.mypy]
     Args:
@@ -13,31 +13,30 @@ def get_python_version_from_pyproject(directory: str = ".") -> str:
     Returns:
         str: python version
     """
-    try:
-        with open(os.path.join(directory, "pyproject.toml")) as file:
-            content = toml.load(file)
+    pyproject_file = os.path.join(directory, 'pyproject.toml')
 
-        starter_response = "According to pyproject.toml "
-        python_version = content.get("build-system", {}).get("requires", [None])[0]
-        if python_version and python_version.startswith("python"):
-            return starter_response + python_version
-        else:
-            # Check under [tool.mypy] section
-            mypy_version = content.get("tool", {}).get("mypy", {}).get("python_version")
-            if mypy_version:
-                return starter_response + "python" + mypy_version
-            else:
-                # Check under [tool.poetry.dependencies] section
-                poetry_version = (
-                    content.get("tool", {})
-                    .get("poetry", {})
-                    .get("dependencies", {})
-                    .get("python")
-                )
-                if poetry_version:
-                    return starter_response + "python" + poetry_version
-    except FileNotFoundError:
-        return None
+    starter_response = 'According to pyproject.toml '
+
+    if os.path.exists(pyproject_file):
+        with open(pyproject_file, 'r') as f:
+            content = toml.load(f)
+
+        if 'build-system' in content and 'requires' in content['build-system']:
+            for requirement in content['build-system']['requires']:
+                if requirement.startswith('python'):
+                    return starter_response + 'build-system requires ' + requirement
+
+        if 'tool' in content:
+            if 'mypy' in content['tool'] and 'python_version' in content['tool']['mypy']:
+                return starter_response + 'tool.mypy python_version is ' + content['tool']['mypy']['python_version']
+            if 'poetry' in content['tool'] and 'dependencies' in content['tool']['poetry']:
+                if 'python' in content['tool']['poetry']['dependencies']:
+                    return starter_response + 'tool.poetry.dependencies python is ' + content['tool']['poetry']['dependencies']['python']
+
+        if 'project' in content and 'requires-python' in content['project']:
+            return starter_response + 'project requires-python ' + content['project']['requires-python']
+
+    return None
 
 
 def get_python_version_from_requirements(directory=".") -> str:
@@ -95,7 +94,7 @@ def get_python_version_from_setup_cfg(directory=".") -> str:
         python_version = config.get("options", "python_requires", fallback=None)
         if python_version:
             # Remove any quotes from the start and end of the version string
-            return starter_response + "python" + python_version.strip("'\"")
+            return starter_response + "python " + python_version.strip("'\"")
     except FileNotFoundError:
         return None
 
@@ -159,3 +158,16 @@ def get_python_version_from_pipfile_lock(directory=".") -> str:
             return starter_response + "python" + python_version
     except FileNotFoundError:
         return None
+
+
+def get_python_version(directory="."):
+    python_version = (
+        get_python_version_from_pyproject(directory)
+        or get_python_version_from_requirements(directory)
+        or get_python_version_from_runtime(directory)
+        or get_python_version_from_setup_cfg(directory)
+        or get_python_version_from_setup_py(directory)
+        or get_python_version_from_pipfile_lock(directory)
+        or get_python_version_from_pipfile(directory)
+    )
+    return python_version
