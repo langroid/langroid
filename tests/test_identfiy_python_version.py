@@ -1,4 +1,4 @@
-import llmagent.parsing.identify_python_version as pyver
+import examples.dockerchat.identify_python_version as pyver
 
 import os
 import pytest

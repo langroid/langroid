@@ -1,6 +1,6 @@
 from llmagent.agent.chat_agent import ChatAgent
 from llmagent.agent.base import AgentMessage
-from llmagent.parsing.identify_python_version import get_python_version
+from examples.dockerchat.identify_python_version import get_python_version
 from typing import List
 
 
