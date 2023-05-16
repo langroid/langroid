@@ -78,9 +78,7 @@ def test_repo_vectorize(vecdb: Union[ChromaDB, QdrantDB]):
     )
 
     parser = CodeParser(parse_cfg)
-    split_docs = parser.split(docs)[:5]
-
-    os.makedirs(vecdb.config.storage_path, exist_ok=True)
+    split_docs = parser.split(docs)[:3]
 
     vecdb.add_documents(split_docs)
     vecdb.similar_texts_with_scores("hello", k=2)
