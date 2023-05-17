@@ -216,7 +216,6 @@ def test_llm_agent_reformat():
 
 @pytest.mark.parametrize("depfile", DEPENDENCY_FILES)
 def test_identify_dependency_management(depfile):
-    # Test case 1: Check for requirements.txt
     with tempfile.TemporaryDirectory() as tmpdir:
         with open(os.path.join(tmpdir, depfile), "w") as f:
             f.write("")
