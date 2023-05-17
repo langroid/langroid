@@ -2,7 +2,7 @@ from examples.urlqa.doc_chat_agent import DocChatAgent
 from llmagent.parsing.urls import get_urls_from_user
 from llmagent.utils.logging import setup_colored_logging
 from llmagent.mytypes import Document
-from llmagent.parsing.repo_loader import RepoLoader
+from llmagent.parsing.repo_loader import RepoLoader, RepoLoaderConfig
 from llmagent.utils import configuration
 from llmagent.agent.base import AgentConfig
 from llmagent.vector_store.qdrantdb import QdrantDBConfig
@@ -68,7 +68,7 @@ def chat(config: CodeChatConfig) -> None:
     print("[cyan]Enter x or q to quit, or ? for evidence")
     print("[blue]Enter a GitHub URL below (or leave empty for default Repo)")
     urls = get_urls_from_user(n=1) or default_urls
-    loader = RepoLoader(urls[0], extensions=config.code_parsing.extensions)
+    loader = RepoLoader(urls[0], config=RepoLoaderConfig())
     documents: List[Document] = loader.load()
 
     code_docs = [
