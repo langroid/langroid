@@ -3,15 +3,13 @@ import tempfile
 import os
 import json
 
+
 def test_repo_loader() -> None:
     """
     Test the RepoLoader class.
     """
     url = "https://github.com/eugeneyan/testing-ml"
-    repo_loader = RepoLoader(
-        url,
-        config=RepoLoaderConfig()
-    )
+    repo_loader = RepoLoader(url, config=RepoLoaderConfig())
 
     docs = repo_loader.load(10, depth=0, lines=20)
     assert len(docs) > 0
@@ -34,9 +32,7 @@ def test_repo_loader() -> None:
         assert len(folder_tree) > 0
 
         folder_tree_with_contents = repo_loader.get_folder_structure(
-            tmpdir,
-            depth=2,
-            lines=5
+            tmpdir, depth=2, lines=5
         )
         assert len(folder_tree_with_contents) > 0
 
@@ -52,5 +48,3 @@ def test_repo_loader() -> None:
         )
 
         assert len(subtree["dirs"]) + len(subtree["files"]) <= 3
-
-
