@@ -4,6 +4,7 @@ from examples.dockerchat.docker_chat_agent import (
     DockerChatAgent,
     FileExistsMessage,
     PythonVersionMessage,
+    PythonDependencyMessage,
     ValidateDockerfileMessage,
 )
 import typer
@@ -80,6 +81,7 @@ def chat(config: DockerChatAgentConfig) -> None:
     agent.enable_message(FileExistsMessage)
     agent.enable_message(PythonVersionMessage)
     agent.enable_message(ValidateDockerfileMessage)
+    agent.enable_message(PythonDependencyMessage)
 
     agent.run()
 
