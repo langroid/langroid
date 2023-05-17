@@ -16,6 +16,7 @@ from llmagent.utils.system import rmdir
 from llmagent.cachedb.redis_cachedb import RedisCacheConfig
 from examples.dockerchat.identify_python_dependency import (
     identify_dependency_management,
+    DEPENDENCY_FILES,
 )
 
 from functools import reduce
@@ -213,18 +214,7 @@ def test_llm_agent_reformat():
     )
 
 
-@pytest.mark.parametrize(
-    "depfile",
-    [
-        "requirements.txt",
-        "pyproject.toml",
-        "Pipfile",
-        "environment.yml",
-        "setup.py",
-        "setup.cfg",
-        "junk.txt",
-    ],
-)
+@pytest.mark.parametrize("depfile", DEPENDENCY_FILES)
 def test_identify_dependency_management(depfile):
     # Test case 1: Check for requirements.txt
     with tempfile.TemporaryDirectory() as tmpdir:
