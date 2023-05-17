@@ -23,6 +23,11 @@ def test_repo_loader() -> None:
 
     tree_with_contents = repo_loader.get_repo_structure(depth=1, lines=5)
     assert len(tree_with_contents) > 0
+
+    # list all names to depth 2
+    listing = repo_loader.ls(tree_with_contents, depth=2)
+    assert len(listing) > 0
+
     # cloning
     with tempfile.TemporaryDirectory() as tmpdir:
         repo_loader.clone(tmpdir)
@@ -48,3 +53,8 @@ def test_repo_loader() -> None:
         )
 
         assert len(subtree["dirs"]) + len(subtree["files"]) <= 3
+
+        # list all names to depth 2
+        listing = repo_loader.ls(folder_tree_with_contents, depth=2)
+        assert len(listing) > 0
+
