@@ -347,3 +347,37 @@ class RepoLoader:
                 filtered_structure["files"].append(file)
 
         return filtered_structure
+
+    @staticmethod
+    def ls(structure: Dict[str, Union[str, List[Dict]]], depth: int = 0) -> List[str]:
+        """
+        Get a list of names of files or directories up to a certain depth from a
+        structure dictionary.
+
+        Args:
+            structure (Dict[str, Union[str, List[Dict]]]): The structure dictionary.
+            depth (int, optional): The depth level. Defaults to 0.
+
+        Returns:
+            List[str]: A list of names of files or directories.
+        """
+        names = []
+
+        # A queue of tuples (current_structure, current_depth)
+        queue = deque([(structure, 0)])
+
+        while queue:
+            current_structure, current_depth = queue.popleft()
+
+            if current_depth <= depth:
+                names.append(current_structure["name"])
+
+                for dir in current_structure["dirs"]:
+                    queue.append((dir, current_depth + 1))
+
+                for file in current_structure["files"]:
+                    # add file names only if depth is less than the limit
+                    if current_depth < depth:
+                        names.append(file["name"])
+        names = [n for n in names if n not in ["", None]]
+        return names
