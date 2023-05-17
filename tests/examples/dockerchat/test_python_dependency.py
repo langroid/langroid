@@ -213,55 +213,22 @@ def test_llm_agent_reformat():
     )
 
 
-def test_identify_dependency_management():
+@pytest.mark.parametrize(
+    "depfile",
+    [
+        "requirements.txt",
+        "pyproject.toml",
+        "Pipfile",
+        "environment.yml",
+        "setup.py",
+        "setup.cfg",
+        "junk.txt",
+    ],
+)
+def test_identify_dependency_management(depfile):
     # Test case 1: Check for requirements.txt
     with tempfile.TemporaryDirectory() as tmpdir:
-        with open(os.path.join(tmpdir, "requirements.txt"), "w") as f:
+        with open(os.path.join(tmpdir, depfile), "w") as f:
             f.write("")
-        assert identify_dependency_management(tmpdir) == [
-            "requirements.txt"
-        ], "Test case 1 failed"
-
-    # Test case 2: Check for pyproject.toml (Poetry)
-    with tempfile.TemporaryDirectory() as tmpdir:
-        with open(os.path.join(tmpdir, "pyproject.toml"), "w") as f:
-            f.write("")
-        assert identify_dependency_management(tmpdir) == [
-            "pyproject.toml (Poetry)"
-        ], "Test case 2 failed"
-
-    # Test case 3: Check for Pipfile (Pipenv)
-    with tempfile.TemporaryDirectory() as tmpdir:
-        with open(os.path.join(tmpdir, "Pipfile"), "w") as f:
-            f.write("")
-        assert identify_dependency_management(tmpdir) == [
-            "Pipfile (Pipenv)"
-        ], "Test case 3 failed"
-
-    # Test case 4: Check for environment.yml (Conda)
-    with tempfile.TemporaryDirectory() as tmpdir:
-        with open(os.path.join(tmpdir, "environment.yml"), "w") as f:
-            f.write("")
-        assert identify_dependency_management(tmpdir) == [
-            "environment.yml (Conda)"
-        ], "Test case 4 failed"
-
-    # Test case 5: Check for setup.py (setuptools)
-    with tempfile.TemporaryDirectory() as tmpdir:
-        with open(os.path.join(tmpdir, "setup.py"), "w") as f:
-            f.write("")
-        assert identify_dependency_management(tmpdir) == [
-            "setup.py"
-        ], "Test case 5 failed"
-
-    # Test case 6: Check for setup.cfg (setuptools)
-    with tempfile.TemporaryDirectory() as tmpdir:
-        with open(os.path.join(tmpdir, "setup.cfg"), "w") as f:
-            f.write("")
-        assert identify_dependency_management(tmpdir) == [
-            "setup.cfg"
-        ], "Test case 6 failed"
-
-    # Test case 7: Check for unknown dependency management
-    with tempfile.TemporaryDirectory() as tmpdir:
-        assert identify_dependency_management(tmpdir) == [], "Test case 7 failed"
+        found_deps = identify_dependency_management(tmpdir)
+        assert found_deps == [] if depfile == "junk.txt" else [depfile]
