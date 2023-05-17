@@ -29,32 +29,31 @@ def test_repo_loader() -> None:
     assert len(listing) > 0
 
     # cloning
-    with tempfile.TemporaryDirectory() as tmpdir:
-        repo_loader.clone(tmpdir)
-        assert len(os.listdir(tmpdir)) > 0
-        # tree structure from cloned repo
-        folder_tree = repo_loader.get_folder_structure(tmpdir, depth=2)
-        assert len(folder_tree) > 0
+    repo_loader.clone()
+    assert len(os.listdir(repo_loader.clone_path)) > 0
+    # tree structure from cloned repo
+    folder_tree = repo_loader.get_folder_structure(depth=2)
+    assert len(folder_tree) > 0
 
-        folder_tree_with_contents = repo_loader.get_folder_structure(
-            tmpdir, depth=2, lines=5
-        )
-        assert len(folder_tree_with_contents) > 0
+    folder_tree_with_contents = repo_loader.get_folder_structure(
+        repo_loader.clone_path, depth=2, lines=5
+    )
+    assert len(folder_tree_with_contents) > 0
 
-        # dump to json
-        s = json.dumps(folder_tree_with_contents, indent=2)
-        assert len(s) > 0
+    # dump to json
+    s = json.dumps(folder_tree_with_contents, indent=2)
+    assert len(s) > 0
 
-        # select specific files
-        desired = ["workflows", "Makefile", "pyproject.toml"]
-        subtree = RepoLoader.select(
-            folder_tree_with_contents,
-            names=desired,
-        )
+    # select specific files
+    desired = ["workflows", "Makefile", "pyproject.toml"]
+    subtree = RepoLoader.select(
+        folder_tree_with_contents,
+        names=desired,
+    )
 
-        assert len(subtree["dirs"]) + len(subtree["files"]) <= 3
+    assert len(subtree["dirs"]) + len(subtree["files"]) <= 3
 
-        # list all names to depth 2
-        listing = repo_loader.ls(folder_tree_with_contents, depth=2)
-        assert len(listing) > 0
+    # list all names to depth 2
+    listing = repo_loader.ls(folder_tree_with_contents, depth=2)
+    assert len(listing) > 0
 
