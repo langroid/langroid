@@ -7,6 +7,9 @@ from typing import List, Union, Dict
 from pydantic import BaseSettings
 from collections import deque
 import subprocess
+import tempfile
+import json
+from urllib.parse import urlparse
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +73,18 @@ class RepoLoader:
         """
         self.url = url
         self.config = config
+        self.clone_path = None
+        self.log_file = '.logs/repo_loader/download_log.json'
+        os.makedirs(os.path.dirname(self.log_file), exist_ok=True)
+        if not os.path.exists(self.log_file):
+            with open(self.log_file, 'w') as f:
+                json.dump({"junk": "ignore"}, f)
+        with open(self.log_file, 'r') as f:
+            log = json.load(f)
+        if self.url in log:
+            logger.info(f"Repo Already downloaded in {log[self.url]}")
+            self.clone_path = log[self.url]
+
         if "github.com" in self.url:
             repo_name = self.url.split("github.com/")[1]
         else:
@@ -79,6 +94,9 @@ class RepoLoader:
         token = os.getenv("GITHUB_ACCESS_TOKEN")
         g = Github(token)
         self.repo = g.get_repo(repo_name)
+
+    def _get_dir_name(self) -> str:
+        return urlparse(self.url).path.replace('/', '_')
 
     def _file_type(self, name: str) -> str:
         """
@@ -111,15 +129,36 @@ class RepoLoader:
         else:
             return False
 
-    def clone(self, path: str) -> None:
+    def default_clone_path(self):
+        return tempfile.mkdtemp(suffix=self._get_dir_name())
+
+    def clone(self, path: str=None) -> None:
         """
-        Clone a GitHub repository to a local directory specified by `path`.
+        Clone a GitHub repository to a local directory specified by `path`,
+        if it has not already been cloned.
 
         Args:
             path (str): The local directory where the repository should be cloned.
+                If not specified, a temporary directory will be created.
         """
+        with open(self.log_file, 'r') as f:
+            log = json.load(f)
+
+        if self.url in log and os.path.exists(log[self.url]):
+            print(f"Already downloaded in {log[self.url]}")
+            self.clone_path = log[self.url]
+            return
+
+        self.clone_path = path
+        if path is None:
+            path = self.default_clone_path()
+            self.clone_path = path
+
         try:
             subprocess.run(["git", "clone", self.url, path], check=True)
+            log[self.url] = path
+            with open(self.log_file, 'w') as f:
+                json.dump(log, f)
         except subprocess.CalledProcessError as e:
             print(f"Git clone failed: {e}")
         except Exception as e:
@@ -200,13 +239,14 @@ class RepoLoader:
         return repo_structure
 
     def get_folder_structure(
-        self, path: str, depth: int = 3, lines: int = 0
+        self, path: str = None, depth: int = 3, lines: int = 0
     ) -> Dict[str, Union[str, List[Dict]]]:
         """
         Get a nested dictionary of local folder file and directory names
         up to a certain depth, with file contents.
 
         Args:
+            path: The local folder path; if none, use self.clone_path()
             depth (int): The depth level.
             lines (int): The number of lines of file contents to include.
 
@@ -216,6 +256,7 @@ class RepoLoader:
         """
         folder_structure = {"type": "dir", "name": "", "dirs": [], "files": []}
 
+        path = path or self.clone_path
         # A queue of tuples (current_path, current_depth, parent_structure)
         queue = deque([(path, 0, folder_structure)])
 
