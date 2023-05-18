@@ -117,6 +117,8 @@ class ChatAgent(Agent):
                 print(f"[red]Agent: {agent_result}")
             else:
                 if default_human_response is not None:
+                    # this is useful for automated testing
+                    # where we don't want to have to type in a human response
                     msg = default_human_response
                     print(f"[blue]Human: {default_human_response}")
                 else:
