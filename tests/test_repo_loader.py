@@ -1,5 +1,4 @@
 from llmagent.parsing.repo_loader import RepoLoader, RepoLoaderConfig
-import tempfile
 import os
 import json
 
@@ -53,7 +52,14 @@ def test_repo_loader() -> None:
 
     assert len(subtree["dirs"]) + len(subtree["files"]) <= 3
 
+    # select non-existent files
+    subtree = RepoLoader.select(
+        folder_tree_with_contents,
+        names=["non-existent-file"],
+    )
+
+    assert len(subtree["dirs"]) + len(subtree["files"]) == 0
+
     # list all names to depth 2
     listing = repo_loader.ls(folder_tree_with_contents, depth=2)
     assert len(listing) > 0
-
