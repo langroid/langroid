@@ -55,11 +55,13 @@ class AgentMessage(ABC, BaseModel):
     - information or data given to the agent
     - request for information or data from the agent
     Attributes:
-        request (str): name of agent method to map to
-        result (str): result of agent method
+        request (str): name of agent method to map to.
+        purpose (str): purpose of agent method, expressed in general terms.
+        result (str): result of agent method.
     """
 
     request: str
+    purpose: str
     result: str
 
     class Config:
@@ -153,7 +155,7 @@ class AgentMessage(ABC, BaseModel):
             return tqa.example()
 
     def json_example(self):
-        return self.json(indent=4, exclude={"result"})
+        return self.json(indent=4, exclude={"result", "purpose"})
 
     def sample_conversation(self, json_only=True):
         """
