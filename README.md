@@ -149,3 +149,10 @@ or give a set of possible options, and ask the human to confirm/choose.
 python3 examples/dockerfile/chat.py
 ```
 
+By default this uses `gpt-3.5-turbo`. 
+For better results, you can specify the option `-4`, so it uses `gpt4` 
+(CAUTION GPT4 is ~20-30 times more expensive per token):
+```
+python3 examples/dockerfile/chat.py -4
+```
+
