@@ -19,6 +19,7 @@ import json
 
 class ValidateDockerfileMessage(AgentMessage):
     request: str = "validate_dockerfile"
+    purpose: str = "To check whether a Dockerfile is valid."
     proposed_dockerfile: str = """
         # Use an existing base image
         FROM ubuntu:latest
@@ -266,4 +267,4 @@ def test_llm_agent_reformat():
     assert len(reformatted_jsons) == 1
     assert ld_reformatted_json == ValidateDockerfileMessage(
         proposed_dockerfile=f"{df_nowhitespace}"
-    ).dict(exclude={"result"})
+    ).dict(exclude={"result", "purpose"})

@@ -16,6 +16,7 @@ import json
 
 class FileExistsMessage(AgentMessage):
     request: str = "file_exists"
+    purpose: str = "To check whether a certain files is in the repo."
     filename: str = "test.txt"
     result: str = "yes"  # or "no"
 
@@ -49,6 +50,7 @@ class FileExistsMessage(AgentMessage):
 
 class PythonVersionMessage(AgentMessage):
     request: str = "python_version"
+    purpose: str = "To check which version of Python is needed."
     result: str = "3.9"
 
     @classmethod
@@ -247,7 +249,7 @@ def test_llm_agent_reformat():
     assert len(reformatted_jsons) == 1
     assert json.loads(reformatted_jsons[0]) == FileExistsMessage(
         filename="requirements.txt"
-    ).dict(exclude={"result"})
+    ).dict(exclude={"result", "purpose"})
 
     msg = """
     I want to know which version of Python is needed
@@ -258,7 +260,7 @@ def test_llm_agent_reformat():
     reformatted_jsons = extract_top_level_json(reformatted.content)
     assert len(reformatted_jsons) == 1
     assert json.loads(reformatted_jsons[0]) == PythonVersionMessage().dict(
-        exclude={"result"}
+        exclude={"result", "purpose"}
     )
 
     msg = """
