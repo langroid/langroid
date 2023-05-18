@@ -1,7 +1,8 @@
 from llmagent.utils.logging import setup_colored_logging
 from llmagent.utils import configuration
-from examples.dockerchat.docker_chat_agent import (
-    DockerChatAgent,
+from examples.dockerchat.docker_chat_agent import DockerChatAgent
+from examples.dockerchat.dockerchat_agent_messages import (
+    InformURLMessage,
     FileExistsMessage,
     PythonVersionMessage,
     PythonDependencyMessage,
@@ -24,6 +25,7 @@ setup_colored_logging()
 
 
 class DockerChatAgentConfig(AgentConfig):
+    gpt4: bool = False
     debug: bool = False
     stream: bool = True
     max_tokens: int = 200
@@ -37,7 +39,10 @@ class DockerChatAgentConfig(AgentConfig):
             dims=1536,
         ),
     )
-    llm: LLMConfig = LLMConfig(type="openai")
+    llm: LLMConfig = LLMConfig(
+        type="openai",
+        chat_model="gpt-3.5-turbo",
+    )
     parsing: ParsingConfig = ParsingConfig(
         chunk_size=100,
         chunk_overlap=10,
@@ -50,7 +55,8 @@ class DockerChatAgentConfig(AgentConfig):
 
 def chat(config: DockerChatAgentConfig) -> None:
     configuration.update_global_settings(config, keys=["debug", "stream"])
-
+    if config.gpt4:
+        config.llm.chat_model = "gpt-4"
     print("[blue]Hello I am here to make your dockerfile!")
     print("[cyan]Enter x or q to quit")
 
@@ -73,11 +79,15 @@ def chat(config: DockerChatAgentConfig) -> None:
             THINKING, and the QUESTION you want to ask. Based on my answer, you will 
             generate a new THINKING and QUESTION.  Ask only one question at a time, 
             and wait for my answer before asking the next question.
+            Any time you receive information from me, make sure you send a message to 
+            confirm the content of the information. For example, if you receive a 
+            URL, you have to show me the URL before proceeding.
             """,
         ),
     ]
 
     agent = DockerChatAgent(config, task_messages)
+    agent.enable_message(InformURLMessage)
     agent.enable_message(FileExistsMessage)
     agent.enable_message(PythonVersionMessage)
     agent.enable_message(ValidateDockerfileMessage)
@@ -87,8 +97,11 @@ def chat(config: DockerChatAgentConfig) -> None:
 
 
 @app.command()
-def main(debug: bool = typer.Option(False, "--debug", "-d", help="debug mode")) -> None:
-    config = DockerChatAgentConfig(debug=debug)
+def main(
+    debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
+    gpt4: bool = typer.Option(False, "--gpt4", "-4", help="use gpt4"),
+) -> None:
+    config = DockerChatAgentConfig(debug=debug, gpt4=gpt4)
     chat(config)
 
 

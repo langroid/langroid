@@ -94,7 +94,10 @@ class Agent(ABC):
         handled_requests: str = list(self.handled_classes.keys())
         json_conditions = "\n\n".join(
             [
-                f"JSON CONDITION {i+1}: " + msg_cls().usage_example()
+                f"""JSON CONDITION {i+1}: 
+                {msg_cls().purpose}. For example:
+                {msg_cls().usage_example()}
+                """
                 for i, msg_cls in enumerate(enabled_classes)
             ]
         )
@@ -211,12 +214,26 @@ class Agent(ABC):
         """
         json_substrings = extract_top_level_json(input_str)
         if len(json_substrings) == 0:
-            return None
+            return self.handle_message_fallback(input_str)
         results = [self._handle_one_json_message(j) for j in json_substrings]
         results = [r for r in results if r is not None]
         if len(results) == 0:
-            return None
+            return self.handle_message_fallback(input_str)
         return "\n".join(results)
+
+    def handle_message_fallback(self, input_str: str) -> Optional[str]:
+        """
+        Fallback method to handle input string if no other handler method applies,
+        or if an error is thrown.
+        This method can be overridden by subclasses.
+
+        Args:
+            input_str (str): The input string.
+        Returns:
+            str: The result of the handler method in string form so it can
+            be sent back to the LLM.
+        """
+        return None
 
     def _handle_one_json_message(self, json_str: str) -> Optional[str]:
         json_str = json_str.replace("'", '"')

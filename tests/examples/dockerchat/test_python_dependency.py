@@ -25,6 +25,7 @@ from typing import List
 
 class PythonDependencyMessage(AgentMessage):
     request: str = "python_dependency"
+    purpose: str = "To check which file has dependencies."
     result: str = "yes"
 
     @classmethod
@@ -210,7 +211,7 @@ def test_llm_agent_reformat():
     reformatted_jsons = extract_top_level_json(reformatted.content)
     assert len(reformatted_jsons) == 1
     assert json.loads(reformatted_jsons[0]) == PythonDependencyMessage().dict(
-        exclude={"result"}
+        exclude={"result", "purpose"}
     )
 
 
