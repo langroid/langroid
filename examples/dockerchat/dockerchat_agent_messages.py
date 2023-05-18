@@ -1,12 +1,48 @@
 from llmagent.agent.base import AgentMessage
+from llmagent.agent.message import ThoughtQuestionAnswer
 from typing import List
 import logging
 
 logger = logging.getLogger(__name__)
 
+
+class InformURLMessage(AgentMessage):
+    request: str = "inform_url"
+    purpose: str = """After receiving the URL, to confirm the URL with the user. 
+        To be used ONLY AFTER receiving the URL, before proceeding with other steps.
+        This should NOT be used for REQUESTING a URL, only to confirm
+        a URL that has already been received."""
+    url: str = ""
+    result: str = "confirmed"
+
+    @classmethod
+    def examples(cls) -> List["AgentMessage"]:
+        return [
+            cls(url="https://github.com/a/b.git", result="confirmed"),
+            cls(url="pytorch/pytorch.git", result="ok"),
+        ]
+
+    def use_when(self) -> List[str]:
+        return [
+            f"Before proceeding, I want to show the URL I received: {self.url}",
+            f"Before proceeding, I need to make sure the URL is {self.url}",
+            f"I want to inform the agent that the URL is {self.url}",
+        ]
+
+    def non_usage_examples(self) -> List[ThoughtQuestionAnswer]:
+        return [
+            ThoughtQuestionAnswer(
+                thought="I need to know the URL of the repo",
+                question="What is the URL of the repo?",
+                answer="https://github.com/hello/world.git",
+            ),
+        ]
+
+
 class FileExistsMessage(AgentMessage):
     request: str = "file_exists"  # name should exactly match method name in agent
     # below will be fields that will be used by the agent method to handle the message.
+    purpose: str = "To check if a certain file exists in the repo."
     filename: str = "test.txt"
     result: str = "yes"
 
@@ -42,6 +78,7 @@ class FileExistsMessage(AgentMessage):
 
 class PythonVersionMessage(AgentMessage):
     request: str = "python_version"
+    purpose: str = "To check which version of Python is needed."
     result: str = "3.9"
 
     @classmethod
@@ -63,6 +100,7 @@ class PythonVersionMessage(AgentMessage):
 
 class ValidateDockerfileMessage(AgentMessage):
     request: str = "validate_dockerfile"
+    purpose: str = "To send the dockerfile to the user, for validation."
     proposed_dockerfile: str = """
         # Use an existing base image
         FROM ubuntu:latest
@@ -108,6 +146,7 @@ class ValidateDockerfileMessage(AgentMessage):
 
 class PythonDependencyMessage(AgentMessage):
     request: str = "python_dependency"
+    purpose: str = "To find out which file contains dependencies."
     result: str = "yes"
 
     @classmethod

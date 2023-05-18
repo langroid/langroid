@@ -1,17 +1,23 @@
 from llmagent.agent.chat_agent import ChatAgent
+from pydantic import BaseModel, HttpUrl
+from typing import Optional
 from examples.dockerchat.dockerchat_agent_messages import (
+    InformURLMessage,
     FileExistsMessage,
     PythonVersionMessage,
     PythonDependencyMessage,
     ValidateDockerfileMessage,
 )
+from llmagent.parsing.repo_loader import RepoLoader, RepoLoaderConfig
 from examples.dockerchat.identify_python_version import get_python_version
 from examples.dockerchat.identify_python_dependency import (
     identify_dependency_management,
+    DEPENDENCY_FILES,
 )
 
 import subprocess
 import os
+import json
 import logging
 
 logger = logging.getLogger(__name__)
@@ -20,18 +26,69 @@ logger = logging.getLogger(__name__)
 # each corresponds to a method in the agent.
 
 
+class UrlModel(BaseModel):
+    url: HttpUrl
 
 
 class DockerChatAgent(ChatAgent):
-    repo_path: str = "/nobackup/images_repos/Auto-GPT"
+    url: str = "https://github.com/eugeneyan/testing-ml"
+    repo_tree: str = None
+    repo_path: str = None
 
-    def python_version(self, PythonVersionMessage) -> str:
+    def handle_message_fallback(self, input_str: str = "") -> Optional[str]:
+        if self.repo_path is None and "URL" not in input_str:
+            return """
+            You have not sent me the URL for the repo yet. 
+            Please ask me for the URL, and once you receive it, 
+            send it to me for confirmation. Once I confirm the URL, 
+            you can proceed.
+            """
+
+    def inform_url(self, msg: InformURLMessage) -> str:
+        try:
+            url_model = UrlModel(url=msg.url)
+        except ValueError as e:
+            return f"""
+            A valid URL was not seen: {e}
+            Please ask me for the URL before proceeding. 
+            And once you receive a URL, 
+            please reconfirm it by showing it to me.
+            """
+
+        self.url = url_model.url
+        self.repo_loader = RepoLoader(self.url, RepoLoaderConfig())
+        self.repo_path = self.repo_loader.clone()
+        # get the repo tree to depth d, with first k lines of each file
+        self.repo_tree = self.repo_loader.get_folder_structure(depth=1, lines=20)
+        selected_tree = RepoLoader.select(
+            self.repo_tree,
+            names=DEPENDENCY_FILES,
+        )
+        repo_listing = "\n".join(self.repo_loader.ls(self.repo_tree, depth=1))
+        repo_contents = json.dumps(selected_tree, indent=2)
+
+        return f"""
+        Ok, confirmed, and here is some information about the repo that you can use.
+        
+        First, here is a listing of the files and directories at the root of the repo:
+        {repo_listing}
+        
+        And here is a JSON representation of the contents of some of the files:
+        {repo_contents}
+        
+        Based on these, first extract any useful information you might need in order 
+        to build the dockerfile. If you still need further information, you can ask me. 
+        """
+
+    def python_version(self, m: PythonVersionMessage) -> str:
         """
         Identifies Python version for a given repo
         Args:
         Returns:
             str: a string indicates the identified python version or indicate the version can't be identified
         """
+        if self.repo_path is None:
+            return self.handle_message_fallback()
         python_version = get_python_version(self.repo_path)
         if python_version:
             return python_version
@@ -40,21 +97,31 @@ class DockerChatAgent(ChatAgent):
         return "Couldn't identify the python version"
 
     def file_exists(self, message: FileExistsMessage) -> str:
+        if self.repo_path is None:
+            return self.handle_message_fallback()
         # dummy result, fill with actual code.
-        if message.filename == "requirements.txt":
+        matches = RepoLoader.select(self.repo_tree, names=[message.filename])
+        exists = False
+        if len(matches) > 0:
+            exists = len(matches["files"]) > 0
+
+        if exists:
             return f"""
             Yes, there is a file named {message.filename} in the repo."""
         else:
             return f"""
             No, there is no file named {message.filename} in the repo."""
 
-    def python_dependency(self, PythonDependencyMessage) -> str:
+    def python_dependency(self, m: PythonDependencyMessage) -> str:
         """
         Identifies Python dependencies in a given repo by inspecting various artifacts like requirements.txt
         Args:
         Returns:
             str: a string indicates the identified the dependency management approach
         """
+        if self.repo_path is None:
+            return self.handle_message_fallback()
+
         python_dependency = identify_dependency_management(self.repo_path)
         if python_dependency:
             return f"Dependencies in this repo are managed using: {python_dependency}"
@@ -117,6 +184,9 @@ class DockerChatAgent(ChatAgent):
         Returns:
             str: a string indicates whether the Dockerfile has been built successfully
         """
+        if self.repo_path is None:
+            return self.handle_message_fallback()
+
         proposed_dockerfile = dockerfile_msg.proposed_dockerfile
         try:
             dockerfile_path = self._save_dockerfile(proposed_dockerfile)
