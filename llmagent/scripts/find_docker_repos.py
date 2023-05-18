@@ -25,8 +25,12 @@ def find_docker_repos(stars: int = 10000, k: int = 10, out: str = None):
 
         try:
             dockerfile = repo.get_contents("Dockerfile")
+            readme = repo.get_contents("README.md")
             if dockerfile and dockerfile.type == "file":
-                filtered_repos.append(repo)
+                if readme and readme.type == "file":
+                    # restrict to repos where the readme mentions docker
+                    if "docker run" in readme.decoded_content.decode().lower():
+                        filtered_repos.append(repo)
         except Exception:
             pass
 
@@ -34,7 +38,7 @@ def find_docker_repos(stars: int = 10000, k: int = 10, out: str = None):
     c = 0
     save_repos_to_csv = []
     for repo in filtered_repos:
-        print(f"{c}: {repo.name}: {repo.html_url}: {repo.stargazers_count}")
+        print(f"{c}, {repo.name}, {repo.html_url}, {repo.stargazers_count}")
         row = [c, repo.name, repo.html_url, repo.stargazers_count]
         save_repos_to_csv.append(row)
         c += 1
