@@ -279,6 +279,7 @@ class RepoLoader:
                     queue.append((item_path, current_depth + 1, new_dir))
                 elif os.path.isfile(item_path):
                     # Add the file to the current dictionary
+                    file_content = ""
                     try:
                         with open(item_path, "r") as f:
                             file_content = "\n".join([next(f) for _ in range(lines)])
