@@ -74,12 +74,12 @@ class RepoLoader:
         self.url = url
         self.config = config
         self.clone_path = None
-        self.log_file = '.logs/repo_loader/download_log.json'
+        self.log_file = ".logs/repo_loader/download_log.json"
         os.makedirs(os.path.dirname(self.log_file), exist_ok=True)
         if not os.path.exists(self.log_file):
-            with open(self.log_file, 'w') as f:
+            with open(self.log_file, "w") as f:
                 json.dump({"junk": "ignore"}, f)
-        with open(self.log_file, 'r') as f:
+        with open(self.log_file, "r") as f:
             log = json.load(f)
         if self.url in log:
             logger.info(f"Repo Already downloaded in {log[self.url]}")
@@ -96,7 +96,7 @@ class RepoLoader:
         self.repo = g.get_repo(repo_name)
 
     def _get_dir_name(self) -> str:
-        return urlparse(self.url).path.replace('/', '_')
+        return urlparse(self.url).path.replace("/", "_")
 
     def _file_type(self, name: str) -> str:
         """
@@ -132,7 +132,7 @@ class RepoLoader:
     def default_clone_path(self):
         return tempfile.mkdtemp(suffix=self._get_dir_name())
 
-    def clone(self, path: str=None) -> None:
+    def clone(self, path: str = None) -> None:
         """
         Clone a GitHub repository to a local directory specified by `path`,
         if it has not already been cloned.
@@ -141,13 +141,13 @@ class RepoLoader:
             path (str): The local directory where the repository should be cloned.
                 If not specified, a temporary directory will be created.
         """
-        with open(self.log_file, 'r') as f:
+        with open(self.log_file, "r") as f:
             log = json.load(f)
 
         if self.url in log and os.path.exists(log[self.url]):
-            print(f"Already downloaded in {log[self.url]}")
+            logger.warning(f"Repo Already downloaded in {log[self.url]}")
             self.clone_path = log[self.url]
-            return
+            return self.clone_path
 
         self.clone_path = path
         if path is None:
@@ -157,12 +157,13 @@ class RepoLoader:
         try:
             subprocess.run(["git", "clone", self.url, path], check=True)
             log[self.url] = path
-            with open(self.log_file, 'w') as f:
+            with open(self.log_file, "w") as f:
                 json.dump(log, f)
+            return self.clone_path
         except subprocess.CalledProcessError as e:
-            print(f"Git clone failed: {e}")
+            logger.error(f"Git clone failed: {e}")
         except Exception as e:
-            print(f"An error occurred while trying to clone the repository: {e}")
+            logger.error(f"An error occurred while trying to clone the repository:{e}")
 
     def get_repo_structure(
         self, depth: int, lines: int = 0
