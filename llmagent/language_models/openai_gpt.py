@@ -111,8 +111,6 @@ class OpenAIGPT(LanguageModel):
         return LLMResponse(message=completion, usage=0), openai_response.dict()
 
     def _cache_lookup(self, fn_name: str, **kwargs):
-        if not settings.cache:
-            return None, None
         # Use the kwargs as the cache key
         sorted_kwargs_str = str(sorted(kwargs.items()))
         raw_key = f"{fn_name}:{sorted_kwargs_str}"
@@ -120,6 +118,8 @@ class OpenAIGPT(LanguageModel):
         # Hash the key to a fixed length using SHA256
         hashed_key = hashlib.sha256(raw_key.encode()).hexdigest()
 
+        if not settings.cache:
+            return hashed_key, None
         # Try to get the result from the cache
         return hashed_key, self.cache.retrieve(hashed_key)
 
