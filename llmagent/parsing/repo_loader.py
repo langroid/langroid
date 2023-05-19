@@ -77,7 +77,7 @@ class RepoLoader:
         """
         Args:
             url: full github url of repo, or just "owner/repo"
-            file_types: list of file extensions to include
+            config: configuration for RepoLoader
         """
         self.url = url
         self.config = config
