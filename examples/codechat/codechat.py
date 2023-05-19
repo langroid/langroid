@@ -1,7 +1,6 @@
 from examples.urlqa.doc_chat_agent import DocChatAgent
 from llmagent.parsing.urls import get_urls_from_user
 from llmagent.utils.logging import setup_colored_logging
-from llmagent.mytypes import Document
 from llmagent.parsing.repo_loader import RepoLoader, RepoLoaderConfig
 from llmagent.utils import configuration
 from llmagent.agent.base import AgentConfig
@@ -13,7 +12,6 @@ from llmagent.parsing.parser import ParsingConfig
 from llmagent.parsing.code_parser import CodeParsingConfig
 from llmagent.prompts.prompts_config import PromptsConfig
 
-from typing import List
 import typer
 import os
 from rich import print
@@ -71,7 +69,7 @@ def chat(config: CodeChatConfig) -> None:
     print("[blue]Enter a GitHub URL below (or leave empty for default Repo)")
     urls = get_urls_from_user(n=1) or default_urls
     loader = RepoLoader(urls[0], config=RepoLoaderConfig())
-    documents: List[Document] = loader.load(depth=2, lines=500)
+    dct, documents = loader.load(depth=2, lines=500)
 
     code_docs = [
         doc for doc in documents if doc.metadata["language"] not in ["md", "txt"]
