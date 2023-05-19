@@ -142,17 +142,7 @@ class AgentMessage(ABC, BaseModel):
         """
         # pick a random example of the fields
         ex = choice(self.examples())
-        # pick a random template of when to use the message
-        template = choice(ex.use_when())
-        tqa = ThoughtQuestionAnswer(
-            thought=template,
-            question=ex.json_example(),
-            answer=ex.result,
-        )
-        if conversation:
-            return tqa.conversation()
-        else:
-            return tqa.example()
+        return ex.json_example()
 
     def json_example(self):
         return self.json(indent=4, exclude={"result", "purpose"})

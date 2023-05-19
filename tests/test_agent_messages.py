@@ -9,7 +9,6 @@ from llmagent.cachedb.redis_cachedb import RedisCacheConfig
 from llmagent.utils.system import rmdir
 from llmagent.utils.configuration import update_global_settings
 from typing import List
-from functools import reduce
 import pytest
 import json
 
@@ -116,12 +115,7 @@ def test_disable_message():
 @pytest.mark.parametrize("msg_cls", [PythonVersionMessage, FileExistsMessage])
 def test_usage_instruction(msg_cls: AgentMessage):
     usage = msg_cls().usage_example()
-    assert any(
-        template in usage
-        for template in reduce(
-            lambda x, y: x + y, [ex.use_when() for ex in msg_cls.examples()]
-        )
-    )
+    assert json.loads(usage)["request"] == msg_cls().request
 
 
 rmdir(qd_dir)  # don't need it here

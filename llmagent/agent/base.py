@@ -91,28 +91,18 @@ class Agent(ABC):
         if len(enabled_classes) == 0:
             return "You can ask questions in natural language."
 
-        handled_requests: str = list(self.handled_classes.keys())
         json_conditions = "\n\n".join(
             [
-                f"""JSON CONDITION {i+1}: 
-                {msg_cls().purpose}. For example:
+                f""" 
+                {msg_cls().request}: 
+                {msg_cls().purpose}
+                For example:
                 {msg_cls().usage_example()}
                 """
                 for i, msg_cls in enumerate(enabled_classes)
             ]
         )
-        json_rules = (
-            f"""
-        If the THINKING fits one of the  below JSON CONDITIONS, then FORMAT the 
-        QUESTION in the JSON format indicated; otherwise, keep it in the original form.
-        In case of JSON formatting, the only permissible values of the 'request' field
-        are {handled_requests}.
-        
-        """
-            + json_conditions
-        )
-
-        return json_rules
+        return json_conditions
 
     def sample_multi_round_dialog(self):
         """
@@ -139,20 +129,16 @@ class Agent(ABC):
             str: The instructions string.
         """
         format_rules = self.json_format_rules()
-        conversation_example = self.sample_multi_round_dialog()
 
         return f"""
-        FORMATTING RULES:
+        TOOLS AVAILABLE:
         {format_rules}
+
+        Whenever possible, use these tools, with the JSON syntax specified above.
+        When a tool is applicable, simply use this syntax, do not write anything 
+        else. Only if no tool is applicable, ask in natural language. 
         
-        SAMPLE CONVERSATION:
-        {conversation_example}
-        
-        Now start showing me your THINKING and QUESTION steps.
-        Ignore all specific details above, 
-        those were just examples. Start from scratch, assume you know nothing. 
-        Remember to format the QUESTION in JSON if it fits one of the JSON 
-        CONDITIONs above.          
+        Now start, and be concise!                 
         """
 
     def request_reformat_prompt(self, request: str) -> str:
@@ -169,34 +155,18 @@ class Agent(ABC):
         if len(enabled_classes) == 0:
             return "You can ask questions in natural language."
         # use at most 2 usage examples, no need to be exhaustive;
-        reformat_examples = "\n\n".join(
-            [
-                msg_cls().usage_example()
-                for i, msg_cls in enumerate(enabled_classes)
-                if i < 2
-            ]
-        )
-        first_enabled_class = list(enabled_classes)[0]
-        no_reformat_examples = first_enabled_class().non_usage_example(
-            conversation=False
-        )
-        return f"""See the THINKING statement below, and check if the following 
-        JSON formatting rules apply to this statement. 
+        return f"""See the JSON format rules below, and check if the 
+        following REQUEST fits one of these rules.
         If one of these rules applies, 
-            then format the THINKING statement 
-                as a QUESTION in the JSON format indicated;
-            otherwise return the QUESTION as identical to the THINKING statement. 
+        then format the REQUEST statement in the JSON format indicated;
+        otherwise return the REQUEST as the original.
         
+        FORMAT RULES:
         
         {format_rules}
         
-        FORMATTING EXAMPLES:
-        
-        {reformat_examples}
-        
-        {no_reformat_examples}
-        
-        THINKING: {request}
+        ------------------------
+        REQUEST: {request}
         """
 
     def handle_message(self, input_str: str) -> Optional[str]:
