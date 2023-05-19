@@ -16,7 +16,6 @@ from examples.dockerchat.identify_python_dependency import (
     DEPENDENCY_FILES,
 )
 
-import subprocess
 import os
 import json
 import logging
@@ -190,12 +189,13 @@ class DockerChatAgent(ChatAgent):
         try:
             start = time.time()
             # I noticed the flag ``rm`` isn't used anymore, so I need to do the cleanup myself later on
-            image, build_logs = docker.from_env().images.build(
-                rm=True,
-                path=self.repo_path,
-                tag=img_tag,
-                dockerfile=proposed_doeckerfile_name,
-            )
+            with Halo(text="Verifying the proposed Dockerfile...", spinner="dots"):
+                image, build_logs = docker.from_env().images.build(
+                    rm=True,
+                    path=self.repo_path,
+                    tag=img_tag,
+                    dockerfile=proposed_doeckerfile_name,
+                )
             build_time = time.time() - start
             formatted_build_time = "{:.2f}".format(
                 datetime.timedelta(seconds=build_time).total_seconds()
