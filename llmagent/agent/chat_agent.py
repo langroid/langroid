@@ -54,6 +54,19 @@ class ChatAgent(Agent):
             task = [LLMMessage(role=Role.SYSTEM, content="You are a helpful assistant")]
         self.task_messages = task
 
+    def clear_history(self, start: int = -2) -> None:
+        """
+        Clear the message history, and optionally keep the last `k` messages.
+        Args:
+            start (int): index of first message to delete; default = -2
+                    (i.e. delete last 2 messages, typically these
+                    are the last user and assistant messages)
+        """
+        n = len(self.message_history)
+        if start < 0:
+            start = max(0, n + start)
+        self.message_history = self.message_history[:start]
+
     def enable_message(self, message_class: Type[AgentMessage]) -> None:
         super().enable_message(message_class)
         self.update_message_instructions()
@@ -153,6 +166,9 @@ class ChatAgent(Agent):
             message: user message
         Returns:
         """
+        if len(self.message_history) == 0:
+            # task_messages have not yet been loaded, so load them
+            self.message_history = self.task_messages
         self.message_history.append(LLMMessage(role=Role.USER, content=message))
         with StreamingIfAllowed(self.llm):
             response = self.respond_messages(self.message_history)
@@ -175,3 +191,17 @@ class ChatAgent(Agent):
             return str(self.message_history[i])
         else:
             return "\n".join([str(m) for m in self.message_history[i:]])
+
+    def reformat_message(self, msg: str) -> str:
+        """
+        Reformat a message according to any applicable tool (message class).
+        If no tool is applicable, return the original message, or an equivalent.
+        Args:
+            msg: original message to be reformatted
+
+        Returns:
+            Reformatted message that makes use of a tool (message class) when possible.
+        """
+        formatter_agent = ChatAgent(self.config, task=self.task_messages)
+        reformatted = formatter_agent.respond(msg).content
+        return reformatted
