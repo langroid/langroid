@@ -37,6 +37,14 @@ class RedisCache(CacheDB):
                 password=redis_password,
             )
 
+    def clear(self) -> None:
+        """Clear keys from current db."""
+        self.client.flushdb()
+
+    def clear_all(self) -> None:
+        """Clear all keys from all dbs."""
+        self.client.flushall()
+
     def store(self, key: str, value: dict) -> None:
         """
         Store a value associated with a key.
