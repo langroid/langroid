@@ -76,10 +76,6 @@ def chat(config: DockerChatAgentConfig) -> None:
             repo. Think step by step about the information you need, to accomplish 
             your task.  If I cannot answer, further breakdown your task into 
             sub-tasks and so on. Start by asking me for the URL of the github repo.
-            
-            You have access to the following TOOLS to accomplish your task:
-            
-                        
             """,
         ),
     ]
