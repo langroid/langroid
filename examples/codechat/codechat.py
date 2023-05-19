@@ -25,6 +25,7 @@ setup_colored_logging()
 
 
 class CodeChatConfig(AgentConfig):
+    gpt4: bool = False
     debug: bool = False
     stream: bool = True  # allow streaming where needed
     max_tokens: int = 10000
@@ -61,7 +62,8 @@ class CodeChatConfig(AgentConfig):
 
 def chat(config: CodeChatConfig) -> None:
     configuration.update_global_settings(config, keys=["debug", "stream"])
-
+    if config.gpt4:
+        config.llm.chat_model = "gpt-4"
     default_urls = [config.repo_url]
 
     print("[blue]Welcome to the GitHub Repo chatbot!")
@@ -69,7 +71,7 @@ def chat(config: CodeChatConfig) -> None:
     print("[blue]Enter a GitHub URL below (or leave empty for default Repo)")
     urls = get_urls_from_user(n=1) or default_urls
     loader = RepoLoader(urls[0], config=RepoLoaderConfig())
-    documents: List[Document] = loader.load()
+    documents: List[Document] = loader.load(depth=2, lines=500)
 
     code_docs = [
         doc for doc in documents if doc.metadata["language"] not in ["md", "txt"]
@@ -87,7 +89,7 @@ def chat(config: CodeChatConfig) -> None:
 
     print(
         f"""
-    [green]I have processed the following GitHub Repo into 
+    [green]I have processed {len(documents)} files from the following GitHub Repo into 
     {n_text_splits} text chunks and {n_code_splits} code chunks:
     {urls[0]}
     """.strip()
@@ -104,8 +106,11 @@ def chat(config: CodeChatConfig) -> None:
 
 
 @app.command()
-def main(debug: bool = typer.Option(False, "--debug", "-d", help="debug mode")) -> None:
-    config = CodeChatConfig(debug=debug)
+def main(
+    debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
+    gpt4: bool = typer.Option(False, "--gpt4", "-4", help="use GPT-4"),
+) -> None:
+    config = CodeChatConfig(debug=debug, gpt4=gpt4)
     chat(config)
 
 
