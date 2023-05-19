@@ -3,7 +3,8 @@ import logging
 from github import Github, ContentFile
 from dotenv import load_dotenv
 import os
-from typing import List, Union, Dict
+from typing import List, Union, Dict, Tuple
+import itertools
 from pydantic import BaseSettings
 from collections import deque
 import subprocess
@@ -29,6 +30,12 @@ class RepoLoaderConfig(BaseSettings):
     Configuration for RepoLoader.
     """
 
+    non_code_types: List[str] = [
+        "md",
+        "txt",
+        "text",
+    ]
+
     file_types: List[str] = [
         "py",
         "md",
@@ -46,7 +53,7 @@ class RepoLoaderConfig(BaseSettings):
         "Dockerfile",
     ]
 
-    dir_excludes: List[str] = [
+    exclude_dirs: List[str] = [
         ".gitignore",
         ".gitmodules",
         ".gitattributes",
@@ -128,13 +135,18 @@ class RepoLoader:
     def _get_dir_name(self) -> str:
         return urlparse(self.url).path.replace("/", "_")
 
-    def _file_type(self, name: str) -> str:
+    @staticmethod
+    def _file_type(name: str) -> str:
         """
         Get the file type of a file name.
         Args:
-            name: name of file
+            name: name of file, can be "a", "a.b", or ".b"
         Returns:
-            str: file type
+            str: file type; "a" => "a", "a.b" => "b", ".b" => "b"
+            Examples:
+                "Makefile" => "Makefile",
+                "script.py" => "py",
+                ".gitignore" => "gitignore"
         """
         # "a" -> ("a", ""), "a.b" -> ("a", ".b"), ".b" -> (".b", "")
         file_parts = os.path.splitext(name)
@@ -143,6 +155,16 @@ class RepoLoader:
         else:
             file_type = file_parts[1][1:]  # (*,".b") => "b"
         return file_type
+
+    def _is_code(self, file_type: str) -> bool:
+        """
+        Check if a file type is code.
+        Args:
+            file_type: file type, e.g. "py", "md", "txt"
+        Returns:
+            bool: whether file type is code
+        """
+        return file_type not in self.config.non_code_types
 
     def _is_allowed(self, content: ContentFile) -> bool:
         """
@@ -153,7 +175,7 @@ class RepoLoader:
             bool: Whether the file or directory is allowed to be included.
         """
         if content.type == "dir":
-            return content.name not in self.config.dir_excludes
+            return content.name not in self.config.exclude_dirs
         elif content.type == "file":
             return self._file_type(content.name) in self.config.file_types
         else:
@@ -195,7 +217,7 @@ class RepoLoader:
         except Exception as e:
             logger.error(f"An error occurred while trying to clone the repository:{e}")
 
-    def get_repo_structure(
+    def load_tree_from_github(
         self, depth: int, lines: int = 0
     ) -> Dict[str, Union[str, List[Dict]]]:
         """
@@ -212,7 +234,13 @@ class RepoLoader:
                     A dictionary containing file and directory names, with file contents.
         """
         root_contents = self.repo.get_contents("")
-        repo_structure = {"type": "dir", "name": "", "dirs": [], "files": []}
+        repo_structure = {
+            "type": "dir",
+            "name": "",
+            "dirs": [],
+            "files": [],
+            "path": "",
+        }
 
         # A queue of tuples (current_node, current_depth, parent_structure)
         queue = deque([(root_contents, 0, repo_structure)])
@@ -230,6 +258,7 @@ class RepoLoader:
                         "name": content.name,
                         "dirs": [],
                         "files": [],
+                        "path": content.path,
                     }
                     parent_structure["dirs"].append(new_dir)
                     queue.append(
@@ -247,34 +276,22 @@ class RepoLoader:
                         "type": "file",
                         "name": content.name,
                         "content": file_content,
+                        "path": content.path,
                     }
                     parent_structure["files"].append(file_dict)
-                    #
-                    # if lines > 0:
-                    #     # Add the file to the current dictionary
-                    #     file_content = "\n".join(
-                    #         _get_decoded_content(content).
-                    #         splitlines()[:lines]
-                    #     )
-                    #     file_dict = {'name': content.name, 'contents': file_content}
-                    #     if 'files' in parent_structure:
-                    #         parent_structure['files'].append(file_dict)
-                    #     else:
-                    #         parent_structure['files'] = [file_dict]
-                    # else:
-                    #     if 'files' in parent_structure:
-                    #         parent_structure['files'].append(content.name)
-                    #     else:
-                    #         parent_structure['files'] = [content.name]
 
         return repo_structure
 
-    def get_folder_structure(
-        self, path: str = None, depth: int = 3, lines: int = 0
-    ) -> Dict[str, Union[str, List[Dict]]]:
+    def load(
+        self,
+        path: str = None,
+        depth: int = 3,
+        lines: int = 0,
+    ) -> Tuple[Dict[str, Union[str, List[Dict]]], List[Document]]:
         """
-        Get a nested dictionary of local folder file and directory names
-        up to a certain depth, with file contents.
+        From a local folder `path` (if None, the repo clone path), get:
+        - a nested dictionary (tree) of dicts, files and contents
+        - a list of Document objects for each file.
 
         Args:
             path: The local folder path; if none, use self.clone_path()
@@ -282,51 +299,127 @@ class RepoLoader:
             lines (int): The number of lines of file contents to include.
 
         Returns:
-            Dict[str, Union[str, List[Dict]]]:
-            A dictionary containing file and directory names, with file contents.
+            Tuple of (dict, List_of_Documents):
+            - A dictionary containing file and directory names, with file contents.
+            - A list of Document objects for each file.
         """
-        folder_structure = {"type": "dir", "name": "", "dirs": [], "files": []}
+        if path is None:
+            if self.clone_path is None:
+                self.clone()
+            path = self.clone_path
+        return self.load_from_folder(
+            path=path,
+            depth=depth,
+            lines=lines,
+            file_types=self.config.file_types,
+            exclude_dirs=self.config.exclude_dirs,
+            url=self.url,
+        )
 
-        path = path or self.clone_path
+    @staticmethod
+    def load_from_folder(
+        path: str,
+        depth: int = 3,
+        lines: int = 0,
+        file_types: List[str] = None,
+        exclude_dirs: List[str] = None,
+        url: str = "",
+    ) -> Tuple[Dict[str, Union[str, List[Dict]]], List[Document]]:
+        """
+        From a local folder `path` (required), get:
+        - a nested dictionary (tree) of dicts, files and contents, restricting to
+            desired file_types and excluding undesired directories.
+        - a list of Document objects for each file.
+
+        Args:
+            path (str): The local folder path, required.
+            depth (int): The depth level. Optional, default 3.
+            lines (int): The number of lines of file contents to include.
+                    Optional, default 0 (no lines => empty string).
+            file_types (List[str]): The file types to include.
+                    Optional, default None (all).
+            exclude_dirs (List[str]): The directories to exclude.
+                    Optional, default None (no exclusions).
+            url (str): Optional url, to be stored in docs as metadata. Default "".
+
+        Returns:
+            Tuple of (dict, List_of_Documents):
+            - A dictionary containing file and directory names, with file contents.
+            - A list of Document objects for each file.
+        """
+
+        folder_structure = {
+            "type": "dir",
+            "name": "",
+            "dirs": [],
+            "files": [],
+            "path": "",
+        }
         # A queue of tuples (current_path, current_depth, parent_structure)
         queue = deque([(path, 0, folder_structure)])
-
+        docs = []
+        exclude_dirs = exclude_dirs or []
         while queue:
             current_path, current_depth, parent_structure = queue.popleft()
 
             for item in os.listdir(current_path):
                 item_path = os.path.join(current_path, item)
-                if (os.path.isdir(item_path) and item in self.config.dir_excludes) or (
+                relative_path = os.path.relpath(item_path, path)
+                if (os.path.isdir(item_path) and item in exclude_dirs) or (
                     os.path.isfile(item_path)
-                    and self._file_type(item) not in self.config.file_types
+                    and file_types is not None
+                    and RepoLoader._file_type(item) not in file_types
                 ):
                     continue
 
                 if os.path.isdir(item_path) and current_depth < depth:
                     # Create a new sub-dictionary for this directory
-                    new_dir = {"type": "dir", "name": item, "dirs": [], "files": []}
+                    new_dir = {
+                        "type": "dir",
+                        "name": item,
+                        "dirs": [],
+                        "files": [],
+                        "path": relative_path,
+                    }
                     parent_structure["dirs"].append(new_dir)
                     queue.append((item_path, current_depth + 1, new_dir))
                 elif os.path.isfile(item_path):
                     # Add the file to the current dictionary
-                    file_content = ""
-                    try:
-                        with open(item_path, "r") as f:
-                            file_content = "\n".join([next(f) for _ in range(lines)])
-                    except StopIteration:
-                        pass
-                    file_dict = {"type": "file", "name": item, "content": file_content}
+                    with open(item_path, "r") as f:
+                        file_lines = list(itertools.islice(f, lines))
+                    file_content = "\n".join(line.strip() for line in file_lines)
+                    if file_content == "":
+                        continue
+
+                    file_dict = {
+                        "type": "file",
+                        "name": item,
+                        "content": file_content,
+                        "path": relative_path,
+                    }
                     parent_structure["files"].append(file_dict)
+                    docs.append(
+                        Document(
+                            content=file_content,
+                            metadata=dict(
+                                repo=url,
+                                source=relative_path,
+                                url=url,
+                                filename=item,
+                                extension=RepoLoader._file_type(item),
+                                language=RepoLoader._file_type(item),
+                            ),
+                        )
+                    )
+        return folder_structure, docs
 
-        return folder_structure
-
-    def load(
+    def load_docs_from_github(
         self, k: int = None, depth: int = None, lines: int = None
     ) -> List[Document]:
         """
-        Recursively get all files in a repo that have one of the extensions,
-        possibly up to a max number of files, max depth, and max number of lines per
-        file (if any of these are specified).
+        Directly from GitHub, recursively get all files in a repo that have one of the
+        extensions, possibly up to a max number of files, max depth, and max number
+        of lines per file (if any of these are specified).
         Args:
             k(int): max number of files to load, or None for all files
             depth(int): max depth to recurse, or None for infinite depth
@@ -381,11 +474,10 @@ class RepoLoader:
                     )
         return docs
 
-    from typing import Dict, Union, List
-
     @staticmethod
     def select(
-        structure: Dict[str, Union[str, List[Dict]]], names: List[str]
+        structure: Dict[str, Union[str, List[Dict]]],
+        names: List[str],
     ) -> Dict[str, Union[str, List[Dict]]]:
         """
         Filter a structure dictionary for certain directories and files.
@@ -393,6 +485,8 @@ class RepoLoader:
         Args:
             structure (Dict[str, Union[str, List[Dict]]]): The structure dictionary.
             names (List[str]): A list of desired directory and file names.
+            type (str): The type of the structure to filter for. If None, filter for
+            both files and directories.
         Returns:
             Dict[str, Union[str, List[Dict]]]: The filtered structure dictionary.
         """
@@ -401,6 +495,7 @@ class RepoLoader:
             "name": structure["name"],
             "dirs": [],
             "files": [],
+            "path": structure["path"],
         }
 
         for dir in structure["dirs"]:

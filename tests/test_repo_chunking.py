@@ -13,7 +13,7 @@ MAX_CHUNK_SIZE = 20
 def test_repo_chunking():
     url = "https://github.com/eugeneyan/testing-ml"
     repo_loader = RepoLoader(url)
-    docs = repo_loader.load(10)
+    _, docs = repo_loader.load(depth=2, lines=100)
     assert len(docs) > 0
 
     parse_cfg = CodeParsingConfig(

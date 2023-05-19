@@ -60,7 +60,7 @@ class DockerChatAgent(ChatAgent):
         self.repo_loader = RepoLoader(self.url, RepoLoaderConfig())
         self.repo_path = self.repo_loader.clone()
         # get the repo tree to depth d, with first k lines of each file
-        self.repo_tree = self.repo_loader.get_folder_structure(depth=1, lines=20)
+        self.repo_tree = self.repo_loader.load(depth=1, lines=20)
         selected_tree = RepoLoader.select(
             self.repo_tree,
             names=DEPENDENCY_FILES,
