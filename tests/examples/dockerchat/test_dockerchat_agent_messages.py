@@ -9,7 +9,7 @@ from llmagent.agent.message import AgentMessage
 from llmagent.language_models.base import LLMConfig
 from llmagent.cachedb.redis_cachedb import RedisCacheConfig
 from typing import Optional
-from functools import reduce
+import json
 import pytest
 
 cfg = AgentConfig(
@@ -90,12 +90,7 @@ def test_disable_message():
 @pytest.mark.parametrize("msg_cls", [InformURLMessage, FileExistsMessage])
 def test_usage_instruction(msg_cls: AgentMessage):
     usage = msg_cls().usage_example()
-    assert any(
-        template in usage
-        for template in reduce(
-            lambda x, y: x + y, [ex.use_when() for ex in msg_cls.examples()]
-        )
-    )
+    assert json.loads(usage)["request"] == msg_cls().request
 
 
 def test_dockerchat_agent_handle_message():
