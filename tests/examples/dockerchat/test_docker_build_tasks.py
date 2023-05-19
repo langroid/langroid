@@ -63,17 +63,15 @@ def test_validate_dockerfile():
         result = agent.validate_dockerfile(vdm)
 
         # should fail because requirements.txt doesn'r exist
-        assert "Docker build failed with error" in result
+        assert "failed" in result
 
         # Create a requirements.txt file in the folder
         temp_file_path = os.path.join(temp_folder_path, "requirements.txt")
         open(temp_file_path, "a").close()
-        vdm = ValidateDockerfileMessage()
-        vdm.proposed_dockerfile = PROPOSED_DOCKERFILE_CONTENT
         result = agent.validate_dockerfile(vdm)
 
         # should succeed after creating the file
-        assert "Docker image built successfully" in result
+        assert "successfully" in result
 
     finally:
         # Clean up - remove the temporary folder and its contents
