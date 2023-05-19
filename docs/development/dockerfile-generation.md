@@ -1,7 +1,7 @@
 # Dockerfile Generation
 
 !!! note
-    By GPT4. Caveat Lector. May not be fully accurate. Trust but Verify!
+By GPT4. Caveat Lector. May not be fully accurate. Trust but Verify!
 
 To build a Dockerfile for a Python repo, you will need the following
 information:
@@ -65,10 +65,74 @@ Dockerfile by writing the appropriate instructions in the proper sequence, and
 then use Docker to build, tag, and optionally push the image to a container
 registry.
 
+# Where to look in a repo, to find what to put in the CMD or RUN directives
+
+When examining a Python repository to decide what to put in the `CMD` or `RUN`
+directive in a Dockerfile, you'd need to understand how the application should
+be run in a production environment. Here are the places you should investigate
+to determine this:
+
+1. **Readme file**: The Readme file usually contains instructions on how to
+   install and run the project, along with the command that needs to be run to
+   start the server or run the script.
+
+2. **Python files**: Look for an entry point into the application. This is often
+   a `.py` file in the root directory, or a script inside a `/bin` or `/scripts`
+   directory. Python projects often have a main file which bootstraps and starts
+   the application, it can be named `main.py`, `run.py`, `app.py` or something
+   similar.
+
+3. **`requirements.txt` or `Pipfile` or `pyproject.toml` files**: These files
+   are often used to manage dependencies in Python projects. The commands to
+   install the packages listed in these files would typically go in a `RUN`
+   directive in the Dockerfile.
+
+4. **`setup.py` or `setup.cfg`**: These files are used for packaging Python
+   projects. If present, they may indicate how to install and run the project.
+
+5. **`Procfile`**: This file is often used in platforms like Heroku and can
+   contain commands to run the application.
+
+6. **`wsgi.py` or `asgi.py` files**: If the project is a web application, there
+   may be WSGI (Web Server Gateway Interface) or ASGI (Asynchronous Server
+   Gateway Interface) files. These files are usually the entry point for Python
+   web applications. They could be used in conjunction with a WSGI/ASGI server
+   like Gunicorn or Uvicorn to start the web server.
+
+7. **`manage.py`**: This file is typically found in Django projects and is used
+   to manage various aspects of the project. The `runserver` command is often
+   used in development but for production, you'll typically want to use a WSGI
+   server like Gunicorn.
+
+8. **`.env`, `.env.example`, `config.py` or similar**: These files are used for
+   managing environment variables. In the Dockerfile, you might use the `ENV`
+   directive to set these.
+
+9. **Tests**: Tests often need to setup the application to run, so you can
+   sometimes find information on how to run the application by looking at the
+   test setup code.
+
+10. **`docker-compose.yml` or `Dockerfile`**: If these files exist, they may
+    already contain the commands to build a Docker image and run the application
+    in a container. You can use these as a reference or even just use the
+    existing Docker configuration, if it meets your needs.
+
+Remember, the `CMD` directive in a Dockerfile is used to provide defaults for an
+executing container, this can include an executable, or they can omit the
+executable, in which case you must specify an `ENTRYPOINT` command.
+
+The `RUN` directive is used to execute any commands in a new layer on top of the
+current image and commit the results, thus creating a new image. These will
+usually be used for installing packages, compiling code, or other setup tasks.
+
+Finally, always ensure to follow the best practices for writing Dockerfiles like
+minimizing the number of layers, using multi-stage builds for compiling code and
+not running containers as root wherever possible.
 
 # Sample python code
 
-Here's a more complete implementation of the `Docker` class with type annotations, Google-style docstrings, and PEP8 compliance:
+Here's a more complete implementation of the `Docker` class with type
+annotations, Google-style docstrings, and PEP8 compliance:
 
 ```python
 import os
@@ -91,7 +155,8 @@ class Docker(BaseModel):
     def clone_repo(self) -> Repo:
         """Clone the given GitHub repository to a temporary directory."""
         temp_dir = tempfile.mkdtemp()
-        return Repo.clone_from(self.github_url, os.path.join(temp_dir, self.repo_name))
+        return Repo.clone_from(self.github_url,
+                               os.path.join(temp_dir, self.repo_name))
 
     def get_base_image(self) -> str:
         """Determine the appropriate Python base image for the Dockerfile."""
@@ -104,7 +169,8 @@ class Docker(BaseModel):
 
     def get_dependencies(self) -> List[str]:
         """Return the Dockerfile instructions to install the required dependencies."""
-        requirements_file = os.path.join(self.repo.working_tree_dir, 'requirements.txt')
+        requirements_file = os.path.join(self.repo.working_tree_dir,
+                                         'requirements.txt')
         if os.path.exists(requirements_file):
             return [f"RUN pip install --no-cache-dir -r requirements.txt"]
         else:
@@ -174,7 +240,6 @@ class Docker(BaseModel):
             dockerfile.write(dockerfile_content)
 
         return dockerfile_content
-        
 
     def build_docker_image(self, dockerfile_content: str) -> Tuple[str, bool]:
         """
@@ -191,7 +256,8 @@ class Docker(BaseModel):
         dockerfile_path = os.path.join(self.repo.working_tree_dir, 'Dockerfile')
 
         build_command = f"docker build -t {image_name} -f {dockerfile_path} ."
-        process = subprocess.run(build_command, shell=True, text=True, cwd=self.repo.working_tree_dir,
+        process = subprocess.run(build_command, shell=True, text=True,
+                                 cwd=self.repo.working_tree_dir,
                                  stdout=subprocess.PIPE, stderr=subprocess.PIPE)
 
         if process.returncode == 0:
@@ -238,6 +304,7 @@ class Docker(BaseModel):
             return False
 
         return True
+
 
 # Usage example:
 docker = Docker(github_url="https://github.com/username/repo.git")
