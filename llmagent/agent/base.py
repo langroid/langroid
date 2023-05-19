@@ -6,7 +6,7 @@ from halo import Halo
 from llmagent.mytypes import Document
 from rich import print
 import json
-from llmagent.agent.message import AgentMessage
+from llmagent.agent.message import AgentMessage, INSTRUCTION
 from llmagent.language_models.base import LanguageModel, LLMMessage
 from llmagent.vector_store.base import VectorStore
 from llmagent.parsing.parser import Parser
@@ -96,9 +96,11 @@ class Agent(ABC):
                 f""" 
                 {msg_cls().request}: 
                 {msg_cls().purpose}
-                For example:
-                {msg_cls().usage_example()}
                 """
+                # """
+                # For example:
+                # {msg_cls().usage_example()}
+                # """
                 for i, msg_cls in enumerate(enabled_classes)
             ]
         )
@@ -131,42 +133,13 @@ class Agent(ABC):
         format_rules = self.json_format_rules()
 
         return f"""
+        You have access to the following TOOLS to accomplish your task:
         TOOLS AVAILABLE:
         {format_rules}
-
-        Whenever possible, use these tools, with the JSON syntax specified above.
-        When a tool is applicable, simply use this syntax, do not write anything 
-        else. Only if no tool is applicable, ask in natural language. 
+        
+        {INSTRUCTION}
         
         Now start, and be concise!                 
-        """
-
-    def request_reformat_prompt(self, request: str) -> str:
-        """
-        Prompt to send to (non-chat) completion model, to ask it to format a
-        THINKING phrase as a QUESTION in JSON format if it matches one of the
-        patterns of the enabled message classes.
-
-        Args:
-            request (str): The request to reformat.
-        """
-        format_rules = self.json_format_rules()
-        enabled_classes: List[Type[AgentMessage]] = self.handled_classes.values()
-        if len(enabled_classes) == 0:
-            return "You can ask questions in natural language."
-        # use at most 2 usage examples, no need to be exhaustive;
-        return f"""See the JSON format rules below, and check if the 
-        following REQUEST fits one of these rules.
-        If one of these rules applies, 
-        then format the REQUEST statement in the JSON format indicated;
-        otherwise return the REQUEST as the original.
-        
-        FORMAT RULES:
-        
-        {format_rules}
-        
-        ------------------------
-        REQUEST: {request}
         """
 
     def handle_message(self, input_str: str) -> Optional[str]:

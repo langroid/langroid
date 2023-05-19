@@ -1,5 +1,4 @@
-from llmagent.agent.base import AgentConfig, Agent
-from llmagent.language_models.base import Role, LLMMessage
+from llmagent.agent.base import AgentConfig
 from llmagent.agent.chat_agent import ChatAgent
 from llmagent.agent.message import AgentMessage, ThoughtQuestionAnswer
 from llmagent.language_models.base import LLMConfig
@@ -13,9 +12,28 @@ import pytest
 import json
 
 
+class CountryCapitalMessage(AgentMessage):
+    request: str = "country_capital"
+    purpose: str = "To check whether <city> is the capital of <country>."
+    country: str = "France"
+    city: str = "Paris"
+    result: str = "yes"  # or "no"
+
+    @classmethod
+    def examples(cls) -> List["CountryCapitalMessage"]:
+        return [
+            cls(country="France", city="Paris", result="yes"),
+            cls(country="France", city="Marseille", result="no"),
+        ]
+
+    @classmethod
+    def use_when(self):
+        return []
+
+
 class FileExistsMessage(AgentMessage):
     request: str = "file_exists"
-    purpose: str = "To check whether a certain files is in the repo."
+    purpose: str = "To check whether a certain <filename> is in the repo."
     filename: str = "test.txt"
     result: str = "yes"  # or "no"
 
@@ -66,12 +84,20 @@ class PythonVersionMessage(AgentMessage):
         ]
 
 
+DEFAULT_PY_VERSION = "3.9"
+
+
 class MessageHandlingAgent(ChatAgent):
     def file_exists(self, message: FileExistsMessage) -> str:
         return "yes" if message.filename == "requirements.txt" else "no"
 
     def python_version(self, PythonVersionMessage) -> str:
-        return "3.9"
+        return DEFAULT_PY_VERSION
+
+    def country_capital(self, message: CountryCapitalMessage) -> str:
+        return (
+            "yes" if (message.city == "Paris" and message.country == "France") else "no"
+        )
 
 
 qd_dir = ".qdrant/testdata_test_agent"
@@ -82,7 +108,7 @@ cfg = AgentConfig(
     vecdb=None,
     llm=LLMConfig(
         type="openai",
-        chat_model="gpt-3.5-turbo",
+        chat_model="gpt-4",
         cache_config=RedisCacheConfig(fake=False),
     ),
     parsing=None,
@@ -173,33 +199,34 @@ def test_llm_agent_message():
     agent handles the message correctly.
     """
     update_global_settings(cfg, keys=["debug"])
-    task_messages = [
-        LLMMessage(
-            role=Role.SYSTEM,
-            content="""
-            You are a devops engineer, and your task is to understand a PYTHON 
-            repo. Plan this out step by step, and ask me questions 
-            for any info you need to understand the repo. 
-            """,
-        ),
-        LLMMessage(
-            role=Role.USER,
-            content="""
-            You are an assistant whose task is to understand a Python repo.
-
-            You have to think in small steps, and at each stage, show me your 
-            THINKING, and the QUESTION you want to ask. Based on my answer, you will 
-            generate a new THINKING and QUESTION.  
-            """,
-        ),
-    ]
-    agent = MessageHandlingAgent(cfg, task_messages)
+    agent = MessageHandlingAgent(cfg)
     agent.enable_message(FileExistsMessage)
     agent.enable_message(PythonVersionMessage)
+    agent.enable_message(CountryCapitalMessage)
 
-    agent.run(
-        iters=2, default_human_response="I don't know, please ask your next question."
-    )
+    llm_msg = agent.respond("Start by asking me about the python version.").content
+
+    agent_result = agent.handle_message(llm_msg)
+    assert agent_result == "3.9"
+
+    agent.clear_history(-2)
+    llm_msg = agent.respond(
+        "Start by asking me whether file 'requirements.txt' exists."
+    ).content
+    agent_result = agent.handle_message(llm_msg)
+    assert agent_result == "yes"
+
+    agent.clear_history(-2)
+    llm_msg = agent.respond(
+        "Start by asking me whether Paris is the capital of France."
+    ).content
+    agent_result = agent.handle_message(llm_msg)
+    assert agent_result == "yes"
+
+    agent.clear_history(-2)
+    llm_msg = agent.respond("Ask me to check what is the population of France.").content
+    agent_result = agent.handle_message(llm_msg)
+    assert agent_result is None
 
 
 def test_llm_agent_reformat():
@@ -208,60 +235,45 @@ def test_llm_agent_reformat():
     on the auto-generated reformat instructions.
     """
     update_global_settings(cfg, keys=["debug"])
-    task_messages = [
-        LLMMessage(
-            role=Role.SYSTEM,
-            content="""
-            You are a devops engineer, and your task is to understand a PYTHON 
-            repo. Plan this out step by step, and ask me questions 
-            for any info you need to understand the repo. 
-            """,
-        ),
-        LLMMessage(
-            role=Role.USER,
-            content="""
-            You are an assistant whose task is to understand a Python repo.
 
-            You have to think in small steps, and at each stage, show me your 
-            THINKING, and the QUESTION you want to ask. Based on my answer, you will 
-            generate a new THINKING and QUESTION.  
-            """,
-        ),
-    ]
-    agent = MessageHandlingAgent(cfg, task_messages)
+    agent = MessageHandlingAgent(cfg)
     agent.enable_message(FileExistsMessage)
     agent.enable_message(PythonVersionMessage)
+    agent.enable_message(CountryCapitalMessage)
 
-    msg = """
-    I want to know whether the repo contains the file 'requirements.txt'
-    """
-
-    prompt = agent.request_reformat_prompt(msg)
-    reformat_agent = Agent(cfg)
-    reformatted = reformat_agent.respond(prompt)
-    reformatted_jsons = extract_top_level_json(reformatted.content)
+    FILE = "blah.txt"
+    reformatted = agent.reformat_message(
+        f"I want to know if the repo contains the file '{FILE}'"
+    )
+    reformatted_jsons = extract_top_level_json(reformatted)
     assert len(reformatted_jsons) == 1
-    assert json.loads(reformatted_jsons[0]) == FileExistsMessage(
-        filename="requirements.txt"
-    ).dict(exclude={"result", "purpose"})
-
-    msg = """
-    I want to know which version of Python is needed
-    """
-    prompt = agent.request_reformat_prompt(msg)
-    reformat_agent = Agent(cfg)
-    reformatted = reformat_agent.respond(prompt)
-    reformatted_jsons = extract_top_level_json(reformatted.content)
-    assert len(reformatted_jsons) == 1
-    assert json.loads(reformatted_jsons[0]) == PythonVersionMessage().dict(
-        exclude={"result", "purpose"}
+    assert (
+        json.loads(reformatted_jsons[0])
+        == FileExistsMessage(filename=FILE).dict_example()
     )
 
-    msg = """
-    I need to know the population of France
-    """
-    prompt = agent.request_reformat_prompt(msg)
-    reformat_agent = Agent(cfg)
-    reformatted = reformat_agent.respond(prompt)
-    reformatted_jsons = extract_top_level_json(reformatted.content)
+    reformatted = agent.reformat_message(
+        "I want to know which version of Python is needed"
+    )
+    reformatted_jsons = extract_top_level_json(reformatted)
+    assert len(reformatted_jsons) == 1
+    assert json.loads(reformatted_jsons[0]) == PythonVersionMessage().dict_example()
+
+    reformatted = agent.reformat_message("I need to know the population of England")
+    reformatted_jsons = extract_top_level_json(reformatted)
     assert len(reformatted_jsons) == 0
+
+    COUNTRY = "India"
+    CITY = "Delhi"
+    reformatted = agent.reformat_message(
+        f"Check whether the capital of {COUNTRY} is {CITY}",
+    )
+    reformatted_jsons = extract_top_level_json(reformatted)
+    assert len(reformatted_jsons) == 1
+    assert (
+        json.loads(reformatted_jsons[0])
+        == CountryCapitalMessage(
+            country=COUNTRY,
+            city=CITY,
+        ).dict_example()
+    )
