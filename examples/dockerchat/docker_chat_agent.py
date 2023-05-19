@@ -8,6 +8,7 @@ from examples.dockerchat.dockerchat_agent_messages import (
     PythonDependencyMessage,
     ValidateDockerfileMessage,
 )
+from halo import Halo
 from llmagent.parsing.repo_loader import RepoLoader, RepoLoaderConfig
 from examples.dockerchat.identify_python_version import get_python_version
 from examples.dockerchat.identify_python_dependency import (
@@ -76,8 +77,14 @@ class DockerChatAgent(ChatAgent):
         And here is a JSON representation of the contents of some of the files:
         {repo_contents}
         
-        Based on these, first extract any useful information you might need in order 
-        to build the dockerfile. If you still need further information, you can ask me. 
+        Before proceeding, based on the above information, tell me what 
+        information you can gather, to help you with your task. 
+        For each piece of information, indicate with "SOURCE:" where you
+        got the information from.
+        Once you show me the information you are able to infer, 
+        you can proceed with your next question or request for information. 
+
+        If you still need further information, you can ask me. 
         """
 
     def python_version(self, m: PythonVersionMessage) -> str:
@@ -199,20 +206,23 @@ class DockerChatAgent(ChatAgent):
             # Build the Docker image
             img_name = "validate_img"
             command = f"docker build -t {img_name} -f {dockerfile_path} ."
-            process = subprocess.run(
-                command,
-                shell=True,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-            )
+            with Halo(text="Building the Docker image", spinner="dots"):
+                process = subprocess.run(
+                    command,
+                    shell=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                )
 
             os.chdir(original_path)
 
+            # do some cleaning: remove the Docker image and the Dockerfile
+            # TODO check is it ok to cleanup here?
+            self._cleanup_dockerfile(img_name, dockerfile_path)
+
             # Check the result of the build process
             if process.returncode == 0:
-                # do some cleaning: remove the Docker image and the Dockerfile
-                self._cleanup_dockerfile(img_name, dockerfile_path)
                 return "Docker build was successful"
             else:
                 return f"Docker build failed with error message: {process.stderr}"

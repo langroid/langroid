@@ -8,10 +8,10 @@ logger = logging.getLogger(__name__)
 
 class InformURLMessage(AgentMessage):
     request: str = "inform_url"
-    purpose: str = """After receiving the URL, to confirm the URL with the user. 
-        To be used ONLY AFTER receiving the URL, before proceeding with other steps.
-        This should NOT be used for REQUESTING a URL, only to confirm
-        a URL that has already been received."""
+    purpose: str = """After receiving the <url>, to confirm the <url> with the user. 
+        To be used ONLY AFTER receiving the <url>, before proceeding with other steps.
+        This should NOT be used for REQUESTING a <url>, only to confirm
+        a <url> that has already been received."""
     url: str = ""
     result: str = "confirmed"
 
@@ -42,7 +42,7 @@ class InformURLMessage(AgentMessage):
 class FileExistsMessage(AgentMessage):
     request: str = "file_exists"  # name should exactly match method name in agent
     # below will be fields that will be used by the agent method to handle the message.
-    purpose: str = "To check if a certain file exists in the repo."
+    purpose: str = "To check if a file <filename> exists in the repo."
     filename: str = "test.txt"
     result: str = "yes"
 
@@ -54,9 +54,9 @@ class FileExistsMessage(AgentMessage):
             List[AgentMessage]: list of example messages of this type
         """
         return [
-            cls(filename="requirements.txt", result="yes"),
-            cls(filename="test.txt", result="yes"),
-            cls(filename="Readme.md", result="no"),
+            cls(filename="<filename>", result="yes"),
+            #            cls(filename="test.txt", result="yes"),
+            #            cls(filename="Readme.md", result="no"),
         ]
 
     def use_when(self) -> List[str]:
@@ -100,7 +100,7 @@ class PythonVersionMessage(AgentMessage):
 
 class ValidateDockerfileMessage(AgentMessage):
     request: str = "validate_dockerfile"
-    purpose: str = "To send the dockerfile to the user, for validation."
+    purpose: str = "To propose a <proposed_dockerfile> to the user."
     proposed_dockerfile: str = """
         # Use an existing base image
         FROM ubuntu:latest
@@ -146,7 +146,7 @@ class ValidateDockerfileMessage(AgentMessage):
 
 class PythonDependencyMessage(AgentMessage):
     request: str = "python_dependency"
-    purpose: str = "To find out which file contains dependencies."
+    purpose: str = "To find out the python dependencies."
     result: str = "yes"
 
     @classmethod

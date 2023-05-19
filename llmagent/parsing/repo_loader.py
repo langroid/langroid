@@ -8,6 +8,7 @@ from pydantic import BaseSettings
 from collections import deque
 import subprocess
 import tempfile
+import time
 import json
 from urllib.parse import urlparse
 
@@ -93,7 +94,36 @@ class RepoLoader:
         # authenticated calls to github api have higher rate limit
         token = os.getenv("GITHUB_ACCESS_TOKEN")
         g = Github(token)
-        self.repo = g.get_repo(repo_name)
+        self.repo = self._get_repo_with_retry(g, repo_name)
+
+    @staticmethod
+    def _get_repo_with_retry(g: Github, repo_name: str, max_retries: int = 5):
+        """
+        Get a repo from the GitHub API, retrying if the request fails,
+        with exponential backoff.
+
+        Args:
+            g:
+            repo_name:
+            max_retries:
+
+        Returns:
+
+        """
+        base_delay = 2  # base delay in seconds
+        max_delay = 60  # maximum delay in seconds
+
+        for attempt in range(max_retries):
+            try:
+                return g.get_repo(repo_name)
+            except Exception as e:
+                delay = min(max_delay, base_delay * 2**attempt)
+                logger.info(
+                    f"Attempt {attempt+1} failed with error: {str(e)}. "
+                    f"Retrying in {delay} seconds..."
+                )
+                time.sleep(delay)
+        raise Exception(f"Failed to get repo {repo_name} after {max_retries} attempts.")
 
     def _get_dir_name(self) -> str:
         return urlparse(self.url).path.replace("/", "_")

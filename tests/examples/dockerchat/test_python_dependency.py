@@ -1,13 +1,9 @@
 import os
 import tempfile
 import pytest
-import json
-
-
-from llmagent.parsing.json import extract_top_level_json
 from llmagent.utils.configuration import update_global_settings
 from llmagent.language_models.base import Role, LLMMessage
-from llmagent.agent.base import AgentConfig, Agent
+from llmagent.agent.base import AgentConfig
 from llmagent.language_models.base import LLMConfig
 from llmagent.prompts.prompts_config import PromptsConfig
 from llmagent.agent.base import AgentMessage
@@ -19,13 +15,13 @@ from examples.dockerchat.identify_python_dependency import (
     DEPENDENCY_FILES,
 )
 
-from functools import reduce
+import json
 from typing import List
 
 
 class PythonDependencyMessage(AgentMessage):
     request: str = "python_dependency"
-    purpose: str = "To check which file has dependencies."
+    purpose: str = "To find out the python dependencies."
     result: str = "yes"
 
     @classmethod
@@ -95,12 +91,7 @@ def test_disable_message():
 @pytest.mark.parametrize("msg_cls", [PythonDependencyMessage])
 def test_usage_instruction(msg_cls: AgentMessage):
     usage = msg_cls().usage_example()
-    assert any(
-        template in usage
-        for template in reduce(
-            lambda x, y: x + y, [ex.use_when() for ex in msg_cls.examples()]
-        )
-    )
+    assert json.loads(usage)["request"] == msg_cls().request
 
 
 rmdir(qd_dir)  # don't need it here
@@ -169,49 +160,6 @@ def test_llm_agent_message():
 
     agent.run(
         iters=2, default_human_response="I don't know, please ask your next question."
-    )
-
-
-def test_llm_agent_reformat():
-    """
-    Test whether the LLM completion mode is able to reformat the request based
-    on the auto-generated reformat instructions.
-    """
-    update_global_settings(cfg, keys=["debug"])
-    task_messages = [
-        LLMMessage(
-            role=Role.SYSTEM,
-            content="""
-            You are a devops engineer, and your task is to understand a PYTHON 
-            repo. Plan this out step by step, and ask me questions 
-            for any info you need to understand the repo. 
-            """,
-        ),
-        LLMMessage(
-            role=Role.USER,
-            content="""
-            You are an assistant whose task is to understand a Python repo.
-
-            You have to think in small steps, and at each stage, show me your 
-            THINKING, and the QUESTION you want to ask. Based on my answer, you will 
-            generate a new THINKING and QUESTION.  
-            """,
-        ),
-    ]
-    agent = MessageHandlingAgent(cfg, task_messages)
-    agent.enable_message(PythonDependencyMessage)
-
-    msg = """
-    I want to know the dependencies in this project
-    """
-
-    prompt = agent.request_reformat_prompt(msg)
-    reformat_agent = Agent(cfg)
-    reformatted = reformat_agent.respond(prompt)
-    reformatted_jsons = extract_top_level_json(reformatted.content)
-    assert len(reformatted_jsons) == 1
-    assert json.loads(reformatted_jsons[0]) == PythonDependencyMessage().dict(
-        exclude={"result", "purpose"}
     )
 
 

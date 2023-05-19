@@ -27,6 +27,7 @@ setup_colored_logging()
 class DockerChatAgentConfig(AgentConfig):
     gpt4: bool = False
     debug: bool = False
+    cache: bool = True
     stream: bool = True
     max_tokens: int = 200
     vecdb: VectorStoreConfig = QdrantDBConfig(
@@ -54,9 +55,10 @@ class DockerChatAgentConfig(AgentConfig):
 
 
 def chat(config: DockerChatAgentConfig) -> None:
-    configuration.update_global_settings(config, keys=["debug", "stream"])
+    configuration.update_global_settings(config, keys=["debug", "stream", "cache"])
     if config.gpt4:
         config.llm.chat_model = "gpt-4"
+
     print("[blue]Hello I am here to make your dockerfile!")
     print("[cyan]Enter x or q to quit")
 
@@ -64,24 +66,20 @@ def chat(config: DockerChatAgentConfig) -> None:
         LLMMessage(
             role=Role.SYSTEM,
             content="""
-            You are a devops engineer, and your task is to create a docker file to 
-            containerize a PYTHON repo. Plan this out step by step, and ask me questions 
-            for any info you need to create the docker file, such as Operating system, 
-            python version, etc. Start by asking the user the URL of the repo
+            You are a helpful assistant, able to think step by step.
             """,
         ),
         LLMMessage(
             role=Role.USER,
             content="""
-            You are an assistant whose task is to write a Dockerfile for a python repo.
-
-            You have to think in small steps, and at each stage, show me your 
-            THINKING, and the QUESTION you want to ask. Based on my answer, you will 
-            generate a new THINKING and QUESTION.  Ask only one question at a time, 
-            and wait for my answer before asking the next question.
-            Any time you receive information from me, make sure you send a message to 
-            confirm the content of the information. For example, if you receive a 
-            URL, you have to show me the URL before proceeding.
+            You are a devops engineer, and you have to write a dockerfile for a python 
+            repo. Think step by step about the information you need, to accomplish 
+            your task.  If I cannot answer, further breakdown your task into 
+            sub-tasks and so on. Start by asking me for the URL of the github repo.
+            
+            You have access to the following TOOLS to accomplish your task:
+            
+                        
             """,
         ),
     ]
@@ -100,8 +98,9 @@ def chat(config: DockerChatAgentConfig) -> None:
 def main(
     debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
     gpt4: bool = typer.Option(False, "--gpt4", "-4", help="use gpt4"),
+    nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
 ) -> None:
-    config = DockerChatAgentConfig(debug=debug, gpt4=gpt4)
+    config = DockerChatAgentConfig(debug=debug, gpt4=gpt4, cache=not nocache)
     chat(config)
 
 
