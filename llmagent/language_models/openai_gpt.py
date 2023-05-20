@@ -3,6 +3,7 @@ from llmagent.language_models.base import (
     LLMConfig,
     LLMResponse,
     LLMMessage,
+    Role,
 )
 import sys
 from llmagent.language_models.utils import retry_with_exponential_backoff
@@ -12,20 +13,33 @@ from llmagent.utils.output.printing import PrintColored
 from llmagent.cachedb.redis_cachedb import RedisCache
 from pydantic import BaseModel
 import hashlib
-from typing import List, Tuple, Dict
+from typing import List, Tuple, Dict, Union
 import openai
 from dotenv import load_dotenv
 import os
 import logging
+from enum import Enum
 
 logging.getLogger("openai").setLevel(logging.ERROR)
+
+
+class OpenAIChatModel(str, Enum):
+    """Enum for OpenAI Chat models"""
+    GPT3_5_TURBO = "gpt-3.5-turbo"
+    GPT4 = "gpt-4"
+
+class OpenAICompletionModel(str, Enum):
+    """Enum for OpenAI Completion models"""
+    TEXT_DA_VINCI_003 = "text-davinci-003"
+    TEXT_ADA_001 = "text-ada-001"
+
 
 
 class OpenAIGPTConfig(LLMConfig):
     type: str = "openai"
     max_tokens: int = 1024
-    chat_model: str = "gpt-3.5-turbo"
-    completion_model: str = "text-davinci-003"
+    chat_model: OpenAIChatModel = OpenAIChatModel.GPT3_5_TURBO
+    completion_model: OpenAICompletionModel = OpenAICompletionModel.TEXT_DA_VINCI_003
 
 
 class OpenAIResponse(BaseModel):
@@ -124,6 +138,8 @@ class OpenAIGPT(LanguageModel):
         return hashed_key, self.cache.retrieve(hashed_key)
 
     def generate(self, prompt: str, max_tokens: int) -> LLMResponse:
+        if self.config.use_chat_for_completion:
+            return self.chat(messages=prompt, max_tokens=max_tokens)
         openai.api_key = self.api_key
 
         if settings.debug:
@@ -171,6 +187,8 @@ class OpenAIGPT(LanguageModel):
 
     async def agenerate(self, prompt: str, max_tokens: int) -> LLMResponse:
         # TODO: implement caching, streaming, retry for async
+        if self.config.use_chat_for_completion:
+            return self.chat(messages=prompt, max_tokens=max_tokens)
         openai.api_key = self.api_key
         # note we typically will not have self.config.stream = True
         # when issuing several api calls concurrently/asynchronously.
@@ -188,9 +206,17 @@ class OpenAIGPT(LanguageModel):
         msg = response["choices"][0]["text"].strip()
         return LLMResponse(message=msg, usage=usage)
 
-    def chat(self, messages: List[LLMMessage], max_tokens: int) -> LLMResponse:
+    def chat(
+            self,
+            messages: Union[str, List[LLMMessage]],
+            max_tokens: int
+    ) -> LLMResponse:
         openai.api_key = self.api_key
-
+        if type(messages) == str:
+            messages = [
+                LLMMessage(role=Role.SYSTEM, content="You are a helpful assistant."),
+                LLMMessage(role=Role.USER, content=messages)
+            ]
         @retry_with_exponential_backoff
         def completions_with_backoff(**kwargs):
             cached = False
