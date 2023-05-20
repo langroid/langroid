@@ -5,7 +5,7 @@ import mkdocs_gen_files
 #                    Configuration                    #
 # -----------------------------------------------------#
 src_dir = "llmagent"
-repo_root = "https://github.com/godelian-xyz/llmagent/tree/main/"
+repo_root = "https://github.com/langroid/llmagent/tree/main/"
 nav = mkdocs_gen_files.Nav()
 
 # -----------------------------------------------------#

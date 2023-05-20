@@ -110,11 +110,11 @@ class RepoLoader:
         with exponential backoff.
 
         Args:
-            g:
-            repo_name:
-            max_retries:
-
+            g: GitHub object
+            repo_name: name of repo
+            max_retries: maximum number of retries
         Returns:
+            Repo: GitHub repo object
 
         """
         base_delay = 2  # base delay in seconds
@@ -143,7 +143,7 @@ class RepoLoader:
             name: name of file, can be "a", "a.b", or ".b"
         Returns:
             str: file type; "a" => "a", "a.b" => "b", ".b" => "b"
-            Examples:
+                some examples:
                 "Makefile" => "Makefile",
                 "script.py" => "py",
                 ".gitignore" => "gitignore"
@@ -159,6 +159,7 @@ class RepoLoader:
     def _is_code(self, file_type: str) -> bool:
         """
         Check if a file type is code.
+
         Args:
             file_type: file type, e.g. "py", "md", "txt"
         Returns:
@@ -169,8 +170,10 @@ class RepoLoader:
     def _is_allowed(self, content: ContentFile) -> bool:
         """
         Check if a file or directory content is allowed to be included.
+
         Args:
             content (ContentFile): The file or directory Content object.
+
         Returns:
             bool: Whether the file or directory is allowed to be included.
         """
@@ -221,17 +224,16 @@ class RepoLoader:
         self, depth: int, lines: int = 0
     ) -> Dict[str, Union[str, List[Dict]]]:
         """
-                Get a nested dictionary of GitHub repository file and directory names
-                up to a certain depth, with file contents.
+        Get a nested dictionary of GitHub repository file and directory names
+        up to a certain depth, with file contents.
 
-                Args:
-                    depth (int): The depth level.
-                    lines (int): The number of lines of file contents to include.
+        Args:
+            depth (int): The depth level.
+            lines (int): The number of lines of file contents to include.
 
-                Returns:
         Returns:
-                    Dict[str, Union[str, List[Dict]]]:
-                    A dictionary containing file and directory names, with file contents.
+            Dict[str, Union[str, List[Dict]]]:
+            A dictionary containing file and directory names, with file contents.
         """
         root_contents = self.repo.get_contents("")
         repo_structure = {
@@ -290,18 +292,18 @@ class RepoLoader:
     ) -> Tuple[Dict[str, Union[str, List[Dict]]], List[Document]]:
         """
         From a local folder `path` (if None, the repo clone path), get:
-        - a nested dictionary (tree) of dicts, files and contents
-        - a list of Document objects for each file.
+          a nested dictionary (tree) of dicts, files and contents
+          a list of Document objects for each file.
 
         Args:
-            path: The local folder path; if none, use self.clone_path()
+            path (str): The local folder path; if none, use self.clone_path()
             depth (int): The depth level.
             lines (int): The number of lines of file contents to include.
 
         Returns:
             Tuple of (dict, List_of_Documents):
-            - A dictionary containing file and directory names, with file contents.
-            - A list of Document objects for each file.
+              A dictionary containing file and directory names, with file contents, and
+              A list of Document objects for each file.
         """
         if path is None:
             if self.clone_path is None:
@@ -327,9 +329,9 @@ class RepoLoader:
     ) -> Tuple[Dict[str, Union[str, List[Dict]]], List[Document]]:
         """
         From a local folder `path` (required), get:
-        - a nested dictionary (tree) of dicts, files and contents, restricting to
+          a nested dictionary (tree) of dicts, files and contents, restricting to
             desired file_types and excluding undesired directories.
-        - a list of Document objects for each file.
+          a list of Document objects for each file.
 
         Args:
             path (str): The local folder path, required.
@@ -344,8 +346,8 @@ class RepoLoader:
 
         Returns:
             Tuple of (dict, List_of_Documents):
-            - A dictionary containing file and directory names, with file contents.
-            - A list of Document objects for each file.
+              A dictionary containing file and directory names, with file contents.
+              A list of Document objects for each file.
         """
 
         folder_structure = {
@@ -420,10 +422,12 @@ class RepoLoader:
         Directly from GitHub, recursively get all files in a repo that have one of the
         extensions, possibly up to a max number of files, max depth, and max number
         of lines per file (if any of these are specified).
+
         Args:
             k(int): max number of files to load, or None for all files
             depth(int): max depth to recurse, or None for infinite depth
             lines (int): max number of lines to get, from a file, or None for all lines
+
         Returns:
             list of Document objects, each has fields `content` and `metadata`,
             and `metadata` has fields `url`, `filename`, `extension`, `language`
@@ -487,6 +491,7 @@ class RepoLoader:
             names (List[str]): A list of desired directory and file names.
             type (str): The type of the structure to filter for. If None, filter for
             both files and directories.
+
         Returns:
             Dict[str, Union[str, List[Dict]]]: The filtered structure dictionary.
         """
