@@ -2,7 +2,7 @@ from llmagent.agent.base import AgentConfig
 from llmagent.vector_store.qdrantdb import QdrantDBConfig
 from llmagent.embedding_models.models import OpenAIEmbeddingsConfig
 from llmagent.vector_store.base import VectorStoreConfig
-from llmagent.language_models.base import LLMConfig
+from llmagent.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
 from llmagent.parsing.parser import ParsingConfig
 from llmagent.prompts.prompts_config import PromptsConfig
 
@@ -11,6 +11,8 @@ from typing import List
 
 class URLQAConfig(AgentConfig):
     debug: bool = False
+    cache: bool = True  # cache results
+    gpt4: bool = False  # use GPT-4
     stream: bool = True  # allow streaming where needed
     max_tokens: int = 10000
     vecdb: VectorStoreConfig = QdrantDBConfig(
@@ -24,7 +26,10 @@ class URLQAConfig(AgentConfig):
         ),
     )
 
-    llm: LLMConfig = LLMConfig(type="openai")
+    llm: OpenAIGPTConfig = OpenAIGPTConfig(
+        type="openai",
+        chat_model=OpenAIChatModel.GPT3_5_TURBO,
+    )
     parsing: ParsingConfig = ParsingConfig(
         splitter="para_sentence",
         chunk_size=500,
