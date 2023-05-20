@@ -10,6 +10,7 @@ class ParsingConfig(BaseSettings):
     splitter: str = "para_sentence"
     chunk_size: int = 500
     chunk_overlap: int = 50
+    n_similar_docs: int = 4
     separators: List[str] = ["\n\n", "\n", " ", ""]
     token_encoding_model: str = "text-embedding-ada-002"
 

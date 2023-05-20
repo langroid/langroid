@@ -1,4 +1,6 @@
-from llmagent.language_models.openai_gpt import OpenAIGPT, OpenAIGPTConfig
+from llmagent.language_models.openai_gpt import (
+    OpenAIGPT, OpenAIGPTConfig, OpenAIChatModel, OpenAICompletionModel
+)
 from llmagent.language_models.base import LLMMessage, Role
 from llmagent.cachedb.redis_cachedb import RedisCacheConfig
 from llmagent.utils.configuration import Settings, set_global
@@ -17,14 +19,15 @@ def test_openai_gpt(streaming, country, capital):
         stream=streaming,  # use streaming output if enabled globally
         type="openai",
         max_tokens=100,
-        chat_model="gpt-3.5-turbo",
-        completion_model="text-davinci-003",
+        chat_model=OpenAIChatModel.GPT3_5_TURBO,
+        completion_model=OpenAICompletionModel.TEXT_DA_VINCI_003,
         cache_config=RedisCacheConfig(fake=False),
     )
 
     mdl = OpenAIGPT(config=cfg)
 
     # completion mode
+    cfg.use_chat_for_completion = False
     question = "What is the capital of " + country + "?"
 
     set_global(Settings(cache=False))
@@ -32,14 +35,26 @@ def test_openai_gpt(streaming, country, capital):
     assert capital in response.message
     assert not response.cached
 
+
     set_global(Settings(cache=True))
     # should be from cache this time
     response = mdl.generate(prompt=question, max_tokens=10)
     assert capital in response.message
     assert response.cached
 
+
+
     set_global(Settings(cache=False))
-    # chat mode
+    # chat mode via `generate`,
+    # i.e. use same call as for completion, but the setting below
+    # actually calls `chat` under the hood
+    cfg.use_chat_for_completion = True
+    # check that "generate" works when "use_chat_for_completion" is True
+    response = mdl.generate(prompt=question, max_tokens=10)
+    assert capital in response.message
+    assert not response.cached
+
+    # actual chat mode
     messages = [
         LLMMessage(role=Role.SYSTEM, content="You are a helpful assitant"),
         LLMMessage(role=Role.USER, content=question),

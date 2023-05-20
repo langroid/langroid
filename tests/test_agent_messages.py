@@ -1,7 +1,10 @@
 from llmagent.agent.base import AgentConfig
 from llmagent.agent.chat_agent import ChatAgent
 from llmagent.agent.message import AgentMessage
-from llmagent.language_models.base import LLMConfig
+from llmagent.language_models.openai_gpt import (
+    OpenAIGPTConfig,
+    OpenAIChatModel,
+)
 from llmagent.parsing.json import extract_top_level_json
 from llmagent.prompts.prompts_config import PromptsConfig
 from llmagent.cachedb.redis_cachedb import RedisCacheConfig
@@ -76,9 +79,9 @@ cfg = AgentConfig(
     debug=True,
     name="test-llmagent",
     vecdb=None,
-    llm=LLMConfig(
+    llm=OpenAIGPTConfig(
         type="openai",
-        chat_model="gpt-4",
+        chat_model=OpenAIChatModel.GPT4,
         cache_config=RedisCacheConfig(fake=False),
     ),
     parsing=None,

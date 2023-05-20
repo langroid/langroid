@@ -2,7 +2,7 @@ from llmagent.agent.base import Agent, AgentConfig
 from llmagent.language_models.base import StreamingIfAllowed
 from llmagent.cachedb.redis_cachedb import RedisCacheConfig
 from llmagent.vector_store.base import VectorStoreConfig
-from llmagent.language_models.base import LLMConfig
+from llmagent.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
 from llmagent.parsing.parser import ParsingConfig
 from llmagent.prompts.prompts_config import PromptsConfig
 
@@ -10,8 +10,10 @@ from llmagent.prompts.prompts_config import PromptsConfig
 class CustomAgentConfig(AgentConfig):
     max_tokens: int = 10000
     vecdb: VectorStoreConfig = None
-    llm: LLMConfig = LLMConfig(
+    llm: OpenAIGPTConfig = OpenAIGPTConfig(
         type="openai",
+        chat_model=OpenAIChatModel.GPT3_5_TURBO,
+        use_chat_for_completion=True,
         cache_config=RedisCacheConfig(fake=False),
     )
     parsing: ParsingConfig = None
