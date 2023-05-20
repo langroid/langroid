@@ -181,10 +181,14 @@ class DockerChatAgent(ChatAgent):
         """
         Build docker image based on the repo_path by using docker SDK
         Args:
-            proposed_doeckerfile_name (str): the name of the proposed Dockerfile that should be used to build the image
-            img_tag (str): the name of the Docker image that will be built based on the proposed_doeckerfile_name
+            proposed_doeckerfile_name (str): the name of the proposed Dockerfile that should
+            be used to build the image
+            img_tag (str): the name of the Docker image that will be built based on the
+            proposed_doeckerfile_name
         Returns:
-            A tuple comprises three items: First, object for the image that was built (if succeeded), otherwise, returns None. Second, message indicates whetehr the build process succeeded or failed. Third, build time or None (if failed)
+            A tuple comprises three items: First, object for the image that was
+            built (if succeeded), otherwise, returns None. Second, message indicates
+            whetehr the build process succeeded or failed. Third, build time or None (if failed)
         """
         try:
             start = time.time()
@@ -200,7 +204,7 @@ class DockerChatAgent(ChatAgent):
             formatted_build_time = "{:.2f}".format(
                 datetime.timedelta(seconds=build_time).total_seconds()
             )
-        except docker.errors.BuildError as e:
+        except docker.errors.DockerException as e:
             return (None, f"Image build failed: {e}", None)
 
         return (image, "Image build successful!", formatted_build_time)
