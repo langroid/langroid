@@ -114,9 +114,8 @@ class Agent(ABC):
         """
         enabled_classes: List[Type[AgentMessage]] = self.handled_classes.values()
         # use at most 2 sample conversations, no need to be exhaustive;
-        # include non-JSON sample only for the first message class
         sample_convo = [
-            msg_cls().sample_conversation(json_only=(i == 0))
+            msg_cls().usage_example()
             for i, msg_cls in enumerate(enabled_classes)
             if i < 2
         ]
@@ -220,13 +219,13 @@ class Agent(ABC):
                 break
             self.respond(query)
 
-    def respond(self, query: str) -> Document:
+    def respond(self, prompt: str) -> Document:
         """
-        Respond to a query.
+        Respond to a prompt.
         Args:
-            query: query string
+            prompt (str): prompt string
         Returns:
-            Document
+            Response from LLM, packaged as a Document
         """
 
         with ExitStack() as stack:  # for conditionally using Halo spinner
@@ -234,12 +233,17 @@ class Agent(ABC):
                 # show Halo spinner only if not streaming!
                 cm = Halo(text="LLM responding to message...", spinner="dots")
                 stack.enter_context(cm)
-            response = self.llm.generate(query, self.config.llm.max_tokens)
+            response = self.llm.generate(prompt, self.config.llm.max_tokens)
         if not self.llm.get_stream():
             print("[green]" + response.message)
 
         return Document(
-            content=response.message, metadata=dict(source="LLM", usage=response.usage)
+            content=response.message,
+            metadata=dict(
+                source="LLM",
+                usage=response.usage,
+                cached=response.cached,
+            ),
         )
 
     def respond_messages(self, messages: List[LLMMessage]) -> Document:
@@ -256,8 +260,22 @@ class Agent(ABC):
                 cm = Halo(text="LLM responding to messages...", spinner="dots")
                 stack.enter_context(cm)
             response = self.llm.chat(messages, self.config.llm.max_tokens)
-        if not self.llm.get_stream():
-            print("[green]" + response.message)
+        if not self.llm.get_stream() or (self.llm.get_stream() and response.cached):
+            cached = "[red](cached)[/red]" if response.cached else ""
+            print(cached + "[green]" + response.message)
         return Document(
             content=response.message, metadata=dict(source="LLM", usage=response.usage)
         )
+
+    def message_to_user(self, msg) -> str:
+        """
+        Send msg to user (or another agent), and return the response.
+        Args:
+            msg: msg to send
+
+        Returns:
+            response from user/agent
+        """
+        print(f"[red]{msg}", end="")
+        response = input("")
+        return response
