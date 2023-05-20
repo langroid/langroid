@@ -1,3 +1,8 @@
+# Running Code in a Container
+
+Suppose you want to write a Python function that takes a string containing
+Python code, and runs that code in a container.
+
 Creating a method that runs arbitrary Python code, especially if that code can
 access objects and data from the class, is a complex and potentially dangerous
 task, depending on the source and the nature of the code being run. However, for
@@ -20,11 +25,11 @@ from docker.types import Mount
 
 class MessageHandler:
 
-
     def __init__(self):
 
-
     self.data_file = '/path/to/data_file.csv'
+
+
 # add more class attributes as needed
 
 def run_python(self, code: str):
