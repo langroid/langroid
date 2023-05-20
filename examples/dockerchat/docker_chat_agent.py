@@ -221,9 +221,9 @@ class DockerChatAgent(ChatAgent):
         return (image, "Image build successful!", formatted_build_time)
 
     def validate_dockerfile(
-            self,
-            dockerfile_msg: ValidateDockerfileMessage,
-            confirm: bool = True,
+        self,
+        dockerfile_msg: ValidateDockerfileMessage,
+        confirm: bool = True,
     ) -> str:
         """
         validates the proposed Dockerfile by LLM. The validation process involves
