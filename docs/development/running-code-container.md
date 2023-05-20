@@ -130,3 +130,123 @@ support can be a time-consuming task. However, it's a task that you typically
 need to do only once for each environment, and it's a reliable way to ensure
 that your Python code always has the packages it needs, regardless of what
 computer it's run on.
+
+# Returning results from code running in a container
+
+There are multiple ways to return results from a container depending on the type
+of result you expect:
+
+1. **Primitive Data Types (Strings, Numbers, etc.)**: If your code produces
+   strings or numbers, you can simply print these values, and then capture the
+   stdout logs from the container, as shown in the previous examples. The
+   printed values can be returned from the `run_python` function.
+
+2. **Objects, Complex Data Types**: If your code produces Python objects or
+   complex data types, you can serialize these objects to a file using something
+   like JSON or `pickle`, and then read this file back in your host application.
+
+3. **Files**: If your code generates files, you can write these files to the
+   mounted directory (`/data` in the previous examples). After the code has been
+   executed, these files will remain in the host directory, and their path can
+   be returned from the `run_python` function.
+
+Here's an example where `run_python` returns a path to a file that is generated
+by the executed code:
+
+```python
+class MessageHandler:
+    def __init__(self):
+        self.data_file = '/path/to/data_file.csv'
+        # add more class attributes as needed
+
+    def run_python(self, code: str, packages: list):
+        client = docker.from_env()
+        mount = Mount("/data", "/host/data/path", type="bind")
+        install_packages_code = f'import sys, subprocess; [subprocess.check_call([sys.executable, "-m", "pip", "install", pkg]) for pkg in {packages}]'
+        try:
+            container = client.containers.run(
+                "python:3.8",
+                command=["python", "-c", f"{install_packages_code}; {code}"],
+                mounts=[mount],
+                working_dir="/data",
+                remove=True,
+                detach=True
+            )
+            # For this example, we'll assume that the code writes its output to a file called 'output.txt'.
+            return '/host/data/path/output.txt'
+        except docker.errors.ContainerError as e:
+            print(f'Error while running container: {e}')
+
+
+# usage
+handler = MessageHandler()
+code = """
+with open('output.txt', 'w') as f:
+    f.write('Hello, World!')
+"""
+packages = []
+output_file = handler.run_python(code, packages)
+print(f'Results are stored in: {output_file}')
+```
+
+In this example, the Python code writes its result to a file `output.txt`, and
+the `run_python` function returns the path to this file on the host machine.
+
+# Using JSON to serilize/deserialize Python objects to return from the container
+
+Yes, you can use JSON to dump results to the log, and then parse the output from
+the container log. This would work well for primitive data types and simple data
+structures like lists and dictionaries. Here's an example:
+
+```python
+import json
+
+
+class MessageHandler:
+    def __init__(self):
+        self.data_file = '/path/to/data_file.csv'
+        # add more class attributes as needed
+
+    def run_python(self, code: str, packages: list):
+        client = docker.from_env()
+        mount = Mount("/data", "/host/data/path", type="bind")
+        install_packages_code = f'import sys, subprocess; [subprocess.check_call([sys.executable, "-m", "pip", "install", pkg]) for pkg in {packages}]'
+        try:
+            container = client.containers.run(
+                "python:3.8",
+                command=["python", "-c", f"{install_packages_code}; {code}"],
+                mounts=[mount],
+                working_dir="/data",
+                remove=True,
+                detach=True
+            )
+            output = container.logs().decode('utf-8')
+            # Parse the output as JSON
+            result = json.loads(output)
+            return result
+        except docker.errors.ContainerError as e:
+            print(f'Error while running container: {e}')
+
+
+# usage
+handler = MessageHandler()
+code = """
+import json
+data = {'foo': 42, 'bar': [1, 2, 3]}
+print(json.dumps(data))
+"""
+packages = []
+result = handler.run_python(code, packages)
+print(f'Result: {result}')  # prints: Result: {'foo': 42, 'bar': [1, 2, 3]}
+```
+
+In this example, the Python code creates a dictionary, converts it to a JSON
+string using `json.dumps`, and prints it. The `run_python` function then
+captures the container log, which is the printed JSON string, and parses it back
+into a Python object using `json.loads`.
+
+Please note that this approach can only be used for serializable objects that
+can be converted to a JSON string. If your code produces non-serializable
+objects or objects that cannot be represented in JSON (like custom classes or
+complex data structures), you'll need to use a different approach (like
+serializing to a file using `pickle`, as discussed in a previous comment).

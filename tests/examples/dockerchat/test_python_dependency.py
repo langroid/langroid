@@ -3,6 +3,7 @@ import tempfile
 import pytest
 from llmagent.utils.configuration import update_global_settings
 from llmagent.language_models.base import Role, LLMMessage
+from llmagent.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
 from llmagent.agent.base import AgentConfig
 from llmagent.language_models.base import LLMConfig
 from llmagent.prompts.prompts_config import PromptsConfig
@@ -49,9 +50,9 @@ cfg = AgentConfig(
     debug=True,
     name="test-llmagent",
     vecdb=None,
-    llm=LLMConfig(
+    llm=OpenAIGPTConfig(
         type="openai",
-        chat_model="gpt-3.5-turbo",
+        chat_model=OpenAIChatModel.GPT3_5_TURBO,
         cache_config=RedisCacheConfig(fake=False),
     ),
     parsing=None,

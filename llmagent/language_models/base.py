@@ -1,12 +1,15 @@
 from pydantic import BaseSettings, BaseModel
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import List, Tuple
+from typing import List, Tuple, Union
 from llmagent.mytypes import Document
 from llmagent.cachedb.redis_cachedb import RedisCacheConfig
 from llmagent.utils.configuration import settings
 from llmagent.utils.output.printing import show_if_debug
-from llmagent.prompts.templates import EXTRACTION_PROMPT, SUMMARY_ANSWER_PROMPT
+from llmagent.prompts.templates import (
+    EXTRACTION_PROMPT_GPT4,
+    SUMMARY_ANSWER_PROMPT_GPT4,
+)
 from llmagent.prompts.dialog import collate_chat_history
 import aiohttp
 import asyncio
@@ -15,8 +18,9 @@ import asyncio
 class LLMConfig(BaseSettings):
     type: str = "openai"
     max_tokens: int = 1024
-    chat_model: str = "gpt-3.5-turbo"
-    completion_model: str = "text-davinci-003"
+    # chat_model: str = "gpt-3.5-turbo"
+    # completion_model: str = "text-davinci-003"
+    use_chat_for_completion: bool = True # use chat model for completion?
     stream: bool = False  # stream output from API?
     cache_config: RedisCacheConfig = RedisCacheConfig(
         hostname="redis-11524.c251.east-us-mz.azure.cloud.redislabs.com",
@@ -84,7 +88,10 @@ class LanguageModel(ABC):
         pass
 
     @abstractmethod
-    def chat(self, messages: List[LLMMessage], max_tokens: int) -> LLMResponse:
+    def chat(self,
+             messages: Union[str, List[LLMMessage]],
+             max_tokens: int
+             ) -> LLMResponse:
         pass
 
     def __call__(self, prompt: str, max_tokens: int) -> LLMResponse:
@@ -122,9 +129,11 @@ class LanguageModel(ABC):
         Asynch allows parallel calls to the LLM API.
         """
         async with aiohttp.ClientSession():
-            templatized_prompt = EXTRACTION_PROMPT
-            show_if_debug(EXTRACTION_PROMPT, "EXTRACT-PROMPT= ")
-            final_prompt = templatized_prompt.format(question=question, content=passage)
+            templatized_prompt = EXTRACTION_PROMPT_GPT4
+            show_if_debug(EXTRACTION_PROMPT_GPT4, "EXTRACT-PROMPT= ")
+            final_prompt = templatized_prompt.format(
+                question=question, content=passage.content
+            )
             final_extract = await self.agenerate(prompt=final_prompt, max_tokens=1024)
             show_if_debug(final_extract.message.strip(), "EXTRACT-RESPONSE= ")
         return final_extract.message.strip()
@@ -189,7 +198,8 @@ class LanguageModel(ABC):
 
         passages = stringify_passages(passages)
         # Substitute Q and P into the templatized prompt
-        final_prompt = SUMMARY_ANSWER_PROMPT.format(
+
+        final_prompt = SUMMARY_ANSWER_PROMPT_GPT4.format(
             question=f"Question:{question}", extracts=passages
         )
         show_if_debug(final_prompt, "SUMMARIZE_PROMPT= ")

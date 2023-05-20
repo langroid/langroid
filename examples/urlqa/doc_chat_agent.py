@@ -53,7 +53,9 @@ class DocChatAgent(Agent):
             print(f"[orange2]New query: {query}")
 
         with Halo(text="Searching VecDB for relevant doc passages...", spinner="dots"):
-            docs_and_scores = self.vecdb.similar_texts_with_scores(query, k=4)
+            docs_and_scores = self.vecdb.similar_texts_with_scores(
+                query, k=self.config.parsing.n_similar_docs,
+            )
         passages: List[Document] = [
             Document(content=d.content, metadata=d.metadata)
             for (d, _) in docs_and_scores

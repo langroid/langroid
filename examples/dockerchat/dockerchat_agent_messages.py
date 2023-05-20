@@ -51,7 +51,12 @@ class PythonVersionMessage(AgentMessage):
 
 class ValidateDockerfileMessage(AgentMessage):
     request: str = "validate_dockerfile"
-    purpose: str = "To propose a <proposed_dockerfile> to the user."
+    purpose: str = """
+    To show a <proposed_dockerfile> to the user. Use this tool whenever you want 
+    to SHOW or VALIDATE a <proposed_dockerfile>. NEVER list out a dockerfile without 
+    using this tool
+    """
+
     proposed_dockerfile: Union[
         str, List[str]
     ] = """

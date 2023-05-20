@@ -1,7 +1,7 @@
 from llmagent.agent.chat_agent import ChatAgent
 from llmagent.agent.base import AgentConfig
 from llmagent.vector_store.base import VectorStoreConfig
-from llmagent.language_models.base import LLMConfig
+from llmagent.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
 from llmagent.parsing.parser import ParsingConfig
 from llmagent.prompts.prompts_config import PromptsConfig
 from llmagent.cachedb.redis_cachedb import RedisCacheConfig
@@ -10,9 +10,10 @@ from llmagent.cachedb.redis_cachedb import RedisCacheConfig
 class TestChatAgentConfig(AgentConfig):
     max_tokens: int = 200
     vecdb: VectorStoreConfig = None
-    llm: LLMConfig = LLMConfig(
-        type="openai",
+    llm: OpenAIGPTConfig = OpenAIGPTConfig(
         cache_config=RedisCacheConfig(fake=False),
+        chat_model=OpenAIChatModel.GPT3_5_TURBO,
+        use_chat_for_completion=True,
     )
     parsing: ParsingConfig = None
     prompts: PromptsConfig = PromptsConfig(

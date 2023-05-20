@@ -10,11 +10,11 @@ from examples.dockerchat.dockerchat_agent_messages import (
 )
 import typer
 from llmagent.language_models.base import LLMMessage, Role
+from llmagent.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
 from llmagent.agent.base import AgentConfig
 from llmagent.vector_store.qdrantdb import QdrantDBConfig
 from llmagent.embedding_models.models import OpenAIEmbeddingsConfig
 from llmagent.vector_store.base import VectorStoreConfig
-from llmagent.language_models.base import LLMConfig
 from llmagent.parsing.parser import ParsingConfig
 from llmagent.prompts.prompts_config import PromptsConfig
 from rich import print
@@ -40,9 +40,9 @@ class DockerChatAgentConfig(AgentConfig):
             dims=1536,
         ),
     )
-    llm: LLMConfig = LLMConfig(
+    llm: OpenAIGPTConfig = OpenAIGPTConfig(
         type="openai",
-        chat_model="gpt-3.5-turbo",
+        chat_model=OpenAIChatModel.GPT3_5_TURBO,
     )
     parsing: ParsingConfig = ParsingConfig(
         chunk_size=100,
@@ -57,7 +57,7 @@ class DockerChatAgentConfig(AgentConfig):
 def chat(config: DockerChatAgentConfig) -> None:
     configuration.update_global_settings(config, keys=["debug", "stream", "cache"])
     if config.gpt4:
-        config.llm.chat_model = "gpt-4"
+        config.llm.chat_model = OpenAIChatModel.GPT4
 
     print("[blue]Hello I am here to make your dockerfile!")
     print("[cyan]Enter x or q to quit")

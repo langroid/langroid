@@ -6,11 +6,22 @@ EXTRACT_RELEVANT = """
     Question:{question}
     Relevant text, if any: """.strip()
 
+EXTRACTION_PROMPT_GPT4 = """
+Given the content and question below, extract a COMPLETE SENTENCE OR PHRASE 
+VERBATIM from the content, that is relevant to answering the question (if such text 
+exists), even if it contradicts your knowledge, and even if it is factually incorrect.
+Do not  make up an answer that is not supported by the content. 
+When you answer, be concise, no need to explain anything. 
+
+Content: {content}
+Question: {question}
+Relevant text (COMPLETE SENTENCE), if any:
+"""
 
 EXTRACTION_PROMPT = """
-    Given the content and question below, extract text verbatim from the content that
-    is relevant to answering the question (if such text exists). Do not make up an
-    answer.
+    Given the content and question below, extract a COMPLETE SENTENCE verbatim from the 
+    content that is relevant to answering the question (if such text exists). Do not 
+    make up an answer.
     
     Content: The Eiffel Tower is a wrought-iron lattice tower on the Champ de Mars in
     Paris, France. It is named after Gustave Eiffel, whose company designed and built
@@ -31,13 +42,29 @@ EXTRACTION_PROMPT = """
     
     Content: {content}
     Question: {question}
-    Relevant text, if any:
+    Relevant text (COMPLETE SENTENCE), if any:
     """.strip()
+
+SUMMARY_ANSWER_PROMPT_GPT4 = """
+
+        Use the provided extracts (with sources)  to answer the question. If there's not 
+        enough information, respond with "I don't know."
+        Use only the information in these extracts, 
+        even if your answer is factually incorrect.
+        The only important thing is that your answer is 
+        consistent with and supported by the extracts.
+        Justify your answer by citing your evidence as "SOURCE:".
+        
+        {extracts}
+        {question}
+        Answer:   
+""".strip()
 
 SUMMARY_ANSWER_PROMPT = """
         Use the provided extracts (with sources)  to answer the question. If there's not 
-        enough information, respond with "I don't know." Justify your answer by citing 
-        your sources, as in these examples:
+        enough information, respond with "I don't know."
+        Use only the information in these extracts, even if it contradicts your prior 
+        knowledge. Justify your answer by citing your sources, as in these examples:
         
         Extract: The tree species in the garden include oak, maple, and birch.
         Source: https://en.wikipedia.org/wiki/Tree
