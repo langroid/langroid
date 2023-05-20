@@ -10,6 +10,7 @@ from examples.dockerchat.dockerchat_agent_messages import (
 )
 import typer
 from llmagent.language_models.base import LLMMessage, Role
+from llmagent.language_models.openai_gpt import OpenAIChatModel
 from llmagent.agent.base import AgentConfig
 from llmagent.vector_store.qdrantdb import QdrantDBConfig
 from llmagent.embedding_models.models import OpenAIEmbeddingsConfig
@@ -42,7 +43,7 @@ class DockerChatAgentConfig(AgentConfig):
     )
     llm: LLMConfig = LLMConfig(
         type="openai",
-        chat_model="gpt-3.5-turbo",
+        chat_model=OpenAIChatModel.GPT3_5_TURBO,
     )
     parsing: ParsingConfig = ParsingConfig(
         chunk_size=100,

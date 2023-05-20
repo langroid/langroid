@@ -1,4 +1,5 @@
 from llmagent.agent.base import AgentConfig
+from llmagent.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
 from examples.dockerchat.docker_chat_agent import DockerChatAgent
 from examples.dockerchat.dockerchat_agent_messages import (
     AskURLMessage,
@@ -16,9 +17,9 @@ import tempfile
 cfg = AgentConfig(
     debug=False,
     vecdb=None,
-    llm=LLMConfig(
+    llm=OpenAIGPTConfig(
         type="openai",
-        chat_model="gpt-3.5-turbo",
+        chat_model=OpenAIChatModel.GPT3_5_TURBO,
         cache_config=RedisCacheConfig(fake=True),
     ),
 )
