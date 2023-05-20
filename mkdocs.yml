@@ -41,6 +41,7 @@ nav:
   - Writeups:
     - Specifying LLM Agents: writeups/specifying-llm-agents.md
   - Development:
+    - Running Code in a Container: development/running-code-container.md
     - Dockerfile Generation: development/dockerfile-generation.md
     - Code Analysis Packages: development/code-analysis-packages.md
     - GitHub CLI: development/github-cli.md
