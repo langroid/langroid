@@ -40,7 +40,7 @@ sentence-transformers = "^2.2.2"
 redis = "^4.5.5"
 fakeredis = "^2.12.1"
 torch = "2.0.0"
-
+docker = "^6.1.2"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.3.1"

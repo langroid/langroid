@@ -5,7 +5,7 @@ from llmagent.utils.configuration import Settings, set_global
 import pytest
 
 # allow streaming globally, but can be turned off by individual models
-set_global(Settings(stream=True, cache=True))
+set_global(Settings(stream=True))
 
 
 @pytest.mark.parametrize(
@@ -27,15 +27,18 @@ def test_openai_gpt(streaming, country, capital):
     # completion mode
     question = "What is the capital of " + country + "?"
 
+    set_global(Settings(cache=False))
     response = mdl.generate(prompt=question, max_tokens=10)
     assert capital in response.message
     assert not response.cached
 
+    set_global(Settings(cache=True))
     # should be from cache this time
     response = mdl.generate(prompt=question, max_tokens=10)
     assert capital in response.message
     assert response.cached
 
+    set_global(Settings(cache=False))
     # chat mode
     messages = [
         LLMMessage(role=Role.SYSTEM, content="You are a helpful assitant"),
@@ -45,6 +48,7 @@ def test_openai_gpt(streaming, country, capital):
     assert capital in response.message
     assert not response.cached
 
+    set_global(Settings(cache=True))
     # should be from cache this time
     response = mdl.chat(messages=messages, max_tokens=10)
     assert capital in response.message
