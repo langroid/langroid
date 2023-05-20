@@ -19,7 +19,7 @@ def test_openai_gpt(streaming, country, capital):
         max_tokens=100,
         chat_model="gpt-3.5-turbo",
         completion_model="text-davinci-003",
-        cache_config=RedisCacheConfig(fake=True),
+        cache_config=RedisCacheConfig(fake=False),
     )
 
     mdl = OpenAIGPT(config=cfg)

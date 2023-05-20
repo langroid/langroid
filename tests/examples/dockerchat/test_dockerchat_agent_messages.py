@@ -1,7 +1,7 @@
 from llmagent.agent.base import AgentConfig
 from examples.dockerchat.docker_chat_agent import DockerChatAgent
 from examples.dockerchat.dockerchat_agent_messages import (
-    InformURLMessage,
+    AskURLMessage,
     FileExistsMessage,
 )
 
@@ -18,7 +18,7 @@ cfg = AgentConfig(
     llm=LLMConfig(
         type="openai",
         chat_model="gpt-3.5-turbo",
-        cache_config=RedisCacheConfig(fake=True),
+        cache_config=RedisCacheConfig(fake=False),
     ),
 )
 
@@ -42,11 +42,10 @@ Ok, thank you.
 Hope you can tell me!
 """
 
-INFORM_URL_MSG = """
-great, please see if this is the right URL:
+ASK_URL_MSG = """
+great, let me know the URL:
 {
-'request': 'inform_url',
-'url': 'https://github.com/openai/chatgpt-retrieval-plugin'
+'request': 'ask_url'
 }
 """
 
@@ -58,8 +57,8 @@ class TestDockerChatAgent(DockerChatAgent):
         if self.repo_path is None and "url" not in input_str.lower():
             return ASK_URL_RESPONSE
 
-    def inform_url(self, msg: InformURLMessage) -> str:
-        self.repo_path = msg.url
+    def ask_url(self, msg: AskURLMessage) -> str:
+        self.repo_path = "dummy"
         return GOT_URL_RESPONSE
 
 
@@ -71,23 +70,23 @@ def test_enable_message():
     assert "file_exists" in agent.handled_classes
     assert agent.handled_classes["file_exists"] == FileExistsMessage
 
-    agent.enable_message(InformURLMessage)
-    assert "inform_url" in agent.handled_classes
-    assert agent.handled_classes["inform_url"] == InformURLMessage
+    agent.enable_message(AskURLMessage)
+    assert "ask_url" in agent.handled_classes
+    assert agent.handled_classes["ask_url"] == AskURLMessage
 
 
 def test_disable_message():
     agent.enable_message(FileExistsMessage)
-    agent.enable_message(InformURLMessage)
+    agent.enable_message(AskURLMessage)
 
     agent.disable_message(FileExistsMessage)
     assert "file_exists" not in agent.handled_classes
 
-    agent.disable_message(InformURLMessage)
-    assert "inform_url" not in agent.handled_classes
+    agent.disable_message(AskURLMessage)
+    assert "ask_url" not in agent.handled_classes
 
 
-@pytest.mark.parametrize("msg_cls", [InformURLMessage, FileExistsMessage])
+@pytest.mark.parametrize("msg_cls", [AskURLMessage, FileExistsMessage])
 def test_usage_instruction(msg_cls: AgentMessage):
     usage = msg_cls().usage_example()
     assert json.loads(usage)["request"] == msg_cls().request
@@ -99,12 +98,12 @@ def test_dockerchat_agent_handle_message():
     message enabling/disabling works as expected.
     """
     agent.enable_message(FileExistsMessage)
-    agent.enable_message(InformURLMessage)
-    # any msg before inform_url will result in an agent response
+    agent.enable_message(AskURLMessage)
+    # any msg before ask_url will result in an agent response
     # telling LLM to ask for URL
     assert agent.handle_message(NONE_MSG) == ASK_URL_RESPONSE
     assert agent.handle_message(FILE_EXISTS_MSG) == ASK_URL_RESPONSE
-    assert agent.handle_message(INFORM_URL_MSG) == GOT_URL_RESPONSE
+    assert agent.handle_message(ASK_URL_MSG) == GOT_URL_RESPONSE
 
     agent.disable_message(FileExistsMessage)
     assert agent.handle_message(FILE_EXISTS_MSG) is None

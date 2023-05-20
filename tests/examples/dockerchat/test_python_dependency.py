@@ -37,22 +37,6 @@ class PythonDependencyMessage(AgentMessage):
             cls(result="This repo doesn't contain any dependacy manager"),
         ]
 
-    def use_when(self) -> List[str]:
-        """
-        Return a List of strings showing an example of when the message should be used,
-        possibly parameterized by the field values. This should be a valid english
-        phrase in first person, in the form of a phrase that can legitimately
-        complete "I can use this message when..."
-        Returns:
-            str: list of examples of a situation when the message should be used,
-                in first person, possibly parameterized by the field values.
-        """
-
-        return [
-            "what are the dependencies in the repo.",
-            "I need to check if the repo contains dependencies",
-        ]
-
 
 class MessageHandlingAgent(ChatAgent):
     def python_dependency(self, PythonDependencyMessage) -> str:
@@ -68,7 +52,7 @@ cfg = AgentConfig(
     llm=LLMConfig(
         type="openai",
         chat_model="gpt-3.5-turbo",
-        cache_config=RedisCacheConfig(fake=True),
+        cache_config=RedisCacheConfig(fake=False),
     ),
     parsing=None,
     prompts=PromptsConfig(),

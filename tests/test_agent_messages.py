@@ -1,6 +1,6 @@
 from llmagent.agent.base import AgentConfig
 from llmagent.agent.chat_agent import ChatAgent
-from llmagent.agent.message import AgentMessage, ThoughtQuestionAnswer
+from llmagent.agent.message import AgentMessage
 from llmagent.language_models.base import LLMConfig
 from llmagent.parsing.json import extract_top_level_json
 from llmagent.prompts.prompts_config import PromptsConfig
@@ -26,10 +26,6 @@ class CountryCapitalMessage(AgentMessage):
             cls(country="France", city="Marseille", result="no"),
         ]
 
-    @classmethod
-    def use_when(self):
-        return []
-
 
 class FileExistsMessage(AgentMessage):
     request: str = "file_exists"
@@ -44,26 +40,6 @@ class FileExistsMessage(AgentMessage):
             cls(filename="Dockerfile", result="no"),
         ]
 
-    def use_when(self):
-        return [
-            f"I want to know if a file {self.filename} is in the repo",
-            f"I need to check if the repo contains the file {self.filename}",
-        ]
-
-    def non_usage_examples(self) -> List[ThoughtQuestionAnswer]:
-        return [
-            ThoughtQuestionAnswer(
-                thought="I want to see how many files are in the repo",
-                question="How many files are in the repo?",
-                answer="34",
-            ),
-            ThoughtQuestionAnswer(
-                thought="I need to know the URL of the repo",
-                question="What is the URL of the repo?",
-                answer="https://a.github.com/b/c",
-            ),
-        ]
-
 
 class PythonVersionMessage(AgentMessage):
     request: str = "python_version"
@@ -75,12 +51,6 @@ class PythonVersionMessage(AgentMessage):
         return [
             cls(result="3.7"),
             cls(result="3.8"),
-        ]
-
-    def use_when(self):
-        return [
-            "I want to know which version of Python is needed",
-            "I need to check the Python version",
         ]
 
 
