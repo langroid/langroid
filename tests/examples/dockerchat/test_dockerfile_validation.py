@@ -47,25 +47,6 @@ class ValidateDockerfileMessage(AgentMessage):
             ),
         ]
 
-    def use_when(self) -> List[str]:
-        """
-        Return a List of strings showing an example of when the message should be used,
-        possibly parameterized by the field values. This should be a valid english
-        phrase in first person, in the form of a phrase that can legitimately
-        complete "I can use this message when..."
-        Returns:
-            str: list of examples of a situation when the message should be used,
-                in first person, possibly parameterized by the field values.
-        """
-
-        return [
-            "Here is a sample Dockerfile",
-            "You can modify this Dockerfile",
-            "Does this look good to you",
-            "Here is the Dockerfile",
-            "This Dockerfile installs",
-        ]
-
 
 class MessageHandlingAgent(ChatAgent):
     def validate_dockerfile(self, ValidateDockerfileMessage) -> str:
@@ -81,7 +62,7 @@ cfg = AgentConfig(
     llm=LLMConfig(
         type="openai",
         chat_model="gpt-3.5-turbo",
-        cache_config=RedisCacheConfig(fake=True),
+        cache_config=RedisCacheConfig(fake=False),
     ),
     parsing=None,
     prompts=PromptsConfig(),

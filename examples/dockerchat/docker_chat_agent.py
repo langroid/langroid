@@ -2,7 +2,7 @@ from llmagent.agent.chat_agent import ChatAgent
 from pydantic import BaseModel, HttpUrl
 from typing import Optional
 from examples.dockerchat.dockerchat_agent_messages import (
-    InformURLMessage,
+    AskURLMessage,
     FileExistsMessage,
     PythonVersionMessage,
     PythonDependencyMessage,
@@ -22,7 +22,7 @@ import json
 import logging
 
 logger = logging.getLogger(__name__)
-
+DEFAULT_URL = "https://github.com/eugeneyan/testing-ml"
 # Message types that can be handled by the agent;
 # each corresponds to a method in the agent.
 
@@ -45,22 +45,28 @@ class DockerChatAgent(ChatAgent):
             you can proceed.
             """
 
-    def inform_url(self, msg: InformURLMessage) -> str:
-        try:
-            url_model = UrlModel(url=msg.url)
-        except ValueError as e:
-            return f"""
-            A valid URL was not seen: {e}
-            Please ask me for the URL before proceeding. 
-            And once you receive a URL, 
-            please reconfirm it by showing it to me.
-            """
+    def ask_url(self, msg: AskURLMessage) -> str:
+        while True:
+            url = self.message_to_user(
+                "Please enter the URL of the repo, or hit enter to use default URL: "
+            )
+            if url == "":
+                url = DEFAULT_URL
+            try:
+                url_model = UrlModel(url=url)
+            except ValueError as e:
+                self.message_to_user(
+                    f"""A valid URL was not seen: {e}
+                    Please try again: """
+                )
+            if url_model.url is not None:
+                break
 
         self.url = url_model.url
         self.repo_loader = RepoLoader(self.url, RepoLoaderConfig())
         self.repo_path = self.repo_loader.clone()
         # get the repo tree to depth d, with first k lines of each file
-        self.repo_tree = self.repo_loader.load(depth=1, lines=20)
+        self.repo_tree, _ = self.repo_loader.load(depth=1, lines=20)
         selected_tree = RepoLoader.select(
             self.repo_tree,
             names=DEPENDENCY_FILES,
@@ -193,6 +199,20 @@ class DockerChatAgent(ChatAgent):
         """
         if self.repo_path is None:
             return self.handle_message_fallback()
+
+        if type(dockerfile_msg.proposed_dockerfile) != str:
+            dockerfile_msg.proposed_dockerfile = "\n".join(
+                dockerfile_msg.proposed_dockerfile
+            )
+
+        user_response = self.message_to_user(
+            "Please confirm dockerfile validation (y/n): "
+        )
+        if user_response.lower() != "y":
+            return """"
+                Not ready for dockerfile validation, please 
+                continue with your next question or request for information.
+                """
 
         proposed_dockerfile = dockerfile_msg.proposed_dockerfile
         try:

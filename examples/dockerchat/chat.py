@@ -2,7 +2,7 @@ from llmagent.utils.logging import setup_colored_logging
 from llmagent.utils import configuration
 from examples.dockerchat.docker_chat_agent import DockerChatAgent
 from examples.dockerchat.dockerchat_agent_messages import (
-    InformURLMessage,
+    AskURLMessage,
     FileExistsMessage,
     PythonVersionMessage,
     PythonDependencyMessage,
@@ -81,7 +81,7 @@ def chat(config: DockerChatAgentConfig) -> None:
     ]
 
     agent = DockerChatAgent(config, task_messages)
-    agent.enable_message(InformURLMessage)
+    agent.enable_message(AskURLMessage)
     agent.enable_message(FileExistsMessage)
     agent.enable_message(PythonVersionMessage)
     agent.enable_message(ValidateDockerfileMessage)
