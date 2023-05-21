@@ -11,6 +11,7 @@ from llmagent.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
 from llmagent.parsing.parser import ParsingConfig
 from llmagent.parsing.code_parser import CodeParsingConfig
 from llmagent.prompts.prompts_config import PromptsConfig
+from llmagent.mytypes import Document
 
 import typer
 import os
@@ -24,6 +25,7 @@ setup_colored_logging()
 
 class CodeChatConfig(AgentConfig):
     gpt4: bool = False
+    cache: bool = True
     debug: bool = False
     stream: bool = True  # allow streaming where needed
     max_tokens: int = 10000
@@ -63,7 +65,7 @@ class CodeChatConfig(AgentConfig):
 
 
 def chat(config: CodeChatConfig) -> None:
-    configuration.update_global_settings(config, keys=["debug", "stream"])
+    configuration.update_global_settings(config, keys=["debug", "stream", "cache"])
     if config.gpt4:
         config.llm.chat_model = OpenAIChatModel.GPT4
     default_urls = [config.repo_url]
@@ -73,11 +75,22 @@ def chat(config: CodeChatConfig) -> None:
     print("[blue]Enter a GitHub URL below (or leave empty for default Repo)")
     urls = get_urls_from_user(n=1) or default_urls
     loader = RepoLoader(urls[0], config=RepoLoaderConfig())
-    dct, documents = loader.load(depth=2, lines=500)
+    dct, documents = loader.load(depth=2, lines=100)
+    listing = [
+        """
+        List of ALL files and directories in this project:
+        If a file is not in this list, then we can be sure that
+        it is not in the repo!
+        """
+        ] + loader.ls(dct, depth=1)
+    listing = Document(
+        content="\n".join(listing),
+        metadata={"source": "repo_listing"},
+    )
 
     code_docs = [
         doc for doc in documents if doc.metadata["language"] not in ["md", "txt"]
-    ]
+    ] + [listing]
 
     text_docs = [doc for doc in documents if doc.metadata["language"] in ["md", "txt"]]
 
@@ -111,8 +124,9 @@ def chat(config: CodeChatConfig) -> None:
 def main(
     debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
     gpt4: bool = typer.Option(False, "--gpt4", "-4", help="use GPT-4"),
+    nocache: bool = typer.Option(False, "--nocache", "-nc", help="do no use cache"),
 ) -> None:
-    config = CodeChatConfig(debug=debug, gpt4=gpt4)
+    config = CodeChatConfig(debug=debug, gpt4=gpt4, cache=not nocache)
     chat(config)
 
 
