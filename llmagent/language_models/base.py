@@ -130,10 +130,10 @@ class LanguageModel(ABC):
         """
         async with aiohttp.ClientSession():
             templatized_prompt = EXTRACTION_PROMPT_GPT4
-            show_if_debug(EXTRACTION_PROMPT_GPT4, "EXTRACT-PROMPT= ")
             final_prompt = templatized_prompt.format(
                 question=question, content=passage.content
             )
+            show_if_debug(final_prompt, "EXTRACT-PROMPT= ")
             final_extract = await self.agenerate(prompt=final_prompt, max_tokens=1024)
             show_if_debug(final_extract.message.strip(), "EXTRACT-RESPONSE= ")
         return final_extract.message.strip()

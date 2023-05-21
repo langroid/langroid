@@ -1,5 +1,5 @@
 from abc import ABC
-from typing import Dict, Optional, Type, List
+from typing import Dict, Optional, Type, List, Tuple
 from contextlib import ExitStack
 from pydantic import BaseSettings, ValidationError
 from halo import Halo
@@ -46,10 +46,10 @@ class Agent(ABC):
         self.vecdb = VectorStore.create(config.vecdb) if config.vecdb else None
         self.parser = Parser(config.parsing) if config.parsing else None
 
-    def update_dialog(self, prompt, output):
+    def update_dialog(self, prompt:str, output:str) -> None:
         self.dialog.append((prompt, output))
 
-    def get_dialog(self):
+    def get_dialog(self) -> List[Tuple[str, str]]:
         return self.dialog
 
     def enable_message(self, message_class: Type[AgentMessage]) -> None:
