@@ -65,6 +65,7 @@ class CodeParsingConfig(BaseSettings):
     ]
     chunk_size: int = 500  # tokens
     token_encoding_model: str = "text-embedding-ada-002"
+    n_similar_docs: int = 4
 
 
 class CodeParser:
