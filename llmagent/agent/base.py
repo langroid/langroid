@@ -234,7 +234,9 @@ class Agent(ABC):
                 cm = Halo(text="LLM responding to message...", spinner="dots")
                 stack.enter_context(cm)
             response = self.llm.generate(prompt, self.config.llm.max_tokens)
-        if not self.llm.get_stream():
+        if not self.llm.get_stream() or response.cached:
+            # we would have already displayed the msg "live" ONLY if
+            # streaming was enabled, AND we did not find a cached response
             print("[green]" + response.message)
 
         return Document(
