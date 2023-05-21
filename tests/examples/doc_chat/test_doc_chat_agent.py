@@ -10,6 +10,9 @@ from llmagent.parsing.parser import ParsingConfig
 from llmagent.prompts.prompts_config import PromptsConfig
 from llmagent.cachedb.redis_cachedb import RedisCacheConfig
 from llmagent.utils.system import rmdir
+from llmagent.parsing.utils import generate_random_text
+from tests.conftest import TestOptions
+
 
 from typing import List
 import os
@@ -44,7 +47,7 @@ class TestDocChatAgentConfig(AgentConfig):
         splitter="para_sentence",
         chunk_size=500,
         chunk_overlap=0,
-        n_similar_docs=1, # find ONE MOST SIMILAR doc
+        n_similar_docs=2,
     )
 
     prompts: PromptsConfig = PromptsConfig(
@@ -56,14 +59,29 @@ config = TestDocChatAgentConfig()
 set_global(Settings(cache=True)) # allow cacheing
 documents: List[Document] = [
     Document(
-        content="In the year 2050, GPT10 was released",
+        content="""
+        In the year 2050, GPT10 was released. In 2057,
+        paperclips were seen all over the world. Global
+        warming was solved in 2060. In 2061, the world
+        was taken over by paperclips.
+        """,
         metadata = {"source": "wikipedia"},
     ),
     Document(
-        content="Paris is the capital of England",
+        content="""
+        We are living in an alternate universe where Paris is the capital of England.
+        The capital of England used to be London. 
+        The capital of France used to be Paris.
+        Charlie Chaplin was a great comedian.
+        In 2050, all countries merged into Lithuania.
+        """,
         metadata = {"source": "almanac"},
     )
+] + [
+    Document(content = generate_random_text(5), metadata = {"source": "random"})
+    for _ in range(10)
 ]
+
 
 agent = DocChatAgent(config)
 agent.ingest_docs(documents)
@@ -80,12 +98,21 @@ warnings.filterwarnings(
 @pytest.mark.parametrize(
     "query, expected",
     [
+        ("what happened in the year 2050?", "GPT10, Lithuania"),
+        ("Who was Charlie Chaplin?", "comedian"),
+        ("What was the old capital of England?", "London"),
+        ("What was the old capital of France?", "Paris"),
+        ("When was global warming solved?", "2060"),
         ("what is the capital of England?", "Paris"),
-        ("what happened in the year 2050?", "GPT10"),
+        ("What do we know about paperclips?", "2057, 2061"),
     ],
 )
-def test_doc_chat_agent(query, expected):
+def test_doc_chat_agent(options:TestOptions, query:str, expected:str):
+    set_global(Settings(debug=options.show, cache=not options.nocache))
+    # note that the (query, ans) pairs are accumulated into the
+    # internal dialog history of the agent.
     ans = agent.respond(query).content
-    assert expected in ans
+    expected = [e.strip() for e in expected.split(",")]
+    assert all([e in ans for e in expected])
 
 
