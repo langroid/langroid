@@ -187,7 +187,6 @@ class OpenAIGPT(LanguageModel):
         return LLMResponse(message=msg, usage=usage, cached=cached)
 
     async def agenerate(self, prompt: str, max_tokens: int) -> LLMResponse:
-        # TODO: implement caching, streaming, retry for async
         openai.api_key = self.api_key
         # note we typically will not have self.config.stream = True
         # when issuing several api calls concurrently/asynchronously.
