@@ -133,6 +133,7 @@ class OpenAIGPT(LanguageModel):
         hashed_key = hashlib.sha256(raw_key.encode()).hexdigest()
 
         if not settings.cache:
+            # when cacheing disabled, return the hashed_key and none result
             return hashed_key, None
         # Try to get the result from the cache
         return hashed_key, self.cache.retrieve(hashed_key)
@@ -197,7 +198,19 @@ class OpenAIGPT(LanguageModel):
                 LLMMessage(role=Role.SYSTEM, content="You are a helpful assistant."),
                 LLMMessage(role=Role.USER, content=prompt),
             ]
-            response = await openai.ChatCompletion.acreate(
+            @retry_with_exponential_backoff
+            async def completions_with_backoff(**kwargs):
+                cached = False
+                hashed_key, result = self._cache_lookup("AsyncChatCompletion", **kwargs)
+                if result is not None:
+                    cached = True
+                else:
+                    # If it's not in the cache, call the API
+                    result = await openai.ChatCompletion.acreate(**kwargs)
+                    self.cache.store(hashed_key, result)
+                return cached, hashed_key, result
+
+            cached, hashed_key, response = await completions_with_backoff(
                 model=self.config.chat_model,
                 messages=[m.dict() for m in messages],
                 max_tokens=max_tokens,
@@ -207,7 +220,19 @@ class OpenAIGPT(LanguageModel):
             usage = response["usage"]["total_tokens"]
             msg = response["choices"][0]["message"]["content"].strip()
         else:
-            response = await openai.Completion.acreate(
+            @retry_with_exponential_backoff
+            async def completions_with_backoff(**kwargs):
+                cached = False
+                hashed_key, result = self._cache_lookup("AsyncCompletion", **kwargs)
+                if result is not None:
+                    cached = True
+                else:
+                    # If it's not in the cache, call the API
+                    result = await openai.Completion.acreate(**kwargs)
+                    self.cache.store(hashed_key, result)
+                return cached, hashed_key, result
+
+            cached, hashed_key, response = await completions_with_backoff(
                 model=self.config.completion_model,
                 prompt=prompt,
                 max_tokens=max_tokens,
@@ -217,7 +242,7 @@ class OpenAIGPT(LanguageModel):
             )
             usage = response["usage"]["total_tokens"]
             msg = response["choices"][0]["text"].strip()
-        return LLMResponse(message=msg, usage=usage)
+        return LLMResponse(message=msg, usage=usage, cached=cached)
 
     def chat(
             self,
