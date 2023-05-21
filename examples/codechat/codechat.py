@@ -7,7 +7,7 @@ from llmagent.agent.base import AgentConfig
 from llmagent.vector_store.qdrantdb import QdrantDBConfig
 from llmagent.embedding_models.models import OpenAIEmbeddingsConfig
 from llmagent.vector_store.base import VectorStoreConfig
-from llmagent.language_models.base import LLMConfig
+from llmagent.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
 from llmagent.parsing.parser import ParsingConfig
 from llmagent.parsing.code_parser import CodeParsingConfig
 from llmagent.prompts.prompts_config import PromptsConfig
@@ -38,7 +38,10 @@ class CodeChatConfig(AgentConfig):
         ),
     )
 
-    llm: LLMConfig = LLMConfig(type="openai")
+    llm: OpenAIGPTConfig = OpenAIGPTConfig(
+        chat_model=OpenAIChatModel.GPT3_5_TURBO,
+        use_chat_for_completion=True,
+    )
     parsing: ParsingConfig = ParsingConfig(
         splitter="para_sentence",
         chunk_size=500,
@@ -49,6 +52,7 @@ class CodeChatConfig(AgentConfig):
         chunk_size=200,
         token_encoding_model="text-embedding-ada-002",
         extensions=["py", "yml", "yaml", "sh", "md", "txt"],
+        n_similar_docs=2,
     )
 
     prompts: PromptsConfig = PromptsConfig(
@@ -61,7 +65,7 @@ class CodeChatConfig(AgentConfig):
 def chat(config: CodeChatConfig) -> None:
     configuration.update_global_settings(config, keys=["debug", "stream"])
     if config.gpt4:
-        config.llm.chat_model = "gpt-4"
+        config.llm.chat_model = OpenAIChatModel.GPT4
     default_urls = [config.repo_url]
 
     print("[blue]Welcome to the GitHub Repo chatbot!")
