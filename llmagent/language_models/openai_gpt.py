@@ -187,23 +187,36 @@ class OpenAIGPT(LanguageModel):
 
     async def agenerate(self, prompt: str, max_tokens: int) -> LLMResponse:
         # TODO: implement caching, streaming, retry for async
-        if self.config.use_chat_for_completion:
-            return self.chat(messages=prompt, max_tokens=max_tokens)
         openai.api_key = self.api_key
         # note we typically will not have self.config.stream = True
         # when issuing several api calls concurrently/asynchronously.
         # The calling fn should use the context `with Streaming(..., False)` to
         # disable streaming.
-        response = await openai.Completion.acreate(
-            model=self.config.completion_model,
-            prompt=prompt,
-            max_tokens=max_tokens,
-            temperature=0,
-            echo=False,
-            stream=self.config.stream,
-        )
-        usage = response["usage"]["total_tokens"]
-        msg = response["choices"][0]["text"].strip()
+        if self.config.use_chat_for_completion:
+            messages = [
+                LLMMessage(role=Role.SYSTEM, content="You are a helpful assistant."),
+                LLMMessage(role=Role.USER, content=prompt),
+            ]
+            response = await openai.ChatCompletion.acreate(
+                model=self.config.chat_model,
+                messages=[m.dict() for m in messages],
+                max_tokens=max_tokens,
+                temperature=0,
+                stream=self.config.stream,
+            )
+            usage = response["usage"]["total_tokens"]
+            msg = response["choices"][0]["message"]["content"].strip()
+        else:
+            response = await openai.Completion.acreate(
+                model=self.config.completion_model,
+                prompt=prompt,
+                max_tokens=max_tokens,
+                temperature=0,
+                echo=False,
+                stream=self.config.stream,
+            )
+            usage = response["usage"]["total_tokens"]
+            msg = response["choices"][0]["text"].strip()
         return LLMResponse(message=msg, usage=usage)
 
     def chat(
