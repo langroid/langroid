@@ -204,9 +204,10 @@ class LanguageModel(ABC):
         )
         show_if_debug(final_prompt, "SUMMARIZE_PROMPT= ")
         # Generate the final verbatim extract based on the final prompt
-        final_answer = self.generate(
+        llm_response = self.generate(
             prompt=final_prompt, max_tokens=1024
-        ).message.strip()
+        )
+        final_answer = llm_response.message.strip()
         show_if_debug(final_answer, "SUMMARIZE_RESPONSE= ")
         parts = final_answer.split("SOURCE:", maxsplit=1)
         if len(parts) > 1:
@@ -215,7 +216,11 @@ class LanguageModel(ABC):
         else:
             content = final_answer
             sources = ""
-        return Document(content=content, metadata={"source": "SOURCE: " + sources})
+        return Document(
+            content=content,
+            metadata={"source": "SOURCE: " + sources,
+                      "cached": llm_response.cached}
+        )
 
 
 class StreamingIfAllowed:

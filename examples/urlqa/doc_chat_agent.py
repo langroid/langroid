@@ -76,9 +76,11 @@ class DocChatAgent(Agent):
             stack.enter_context(cm)
             response = self.llm.get_summary_answer(query, verbatim_texts)
         print("[green]relevance = ", max_score)
-        if not settings.stream:
-            # if we didn't stream it, print it now
+        if not self.llm.get_stream() or response.metadata["cached"]:
+            # we would have already printed the response ONLY if
+            # streaming was enabled AND the response was not cached
             print("[green]" + response.content)
+            print("[magenta]" + response.metadata["source"])
         self.update_dialog(query, response.content)
         self.response = response  # save last response
         return response
