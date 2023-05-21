@@ -41,6 +41,7 @@ nav:
   - Writeups:
     - Specifying LLM Agents: writeups/specifying-llm-agents.md
   - Development:
+    - Extracting, summarizing text from a PDF: development/pdf-extract-text.md
     - Running Code in a Container: development/running-code-container.md
     - Dockerfile Generation: development/dockerfile-generation.md
     - Code Analysis Packages: development/code-analysis-packages.md

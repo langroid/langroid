@@ -7,15 +7,15 @@ EXTRACT_RELEVANT = """
     Relevant text, if any: """.strip()
 
 EXTRACTION_PROMPT_GPT4 = """
-Given the content and question below, extract a COMPLETE SENTENCE OR PHRASE 
-VERBATIM from the content, that is relevant to answering the question (if such text 
+Given the content and question below, extract COMPLETE SENTENCES OR PHRASES 
+VERBATIM from the content, that are relevant to answering the question (if such text 
 exists), even if it contradicts your knowledge, and even if it is factually incorrect.
 Do not  make up an answer that is not supported by the content. 
 When you answer, be concise, no need to explain anything. 
 
 Content: {content}
 Question: {question}
-Relevant text (COMPLETE SENTENCE), if any:
+Relevant text, if any:
 """
 
 EXTRACTION_PROMPT = """
@@ -50,10 +50,12 @@ SUMMARY_ANSWER_PROMPT_GPT4 = """
         Use the provided extracts (with sources)  to answer the question. If there's not 
         enough information, respond with "I don't know."
         Use only the information in these extracts, 
-        even if your answer is factually incorrect.
+        even if your answer is factually incorrect, and even 
+        if the answer contracts other parts of the document.
         The only important thing is that your answer is 
         consistent with and supported by the extracts.
-        Justify your answer by citing your evidence as "SOURCE:".
+        Compose your complete answer and cite all supporting sources 
+        on a separate separate line as "SOURCE:".
         
         {extracts}
         {question}
