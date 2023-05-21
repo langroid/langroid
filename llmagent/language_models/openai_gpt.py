@@ -38,6 +38,7 @@ class OpenAICompletionModel(str, Enum):
 class OpenAIGPTConfig(LLMConfig):
     type: str = "openai"
     max_tokens: int = 1024
+    timeout: int = 20
     chat_model: OpenAIChatModel = OpenAIChatModel.GPT3_5_TURBO
     completion_model: OpenAICompletionModel = OpenAICompletionModel.TEXT_DA_VINCI_003
 
@@ -122,7 +123,9 @@ class OpenAIGPT(LanguageModel):
             choices=[msg],
             usage=dict(total_tokens=0),
         )
-        return LLMResponse(message=completion, usage=0), openai_response.dict()
+        return LLMResponse(
+            message=completion, usage=0, cached=False
+        ), openai_response.dict()
 
     def _cache_lookup(self, fn_name: str, **kwargs):
         # Use the kwargs as the cache key
@@ -171,14 +174,20 @@ class OpenAIGPT(LanguageModel):
             model=self.config.completion_model,
             prompt=prompt,
             max_tokens=max_tokens,
+            request_timeout=self.config.timeout,
             temperature=0,
             echo=False,
             stream=self.config.stream,
         )
         if self.config.stream and not cached:
+            # in this case we have not found it in cache,
+            # so get response and cache now.
+            # Also in stream mode we would display the response "live",
+            # in the _stream_response method.
             llm_response, openai_response = self._stream_response(response)
             self.cache.store(hashed_key, openai_response)
             return llm_response
+
         usage = response["usage"]["total_tokens"]
         msg = response["choices"][0]["text"].strip()
         if settings.debug:
@@ -213,6 +222,7 @@ class OpenAIGPT(LanguageModel):
                 model=self.config.chat_model,
                 messages=[m.dict() for m in messages],
                 max_tokens=max_tokens,
+                request_timeout=self.config.timeout,
                 temperature=0,
                 stream=self.config.stream,
             )
@@ -235,6 +245,7 @@ class OpenAIGPT(LanguageModel):
                 model=self.config.completion_model,
                 prompt=prompt,
                 max_tokens=max_tokens,
+                request_timeout=self.config.timeout,
                 temperature=0,
                 echo=False,
                 stream=self.config.stream,
@@ -281,6 +292,7 @@ class OpenAIGPT(LanguageModel):
             n=1,
             stop=None,
             temperature=0.5,
+            request_timeout=self.config.timeout,
             stream=self.config.stream,
         )
         if self.config.stream and not cached:
