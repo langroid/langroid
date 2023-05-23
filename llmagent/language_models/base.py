@@ -224,7 +224,7 @@ class LanguageModel(ABC):
 
 
 class StreamingIfAllowed:
-    """Context to temporarily enable streaming, if allowed globally via
+    """Context to temporarily enable or disable streaming, if allowed globally via
     `settings.stream`"""
 
     def __init__(self, llm: LanguageModel, stream: bool = True):

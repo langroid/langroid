@@ -11,3 +11,7 @@ class Document(BaseModel):
 
     content: str
     metadata: dict = Field(default_factory=dict)
+
+    def __str__(self):
+        #TODO: make metadata a pydantic model to enforce "source"
+        return f"{self.content} {self.metadata['source']}"
