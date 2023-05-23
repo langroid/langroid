@@ -33,8 +33,8 @@ class URLQAConfig(DocChatAgentConfig):
         chat_model=OpenAIChatModel.GPT3_5_TURBO,
     )
     parsing: ParsingConfig = ParsingConfig(
-        splitter="para_sentence",
-        chunk_size=500,
+        splitter="tokens",
+        chunk_size=200,
         chunk_overlap=50,
     )
 
