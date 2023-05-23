@@ -62,6 +62,27 @@ SUMMARY_ANSWER_PROMPT_GPT4 = """
         Answer:   
 """.strip()
 
+ANSWER_PROMPT_USE_HISTORY_GPT4 = """
+
+        Use ANY of the information earlier, as well as the extracts provided below 
+        (with sources)  to answer the question. If there's not 
+        enough information, respond with "I don't know."
+        Use only the information in this conversation or these extracts, 
+        even if your answer is factually incorrect, and even 
+        if the answer contracts other parts of the document.
+        The only important thing is that your answer is 
+        consistent with information provided here or earlier.
+        Compose your complete answer and cite all supporting sources 
+        on a separate separate line as "SOURCE:". 
+        When citing a SOURCE: be concise, whether it refers to a source in these 
+        extracts, or info provided earlier.
+        
+        {extracts}
+        {question}
+        Answer:   
+""".strip()
+
+
 SUMMARY_ANSWER_PROMPT = """
         Use the provided extracts (with sources)  to answer the question. If there's not 
         enough information, respond with "I don't know."
