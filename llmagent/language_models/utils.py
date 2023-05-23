@@ -50,7 +50,8 @@ def retry_with_exponential_backoff(
                 # Increment the delay
                 delay *= exponential_base * (1 + jitter * random.random())
                 logger.warning(
-                    f"""OpenAI API request failed with error{e}. 
+                    f"""OpenAI API request failed with error: 
+                    {e}. 
                     Retrying in {delay} seconds..."""
                 )
                 # Sleep for the delay
