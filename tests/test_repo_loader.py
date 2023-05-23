@@ -52,12 +52,12 @@ def test_repo_loader() -> None:
 
     # select specific files
     desired = ["workflows", "Makefile", "pyproject.toml"]
-    subtree = RepoLoader.select(tree, names=desired)
+    subtree = RepoLoader.select(tree, includes=desired)
 
     assert len(subtree["dirs"]) + len(subtree["files"]) <= 3
 
     # select non-existent files
-    subtree = RepoLoader.select(tree, names=["non-existent-file"])
+    subtree = RepoLoader.select(tree, includes=["non-existent-file"])
 
     assert len(subtree["dirs"]) + len(subtree["files"]) == 0
 
