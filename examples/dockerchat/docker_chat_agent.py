@@ -1,6 +1,6 @@
 from llmagent.agent.chat_agent import ChatAgent
 from pydantic import BaseModel, HttpUrl
-from typing import Optional
+from typing import Optional, List, Tuple
 from examples.codechat.code_chat_agent import CodeChatAgentConfig, CodeChatAgent
 from examples.dockerchat.dockerchat_agent_messages import (
     AskURLMessage,
