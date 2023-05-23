@@ -9,7 +9,6 @@ from llmagent.mytypes import Document
 from typing import List, Union
 from rich import print
 from rich.console import Console
-
 console = Console()
 
 
@@ -25,17 +24,14 @@ class DocChatAgentConfig(AgentConfig):
             If False, each request to LLM will consist only of the
             initial task messages plus the current query.
     """
-
     max_context_tokens: int = 500
     conversation_mode: bool = True
-
 
 DOC_CHAT_INSTRUCTIONS = """
 Your task is to answer questions about various documents.
 You will be given various passages from these documents, and asked to answer questions 
 about them, or summarize them into coherent answers.
 """
-
 
 class DocChatAgent(ChatAgent):
     """
