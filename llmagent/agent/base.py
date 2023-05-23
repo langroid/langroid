@@ -2,7 +2,6 @@ from abc import ABC
 from typing import Dict, Optional, Type, List, Tuple
 from contextlib import ExitStack
 from pydantic import BaseSettings, ValidationError
-from halo import Halo
 from llmagent.mytypes import Document
 from rich import print
 import json
@@ -16,6 +15,9 @@ from llmagent.parsing.parser import ParsingConfig
 from llmagent.parsing.json import extract_top_level_json
 from llmagent.prompts.prompts_config import PromptsConfig
 import logging
+from rich.console import Console
+
+console = Console()
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +30,6 @@ class AgentConfig(BaseSettings):
 
     name: str = "llmagent"
     debug: bool = False
-    stream: bool = False  # stream LLM output?
     vecdb: Optional[VectorStoreConfig] = VectorStoreConfig()
     llm: LLMConfig = LLMConfig()
     parsing: Optional[ParsingConfig] = ParsingConfig()
@@ -228,22 +229,25 @@ class Agent(ABC):
             Response from LLM, packaged as a Document
         """
 
-        with ExitStack() as stack:  # for conditionally using Halo spinner
+        with ExitStack() as stack:  # for conditionally using rich spinner
             if not self.llm.get_stream():
-                # show Halo spinner only if not streaming!
-                cm = Halo(text="LLM responding to message...", spinner="dots")
+                # show rich spinner only if not streaming!
+                cm = console.status("LLM responding to message...")
                 stack.enter_context(cm)
             response = self.llm.generate(prompt, self.config.llm.max_tokens)
+        displayed=False
         if not self.llm.get_stream() or response.cached:
             # we would have already displayed the msg "live" ONLY if
             # streaming was enabled, AND we did not find a cached response
             print("[green]" + response.message)
+            displayed = True
 
         return Document(
             content=response.message,
             metadata=dict(
                 source="LLM",
                 usage=response.usage,
+                displayed=displayed,
                 cached=response.cached,
             ),
         )
@@ -256,20 +260,28 @@ class Agent(ABC):
         Returns:
             Document (i.e. with fields "content", "metadata")
         """
-        with ExitStack() as stack:  # for conditionally using Halo spinner
+        with ExitStack() as stack:  # for conditionally using rich spinner
             if not self.llm.get_stream():
-                # show Halo spinner only if not streaming!
-                cm = Halo(text="LLM responding to messages...", spinner="dots")
+                # show rich spinner only if not streaming!
+                cm = console.status("LLM responding to messages...")
                 stack.enter_context(cm)
             response = self.llm.chat(messages, self.config.llm.max_tokens)
-        if not self.llm.get_stream() or (self.llm.get_stream() and response.cached):
+        displayed = False
+        if not self.llm.get_stream() or response.cached:
+            displayed = True
             cached = "[red](cached)[/red]" if response.cached else ""
             print(cached + "[green]" + response.message)
         return Document(
-            content=response.message, metadata=dict(source="LLM", usage=response.usage)
+            content=response.message,
+            metadata=dict(
+                source="LLM",
+                usage=response.usage,
+                displayed=displayed,
+                cached=response.cached
+            )
         )
 
-    def message_to_user(self, msg) -> str:
+    def respond_user(self, msg) -> str:
         """
         Send msg to user (or another agent), and return the response.
         Args:
@@ -281,3 +293,32 @@ class Agent(ABC):
         print(f"[red]{msg}", end="")
         response = input("")
         return response
+
+    def ask_agent(self, agent: "Agent", request: str,
+                  no_answer:str = "I don't know",
+                  user_confirm: bool = True) -> Optional[Document]:
+        """
+        Send a request to another agent, possibly after confirming with the user.
+
+        Args:
+            agent (Agent): agent to ask
+            request (str): request to send
+            no_answer: expected response when agent does not know the answer
+            gate_human: whether to gate the request with a human confirmation
+
+        Returns:
+            Document: response from agent
+        """
+        agent_type = type(agent).__name__
+        if user_confirm:
+            user_response = self.respond_user(
+                f"""[magenta]Here is the request or message:
+                {request}
+                Should I forward this to {agent_type}? (y/n) """
+            )
+            if user_response not in ["y", "yes"]:
+                return None
+        answer = agent.respond(request)
+        if answer != no_answer:
+            return (f"{agent_type} says: " + str(answer)).strip()
+
