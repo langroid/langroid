@@ -43,6 +43,7 @@ class OpenAICompletionModel(str, Enum):
 class OpenAIGPTConfig(LLMConfig):
     type: str = "openai"
     max_tokens: int = 1024
+    max_context_length: int = 4096
     timeout: int = 20
     chat_model: OpenAIChatModel = OpenAIChatModel.GPT3_5_TURBO
     completion_model: OpenAICompletionModel = OpenAICompletionModel.TEXT_DA_VINCI_003

@@ -19,7 +19,9 @@ def retry_with_exponential_backoff(
     jitter: bool = True,
     max_retries: int = 10,
     errors: tuple = (
-        openai.error.OpenAIError,
+        openai.error.Timeout,
+        openai.error.RateLimitError,
+        openai.error.TryAgain,
         aiohttp.ServerTimeoutError,
         asyncio.TimeoutError,
     ),
