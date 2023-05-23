@@ -107,3 +107,25 @@ class PythonDependencyMessage(AgentMessage):
             cls(result="This repo uses pyproject.toml for managing dependencies"),
             cls(result="This repo doesn't contain any dependacy manager"),
         ]
+
+
+class EntryPointAndCMDMessage(AgentMessage):
+    request: str = "get_entrypoint_cmd"
+    purpose: str = "To define commands for ENTRYPOINT, CMD, both, or none."
+    result: str = "yes"
+
+    @classmethod
+    def examples(cls) -> List["AgentMessage"]:
+        """
+        Return a list of example messages of this type, for use in testing.
+        Returns:
+            List[AgentMessage]: list of example messages of this type
+        """
+        return [
+            cls(result="This repo uses this command for both ENTRYPOINT and CMD"),
+            cls(
+                result="This repo uses this command for ENTRYPOINT and this command for CMD"
+            ),
+            cls(result="This repo doesn't use ENTRYPOINT"),
+            cls(result="This repo doesn't use CMD"),
+        ]

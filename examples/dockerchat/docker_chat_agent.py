@@ -8,6 +8,7 @@ from examples.dockerchat.dockerchat_agent_messages import (
     PythonVersionMessage,
     PythonDependencyMessage,
     ValidateDockerfileMessage,
+    EntryPointAndCMDMessage,
 )
 from rich.console import Console
 from llmagent.parsing.repo_loader import RepoLoader, RepoLoaderConfig
@@ -15,6 +16,8 @@ from examples.dockerchat.identify_python_version import get_python_version
 from examples.dockerchat.identify_python_dependency import (
     identify_dependency_management,
 )
+
+from examples.dockerchat.identify_docker_entrypoint_cmd import identify_entrypoint_CMD
 
 import os
 import logging
@@ -337,3 +340,8 @@ class DockerChatAgent(ChatAgent):
             return f"Docker image built successfully and build time took:{build_time} Seconds..."
         else:
             return f"Docker build failed with error message: {build_log}"
+
+    def get_entrypoint_cmd(
+        self, m: EntryPointAndCMDMessage, cmd: bool = False, entrypoint: bool = False
+    ) -> Tuple[Optional[List[List[str]]], Optional[List[List[str]]]]:
+        return identify_entrypoint_CMD(self.repo_path)
