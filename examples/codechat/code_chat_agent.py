@@ -8,6 +8,7 @@ from llmagent.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
 from llmagent.parsing.parser import ParsingConfig
 from llmagent.parsing.code_parser import CodeParsingConfig
 from llmagent.prompts.prompts_config import PromptsConfig
+from llmagent.prompts.templates import ANSWER_PROMPT_USE_HISTORY_GPT4
 from llmagent.mytypes import Document
 
 import os
@@ -15,9 +16,23 @@ import json
 from rich import print
 
 
+DEFAULT_CODE_CHAT_INSTRUCTIONS = """
+Your task is to answer questions about a code repository. You will be given directly 
+listings, text and code from various files in the repository. You must answer based 
+on the information given to you. If you are asked to see if there is a certain file 
+in the repository, and it does not occur in the listings you are shown, then you can 
+simply answer "No".
+"""
+
+
 class CodeChatAgentConfig(DocChatAgentConfig):
-    max_context_tokens = 1000
-    conversation_mode = True
+    instructions: str = DEFAULT_CODE_CHAT_INSTRUCTIONS
+    # threshold to decide whether to extract relevant parts
+    summarize_prompt: str = ANSWER_PROMPT_USE_HISTORY_GPT4
+    max_context_tokens: int = 500
+    conversation_mode: bool = True
+    content_includes: List[str] = ["txt", "md", "yml", "yaml", "sh", "Makefile"]
+    content_excludes: List[str] = []
     repo_url: str = "https://github.com/eugeneyan/testing-ml"
     gpt4: bool = False
     cache: bool = True
@@ -57,28 +72,25 @@ class CodeChatAgentConfig(DocChatAgentConfig):
     )
 
 
-CODE_CHAT_INSTRUCTIONS = """
-Your task is to answer questions about a code repository. You will be given directly 
-listings, text and code from various files in the repository. You must answer based 
-on the information given to you. If you are asked to see if there is a certain file 
-in the repository, and it does not occur in the listings you are shown, then you can 
-simply answer "No".
-"""
-
-
 class CodeChatAgent(DocChatAgent):
     """
     Agent for chatting with a code repository.
     """
 
     def __init__(self, config: CodeChatAgentConfig):
-        super().__init__(config, CODE_CHAT_INSTRUCTIONS)
+        super().__init__(config)
         self.original_docs: List[Document] = None
         repo_loader = RepoLoader(self.config.repo_url, config=RepoLoaderConfig())
 
         repo_tree, _ = repo_loader.load(depth=1, lines=20)
         repo_listing = "\n".join(repo_loader.ls(repo_tree, depth=1))
-        repo_contents = json.dumps(repo_tree, indent=2)
+
+        selected_tree = RepoLoader.select(
+            repo_tree,
+            includes=config.content_includes,
+            excludes=config.content_excludes,
+        )
+        repo_contents = json.dumps(selected_tree, indent=2)
 
         repo_info_message = f"""
         Here is some information about the code repository that you can use, 

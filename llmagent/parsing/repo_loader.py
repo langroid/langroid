@@ -481,16 +481,22 @@ class RepoLoader:
     @staticmethod
     def select(
         structure: Dict[str, Union[str, List[Dict]]],
-        names: List[str],
+        includes: List[str],
+        excludes: List[str] = [],
     ) -> Dict[str, Union[str, List[Dict]]]:
         """
         Filter a structure dictionary for certain directories and files.
 
         Args:
             structure (Dict[str, Union[str, List[Dict]]]): The structure dictionary.
-            names (List[str]): A list of desired directory and file names.
-            type (str): The type of the structure to filter for. If None, filter for
-            both files and directories.
+            includes (List[str]): A list of desired directories and files.
+                For files, either full file names or "file type" can be specified.
+                E.g.  "toml" will include all files with the ".toml" extension,
+                or "Makefile" will include all files named "Makefile".
+            excludes (List[str]): A list of directories and files to exclude.
+                Similar to `includes`, full file/dir names or "file type" can be
+                specified. Optional, defaults to empty list.
+
 
         Returns:
             Dict[str, Union[str, List[Dict]]]: The filtered structure dictionary.
@@ -504,19 +510,31 @@ class RepoLoader:
         }
 
         for dir in structure["dirs"]:
-            if dir["name"] in names:
+            if (
+                dir["name"] in includes
+                or RepoLoader._file_type(dir["name"]) in includes
+            ) and (
+                dir["name"] not in excludes
+                and RepoLoader._file_type(dir["name"]) not in excludes
+            ):
                 # If the directory is in the select list, include the whole subtree
                 filtered_structure["dirs"].append(dir)
             else:
                 # Otherwise, filter the directory's contents
-                filtered_dir = RepoLoader.select(dir, names)
+                filtered_dir = RepoLoader.select(dir, includes)
                 if (
                     filtered_dir["dirs"] or filtered_dir["files"]
                 ):  # only add if not empty
                     filtered_structure["dirs"].append(filtered_dir)
 
         for file in structure["files"]:
-            if file["name"] in names:
+            if (
+                file["name"] in includes
+                or RepoLoader._file_type(file["name"]) in includes
+            ) and (
+                file["name"] not in excludes
+                and RepoLoader._file_type(file["name"]) not in excludes
+            ):
                 filtered_structure["files"].append(file)
 
         return filtered_structure

@@ -12,6 +12,12 @@ from rich.console import Console
 
 console = Console()
 
+DEFAULT_DOC_CHAT_INSTRUCTIONS = """
+Your task is to answer questions about various documents.
+You will be given various passages from these documents, and asked to answer questions 
+about them, or summarize them into coherent answers.
+"""
+
 
 class DocChatAgentConfig(AgentConfig):
     """
@@ -26,15 +32,10 @@ class DocChatAgentConfig(AgentConfig):
             initial task messages plus the current query.
     """
 
+    instructions: str = DEFAULT_DOC_CHAT_INSTRUCTIONS
+    summarize_prompt: str = SUMMARY_ANSWER_PROMPT_GPT4
     max_context_tokens: int = 500
     conversation_mode: bool = True
-
-
-DOC_CHAT_INSTRUCTIONS = """
-Your task is to answer questions about various documents.
-You will be given various passages from these documents, and asked to answer questions 
-about them, or summarize them into coherent answers.
-"""
 
 
 class DocChatAgent(ChatAgent):
@@ -45,11 +46,10 @@ class DocChatAgent(ChatAgent):
     def __init__(
         self,
         config: DocChatAgentConfig,
-        instructions: str = DOC_CHAT_INSTRUCTIONS,
     ):
         task_messages = [
             LLMMessage(role=Role.SYSTEM, content="You are a helpful assistant"),
-            LLMMessage(role=Role.USER, content=instructions),
+            LLMMessage(role=Role.USER, content=config.instructions),
         ]
         super().__init__(config, task_messages)
         self.original_docs: List[Document] = None
@@ -133,7 +133,7 @@ class DocChatAgent(ChatAgent):
         passages = self.doc_string(passages)
         # Substitute Q and P into the templatized prompt
 
-        final_prompt = SUMMARY_ANSWER_PROMPT_GPT4.format(
+        final_prompt = self.config.summarize_prompt.format(
             question=f"Question:{question}", extracts=passages
         )
         show_if_debug(final_prompt, "SUMMARIZE_PROMPT= ")
