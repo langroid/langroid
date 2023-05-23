@@ -9,6 +9,7 @@ from llmagent.mytypes import Document
 from typing import List, Union
 from rich import print
 from rich.console import Console
+
 console = Console()
 
 
