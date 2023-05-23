@@ -20,6 +20,7 @@ import pytest
 storage_path = ".qdrant/testdata1"
 rmdir(storage_path)
 
+
 class _TestDocChatAgentConfig(DocChatAgentConfig):
     debug: bool = False
     stream: bool = True  # allow streaming where needed
