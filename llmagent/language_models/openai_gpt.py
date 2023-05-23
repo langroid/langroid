@@ -28,14 +28,16 @@ logging.getLogger("openai").setLevel(logging.ERROR)
 
 class OpenAIChatModel(str, Enum):
     """Enum for OpenAI Chat models"""
+
     GPT3_5_TURBO = "gpt-3.5-turbo"
     GPT4 = "gpt-4"
 
+
 class OpenAICompletionModel(str, Enum):
     """Enum for OpenAI Completion models"""
+
     TEXT_DA_VINCI_003 = "text-davinci-003"
     TEXT_ADA_001 = "text-ada-001"
-
 
 
 class OpenAIGPTConfig(LLMConfig):
@@ -126,9 +128,10 @@ class OpenAIGPT(LanguageModel):
             choices=[msg],
             usage=dict(total_tokens=0),
         )
-        return LLMResponse(
-            message=completion, usage=0, cached=False
-        ), openai_response.dict()
+        return (
+            LLMResponse(message=completion, usage=0, cached=False),
+            openai_response.dict(),
+        )
 
     def _cache_lookup(self, fn_name: str, **kwargs):
         # Use the kwargs as the cache key
@@ -201,6 +204,7 @@ class OpenAIGPT(LanguageModel):
                 LLMMessage(role=Role.SYSTEM, content="You are a helpful assistant."),
                 LLMMessage(role=Role.USER, content=prompt),
             ]
+
             @async_retry_with_exponential_backoff
             async def completions_with_backoff(**kwargs):
                 cached = False
@@ -224,6 +228,7 @@ class OpenAIGPT(LanguageModel):
             usage = response["usage"]["total_tokens"]
             msg = response["choices"][0]["message"]["content"].strip()
         else:
+
             @retry_with_exponential_backoff
             async def completions_with_backoff(**kwargs):
                 cached = False
@@ -250,16 +255,15 @@ class OpenAIGPT(LanguageModel):
         return LLMResponse(message=msg, usage=usage, cached=cached)
 
     def chat(
-            self,
-            messages: Union[str, List[LLMMessage]],
-            max_tokens: int
+        self, messages: Union[str, List[LLMMessage]], max_tokens: int
     ) -> LLMResponse:
         openai.api_key = self.api_key
         if type(messages) == str:
             messages = [
                 LLMMessage(role=Role.SYSTEM, content="You are a helpful assistant."),
-                LLMMessage(role=Role.USER, content=messages)
+                LLMMessage(role=Role.USER, content=messages),
             ]
+
         @retry_with_exponential_backoff
         def completions_with_backoff(**kwargs):
             cached = False

@@ -31,6 +31,8 @@ DEFAULT_URL = "https://github.com/eugeneyan/testing-ml"
 # each corresponds to a method in the agent.
 
 NO_ANSWER = "I don't know"
+
+
 class UrlModel(BaseModel):
     url: HttpUrl
 
@@ -58,7 +60,7 @@ class DockerChatAgent(ChatAgent):
                 self.code_chat_agent,
                 request=input_str,
                 no_answer=NO_ANSWER,
-                user_confirm=True
+                user_confirm=True,
             )
 
     def handle_message_fallback(self, input_str: str = "") -> Optional[str]:

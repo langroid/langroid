@@ -66,7 +66,6 @@ simply answer "No".
 """
 
 
-
 class CodeChatAgent(DocChatAgent):
     """
     Agent for chatting with a code repository.
@@ -81,7 +80,7 @@ class CodeChatAgent(DocChatAgent):
         repo_listing = "\n".join(repo_loader.ls(repo_tree, depth=1))
         repo_contents = json.dumps(repo_tree, indent=2)
 
-        repo_info_message =  f"""
+        repo_info_message = f"""
         Here is some information about the code repository that you can use, 
         in the subsequent questions. For any future questions, you can refer back to 
         this info if needed.
@@ -96,13 +95,16 @@ class CodeChatAgent(DocChatAgent):
         self.add_user_message(repo_info_message)
 
         dct, documents = repo_loader.load(depth=1, lines=100)
-        listing = [
-                      """
+        listing = (
+            [
+                """
                       List of ALL files and directories in this project:
                       If a file is not in this list, then we can be sure that
                       it is not in the repo!
                       """
-                  ] + repo_loader.ls(dct, depth=1)
+            ]
+            + repo_loader.ls(dct, depth=1)
+        )
         listing = Document(
             content="\n".join(listing),
             metadata={"source": "repo_listing"},
@@ -112,7 +114,9 @@ class CodeChatAgent(DocChatAgent):
             doc for doc in documents if doc.metadata["language"] not in ["md", "txt"]
         ] + [listing]
 
-        text_docs = [doc for doc in documents if doc.metadata["language"] in ["md", "txt"]]
+        text_docs = [
+            doc for doc in documents if doc.metadata["language"] in ["md", "txt"]
+        ]
 
         self.config.parsing = config.parsing
         n_text_splits = self.ingest_docs(text_docs)
@@ -128,7 +132,3 @@ class CodeChatAgent(DocChatAgent):
         {self.config.repo_url}
         """.strip()
         )
-
-
-
-

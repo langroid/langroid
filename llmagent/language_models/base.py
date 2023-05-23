@@ -20,7 +20,7 @@ class LLMConfig(BaseSettings):
     max_tokens: int = 1024
     # chat_model: str = "gpt-3.5-turbo"
     # completion_model: str = "text-davinci-003"
-    use_chat_for_completion: bool = True # use chat model for completion?
+    use_chat_for_completion: bool = True  # use chat model for completion?
     stream: bool = False  # stream output from API?
     cache_config: RedisCacheConfig = RedisCacheConfig(
         hostname="redis-11524.c251.east-us-mz.azure.cloud.redislabs.com",
@@ -88,10 +88,9 @@ class LanguageModel(ABC):
         pass
 
     @abstractmethod
-    def chat(self,
-             messages: Union[str, List[LLMMessage]],
-             max_tokens: int
-             ) -> LLMResponse:
+    def chat(
+        self, messages: Union[str, List[LLMMessage]], max_tokens: int
+    ) -> LLMResponse:
         pass
 
     def __call__(self, prompt: str, max_tokens: int) -> LLMResponse:
@@ -204,9 +203,7 @@ class LanguageModel(ABC):
         )
         show_if_debug(final_prompt, "SUMMARIZE_PROMPT= ")
         # Generate the final verbatim extract based on the final prompt
-        llm_response = self.generate(
-            prompt=final_prompt, max_tokens=1024
-        )
+        llm_response = self.generate(prompt=final_prompt, max_tokens=1024)
         final_answer = llm_response.message.strip()
         show_if_debug(final_answer, "SUMMARIZE_RESPONSE= ")
         parts = final_answer.split("SOURCE:", maxsplit=1)
@@ -218,8 +215,7 @@ class LanguageModel(ABC):
             sources = ""
         return Document(
             content=content,
-            metadata={"source": "SOURCE: " + sources,
-                      "cached": llm_response.cached}
+            metadata={"source": "SOURCE: " + sources, "cached": llm_response.cached},
         )
 
 

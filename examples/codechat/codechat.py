@@ -13,8 +13,6 @@ app = typer.Typer()
 setup_colored_logging()
 
 
-
-
 def chat(config: CodeChatAgentConfig) -> None:
     configuration.update_global_settings(config, keys=["debug", "stream", "cache"])
     if config.gpt4:

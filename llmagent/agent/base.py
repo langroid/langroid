@@ -47,7 +47,7 @@ class Agent(ABC):
         self.vecdb = VectorStore.create(config.vecdb) if config.vecdb else None
         self.parser = Parser(config.parsing) if config.parsing else None
 
-    def update_dialog(self, prompt:str, output:str) -> None:
+    def update_dialog(self, prompt: str, output: str) -> None:
         self.dialog.append((prompt, output))
 
     def get_dialog(self) -> List[Tuple[str, str]]:
@@ -235,7 +235,7 @@ class Agent(ABC):
                 cm = console.status("LLM responding to message...")
                 stack.enter_context(cm)
             response = self.llm.generate(prompt, self.config.llm.max_tokens)
-        displayed=False
+        displayed = False
         if not self.llm.get_stream() or response.cached:
             # we would have already displayed the msg "live" ONLY if
             # streaming was enabled, AND we did not find a cached response
@@ -277,8 +277,8 @@ class Agent(ABC):
                 source="LLM",
                 usage=response.usage,
                 displayed=displayed,
-                cached=response.cached
-            )
+                cached=response.cached,
+            ),
         )
 
     def respond_user(self, msg) -> str:
@@ -294,9 +294,13 @@ class Agent(ABC):
         response = input("")
         return response
 
-    def ask_agent(self, agent: "Agent", request: str,
-                  no_answer:str = "I don't know",
-                  user_confirm: bool = True) -> Optional[Document]:
+    def ask_agent(
+        self,
+        agent: "Agent",
+        request: str,
+        no_answer: str = "I don't know",
+        user_confirm: bool = True,
+    ) -> Optional[Document]:
         """
         Send a request to another agent, possibly after confirming with the user.
 
@@ -321,4 +325,3 @@ class Agent(ABC):
         answer = agent.respond(request)
         if answer != no_answer:
             return (f"{agent_type} says: " + str(answer)).strip()
-

@@ -6,7 +6,6 @@ from examples.dockerchat.dockerchat_agent_messages import (
     ValidateDockerfileMessage,
 )
 
-from llmagent.language_models.base import LLMConfig
 from llmagent.cachedb.redis_cachedb import RedisCacheConfig
 from typing import Optional
 

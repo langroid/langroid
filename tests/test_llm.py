@@ -1,5 +1,8 @@
 from llmagent.language_models.openai_gpt import (
-    OpenAIGPT, OpenAIGPTConfig, OpenAIChatModel, OpenAICompletionModel
+    OpenAIGPT,
+    OpenAIGPTConfig,
+    OpenAIChatModel,
+    OpenAICompletionModel,
 )
 from llmagent.language_models.base import LLMMessage, Role
 from llmagent.cachedb.redis_cachedb import RedisCacheConfig
@@ -36,14 +39,11 @@ def test_openai_gpt(test_settings: Settings, streaming, country, capital):
     assert capital in response.message
     assert not response.cached
 
-
     set_global(Settings(cache=True))
     # should be from cache this time
     response = mdl.generate(prompt=question, max_tokens=10)
     assert capital in response.message
     assert response.cached
-
-
 
     set_global(Settings(cache=False))
     # chat mode via `generate`,

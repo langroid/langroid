@@ -1,13 +1,16 @@
 # from openai-cookbook
 import random
 import time
-import aiohttp, asyncio
+import aiohttp
+import asyncio
 import openai
 import logging
 
 logger = logging.getLogger(__name__)
 # setlevel to warning
 logger.setLevel(logging.WARNING)
+
+
 # define a retry decorator
 def retry_with_exponential_backoff(
     func,
@@ -61,16 +64,16 @@ def retry_with_exponential_backoff(
 
 
 def async_retry_with_exponential_backoff(
-        func,
-        initial_delay: float = 1,
-        exponential_base: float = 2,
-        jitter: bool = True,
-        max_retries: int = 10,
-        errors: tuple = (
-                openai.error.OpenAIError,
-                aiohttp.ServerTimeoutError,
-                asyncio.TimeoutError,
-        ),
+    func,
+    initial_delay: float = 1,
+    exponential_base: float = 2,
+    jitter: bool = True,
+    max_retries: int = 10,
+    errors: tuple = (
+        openai.error.OpenAIError,
+        aiohttp.ServerTimeoutError,
+        asyncio.TimeoutError,
+    ),
 ):
     """Retry a function with exponential backoff."""
 

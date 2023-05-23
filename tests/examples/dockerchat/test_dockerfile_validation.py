@@ -2,7 +2,6 @@ from llmagent.utils.configuration import update_global_settings, Settings, set_g
 from llmagent.language_models.base import Role, LLMMessage
 from llmagent.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
 from llmagent.agent.base import AgentConfig
-from llmagent.language_models.base import LLMConfig
 from llmagent.prompts.prompts_config import PromptsConfig
 from llmagent.agent.base import AgentMessage
 from llmagent.agent.chat_agent import ChatAgent

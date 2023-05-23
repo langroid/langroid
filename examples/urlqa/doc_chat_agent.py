@@ -1,10 +1,7 @@
 from llmagent.agent.base import AgentConfig
 from llmagent.agent.chat_agent import ChatAgent
 from llmagent.language_models.base import StreamingIfAllowed, LLMMessage, Role
-from llmagent.prompts.templates import (
-    SUMMARY_ANSWER_PROMPT_GPT4,
-    EXTRACTION_PROMPT_GPT4,
-)
+from llmagent.prompts.templates import SUMMARY_ANSWER_PROMPT_GPT4
 from llmagent.utils.output.printing import show_if_debug
 from llmagent.utils.configuration import settings
 from contextlib import ExitStack
@@ -14,6 +11,7 @@ from rich import print
 from rich.console import Console
 
 console = Console()
+
 
 class DocChatAgentConfig(AgentConfig):
     """
@@ -27,22 +25,27 @@ class DocChatAgentConfig(AgentConfig):
             If False, each request to LLM will consist only of the
             initial task messages plus the current query.
     """
+
     max_context_tokens: int = 500
     conversation_mode: bool = True
+
 
 DOC_CHAT_INSTRUCTIONS = """
 Your task is to answer questions about various documents.
 You will be given various passages from these documents, and asked to answer questions 
 about them, or summarize them into coherent answers.
 """
+
+
 class DocChatAgent(ChatAgent):
     """
     Agent for chatting with a collection of documents.
     """
 
     def __init__(
-            self, config: DocChatAgentConfig,
-            instructions:str = DOC_CHAT_INSTRUCTIONS,
+        self,
+        config: DocChatAgentConfig,
+        instructions: str = DOC_CHAT_INSTRUCTIONS,
     ):
         task_messages = [
             LLMMessage(role=Role.SYSTEM, content="You are a helpful assistant"),
@@ -141,9 +144,8 @@ class DocChatAgent(ChatAgent):
         # 2 new LLMMessage objects:
         # one for `final_prompt`, and one for the LLM response
 
-        #TODO need to "forget" last two messages in message_history
+        # TODO need to "forget" last two messages in message_history
         # if we are not in conversation mode
-
 
         if self.config.conversation_mode:
             answer_doc = super().respond(final_prompt)
@@ -161,8 +163,10 @@ class DocChatAgent(ChatAgent):
             sources = ""
         return Document(
             content=content,
-            metadata={"source": "SOURCE: " + sources,
-                      "cached": answer_doc.metadata.get("cached", False)}
+            metadata={
+                "source": "SOURCE: " + sources,
+                "cached": answer_doc.metadata.get("cached", False),
+            },
         )
 
     def answer_from_docs(self, query: str) -> Document:
@@ -177,13 +181,14 @@ class DocChatAgent(ChatAgent):
                     query = self.llm.followup_to_standalone(self.dialog, query)
             print(f"[orange2]New query: {query}")
 
-        max_score=0
+        max_score = 0
         passages = self.original_docs
         # if original docs not too long, no need to look for relevant parts.
         if self.original_docs_length > self.config.max_context_tokens:
             with console.status("[cyan]Searching VecDB for relevant doc passages..."):
                 docs_and_scores = self.vecdb.similar_texts_with_scores(
-                    query, k=self.config.parsing.n_similar_docs,
+                    query,
+                    k=self.config.parsing.n_similar_docs,
                 )
             passages: List[Document] = [
                 Document(content=d.content, metadata=d.metadata)
