@@ -1,5 +1,6 @@
 import re
 from typing import Callable, List
+from bs4 import BeautifulSoup
 
 
 def custom_sent_tokenize(text):
@@ -38,6 +39,8 @@ def create_chunks(
 
         return chunks
 
+    soup = BeautifulSoup(text, "html.parser")
+    text = soup.get_text()
     # First, try to split the document into paragraphs
     paragraphs = text.split("\n\n")
 
@@ -48,4 +51,5 @@ def create_chunks(
     else:
         chunks = paragraphs
 
+    chunks = [chunk.strip() for chunk in chunks if chunk.strip() != ""]
     return chunks

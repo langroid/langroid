@@ -38,7 +38,6 @@ class CodeChatAgentConfig(DocChatAgentConfig):
     cache: bool = True
     debug: bool = False
     stream: bool = True  # allow streaming where needed
-    max_tokens: int = 10000
     vecdb: VectorStoreConfig = QdrantDBConfig(
         type="qdrant",
         collection_name="llmagent-repo",
@@ -55,8 +54,8 @@ class CodeChatAgentConfig(DocChatAgentConfig):
         use_chat_for_completion=True,
     )
     parsing: ParsingConfig = ParsingConfig(
-        splitter="para_sentence",
-        chunk_size=500,
+        splitter="tokens",
+        chunk_size=100,
         chunk_overlap=50,
     )
 
