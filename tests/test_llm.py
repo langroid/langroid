@@ -14,7 +14,8 @@ set_global(Settings(stream=True))
     "streaming, country, capital",
     [(True, "France", "Paris"), (False, "India", "Delhi")],
 )
-def test_openai_gpt(streaming, country, capital):
+def test_openai_gpt(test_settings: Settings, streaming, country, capital):
+    set_global(test_settings)
     cfg = OpenAIGPTConfig(
         stream=streaming,  # use streaming output if enabled globally
         type="openai",

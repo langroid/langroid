@@ -1,4 +1,4 @@
-from examples.urlqa.doc_chat_agent import DocChatAgent
+from examples.urlqa.doc_chat_agent import DocChatAgent, DocChatAgentConfig
 from llmagent.mytypes import Document
 from llmagent.agent.base import AgentConfig
 from llmagent.utils.configuration import Settings, set_global
@@ -11,7 +11,6 @@ from llmagent.prompts.prompts_config import PromptsConfig
 from llmagent.cachedb.redis_cachedb import RedisCacheConfig
 from llmagent.utils.system import rmdir
 from llmagent.parsing.utils import generate_random_text
-from tests.conftest import TestOptions
 
 
 from typing import List
@@ -22,10 +21,11 @@ import pytest
 storage_path = ".qdrant/testdata1"
 rmdir(storage_path)
 
-class TestDocChatAgentConfig(AgentConfig):
+class _TestDocChatAgentConfig(DocChatAgentConfig):
     debug: bool = False
     stream: bool = True  # allow streaming where needed
     max_tokens: int = 100
+    conversation_mode = True
     vecdb: VectorStoreConfig = QdrantDBConfig(
         type="qdrant",
         collection_name="test-data",
@@ -38,6 +38,7 @@ class TestDocChatAgentConfig(AgentConfig):
     )
 
     llm: OpenAIGPTConfig = OpenAIGPTConfig(
+        stream=True,
         cache_config=RedisCacheConfig(fake=False),
         chat_model=OpenAIChatModel.GPT4,
         use_chat_for_completion=True,
@@ -55,7 +56,7 @@ class TestDocChatAgentConfig(AgentConfig):
     )
 
 
-config = TestDocChatAgentConfig()
+config = _TestDocChatAgentConfig()
 set_global(Settings(cache=True)) # allow cacheing
 documents: List[Document] = [
     Document(
@@ -63,7 +64,10 @@ documents: List[Document] = [
         In the year 2050, GPT10 was released. In 2057,
         paperclips were seen all over the world. Global
         warming was solved in 2060. In 2061, the world
-        was taken over by paperclips.
+        was taken over by paperclips. 
+        
+        In 2045, the Tour de France was still going on.
+        They were still using bicycles. There was one more ice age in 2040.
         """,
         metadata = {"source": "wikipedia"},
     ),
@@ -107,10 +111,11 @@ warnings.filterwarnings(
         ("What do we know about paperclips?", "2057, 2061"),
     ],
 )
-def test_doc_chat_agent(options:TestOptions, query:str, expected:str):
-    set_global(Settings(debug=options.show, cache=not options.nocache))
+def test_doc_chat_agent(test_settings:Settings, query:str, expected:str):
+    #set_global(Settings(debug=options.show, cache=not options.nocache))
     # note that the (query, ans) pairs are accumulated into the
     # internal dialog history of the agent.
+    set_global(test_settings)
     ans = agent.respond(query).content
     expected = [e.strip() for e in expected.split(",")]
     assert all([e in ans for e in expected])

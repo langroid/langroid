@@ -1,9 +1,5 @@
 import pytest
-from pydantic import BaseSettings
-
-class TestOptions(BaseSettings):
-    show: bool = False
-    nocache: bool = False
+from llmagent.utils.configuration import Settings
 
 
 def pytest_addoption(parser) -> None:
@@ -21,8 +17,8 @@ def pytest_addoption(parser) -> None:
     )
 
 @pytest.fixture
-def options(request) -> TestOptions:
-    return TestOptions(
-        show=request.config.getoption("--show"),
-        nocache=request.config.getoption("--nc"),
+def test_settings(request) -> Settings:
+    return Settings(
+        debug=request.config.getoption("--show"),
+        cache=not request.config.getoption("--nc"),
     )
