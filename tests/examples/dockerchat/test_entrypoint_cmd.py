@@ -5,7 +5,7 @@ import json
 import pytest
 
 from llmagent.utils.system import rmdir
-from examples.dockerchat.identify_docker_entrypoint_cmd import identify_entrypoint_CMD
+from examples.dockerchat.entrypoint_cmd import identify_entrypoint_CMD
 from llmagent.agent.base import AgentMessage
 from llmagent.agent.base import AgentConfig
 from llmagent.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
@@ -42,7 +42,10 @@ class MessageHandlingAgent(ChatAgent):
     def get_entrypoint_cmd(
         self, EntryPointAndCMDMessage, cmd: bool = False, entrypoint: bool = False
     ) -> str:
-        return {"entrypoint": '["python", "main.py"]', "cmd": None}
+        my_dict = {"entrypoint": '["python", "main.py"]', "cmd": ''}
+
+        return my_dict
+    # json.dumps({"entrypoint": '["python", "main.py"]', "cmd": None})
 
 
 qd_dir = ".qdrant/testdata_test_agent"
@@ -71,7 +74,7 @@ def test_enable_message():
 def test_disable_message():
     agent.enable_message(EntryPointAndCMDMessage)
     agent.disable_message(EntryPointAndCMDMessage)
-    assert "python_dependency" not in agent.handled_classes
+    assert "get_entrypoint_cmd" not in agent.handled_classes
 
 
 @pytest.mark.parametrize("msg_cls", [EntryPointAndCMDMessage])
@@ -100,7 +103,8 @@ def test_agent_handle_message():
     """
     agent.enable_message(EntryPointAndCMDMessage)
     assert agent.handle_message(NONE_MSG) is None
-    a, b = agent.handle_message(ENTRYPOINT_CMD_MSG)
+    candidates = agent.handle_message(ENTRYPOINT_CMD_MSG)
+    print(candidates)
     assert agent.handle_message(ENTRYPOINT_CMD_MSG) == {
         "entrypoint": '["python", "main.py"]',
         "cmd": None,

@@ -17,7 +17,7 @@ from examples.dockerchat.identify_python_dependency import (
     identify_dependency_management,
 )
 
-from examples.dockerchat.identify_docker_entrypoint_cmd import identify_entrypoint_CMD
+from examples.dockerchat.entrypoint_cmd import identify_entrypoint_CMD
 
 import os
 import logging
@@ -344,4 +344,12 @@ class DockerChatAgent(ChatAgent):
     def get_entrypoint_cmd(
         self, m: EntryPointAndCMDMessage, cmd: bool = False, entrypoint: bool = False
     ) -> Tuple[Optional[List[List[str]]], Optional[List[List[str]]]]:
+        """
+        Defines the ENTRYPOINT and CMD instructions. 
+        Args:
+            cmd (bool): 
+            entrypoint (bool): 
+        Retruns:
+            A tuple comprises the list of instructions for ENTRYPOINT and CMD. The assumption here there could be more than one main script in the rep. Therefore, we need to provide the user with possibilities to run their containerized app
+        """
         return identify_entrypoint_CMD(self.repo_path)
