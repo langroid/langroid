@@ -8,7 +8,7 @@ from llmagent.cachedb.redis_cachedb import RedisCacheConfig
 from llmagent.utils.configuration import Settings, set_global
 
 
-class TestChatAgentConfig(AgentConfig):
+class _TestChatAgentConfig(AgentConfig):
     max_tokens: int = 200
     vecdb: VectorStoreConfig = None
     llm: OpenAIGPTConfig = OpenAIGPTConfig(
@@ -24,7 +24,7 @@ class TestChatAgentConfig(AgentConfig):
 
 def test_chat_agent(test_settings: Settings):
     set_global(test_settings)
-    cfg = TestChatAgentConfig()
+    cfg = _TestChatAgentConfig()
     # just testing that these don't fail
     agent = ChatAgent(cfg)
     response = agent.respond("what is the capital of France?")
