@@ -1,11 +1,10 @@
 import os
 import tempfile
 import pytest
-from llmagent.utils.configuration import update_global_settings
+from llmagent.utils.configuration import update_global_settings, Settings, set_global
 from llmagent.language_models.base import Role, LLMMessage
 from llmagent.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
 from llmagent.agent.base import AgentConfig
-from llmagent.language_models.base import LLMConfig
 from llmagent.prompts.prompts_config import PromptsConfig
 from llmagent.agent.base import AgentMessage
 from llmagent.agent.chat_agent import ChatAgent
@@ -114,12 +113,13 @@ def test_agent_handle_message():
     )
 
 
-def test_llm_agent_message():
+def test_llm_agent_message(test_settings: Settings):
     """
     Test whether LLM is able to generate message in required format, and the
     agent handles the message correctly.
     """
     update_global_settings(cfg, keys=["debug"])
+    set_global(test_settings)
     task_messages = [
         LLMMessage(
             role=Role.SYSTEM,

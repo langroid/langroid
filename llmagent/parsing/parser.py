@@ -18,10 +18,11 @@ class ParsingConfig(BaseSettings):
 class Parser:
     def __init__(self, config: ParsingConfig):
         self.config = config
+        self.tokenizer = tiktoken.encoding_for_model(config.token_encoding_model)
 
     def num_tokens(self, text: str) -> int:
-        encoding = tiktoken.encoding_for_model(self.config.token_encoding_model)
-        return len(encoding.encode(text))
+        tokens = self.tokenizer.encode(text)
+        return len(tokens)
 
     def split(self, docs: List[Document]) -> List[Document]:
         if self.config.splitter == "para_sentence":

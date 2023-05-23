@@ -1,5 +1,8 @@
 from llmagent.language_models.openai_gpt import (
-    OpenAIGPT, OpenAIGPTConfig, OpenAIChatModel, OpenAICompletionModel
+    OpenAIGPT,
+    OpenAIGPTConfig,
+    OpenAIChatModel,
+    OpenAICompletionModel,
 )
 from llmagent.language_models.base import LLMMessage, Role
 from llmagent.cachedb.redis_cachedb import RedisCacheConfig
@@ -14,7 +17,8 @@ set_global(Settings(stream=True))
     "streaming, country, capital",
     [(True, "France", "Paris"), (False, "India", "Delhi")],
 )
-def test_openai_gpt(streaming, country, capital):
+def test_openai_gpt(test_settings: Settings, streaming, country, capital):
+    set_global(test_settings)
     cfg = OpenAIGPTConfig(
         stream=streaming,  # use streaming output if enabled globally
         type="openai",
@@ -35,14 +39,11 @@ def test_openai_gpt(streaming, country, capital):
     assert capital in response.message
     assert not response.cached
 
-
     set_global(Settings(cache=True))
     # should be from cache this time
     response = mdl.generate(prompt=question, max_tokens=10)
     assert capital in response.message
     assert response.cached
-
-
 
     set_global(Settings(cache=False))
     # chat mode via `generate`,

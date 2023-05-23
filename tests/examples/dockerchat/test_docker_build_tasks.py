@@ -6,7 +6,6 @@ from examples.dockerchat.dockerchat_agent_messages import (
     ValidateDockerfileMessage,
 )
 
-from llmagent.language_models.base import LLMConfig
 from llmagent.cachedb.redis_cachedb import RedisCacheConfig
 from typing import Optional
 
@@ -33,7 +32,7 @@ Ok, confirming the URL.
 """
 
 
-class TestDockerChatAgent(DockerChatAgent):
+class _TestDockerChatAgent(DockerChatAgent):
     def handle_message_fallback(self, input_str: str = "") -> Optional[str]:
         # if URL not yet known, tell LLM to ask for it, unless this msg
         # contains the word URL
@@ -57,7 +56,7 @@ PROPOSED_DOCKERFILE_CONTENT = """
 
 
 def test_validate_dockerfile():
-    agent = TestDockerChatAgent(cfg)
+    agent = _TestDockerChatAgent(cfg)
     temp_folder_path = tempfile.mkdtemp()
     agent.repo_path = temp_folder_path
 

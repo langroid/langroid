@@ -7,7 +7,6 @@ from examples.dockerchat.dockerchat_agent_messages import (
 )
 
 from llmagent.agent.message import AgentMessage
-from llmagent.language_models.base import LLMConfig
 from llmagent.cachedb.redis_cachedb import RedisCacheConfig
 from typing import Optional
 import json
@@ -51,7 +50,7 @@ great, let me know the URL:
 """
 
 
-class TestDockerChatAgent(DockerChatAgent):
+class _TestDockerChatAgent(DockerChatAgent):
     def handle_message_fallback(self, input_str: str = "") -> Optional[str]:
         # if URL not yet known, tell LLM to ask for it, unless this msg
         # contains the word URL
@@ -63,7 +62,7 @@ class TestDockerChatAgent(DockerChatAgent):
         return GOT_URL_RESPONSE
 
 
-agent = TestDockerChatAgent(cfg)
+agent = _TestDockerChatAgent(cfg)
 
 
 def test_enable_message():

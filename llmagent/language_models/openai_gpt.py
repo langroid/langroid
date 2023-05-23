@@ -6,7 +6,10 @@ from llmagent.language_models.base import (
     Role,
 )
 import sys
-from llmagent.language_models.utils import retry_with_exponential_backoff
+from llmagent.language_models.utils import (
+    retry_with_exponential_backoff,
+    async_retry_with_exponential_backoff,
+)
 from llmagent.utils.configuration import settings
 from llmagent.utils.constants import Colors
 from llmagent.utils.output.printing import PrintColored
@@ -25,14 +28,16 @@ logging.getLogger("openai").setLevel(logging.ERROR)
 
 class OpenAIChatModel(str, Enum):
     """Enum for OpenAI Chat models"""
+
     GPT3_5_TURBO = "gpt-3.5-turbo"
     GPT4 = "gpt-4"
 
+
 class OpenAICompletionModel(str, Enum):
     """Enum for OpenAI Completion models"""
+
     TEXT_DA_VINCI_003 = "text-davinci-003"
     TEXT_ADA_001 = "text-ada-001"
-
 
 
 class OpenAIGPTConfig(LLMConfig):
@@ -123,9 +128,10 @@ class OpenAIGPT(LanguageModel):
             choices=[msg],
             usage=dict(total_tokens=0),
         )
-        return LLMResponse(
-            message=completion, usage=0, cached=False
-        ), openai_response.dict()
+        return (
+            LLMResponse(message=completion, usage=0, cached=False),
+            openai_response.dict(),
+        )
 
     def _cache_lookup(self, fn_name: str, **kwargs):
         # Use the kwargs as the cache key
@@ -162,11 +168,11 @@ class OpenAIGPT(LanguageModel):
             else:
                 # If it's not in the cache, call the API
                 result = openai.Completion.create(**kwargs)
-                if not self.config.stream:
-                    # if streaming, cannot cache result
-                    # since it is a generator. Instead,
-                    # we hold on to the hashed_key and
-                    # cache the result later
+                if self.config.stream:
+                    llm_response, openai_response = self._stream_response(result)
+                    self.cache.store(hashed_key, openai_response)
+                    return cached, hashed_key, openai_response
+                else:
                     self.cache.store(hashed_key, result)
             return cached, hashed_key, result
 
@@ -179,14 +185,6 @@ class OpenAIGPT(LanguageModel):
             echo=False,
             stream=self.config.stream,
         )
-        if self.config.stream and not cached:
-            # in this case we have not found it in cache,
-            # so get response and cache now.
-            # Also in stream mode we would display the response "live",
-            # in the _stream_response method.
-            llm_response, openai_response = self._stream_response(response)
-            self.cache.store(hashed_key, openai_response)
-            return llm_response
 
         usage = response["usage"]["total_tokens"]
         msg = response["choices"][0]["text"].strip()
@@ -206,7 +204,8 @@ class OpenAIGPT(LanguageModel):
                 LLMMessage(role=Role.SYSTEM, content="You are a helpful assistant."),
                 LLMMessage(role=Role.USER, content=prompt),
             ]
-            @retry_with_exponential_backoff
+
+            @async_retry_with_exponential_backoff
             async def completions_with_backoff(**kwargs):
                 cached = False
                 hashed_key, result = self._cache_lookup("AsyncChatCompletion", **kwargs)
@@ -229,6 +228,7 @@ class OpenAIGPT(LanguageModel):
             usage = response["usage"]["total_tokens"]
             msg = response["choices"][0]["message"]["content"].strip()
         else:
+
             @retry_with_exponential_backoff
             async def completions_with_backoff(**kwargs):
                 cached = False
@@ -255,16 +255,15 @@ class OpenAIGPT(LanguageModel):
         return LLMResponse(message=msg, usage=usage, cached=cached)
 
     def chat(
-            self,
-            messages: Union[str, List[LLMMessage]],
-            max_tokens: int
+        self, messages: Union[str, List[LLMMessage]], max_tokens: int
     ) -> LLMResponse:
         openai.api_key = self.api_key
         if type(messages) == str:
             messages = [
                 LLMMessage(role=Role.SYSTEM, content="You are a helpful assistant."),
-                LLMMessage(role=Role.USER, content=messages)
+                LLMMessage(role=Role.USER, content=messages),
             ]
+
         @retry_with_exponential_backoff
         def completions_with_backoff(**kwargs):
             cached = False
