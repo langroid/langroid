@@ -7,7 +7,6 @@ from llmagent.prompts.prompts_config import PromptsConfig
 from llmagent.cachedb.redis_cachedb import RedisCacheConfig
 from llmagent.utils.configuration import Settings, set_global
 
-
 class _TestChatAgentConfig(AgentConfig):
     max_tokens: int = 200
     vecdb: VectorStoreConfig = None
