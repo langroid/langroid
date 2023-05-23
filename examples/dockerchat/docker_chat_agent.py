@@ -32,6 +32,16 @@ DEFAULT_URL = "https://github.com/eugeneyan/testing-ml"
 
 NO_ANSWER = "I don't know"
 
+DOCKER_CODE_CHAT_INSTRUCTIONS = """
+Your task is to answer my questions about a code repository, 
+so that I can build a Dockerfile for it. You will be given various 
+extracts from the codebase, such as directory listings or file contents.  
+When answering my questions, keep in mind that my goal is to build a
+Dockerfile for the codebase. For example, if I ask you if a certain file
+exists, and it does not occur in the listings you are shown, then you can
+simply answer "No". 
+"""
+
 
 class UrlModel(BaseModel):
     url: HttpUrl
@@ -90,7 +100,15 @@ class DockerChatAgent(ChatAgent):
                 break
 
         self.url = url_model.url
-        code_chat_cfg = CodeChatAgentConfig(repo_url=self.url)
+        code_chat_cfg = CodeChatAgentConfig(
+            repo_url=self.url,
+            instructions=DOCKER_CODE_CHAT_INSTRUCTIONS,
+            content_includes=["txt", "md", "yml", "yaml", "sh", "Makefile"],
+            content_excludes=[],
+        )
+        # Note `content_includes` and `content_excludes` are used in
+        # self.code_chat_agent to create a json dump of (top k lines) of various
+        # files, to be included in the initial LLM message.
         self.code_chat_agent = CodeChatAgent(code_chat_cfg)
         self.repo_loader = RepoLoader(self.url, RepoLoaderConfig())
         self.repo_path = self.repo_loader.clone()
@@ -98,15 +116,16 @@ class DockerChatAgent(ChatAgent):
         self.repo_tree, _ = self.repo_loader.load(depth=1, lines=20)
         selected_tree = RepoLoader.select(
             self.repo_tree,
-            names=DEPENDENCY_FILES,
+            includes=DEPENDENCY_FILES,
         )
         repo_listing = "\n".join(self.repo_loader.ls(self.repo_tree, depth=1))
         repo_contents = json.dumps(selected_tree, indent=2)
 
         return f"""
-        Ok, confirmed, and here is some information about the repo that you can use.
+        Based on the URL, here is some information about the repo that you can use.  
         
-        First, here is a listing of the files and directories at the root of the repo:
+        First, here is a list of ALL the files and directories at the root of the repo
+        (if a file is NOT in this list, you an assume it DOES NOT EXIST):
         {repo_listing}
         
         And here is a JSON representation of the contents of some of the files:
@@ -118,6 +137,9 @@ class DockerChatAgent(ChatAgent):
         got the information from.
         Once you show me the information you are able to infer, 
         you can proceed with your next question or request for information. 
+        
+        In later parts of the conversation, only ask questions that CANNOT 
+        be answered by the information above.
 
         If you still need further information, you can ask me. 
         """
@@ -162,7 +184,7 @@ class DockerChatAgent(ChatAgent):
         if answer is not None:
             return answer
 
-        matches = RepoLoader.select(self.repo_tree, names=[message.filename])
+        matches = RepoLoader.select(self.repo_tree, includes=[message.filename])
         exists = False
         if len(matches) > 0:
             exists = len(matches["files"]) > 0
