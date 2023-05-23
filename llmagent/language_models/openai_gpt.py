@@ -6,7 +6,10 @@ from llmagent.language_models.base import (
     Role,
 )
 import sys
-from llmagent.language_models.utils import retry_with_exponential_backoff
+from llmagent.language_models.utils import (
+    retry_with_exponential_backoff,
+    async_retry_with_exponential_backoff,
+)
 from llmagent.utils.configuration import settings
 from llmagent.utils.constants import Colors
 from llmagent.utils.output.printing import PrintColored
@@ -162,11 +165,11 @@ class OpenAIGPT(LanguageModel):
             else:
                 # If it's not in the cache, call the API
                 result = openai.Completion.create(**kwargs)
-                if not self.config.stream:
-                    # if streaming, cannot cache result
-                    # since it is a generator. Instead,
-                    # we hold on to the hashed_key and
-                    # cache the result later
+                if self.config.stream:
+                    llm_response, openai_response = self._stream_response(result)
+                    self.cache.store(hashed_key, openai_response)
+                    return cached, hashed_key, openai_response
+                else:
                     self.cache.store(hashed_key, result)
             return cached, hashed_key, result
 
@@ -179,14 +182,6 @@ class OpenAIGPT(LanguageModel):
             echo=False,
             stream=self.config.stream,
         )
-        if self.config.stream and not cached:
-            # in this case we have not found it in cache,
-            # so get response and cache now.
-            # Also in stream mode we would display the response "live",
-            # in the _stream_response method.
-            llm_response, openai_response = self._stream_response(response)
-            self.cache.store(hashed_key, openai_response)
-            return llm_response
 
         usage = response["usage"]["total_tokens"]
         msg = response["choices"][0]["text"].strip()
@@ -206,7 +201,7 @@ class OpenAIGPT(LanguageModel):
                 LLMMessage(role=Role.SYSTEM, content="You are a helpful assistant."),
                 LLMMessage(role=Role.USER, content=prompt),
             ]
-            @retry_with_exponential_backoff
+            @async_retry_with_exponential_backoff
             async def completions_with_backoff(**kwargs):
                 cached = False
                 hashed_key, result = self._cache_lookup("AsyncChatCompletion", **kwargs)
