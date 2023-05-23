@@ -1,6 +1,7 @@
 from llmagent.agent.chat_agent import ChatAgent
 from pydantic import BaseModel, HttpUrl
 from typing import Optional
+from examples.codechat.code_chat_agent import CodeChatAgentConfig, CodeChatAgent
 from examples.dockerchat.dockerchat_agent_messages import (
     AskURLMessage,
     FileExistsMessage,
@@ -8,7 +9,7 @@ from examples.dockerchat.dockerchat_agent_messages import (
     PythonDependencyMessage,
     ValidateDockerfileMessage,
 )
-from halo import Halo
+from rich.console import Console
 from llmagent.parsing.repo_loader import RepoLoader, RepoLoaderConfig
 from examples.dockerchat.identify_python_version import get_python_version
 from examples.dockerchat.identify_python_dependency import (
@@ -23,13 +24,13 @@ import docker
 import time
 import datetime
 
-
+console = Console()
 logger = logging.getLogger(__name__)
 DEFAULT_URL = "https://github.com/eugeneyan/testing-ml"
 # Message types that can be handled by the agent;
 # each corresponds to a method in the agent.
 
-
+NO_ANSWER = "I don't know"
 class UrlModel(BaseModel):
     url: HttpUrl
 
@@ -38,6 +39,27 @@ class DockerChatAgent(ChatAgent):
     url: str = "https://github.com/eugeneyan/testing-ml"
     repo_tree: str = None
     repo_path: str = None
+    code_chat_agent: CodeChatAgent = None
+
+    def handle_message(self, input_str: str) -> Optional[str]:
+        """
+        Handle message from LLM
+        Args:
+            input_str: LLM msg, usually a request for info
+        Returns:
+            str: response to LLM, or None
+        """
+        answer = super().handle_message(input_str)
+        if answer is not None:
+            return answer
+        # if our handlers didn't work, try the code chat agent
+        if self.code_chat_agent:
+            return self.ask_agent(
+                self.code_chat_agent,
+                request=input_str,
+                no_answer=NO_ANSWER,
+                user_confirm=True
+            )
 
     def handle_message_fallback(self, input_str: str = "") -> Optional[str]:
         if self.repo_path is None and "URL" not in input_str:
@@ -50,7 +72,7 @@ class DockerChatAgent(ChatAgent):
 
     def ask_url(self, msg: AskURLMessage) -> str:
         while True:
-            url = self.message_to_user(
+            url = self.respond_user(
                 "Please enter the URL of the repo, or hit enter to use default URL: "
             )
             if url == "":
@@ -58,7 +80,7 @@ class DockerChatAgent(ChatAgent):
             try:
                 url_model = UrlModel(url=url)
             except ValueError as e:
-                self.message_to_user(
+                self.respond_user(
                     f"""A valid URL was not seen: {e}
                     Please try again: """
                 )
@@ -66,6 +88,8 @@ class DockerChatAgent(ChatAgent):
                 break
 
         self.url = url_model.url
+        code_chat_cfg = CodeChatAgentConfig(repo_url=self.url)
+        self.code_chat_agent = CodeChatAgent(code_chat_cfg)
         self.repo_loader = RepoLoader(self.url, RepoLoaderConfig())
         self.repo_path = self.repo_loader.clone()
         # get the repo tree to depth d, with first k lines of each file
@@ -106,9 +130,18 @@ class DockerChatAgent(ChatAgent):
         """
         if self.repo_path is None:
             return self.handle_message_fallback()
-        python_version = get_python_version(self.repo_path)
-        if python_version:
-            return python_version
+        answer = self.ask_agent(
+            self.code_chat_agent,
+            request="What is the Python version of this repo?",
+            no_answer=NO_ANSWER,
+            user_confirm=False,
+        )
+        if answer is not None:
+            return answer
+
+        answer = get_python_version(self.repo_path)
+        if answer:
+            return answer
         else:
             logger.error("Could not determine Python version.")
         return "Couldn't identify the python version"
@@ -117,6 +150,16 @@ class DockerChatAgent(ChatAgent):
         if self.repo_path is None:
             return self.handle_message_fallback()
         # dummy result, fill with actual code.
+
+        answer = self.ask_agent(
+            self.code_chat_agent,
+            request=f"Does this project contain a file named {message.filename}?",
+            no_answer=NO_ANSWER,
+            user_confirm=False,
+        )
+        if answer is not None:
+            return answer
+
         matches = RepoLoader.select(self.repo_tree, names=[message.filename])
         exists = False
         if len(matches) > 0:
@@ -139,6 +182,15 @@ class DockerChatAgent(ChatAgent):
         """
         if self.repo_path is None:
             return self.handle_message_fallback()
+
+        answer = self.ask_agent(
+            self.code_chat_agent,
+            request="Which file is used to manage dependencies in this project?",
+            no_answer=NO_ANSWER,
+            user_confirm=False,
+        )
+        if answer is not None:
+            return answer
 
         python_dependency = identify_dependency_management(self.repo_path)
         if python_dependency:
@@ -204,7 +256,7 @@ class DockerChatAgent(ChatAgent):
             start = time.time()
             # I noticed the flag ``rm`` isn't used anymore,
             # so I need to do the cleanup myself later on
-            with Halo(text="Verifying the proposed Dockerfile...", spinner="dots"):
+            with console.status("Verifying the proposed Dockerfile..."):
                 image, build_logs = docker.from_env().images.build(
                     rm=True,
                     path=self.repo_path,
@@ -242,7 +294,7 @@ class DockerChatAgent(ChatAgent):
                 dockerfile_msg.proposed_dockerfile
             )
         if confirm:
-            user_response = self.message_to_user(
+            user_response = self.respond_user(
                 "Please confirm dockerfile validation (y/n): "
             )
             if user_response.lower() != "y":
