@@ -7,7 +7,6 @@ from llmagent.parsing.parser import ParsingConfig
 from llmagent.prompts.prompts_config import PromptsConfig
 from llmagent.utils.configuration import Settings, set_global
 
-
 class CustomAgentConfig(AgentConfig):
     max_tokens: int = 10000
     vecdb: VectorStoreConfig = None
