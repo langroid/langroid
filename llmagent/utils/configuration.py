@@ -5,7 +5,7 @@ from typing import List
 class Settings(BaseSettings):
     debug: bool = False  # show debug messages?
     progress: bool = False  # show progress spinners/bars?
-    stream: bool = False  # stream output?
+    stream: bool = True  # stream output?
     cache: bool = True  # use cache?
 
     class Config:

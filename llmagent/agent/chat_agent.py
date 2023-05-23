@@ -56,7 +56,8 @@ class ChatAgent(Agent):
 
     def clear_history(self, start: int = -2) -> None:
         """
-        Clear the message history, and optionally keep the last `k` messages.
+        Clear the message history, starting at the index `start`
+
         Args:
             start (int): index of first message to delete; default = -2
                     (i.e. delete last 2 messages, typically these
@@ -66,6 +67,31 @@ class ChatAgent(Agent):
         if start < 0:
             start = max(0, n + start)
         self.message_history = self.message_history[:start]
+
+    def update_history(self, message: str, response: str) -> None:
+        """
+        Update the message history with the latest user message and LLM response.
+        Args:
+            message (str): user message
+            response: (str): LLM response
+        """
+        self.message_history.extend(
+            [
+                LLMMessage(role=Role.USER, content=message),
+                LLMMessage(role=Role.ASSISTANT, content=response),
+            ]
+        )
+
+    def add_user_message(self, message: str) -> None:
+        """
+        Add a user message to the message history.
+        Args:
+            message (str): user message
+        """
+        if len(self.message_history) > 0:
+            self.message_history.append(LLMMessage(role=Role.USER, content=message))
+        else:
+            self.task_messages.append(LLMMessage(role=Role.USER, content=message))
 
     def enable_message(self, message_class: Type[AgentMessage]) -> None:
         super().enable_message(message_class)
@@ -176,6 +202,28 @@ class ChatAgent(Agent):
             LLMMessage(role=Role.ASSISTANT, content=response.content)
         )
         return Document(content=response.content, metadata=response.metadata)
+
+    def respond_forget(self, message: str) -> Document:
+        """
+        Respond to single message, and restore message_history.
+        In effect a "one-off" message & response that leaves agent
+        message history state intact.
+
+        Args:
+            message (str): user message
+
+        Returns:
+            A Document object with the response.
+
+        """
+        # explicitly call THIS class's respond method,
+        # not a derived class's (or else there would be infinite recursion!)
+        response = ChatAgent.respond(self, message)
+        # clear the last two messages, which are the
+        # user message and the assistant response
+        self.message_history.pop()
+        self.message_history.pop()
+        return response
 
     def message_history_str(self, i: Optional[int] = None) -> str:
         """

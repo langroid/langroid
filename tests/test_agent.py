@@ -5,6 +5,7 @@ from llmagent.vector_store.base import VectorStoreConfig
 from llmagent.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
 from llmagent.parsing.parser import ParsingConfig
 from llmagent.prompts.prompts_config import PromptsConfig
+from llmagent.utils.configuration import Settings, set_global
 
 
 class CustomAgentConfig(AgentConfig):
@@ -23,10 +24,11 @@ class CustomAgentConfig(AgentConfig):
     )
 
 
-def test_agent():
+def test_agent(test_settings: Settings):
     """
     Test whether the combined configs work as expected.
     """
+    set_global(test_settings)
     agent_config = CustomAgentConfig()
     agent = Agent(agent_config)
     response = agent.respond("what is the capital of France?")  # direct LLM question

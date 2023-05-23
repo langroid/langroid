@@ -1,4 +1,4 @@
-from llmagent.agent.base import AgentConfig
+from examples.urlqa.doc_chat_agent import DocChatAgentConfig
 from llmagent.vector_store.qdrantdb import QdrantDBConfig
 from llmagent.embedding_models.models import OpenAIEmbeddingsConfig
 from llmagent.vector_store.base import VectorStoreConfig
@@ -9,8 +9,10 @@ from llmagent.prompts.prompts_config import PromptsConfig
 from typing import List
 
 
-class URLQAConfig(AgentConfig):
+class URLQAConfig(DocChatAgentConfig):
     debug: bool = False
+    max_context_tokens = 500
+    conversation_mode = True
     cache: bool = True  # cache results
     gpt4: bool = False  # use GPT-4
     stream: bool = True  # allow streaming where needed

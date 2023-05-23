@@ -9,7 +9,7 @@ from llmagent.parsing.json import extract_top_level_json
 from llmagent.prompts.prompts_config import PromptsConfig
 from llmagent.cachedb.redis_cachedb import RedisCacheConfig
 from llmagent.utils.system import rmdir
-from llmagent.utils.configuration import update_global_settings
+from llmagent.utils.configuration import update_global_settings, Settings, set_global
 from typing import List
 import pytest
 import json
@@ -166,11 +166,12 @@ def test_agent_handle_message():
     assert agent.handle_message(PYTHON_VERSION_MSG) == "3.9"
 
 
-def test_llm_agent_message():
+def test_llm_agent_message(test_settings: Settings):
     """
     Test whether LLM is able to generate message in required format, and the
     agent handles the message correctly.
     """
+    set_global(test_settings)
     update_global_settings(cfg, keys=["debug"])
     agent = MessageHandlingAgent(cfg)
     agent.enable_message(FileExistsMessage)
@@ -202,12 +203,13 @@ def test_llm_agent_message():
     assert agent_result is None
 
 
-def test_llm_agent_reformat():
+def test_llm_agent_reformat(test_settings: Settings):
     """
     Test whether the LLM completion mode is able to reformat the request based
     on the auto-generated reformat instructions.
     """
     update_global_settings(cfg, keys=["debug"])
+    set_global(test_settings)
 
     agent = MessageHandlingAgent(cfg)
     agent.enable_message(FileExistsMessage)
