@@ -3,6 +3,7 @@ from llmagent.agent.chat_agent import ChatAgent
 from llmagent.language_models.base import StreamingIfAllowed, LLMMessage, Role
 from llmagent.prompts.templates import SUMMARY_ANSWER_PROMPT_GPT4
 from llmagent.utils.output.printing import show_if_debug
+from llmagent.parsing.parser import ParsingConfig
 from llmagent.utils.configuration import settings
 from contextlib import ExitStack
 from llmagent.mytypes import Document
@@ -36,6 +37,16 @@ class DocChatAgentConfig(AgentConfig):
     summarize_prompt: str = SUMMARY_ANSWER_PROMPT_GPT4
     max_context_tokens: int = 500
     conversation_mode: bool = True
+    parsing = ParsingConfig(  # modify as needed
+        splitter="tokens",
+        chunk_size=200,  # aim for this many tokens per chunk
+        max_chunks=10_000,
+        # aim to have at least this many chars per chunk when truncating due to punctuation
+        min_chunk_chars=350,
+        discard_chunk_chars=5,  # discard chunks with fewer than this many chars
+        chunk_overlap=50,  # ignored
+        n_similar_docs=4,
+    )
 
 
 class DocChatAgent(ChatAgent):
