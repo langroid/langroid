@@ -10,7 +10,9 @@ logger = logging.getLogger(__name__)
 # setlevel to warning
 logger.setLevel(logging.WARNING)
 
-
+logger = logging.getLogger(__name__)
+# setlevel to warning
+logger.setLevel(logging.WARNING)
 # define a retry decorator
 def retry_with_exponential_backoff(
     func,
