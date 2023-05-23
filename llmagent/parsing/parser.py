@@ -15,8 +15,8 @@ class ParsingConfig(BaseSettings):
     chunk_size: int = 200  # aim for this many tokens per chunk
     max_chunks: int = 10_000
     # aim to have at least this many chars per chunk when truncating due to punctuation
-    min_chunk_chars = 350
-    discard_chunk_chars = 5  # discard chunks with fewer than this many chars
+    min_chunk_chars: int = 350
+    discard_chunk_chars: int = 5  # discard chunks with fewer than this many chars
     chunk_overlap: int = 50  # ignored
     n_similar_docs: int = 4
     separators: List[str] = ["\n\n", "\n", " ", ""]
