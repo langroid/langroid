@@ -7,6 +7,7 @@ from llmagent.language_models.openai_gpt import (
 )
 from llmagent.parsing.json import extract_top_level_json
 from llmagent.prompts.prompts_config import PromptsConfig
+from llmagent.parsing.parser import ParsingConfig
 from llmagent.cachedb.redis_cachedb import RedisCacheConfig
 from llmagent.utils.system import rmdir
 from llmagent.utils.configuration import update_global_settings, Settings, set_global
@@ -84,7 +85,7 @@ cfg = AgentConfig(
         chat_model=OpenAIChatModel.GPT4,
         cache_config=RedisCacheConfig(fake=False),
     ),
-    parsing=None,
+    parsing=ParsingConfig(),
     prompts=PromptsConfig(),
 )
 agent = MessageHandlingAgent(cfg)

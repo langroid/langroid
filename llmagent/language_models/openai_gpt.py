@@ -47,6 +47,11 @@ class OpenAIGPTConfig(LLMConfig):
     timeout: int = 20
     chat_model: OpenAIChatModel = OpenAIChatModel.GPT3_5_TURBO
     completion_model: OpenAICompletionModel = OpenAICompletionModel.TEXT_DA_VINCI_003
+    context_length: Dict[str, int] = {
+        OpenAIChatModel.GPT3_5_TURBO: 1024,
+        OpenAIChatModel.GPT4: 4096,  # but pricing page says 8k??
+        OpenAICompletionModel.TEXT_DA_VINCI_003: 4096,
+    }
 
 
 class OpenAIResponse(BaseModel):
@@ -67,8 +72,7 @@ class OpenAIGPT(LanguageModel):
         Args:
             config: configuration for openai-gpt model
         """
-        super().__init__()
-        self.config = config
+        super().__init__(config)
         load_dotenv()
         self.api_key = os.getenv("OPENAI_API_KEY")
         self.cache = RedisCache(config.cache_config)

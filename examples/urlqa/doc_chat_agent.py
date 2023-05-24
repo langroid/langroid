@@ -195,8 +195,8 @@ class DocChatAgent(ChatAgent):
                     query = self.llm.followup_to_standalone(self.dialog, query)
             print(f"[orange2]New query: {query}")
 
-        max_score = 0
         passages = self.original_docs
+
         # if original docs not too long, no need to look for relevant parts.
         if self.original_docs_length > self.config.max_context_tokens:
             with console.status("[cyan]Searching VecDB for relevant doc passages..."):
@@ -208,7 +208,6 @@ class DocChatAgent(ChatAgent):
                 Document(content=d.content, metadata=d.metadata)
                 for (d, _) in docs_and_scores
             ]
-            max_score = max([s[1] for s in docs_and_scores])
 
         # if passages not too long, no need to extract relevant verbatim text
         verbatim_texts = passages
@@ -227,7 +226,7 @@ class DocChatAgent(ChatAgent):
             )
             stack.enter_context(cm)
             response = self.get_summary_answer(query, verbatim_texts)
-            print(f"[green]relevance = {max_score}")
+
         # no need to print answer since get_summary_answer -> respond already did
         # if not self.llm.get_stream() or response.metadata["cached"]:
         #     # we would have already printed the response ONLY if
