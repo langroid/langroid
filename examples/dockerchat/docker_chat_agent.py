@@ -3,6 +3,7 @@ from pydantic import BaseModel, HttpUrl
 from typing import Optional
 from examples.codechat.code_chat_agent import CodeChatAgentConfig, CodeChatAgent
 from examples.dockerchat.dockerchat_agent_messages import (
+    RunPython,
     AskURLMessage,
     FileExistsMessage,
     PythonVersionMessage,
@@ -79,6 +80,17 @@ class DockerChatAgent(ChatAgent):
             send it to me for confirmation. Once I confirm the URL, 
             you can proceed.
             """
+
+    def run_python(self, msg: RunPython) -> str:
+        # TODO: to be implemented. Return dummy msg for now
+        logger.error(
+            f"""
+        This is a placeholder for the run_python method.
+        Here is the code:
+        {msg.code}
+        """
+        )
+        return "No results, please continue asking your questions."
 
     def ask_url(self, msg: AskURLMessage) -> str:
         while True:

@@ -2,6 +2,7 @@ from llmagent.utils.logging import setup_colored_logging
 from llmagent.utils import configuration
 from examples.dockerchat.docker_chat_agent import DockerChatAgent
 from examples.dockerchat.dockerchat_agent_messages import (
+    RunPython,
     AskURLMessage,
     FileExistsMessage,
     PythonVersionMessage,
@@ -29,7 +30,6 @@ class DockerChatAgentConfig(AgentConfig):
     debug: bool = False
     cache: bool = True
     stream: bool = True
-    max_tokens: int = 200
     vecdb: VectorStoreConfig = QdrantDBConfig(
         type="qdrant",
         collection_name="test",
@@ -48,10 +48,7 @@ class DockerChatAgentConfig(AgentConfig):
         chunk_size=100,
     )
 
-    prompts: PromptsConfig = PromptsConfig(
-        max_tokens=200,
-    )
-
+    prompts: PromptsConfig = PromptsConfig()
 
 def chat(config: DockerChatAgentConfig) -> None:
     configuration.update_global_settings(config, keys=["debug", "stream", "cache"])
@@ -82,6 +79,7 @@ def chat(config: DockerChatAgentConfig) -> None:
     ]
 
     agent = DockerChatAgent(config, task_messages)
+    agent.enable_message(RunPython)
     agent.enable_message(AskURLMessage)
     agent.enable_message(FileExistsMessage)
     agent.enable_message(PythonVersionMessage)
