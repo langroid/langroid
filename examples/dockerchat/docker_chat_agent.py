@@ -103,7 +103,7 @@ class DockerChatAgent(ChatAgent):
             repo_url=self.url,
             instructions=DOCKER_CODE_CHAT_INSTRUCTIONS,
             content_includes=["txt", "md", "yml", "yaml", "sh", "Makefile"],
-            content_excludes=[],
+            content_excludes=["Dockerfile"],
         )
         # Note `content_includes` and `content_excludes` are used in
         # self.code_chat_agent to create a json dump of (top k lines) of various
@@ -343,8 +343,7 @@ class DockerChatAgent(ChatAgent):
         """
         Finds corresponding command to the ENTRYPOINT
         Args:
-            cmd (bool):
-            entrypoint (bool):
+            m (EntryPointAndCMDMessage): LLM message contains a request to identify entrypoints
         Retruns:
             str: description of the main scripts and corresponding argument in the repo that are potential candidates to become ENTRYPOINT
         """

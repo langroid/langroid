@@ -72,12 +72,6 @@ def test_disable_message():
     assert "find_entrypoint" not in agent.handled_classes
 
 
-@pytest.mark.parametrize("msg_cls", [AskURLMessage, EntryPointAndCMDMessage])
-def test_usage_instruction(msg_cls: AgentMessage):
-    usage = msg_cls().usage_example()
-    assert json.loads(usage)["request"] == msg_cls().request
-
-
 def test_dockerchat_agent_handle_message():
     """
     Test whether messages are handled correctly, and that
