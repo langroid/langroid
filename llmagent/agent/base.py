@@ -220,6 +220,9 @@ class Agent(ABC):
                 break
             self.respond(query)
 
+    def num_tokens(self, prompt:str) -> int:
+        return self.parser.num_tokens(prompt)
+
     def respond(self, prompt: str) -> Document:
         """
         Respond to a prompt.
@@ -234,7 +237,24 @@ class Agent(ABC):
                 # show rich spinner only if not streaming!
                 cm = console.status("LLM responding to message...")
                 stack.enter_context(cm)
-            response = self.llm.generate(prompt, self.config.llm.max_tokens)
+            output_len = self.config.llm.max_output_tokens
+            if (self.num_tokens(prompt) + output_len >
+                self.llm.completion_context_length()):
+                output_len = (self.llm.completion_context_length() -
+                              self.num_tokens(prompt))
+                if output_len < self.config.llm.min_output_tokens:
+                    raise ValueError("""
+                    Token-length of Prompt + Output is longer than the
+                    completion context length of the LLM!
+                    """)
+                else:
+                    logger.warning(f"""
+                    Requested output length has been shorted to {output_len}
+                    so that the total length of Prompt + Output is less than
+                    the completion context length of the LLM. 
+                    """)
+
+            response = self.llm.generate(prompt, output_len)
         displayed = False
         if not self.llm.get_stream() or response.cached:
             # we would have already displayed the msg "live" ONLY if
@@ -252,7 +272,10 @@ class Agent(ABC):
             ),
         )
 
-    def respond_messages(self, messages: List[LLMMessage]) -> Document:
+    def respond_messages(
+            self, messages: List[LLMMessage],
+            output_len:int=None
+    ) -> Document:
         """
         Respond to a series of messages, e.g. with OpenAI ChatCompletion
         Args:
@@ -260,12 +283,13 @@ class Agent(ABC):
         Returns:
             Document (i.e. with fields "content", "metadata")
         """
+        output_len = output_len or self.config.llm.max_output_tokens
         with ExitStack() as stack:  # for conditionally using rich spinner
             if not self.llm.get_stream():
                 # show rich spinner only if not streaming!
                 cm = console.status("LLM responding to messages...")
                 stack.enter_context(cm)
-            response = self.llm.chat(messages, self.config.llm.max_tokens)
+            response = self.llm.chat(messages, output_len)
         displayed = False
         if not self.llm.get_stream() or response.cached:
             displayed = True

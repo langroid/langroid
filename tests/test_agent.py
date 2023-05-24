@@ -17,7 +17,7 @@ class CustomAgentConfig(AgentConfig):
         use_chat_for_completion=True,
         cache_config=RedisCacheConfig(fake=False),
     )
-    parsing: ParsingConfig = None
+    parsing: ParsingConfig = ParsingConfig()
 
     prompts: PromptsConfig = PromptsConfig(
         max_tokens=1000,

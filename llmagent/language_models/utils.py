@@ -21,6 +21,7 @@ def retry_with_exponential_backoff(
     errors: tuple = (
         openai.error.Timeout,
         openai.error.RateLimitError,
+        openai.error.APIError,
         openai.error.ServiceUnavailableError,
         openai.error.TryAgain,
         aiohttp.ServerTimeoutError,
@@ -82,6 +83,7 @@ def async_retry_with_exponential_backoff(
     errors: tuple = (
         openai.error.Timeout,
         openai.error.RateLimitError,
+        openai.error.APIError,
         openai.error.ServiceUnavailableError,
         openai.error.TryAgain,
         aiohttp.ServerTimeoutError,
