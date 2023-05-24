@@ -3,7 +3,7 @@ from llmagent.vector_store.qdrantdb import QdrantDBConfig
 from llmagent.embedding_models.models import OpenAIEmbeddingsConfig
 from llmagent.vector_store.base import VectorStoreConfig
 from llmagent.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
-from llmagent.parsing.parser import ParsingConfig
+from llmagent.parsing.parser import ParsingConfig, Splitter
 from llmagent.prompts.prompts_config import PromptsConfig
 
 from typing import List
@@ -33,7 +33,7 @@ class URLQAConfig(DocChatAgentConfig):
         chat_model=OpenAIChatModel.GPT3_5_TURBO,
     )
     parsing: ParsingConfig = ParsingConfig(
-        splitter="tokens",
+        splitter=Splitter.TOKENS,
         chunk_size=100,
     )
 

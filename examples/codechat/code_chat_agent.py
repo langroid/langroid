@@ -5,7 +5,7 @@ from llmagent.vector_store.qdrantdb import QdrantDBConfig
 from llmagent.embedding_models.models import OpenAIEmbeddingsConfig
 from llmagent.vector_store.base import VectorStoreConfig
 from llmagent.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
-from llmagent.parsing.parser import ParsingConfig
+from llmagent.parsing.parser import ParsingConfig, Splitter
 from llmagent.parsing.code_parser import CodeParsingConfig
 from llmagent.prompts.prompts_config import PromptsConfig
 from llmagent.prompts.templates import ANSWER_PROMPT_USE_HISTORY_GPT4
@@ -54,7 +54,7 @@ class CodeChatAgentConfig(DocChatAgentConfig):
         use_chat_for_completion=True,
     )
     parsing: ParsingConfig = ParsingConfig(
-        splitter="tokens",
+        splitter=Splitter.TOKENS,
         chunk_size=100,
     )
 

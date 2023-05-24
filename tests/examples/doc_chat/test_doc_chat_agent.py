@@ -5,7 +5,7 @@ from llmagent.vector_store.qdrantdb import QdrantDBConfig
 from llmagent.embedding_models.models import OpenAIEmbeddingsConfig
 from llmagent.vector_store.base import VectorStoreConfig
 from llmagent.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
-from llmagent.parsing.parser import ParsingConfig
+from llmagent.parsing.parser import ParsingConfig, Splitter
 from llmagent.prompts.prompts_config import PromptsConfig
 from llmagent.cachedb.redis_cachedb import RedisCacheConfig
 from llmagent.utils.system import rmdir
@@ -45,7 +45,7 @@ class _TestDocChatAgentConfig(DocChatAgentConfig):
     )
 
     parsing: ParsingConfig = ParsingConfig(
-        splitter="para_sentence",
+        splitter=Splitter.TOKENS,
         chunk_size=500,
         n_similar_docs=2,
     )
