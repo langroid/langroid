@@ -44,7 +44,6 @@ class DocChatAgentConfig(AgentConfig):
         # aim to have at least this many chars per chunk when truncating due to punctuation
         min_chunk_chars=350,
         discard_chunk_chars=5,  # discard chunks with fewer than this many chars
-        chunk_overlap=50,  # ignored
         n_similar_docs=4,
     )
 
