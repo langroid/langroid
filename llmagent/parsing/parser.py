@@ -17,7 +17,6 @@ class ParsingConfig(BaseSettings):
     # aim to have at least this many chars per chunk when truncating due to punctuation
     min_chunk_chars: int = 350
     discard_chunk_chars: int = 5  # discard chunks with fewer than this many chars
-    chunk_overlap: int = 50  # ignored
     n_similar_docs: int = 4
     separators: List[str] = ["\n\n", "\n", " ", ""]
     token_encoding_model: str = "text-embedding-ada-002"
