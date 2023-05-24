@@ -179,7 +179,6 @@ class Agent(ABC):
         return None
 
     def _handle_one_json_message(self, json_str: str) -> Optional[str]:
-        json_str = json_str.replace("'", '"')
         json_data = json.loads(json_str)
         request = json_data.get("request")
         if request is None:
