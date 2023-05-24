@@ -34,8 +34,7 @@ class URLQAConfig(DocChatAgentConfig):
     )
     parsing: ParsingConfig = ParsingConfig(
         splitter="tokens",
-        chunk_size=200,
-        chunk_overlap=50,
+        chunk_size=100,
     )
 
     prompts: PromptsConfig = PromptsConfig(
