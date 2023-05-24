@@ -110,7 +110,7 @@ class CodeChatAgent(DocChatAgent):
         )
 
         code_docs = [
-            doc for doc in documents if doc.metadata["language"] not in ["md", "txt"]
+            doc for doc in documents if doc.metadata["language"] not in (["md", "txt"] + config.content_excludes)
         ] + [listing]
 
         text_docs = [

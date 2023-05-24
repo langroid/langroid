@@ -110,9 +110,9 @@ class PythonDependencyMessage(AgentMessage):
 
 
 class EntryPointAndCMDMessage(AgentMessage):
-    request: str = "get_entrypoint_cmd"
-    purpose: str = "To define commands for ENTRYPOINT, CMD, both, or none."
-    result: str = "yes"
+    request: str = "find_entrypoint"
+    purpose: str = "To identify main scripts and their arguments that can be used for ENTRYPOINT, CMD, both, or none."
+    result: str = "I couldn't identify potentail main scripts for the ENTRYPOINT"
 
     @classmethod
     def examples(cls) -> List["AgentMessage"]:
@@ -122,10 +122,9 @@ class EntryPointAndCMDMessage(AgentMessage):
             List[AgentMessage]: list of example messages of this type
         """
         return [
-            cls(result="This repo uses this command for both ENTRYPOINT and CMD"),
+            cls(result="The name of the main script in this repo is main.py. To run it, you can use the command python main.py"),
             cls(
-                result="This repo uses this command for ENTRYPOINT and this command for CMD"
+                result="I don't know."
             ),
-            cls(result="This repo doesn't use ENTRYPOINT"),
-            cls(result="This repo doesn't use CMD"),
+            cls(result="This repo doesn't have main script"),
         ]

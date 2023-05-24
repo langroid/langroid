@@ -17,8 +17,6 @@ from examples.dockerchat.identify_python_dependency import (
     identify_dependency_management,
 )
 
-from examples.dockerchat.entrypoint_cmd import identify_entrypoint_CMD
-
 import os
 import logging
 import docker
@@ -341,27 +339,25 @@ class DockerChatAgent(ChatAgent):
         else:
             return f"Docker build failed with error message: {build_log}"
 
-    def get_entrypoint_cmd(
-        self, m: EntryPointAndCMDMessage, cmd: bool = False, entrypoint: bool = False
-    ) -> str:
+    def find_entrypoint(self, m: EntryPointAndCMDMessage) -> str:
         """
-        Defines the ENTRYPOINT and CMD instructions. 
+        Finds corresponding command to the ENTRYPOINT
         Args:
             cmd (bool): 
             entrypoint (bool): 
         Retruns:
-            A tuple comprises the list of instructions for ENTRYPOINT and CMD. The assumption here there could be more than one main script in the rep. Therefore, we need to provide the user with possibilities to run their containerized app
+            str: description of the main scripts and corresponding argument in the repo that are potential candidates to become ENTRYPOINT
         """
         if self.repo_path is None:
             return self.handle_message_fallback()
 
         answer = self.ask_agent(
             self.code_chat_agent,
-            request="What's the name of main script in this repo and can you provide the command line to run the main script?",
+            request="What's the name of main script in this repo and can you SPECIFY the command line and necessary arguments to run the main script? If there are more than one main script, then SPECIFY the commands and necessary arguments corresponding to each one",
             no_answer=NO_ANSWER,
             user_confirm=False,
         )
         if answer is not None:
             return answer
         
-        return ""
+        return "I couldn't identify potentail main scripts for the ENTRYPOINT"

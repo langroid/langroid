@@ -1,31 +1,31 @@
-No.,Repo_name,URL,Stars,manual_inspection,testing_observations ,Consider
-0,Auto-GPT,https://github.com/Significant-Gravitas/Auto-GPT,130452,dockerfile is tricky as it contains section for dev and another section for build,docker build works ,yes but we need to instruct LLM that this Dockerfile should contain an arg called BUILD_TYPE to differentiate the intention to build a dev image or build image
-1,pytorch,https://github.com/pytorch/pytorch,66731,dockerfile is too complex,-,No
-2,core,https://github.com/home-assistant/core,60428,dockerfile contains highly customized stuff,-,no
-3,face_recognition,https://github.com/ageitgey/face_recognition,48226,dockerfile contains dependencies outside requirements and setup.py. This project is interesting because it contains setup.py/setup.cfg/pyproject.toml/requirements.txt,docker build works ,yes but we need to instruct LLM about dependencies that are  outside requirements.txt and other python file
-4,localstack,https://github.com/localstack/localstack,47106,dockerfile is too complex,-,No
-5,sherlock,https://github.com/sherlock-project/sherlock,41116,dockerfile looks simple,docker build works ,yes
-6,langchain,https://github.com/hwchase17/langchain,38471,dockerfile looks simple,docker build works ,yes
-7,pandas,https://github.com/pandas-dev/pandas,38335,dockerfile looks simple,docker build works ,yes
-8,gpt4free,https://github.com/xtekky/gpt4free,35441,dockerfile looks simple,docker build works ,yes super simple
-9,ailearning,https://github.com/apachecn/ailearning,35426,dockerfile contains only two lines,docker build works ,not quite sure because it doesn't contain other attributes like CMD and entrypoint
-10,cheat.sh,https://github.com/chubin/cheat.sh,35292,dockerfile looks simple but it contains dependencies that are outside the scope of requirements.txt,docker build works ,yes
-11,gpt_academic,https://github.com/binary-husky/gpt_academic,33163,dockerfile looks simple though it contains some tricky RUN commands,docker build works ,yes
-12,black,https://github.com/psf/black,32325,dockerfile looks simple and the repo contains only pyproject.toml but poetry wasn't used to get the dependencies,docker build works ,yes
-13,12306,https://github.com/testerSunshine/12306,31037,This repo looks old because Dockerfile builds based on python 2.7 but it has also another dockerfile for python 3.7 and uses a different name for the requirements (called requirements-docker37.txt),didn't build successfully ,no
-14,hackingtool,https://github.com/Z4nzu/hackingtool,30227,Dockerfile looks simple but doesn't use the script install.sh since it contains some dependencies. It also have duplicated dependencies between the Dockerfile itself and requriements.txt,docker build works ,yes 
-15,airflow,https://github.com/apache/airflow,30174,the dockerfile is too complex. It's around 1400 lines. Bash scripts are created inside the Dockerfile,-,no
-16,MockingBird,https://github.com/babysor/MockingBird,28717,the Dockerfile looks simple but it contains update and install commands for OS dependencies,didn't build successfully ,yes thoguh it might be challenging because it contains settings for VOLUME and ENV var
-17,ccxt,https://github.com/ccxt/ccxt,28199,this repo uses python (37%) and JS (22%) thus the Dockerfile contain dependencies for both languages,-,no
-18,linux-insides,https://github.com/0xAX/linux-insides,28149,although the repo is maintained but the last update on the Docker file was 5 yrs ago,-,no
-19,redash,https://github.com/getredash/redash,23134,the Dockerfile is a bit complex because it contains an ARG to control which dependencies to be installed. The dockerfile also copies package.json but without using it ,docker build works ,yes worth testing but it also tricky since it uses some commands like chown
-20,hosts,https://github.com/StevenBlack/hosts,22913,the dockerfile looks simple but contains 2 ENV vars,docker build works ,yes
-21,freqtrade,https://github.com/freqtrade/freqtrade,21613,"the Dockerfile contains 2 files that bring dependencies (requirements.txt and requirements-hyperopt.txt) but I think the tricky part is that the USER command. Also, the dockerfile contains mkdir command which is necessary to know its name and location",docker build works ,yes
-22,wttr.in,https://github.com/chubin/wttr.in,21490,the Dockerfile contains golang dependencies thus it needs to install some dependencies that are beyond requirements.txt. I also run commands like mkdir and chmod. Finally I'm wondering why the app stage doesn't use the image from the build stage instead of using alpine,didn't build successfully ,yes 
-23,locust,https://github.com/locustio/locust,21305,the Dockerfile runs an IF command to figure out dependencies support of different arch,docker build works ,yes 
-24,jumpserver,https://github.com/jumpserver/jumpserver,20483,Dockefile looks complex,-,no
-25,saleor,https://github.com/saleor/saleor,18438,Dockerfile looks trick as it contains echo commands. The CMD requires good knolwedge about the program. ,-,no
-26,EasyOCR,https://github.com/JaidedAI/EasyOCR,17940,"the Dockerfile is weird because it uses clone to get the repo, however it looks simple. Lat time it's updated was 2 yrs ago",docker build works ,yes
-27,proxy_pool,https://github.com/jhao104/proxy_pool,17788,the dockerfile looks simple,docker build works ,yes
-28,nginx-proxy,https://github.com/nginx-proxy/nginx-proxy,17052,the dockerfile looks simple,docker build works ,yes
-29,chatgpt-retrieval-plugin,https://github.com/openai/chatgpt-retrieval-plugin,16433,the dockerfile looks simple,docker build works ,yes 
+No.,Repo_name,URL,Stars,manual_inspection,testing_observations ,Consider,Identify ENTRYPOINT
+0,Auto-GPT,https://github.com/Significant-Gravitas/Auto-GPT,130452,dockerfile is tricky as it contains section for dev and another section for build,docker build works ,yes but we need to instruct LLM that this Dockerfile should contain an arg called BUILD_TYPE to differentiate the intention to build a dev image or build image,wrong there is no ENTRYPOINT in the dockerfile
+1,pytorch,https://github.com/pytorch/pytorch,66731,dockerfile is too complex,-,No,
+2,core,https://github.com/home-assistant/core,60428,dockerfile contains highly customized stuff,-,no,
+3,face_recognition,https://github.com/ageitgey/face_recognition,48226,dockerfile contains dependencies outside requirements and setup.py. This project is interesting because it contains setup.py/setup.cfg/pyproject.toml/requirements.txt,docker build works ,yes but we need to instruct LLM about dependencies that are  outside requirements.txt and other python file,correct though it doesn't match the one in the Dockerfile
+4,localstack,https://github.com/localstack/localstack,47106,dockerfile is too complex,-,No,
+5,sherlock,https://github.com/sherlock-project/sherlock,41116,dockerfile looks simple,docker build works ,yes,correct
+6,langchain,https://github.com/hwchase17/langchain,38471,dockerfile looks simple,docker build works ,yes,correct though it doesn't match the one in the Dockerfile
+7,pandas,https://github.com/pandas-dev/pandas,38335,dockerfile looks simple,docker build works ,yes,crashed 
+8,gpt4free,https://github.com/xtekky/gpt4free,35441,dockerfile looks simple,docker build works ,yes super simple,correct no ENTRYPOINT app (existing Dockerfile contains only CMD based on streamlit)
+9,ailearning,https://github.com/apachecn/ailearning,35426,dockerfile contains only two lines,docker build works ,not quite sure because it doesn't contain other attributes like CMD and entrypoint,crashed 
+10,cheat.sh,https://github.com/chubin/cheat.sh,35292,dockerfile looks simple but it contains dependencies that are outside the scope of requirements.txt,docker build works ,yes,crashed 
+11,gpt_academic,https://github.com/binary-husky/gpt_academic,33163,dockerfile looks simple though it contains some tricky RUN commands,docker build works ,yes,crashed 
+12,black,https://github.com/psf/black,32325,dockerfile looks simple and the repo contains only pyproject.toml but poetry wasn't used to get the dependencies,docker build works ,yes,crashed 
+13,12306,https://github.com/testerSunshine/12306,31037,This repo looks old because Dockerfile builds based on python 2.7 but it has also another dockerfile for python 3.7 and uses a different name for the requirements (called requirements-docker37.txt),didn't build successfully ,no,crashed 
+14,hackingtool,https://github.com/Z4nzu/hackingtool,30227,Dockerfile looks simple but doesn't use the script install.sh since it contains some dependencies. It also have duplicated dependencies between the Dockerfile itself and requriements.txt,docker build works ,yes ,correct
+15,airflow,https://github.com/apache/airflow,30174,the dockerfile is too complex. It's around 1400 lines. Bash scripts are created inside the Dockerfile,-,no,
+16,MockingBird,https://github.com/babysor/MockingBird,28717,the Dockerfile looks simple but it contains update and install commands for OS dependencies,didn't build successfully ,no,
+17,ccxt,https://github.com/ccxt/ccxt,28199,this repo uses python (37%) and JS (22%) thus the Dockerfile contain dependencies for both languages,-,no,
+18,linux-insides,https://github.com/0xAX/linux-insides,28149,although the repo is maintained but the last update on the Docker file was 5 yrs ago,-,no,
+19,redash,https://github.com/getredash/redash,23134,the Dockerfile is a bit complex because it contains an ARG to control which dependencies to be installed. The dockerfile also copies package.json but without using it ,docker build works ,yes worth testing but it also tricky since it uses some commands like chown,crashed 
+20,hosts,https://github.com/StevenBlack/hosts,22913,the dockerfile looks simple but contains 2 ENV vars,docker build works ,yes,crashed 
+21,freqtrade,https://github.com/freqtrade/freqtrade,21613,"the Dockerfile contains 2 files that bring dependencies (requirements.txt and requirements-hyperopt.txt) but I think the tricky part is that the USER command. Also, the dockerfile contains mkdir command which is necessary to know its name and location",docker build works ,yes,correct no main script (the dockerfile contains ENTRYPOINT but isn't python file)
+22,wttr.in,https://github.com/chubin/wttr.in,21490,the Dockerfile contains golang dependencies thus it needs to install some dependencies that are beyond requirements.txt. I also run commands like mkdir and chmod. Finally I'm wondering why the app stage doesn't use the image from the build stage instead of using alpine,didn't build successfully ,no,
+23,locust,https://github.com/locustio/locust,21305,the Dockerfile runs an IF command to figure out dependencies support of different arch,docker build works ,yes ,correct no main script (the dockerfile contains ENTRYPOINT but isn't python file)
+24,jumpserver,https://github.com/jumpserver/jumpserver,20483,Dockefile looks complex,-,no,
+25,saleor,https://github.com/saleor/saleor,18438,Dockerfile looks trick as it contains echo commands. The CMD requires good knolwedge about the program. ,-,no,
+26,EasyOCR,https://github.com/JaidedAI/EasyOCR,17940,"the Dockerfile is weird because it uses clone to get the repo, however it looks simple. Lat time it's updated was 2 yrs ago",docker build works ,yes,correct
+27,proxy_pool,https://github.com/jhao104/proxy_pool,17788,the dockerfile looks simple,docker build works ,yes,correct (the dockerfile contains ENTRYPOINT based on bash script)
+28,nginx-proxy,https://github.com/nginx-proxy/nginx-proxy,17052,the dockerfile looks simple,docker build works ,yes,correct (the dockerfile contains ENTRYPOINT based on bash script)
+29,chatgpt-retrieval-plugin,https://github.com/openai/chatgpt-retrieval-plugin,16433,the dockerfile looks simple,docker build works ,yes ,correct 
