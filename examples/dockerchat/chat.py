@@ -50,6 +50,7 @@ class DockerChatAgentConfig(AgentConfig):
 
     prompts: PromptsConfig = PromptsConfig()
 
+
 def chat(config: DockerChatAgentConfig) -> None:
     configuration.update_global_settings(config, keys=["debug", "stream", "cache"])
     if config.gpt4:

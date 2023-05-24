@@ -36,8 +36,8 @@ Ok, confirming the URL.
 FILE_EXISTS_MSG = """
 Ok, thank you.
 {
-'request': 'file_exists',
-'filename': '___test.txt'
+"request": "file_exists",
+"filename": "___test.txt"
 } 
 Hope you can tell me!
 """
@@ -45,7 +45,7 @@ Hope you can tell me!
 ASK_URL_MSG = """
 great, let me know the URL:
 {
-'request': 'ask_url'
+"request": "ask_url"
 }
 """
 

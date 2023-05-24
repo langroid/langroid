@@ -219,7 +219,7 @@ class Agent(ABC):
                 break
             self.respond(query)
 
-    def num_tokens(self, prompt:str) -> int:
+    def num_tokens(self, prompt: str) -> int:
         return self.parser.num_tokens(prompt)
 
     def respond(self, prompt: str) -> Document:
@@ -237,21 +237,28 @@ class Agent(ABC):
                 cm = console.status("LLM responding to message...")
                 stack.enter_context(cm)
             output_len = self.config.llm.max_output_tokens
-            if (self.num_tokens(prompt) + output_len >
-                self.llm.completion_context_length()):
-                output_len = (self.llm.completion_context_length() -
-                              self.num_tokens(prompt))
+            if (
+                self.num_tokens(prompt) + output_len
+                > self.llm.completion_context_length()
+            ):
+                output_len = self.llm.completion_context_length() - self.num_tokens(
+                    prompt
+                )
                 if output_len < self.config.llm.min_output_tokens:
-                    raise ValueError("""
+                    raise ValueError(
+                        """
                     Token-length of Prompt + Output is longer than the
                     completion context length of the LLM!
-                    """)
+                    """
+                    )
                 else:
-                    logger.warning(f"""
+                    logger.warning(
+                        f"""
                     Requested output length has been shorted to {output_len}
                     so that the total length of Prompt + Output is less than
                     the completion context length of the LLM. 
-                    """)
+                    """
+                    )
 
             response = self.llm.generate(prompt, output_len)
         displayed = False
@@ -272,8 +279,7 @@ class Agent(ABC):
         )
 
     def respond_messages(
-            self, messages: List[LLMMessage],
-            output_len:int=None
+        self, messages: List[LLMMessage], output_len: int = None
     ) -> Document:
         """
         Respond to a series of messages, e.g. with OpenAI ChatCompletion

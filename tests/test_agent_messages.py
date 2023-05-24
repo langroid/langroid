@@ -125,8 +125,8 @@ NONE_MSG = "nothing to see here"
 FILE_EXISTS_MSG = """
 Ok, thank you.
 {
-'request': 'file_exists',
-'filename': 'test.txt'
+"request": "file_exists",
+"filename": "test.txt"
 } 
 Hope you can tell me!
 """
@@ -134,7 +134,7 @@ Hope you can tell me!
 PYTHON_VERSION_MSG = """
 great, please tell me this --
 {
-'request': 'python_version'
+"request": "python_version"
 }/if you know it
 """
 

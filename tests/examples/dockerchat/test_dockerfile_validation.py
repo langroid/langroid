@@ -94,8 +94,8 @@ NONE_MSG = "nothing to see here"
 VALIDATE_DOCKERFILE_MSG = f"""
 Ok, thank you.
 {{
-'request': 'validate_dockerfile',
-'proposed_dockerfile': {df_json}
+"request": "validate_dockerfile",
+"proposed_dockerfile": {df_json}
 }} 
 this is the dockerfile
 """
@@ -103,8 +103,8 @@ this is the dockerfile
 FILE_EXISTS_MSG = """
 Ok, thank you.
 {
-'request': 'file_exists',
-'filename': 'test.txt'
+"request": "file_exists",
+"filename": "test.txt"
 } 
 Hope you can tell me!
 """

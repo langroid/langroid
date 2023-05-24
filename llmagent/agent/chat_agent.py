@@ -219,8 +219,10 @@ class ChatAgent(Agent):
 
         hist = self.message_history
         output_len = self.config.llm.max_output_tokens
-        if (self.chat_num_tokens(hist) >
-                self.llm.chat_context_length() - self.config.llm.max_output_tokens):
+        if (
+            self.chat_num_tokens(hist)
+            > self.llm.chat_context_length() - self.config.llm.max_output_tokens
+        ):
             # chat + output > max context length,
             # so first try to shorten requested output len to fit.
             output_len = self.llm.chat_context_length() - self.chat_num_tokens(hist)
@@ -229,9 +231,10 @@ class ChatAgent(Agent):
                 # if output_len is still too long, then drop early parts of conv history
                 # TODO we should really be doing summarization or other types of
                 #   prompt-size reduction
-                while (self.chat_num_tokens(hist) >
-                       self.llm.chat_context_length() -
-                       self.config.llm.min_output_tokens):
+                while (
+                    self.chat_num_tokens(hist)
+                    > self.llm.chat_context_length() - self.config.llm.min_output_tokens
+                ):
                     # try dropping early parts of conv history
                     # TODO we should really be doing summarization or other types of
                     #   prompt-size reduction
