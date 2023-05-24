@@ -12,7 +12,6 @@ from llmagent.prompts.templates import ANSWER_PROMPT_USE_HISTORY_GPT4
 from llmagent.mytypes import Document
 
 import os
-import json
 from rich import print
 
 
@@ -83,23 +82,13 @@ class CodeChatAgent(DocChatAgent):
         repo_tree, _ = repo_loader.load(depth=1, lines=20)
         repo_listing = "\n".join(repo_loader.ls(repo_tree, depth=1))
 
-        selected_tree = RepoLoader.select(
-            repo_tree,
-            includes=config.content_includes,
-            excludes=config.content_excludes,
-        )
-        repo_contents = json.dumps(selected_tree, indent=2)
-
         repo_info_message = f"""
         Here is some information about the code repository that you can use, 
         in the subsequent questions. For any future questions, you can refer back to 
         this info if needed.
         
-        First, here is a listing of the files and directories at the root of the repo:
+        Here is a listing of the files and directories at the root of the repo:
         {repo_listing}
-        
-        And here is a JSON representation of the contents of some of the files:
-        {repo_contents}        
         """
 
         self.add_user_message(repo_info_message)
