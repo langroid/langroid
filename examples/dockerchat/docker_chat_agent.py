@@ -14,11 +14,9 @@ from llmagent.parsing.repo_loader import RepoLoader, RepoLoaderConfig
 from examples.dockerchat.identify_python_version import get_python_version
 from examples.dockerchat.identify_python_dependency import (
     identify_dependency_management,
-    DEPENDENCY_FILES,
 )
 
 import os
-import json
 import logging
 import docker
 import time
@@ -114,41 +112,19 @@ class DockerChatAgent(ChatAgent):
         self.repo_path = self.repo_loader.clone()
         # get the repo tree to depth d, with first k lines of each file
         self.repo_tree, _ = self.repo_loader.load(depth=1, lines=20)
-        selected_tree = RepoLoader.select(
-            self.repo_tree,
-            includes=DEPENDENCY_FILES,
-        )
         repo_listing = "\n".join(self.repo_loader.ls(self.repo_tree, depth=1))
-        repo_contents = RepoLoader.show_file_contents(selected_tree)
 
-        return (
-                f"""
+        return f"""
         Based on the URL, here is some information about the repo that you can use.  
         
         First, here is a list of ALL the files and directories at the ROOT of the 
         repo. Any files of interest to you MUST be in this list, there you do NOT 
         need to ask in future about whether any file exists.
         {repo_listing}
-        """ +
-        
-        # """
-        # And here are the contents of some of the files:
-        # {repo_contents}
-        #
-        # Tell me what information you can gather from the above, to help you with your
-        # task. For each piece of information, indicate with "SOURCE:" where you
-        # got the information from.
-        # After showing me what you have gathered, continue to ask me more questions
-        # to help you accomplish your task. If I tell you that I don't know,
-        # refine your question into smaller requests.
-        # """
-
-        """
         In later parts of the conversation, only ask questions that CANNOT 
         be answered by the information above. Do not ask for any info that is already 
         provided above! 
         """
-        )
 
     def python_version(self, m: PythonVersionMessage) -> str:
         """

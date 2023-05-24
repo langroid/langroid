@@ -10,9 +10,11 @@ import logging
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.WARNING)
 
+
 class Splitter(str, Enum):
     TOKENS = "tokens"
     PARA_SENTENCE = "para_sentence"
+
 
 class ParsingConfig(BaseSettings):
     splitter: str = Splitter.TOKENS
