@@ -5,8 +5,11 @@ from llmagent.language_models.openai_gpt import (
     OpenAICompletionModel,
 )
 from llmagent.language_models.base import LLMMessage, Role
+from llmagent.parsing.utils import generate_random_text
+from llmagent.parsing.parser import ParsingConfig, Parser
 from llmagent.cachedb.redis_cachedb import RedisCacheConfig
 from llmagent.utils.configuration import Settings, set_global
+import openai
 import pytest
 
 # allow streaming globally, but can be turned off by individual models
@@ -22,8 +25,9 @@ def test_openai_gpt(test_settings: Settings, streaming, country, capital):
     cfg = OpenAIGPTConfig(
         stream=streaming,  # use streaming output if enabled globally
         type="openai",
-        max_tokens=100,
-        chat_model=OpenAIChatModel.GPT3_5_TURBO,
+        max_output_tokens=100,
+        min_output_tokens=10,
+        chat_model=OpenAIChatModel.GPT4,
         completion_model=OpenAICompletionModel.TEXT_DA_VINCI_003,
         cache_config=RedisCacheConfig(fake=False),
     )
@@ -35,13 +39,13 @@ def test_openai_gpt(test_settings: Settings, streaming, country, capital):
     question = "What is the capital of " + country + "?"
 
     set_global(Settings(cache=False))
-    response = mdl.generate(prompt=question, max_tokens=10)
+    response = mdl.generate(prompt=question, max_tokens=20)
     assert capital in response.message
     assert not response.cached
 
     set_global(Settings(cache=True))
     # should be from cache this time
-    response = mdl.generate(prompt=question, max_tokens=10)
+    response = mdl.generate(prompt=question, max_tokens=20)
     assert capital in response.message
     assert response.cached
 
@@ -69,3 +73,50 @@ def test_openai_gpt(test_settings: Settings, streaming, country, capital):
     response = mdl.chat(messages=messages, max_tokens=10)
     assert capital in response.message
     assert response.cached
+
+@pytest.mark.parametrize(
+    "mode, max_tokens",
+    [("completion", 100), ("chat", 100), ("completion", 1000), ("chat", 1000)],
+)
+def _test_context_length_error(test_settings:Settings, mode:str, max_tokens:int):
+    """
+    Test disabled, see TODO below.
+    Args:
+        test_settings:
+        mode:
+        max_tokens:
+
+    Returns:
+
+    """
+    set_global(test_settings)
+    set_global(Settings(cache=False))
+
+    cfg = OpenAIGPTConfig(
+        stream=False,
+        max_output_tokens=max_tokens,
+        chat_model=OpenAIChatModel.GPT4,
+        completion_model=OpenAICompletionModel.TEXT_DA_VINCI_003,
+        cache_config=RedisCacheConfig(fake=False),
+    )
+    parser = Parser(config=ParsingConfig())
+    llm = OpenAIGPT(config=cfg)
+    context_length = (
+        llm.chat_context_length() if mode == "chat" else
+        llm.completion_context_length()
+    )
+
+    toks_per_sentence = int(parser.num_tokens(generate_random_text(1000))/1000)
+    max_sentences = int(context_length/toks_per_sentence)
+    big_message = generate_random_text(max_sentences+1)
+    assert parser.num_tokens(big_message)  + max_tokens > context_length
+    response = None
+    #TODO need to figure out what error type to expect here
+    with pytest.raises(openai.error.InvalidRequestError) as e:
+        if mode == "chat":
+            response = llm.chat(big_message, max_tokens=max_tokens)
+        else:
+            response = llm.generate(prompt=big_message, max_tokens=max_tokens)
+
+    assert response is None
+    assert "context length" in str(e.value).lower()

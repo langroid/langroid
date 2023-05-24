@@ -218,32 +218,49 @@ class ChatAgent(Agent):
         self.message_history.append(LLMMessage(role=Role.USER, content=message))
 
         hist = self.message_history
-        while self.chat_tokens(hist) > self.llm.chat_context_length() - 500:
-            # try dropping early parts of conv history
-            # TODO we should really be doing summarization or other types of
-            #   prompt-size reduction
-            if len(hist) == 0:
-                raise ValueError(
-                    """
-                The message history is longer than the max chat context 
-                length allowed, and we have run out of messages to drop."""
-                )
-            hist = hist[1:]
+        output_len = self.config.llm.max_output_tokens
+        if (self.chat_num_tokens(hist) >
+                self.llm.chat_context_length() - self.config.llm.max_output_tokens):
+            # chat + output > max context length,
+            # so first try to shorten requested output len to fit.
+            output_len = self.llm.chat_context_length() - self.chat_num_tokens(hist)
+            if output_len < self.config.llm.min_output_tokens:
+                # unacceptably small output len, so drop early parts of conv history
+                # if output_len is still too long, then drop early parts of conv history
+                # TODO we should really be doing summarization or other types of
+                #   prompt-size reduction
+                while (self.chat_num_tokens(hist) >
+                       self.llm.chat_context_length() -
+                       self.config.llm.min_output_tokens):
+                    # try dropping early parts of conv history
+                    # TODO we should really be doing summarization or other types of
+                    #   prompt-size reduction
+                    if len(hist) <= 2:
+                        # first two are "reserved" for the initial system, user msgs
+                        # that presumably set up the initial "priming" or "task" for
+                        # the agent.
+                        raise ValueError(
+                            """
+                        The message history is longer than the max chat context 
+                        length allowed, and we have run out of messages to drop."""
+                        )
+                    hist = hist[:2] + hist[3:]
 
-        if len(hist) < len(self.message_history):
-            msg_tokens = self.chat_tokens()
-            logger.warning(
-                f"""
-            Chat Model context length is {self.llm.chat_context_length()} tokens,
-            but the current message history is {msg_tokens} tokens long.
-            Dropped the first {len(self.message_history) - len(hist)} initial parts of 
-            the conversation history so total tokens are low enough to allow 
-            up to 500 tokens model output.
-            """
-            )
+                if len(hist) < len(self.message_history):
+                    msg_tokens = self.chat_num_tokens()
+                    logger.warning(
+                        f"""
+                    Chat Model context length is {self.llm.chat_context_length()} 
+                    tokens, but the current message history is {msg_tokens} tokens long.
+                    Dropped the {len(self.message_history) - len(hist)} messages
+                    from early in the conversation history so total tokens are 
+                    low enough to allow minimum output length of 
+                    {self.config.llm.min_output_tokens} tokens.
+                    """
+                    )
 
         with StreamingIfAllowed(self.llm):
-            response = self.respond_messages(hist)
+            response = self.respond_messages(hist, output_len)
         self.message_history.append(
             LLMMessage(role=Role.ASSISTANT, content=response.content)
         )
@@ -271,7 +288,7 @@ class ChatAgent(Agent):
         self.message_history.pop()
         return response
 
-    def chat_tokens(self, messages: Optional[List[LLMMessage]] = None) -> int:
+    def chat_num_tokens(self, messages: Optional[List[LLMMessage]] = None) -> int:
         """
         Total number of tokens in the message history so far.
 
