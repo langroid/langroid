@@ -47,7 +47,6 @@ class _TestDocChatAgentConfig(DocChatAgentConfig):
     parsing: ParsingConfig = ParsingConfig(
         splitter="para_sentence",
         chunk_size=500,
-        chunk_overlap=0,
         n_similar_docs=2,
     )
 

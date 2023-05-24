@@ -56,7 +56,6 @@ class CodeChatAgentConfig(DocChatAgentConfig):
     parsing: ParsingConfig = ParsingConfig(
         splitter="tokens",
         chunk_size=100,
-        chunk_overlap=50,
     )
 
     code_parsing: CodeParsingConfig = CodeParsingConfig(

@@ -1,51 +1,71 @@
 import pytest
 from llmagent.parsing.parser import ParsingConfig, Parser
 from llmagent.mytypes import Document
-from llmagent.parsing.para_sentence_split import create_chunks
-from typing import List
+from llmagent.parsing.utils import generate_random_text
+
+CHUNK_SIZE = 100
 
 
-def test_parser():
+@pytest.mark.parametrize(
+    "chunk_size, max_chunks, min_chunk_chars, discard_chunk_chars",
+    [
+        (100, 10_000, 350, 5),
+        (10, 100, 35, 2),
+        (200, 1000, 300, 10),
+    ],
+)
+def test_parser(
+    chunk_size: int, max_chunks: int, min_chunk_chars: int, discard_chunk_chars: int
+):
     cfg = ParsingConfig(
-        splitter="para_sentence",
-        chunk_size=1000,
-        chunk_overlap=2,
-        separators=["."],
+        chunk_size=chunk_size,
+        max_chunks=max_chunks,
+        min_chunk_chars=min_chunk_chars,
+        discard_chunk_chars=discard_chunk_chars,
         token_encoding_model="text-embedding-ada-002",
     )
 
     parser = Parser(cfg)
-    texts = """
-    This is a sentence. This is another sentence. This is a third sentence.
-    """.strip().split(
-        "."
-    )
-    texts = [text.strip() for text in texts if text.strip() != ""]
+    docs = [
+        Document(content=generate_random_text(10), metadata={"id": i})
+        for i in range(30)
+    ]
 
-    docs = [Document(content=text, metadata={"id": i}) for i, text in enumerate(texts)]
     split_docs = parser.split(docs)
-    assert len(split_docs) == 3
+
+    assert all(parser.num_tokens(d.content) <= chunk_size + 5 for d in split_docs)
+    assert len(split_docs) <= max_chunks * len(docs)
+    assert all(len(d.content) >= discard_chunk_chars for d in split_docs)
 
 
 def length_fn(text):
-    return len(text.split())
+    return len(text.split())  # num chars
 
 
 @pytest.mark.parametrize(
-    "text, chunk_size, expected",
+    "chunk_size, max_chunks, min_chunk_chars, discard_chunk_chars",
     [
-        (
-            "A B C D E F.\nG H I J K L.\n\nM N O P Q R.\nS T U V W X.",
-            6,
-            ["A B C D E F.", "G H I J K L.", "M N O P Q R.", "S T U V W X."],
-        ),
-        (
-            "A B C D E F.\nG H I J K L.\n\nM N O P Q R.\nS T U V W X.",
-            20,
-            ["A B C D E F.\nG H I J K L.", "M N O P Q R.\nS T U V W X."],
-        ),
+        (100, 10_000, 350, 5),
+        (10, 100, 35, 2),
+        (200, 1000, 300, 10),
     ],
 )
-def test_create_chunks(text: str, chunk_size: int, expected: List[str]):
-    chunks = create_chunks(text, chunk_size, length_fn)
-    assert chunks == expected
+def test_text_chunking(
+    chunk_size: int, max_chunks: int, min_chunk_chars: int, discard_chunk_chars: int
+):
+    cfg = ParsingConfig(
+        chunk_size=chunk_size,
+        max_chunks=max_chunks,
+        min_chunk_chars=min_chunk_chars,
+        discard_chunk_chars=discard_chunk_chars,
+        token_encoding_model="text-embedding-ada-002",
+    )
+
+    parser = Parser(cfg)
+
+    text = generate_random_text(60)
+    chunks = parser.chunk_tokens(text)
+
+    assert len(chunks) <= max_chunks
+    assert all(len(c) >= discard_chunk_chars for c in chunks)
+    assert all(parser.num_tokens(c) <= chunk_size + 5 for c in chunks)
