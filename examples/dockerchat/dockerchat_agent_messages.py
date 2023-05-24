@@ -17,6 +17,24 @@ class AskURLMessage(AgentMessage):
         ]
 
 
+class RunPython(AgentMessage):
+    request: str = "run_python"
+    purpose: str = """
+    To run a python <code> on the repository, to find desired info.
+    This code can assume it has access to the code repository in a local folder.
+    The code can be as detailed as needed, including import statements.
+    This tool can be used to find any info not available from the other tools.
+    """
+    code: str = "print('hello world')"
+    result: str = "hello world"
+
+    @classmethod
+    def examples(cls) -> List["AgentMessage"]:
+        return [
+            cls(code="print('hello world')", result="hello world"),
+        ]
+
+
 class FileExistsMessage(AgentMessage):
     request: str = "file_exists"  # name should exactly match method name in agent
     # below will be fields that will be used by the agent method to handle the message.
