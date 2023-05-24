@@ -4,14 +4,18 @@ from functools import reduce
 from llmagent.parsing.para_sentence_split import create_chunks
 from llmagent.mytypes import Document
 from typing import List
+from enum import Enum
 import logging
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.WARNING)
 
+class Splitter(str, Enum):
+    TOKENS = "tokens"
+    PARA_SENTENCE = "para_sentence"
 
 class ParsingConfig(BaseSettings):
-    splitter: str = "tokens"
+    splitter: str = Splitter.TOKENS
     chunk_size: int = 200  # aim for this many tokens per chunk
     max_chunks: int = 10_000
     # aim to have at least this many chars per chunk when truncating due to punctuation
@@ -32,39 +36,35 @@ class Parser:
         return len(tokens)
 
     def split_para_sentence(self, docs: List[Document]) -> List[Document]:
-        if self.config.splitter == "para_sentence":
-            final_chunks = []
-            chunks = docs
-            while True:
-                long_chunks = [
-                    p
-                    for p in chunks
-                    if self.num_tokens(p.content) > 1.3 * self.config.chunk_size
-                ]
-                if len(long_chunks) == 0:
-                    break
-                short_chunks = [
-                    p
-                    for p in chunks
-                    if self.num_tokens(p.content) <= 1.3 * self.config.chunk_size
-                ]
-                final_chunks += short_chunks
-                chunks = self._split_para_sentence_once(long_chunks)
-                if len(chunks) == len(long_chunks):
-                    max_len = max([self.num_tokens(p.content) for p in long_chunks])
-                    logger.warning(
-                        f"""
-                        Unable to split {len(long_chunks)} long chunks
-                        using chunk_size = {self.config.chunk_size}.
-                        Max chunk size is {max_len} tokens.
-                        """
-                    )
-                    break  # we won't be able to shorten them with current settings
+        final_chunks = []
+        chunks = docs
+        while True:
+            long_chunks = [
+                p
+                for p in chunks
+                if self.num_tokens(p.content) > 1.3 * self.config.chunk_size
+            ]
+            if len(long_chunks) == 0:
+                break
+            short_chunks = [
+                p
+                for p in chunks
+                if self.num_tokens(p.content) <= 1.3 * self.config.chunk_size
+            ]
+            final_chunks += short_chunks
+            chunks = self._split_para_sentence_once(long_chunks)
+            if len(chunks) == len(long_chunks):
+                max_len = max([self.num_tokens(p.content) for p in long_chunks])
+                logger.warning(
+                    f"""
+                    Unable to split {len(long_chunks)} long chunks
+                    using chunk_size = {self.config.chunk_size}.
+                    Max chunk size is {max_len} tokens.
+                    """
+                )
+                break  # we won't be able to shorten them with current settings
 
-            return final_chunks + chunks
-
-        else:
-            raise ValueError(f"Unknown splitter: {self.config.splitter}")
+        return final_chunks + chunks
 
     def _split_para_sentence_once(self, docs: List[Document]) -> List[Document]:
         chunked_docs = [
@@ -177,10 +177,9 @@ class Parser:
         return chunks
 
     def split(self, docs: List[Document]) -> List[Document]:
-        # TODO this is a bit ad hoc, make a pydantic model for splitter
-        if "sentence" in self.config.splitter:
+        if self.config.splitter == Splitter.PARA_SENTENCE:
             return self.split_para_sentence(docs)
-        elif "token" in self.config.splitter:
+        elif self.config.splitter == Splitter.TOKENS:
             return self.split_chunk_tokens(docs)
         else:
             raise ValueError(f"Unknown splitter: {self.config.splitter}")
