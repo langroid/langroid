@@ -87,7 +87,7 @@ NONE_MSG = "nothing to see here"
 PYTHON_DEPENDENCY_MSG = """
 great, please tell me this --
 {
-'request': 'python_dependency'
+"request": "python_dependency"
 }/if you know it
 """
 

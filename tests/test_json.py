@@ -11,16 +11,16 @@ import pytest
             """
             Ok, thank you.
             {
-                'request': 'file_exists',
-                'filename': 'test.txt'
+                "request": "file_exists",
+                "filename": "test.txt"
             }
             Hope you can tell me!
         """,
             [
                 """
             {
-                'request': 'file_exists',
-                'filename': 'test.txt'
+                "request": "file_exists",
+                "filename": "test.txt"
             }
             """
             ],

@@ -185,7 +185,7 @@ class OpenAIGPT(LanguageModel):
         cached, hashed_key, response = completions_with_backoff(
             model=self.config.completion_model,
             prompt=prompt,
-            max_tokens=max_tokens, # for output/completion
+            max_tokens=max_tokens,  # for output/completion
             request_timeout=self.config.timeout,
             temperature=0,
             echo=False,

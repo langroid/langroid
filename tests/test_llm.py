@@ -74,11 +74,12 @@ def test_openai_gpt(test_settings: Settings, streaming, country, capital):
     assert capital in response.message
     assert response.cached
 
+
 @pytest.mark.parametrize(
     "mode, max_tokens",
     [("completion", 100), ("chat", 100), ("completion", 1000), ("chat", 1000)],
 )
-def _test_context_length_error(test_settings:Settings, mode:str, max_tokens:int):
+def _test_context_length_error(test_settings: Settings, mode: str, max_tokens: int):
     """
     Test disabled, see TODO below.
     Args:
@@ -102,16 +103,15 @@ def _test_context_length_error(test_settings:Settings, mode:str, max_tokens:int)
     parser = Parser(config=ParsingConfig())
     llm = OpenAIGPT(config=cfg)
     context_length = (
-        llm.chat_context_length() if mode == "chat" else
-        llm.completion_context_length()
+        llm.chat_context_length() if mode == "chat" else llm.completion_context_length()
     )
 
-    toks_per_sentence = int(parser.num_tokens(generate_random_text(1000))/1000)
-    max_sentences = int(context_length/toks_per_sentence)
-    big_message = generate_random_text(max_sentences+1)
-    assert parser.num_tokens(big_message)  + max_tokens > context_length
+    toks_per_sentence = int(parser.num_tokens(generate_random_text(1000)) / 1000)
+    max_sentences = int(context_length / toks_per_sentence)
+    big_message = generate_random_text(max_sentences + 1)
+    assert parser.num_tokens(big_message) + max_tokens > context_length
     response = None
-    #TODO need to figure out what error type to expect here
+    # TODO need to figure out what error type to expect here
     with pytest.raises(openai.error.InvalidRequestError) as e:
         if mode == "chat":
             response = llm.chat(big_message, max_tokens=max_tokens)
