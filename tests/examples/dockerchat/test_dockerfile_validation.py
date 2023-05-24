@@ -71,6 +71,8 @@ cfg = AgentConfig(
 agent = MessageHandlingAgent(cfg)
 
 
+
+
 def test_enable_message():
     agent.enable_message(ValidateDockerfileMessage)
     assert "validate_dockerfile" in agent.handled_classes

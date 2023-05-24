@@ -343,7 +343,7 @@ class DockerChatAgent(ChatAgent):
 
     def get_entrypoint_cmd(
         self, m: EntryPointAndCMDMessage, cmd: bool = False, entrypoint: bool = False
-    ) -> Tuple[Optional[List[List[str]]], Optional[List[List[str]]]]:
+    ) -> str:
         """
         Defines the ENTRYPOINT and CMD instructions. 
         Args:
@@ -352,4 +352,16 @@ class DockerChatAgent(ChatAgent):
         Retruns:
             A tuple comprises the list of instructions for ENTRYPOINT and CMD. The assumption here there could be more than one main script in the rep. Therefore, we need to provide the user with possibilities to run their containerized app
         """
-        return identify_entrypoint_CMD(self.repo_path)
+        if self.repo_path is None:
+            return self.handle_message_fallback()
+
+        answer = self.ask_agent(
+            self.code_chat_agent,
+            request="What's the name of main script in this repo and can you provide the command line to run the main script?",
+            no_answer=NO_ANSWER,
+            user_confirm=False,
+        )
+        if answer is not None:
+            return answer
+        
+        return ""
