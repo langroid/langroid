@@ -46,7 +46,6 @@ class DockerChatAgentConfig(AgentConfig):
     )
     parsing: ParsingConfig = ParsingConfig(
         chunk_size=100,
-        chunk_overlap=10,
     )
 
     prompts: PromptsConfig = PromptsConfig(
