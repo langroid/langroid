@@ -20,7 +20,7 @@ class LLMConfig(BaseSettings):
     chat_model: str = None
     completion_model: str = None
     context_length: Dict[str, int] = None
-    max_output_tokens: int = 1024 # generate at most this many tokens
+    max_output_tokens: int = 1024  # generate at most this many tokens
     # if input length + max_output_tokens > context length of model,
     # we will try shortening requested output
     min_output_tokens: int = 64
@@ -58,6 +58,7 @@ class LanguageModel(ABC):
     """
     Abstract base class for language models.
     """
+
     def __init__(self, config: LLMConfig):
         self.config = config
 
