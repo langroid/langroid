@@ -159,6 +159,10 @@ class DocChatAgent(ChatAgent):
 
         if self.config.conversation_mode:
             answer_doc = super().respond(final_prompt)
+            # IMPORTANT: the `final_prompt` can be LONG, so we need to
+            # replace it with just the question in the message history!
+            # Else we will eventually get a "too long context" error
+            self.update_last_message(question, role=Role.USER)
         else:
             answer_doc = super().respond_forget(final_prompt)
 
