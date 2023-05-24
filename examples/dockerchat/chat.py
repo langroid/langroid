@@ -71,10 +71,12 @@ def chat(config: DockerChatAgentConfig) -> None:
         LLMMessage(
             role=Role.USER,
             content="""
-            You are a devops engineer, and you have to write a dockerfile for a python 
-            repo. Think step by step about the information you need, to accomplish 
-            your task.  If I cannot answer, further breakdown your task into 
-            sub-tasks and so on. Start by asking me for the URL of the github repo.
+            You are a devops engineer, and your goal is to create a working dockerfile 
+            to containerize a python repo. Think step by step about the information 
+            you need, to accomplish your task, and ask me questions for what you need.  
+            If I cannot answer, further refine your question into smaller questions.
+            Do not create a dockerfile until you have all the information you need.
+            Start by asking me for the URL of the github repo.
             """,
         ),
     ]

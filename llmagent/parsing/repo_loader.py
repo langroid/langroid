@@ -572,3 +572,25 @@ class RepoLoader:
                         names.append(file["name"])
         names = [n for n in names if n not in ["", None]]
         return names
+
+    @staticmethod
+    def show_file_contents(tree: Dict[str, Union[str, List[Dict]]]):
+        """
+        Print the contents of all files from a structure dictionary.
+
+        Args:
+            tree (Dict[str, Union[str, List[Dict]]]): The structure dictionary.
+        """
+        contents = ""
+        for dir in tree["dirs"]:
+            contents += RepoLoader.show_file_contents(dir)
+        for file in tree["files"]:
+            path = file["path"]
+            contents += f"""
+            {path}:
+            --------------------
+            {file["content"]}
+            
+            """
+
+        return contents
