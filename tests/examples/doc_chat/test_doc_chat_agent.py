@@ -24,7 +24,6 @@ rmdir(storage_path)
 class _TestDocChatAgentConfig(DocChatAgentConfig):
     debug: bool = False
     stream: bool = True  # allow streaming where needed
-    max_tokens: int = 100
     conversation_mode = True
     vecdb: VectorStoreConfig = QdrantDBConfig(
         type="qdrant",
