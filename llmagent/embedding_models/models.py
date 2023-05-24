@@ -2,6 +2,7 @@ import openai
 from llmagent.mytypes import Embeddings
 from sentence_transformers import SentenceTransformer
 from llmagent.embedding_models.base import EmbeddingModel, EmbeddingModelsConfig
+from llmagent.language_models.utils import retry_with_exponential_backoff
 from dotenv import load_dotenv
 from typing import Callable, List
 import os
@@ -27,6 +28,7 @@ class OpenAIEmbeddings(EmbeddingModel):
         openai.api_key = self.config.api_key
 
     def embedding_fn(self) -> Callable[[List[str]], Embeddings]:
+        @retry_with_exponential_backoff
         def fn(texts: List[str]) -> Embeddings:
             result = openai.Embedding.create(input=texts, model=self.config.model_name)
             return [d["embedding"] for d in result["data"]]
