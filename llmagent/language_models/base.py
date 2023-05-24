@@ -1,7 +1,7 @@
 from pydantic import BaseSettings, BaseModel
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import List, Tuple, Union
+from typing import List, Tuple, Union, Dict
 from llmagent.mytypes import Document
 from llmagent.cachedb.redis_cachedb import RedisCacheConfig
 from llmagent.utils.configuration import settings
@@ -17,9 +17,10 @@ import asyncio
 
 class LLMConfig(BaseSettings):
     type: str = "openai"
-    max_tokens: int = 1024
-    # chat_model: str = "gpt-3.5-turbo"
-    # completion_model: str = "text-davinci-003"
+    chat_model: str = None
+    completion_model: str = None
+    context_length: Dict[str, int] = None
+    max_tokens: int = 1024  # for output
     use_chat_for_completion: bool = True  # use chat model for completion?
     stream: bool = False  # stream output from API?
     cache_config: RedisCacheConfig = RedisCacheConfig(
@@ -56,6 +57,9 @@ class LanguageModel(ABC):
     """
 
     max_tokens: int = None
+
+    def __init__(self, config: LLMConfig):
+        self.config = config
 
     @staticmethod
     def create(config: LLMConfig):
@@ -95,6 +99,12 @@ class LanguageModel(ABC):
 
     def __call__(self, prompt: str, max_tokens: int) -> LLMResponse:
         return self.generate(prompt, max_tokens)
+
+    def chat_context_length(self) -> int:
+        return self.config.context_length[self.config.chat_model]
+
+    def completion_context_length(self) -> int:
+        return self.config.context_length[self.config.completion_model]
 
     def followup_to_standalone(
         self, chat_history: List[Tuple[str]], question: str

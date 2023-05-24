@@ -16,7 +16,7 @@ class _TestChatAgentConfig(AgentConfig):
         chat_model=OpenAIChatModel.GPT3_5_TURBO,
         use_chat_for_completion=True,
     )
-    parsing: ParsingConfig = None
+    parsing: ParsingConfig = ParsingConfig()
     prompts: PromptsConfig = PromptsConfig(
         max_tokens=200,
     )

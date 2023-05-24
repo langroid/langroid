@@ -4,6 +4,9 @@ from llmagent.mytypes import Document
 from llmagent.utils.configuration import settings
 from typing import List, Optional, Type
 from rich import print
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class ChatAgent(Agent):
@@ -213,8 +216,33 @@ class ChatAgent(Agent):
             # task_messages have not yet been loaded, so load them
             self.message_history = self.task_messages
         self.message_history.append(LLMMessage(role=Role.USER, content=message))
+
+        hist = self.message_history
+        while self.chat_tokens(hist) > self.llm.chat_context_length():
+            # try dropping early parts of conv history
+            # TODO we should really be doing summarization or other types of
+            #   prompt-size reduction
+            if len(hist) == 0:
+                raise ValueError(
+                    """
+                The message history is longer than the max chat context 
+                length allowed, and we have run out of messages to drop."""
+                )
+            hist = hist[1:]
+
+        if len(hist) < len(self.message_history):
+            msg_tokens = self.chat_tokens()
+            logger.warning(
+                f"""
+            Chat Model context length is {self.llm.chat_context_length()} tokens,
+            but the current message history is {msg_tokens} tokens long.
+            Dropped the first {len(self.message_history) - len(hist)} initial parts of 
+            the conversation history to fit.
+            """
+            )
+
         with StreamingIfAllowed(self.llm):
-            response = self.respond_messages(self.message_history)
+            response = self.respond_messages(hist)
         self.message_history.append(
             LLMMessage(role=Role.ASSISTANT, content=response.content)
         )
@@ -241,6 +269,19 @@ class ChatAgent(Agent):
         self.message_history.pop()
         self.message_history.pop()
         return response
+
+    def chat_tokens(self, messages: Optional[List[LLMMessage]] = None) -> int:
+        """
+        Total number of tokens in the message history so far.
+
+        Args:
+            messages: if provided, compute the number of tokens in this list of
+                messages, rather than the current message history.
+        Returns:
+            int: number of tokens in message history
+        """
+        hist = messages if messages is not None else self.message_history
+        return sum([self.parser.num_tokens(m.content) for m in hist])
 
     def message_history_str(self, i: Optional[int] = None) -> str:
         """

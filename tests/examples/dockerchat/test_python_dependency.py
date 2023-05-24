@@ -6,6 +6,7 @@ from llmagent.language_models.base import Role, LLMMessage
 from llmagent.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
 from llmagent.agent.base import AgentConfig
 from llmagent.prompts.prompts_config import PromptsConfig
+from llmagent.parsing.parser import ParsingConfig
 from llmagent.agent.base import AgentMessage
 from llmagent.agent.chat_agent import ChatAgent
 from llmagent.utils.system import rmdir
@@ -54,7 +55,7 @@ cfg = AgentConfig(
         chat_model=OpenAIChatModel.GPT3_5_TURBO,
         cache_config=RedisCacheConfig(fake=False),
     ),
-    parsing=None,
+    parsing=ParsingConfig(),
     prompts=PromptsConfig(),
 )
 agent = MessageHandlingAgent(cfg)
