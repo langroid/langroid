@@ -343,8 +343,8 @@ class DockerChatAgent(ChatAgent):
         """
         Finds corresponding command to the ENTRYPOINT
         Args:
-            cmd (bool): 
-            entrypoint (bool): 
+            cmd (bool):
+            entrypoint (bool):
         Retruns:
             str: description of the main scripts and corresponding argument in the repo that are potential candidates to become ENTRYPOINT
         """
@@ -359,5 +359,5 @@ class DockerChatAgent(ChatAgent):
         )
         if answer is not None:
             return answer
-        
+
         return "I couldn't identify potentail main scripts for the ENTRYPOINT"

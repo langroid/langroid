@@ -122,9 +122,9 @@ class EntryPointAndCMDMessage(AgentMessage):
             List[AgentMessage]: list of example messages of this type
         """
         return [
-            cls(result="The name of the main script in this repo is main.py. To run it, you can use the command python main.py"),
             cls(
-                result="I don't know."
+                result="The name of the main script in this repo is main.py. To run it, you can use the command python main.py"
             ),
+            cls(result="I don't know."),
             cls(result="This repo doesn't have main script"),
         ]

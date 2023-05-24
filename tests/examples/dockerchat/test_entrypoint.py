@@ -3,7 +3,7 @@ from llmagent.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
 from examples.dockerchat.docker_chat_agent import DockerChatAgent
 from examples.dockerchat.dockerchat_agent_messages import (
     EntryPointAndCMDMessage,
-    AskURLMessage
+    AskURLMessage,
 )
 
 from llmagent.agent.message import AgentMessage
@@ -88,6 +88,6 @@ def test_dockerchat_agent_handle_message():
     # any msg before ask_url will result in an agent response
     # telling LLM to ask for URL
     assert agent.handle_message(ASK_URL_MSG) == GOT_URL_RESPONSE
-    
+
     agent.disable_message(EntryPointAndCMDMessage)
     assert agent.handle_message(FIND_ENTRYPOINT_MSG) is None
