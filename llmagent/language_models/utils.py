@@ -39,6 +39,12 @@ def retry_with_exponential_backoff(
             try:
                 return func(*args, **kwargs)
 
+            except openai.error.InvalidRequestError as e:
+                # do not retry when the request itself is invalid,
+                # e.g. when context is too long
+                logger.error(f"OpenAI API request failed with error: {e}.")
+                raise e
+
             # Retry on specified errors
             except errors as e:
                 # Increment retries
@@ -94,6 +100,12 @@ def async_retry_with_exponential_backoff(
             try:
                 result = await func(*args, **kwargs)
                 return result
+
+            except openai.error.InvalidRequestError as e:
+                # do not retry when the request itself is invalid,
+                # e.g. when context is too long
+                logger.error(f"OpenAI API request failed with error: {e}.")
+                raise e
 
             # Retry on specified errors
             except errors as e:
