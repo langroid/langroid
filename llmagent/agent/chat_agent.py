@@ -218,7 +218,7 @@ class ChatAgent(Agent):
         self.message_history.append(LLMMessage(role=Role.USER, content=message))
 
         hist = self.message_history
-        while self.chat_tokens(hist) > self.llm.chat_context_length():
+        while self.chat_tokens(hist) > self.llm.chat_context_length() - 500:
             # try dropping early parts of conv history
             # TODO we should really be doing summarization or other types of
             #   prompt-size reduction
@@ -237,7 +237,8 @@ class ChatAgent(Agent):
             Chat Model context length is {self.llm.chat_context_length()} tokens,
             but the current message history is {msg_tokens} tokens long.
             Dropped the first {len(self.message_history) - len(hist)} initial parts of 
-            the conversation history to fit.
+            the conversation history so total tokens are low enough to allow 
+            up to 500 tokens model output.
             """
             )
 
