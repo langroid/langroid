@@ -93,6 +93,23 @@ class ChatAgent(Agent):
         else:
             self.task_messages.append(LLMMessage(role=Role.USER, content=message))
 
+    def update_last_message(self, message: str, role: str = Role.USER) -> None:
+        """
+        Update the last message with role `role` in the message history.
+        Useful when we want to replace a long user prompt, that may contain context
+        documents plus a question, with just the question.
+        Args:
+            message (str): user message
+            role (str): role of message to replace
+        """
+        if len(self.message_history) == 0:
+            return
+        # find last message in self.message_history with role `role`
+        for i in range(len(self.message_history) - 1, -1, -1):
+            if self.message_history[i].role == role:
+                self.message_history[i].content = message
+                break
+
     def enable_message(self, message_class: Type[AgentMessage]) -> None:
         super().enable_message(message_class)
         self.update_message_instructions()
