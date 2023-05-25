@@ -5,9 +5,19 @@ from examples.dockerchat.dockerchat_agent_messages import (
     EntryPointAndCMDMessage,
     AskURLMessage,
 )
-
+from llmagent.utils.configuration import update_global_settings, Settings, set_global
+from llmagent.agent.chat_agent import ChatAgent
+from llmagent.prompts.prompts_config import PromptsConfig
+from llmagent.parsing.parser import ParsingConfig
 from llmagent.cachedb.redis_cachedb import RedisCacheConfig
+
 from typing import Optional
+
+
+class MessageHandlingAgent(ChatAgent):
+    def find_entrypoint(self, EntryPointAndCMDMessage) -> str:
+        return CODE_CHAT_RESPONSE_FIND_ENTRY
+
 
 cfg = AgentConfig(
     debug=False,
@@ -33,27 +43,38 @@ great, please tell me this --
 }/if you know it
 """
 
-ASK_URL_MSG = """
-great, let me know the URL:
-{
-'request': 'ask_url'
-}
+CODE_CHAT_RESPONSE_FIND_ENTRY = """
+The name of the main script in this repo is main.py. To run it, you can use the command python main.py
 """
 
 
-class _TestDockerChatAgent(DockerChatAgent):
-    def handle_message_fallback(self, input_str: str = "") -> Optional[str]:
-        # if URL not yet known, tell LLM to ask for it, unless this msg
-        # contains the word URL
-        if self.repo_path is None and "url" not in input_str.lower():
-            return ASK_URL_RESPONSE
+# class _TestDockerChatAgent(DockerChatAgent):
+#     def handle_message_fallback(self, input_str: str = "") -> Optional[str]:
+#         # if URL not yet known, tell LLM to ask for it, unless this msg
+#         # contains the word URL
+#         if self.repo_path is None and "url" not in input_str.lower():
+#             return ASK_URL_RESPONSE
 
-    def ask_url(self, msg: AskURLMessage) -> str:
-        self.repo_path = "dummy"
-        return GOT_URL_RESPONSE
+#     def ask_url(self, msg: AskURLMessage) -> str:
+#         self.repo_path = "dummy"
+#         return GOT_URL_RESPONSE
 
 
-agent = _TestDockerChatAgent(cfg)
+# agent = _TestDockerChatAgent(cfg)
+
+cfg = AgentConfig(
+    debug=True,
+    name="test-llmagent",
+    vecdb=None,
+    llm=OpenAIGPTConfig(
+        type="openai",
+        chat_model=OpenAIChatModel.GPT4,
+        cache_config=RedisCacheConfig(fake=False),
+    ),
+    parsing=ParsingConfig(),
+    prompts=PromptsConfig(),
+)
+agent = MessageHandlingAgent(cfg)
 
 
 def test_enable_message():
@@ -75,10 +96,21 @@ def test_dockerchat_agent_handle_message():
     message enabling/disabling works as expected.
     """
     agent.enable_message(EntryPointAndCMDMessage)
-    agent.enable_message(AskURLMessage)
-    # any msg before ask_url will result in an agent response
-    # telling LLM to ask for URL
-    assert agent.handle_message(ASK_URL_MSG) == GOT_URL_RESPONSE
-
     agent.disable_message(EntryPointAndCMDMessage)
     assert agent.handle_message(FIND_ENTRYPOINT_MSG) is None
+
+
+def test_llm_agent_message(test_settings: Settings):
+    """
+    Test whether LLM is able to generate message in required format, and the
+    agent handles the message correctly.
+    """
+    set_global(test_settings)
+    update_global_settings(cfg, keys=["debug"])
+    agent = MessageHandlingAgent(cfg)
+    agent.enable_message(EntryPointAndCMDMessage)
+
+    llm_msg = agent.respond("Start by asking me about the identifying main scripts and their argument in the repo to define the ENTRYPOINT.").content
+
+    agent_result = agent.handle_message(llm_msg)
+    assert agent_result == CODE_CHAT_RESPONSE_FIND_ENTRY
