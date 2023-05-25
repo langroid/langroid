@@ -114,7 +114,7 @@ class DocChatAgent(ChatAgent):
             str: string representation
         """
         contents = [f"Extract: {d.content}" for d in docs]
-        sources = [d.metadata.get("source") for d in docs]
+        sources = [d.metadata.get("source", "context") for d in docs]
         sources = [f"Source: {s}" if s is not None else "" for s in sources]
         return "\n".join(
             [
