@@ -29,7 +29,6 @@ class QdrantDBConfig(VectorStoreConfig):
     cloud: bool = True
     url = "https://644cabc3-4141-4734-91f2-0cc3176514d4.us-east-1-0.aws.cloud.qdrant.io:6333"
 
-
     collection_name: str = "qdrant-llmagent"
     storage_path: str = ".qdrant/data"
     embedding: EmbeddingModelsConfig = EmbeddingModelsConfig(
@@ -50,7 +49,7 @@ class QdrantDB(VectorStore):
         load_dotenv()
         if config.cloud:
             self.client = QdrantClient(
-                url = config.url,
+                url=config.url,
                 api_key=os.getenv("QDRANT_API_KEY"),
             )
         else:
