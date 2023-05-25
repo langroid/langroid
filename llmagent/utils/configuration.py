@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     progress: bool = False  # show progress spinners/bars?
     stream: bool = True  # stream output?
     cache: bool = True  # use cache?
+    gpt3_5: bool = True  # use GPT-3.5?
 
     class Config:
         extra = "forbid"
