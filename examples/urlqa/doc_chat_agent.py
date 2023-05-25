@@ -158,11 +158,8 @@ class DocChatAgent(ChatAgent):
         # if we are not in conversation mode
 
         if self.config.conversation_mode:
-            answer_doc = super().respond(final_prompt)
-            # IMPORTANT: the `final_prompt` can be LONG, so we need to
-            # replace it with just the question in the message history!
-            # Else we will eventually get a "too long context" error
-            self.update_last_message(question, role=Role.USER)
+            # respond with temporary context
+            answer_doc = super().respond_temp_context(question, final_prompt)
         else:
             answer_doc = super().respond_forget(final_prompt)
 
@@ -210,11 +207,11 @@ class DocChatAgent(ChatAgent):
             ]
 
         # if passages not too long, no need to extract relevant verbatim text
-        verbatim_texts = passages
+        extracts = passages
         if self.doc_length(passages) > self.config.max_context_tokens:
             with console.status("[cyan]LLM Extracting verbatim passages..."):
                 with StreamingIfAllowed(self.llm, False):
-                    verbatim_texts: List[Document] = self.llm.get_verbatim_extracts(
+                    extracts: List[Document] = self.llm.get_verbatim_extracts(
                         query, passages
                     )
         with ExitStack() as stack:
@@ -225,14 +222,8 @@ class DocChatAgent(ChatAgent):
                 else (console.status("LLM Generating final answer..."))
             )
             stack.enter_context(cm)
-            response = self.get_summary_answer(query, verbatim_texts)
+            response = self.get_summary_answer(query, extracts)
 
-        # no need to print answer since get_summary_answer -> respond already did
-        # if not self.llm.get_stream() or response.metadata["cached"]:
-        #     # we would have already printed the response ONLY if
-        #     # streaming was enabled AND the response was not cached
-        #     print("[green]" + response.content)
-        #     print("[magenta]" + response.metadata["source"])
         self.update_dialog(query, response.content)
         self.response = response  # save last response
         return response
