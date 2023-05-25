@@ -125,3 +125,24 @@ class PythonDependencyMessage(AgentMessage):
             cls(result="This repo uses pyproject.toml for managing dependencies"),
             cls(result="This repo doesn't contain any dependacy manager"),
         ]
+
+
+class EntryPointAndCMDMessage(AgentMessage):
+    request: str = "find_entrypoint"
+    purpose: str = "To identify main scripts and their arguments that can be used for ENTRYPOINT, CMD, both, or none."
+    result: str = "I couldn't identify potentail main scripts for the ENTRYPOINT"
+
+    @classmethod
+    def examples(cls) -> List["AgentMessage"]:
+        """
+        Return a list of example messages of this type, for use in testing.
+        Returns:
+            List[AgentMessage]: list of example messages of this type
+        """
+        return [
+            cls(
+                result="The name of the main script in this repo is main.py. To run it, you can use the command python main.py"
+            ),
+            cls(result="I don't know."),
+            cls(result="This repo doesn't have main script"),
+        ]

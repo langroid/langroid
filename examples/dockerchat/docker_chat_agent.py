@@ -9,6 +9,7 @@ from examples.dockerchat.dockerchat_agent_messages import (
     PythonVersionMessage,
     PythonDependencyMessage,
     ValidateDockerfileMessage,
+    EntryPointAndCMDMessage,
 )
 from rich.console import Console
 from llmagent.parsing.repo_loader import RepoLoader, RepoLoaderConfig
@@ -114,7 +115,7 @@ class DockerChatAgent(ChatAgent):
             repo_url=self.url,
             instructions=DOCKER_CODE_CHAT_INSTRUCTIONS,
             content_includes=["txt", "md", "yml", "yaml", "sh", "Makefile"],
-            content_excludes=[],
+            content_excludes=["Dockerfile"],
         )
         # Note `content_includes` and `content_excludes` are used in
         # self.code_chat_agent to create a json dump of (top k lines) of various
@@ -349,3 +350,31 @@ class DockerChatAgent(ChatAgent):
             return f"Docker image built successfully and build time took:{build_time} Seconds..."
         else:
             return f"Docker build failed with error message: {build_log}"
+
+    def find_entrypoint(self, m: EntryPointAndCMDMessage) -> str:
+        """
+        Finds corresponding command to the ENTRYPOINT
+        Args:
+            m (EntryPointAndCMDMessage): LLM message contains a request to identify
+                entrypoints
+        Retruns:
+            str: description of the main scripts and corresponding argument in the
+                repo that are potential candidates to become ENTRYPOINT
+        """
+        if self.repo_path is None:
+            return self.handle_message_fallback()
+
+        answer = self.ask_agent(
+            self.code_chat_agent,
+            request="""What's the name of main script in this repo and can you SPECIFY 
+            the command line and necessary arguments to run the main script? 
+            If there are more than one main script, then SPECIFY the commands 
+            and necessary arguments corresponding to each one
+            """,
+            no_answer=NO_ANSWER,
+            user_confirm=False,
+        )
+        if answer is not None:
+            return answer
+
+        return "I couldn't identify potentail main scripts for the ENTRYPOINT"

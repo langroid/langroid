@@ -106,7 +106,7 @@ def _test_context_length_error(test_settings: Settings, mode: str, max_tokens: i
     )
 
     toks_per_sentence = int(parser.num_tokens(generate_random_sentences(1000)) / 1000)
-    max_sentences = int(context_length *1.5/ toks_per_sentence)
+    max_sentences = int(context_length * 1.5 / toks_per_sentence)
     big_message = generate_random_sentences(max_sentences + 1)
     big_message_tokens = parser.num_tokens(big_message)
     assert big_message_tokens + max_tokens > context_length

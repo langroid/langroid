@@ -10,7 +10,6 @@ from llmagent.mytypes import Document
 from llmagent.utils.system import rmdir
 from dotenv import load_dotenv
 from typing import Union
-import itertools
 import os
 import pytest
 
@@ -79,4 +78,3 @@ def test_vector_stores(vecdb: Union[ChromaDB, QdrantDB]):
         vecdb.delete_collection(collection_name=vecdb.config.collection_name)
     else:
         rmdir(vecdb.config.storage_path)
-
