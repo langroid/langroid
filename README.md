@@ -31,6 +31,7 @@ insert these secrets:
 - GitHub Personal Access Token (needed by  PyGithub to analyze git repos; 
   token-based API calls are less rate-limited).
 - Redis Password (ask @pchalasani for this) for the redis cache.
+- Qdrant API key (ask @pchalasani for this) for the vector db.
 
 ```bash
 cp .env-template .env
