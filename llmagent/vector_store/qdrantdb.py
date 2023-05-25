@@ -77,7 +77,7 @@ class QdrantDB(VectorStore):
 
     def add_documents(self, documents: List[Document]) -> None:
         embedding_vecs = self.embedding_fn([doc.content for doc in documents])
-        ids = list(range(len(documents)))
+        ids = [self._unique_hash_id(d) for d in documents]
         self.client.upsert(
             collection_name=self.config.collection_name,
             points=Batch(
