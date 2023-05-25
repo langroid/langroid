@@ -1,7 +1,23 @@
 from faker import Faker
+import random
+import nltk
+nltk.download('punkt')
+nltk.download('gutenberg')
 
 Faker.seed(23)
+random.seed(43)
 
+def generate_random_sentences(k):
+    # Load the sample text
+    from nltk.corpus import gutenberg
+    text = gutenberg.raw('austen-emma.txt')
+
+    # Split the text into sentences
+    sentences = nltk.tokenize.sent_tokenize(text)
+
+    # Generate k random sentences
+    random_sentences = random.choices(sentences, k=k)
+    return " ".join(random_sentences)
 
 def generate_random_text(num_sentences):
     fake = Faker()

@@ -5,7 +5,7 @@ from llmagent.language_models.openai_gpt import (
     OpenAICompletionModel,
 )
 from llmagent.language_models.base import LLMMessage, Role
-from llmagent.parsing.utils import generate_random_text
+from llmagent.parsing.utils import generate_random_sentences
 from llmagent.parsing.parser import ParsingConfig, Parser
 from llmagent.cachedb.redis_cachedb import RedisCacheConfig
 from llmagent.utils.configuration import Settings, set_global
@@ -82,13 +82,12 @@ def test_openai_gpt(test_settings: Settings, streaming, country, capital):
 def _test_context_length_error(test_settings: Settings, mode: str, max_tokens: int):
     """
     Test disabled, see TODO below.
+    Also it takes too long since we are trying to test
+    that it raises the expected error when the context length is exceeded.
     Args:
-        test_settings:
-        mode:
-        max_tokens:
-
-    Returns:
-
+        test_settings: from conftest.py
+        mode: "completion" or "chat"
+        max_tokens: number of tokens to generate
     """
     set_global(test_settings)
     set_global(Settings(cache=False))
@@ -106,10 +105,11 @@ def _test_context_length_error(test_settings: Settings, mode: str, max_tokens: i
         llm.chat_context_length() if mode == "chat" else llm.completion_context_length()
     )
 
-    toks_per_sentence = int(parser.num_tokens(generate_random_text(1000)) / 1000)
-    max_sentences = int(context_length / toks_per_sentence)
-    big_message = generate_random_text(max_sentences + 1)
-    assert parser.num_tokens(big_message) + max_tokens > context_length
+    toks_per_sentence = int(parser.num_tokens(generate_random_sentences(1000)) / 1000)
+    max_sentences = int(context_length *1.5/ toks_per_sentence)
+    big_message = generate_random_sentences(max_sentences + 1)
+    big_message_tokens = parser.num_tokens(big_message)
+    assert big_message_tokens + max_tokens > context_length
     response = None
     # TODO need to figure out what error type to expect here
     with pytest.raises(openai.error.InvalidRequestError) as e:
