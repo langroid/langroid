@@ -39,8 +39,8 @@ class CodeChatAgentConfig(DocChatAgentConfig):
     stream: bool = True  # allow streaming where needed
     vecdb: VectorStoreConfig = QdrantDBConfig(
         type="qdrant",
-        collection_name="llmagent-repo",
-        storage_path=".qdrant/data/",
+        collection_name="llmagent-codechat",
+        storage_path=".qdrant/codechat/",
         embedding=OpenAIEmbeddingsConfig(
             model_type="openai",
             model_name="text-embedding-ada-002",

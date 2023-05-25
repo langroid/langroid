@@ -33,8 +33,8 @@ class DockerChatAgentConfig(AgentConfig):
     stream: bool = True
     vecdb: VectorStoreConfig = QdrantDBConfig(
         type="qdrant",
-        collection_name="test",
-        storage_path=".qdrant/test/",
+        collection_name="llmagent-dockerchat",
+        storage_path=".qdrant/llmagent-dockerchat/",
         embedding=OpenAIEmbeddingsConfig(
             model_type="openai",
             model_name="text-embedding-ada-002",
