@@ -19,7 +19,7 @@ class URLQAConfig(DocChatAgentConfig):
     max_tokens: int = 10000
     vecdb: VectorStoreConfig = QdrantDBConfig(
         type="qdrant",
-        collection_name="llmagent-urls",
+        collection_name="llmagent-docs",
         storage_path=".qdrant/data/",
         embedding=OpenAIEmbeddingsConfig(
             model_type="openai",

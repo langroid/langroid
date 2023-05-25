@@ -1,11 +1,12 @@
-from llmagent.parsing.urls import get_urls_from_user
+from llmagent.parsing.urls import get_list_from_user
 from llmagent.utils.logging import setup_colored_logging
 from llmagent.utils import configuration
 from llmagent.language_models.openai_gpt import OpenAIChatModel
 from examples.codechat.code_chat_agent import CodeChatAgent, CodeChatAgentConfig
-
+import re
 import typer
 from rich import print
+from rich.prompt import Prompt
 import warnings
 
 app = typer.Typer()
@@ -22,8 +23,15 @@ def chat(config: CodeChatAgentConfig) -> None:
     print("[blue]Welcome to the GitHub Repo chatbot!")
     print("[cyan]Enter x or q to quit, or ? for evidence")
     print("[blue]Enter a GitHub URL below (or leave empty for default Repo)")
-    urls = get_urls_from_user(n=1) or default_urls
+    urls = get_list_from_user(n=1) or default_urls
     config.repo_url = urls[0]
+
+    collection_name = Prompt.ask(
+        "What would you like to name this collection?",
+        default=config.vecdb.collection_name,
+    )
+    config.vecdb.collection_name = collection_name
+
     agent = CodeChatAgent(config)
 
     warnings.filterwarnings(
@@ -33,7 +41,16 @@ def chat(config: CodeChatAgentConfig) -> None:
         module="transformers",
     )
 
-    agent.run()
+    system_msg = Prompt.ask(
+        """
+        [blue] Tell me who I am; complete this sentence: You are...
+        """,
+        default="a coding expert, who will help me understand a code repo"
+    )
+
+    system_msg = re.sub("you are", "", system_msg, flags=re.IGNORECASE)
+
+    agent.run(system_message= "You are " + system_msg)
 
 
 @app.command()

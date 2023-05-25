@@ -1,45 +1,81 @@
 import fire
 import requests
 from bs4 import BeautifulSoup
+import os
 from urllib.parse import urljoin
 from rich import print
+from rich.prompt import Prompt
+from typing import List, Tuple
+from pydantic import HttpUrl, ValidationError, BaseModel
 
 
-def get_urls_from_user(
-    prompt="Enter a URL (type 'done' or hit return to finish): ",
-    n=None,
-) -> set:
+def get_user_input(msg: str, color:str="blue") -> str:
     """
-    Prompt the user for URLs.
+    Prompt the user for input.
+    Args:
+        msg: printed prompt
+        color: color of the prompt
+    Returns:
+        user input
+    """
+    color_str = f"[{color}]{msg} " if color else msg + " "
+    print(color_str, end = "")
+    return input("")
+
+def get_list_from_user(
+    prompt="Enter input (type 'done' or hit return to finish)",
+    n=None,
+) -> List[str]:
+    """
+    Prompt the user for inputs.
     Args:
         prompt: printed prompt
-        n: how many URLs to prompt for. If None, then prompt until done, otherwise
-            quit after n URLs have been entered.
+        n: how many inputs to prompt for. If None, then prompt until done, otherwise
+            quit after n inputs.
     Returns:
-        set of URLs
+        list of input strings
     """
     # Create an empty set to store the URLs.
-    url_set = set()
+    input_set = set()
 
     # Use a while loop to continuously ask the user for URLs.
     i = 0
     while True:
         # Prompt the user for input.
-        print(f"[blue]{prompt} ", end="")
-        url = input("")
-
+        input_str = Prompt.ask(f"[blue]{prompt}")
         # Check if the user wants to exit the loop.
-        if url.lower() == "done" or url == "":
+        if input_str.lower() == "done" or input_str == "":
             break
-
-        # Add the URL to the set.
-        url_set.add(url.strip())
+        input_set.add(input_str.strip())
         i += 1
         if i == n:
             break
 
-    return list(url_set)
+    return list(input_set)
 
+class Url(BaseModel):
+    url: HttpUrl
+
+def get_urls_and_paths(inputs: List[str]) -> Tuple[List[str], List[str]]:
+    """
+    Given a list of inputs, return a list of URLs and a list of paths.
+    Args:
+        inputs: list of strings
+    Returns:
+        list of URLs, list of paths
+    """
+    urls = []
+    paths = []
+    for item in inputs:
+        try:
+            m = Url(url=item)
+            urls.append(m.url)
+        except ValidationError:
+            if os.path.exists(item):
+                paths.append(item)
+            else:
+                logger.warning(f"{item} is neither a URL nor a path.")
+    return urls, paths
 
 def find_urls(
     url="https://en.wikipedia.org/wiki/Generative_pre-trained_transformer",
