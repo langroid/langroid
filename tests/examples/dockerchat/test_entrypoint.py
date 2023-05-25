@@ -83,7 +83,8 @@ def test_llm_agent_message(test_settings: Settings):
     agent.enable_message(EntryPointAndCMDMessage)
 
     llm_msg = agent.respond_forget(
-        "Start by asking me about the identifying main scripts and their argument in the repo to define the ENTRYPOINT."
+        """Start by asking me about the identifying main scripts and 
+        their argument in the repo to define the ENTRYPOINT."""
     ).content
 
     agent_result = agent.handle_message(llm_msg)

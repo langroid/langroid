@@ -44,13 +44,12 @@ class OpenAIGPTConfig(LLMConfig):
     type: str = "openai"
     max_output_tokens: int = 1024
     min_output_tokens: int = 64
-    max_context_length: int = 4096
     timeout: int = 20
     chat_model: OpenAIChatModel = OpenAIChatModel.GPT3_5_TURBO
     completion_model: OpenAICompletionModel = OpenAICompletionModel.TEXT_DA_VINCI_003
     context_length: Dict[str, int] = {
         OpenAIChatModel.GPT3_5_TURBO: 1024,
-        OpenAIChatModel.GPT4: 4096,  # but pricing page says 8k??
+        OpenAIChatModel.GPT4: 8192,
         OpenAICompletionModel.TEXT_DA_VINCI_003: 4096,
     }
 

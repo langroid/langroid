@@ -79,6 +79,9 @@ class ChromaDB(VectorStore):
             ids=ids,
         )
 
+    def delete_collection(self, collection_name: str):
+        self.client.delete_collection(name=collection_name)
+
     def similar_texts_with_scores(
         self, text: str, k: int = 1, where: str = None, debug: bool = False
     ) -> List[Tuple[Document, float]]:

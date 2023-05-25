@@ -355,20 +355,26 @@ class DockerChatAgent(ChatAgent):
         """
         Finds corresponding command to the ENTRYPOINT
         Args:
-            m (EntryPointAndCMDMessage): LLM message contains a request to identify entrypoints
+            m (EntryPointAndCMDMessage): LLM message contains a request to identify
+                entrypoints
         Retruns:
-            str: description of the main scripts and corresponding argument in the repo that are potential candidates to become ENTRYPOINT
+            str: description of the main scripts and corresponding argument in the
+                repo that are potential candidates to become ENTRYPOINT
         """
         if self.repo_path is None:
             return self.handle_message_fallback()
 
         answer = self.ask_agent(
             self.code_chat_agent,
-            request="What's the name of main script in this repo and can you SPECIFY the command line and necessary arguments to run the main script? If there are more than one main script, then SPECIFY the commands and necessary arguments corresponding to each one",
+            request="""What's the name of main script in this repo and can you SPECIFY 
+            the command line and necessary arguments to run the main script? 
+            If there are more than one main script, then SPECIFY the commands 
+            and necessary arguments corresponding to each one
+            """,
             no_answer=NO_ANSWER,
             user_confirm=False,
         )
         if answer is not None:
             return answer
-        
+
         return "I couldn't identify potentail main scripts for the ENTRYPOINT"
