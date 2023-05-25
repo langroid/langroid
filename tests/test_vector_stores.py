@@ -10,6 +10,7 @@ from llmagent.mytypes import Document
 from llmagent.utils.system import rmdir
 from dotenv import load_dotenv
 from typing import Union
+import itertools
 import os
 import pytest
 
@@ -30,6 +31,15 @@ def generate_vecdbs(embed_cfg: EmbeddingModelsConfig) -> VectorStore:
     rmdir(qd_dir)
     qd_cfg = QdrantDBConfig(
         type="qdrant",
+        cloud=False,
+        collection_name="test-" + embed_cfg.model_type,
+        storage_path=qd_dir,
+        embedding=embed_cfg,
+    )
+
+    qd_cfg_cloud = QdrantDBConfig(
+        type="qdrant",
+        cloud=True,
         collection_name="test-" + embed_cfg.model_type,
         storage_path=qd_dir,
         embedding=embed_cfg,
@@ -45,9 +55,10 @@ def generate_vecdbs(embed_cfg: EmbeddingModelsConfig) -> VectorStore:
     )
 
     qd = QdrantDB(qd_cfg)
+    qd_cloud = QdrantDB(qd_cfg_cloud)
     cd = ChromaDB(cd_cfg)
 
-    return [qd, cd]
+    return [qd, qd_cloud, cd]
 
 
 @pytest.mark.parametrize(
@@ -64,4 +75,8 @@ def test_vector_stores(vecdb: Union[ChromaDB, QdrantDB]):
     assert set([docs_and_scores[0][0].content, docs_and_scores[1][0].content]) == set(
         ["hello", "hi there"]
     )
-    rmdir(vecdb.config.storage_path)
+    if vecdb.config.cloud:
+        vecdb.delete_collection(collection_name=vecdb.config.collection_name)
+    else:
+        rmdir(vecdb.config.storage_path)
+
