@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 class VectorStoreConfig(BaseSettings):
     collection_name: str = "default"
     storage_path: str = ".qdrant/data"
+    cloud: bool = False
     embedding: EmbeddingModelsConfig = EmbeddingModelsConfig(
         model_type="openai",
     )
@@ -46,6 +47,10 @@ class VectorStore(ABC):
     def similar_texts_with_scores(
         self, text: str, k: int = 1, where: str = None, debug: bool = False
     ):
+        pass
+
+    @abstractmethod
+    def delete_collection(self, collection_name: str):
         pass
 
     def show_if_debug(self, doc_score_pairs):

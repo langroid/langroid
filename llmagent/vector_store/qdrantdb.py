@@ -17,6 +17,8 @@ from qdrant_client.http.models import (
 from qdrant_client.conversions.common_types import ScoredPoint
 from typing import List, Tuple
 from chromadb.api.types import EmbeddingFunction
+from dotenv import load_dotenv
+import os
 import logging
 
 logger = logging.getLogger(__name__)
@@ -24,15 +26,16 @@ logger = logging.getLogger(__name__)
 
 class QdrantDBConfig(VectorStoreConfig):
     type: str = "qdrant"
+    cloud: bool = True
+    url = "https://644cabc3-4141-4734-91f2-0cc3176514d4.us-east-1-0.aws.cloud.qdrant.io:6333"
+
+
     collection_name: str = "qdrant-llmagent"
     storage_path: str = ".qdrant/data"
     embedding: EmbeddingModelsConfig = EmbeddingModelsConfig(
         model_type="openai",
     )
     distance: str = Distance.COSINE
-    # host: str = "127.0.0.1"
-    # port: int = 6333
-    # compose_file: str = "llmagent/vector_store/docker-compose-qdrant.yml"
 
 
 class QdrantDB(VectorStore):
@@ -44,12 +47,16 @@ class QdrantDB(VectorStore):
         self.embedding_dim = emb_model.embedding_dims
         self.host = config.host
         self.port = config.port
-        self.client = QdrantClient(
-            path=config.storage_path,
-            # host=self.host,
-            # port=self.port,
-            # prefer_grpc=True,
-        )
+        load_dotenv()
+        if config.cloud:
+            self.client = QdrantClient(
+                url = config.url,
+                api_key=os.getenv("QDRANT_API_KEY"),
+            )
+        else:
+            self.client = QdrantClient(
+                path=config.storage_path,
+            )
 
         self.client.recreate_collection(
             collection_name=config.collection_name,
@@ -80,6 +87,9 @@ class QdrantDB(VectorStore):
                 payloads=documents,
             ),
         )
+
+    def delete_collection(self, collection_name: str):
+        self.client.delete_collection(collection_name=collection_name)
 
     def similar_texts_with_scores(
         self,
