@@ -55,7 +55,7 @@ class VectorStore(ABC):
     @staticmethod
     def _unique_hash_id(doc: Document) -> str:
         # Encode the document as UTF-8
-        doc_utf8 = str(doc).encode('utf-8')
+        doc_utf8 = str(doc).encode("utf-8")
 
         # Create a SHA256 hash object
         sha256_hash = hashlib.sha256()

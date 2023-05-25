@@ -31,8 +31,10 @@ def chat(config: URLQAConfig) -> None:
 
     print("[blue]Welcome to the document chatbot!")
     print("[cyan]Enter x or q to quit, or ? for evidence")
-    print("[blue]Enter some URLs or file/dir paths below "
-          " (or leave empty for default URLs)")
+    print(
+        "[blue]Enter some URLs or file/dir paths below "
+        " (or leave empty for default URLs)"
+    )
     inputs = get_list_from_user() or default_urls
     urls, paths = get_urls_and_paths(inputs)
 
@@ -69,13 +71,16 @@ def chat(config: URLQAConfig) -> None:
         # category=UserWarning,
         module="transformers",
     )
-    system_msg = Prompt.ask("""
+    system_msg = Prompt.ask(
+        """
     [blue] Tell me who I am; complete this sentence: You are...
     [or hit enter for default] 
     [blue] Human
-    """, default="a helpful assistant.")
+    """,
+        default="a helpful assistant.",
+    )
     system_msg = re.sub("you are", "", system_msg, flags=re.IGNORECASE)
-    agent.run(system_message= "You are " + system_msg)
+    agent.run(system_message="You are " + system_msg)
 
 
 @app.command()

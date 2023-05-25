@@ -48,7 +48,7 @@ class OpenAIGPTConfig(LLMConfig):
     chat_model: OpenAIChatModel = OpenAIChatModel.GPT3_5_TURBO
     completion_model: OpenAICompletionModel = OpenAICompletionModel.TEXT_DA_VINCI_003
     context_length: Dict[str, int] = {
-        OpenAIChatModel.GPT3_5_TURBO: 1024,
+        OpenAIChatModel.GPT3_5_TURBO: 4096,
         OpenAIChatModel.GPT4: 8192,
         OpenAICompletionModel.TEXT_DA_VINCI_003: 4096,
     }

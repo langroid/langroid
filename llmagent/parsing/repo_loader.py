@@ -417,9 +417,13 @@ class RepoLoader:
         return folder_structure, docs
 
     @staticmethod
-    def get_documents(path: str, file_types: List[str] = None,
-                      exclude_dirs: List[str] = None, depth: int = -1,
-                      lines: int = None) -> List[Document]:
+    def get_documents(
+        path: str,
+        file_types: List[str] = None,
+        exclude_dirs: List[str] = None,
+        depth: int = -1,
+        lines: int = None,
+    ) -> List[Document]:
         """
         Recursively get all files under a path as Document objects.
 
@@ -455,8 +459,10 @@ class RepoLoader:
                 if depth == -1 or current_depth <= depth:
                     for file in files:
                         file_path = Path(root) / file
-                        if (not file_types or
-                            RepoLoader._file_type(file_path) in file_types):
+                        if (
+                            not file_types
+                            or RepoLoader._file_type(file_path) in file_types
+                        ):
                             file_paths.append(file_path)
 
         for file_path in file_paths:
@@ -466,11 +472,9 @@ class RepoLoader:
                     content = "\n".join(line.strip() for line in file_lines)
                 else:
                     content = f.read()
-            docs.append(Document(content=content,
-                                 metadata={'source': str(file_path)}))
+            docs.append(Document(content=content, metadata={"source": str(file_path)}))
 
         return docs
-
 
     def load_docs_from_github(
         self, k: int = None, depth: int = None, lines: int = None

@@ -27,8 +27,11 @@ def test_openai_gpt(test_settings: Settings, streaming, country, capital):
         type="openai",
         max_output_tokens=100,
         min_output_tokens=10,
-        chat_model=(OpenAIChatModel.GPT3_5_TURBO if test_settings.gpt3_5
-                    else OpenAIChatModel.GPT4),
+        chat_model=(
+            OpenAIChatModel.GPT3_5_TURBO
+            if test_settings.gpt3_5
+            else OpenAIChatModel.GPT4
+        ),
         completion_model=OpenAICompletionModel.TEXT_DA_VINCI_003,
         cache_config=RedisCacheConfig(fake=False),
     )
