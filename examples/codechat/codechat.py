@@ -45,12 +45,12 @@ def chat(config: CodeChatAgentConfig) -> None:
         """
         [blue] Tell me who I am; complete this sentence: You are...
         """,
-        default="a coding expert, who will help me understand a code repo"
+        default="a coding expert, who will help me understand a code repo",
     )
 
     system_msg = re.sub("you are", "", system_msg, flags=re.IGNORECASE)
 
-    agent.run(system_message= "You are " + system_msg)
+    agent.run(system_message="You are " + system_msg)
 
 
 @app.command()

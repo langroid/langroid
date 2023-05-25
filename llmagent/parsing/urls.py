@@ -7,9 +7,12 @@ from rich import print
 from rich.prompt import Prompt
 from typing import List, Tuple
 from pydantic import HttpUrl, ValidationError, BaseModel
+import logging
+
+logger = logging.getLogger(__name__)
 
 
-def get_user_input(msg: str, color:str="blue") -> str:
+def get_user_input(msg: str, color: str = "blue") -> str:
     """
     Prompt the user for input.
     Args:
@@ -19,8 +22,9 @@ def get_user_input(msg: str, color:str="blue") -> str:
         user input
     """
     color_str = f"[{color}]{msg} " if color else msg + " "
-    print(color_str, end = "")
+    print(color_str, end="")
     return input("")
+
 
 def get_list_from_user(
     prompt="Enter input (type 'done' or hit return to finish)",
@@ -53,8 +57,10 @@ def get_list_from_user(
 
     return list(input_set)
 
+
 class Url(BaseModel):
     url: HttpUrl
+
 
 def get_urls_and_paths(inputs: List[str]) -> Tuple[List[str], List[str]]:
     """
@@ -76,6 +82,7 @@ def get_urls_and_paths(inputs: List[str]) -> Tuple[List[str], List[str]]:
             else:
                 logger.warning(f"{item} is neither a URL nor a path.")
     return urls, paths
+
 
 def find_urls(
     url="https://en.wikipedia.org/wiki/Generative_pre-trained_transformer",

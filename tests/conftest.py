@@ -10,9 +10,7 @@ def pytest_addoption(parser) -> None:
         help="show intermediate details, e.g. for debug mode",
     )
     parser.addoption("--nc", action="store_true", default=False, help="don't use cache")
-    parser.addoption(
-        "--3", action="store_true", default=False, help="use GPT-3.5"
-    )
+    parser.addoption("--3", action="store_true", default=False, help="use GPT-3.5")
 
 
 @pytest.fixture

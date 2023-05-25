@@ -118,7 +118,7 @@ class DockerChatAgent(ChatAgent):
             content_excludes=["Dockerfile"],
             # USE same LLM settings as DockerChatAgent, e.g.
             # if DockerChatAgent uses gpt4, then use gpt4 here too
-            llm = self.config.llm,
+            llm=self.config.llm,
         )
         # Note `content_includes` and `content_excludes` are used in
         # self.code_chat_agent to create a json dump of (top k lines) of various
