@@ -1,5 +1,6 @@
 from pydantic import BaseModel, Field
 from typing import Union, List
+import json
 
 Number = Union[int, float]
 Embedding = List[Number]
@@ -14,4 +15,4 @@ class Document(BaseModel):
 
     def __str__(self):
         # TODO: make metadata a pydantic model to enforce "source"
-        return f"{self.content} {self.metadata['source']}"
+        return f"{self.content} {json.dumps(self.metadata)}"
