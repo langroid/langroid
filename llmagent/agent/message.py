@@ -26,13 +26,17 @@ INSTRUCTION = """
         "<arg2>": <value2>
     } 
     where it is important to note that <arg1> is the NAME of the argument, 
-    and <value1> is teh VALUE of the argument.
+    and <value1> is the VALUE of the argument.
     
-    For example if a tool has this description is available:
+    For example suppose a tool with this description is available:
     
-    country_capital: check if <city> is the capital of <country>,
+    country_capital: check if <city> is the capital of <country>.
     
-    and you want to check whether the capital of France is Paris, you must the 
+    Now suppose you want to do this:
+     
+     "Check whether the capital of France is Paris",
+      
+    you realize that the `country_capital` tool is applicable, and so you must 
     ask in the following JSON format: 
     
     The JSON format will be:
@@ -42,8 +46,12 @@ INSTRUCTION = """
         "city": "Paris"
     }
     
-    But if you want to find out the population of France, you must ask in natural
-    nautral language: "What is the population of France?"
+    On the other hand suppose you want to:
+    
+    "Find out the population of France".
+    
+    In this case you realize there is no available tool for this, so you just ask in 
+    natural language: "What is the population of France?"
     
     Whenever possible, AND ONLY IF APPLICABLE, use these tools, with the JSON syntax 
     specified above. When a tool is applicable, simply use this syntax, do not write 
