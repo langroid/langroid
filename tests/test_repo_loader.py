@@ -1,4 +1,5 @@
 from llmagent.parsing.repo_loader import RepoLoader, RepoLoaderConfig
+from pathlib import Path
 import json
 
 
@@ -40,6 +41,26 @@ def test_repo_loader() -> None:
     )
     assert len(tree) > 0
     assert len(docs) > 0
+
+    # use a different fn to just load documents from folder
+    docs = RepoLoader.get_documents(
+        repo_loader.clone_path,
+        depth=1,
+        lines=5,
+        file_types=["md", "txt", "toml"],
+        exclude_dirs=[".git", "tests"],
+    )
+    assert len(docs) > 0
+
+    # test making doc from single file path
+    docs = RepoLoader.get_documents(
+        Path(repo_loader.clone_path) / "pyproject.toml",
+        depth=1,
+        lines=5,
+        file_types=["md", "txt", "toml"],
+        exclude_dirs=[".git", "tests"],
+    )
+    assert len(docs) == 1
 
     # list all names to depth 2
     # Useful to provide LLM a listing of contents of a repo

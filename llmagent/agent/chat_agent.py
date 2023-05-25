@@ -149,7 +149,10 @@ class ChatAgent(Agent):
             self.message_history[self.json_instructions_idx].content = json_instructions
 
     def run(
-        self, iters: int = -1, default_human_response: Optional[str] = None
+        self,
+        iters: int = -1,
+        default_human_response: Optional[str] = None,
+        system_message: Optional[str] = None,
     ) -> None:
         """
         Run the agent in chat mode, until the user types "exit", "quit", "q", "x",
@@ -162,6 +165,8 @@ class ChatAgent(Agent):
                 human response when the agent's `handle_method` returns None.
                 This can be useful for automated/non-interactive testing.
         """
+        if system_message is not None:
+            self.task_messages[0].content = system_message
         llm_msg = self.start().content
         if settings.debug:
             print(f"[red]{self.message_history_str()}")
@@ -268,6 +273,25 @@ class ChatAgent(Agent):
             LLMMessage(role=Role.ASSISTANT, content=response.content)
         )
         return Document(content=response.content, metadata=response.metadata)
+
+    def respond_temp_context(self, message: str, prompt: str) -> Document:
+        """
+        Get LLM response to `prompt` (which presumably includes the `message`
+        somewhere, along with possible large "context" passages),
+        but only include `message` as the USER message, and not the
+        full `prompt`, in the message history.
+        Args:
+            message: the original, relatively short, user request or query
+            prompt: the full prompt potentially containing `message` plus context
+
+        Returns:
+            Document object containing the response.
+        """
+        # we explicitly call THIS class's respond method,
+        # not a derived class's (or else there would be infinite recursion!)
+        answer_doc = ChatAgent.respond(self, prompt)
+        self.update_last_message(message, role=Role.USER)
+        return answer_doc
 
     def respond_forget(self, message: str) -> Document:
         """

@@ -3,6 +3,7 @@ import logging
 from github import Github, ContentFile
 from dotenv import load_dotenv
 import os
+from pathlib import Path
 from typing import List, Union, Dict, Tuple
 import itertools
 from pydantic import BaseSettings
@@ -414,6 +415,62 @@ class RepoLoader:
                         )
                     )
         return folder_structure, docs
+
+    @staticmethod
+    def get_documents(path: str, file_types: List[str] = None,
+                      exclude_dirs: List[str] = None, depth: int = -1,
+                      lines: int = None) -> List[Document]:
+        """
+        Recursively get all files under a path as Document objects.
+
+        Args:
+            path (str): The path to the directory or file.
+            file_types (List[str], optional): List of file extensions to include.
+                Defaults to None, which includes all files.
+            exclude_dirs (List[str], optional): List of directories to exclude.
+                Defaults to None, which includes all directories.
+            depth (int, optional): Max depth of recursion. Defaults to -1,
+                which includes all depths.
+            lines (int, optional): Number of lines to read from each file.
+                Defaults to None, which reads all lines.
+
+        Returns:
+            List[Document]: List of Document objects representing files.
+
+        """
+        docs = []
+        file_paths = []
+        path_obj = Path(path).resolve()
+
+        if path_obj.is_file():
+            file_paths.append(path_obj)
+        else:
+            path_depth = len(path_obj.parts)
+            for root, dirs, files in os.walk(path):
+                # Exclude directories if needed
+                if exclude_dirs:
+                    dirs[:] = [d for d in dirs if d not in exclude_dirs]
+
+                current_depth = len(Path(root).resolve().parts) - path_depth
+                if depth == -1 or current_depth <= depth:
+                    for file in files:
+                        file_path = Path(root) / file
+                        if (not file_types or
+                            RepoLoader._file_type(file_path) in file_types):
+                            file_paths.append(file_path)
+
+        for file_path in file_paths:
+            with open(file_path, "r") as f:
+                if lines is not None:
+                    file_lines = list(itertools.islice(f, lines))
+                    content = "\n".join(line.strip() for line in file_lines)
+                else:
+                    content = f.read()
+            docs.append(Document(content=content,
+                                 metadata={'source': str(file_path)}))
+
+        return docs
+
 
     def load_docs_from_github(
         self, k: int = None, depth: int = None, lines: int = None
