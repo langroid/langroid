@@ -1,5 +1,5 @@
 import pytest
-from llmagent.mytypes import Document
+from llmagent.mytypes import Document, DocMetaData
 from llmagent.embedding_models.clustering import densest_doc_clusters
 from dotenv import load_dotenv
 from llmagent.embedding_models.base import EmbeddingModel
@@ -42,7 +42,7 @@ def test_densest_doc_clusters(emb_fn):
                     perception, and natural language understanding. Machine learning, a subset of AI,
                     involves the development of algorithms that allow computers to learn from and make
                     decisions based on data.""",
-            metadata={"id": 1, "topic": "AI"},
+            metadata=DocMetaData(id=1, topic="AI", source="wikipedia"),
         ),
         Document(
             content="""Virtual reality (VR) is an immersive technology that can transport users
@@ -50,7 +50,7 @@ def test_densest_doc_clusters(emb_fn):
                     a sense of presence and interact with the virtual world using handheld controllers
                     or motion tracking. VR has applications in gaming, training, education, and
                     healthcare, among other fields.""",
-            metadata={"id": 2, "topic": "VR"},
+            metadata=DocMetaData(id=2, topic="VR", source="ars-technica"),
         ),
         Document(
             content="""The Internet of Things (IoT) is a network of interconnected physical devices
@@ -58,7 +58,7 @@ def test_densest_doc_clusters(emb_fn):
                     and connectivity, allowing them to collect and transmit data to a central
                     system for analysis. This technology has applications in various industries,
                     such as smart homes, transportation, agriculture, and manufacturing.""",
-            metadata={"id": 3, "topic": "IOT"},
+            metadata=DocMetaData(id=3, topic="IOT", source="ars-technica"),
         ),
     ]
 
@@ -69,14 +69,14 @@ def test_densest_doc_clusters(emb_fn):
                     opponent's goal. The game is played on a rectangular field with a goal at each
                     end. The players use any part of their body except their hands and arms to
                     manipulate the ball.""",
-            metadata={"id": 4, "topic": "soccer"},
+            metadata=DocMetaData(id=4, topic="soccer", source="espn"),
         ),
         Document(
             content="""Basketball is a fast-paced team sport played on a rectangular court with
                     two teams of five players each. The objective is to score points by shooting a
                     ball through a hoop mounted at a height of 10 feet on a backboard at each end
                     of the court. The team with the most points at the end of the game wins.""",
-            metadata={"id": 5, "topic": "basketball"},
+            metadata=DocMetaData(id=5, topic="basketball", source="nba-news"),
         ),
         Document(
             content="""Tennis is a racket sport that can be played individually (singles) or
@@ -85,14 +85,14 @@ def test_densest_doc_clusters(emb_fn):
                     return it. Players score points by winning individual rallies, and a match is won
                     by winning a predetermined number of sets. Tennis is played on various surfaces,
                     such as grass, clay, and hard courts.""",
-            metadata={"id": 6, "topic": "tennis"},
+            metadata=DocMetaData(id=6, topic="tennis", source="sports-news"),
         ),
     ]
 
     docs = technology_docs * 10 + sports_docs * 10
     # assign unique ids
     for i, doc in enumerate(docs):
-        doc.metadata["id"] = i
+        doc.metadata.id = i
     # Number of densest clusters to find
     k = 6
 
