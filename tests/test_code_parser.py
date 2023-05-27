@@ -1,5 +1,5 @@
 from llmagent.parsing.code_parser import CodeParsingConfig, CodeParser
-from llmagent.mytypes import Document
+from llmagent.mytypes import Document, DocMetaData
 
 MAX_CHUNK_SIZE = 10
 
@@ -51,7 +51,7 @@ def test_code_parser():
     lang_codes = [text.split("|") for text in codes]
 
     docs = [
-        Document(content=code, metadata={"language": lang})
+        Document(content=code, metadata=DocMetaData(language=lang))
         for lang, code in lang_codes
         if code.strip() != ""
     ]

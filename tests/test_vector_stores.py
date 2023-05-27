@@ -6,7 +6,7 @@ from llmagent.embedding_models.models import (
     SentenceTransformerEmbeddingsConfig,
 )
 from llmagent.embedding_models.base import EmbeddingModelsConfig
-from llmagent.mytypes import Document
+from llmagent.mytypes import Document, DocMetaData
 from llmagent.utils.system import rmdir
 from dotenv import load_dotenv
 from typing import Union
@@ -65,9 +65,9 @@ def generate_vecdbs(embed_cfg: EmbeddingModelsConfig) -> VectorStore:
 )
 def test_vector_stores(vecdb: Union[ChromaDB, QdrantDB]):
     docs = [
-        Document(content="hello", metadata={"id": 1}),
-        Document(content="world", metadata={"id": 2}),
-        Document(content="hi there", metadata={"id": 2}),
+        Document(content="hello", metadata=DocMetaData(id=1)),
+        Document(content="world", metadata=DocMetaData(id=2)),
+        Document(content="hi there", metadata=DocMetaData(id=3)),
     ]
     vecdb.add_documents(docs)
     docs_and_scores = vecdb.similar_texts_with_scores("hello", k=2)

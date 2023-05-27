@@ -2,7 +2,7 @@ from abc import ABC
 from typing import Dict, Optional, Type, List, Tuple
 from contextlib import ExitStack
 from pydantic import BaseSettings, ValidationError
-from llmagent.mytypes import Document
+from llmagent.mytypes import Document, DocMetaData
 from rich import print
 import json
 from llmagent.agent.message import AgentMessage, INSTRUCTION
@@ -270,7 +270,7 @@ class Agent(ABC):
 
         return Document(
             content=response.message,
-            metadata=dict(
+            metadata=DocMetaData(
                 source="LLM",
                 usage=response.usage,
                 displayed=displayed,
@@ -302,7 +302,7 @@ class Agent(ABC):
             print(cached + "[green]" + response.message)
         return Document(
             content=response.message,
-            metadata=dict(
+            metadata=DocMetaData(
                 source="LLM",
                 usage=response.usage,
                 displayed=displayed,

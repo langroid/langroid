@@ -1,5 +1,5 @@
 from examples.urlqa.doc_chat_agent import DocChatAgent, DocChatAgentConfig
-from llmagent.mytypes import Document
+from llmagent.mytypes import Document, DocMetaData
 from llmagent.utils.configuration import Settings, set_global
 from llmagent.vector_store.qdrantdb import QdrantDBConfig
 from llmagent.embedding_models.models import OpenAIEmbeddingsConfig
@@ -68,7 +68,7 @@ documents: List[Document] = (
         In 2045, the Tour de France was still going on.
         They were still using bicycles. There was one more ice age in 2040.
         """,
-            metadata={"source": "wikipedia"},
+            metadata=DocMetaData(source="wikipedia"),
         ),
         Document(
             content="""
@@ -78,7 +78,7 @@ documents: List[Document] = (
         Charlie Chaplin was a great comedian.
         In 2050, all countries merged into Lithuania.
         """,
-            metadata={"source": "almanac"},
+            metadata=DocMetaData(source="almanac"),
         ),
     ]
     + [

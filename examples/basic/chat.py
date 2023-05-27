@@ -18,7 +18,6 @@ app = typer.Typer()
 setup_colored_logging()
 
 
-
 class BasicConfig(AgentConfig):
     debug: bool = False
     max_context_tokens = 500
@@ -34,21 +33,20 @@ class BasicConfig(AgentConfig):
     )
 
 
-
 def chat(config: BasicConfig) -> None:
     configuration.update_global_settings(config, keys=["debug", "stream", "cache"])
     if config.gpt4:
         config.llm.chat_model = OpenAIChatModel.GPT4
 
-    print("""
+    print(
+        """
     [blue]Welcome to the basic chatbot!
     Enter x or q to quit
-    """)
-
+    """
+    )
 
     agent = ChatAgent(config)
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
-
 
     warnings.filterwarnings(
         "ignore",
@@ -59,12 +57,11 @@ def chat(config: BasicConfig) -> None:
     agent.run()
 
 
-
 @app.command()
 def main(
-        debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
-        gpt4: bool = typer.Option(False, "--gpt4", "-4", help="use gpt4"),
-        nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
+    debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
+    gpt4: bool = typer.Option(False, "--gpt4", "-4", help="use gpt4"),
+    nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
 ) -> None:
     config = URLQAConfig(debug=debug, gpt4=gpt4, cache=not nocache)
     chat(config)

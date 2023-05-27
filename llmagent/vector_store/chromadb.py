@@ -3,7 +3,7 @@ from llmagent.embedding_models.base import (
     EmbeddingModelsConfig,
     EmbeddingModel,
 )
-from llmagent.mytypes import Document
+from llmagent.mytypes import Document, DocMetaData
 from llmagent.utils.output.printing import print_long_text
 from typing import List, Tuple
 import chromadb
@@ -69,7 +69,7 @@ class ChromaDB(VectorStore):
 
     def add_documents(self, documents: List[Document] = None):
         contents: List[str] = [document.content for document in documents]
-        metadatas: dict = [document.metadata for document in documents]
+        metadatas: List[dict] = [document.metadata.dict() for document in documents]
         ids = range(len(documents))
         ids = ["id" + str(id) for id in ids]
         self.collection.add(
@@ -96,7 +96,10 @@ class ChromaDB(VectorStore):
             for i, c in enumerate(contents):
                 print_long_text("red", "italic red", f"MATCH-{i}", c)
         metadatas = results["metadatas"][0]
-        docs = [Document(content=d, metadata=m) for d, m in zip(contents, metadatas)]
+        docs = [
+            Document(content=d, metadata=DocMetaData.parse_obj(m))
+            for d, m in zip(contents, metadatas)
+        ]
         scores = results["distances"][0]
         return list(zip(docs, scores))
 
