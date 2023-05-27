@@ -6,7 +6,7 @@ from llmagent.utils.output.printing import show_if_debug
 from llmagent.parsing.parser import ParsingConfig, Splitter
 from llmagent.utils.configuration import settings
 from contextlib import ExitStack
-from llmagent.mytypes import Document
+from llmagent.mytypes import Document, DocMetaData
 from typing import List, Union
 from rich import print
 from rich.console import Console
@@ -114,7 +114,7 @@ class DocChatAgent(ChatAgent):
             str: string representation
         """
         contents = [f"Extract: {d.content}" for d in docs]
-        sources = [d.metadata.get("source", "context") for d in docs]
+        sources = [d.metadata.source for d in docs]
         sources = [f"Source: {s}" if s is not None else "" for s in sources]
         return "\n".join(
             [
@@ -174,10 +174,10 @@ class DocChatAgent(ChatAgent):
             sources = ""
         return Document(
             content=content,
-            metadata={
-                "source": "SOURCE: " + sources,
-                "cached": answer_doc.metadata.get("cached", False),
-            },
+            metadata=DocMetaData(
+                source="SOURCE: " + sources,
+                cached=getattr(answer_doc.metadata, "cached", False),
+            ),
         )
 
     def answer_from_docs(self, query: str) -> Document:
@@ -245,7 +245,7 @@ class DocChatAgent(ChatAgent):
 
     def justify_response(self) -> None:
         """Show evidence for last response"""
-        source = self.response.metadata["source"]
+        source = self.response.metadata.source
         if len(source) > 0:
             print("[magenta]" + source)
         else:

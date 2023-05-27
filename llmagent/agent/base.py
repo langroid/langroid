@@ -2,7 +2,7 @@ from abc import ABC
 from typing import Dict, Optional, Type, List, Tuple
 from contextlib import ExitStack
 from pydantic import BaseSettings, ValidationError
-from llmagent.mytypes import Document
+from llmagent.mytypes import Document, DocMetaData
 from rich import print
 import json
 from llmagent.agent.message import AgentMessage, INSTRUCTION
@@ -16,6 +16,7 @@ from llmagent.parsing.json import extract_top_level_json
 from llmagent.prompts.prompts_config import PromptsConfig
 import logging
 from rich.console import Console
+from rich.prompt import Prompt
 
 console = Console()
 
@@ -212,8 +213,7 @@ class Agent(ABC):
             if iters > 0 and niters >= iters:
                 break
             niters += 1
-            print("\n[blue]Query: ", end="")
-            query = input("")
+            query = Prompt.ask("\n[blue]Query")
             if query in ["exit", "quit", "q", "x", "bye"]:
                 print("[green] Bye, it has been a pleasure, hope this was useful!")
                 break
@@ -270,7 +270,7 @@ class Agent(ABC):
 
         return Document(
             content=response.message,
-            metadata=dict(
+            metadata=DocMetaData(
                 source="LLM",
                 usage=response.usage,
                 displayed=displayed,
@@ -302,7 +302,7 @@ class Agent(ABC):
             print(cached + "[green]" + response.message)
         return Document(
             content=response.message,
-            metadata=dict(
+            metadata=DocMetaData(
                 source="LLM",
                 usage=response.usage,
                 displayed=displayed,

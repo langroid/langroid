@@ -16,4 +16,4 @@ def test_url_loader():
     delimiters = re.compile(r"[:/?=&.]")
     for doc in docs:
         assert len(doc.content) > 0
-        assert re.split(delimiters, doc.metadata["source"])[-1] in doc.content.lower()
+        assert re.split(delimiters, doc.metadata.source)[-1] in doc.content.lower()
