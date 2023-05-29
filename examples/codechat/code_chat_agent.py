@@ -9,7 +9,7 @@ from llmagent.parsing.parser import ParsingConfig, Splitter
 from llmagent.parsing.code_parser import CodeParsingConfig
 from llmagent.prompts.prompts_config import PromptsConfig
 from llmagent.prompts.templates import ANSWER_PROMPT_USE_HISTORY_GPT4
-from llmagent.mytypes import Document
+from llmagent.mytypes import Document, DocMetaData
 
 import os
 from rich import print
@@ -106,18 +106,16 @@ class CodeChatAgent(DocChatAgent):
         )
         listing = Document(
             content="\n".join(listing),
-            metadata={"source": "repo_listing"},
+            metadata=DocMetaData(source="repo_listing"),
         )
 
         code_docs = [
             doc
             for doc in documents
-            if doc.metadata["language"] not in (["md", "txt"] + config.content_excludes)
+            if doc.metadata.language not in (["md", "txt"] + config.content_excludes)
         ] + [listing]
 
-        text_docs = [
-            doc for doc in documents if doc.metadata["language"] in ["md", "txt"]
-        ]
+        text_docs = [doc for doc in documents if doc.metadata.language in ["md", "txt"]]
 
         self.config.parsing = config.parsing
         n_text_splits = self.ingest_docs(text_docs)

@@ -155,10 +155,9 @@ def test_llm_agent_message(test_settings: Settings):
     ]
     agent = MessageHandlingAgent(cfg, task_messages)
     agent.enable_message(ValidateDockerfileMessage)
+    agent.default_human_response = "I don't know, please ask your next question."
 
-    agent.run(
-        iters=2, default_human_response="I don't know, please ask your next question."
-    )
+    agent.do_task(rounds=2)
 
 
 def clean_string(string: str) -> str:

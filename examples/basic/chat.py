@@ -5,7 +5,7 @@ from llmagent.agent.base import AgentConfig
 from llmagent.agent.chat_agent import ChatAgent
 from llmagent.vector_store.base import VectorStoreConfig
 from llmagent.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
-
+import textwrap
 import typer
 
 
@@ -39,10 +39,12 @@ def chat(config: BasicConfig) -> None:
         config.llm.chat_model = OpenAIChatModel.GPT4
 
     print(
+        textwrap.dedent(
+            """
+        [blue]Welcome to the basic chatbot!
+        Enter x or q to quit
         """
-    [blue]Welcome to the basic chatbot!
-    Enter x or q to quit
-    """
+        ).strip()
     )
 
     agent = ChatAgent(config)
@@ -54,7 +56,7 @@ def chat(config: BasicConfig) -> None:
         # category=UserWarning,
         module="transformers",
     )
-    agent.run()
+    agent.do_task()
 
 
 @app.command()

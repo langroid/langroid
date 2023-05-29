@@ -50,7 +50,7 @@ def chat(config: CodeChatAgentConfig) -> None:
 
     system_msg = re.sub("you are", "", system_msg, flags=re.IGNORECASE)
 
-    agent.run(system_message="You are " + system_msg)
+    agent.do_task(system_message="You are " + system_msg)
 
 
 @app.command()
