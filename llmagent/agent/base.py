@@ -1,5 +1,5 @@
 from abc import ABC
-from typing import Dict, Optional, Type, List, Tuple
+from typing import Dict, Optional, Type, List, Tuple, Set
 from contextlib import ExitStack
 from pydantic import BaseSettings, ValidationError
 from llmagent.mytypes import Document, DocMetaData
@@ -17,10 +17,17 @@ from llmagent.prompts.prompts_config import PromptsConfig
 import logging
 from rich.console import Console
 from rich.prompt import Prompt
+from enum import Enum
 
 console = Console()
 
 logger = logging.getLogger(__name__)
+
+
+class Entity(str, Enum):
+    AGENT = "agent"
+    LLM = "llm"
+    USER = "user"
 
 
 class AgentConfig(BaseSettings):
@@ -43,10 +50,23 @@ class Agent(ABC):
         self.dialog = []  # seq of LLM (prompt, response) tuples
         self.response: Document = None  # last response
         self.handled_classes: Dict[str, Type[AgentMessage]] = {}
+        self.default_human_response = None
 
         self.llm = LanguageModel.create(config.llm)
         self.vecdb = VectorStore.create(config.vecdb) if config.vecdb else None
         self.parser = Parser(config.parsing) if config.parsing else None
+
+        self.sender: Entity = None  # the entity that sent the current message
+        self.allowed_responders: Set[Entity] = None
+        self._entity_map = {
+            Entity.USER: self.user_response,
+            Entity.LLM: self.llm_response,
+            Entity.AGENT: self.agent_response,
+        }
+        # latest message that needs a response
+        self.pending_message: Document = None
+        # latest response from an entity
+        self.current_response: Document = None
 
     def update_dialog(self, prompt: str, output: str) -> None:
         self.dialog.append((prompt, output))
@@ -143,6 +163,17 @@ class Agent(ABC):
         Now start, and be concise!                 
         """
 
+    def agent_response(self, input_str: str = None) -> Document:
+        if input_str is None:
+            return None
+        results = self.handle_message(input_str)
+        if results is None:
+            return None
+        print(f"[red]Agent: {results}")
+        return Document(
+            content=results, metadata=DocMetaData(source=Entity.AGENT.value)
+        )
+
     def handle_message(self, input_str: str) -> Optional[str]:
         """
         Extract JSON substrings from input message, handle each by the appropriate
@@ -201,28 +232,198 @@ class Agent(ABC):
 
         return handler_method(message)
 
-    def run(self, iters: int = -1) -> None:
-        """
-        Run the LLM in interactive mode, asking for input and generating responses.
-        If iters > 0, quit after that many iterations.
-        Args:
-            iters: number of iterations to run, if > 0
-        """
-        niters = 0
-        while True:
-            if iters > 0 and niters >= iters:
-                break
-            niters += 1
-            query = Prompt.ask("\n[blue]Query")
-            if query in ["exit", "quit", "q", "x", "bye"]:
-                print("[green] Bye, it has been a pleasure, hope this was useful!")
-                break
-            self.respond(query)
-
     def num_tokens(self, prompt: str) -> int:
         return self.parser.num_tokens(prompt)
 
-    def respond(self, prompt: str) -> Document:
+    def user_response(self, msg: str = None) -> Optional[Document]:
+        """
+        Get user response to current message.
+
+        Args:
+            msg (str): the current message
+
+
+        Returns:
+            User response, packaged as a Document
+
+        """
+        if self.default_human_response is not None:
+            # useful for automated testing
+            user_msg = self.default_human_response
+        else:
+            user_msg = Prompt.ask("Human (hit enter to proceed)").strip()
+
+        # only return non-None result if user_msg not empty
+        if user_msg:
+            return Document(
+                content=user_msg, metadata=DocMetaData(source=Entity.USER.value)
+            )
+
+    def _disallow_responder(self, e: Entity) -> None:
+        """
+        Disallow a responder from responding to current message.
+        Args:
+            e (Entity): entity to disallow
+        """
+        self.allowed_responders.remove(e)
+
+    def _allow_responder(self, e: Entity) -> None:
+        """
+        Allow a responder to respond to current message.
+        Args:
+            e (Entity): entity to allow
+        """
+        self.allowed_responders.add(e)
+
+    def _is_allowed_responder(self, e: Entity) -> bool:
+        """
+        Check if a responder is allowed to respond to current message.
+        Args:
+            e (Entity): entity to check
+        Returns:
+            bool: True if allowed, False otherwise
+        """
+        return e in self.allowed_responders
+
+    def _allow_all_responders(self) -> None:
+        """
+        Allow all responders to respond to current message.
+        """
+        self.allowed_responders = set(map(lambda e: e.value, Entity))
+
+    def _allow_all_responders_except(self, e: Entity) -> None:
+        """
+        Allow all responders to respond to current message, except for `e`.
+        Args:
+            e (Entity): entity to disallow
+        """
+        self._allow_all_responders()
+        self._disallow_responder(e)
+
+    def _entity_response(self, e: Entity) -> Optional[Document]:
+        """
+        Get response to current message, from an entity.
+        Args:
+            e (Entity): entity to get response from
+        Returns:
+            Optional[Document]: response from entity
+        """
+        msg = None if self.pending_message is None else self.pending_message.content
+        if self._is_allowed_responder(e):
+            result: Document = self._entity_map[e](msg)
+            self._disallow_responder(e)
+            if result is not None:
+                # enable all but the current entity to respond to the next message
+                self._allow_all_responders_except(e)
+                self.sender = e
+                return result
+
+    def process_pending_message(self) -> None:
+        """
+        Process current message, which could be from ANY entity
+        (e.g. LLM, human, another agent), to get a response.
+        Effectively, this constitutes 1 "turn" of a conversation,
+        e.g. if msg is from the LLM, the returned Document represents
+        the user's response to the LLM's message, or if
+        msg is from a human, the returned Document represents
+        the LLM's response to the human's message.
+
+        Returns:
+            Document: response to message
+        """
+        # First see if agent itself can handle msg via hard-coded method;
+        # this only applies when msg is "structured", i.e. contains a
+        # JSON-formatted substring that matches the structure expected by one of
+        # the agent's enabled message classes. Therefore it would not apply when
+        # msg originates from the human user.
+        result = (
+            self._entity_response(Entity.AGENT)
+            or self._entity_response(Entity.LLM)
+            or self._entity_response(Entity.USER)
+        )
+        self.current_response = result
+        if result is not None:
+            self.pending_message = result
+
+    def task_done(self) -> bool:
+        """
+        Check if task is done. This is the default behavior.
+        Derived classes can override this.
+        Returns:
+            bool: True if task is done, False otherwise
+        """
+        return self.current_response is None or (
+            self.sender == Entity.USER
+            and self.pending_message.content in ["q", "x", "exit", "quit", "bye"]
+        )
+
+    def setup_task(self, msg: str = None) -> None:
+        """
+        Set up task before entering processing loop.
+
+        Args:
+            msg: initial msg; optional, default is None
+
+        """
+        # Even the initial "sender" is not literally the USER (since the task could
+        # have come from another LLM), as far as this agent is concerned, the initial
+        # message can be considered to be from the USER.
+        self._allow_all_responders_except(Entity.USER)
+        self.sender = Entity.USER
+        self.pending_message = None
+        if msg is not None:
+            self.pending_message = Document(
+                content=msg, metadata=DocMetaData(source=Entity.USER.value)
+            )
+
+    def _task_loop(self, rounds: int = None, main: bool = True) -> Optional[Document]:
+        i = 0
+        while True:
+            self.process_pending_message()
+            if self.task_done():
+                if main:
+                    print("[magenta]Bye, hope this was useful!")
+                break
+            i += 1
+            if rounds is not None and i >= rounds:
+                break
+        return self.task_result()
+
+    def do_task(self, msg: str = None, rounds: int = None) -> Optional[Document]:
+        """
+        Loop over `process` until task is considered done.
+
+        Args:
+            msg (str): initial message to process; if None,
+                the LLM will respond to the initial `self.task_messages`
+                which set up the overall task.
+                The agent tries to achieve this goal by looping
+                over `self.process_current_message(msg)` until the task is considered
+                done; this can involve a series of messages produced by Agent,
+                LLM or Human (User).
+            rounds (int): number of rounds to run the task for;
+                default is None, which means run until task is done.
+
+        Returns:
+            Document: final response from the agent
+        """
+
+        # Even the initial "sender" is not literally the USER (since the task could
+        # have come from another LLM), as far as this agent is concerned, the initial
+        # message can be considered to be from the USER.
+        self.setup_task(msg)
+        return self._task_loop(rounds)
+
+    def task_result(self) -> Optional[Document]:
+        """
+        Get result of task. This is the default behavior.
+        Derived classes can override this.
+        Returns:
+            Document: result of task
+        """
+        return self.pending_message
+
+    def llm_response(self, prompt: str) -> Document:
         """
         Respond to a prompt.
         Args:
@@ -303,25 +504,12 @@ class Agent(ABC):
         return Document(
             content=response.message,
             metadata=DocMetaData(
-                source="LLM",
+                source=Entity.LLM.value,
                 usage=response.usage,
                 displayed=displayed,
                 cached=response.cached,
             ),
         )
-
-    def respond_user(self, msg) -> str:
-        """
-        Send msg to user (or another agent), and return the response.
-        Args:
-            msg: msg to send
-
-        Returns:
-            response from user/agent
-        """
-        print(f"[red]{msg}", end="")
-        response = input("")
-        return response
 
     def ask_agent(
         self,
@@ -351,6 +539,6 @@ class Agent(ABC):
             )
             if user_response not in ["y", "yes"]:
                 return None
-        answer = agent.respond(request)
+        answer = agent.llm_response(request)
         if answer != no_answer:
             return (f"{agent_type} says: " + str(answer)).strip()
