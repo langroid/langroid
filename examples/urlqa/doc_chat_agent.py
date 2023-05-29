@@ -85,12 +85,12 @@ class DocChatAgent(ChatAgent):
         """
         return self.parser.num_tokens(self.doc_string(docs))
 
-    def respond(self, query: str) -> Union[Document, None]:
-        if query.startswith("!"):
+    def llm_response(self, query: str = None) -> Union[Document, None]:
+        if query is None or query.startswith("!"):
             # direct query to LLM
-            query = query[1:]
+            query = query[1:] if query is not None else None
             with StreamingIfAllowed(self.llm):
-                response = super().respond(query)
+                response = super().llm_response(query)
             self.update_dialog(query, response.content)
             return response
         if query == "":
@@ -239,7 +239,7 @@ class DocChatAgent(ChatAgent):
             {full_text}
             """.strip()
             with StreamingIfAllowed(self.llm):
-                super().respond(prompt)  # raw LLM call
+                super().llm_response(prompt)  # raw LLM call
         else:
             print("[red] No summarization for more than 1000 tokens, sorry!")
 
