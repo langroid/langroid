@@ -1,6 +1,6 @@
 from llmagent.language_models.base import LLMMessage, Role, StreamingIfAllowed
-from llmagent.agent.base import Agent, AgentConfig, AgentMessage
-from llmagent.mytypes import Document
+from llmagent.agent.base import Agent, AgentConfig, AgentMessage, Entity
+from llmagent.mytypes import Document, DocMetaData
 from llmagent.utils.configuration import settings
 from typing import List, Optional, Type
 from rich import print
@@ -148,6 +148,39 @@ class ChatAgent(Agent):
         if len(self.message_history) > 0:
             self.message_history[self.json_instructions_idx].content = json_instructions
 
+    def setup_task(self, msg: str = None, system_message: str = None):
+        """
+        Set up the task by sending the initial messages to the LLM.
+
+        Args:
+            msg (str): user message (including instructions, initial question etc)
+            system_message (str): system message containing role etc.
+        """
+        if system_message is not None:
+            self.task_messages[0].content = system_message
+        super().setup_task(msg)
+
+    def do_task(
+        self,
+        msg: str = None,
+        system_message: str = None,
+        rounds: int = None,
+        main: bool = True,
+    ) -> Optional[Document]:
+        """
+        Do the task, as specified in the optional msg
+        (if absent use the self.task_messages),
+        Args:
+            msg (str): optional initial msg from user
+            system_message: optional system message spe
+            rounds: how many rounds to run the task for
+            main: whether this is the top-level task or a sub-task
+        Returns:
+            Document: result in the form of a Document object
+        """
+        self.setup_task(msg, system_message)
+        return super()._task_loop(rounds=rounds, main=main)
+
     def run(
         self,
         iters: int = -1,
@@ -191,7 +224,35 @@ class ChatAgent(Agent):
             if msg in ["exit", "quit", "q", "x", "bye"]:
                 print("[green] Bye, hope this was useful!")
                 break
-            llm_msg = self.respond(msg).content
+            llm_msg = self.llm_response(msg).content
+
+    def task_result(self) -> Optional[Document]:
+        """
+        Get result of task. This is the default behavior.
+        Derived classes can override this.
+        Returns:
+            Document: result of task
+        """
+        # last message in history where role is Role.ASSISTANT
+        # scan message_history from the end, and return the first msg
+        # where role is Role.ASSISTANT
+        # use a list comprehension
+        last_ai_msg = next(
+            (
+                msg
+                for msg in reversed(self.message_history)
+                if msg.role == Role.ASSISTANT
+            ),
+            None,
+        )
+        return (
+            None
+            if last_ai_msg is None
+            else Document(
+                content=last_ai_msg.content,
+                metadata=DocMetaData(source=Entity.LLM.value),
+            )
+        )
 
     def start(self) -> Document:
         """
@@ -209,18 +270,23 @@ class ChatAgent(Agent):
         ]
         return Document(content=response.content, metadata=response.metadata)
 
-    def respond(self, message: str) -> Document:
+    def llm_response(self, message: str = None) -> Document:
         """
         Respond to a single user message, appended to the message history,
         in "chat" mode
         Args:
-            message: user message
+            message: user message; if None, use the self.task_messages
         Returns:
         """
+        assert (
+            message is not None or len(self.message_history) == 0
+        ), "message can be None only if message_history is empty, i.e. at start."
+
         if len(self.message_history) == 0:
             # task_messages have not yet been loaded, so load them
             self.message_history = self.task_messages
-        self.message_history.append(LLMMessage(role=Role.USER, content=message))
+        if message is not None:
+            self.message_history.append(LLMMessage(role=Role.USER, content=message))
 
         hist = self.message_history
         output_len = self.config.llm.max_output_tokens
@@ -289,7 +355,7 @@ class ChatAgent(Agent):
         """
         # we explicitly call THIS class's respond method,
         # not a derived class's (or else there would be infinite recursion!)
-        answer_doc = ChatAgent.respond(self, prompt)
+        answer_doc = ChatAgent.llm_response(self, prompt)
         self.update_last_message(message, role=Role.USER)
         return answer_doc
 
@@ -308,7 +374,7 @@ class ChatAgent(Agent):
         """
         # explicitly call THIS class's respond method,
         # not a derived class's (or else there would be infinite recursion!)
-        response = ChatAgent.respond(self, message)
+        response = ChatAgent.llm_response(self, message)
         # clear the last two messages, which are the
         # user message and the assistant response
         self.message_history.pop()
@@ -354,5 +420,5 @@ class ChatAgent(Agent):
             Reformatted message that makes use of a tool (message class) when possible.
         """
         formatter_agent = ChatAgent(self.config, task=self.task_messages)
-        reformatted = formatter_agent.respond(msg).content
+        reformatted = formatter_agent.llm_response(msg).content
         return reformatted

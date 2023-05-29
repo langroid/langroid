@@ -1,4 +1,4 @@
-from llmagent.mytypes import Document
+from llmagent.mytypes import Document, DocMetaData
 import logging
 from github import Github, ContentFile
 from dotenv import load_dotenv
@@ -404,7 +404,7 @@ class RepoLoader:
                     docs.append(
                         Document(
                             content=file_content,
-                            metadata=dict(
+                            metadata=DocMetaData(
                                 repo=url,
                                 source=relative_path,
                                 url=url,
@@ -472,7 +472,9 @@ class RepoLoader:
                     content = "\n".join(line.strip() for line in file_lines)
                 else:
                     content = f.read()
-            docs.append(Document(content=content, metadata={"source": str(file_path)}))
+            docs.append(
+                Document(content=content, metadata=DocMetaData(source=str(file_path)))
+            )
 
         return docs
 
@@ -527,7 +529,7 @@ class RepoLoader:
                     docs.append(
                         Document(
                             content=text,
-                            metadata=dict(
+                            metadata=DocMetaData(
                                 repo=self.url,
                                 source=file_content.html_url,
                                 url=file_content.html_url,

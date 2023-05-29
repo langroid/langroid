@@ -1,4 +1,5 @@
 from examples.urlqa.doc_chat_agent import DocChatAgent, DocChatAgentConfig
+from llmagent.agent.base import Entity
 from llmagent.mytypes import Document, DocMetaData
 from llmagent.utils.configuration import Settings, set_global
 from llmagent.vector_store.qdrantdb import QdrantDBConfig
@@ -100,24 +101,38 @@ warnings.filterwarnings(
     module="transformers",
 )
 
+QUERY_EXPECTED_PAIRS = [
+    ("what happened in the year 2050?", "GPT10, Lithuania"),
+    ("Who was Charlie Chaplin?", "comedian"),
+    # ("What was the old capital of England?", "London"), this often fails!!
+    ("What was the old capital of France?", "Paris"),
+    ("When was global warming solved?", "2060"),
+    ("what is the capital of England?", "Paris"),
+    ("What do we know about paperclips?", "2057, 2061"),
+]
 
-@pytest.mark.parametrize(
-    "query, expected",
-    [
-        ("what happened in the year 2050?", "GPT10, Lithuania"),
-        ("Who was Charlie Chaplin?", "comedian"),
-        # ("What was the old capital of England?", "London"), this often fails!!
-        ("What was the old capital of France?", "Paris"),
-        ("When was global warming solved?", "2060"),
-        ("what is the capital of England?", "Paris"),
-        ("What do we know about paperclips?", "2057, 2061"),
-    ],
-)
+
+@pytest.mark.parametrize("query, expected", QUERY_EXPECTED_PAIRS)
 def test_doc_chat_agent(test_settings: Settings, query: str, expected: str):
     # set_global(Settings(debug=options.show, cache=not options.nocache))
     # note that the (query, ans) pairs are accumulated into the
     # internal dialog history of the agent.
     set_global(test_settings)
-    ans = agent.respond(query).content
+    ans = agent.llm_response(query).content
     expected = [e.strip() for e in expected.split(",")]
     assert all([e in ans for e in expected])
+
+
+def test_doc_chat_process(test_settings: Settings):
+    set_global(test_settings)
+    agent.setup_task()
+    agent.message_history = []
+    agent.process_pending_message()  # LLM initiates conv
+    for q, expected in QUERY_EXPECTED_PAIRS:
+        agent.default_human_response = q
+        agent.process_pending_message()  # user asks
+        agent.process_pending_message()  # LLM answers
+        ans = agent.current_response.content
+        expected = [e.strip() for e in expected.split(",")]
+        assert all([e in ans for e in expected])
+        assert agent.sender == Entity.LLM

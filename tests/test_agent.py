@@ -31,9 +31,11 @@ def test_agent(test_settings: Settings):
     set_global(test_settings)
     agent_config = CustomAgentConfig()
     agent = Agent(agent_config)
-    response = agent.respond("what is the capital of France?")  # direct LLM question
+    response = agent.llm_response(
+        "what is the capital of France?"
+    )  # direct LLM question
     assert "Paris" in response.content
 
     with StreamingIfAllowed(agent.llm, False):
-        response = agent.respond("what is the capital of France?")
+        response = agent.llm_response("what is the capital of France?")
     assert "Paris" in response.content

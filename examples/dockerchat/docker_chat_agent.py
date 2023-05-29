@@ -12,6 +12,8 @@ from examples.dockerchat.dockerchat_agent_messages import (
     EntryPointAndCMDMessage,
 )
 from rich.console import Console
+from rich import print
+from rich.prompt import Prompt
 from llmagent.parsing.repo_loader import RepoLoader, RepoLoaderConfig
 from examples.dockerchat.identify_python_version import get_python_version
 from examples.dockerchat.identify_python_dependency import (
@@ -53,25 +55,39 @@ class DockerChatAgent(ChatAgent):
     repo_path: str = None
     code_chat_agent: CodeChatAgent = None
 
-    def handle_message(self, input_str: str) -> Optional[str]:
-        """
-        Handle message from LLM
-        Args:
-            input_str: LLM msg, usually a request for info
-        Returns:
-            str: response to LLM, or None
-        """
-        answer = super().handle_message(input_str)
-        if answer is not None:
-            return answer
-        # if our handlers didn't work, try the code chat agent
-        if self.code_chat_agent:
-            return self.ask_agent(
-                self.code_chat_agent,
-                request=input_str,
-                no_answer=NO_ANSWER,
-                user_confirm=True,
+    def process_pending_message(self) -> None:
+        super().process_pending_message()
+        if self.current_response is None:
+            print("[red]Delegating to CodeChatAgent[/red]")
+            result = self.code_chat_agent.do_task(
+                msg=self.pending_message.content, main=False
             )
+            self.current_response = result
+            if result is not None:
+                self.pending_message = result
+                # from now on, continue as if the USER sent this msg!
+                self.setup_task(msg=result.content)
+                print("[red]Returning from CodeChatAgent[/red]")
+
+    # def handle_message(self, input_str: str) -> Optional[str]:
+    #     """
+    #     Handle message from LLM
+    #     Args:
+    #         input_str: LLM msg, usually a request for info
+    #     Returns:
+    #         str: response to LLM, or None
+    #     """
+    #     answer = super().handle_message(input_str)
+    #     if answer is not None:
+    #         return answer
+    #     # if our handlers didn't work, try the code chat agent
+    #     if self.code_chat_agent:
+    #         return self.ask_agent(
+    #             self.code_chat_agent,
+    #             request=input_str,
+    #             no_answer=NO_ANSWER,
+    #             user_confirm=True,
+    #         )
 
     def handle_message_fallback(self, input_str: str = "") -> Optional[str]:
         if self.repo_path is None and "URL" not in input_str:
@@ -95,18 +111,15 @@ class DockerChatAgent(ChatAgent):
 
     def ask_url(self, msg: AskURLMessage) -> str:
         while True:
-            url = self.respond_user(
-                "Please enter the URL of the repo, or hit enter to use default URL: "
+            url = Prompt.ask(
+                "[red]Please enter the URL of the repo, or hit enter to use default URL"
             )
             if url == "":
                 url = DEFAULT_URL
             try:
                 url_model = UrlModel(url=url)
             except ValueError as e:
-                self.respond_user(
-                    f"""A valid URL was not seen: {e}
-                    Please try again: """
-                )
+                Prompt.ask(f"[red]A valid URL was not seen: {e}; Please try again")
             if url_model.url is not None:
                 break
 
