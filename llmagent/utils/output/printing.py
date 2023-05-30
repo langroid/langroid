@@ -5,16 +5,23 @@ from llmagent.utils.configuration import settings
 import sys
 
 
-def print_long_text(color, style, preamble, text, chars=100):
-    text = " ".join(text.split())
-    truncated_text = (
-        text[:chars] + "..." + text[-chars:] if len(text) > 2 * chars else text
-    )
-    styled_text = Text(truncated_text, style=style)
+def print_long_text(
+    color: str, style: str, preamble: str, text: str, chars: int = None
+):
+    if chars is not None:
+        text = " ".join(text.split())
+        text = text[:chars] + "..." + text[-chars:] if len(text) > 2 * chars else text
+    styled_text = Text(text, style=style)
     rprint(f"[{color}]{preamble} {styled_text}")
 
 
-def show_if_debug(text, preamble, chars=100, color="red", style="italic"):
+def show_if_debug(
+    text: str,
+    preamble: str,
+    chars: int = None,
+    color: str = "red",
+    style: str = "italic",
+):
     if settings.debug:
         print_long_text(color, style, preamble, text, chars)
 
