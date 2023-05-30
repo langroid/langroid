@@ -252,7 +252,9 @@ class Agent(ABC):
             user_msg = self.default_human_response
         else:
             user_msg = Prompt.ask(
-                "Human (enter response or request, or hit enter to proceed)"
+                "[blue]Human "
+                "(write response/request, q or x to exit current level, "
+                "or hit enter to continue)",
             ).strip()
 
         # only return non-None result if user_msg not empty
@@ -380,6 +382,10 @@ class Agent(ABC):
 
     def _task_loop(self, rounds: int = None, main: bool = True) -> Optional[Document]:
         i = 0
+        print(
+            "[bold magenta]>>> "
+            f"Starting Agent {self.__class__.__name__} [/bold magenta]"
+        )
         while True:
             self.process_pending_message()
             if self.task_done():
@@ -389,6 +395,10 @@ class Agent(ABC):
             i += 1
             if rounds is not None and i >= rounds:
                 break
+        print(
+            "[bold magenta]<<< "
+            f"Finished Agent {self.__class__.__name__} [/bold magenta]"
+        )
         return self.task_result()
 
     def do_task(self, msg: str = None, rounds: int = None) -> Optional[Document]:
