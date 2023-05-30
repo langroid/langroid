@@ -120,9 +120,6 @@ class OpenAIGPT(LanguageModel):
 
         print(Colors().RESET)
         # TODO- get usage info in stream mode (?)
-        if settings.debug:
-            with PrintColored(Colors().RED):
-                print(Colors().RED + f"LLM: {completion}")
 
         # mock openai response so we can cache it
         if chat:
@@ -193,9 +190,6 @@ class OpenAIGPT(LanguageModel):
 
         usage = response["usage"]["total_tokens"]
         msg = response["choices"][0]["text"].strip()
-        if settings.debug:
-            with PrintColored(Colors().RED):
-                print(Colors().RED + f"LLM: {msg}")
         return LLMResponse(message=msg, usage=usage, cached=cached)
 
     async def agenerate(self, prompt: str, max_tokens: int) -> LLMResponse:
