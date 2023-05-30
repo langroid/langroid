@@ -13,6 +13,9 @@ from llmagent.mytypes import Document, DocMetaData
 
 import os
 from rich import print
+from rich.console import Console
+
+console = Console()
 
 
 DEFAULT_CODE_CHAT_INSTRUCTIONS = """
@@ -135,10 +138,11 @@ class CodeChatAgent(DocChatAgent):
 
         text_docs = [doc for doc in documents if doc.metadata.language in ["md", "txt"]]
 
-        self.config.parsing = config.parsing
-        n_text_splits = self.ingest_docs(text_docs)
-        self.config.parsing = config.code_parsing
-        n_code_splits = self.ingest_docs(code_docs)
+        with console.status("Processing code repo..."):
+            self.config.parsing = config.parsing
+            n_text_splits = self.ingest_docs(text_docs)
+            self.config.parsing = config.code_parsing
+            n_code_splits = self.ingest_docs(code_docs)
 
         os.environ["TOKENIZERS_PARALLELISM"] = "false"
 

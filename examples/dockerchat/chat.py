@@ -2,13 +2,8 @@ from llmagent.utils.logging import setup_colored_logging
 from llmagent.utils import configuration
 from examples.dockerchat.docker_chat_agent import DockerChatAgent
 from examples.dockerchat.dockerchat_agent_messages import (
-    RunPython,
     AskURLMessage,
-    FileExistsMessage,
-    PythonVersionMessage,
-    PythonDependencyMessage,
     ValidateDockerfileMessage,
-    EntryPointAndCMDMessage,
 )
 import typer
 from llmagent.language_models.base import LLMMessage, Role
@@ -27,6 +22,7 @@ setup_colored_logging()
 
 
 class DockerChatAgentConfig(AgentConfig):
+    name: str = "DockerExpert"
     gpt4: bool = False
     debug: bool = False
     cache: bool = True
@@ -75,19 +71,20 @@ def chat(config: DockerChatAgentConfig) -> None:
             you need, to accomplish your task, and ask me questions for what you need.  
             If I cannot answer, further refine your question into smaller questions.
             Do not create a dockerfile until you have all the information you need.
+            Before showing me a dockerfile, first ask my permission if you can show it.
             Start by asking me for the URL of the github repo.
             """,
         ),
     ]
 
     agent = DockerChatAgent(config, task_messages)
-    agent.enable_message(RunPython)
+    # agent.enable_message(RunPython)
     agent.enable_message(AskURLMessage)
-    agent.enable_message(FileExistsMessage)
-    agent.enable_message(PythonVersionMessage)
+    # agent.enable_message(FileExistsMessage)
+    # agent.enable_message(PythonVersionMessage)
     agent.enable_message(ValidateDockerfileMessage)
-    agent.enable_message(PythonDependencyMessage)
-    agent.enable_message(EntryPointAndCMDMessage)
+    # agent.enable_message(PythonDependencyMessage)
+    # agent.enable_message(EntryPointAndCMDMessage)
 
     agent.do_task()
 

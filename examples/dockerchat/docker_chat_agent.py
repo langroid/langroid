@@ -12,7 +12,6 @@ from examples.dockerchat.dockerchat_agent_messages import (
     EntryPointAndCMDMessage,
 )
 from rich.console import Console
-from rich import print
 from rich.prompt import Prompt
 from llmagent.parsing.repo_loader import RepoLoader, RepoLoaderConfig
 from examples.dockerchat.identify_python_version import get_python_version
@@ -94,19 +93,20 @@ class DockerChatAgent(ChatAgent):
     def ask_url(self, msg: AskURLMessage) -> str:
         while True:
             url = Prompt.ask(
-                "[red]Please enter the URL of the repo, or hit enter to use default URL"
+                "[blue]Please enter the URL of the repo, or hit enter to use default"
             )
             if url == "":
                 url = DEFAULT_URL
             try:
                 url_model = UrlModel(url=url)
             except ValueError as e:
-                Prompt.ask(f"[red]A valid URL was not seen: {e}; Please try again")
+                Prompt.ask(f"[blue]A valid URL was not seen: {e}; Please try again")
             if url_model.url is not None:
                 break
 
         self.url = url_model.url
         code_chat_cfg = CodeChatAgentConfig(
+            name="Coder",
             repo_url=self.url,
             instructions=DOCKER_CODE_CHAT_INSTRUCTIONS,
             content_includes=["txt", "md", "yml", "yaml", "sh", "Makefile"],

@@ -23,6 +23,8 @@ DEFAULT_DOC_CHAT_SYSTEM_MESSAGE = """
 You are a helpful assistant, helping me understand a collection of documents.
 """
 
+NO_ANSWER = "I don't know."
+
 
 class DocChatAgentConfig(AgentConfig):
     """
@@ -107,7 +109,17 @@ class DocChatAgent(ChatAgent):
         ):
             return self.summarize_docs()
         else:
-            return self.answer_from_docs(query)
+            response = self.answer_from_docs(query)
+            if NO_ANSWER in response.content:
+                print("[red]LLM: rephrasing query...")
+                rephrases = super().llm_response(
+                    f""" Rephrase this query 2 different ways, and be very concise: 
+                    {query}
+                    """
+                )
+                print(f"[green]LLM: rephrased query:\n{rephrases.content}")
+                response = self.answer_from_docs(rephrases.content)
+            return response
 
     @staticmethod
     def doc_string(docs: List[Document]) -> str:
