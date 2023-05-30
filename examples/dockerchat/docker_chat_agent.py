@@ -13,6 +13,7 @@ from examples.dockerchat.dockerchat_agent_messages import (
 )
 from rich.console import Console
 from rich.prompt import Prompt
+from llmagent.parsing.urls import org_user_from_github
 from llmagent.parsing.repo_loader import RepoLoader, RepoLoaderConfig
 from examples.dockerchat.identify_python_version import get_python_version
 from examples.dockerchat.identify_python_dependency import (
@@ -44,7 +45,7 @@ such as directory listings or file contents. You can use this information to ans
 my questions. When answering my questions, keep in mind that my goal is to build a
 Dockerfile for the codebase. For example, if I ask you if a certain file
 exists, and it does not occur in the listings you are shown, then you can
-simply answer "No". 
+simply answer "No". Always be concise in your answers.
 """
 
 
@@ -58,17 +59,6 @@ class DockerChatAgent(ChatAgent):
     repo_path: str = None
     code_chat_agent: CodeChatAgent = None
 
-    def process_pending_message(self) -> None:
-        super().process_pending_message()
-        if self.current_response is None:
-            result = self.code_chat_agent.do_task(
-                msg=self.pending_message.content, main=False
-            )
-            self.current_response = result
-            if result is not None:
-                self.pending_message = result
-                # from now on, continue as if the USER sent this msg!
-                self.setup_task(msg=result.content)
 
     def handle_message_fallback(self, input_str: str = "") -> Optional[str]:
         if self.repo_path is None and "URL" not in input_str:
@@ -118,7 +108,17 @@ class DockerChatAgent(ChatAgent):
         # Note `content_includes` and `content_excludes` are used in
         # self.code_chat_agent to create a json dump of (top k lines) of various
         # files, to be included in the initial LLM message.
+        default_collection_name = org_user_from_github(url)
+        collection_name = Prompt.ask(
+            f"""Creating a vector-store for contents of {url}.
+            IMPORTANT: we need a unique collection name for this repo.
+            What would you like to name this collection?""",
+            default=default_collection_name,
+        )
+        code_chat_cfg.vecdb.collection_name = collection_name
+
         self.code_chat_agent = CodeChatAgent(code_chat_cfg)
+        self.add_agent(self.code_chat_agent)
         self.repo_loader = RepoLoader(self.url, RepoLoaderConfig())
         self.repo_path = self.repo_loader.clone()
         # get the repo tree to depth d, with first k lines of each file

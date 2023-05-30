@@ -2,6 +2,7 @@ import fire
 import requests
 from bs4 import BeautifulSoup
 import os
+import urllib.parse
 from urllib.parse import urljoin
 from rich import print
 from rich.prompt import Prompt
@@ -126,6 +127,14 @@ def find_urls(
                 find_urls(link_url, visited, depth + 1, max_depth)
 
     return visited
+
+
+
+
+def org_user_from_github(url):
+    parsed = urllib.parse.urlparse(url)
+    org, user = parsed.path.lstrip('/').split('/')
+    return f"{org}-{user}"
 
 
 if __name__ == "__main__":

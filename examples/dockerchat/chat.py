@@ -72,6 +72,8 @@ def chat(config: DockerChatAgentConfig) -> None:
             If I cannot answer, further refine your question into smaller questions.
             Do not create a dockerfile until you have all the information you need.
             Before showing me a dockerfile, first ask my permission if you can show it.
+            Make sure you ask about only ONE item at a time. Do not combine multiple 
+            questions into one request.
             Start by asking me for the URL of the github repo.
             """,
         ),

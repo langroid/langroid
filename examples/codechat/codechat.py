@@ -1,4 +1,4 @@
-from llmagent.parsing.urls import get_list_from_user
+from llmagent.parsing.urls import get_list_from_user, org_user_from_github
 from llmagent.utils.logging import setup_colored_logging
 from llmagent.utils import configuration
 from llmagent.language_models.openai_gpt import OpenAIChatModel
@@ -24,13 +24,18 @@ def chat(config: CodeChatAgentConfig) -> None:
     print("[cyan]Enter x or q to quit, or ? for evidence")
     print("[blue]Enter a GitHub URL below (or leave empty for default Repo)")
     urls = get_list_from_user(n=1) or default_urls
-    config.repo_url = urls[0]
+    url = urls[0]
+    config.repo_url = url
 
+    default_collection_name = org_user_from_github(url)
     collection_name = Prompt.ask(
-        "What would you like to name this collection?",
-        default=config.vecdb.collection_name,
+        f"""Creating a vector-store for contents of {url}.
+            IMPORTANT: we need a unique collection name for this repo.
+            What would you like to name this collection?""",
+        default=default_collection_name,
     )
     config.vecdb.collection_name = collection_name
+
 
     agent = CodeChatAgent(config)
 
