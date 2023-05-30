@@ -36,7 +36,7 @@ class AgentConfig(BaseSettings):
     various components, in a hierarchy. Let us see how this works.
     """
 
-    name: str = "llmagent"
+    name: str = "LLM-Agent"
     debug: bool = False
     vecdb: Optional[VectorStoreConfig] = VectorStoreConfig()
     llm: LLMConfig = LLMConfig()
@@ -254,7 +254,7 @@ class Agent(ABC):
             user_msg = Prompt.ask(
                 "[blue]Human "
                 "(write response/request, q or x to exit current level, "
-                "or hit enter to continue)",
+                "or hit enter to continue)\n",
             ).strip()
 
         # only return non-None result if user_msg not empty
@@ -374,18 +374,15 @@ class Agent(ABC):
         # message can be considered to be from the USER.
         self._allow_all_responders_except(Entity.USER)
         self.sender = Entity.USER
-        self.pending_message = None
-        if msg is not None:
-            self.pending_message = Document(
-                content=msg, metadata=DocMetaData(source=Entity.USER.value)
-            )
+        self.pending_message = (
+            None
+            if msg is None
+            else Document(content=msg, metadata=DocMetaData(source=Entity.USER.value))
+        )
 
     def _task_loop(self, rounds: int = None, main: bool = True) -> Optional[Document]:
         i = 0
-        print(
-            "[bold magenta]>>> "
-            f"Starting Agent {self.__class__.__name__} [/bold magenta]"
-        )
+        print("[bold magenta]>>> " f"Starting Agent {self.config.name} [/bold magenta]")
         while True:
             self.process_pending_message()
             if self.task_done():
@@ -395,10 +392,7 @@ class Agent(ABC):
             i += 1
             if rounds is not None and i >= rounds:
                 break
-        print(
-            "[bold magenta]<<< "
-            f"Finished Agent {self.__class__.__name__} [/bold magenta]"
-        )
+        print("[bold magenta]<<< " f"Finished Agent {self.config.name} [/bold magenta]")
         return self.task_result()
 
     def do_task(self, msg: str = None, rounds: int = None) -> Optional[Document]:
