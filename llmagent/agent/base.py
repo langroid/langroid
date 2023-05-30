@@ -251,7 +251,10 @@ class Agent(ABC):
             # useful for automated testing
             user_msg = self.default_human_response
         else:
-            user_msg = Prompt.ask("Human (hit enter to proceed)").strip()
+            user_msg = Prompt.ask(
+                "Human (enter response or request, or hit enter to proceed)"
+            ).strip()
+
 
         # only return non-None result if user_msg not empty
         if user_msg:
@@ -532,10 +535,12 @@ class Agent(ABC):
         """
         agent_type = type(agent).__name__
         if user_confirm:
-            user_response = self.respond_user(
+            user_response = Prompt.ask(
                 f"""[magenta]Here is the request or message:
                 {request}
-                Should I forward this to {agent_type}? (y/n) """
+                Should I forward this to {agent_type}?""",
+                default="y",
+                choices=["y", "n"],
             )
             if user_response not in ["y", "yes"]:
                 return None

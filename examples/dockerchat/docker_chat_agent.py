@@ -35,10 +35,14 @@ DEFAULT_URL = "https://github.com/eugeneyan/testing-ml"
 NO_ANSWER = "I don't know"
 
 DOCKER_CODE_CHAT_INSTRUCTIONS = """
-Your task is to answer my questions about a code repository, 
-so that I can build a Dockerfile for it. You will be given various 
-extracts from the codebase, such as directory listings or file contents.  
-When answering my questions, keep in mind that my goal is to build a
+You are a savvy python programmer who has access to a python repository.
+Your would like to make a dockerfile for this repo, but you are NOT a 
+docker expert. I am a docker expert, and I know how to make a dockerfile
+in general, but since I do not have access to the repo, I will rely on 
+you for information about the codebase. Your task is to answer my questions about 
+the codebase. You will be given various extracts from the codebase, 
+such as directory listings or file contents. You can use this information to answer
+my questions. When answering my questions, keep in mind that my goal is to build a
 Dockerfile for the codebase. For example, if I ask you if a certain file
 exists, and it does not occur in the listings you are shown, then you can
 simply answer "No". 
@@ -58,7 +62,7 @@ class DockerChatAgent(ChatAgent):
     def process_pending_message(self) -> None:
         super().process_pending_message()
         if self.current_response is None:
-            print("[red]Delegating to CodeChatAgent[/red]")
+            print("[red]>>>> Delegating to CodeChatAgent[/red]")
             result = self.code_chat_agent.do_task(
                 msg=self.pending_message.content, main=False
             )
@@ -67,27 +71,8 @@ class DockerChatAgent(ChatAgent):
                 self.pending_message = result
                 # from now on, continue as if the USER sent this msg!
                 self.setup_task(msg=result.content)
-                print("[red]Returning from CodeChatAgent[/red]")
+                print("[red]<<<< Returning from CodeChatAgent[/red]")
 
-    # def handle_message(self, input_str: str) -> Optional[str]:
-    #     """
-    #     Handle message from LLM
-    #     Args:
-    #         input_str: LLM msg, usually a request for info
-    #     Returns:
-    #         str: response to LLM, or None
-    #     """
-    #     answer = super().handle_message(input_str)
-    #     if answer is not None:
-    #         return answer
-    #     # if our handlers didn't work, try the code chat agent
-    #     if self.code_chat_agent:
-    #         return self.ask_agent(
-    #             self.code_chat_agent,
-    #             request=input_str,
-    #             no_answer=NO_ANSWER,
-    #             user_confirm=True,
-    #         )
 
     def handle_message_fallback(self, input_str: str = "") -> Optional[str]:
         if self.repo_path is None and "URL" not in input_str:
@@ -336,8 +321,10 @@ class DockerChatAgent(ChatAgent):
             """
 
         if confirm:
-            user_response = self.respond_user(
-                "Please confirm dockerfile validation (y/n): "
+            user_response = Prompt.ask(
+                "Please confirm dockerfile validation",
+                options=["y", "n"],
+                default="y",
             )
             if user_response.lower() != "y":
                 return """"
