@@ -67,6 +67,8 @@ class Agent(ABC):
         self.pending_message: Document = None
         # latest response from an entity
         self.current_response: Document = None
+        # other agents that can process messages
+        self.other_agents: List[Agent] = []
 
     def update_dialog(self, prompt: str, output: str) -> None:
         self.dialog.append((prompt, output))
@@ -345,8 +347,25 @@ class Agent(ABC):
             or self._entity_response(Entity.LLM)
             or self._entity_response(Entity.USER)
         )
+
+        # sequentially try to get response from other agents,
+        # each one picks up `pending_message` from the previous agent
+        if result is None:
+            pending_message = (
+                None if self.pending_message is None else self.pending_message.content
+            )
+            for a in self.other_agents:
+                result = a.do_task(msg=pending_message, main=False)
+                if result is not None:
+                    break
+                pending_message = a.pending_message.content
+            if result is not None:
+                # initialize as if USER sent this message
+                self.setup_task(msg=result.content)
         self.current_response = result
-        if result is not None:
+        if (result is not None and
+                result.content not in ["q", "x", "exit", "quit", "bye", "done"]
+        ):
             self.pending_message = result
 
     def task_done(self) -> bool:
@@ -358,7 +377,7 @@ class Agent(ABC):
         """
         return self.current_response is None or (
             self.sender == Entity.USER
-            and self.pending_message.content in ["q", "x", "exit", "quit", "bye"]
+            and self.current_response.content in ["q", "x", "exit", "quit", "bye"]
         )
 
     def setup_task(self, msg: str = None) -> None:
@@ -419,6 +438,14 @@ class Agent(ABC):
         # message can be considered to be from the USER.
         self.setup_task(msg)
         return self._task_loop(rounds)
+
+    def add_agent(self, agent: "Agent"):
+        """
+        Add an agent to process pending message when others fail.
+        Args:
+            agent (Agent): agent to add
+        """
+        self.other_agents.append(agent)
 
     def task_result(self) -> Optional[Document]:
         """

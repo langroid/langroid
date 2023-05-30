@@ -181,33 +181,33 @@ class ChatAgent(Agent):
         self.setup_task(msg, system_message)
         return super()._task_loop(rounds=rounds, main=main)
 
-    def task_result(self) -> Optional[Document]:
-        """
-        Get result of task. This is the default behavior.
-        Derived classes can override this.
-        Returns:
-            Document: result of task
-        """
-        # last message in history where role is Role.ASSISTANT
-        # scan message_history from the end, and return the first msg
-        # where role is Role.ASSISTANT
-        # use a list comprehension
-        last_ai_msg = next(
-            (
-                msg
-                for msg in reversed(self.message_history)
-                if msg.role == Role.ASSISTANT
-            ),
-            None,
-        )
-        return (
-            None
-            if last_ai_msg is None
-            else Document(
-                content=last_ai_msg.content,
-                metadata=DocMetaData(source=Entity.LLM.value),
-            )
-        )
+    # def task_result(self) -> Optional[Document]:
+    #     """
+    #     Get result of task. This is the default behavior.
+    #     Derived classes can override this.
+    #     Returns:
+    #         Document: result of task
+    #     """
+    #     # last message in history where role is Role.ASSISTANT
+    #     # scan message_history from the end, and return the first msg
+    #     # where role is Role.ASSISTANT
+    #     # use a list comprehension
+    #     last_ai_msg = next(
+    #         (
+    #             msg
+    #             for msg in reversed(self.message_history)
+    #             if msg.role == Role.ASSISTANT
+    #         ),
+    #         None,
+    #     )
+    #     return (
+    #         None
+    #         if last_ai_msg is None
+    #         else Document(
+    #             content=last_ai_msg.content,
+    #             metadata=DocMetaData(source=Entity.LLM.value),
+    #         )
+    #     )
 
     def llm_response(self, message: str = None) -> Document:
         """

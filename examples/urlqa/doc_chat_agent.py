@@ -113,7 +113,7 @@ class DocChatAgent(ChatAgent):
             if NO_ANSWER in response.content:
                 print("[red]LLM: rephrasing query...")
                 rephrases = super().llm_response(
-                    f""" Rephrase this query 2 different ways, and be very concise: 
+                    f""" Rephrase this query, and be very concise: 
                     {query}
                     """
                 )
