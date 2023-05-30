@@ -181,51 +181,6 @@ class ChatAgent(Agent):
         self.setup_task(msg, system_message)
         return super()._task_loop(rounds=rounds, main=main)
 
-    def run(
-        self,
-        iters: int = -1,
-        default_human_response: Optional[str] = None,
-        system_message: Optional[str] = None,
-    ) -> None:
-        """
-        Run the agent in chat mode, until the user types "exit", "quit", "q", "x",
-        "bye", or, when iters > 0,  until this number of iterations is reached.
-        Args:
-            iters: number of iterations to run the agent for. If -1, run until user
-                types "exit", "quit", "q", "x", "bye"
-            default_human_response: if not None, this means we are running this
-                agent without human input, and we use this string as the default
-                human response when the agent's `handle_method` returns None.
-                This can be useful for automated/non-interactive testing.
-        """
-        if system_message is not None:
-            self.task_messages[0].content = system_message
-        llm_msg = self.start().content
-        if settings.debug:
-            print(f"[red]{self.message_history_str()}")
-        niters = 0
-        while True:
-            niters += 1
-            if iters > 0 and niters > iters:
-                break
-            agent_result = self.handle_message(llm_msg)
-            if agent_result is not None:
-                msg = f"{agent_result}"
-                print(f"[red]Agent: {agent_result}")
-            else:
-                if default_human_response is not None:
-                    # this is useful for automated testing
-                    # where we don't want to have to type in a human response
-                    msg = default_human_response
-                    print(f"[blue]Human: {default_human_response}")
-                else:
-                    print("\n[blue]Human: ", end="")
-                    msg = input("")
-            if msg in ["exit", "quit", "q", "x", "bye"]:
-                print("[green] Bye, hope this was useful!")
-                break
-            llm_msg = self.llm_response(msg).content
-
     def task_result(self) -> Optional[Document]:
         """
         Get result of task. This is the default behavior.
