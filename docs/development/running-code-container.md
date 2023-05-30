@@ -77,7 +77,7 @@ to the container, and then deserialize it in the container.
 Again, caution should be used with this approach. Always validate and sanitize
 any input that will be run as code to prevent any potential security issues.
 
-# Using a base image
+## Using a base image
 
 What about ensuring required python pkgs are available in the container?
 
@@ -131,7 +131,7 @@ need to do only once for each environment, and it's a reliable way to ensure
 that your Python code always has the packages it needs, regardless of what
 computer it's run on.
 
-# Returning results from code running in a container
+## Returning results from code running in a container
 
 There are multiple ways to return results from a container depending on the type
 of result you expect:
@@ -192,7 +192,7 @@ print(f'Results are stored in: {output_file}')
 In this example, the Python code writes its result to a file `output.txt`, and
 the `run_python` function returns the path to this file on the host machine.
 
-# Using JSON to serilize/deserialize Python objects to return from the container
+## Using JSON to serilize/deserialize Python objects to return from the container
 
 Yes, you can use JSON to dump results to the log, and then parse the output from
 the container log. This would work well for primitive data types and simple data
@@ -252,7 +252,7 @@ complex data structures), you'll need to use a different approach (like
 serializing to a file using `pickle`, as discussed in a previous comment).
 
 
-# Python libraries to install
+## Python libraries to install
 
 First find out what pkgs are installed in your current environment:
 ```python
