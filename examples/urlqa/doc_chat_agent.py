@@ -19,6 +19,10 @@ You will be given various passages from these documents, and asked to answer que
 about them, or summarize them into coherent answers.
 """
 
+DEFAULT_DOC_CHAT_SYSTEM_MESSAGE = """
+You are a helpful assistant, helping me understand a collection of documents.
+"""
+
 
 class DocChatAgentConfig(AgentConfig):
     """
@@ -33,6 +37,7 @@ class DocChatAgentConfig(AgentConfig):
             initial task messages plus the current query.
     """
 
+    system_message: str = DEFAULT_DOC_CHAT_SYSTEM_MESSAGE
     instructions: str = DEFAULT_DOC_CHAT_INSTRUCTIONS
     summarize_prompt: str = SUMMARY_ANSWER_PROMPT_GPT4
     max_context_tokens: int = 500
@@ -58,7 +63,7 @@ class DocChatAgent(ChatAgent):
         config: DocChatAgentConfig,
     ):
         task_messages = [
-            LLMMessage(role=Role.SYSTEM, content="You are a helpful assistant"),
+            LLMMessage(role=Role.SYSTEM, content=config.system_message),
             LLMMessage(role=Role.USER, content=config.instructions),
         ]
         super().__init__(config, task_messages)

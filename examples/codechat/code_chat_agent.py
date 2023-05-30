@@ -23,8 +23,26 @@ in the repository, and it does not occur in the listings you are shown, then you
 simply answer "No".
 """
 
+DEFAULT_CODE_CHAT_SYSTEM_MESSAGE = """
+You are an expert software engineer, helping me understand a code repository.
+"""
+
+DEFAULT_CODE_CHAT_ANSWER_PROMPT_GPT4 = """
+        Use either the extracts from the code repo provided below, OR any of the info 
+        shown previously, to answer the question below. If there's not enough 
+        information, respond with "I don't know." 
+        Compose your complete answer and cite all supporting sources on a separate 
+        separate line as "SOURCE:". 
+        
+        {extracts}
+        
+        {question}
+        Answer:   
+""".strip()
+
 
 class CodeChatAgentConfig(DocChatAgentConfig):
+    system_message: str = DEFAULT_CODE_CHAT_SYSTEM_MESSAGE
     instructions: str = DEFAULT_CODE_CHAT_INSTRUCTIONS
     # threshold to decide whether to extract relevant parts
     summarize_prompt: str = ANSWER_PROMPT_USE_HISTORY_GPT4

@@ -1,7 +1,9 @@
 from llmagent.language_models.base import LLMMessage, Role, StreamingIfAllowed
 from llmagent.agent.base import Agent, AgentConfig, AgentMessage, Entity
 from llmagent.mytypes import Document, DocMetaData
+from llmagent.utils.configuration import settings
 from typing import List, Optional, Type
+from rich import print
 import logging
 
 logger = logging.getLogger(__name__)
@@ -207,22 +209,6 @@ class ChatAgent(Agent):
             )
         )
 
-    def start(self) -> Document:
-        """
-        Start the agent, by sending the initial task spec to LLM
-        Returns:
-            Document (i.e. with fields "content", "metadata")
-        """
-        with StreamingIfAllowed(self.llm):
-            response = self.respond_messages(self.task_messages)
-        self.message_history = self.task_messages + [
-            LLMMessage(
-                role=Role.ASSISTANT,
-                content=response.content,
-            )
-        ]
-        return Document(content=response.content, metadata=response.metadata)
-
     def llm_response(self, message: str = None) -> Document:
         """
         Respond to a single user message, appended to the message history,
@@ -238,6 +224,15 @@ class ChatAgent(Agent):
         if len(self.message_history) == 0:
             # task_messages have not yet been loaded, so load them
             self.message_history = self.task_messages
+            # for debugging, show the initial message history
+            if settings.debug:
+                print(
+                    f"""
+                [red]LLM Initial Msg History:
+                {self.message_history_str()}
+                """
+                )
+
         if message is not None:
             self.message_history.append(LLMMessage(role=Role.USER, content=message))
 

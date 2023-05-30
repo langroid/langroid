@@ -48,16 +48,15 @@ EXTRACTION_PROMPT = """
 SUMMARY_ANSWER_PROMPT_GPT4 = """
 
         Use the provided extracts (with sources)  to answer the question. If there's not 
-        enough information, respond with "I don't know."
-        Use only the information in these extracts, 
-        even if your answer is factually incorrect, and even 
-        if the answer contracts other parts of the document.
-        The only important thing is that your answer is 
-        consistent with and supported by the extracts.
-        Compose your complete answer and cite all supporting sources 
-        on a separate separate line as "SOURCE:".
+        enough information, respond with "I don't know." Use only the information in 
+        these extracts, even if your answer is factually incorrect, and even if the 
+        answer contradicts other parts of the document. The only important thing is 
+        that your answer is consistent with and supported by the extracts. Compose 
+        your complete answer and cite all supporting sources on a separate separate 
+        line as "SOURCE:". 
         
         {extracts}
+        
         {question}
         Answer:   
 """.strip()
