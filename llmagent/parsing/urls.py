@@ -129,11 +129,9 @@ def find_urls(
     return visited
 
 
-
-
 def org_user_from_github(url):
     parsed = urllib.parse.urlparse(url)
-    org, user = parsed.path.lstrip('/').split('/')
+    org, user = parsed.path.lstrip("/").split("/")
     return f"{org}-{user}"
 
 

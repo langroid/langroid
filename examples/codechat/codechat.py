@@ -36,7 +36,6 @@ def chat(config: CodeChatAgentConfig) -> None:
     )
     config.vecdb.collection_name = collection_name
 
-
     agent = CodeChatAgent(config)
 
     warnings.filterwarnings(

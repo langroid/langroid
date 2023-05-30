@@ -59,7 +59,6 @@ class DockerChatAgent(ChatAgent):
     repo_path: str = None
     code_chat_agent: CodeChatAgent = None
 
-
     def handle_message_fallback(self, input_str: str = "") -> Optional[str]:
         if self.repo_path is None and "URL" not in input_str:
             return """
