@@ -111,7 +111,7 @@ class CodeChatAgent(DocChatAgent):
 
         self.add_user_message(repo_info_message)
 
-        dct, documents = repo_loader.load(depth=1, lines=100)
+        dct, documents = repo_loader.load(depth=2, lines=100)
         listing = (
             [
                 """

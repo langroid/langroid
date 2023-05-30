@@ -322,7 +322,7 @@ class DockerChatAgent(ChatAgent):
         if confirm:
             user_response = Prompt.ask(
                 "Please confirm dockerfile validation",
-                options=["y", "n"],
+                choices=["y", "n"],
                 default="y",
             )
             if user_response.lower() != "y":
