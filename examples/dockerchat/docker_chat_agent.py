@@ -62,7 +62,6 @@ class DockerChatAgent(ChatAgent):
     def process_pending_message(self) -> None:
         super().process_pending_message()
         if self.current_response is None:
-            print("[red]>>>> Delegating to CodeChatAgent[/red]")
             result = self.code_chat_agent.do_task(
                 msg=self.pending_message.content, main=False
             )
@@ -71,7 +70,6 @@ class DockerChatAgent(ChatAgent):
                 self.pending_message = result
                 # from now on, continue as if the USER sent this msg!
                 self.setup_task(msg=result.content)
-                print("[red]<<<< Returning from CodeChatAgent[/red]")
 
     def handle_message_fallback(self, input_str: str = "") -> Optional[str]:
         if self.repo_path is None and "URL" not in input_str:
