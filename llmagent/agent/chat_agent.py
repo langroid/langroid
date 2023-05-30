@@ -1,9 +1,7 @@
 from llmagent.language_models.base import LLMMessage, Role, StreamingIfAllowed
 from llmagent.agent.base import Agent, AgentConfig, AgentMessage, Entity
 from llmagent.mytypes import Document, DocMetaData
-from llmagent.utils.configuration import settings
 from typing import List, Optional, Type
-from rich import print
 import logging
 
 logger = logging.getLogger(__name__)
