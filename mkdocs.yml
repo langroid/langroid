@@ -4,6 +4,7 @@ edit_uri: ""
 theme:
   features:
     - navigation.tabs
+    - toc
   icon:
       repo: fontawesome/brands/github
   name: material

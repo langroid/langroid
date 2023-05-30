@@ -65,7 +65,7 @@ Dockerfile by writing the appropriate instructions in the proper sequence, and
 then use Docker to build, tag, and optionally push the image to a container
 registry.
 
-# Where to look in a repo, to find what to put in the CMD or RUN directives
+## Where to look in a repo, to find what to put in the CMD or RUN directives
 
 When examining a Python repository to decide what to put in the `CMD` or `RUN`
 directive in a Dockerfile, you'd need to understand how the application should
@@ -129,7 +129,7 @@ Finally, always ensure to follow the best practices for writing Dockerfiles like
 minimizing the number of layers, using multi-stage builds for compiling code and
 not running containers as root wherever possible.
 
-# Sample python code
+## Sample python code
 
 Here's a more complete implementation of the `Docker` class with type
 annotations, Google-style docstrings, and PEP8 compliance:
