@@ -255,7 +255,6 @@ class Agent(ABC):
                 "Human (enter response or request, or hit enter to proceed)"
             ).strip()
 
-
         # only return non-None result if user_msg not empty
         if user_msg:
             return Document(

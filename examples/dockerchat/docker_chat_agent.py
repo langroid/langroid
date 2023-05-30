@@ -73,7 +73,6 @@ class DockerChatAgent(ChatAgent):
                 self.setup_task(msg=result.content)
                 print("[red]<<<< Returning from CodeChatAgent[/red]")
 
-
     def handle_message_fallback(self, input_str: str = "") -> Optional[str]:
         if self.repo_path is None and "URL" not in input_str:
             return """
