@@ -363,9 +363,14 @@ class Agent(ABC):
                 # initialize as if USER sent this message
                 self.setup_task(msg=result.content)
         self.current_response = result
-        if (result is not None and
-                result.content not in ["q", "x", "exit", "quit", "bye", "done"]
-        ):
+        if result is not None and result.content not in [
+            "q",
+            "x",
+            "exit",
+            "quit",
+            "bye",
+            "done",
+        ]:
             self.pending_message = result
 
     def task_done(self) -> bool:

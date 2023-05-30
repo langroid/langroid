@@ -8,6 +8,7 @@ from llmagent.cachedb.redis_cachedb import RedisCacheConfig
 from llmagent.utils.configuration import Settings, set_global
 import pytest
 
+
 class _TestChatAgentConfig(AgentConfig):
     max_tokens: int = 200
     vecdb: VectorStoreConfig = None
@@ -53,6 +54,7 @@ def test_responses(test_settings: Settings):
     response = agent.agent_response("What is the capital of France?")
     assert response is None
 
+
 def test_process_messages(test_settings: Settings):
     set_global(test_settings)
     cfg = _TestChatAgentConfig()
@@ -91,10 +93,8 @@ def test_task(test_settings: Settings):
     assert agent.sender == Entity.LLM and "Paris" in agent.current_response.content
     assert "France" in agent.pending_message.content
 
-@pytest.mark.parametrize(
-    "helper_human_response",
-    ["", "q"]
-)
+
+@pytest.mark.parametrize("helper_human_response", ["", "q"])
 def test_inter_agent_chat(test_settings: Settings, helper_human_response: str):
     set_global(test_settings)
     cfg1 = _TestChatAgentConfig(name="Agent Smith")
@@ -122,6 +122,3 @@ def test_inter_agent_chat(test_settings: Settings, helper_human_response: str):
     assert agent_helper.task_done()
     assert "Paris" in agent_helper.task_result().content
     assert "Paris" in agent.task_result().content
-
-
-
