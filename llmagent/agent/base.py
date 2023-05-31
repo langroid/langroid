@@ -365,8 +365,9 @@ class Agent(ABC):
                 None if self.pending_message is None else self.pending_message.content
             )
             pending_sender = (
-                None if self.pending_message is None else
-                self.pending_message.metadata.sender
+                None
+                if self.pending_message is None
+                else self.pending_message.metadata.sender
             )
             for a in self.other_agents:
                 result = a.do_task(msg=pending_message, main=False, rounds=rounds)
