@@ -1,11 +1,15 @@
 from llmagent.language_models.base import LLMMessage, Role, StreamingIfAllowed
 from llmagent.agent.base import Agent, AgentConfig, AgentMessage
-from llmagent.mytypes import Document
+from llmagent.mytypes import Document, DocMetaData
 from llmagent.utils.configuration import settings
 from typing import List, Optional, Type
 from llmagent.agent.base import Entity
 from rich import print
+from contextlib import ExitStack
 import logging
+from rich.console import Console
+
+console = Console()
 
 logger = logging.getLogger(__name__)
 
@@ -176,21 +180,21 @@ class ChatAgent(Agent):
         msg: str = None,
         system_message: str = None,
         rounds: int = None,
-        main: bool = True,
     ) -> Optional[Document]:
         """
         Do the task, as specified in the optional msg
         (if absent use the self.task_messages),
+
         Args:
             msg (str): optional initial msg from user
             system_message: optional system message spe
             rounds: how many rounds to run the task for
-            main: whether this is the top-level task or a sub-task
+
         Returns:
             Document: result in the form of a Document object
         """
         self.setup_task(msg, ent=Entity.USER, system_message=system_message)
-        return super()._task_loop(rounds=rounds, main=main)
+        return super().do_task(msg, rounds=rounds)
 
     def llm_response(self, message: str = None) -> Document:
         """
@@ -270,6 +274,39 @@ class ChatAgent(Agent):
             LLMMessage(role=Role.ASSISTANT, content=response.content)
         )
         return Document(content=response.content, metadata=response.metadata)
+
+    def llm_response_messages(
+        self, messages: List[LLMMessage], output_len: int = None
+    ) -> Document:
+        """
+        Respond to a series of messages, e.g. with OpenAI ChatCompletion
+        Args:
+            messages: seq of messages (with role, content fields) sent to LLM
+        Returns:
+            Document (i.e. with fields "content", "metadata")
+        """
+        output_len = output_len or self.config.llm.max_output_tokens
+        with ExitStack() as stack:  # for conditionally using rich spinner
+            if not self.llm.get_stream():
+                # show rich spinner only if not streaming!
+                cm = console.status("LLM responding to messages...")
+                stack.enter_context(cm)
+            response = self.llm.chat(messages, output_len)
+        displayed = False
+        if not self.llm.get_stream() or response.cached:
+            displayed = True
+            cached = "[red](cached)[/red]" if response.cached else ""
+            print(cached + "[green]" + response.message)
+        return Document(
+            content=response.message,
+            metadata=DocMetaData(
+                source=Entity.LLM.value,
+                sender=Entity.LLM.value,
+                usage=response.usage,
+                displayed=displayed,
+                cached=response.cached,
+            ),
+        )
 
     def _llm_response_temp_context(self, message: str, prompt: str) -> Document:
         """
