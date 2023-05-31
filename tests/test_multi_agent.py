@@ -1,5 +1,5 @@
 from llmagent.agent.chat_agent import ChatAgent
-from llmagent.agent.base import AgentConfig, Entity, LLM_NO_ANSWER
+from llmagent.agent.base import AgentConfig, Entity
 from llmagent.vector_store.base import VectorStoreConfig
 from llmagent.language_models.base import LLMMessage, Role
 from llmagent.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
@@ -7,6 +7,8 @@ from llmagent.parsing.parser import ParsingConfig
 from llmagent.prompts.prompts_config import PromptsConfig
 from llmagent.cachedb.redis_cachedb import RedisCacheConfig
 from llmagent.utils.configuration import Settings, set_global
+from llmagent.mytypes import Document, DocMetaData
+from typing import Optional
 import pytest
 
 
@@ -15,7 +17,7 @@ class _TestChatAgentConfig(AgentConfig):
     vecdb: VectorStoreConfig = None
     llm: OpenAIGPTConfig = OpenAIGPTConfig(
         cache_config=RedisCacheConfig(fake=False),
-        chat_model=OpenAIChatModel.GPT3_5_TURBO,
+        chat_model=OpenAIChatModel.GPT4,
         use_chat_for_completion=True,
     )
     parsing: ParsingConfig = ParsingConfig()
@@ -27,8 +29,8 @@ class _TestChatAgentConfig(AgentConfig):
 @pytest.mark.parametrize("helper_human_response", ["", "q"])
 def test_inter_agent_chat(test_settings: Settings, helper_human_response: str):
     set_global(test_settings)
-    cfg1 = _TestChatAgentConfig(name="Agent Smith")
-    cfg2 = _TestChatAgentConfig(name="Agent Jones")
+    cfg1 = _TestChatAgentConfig(name="Smith")
+    cfg2 = _TestChatAgentConfig(name="Jones")
 
     agent = ChatAgent(cfg1)
     agent_helper = ChatAgent(cfg2)
@@ -57,58 +59,116 @@ def test_inter_agent_chat(test_settings: Settings, helper_human_response: str):
     assert "Paris" in agent.task_result().content
 
 
+# The classes below are for the mult-agent test
+class _MasterAgent(ChatAgent):
+    def task_done(self) -> bool:
+        return "DONE" in self.pending_message.content
+
+    def task_result(self) -> Optional[Document]:
+        answers = [m.content for m in self.message_history if m.role == Role.USER]
+        return Document(
+            content=" ".join(answers),
+            metadata=DocMetaData(source=Entity.USER, sender=Entity.USER),
+        )
+
+
+class _PlannerAgent(ChatAgent):
+    def task_done(self) -> bool:
+        return "DONE" in self.pending_message.content
+
+    def task_result(self) -> Optional[Document]:
+        return Document(
+            content=self.pending_message.content.replace("DONE:", "").strip(),
+            metadata=DocMetaData(source=Entity.LLM, sender=Entity.LLM),
+        )
+
+
+class _MultiplierAgent(ChatAgent):
+    def task_done(self) -> bool:
+        # multiplication gets done in 1 round, so stop as soon as LLM replies
+        return self.pending_message.metadata.sender == Entity.LLM
+
+
+EXPONENTIALS = "3**5 8**4 9**3"
+
+
 def test_multi_agent(test_settings: Settings):
     set_global(test_settings)
-    smith_cfg = _TestChatAgentConfig(name="Agent Smith")
-    ignorant_cfg = _TestChatAgentConfig(name="Ignoramus")
-    smart_cfg = _TestChatAgentConfig(name="Smart")
+    master_cfg = _TestChatAgentConfig(name="Master")
+    planner_cfg = _TestChatAgentConfig(name="Planner")
+    multiplier_cfg = _TestChatAgentConfig(name="Multiplier")
 
-    smith = ChatAgent(
-        smith_cfg,
+    # master asks a series of expenenential questions, e.g. 3^6, 8^5, etc.
+    master = _MasterAgent(
+        master_cfg,
         task=[
             LLMMessage(
                 role=Role.SYSTEM,
-                content="Your job is to ask me questions.",
-            ),
-            LLMMessage(
-                role=Role.USER,
-                content="Start by asking me what the capital of France is.",
-            ),
-        ],
-    )
-
-    ignoramus = ChatAgent(
-        ignorant_cfg,
-        task=[
-            LLMMessage(
-                role=Role.SYSTEM,
-                content=f"""Your job is to answer "{LLM_NO_ANSWER}" for any question""",
-            ),
-            LLMMessage(
-                role=Role.USER,
                 content=f"""
-                Always answer "{LLM_NO_ANSWER}" no matter what the question is""",
+                Your job is to ask me EXACTLY this series of exponential questions:
+                {EXPONENTIALS}
+                Simply present the needed computation, one at a time, 
+                using only numbers and the exponential operator "**".
+                Say nothing else, only the numerical operation.
+                When you receive the answer, say RIGHT or WRONG, and ask 
+                the next exponential question, e.g.: "RIGHT 8**2".
+                When done asking the series of questions, simply 
+                say "DONE:" followed by the answers without commas, 
+                e.g. "DONE: 243 512 729 125".
+                """,
+            ),
+            LLMMessage(
+                role=Role.USER, content="Start by asking me an exponential question."
             ),
         ],
     )
 
-    smart = ChatAgent(smart_cfg)
+    # For a given exponential computation, plans a sequence of multiplications.
+    planner = _PlannerAgent(
+        planner_cfg,
+        task=[
+            LLMMessage(
+                role=Role.SYSTEM,
+                content="""
+                You understand exponentials, but you do not know how to multiply.
+                You will be given an exponential to compute, and you have to ask a 
+                sequence of multiplication questions, to figure out the exponential. 
+                Present the question using only numbers, e.g, "3 * 5", and it should 
+                only involve a SINGLE multiplication. 
+                When you have your final answer, reply with something like 
+                "DONE: 92"
+                """,
+            ),
+        ],
+    )
 
-    ignoramus.add_agent(smart)
-    smith.add_agent(ignoramus)
+    # Given a multiplication, returns the answer.
+    multiplier = _MultiplierAgent(
+        multiplier_cfg,
+        task=[
+            LLMMessage(
+                role=Role.SYSTEM,
+                content="""
+                You are a calculator. You will be given a multiplication problem. 
+                You simply reply with the answer, say nothing else.
+                """,
+            ),
+        ],
+    )
 
-    smart.default_human_response = ""
-    ignoramus.default_human_response = ""
-    smith.default_human_response = ""
+    # planner helps master...
+    master.add_agent(planner)
+    # multiplier helps planner...
+    planner.add_agent(multiplier)
 
-    smith.setup_task()
+    # ... since human has nothing to say
+    master.default_human_response = ""
+    planner.default_human_response = ""
+    multiplier.default_human_response = ""
 
-    smith.process_pending_message()  # LLM asks
-    assert "What" in smith.pending_message.content
-    assert smith.pending_message.metadata.source == Entity.LLM
+    result = master.do_task()
 
-    smith.process_pending_message(rounds=1)
+    answer_string = " ".join([str(eval(e)) for e in EXPONENTIALS.split()])
+    assert answer_string in result.content
 
-    assert not smith.task_done()
-    assert "Paris" in smith.task_result().content
-    assert smith.pending_message.metadata.sender == Entity.USER
+    # asserttions on message history of each agent
