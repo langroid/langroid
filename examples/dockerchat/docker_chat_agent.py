@@ -312,7 +312,9 @@ class DockerChatAgent(ChatAgent):
         return "I couldn't identify potentail main scripts for the ENTRYPOINT"
 
     def run_container(
-        self, dockerrun_msg: RunContainerMessage
+        self,
+        dockerrun_msg: RunContainerMessage,
+        confirm: bool = True,
     ) -> Optional[List[Tuple[str, int, str]]]:
         """
         Runs a container based on the image built using the proposed_dockerfile. It then executes test cases inside the running container and reports the results.
@@ -322,6 +324,18 @@ class DockerChatAgent(ChatAgent):
         Returns:
             A list of tuples that reports the execution results and logs for each test case. Elements of the tuple are: test_case, exit_code, and log.
         """
+        if confirm:
+            user_response = Prompt.ask(
+                "Please confirm dockerfile validation",
+                choices=["y", "n"],
+                default="y",
+            )
+            if user_response.lower() != "y":
+                return """"
+                    Not ready for dockerfile validation, please 
+                    continue with your next question or request for information.
+                    """
+
         client = docker.from_env()
 
         # Save the Dockerfile and build the image
