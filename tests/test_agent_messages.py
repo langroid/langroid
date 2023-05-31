@@ -179,26 +179,26 @@ def test_llm_agent_message(test_settings: Settings):
     agent.enable_message(PythonVersionMessage)
     agent.enable_message(CountryCapitalMessage)
 
-    llm_msg = agent.respond_forget(
+    llm_msg = agent.llm_response_forget(
         "Start by asking me about the python version."
     ).content
 
     agent_result = agent.handle_message(llm_msg)
     assert agent_result == "3.9"
 
-    llm_msg = agent.respond_forget(
+    llm_msg = agent.llm_response_forget(
         "Start by asking me whether file 'requirements.txt' exists."
     ).content
     agent_result = agent.handle_message(llm_msg)
     assert agent_result == "yes"
 
-    llm_msg = agent.respond_forget(
+    llm_msg = agent.llm_response_forget(
         "Start by asking me whether Paris is the capital of France."
     ).content
     agent_result = agent.handle_message(llm_msg)
     assert agent_result == "yes"
 
-    llm_msg = agent.respond_forget(
+    llm_msg = agent.llm_response_forget(
         "Ask me to check what is the population of France."
     ).content
     agent_result = agent.handle_message(llm_msg)
