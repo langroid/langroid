@@ -97,20 +97,10 @@ def test_run_container():
     # create a temporary directory
     with tempfile.TemporaryDirectory() as temp_dir:
         agent.repo_path = temp_dir
+        agent.proposed_dockerfile = PROPOSED_DOCKERFILE_CONTENT
         # Create a requirements.txt file in the folder
         temp_file_path = os.path.join(temp_dir, "requirements.txt")
         open(temp_file_path, "a").close()
-        img_tag = "validate_img"
-        proposed_dockerfile_name = "Dockerfile_proposed"
-        # write a Dockerfile
-        with open(os.path.join(temp_dir, "Dockerfile"), "w") as f:
-            f.write(PROPOSED_DOCKERFILE_CONTENT)
-            _ = _save_dockerfile(
-                temp_dir, PROPOSED_DOCKERFILE_CONTENT, proposed_dockerfile_name
-            )
-
-        # build the Docker image
-        img, _, _ = _build_docker_image(temp_dir, proposed_dockerfile_name, img_tag)
 
         # write a test case file
         test_case_filename = "test_case.py"
@@ -123,7 +113,7 @@ def test_run_container():
         run_msg.tests = ["test_case.py"]
 
         # create the object and run the function with the custom Python image and the test cases
-        run_results = agent.run_container(run_msg, img.id)
+        run_results = agent.run_container(run_msg)
 
         if run_results:
             # check that all test cases exited with code 0 (success)

@@ -220,80 +220,6 @@ class DockerChatAgent(ChatAgent):
         else:
             return "Dependencies are not defined in this repo"
 
-    # def _cleanup_dockerfile(self, img_id: str, dockerfile_path: str) -> None:
-    #     """
-    #     Remove Dockefile and built image after performing the verification process
-    #     Args:
-    #         img_id (str): the ID of the Docker image
-    #         dockerfile_path (str): path to the saved Dockerfile
-    #     """
-    #     client = docker.from_env()
-
-    #     try:
-    #         if os.path.exists(dockerfile_path):
-    #             os.remove(dockerfile_path)
-    #             logger.info(f"Dockerfile at path '{dockerfile_path}' has been removed.")
-    #         else:
-    #             logger.error(f"No Dockerfile found at path '{dockerfile_path}'.")
-    #         # Remove Dockerfile_proposed
-    #         client.images.remove(img_id)
-    #         client.images.get(img_id)
-    #         logger.error("Image removal failed!")
-    #     except docker.errors.ImageNotFound:
-    #         logger.info("Image removed successfully!")
-
-    # def _save_dockerfile(self, dockerfile: str, proposed_dockerfile_name: str) -> str:
-    #     """
-    #     Save the proposed Dockerfile in the root directory of a repo
-    #     Args:
-    #         dockerfile (str): content of the dockerfile
-    #         proposed_dockerfile_name (str): the name of the Dockerfile,
-    #             better to use a different name to avoid changing existing one (if any).
-    #     Returns:
-    #         str: a string indicates whether the Dockerfile has been saved successfully
-    #     """
-    #     try:
-    #         full_path = os.path.join(self.repo_path, proposed_dockerfile_name)
-    #         with open(full_path, "w") as f:
-    #             f.write(dockerfile)
-    #         return full_path
-    #     except Exception as e:
-    #         return f"An error occurred while saving the Dockerfile: {e}"
-
-    # def _build_docker_image(self, proposed_doeckerfile_name: str, img_tag: str):
-    #     """
-    #     Build docker image based on the repo_path by using docker SDK
-    #     Args:
-    #         proposed_doeckerfile_name (str): the name of the proposed Dockerfile
-    #         that should be used to build the image
-    #         img_tag (str): the name of the Docker image that will be built based on the
-    #         proposed_doeckerfile_name
-    #     Returns:
-    #         A tuple comprises three items: First, object for the image that was
-    #         built (if succeeded), otherwise, returns None. Second, message indicates
-    #         whetehr the build process succeeded or failed.
-    #         Third, build time or None (if failed)
-    #     """
-    #     try:
-    #         start = time.time()
-    #         # I noticed the flag ``rm`` isn't used anymore,
-    #         # so I need to do the cleanup myself later on
-    #         with console.status("Verifying the proposed Dockerfile..."):
-    #             image, build_logs = docker.from_env().images.build(
-    #                 rm=True,
-    #                 path=self.repo_path,
-    #                 tag=img_tag,
-    #                 dockerfile=proposed_doeckerfile_name,
-    #             )
-    #         build_time = time.time() - start
-    #         formatted_build_time = "{:.2f}".format(
-    #             datetime.timedelta(seconds=build_time).total_seconds()
-    #         )
-    #     except docker.errors.DockerException as e:
-    #         return (None, f"Image build failed: {e}", None)
-
-    #     return (image, "Image build successful!", formatted_build_time)
-
     def validate_dockerfile(
         self,
         dockerfile_msg: ValidateDockerfileMessage,
@@ -386,25 +312,36 @@ class DockerChatAgent(ChatAgent):
         return "I couldn't identify potentail main scripts for the ENTRYPOINT"
 
     def run_container(
-        self, dockerrun_msg: RunContainerMessage, img_name: str
+        self, dockerrun_msg: RunContainerMessage
     ) -> Optional[List[Tuple[str, int, str]]]:
         """
         Runs a container based on the image built using the proposed_dockerfile. It then executes test cases inside the running container and reports the results.
         Args:
             dockerrun_msg (RunContainerMessage): LLM message contains the
             command and list of test cases
-            img_name (str): the name of the Docker image that has been built using the Dockerfile
         Returns:
             A list of tuples that reports the execution results and logs for each test case. Elements of the tuple are: test_case, exit_code, and log.
         """
         client = docker.from_env()
+
+        # Save the Dockerfile and build the image
+        img_tag = "validate_img"
+        proposed_dockerfile_name = "Dockerfile_proposed"
+        _ = _save_dockerfile(
+            self.repo_path, self.proposed_dockerfile, proposed_dockerfile_name
+        )
+
+        img, _, _ = _build_docker_image(
+            self.repo_path, proposed_dockerfile_name, img_tag
+        )
+
         cmd = dockerrun_msg.cmd
         test_case_files = dockerrun_msg.tests
         test_results = []
         try:
             # We use tail to make sure the container keeps running
             container = client.containers.run(
-                img_name, "tail -f /dev/null", detach=True, auto_remove=False
+                img.id, "tail -f /dev/null", detach=True, auto_remove=False
             )
 
             for test_case_file in test_case_files:
