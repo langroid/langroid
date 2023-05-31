@@ -176,9 +176,9 @@ class DocChatAgent(ChatAgent):
 
         if self.config.conversation_mode:
             # respond with temporary context
-            answer_doc = super().respond_temp_context(question, final_prompt)
+            answer_doc = super()._llm_response_temp_context(question, final_prompt)
         else:
-            answer_doc = super().respond_forget(final_prompt)
+            answer_doc = super().llm_response_forget(final_prompt)
 
         final_answer = answer_doc.content.strip()
         show_if_debug(final_answer, "SUMMARIZE_RESPONSE= ")
