@@ -6,8 +6,6 @@ from examples.dockerchat.dockerchat_agent_messages import (
     ValidateDockerfileMessage,
     EntryPointAndCMDMessage,
     RunContainerMessage,
-    PythonDependencyMessage,
-    PythonVersionMessage,
 )
 import typer
 from llmagent.language_models.base import LLMMessage, Role
@@ -87,9 +85,9 @@ def chat(config: DockerChatAgentConfig) -> None:
     # agent.enable_message(RunPython)
     agent.enable_message(AskURLMessage)
     # agent.enable_message(FileExistsMessage)
-    agent.enable_message(PythonVersionMessage)
+    # agent.enable_message(PythonVersionMessage)
     agent.enable_message(ValidateDockerfileMessage)
-    agent.enable_message(PythonDependencyMessage)
+    # agent.enable_message(PythonDependencyMessage)
     agent.enable_message(EntryPointAndCMDMessage)
     agent.enable_message(RunContainerMessage)
 

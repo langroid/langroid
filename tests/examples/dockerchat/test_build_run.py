@@ -7,7 +7,6 @@ from examples.dockerchat.dockerchat_agent_messages import (
     RunContainerMessage,
 )
 
-
 from llmagent.cachedb.redis_cachedb import RedisCacheConfig
 from typing import Optional
 
@@ -108,7 +107,8 @@ def test_run_container():
         run_msg.cmd = "python"
         run_msg.tests = ["test_case.py"]
 
-        # create the object and run the function with the custom Python image and the test cases
+        # create the object and run the function with the custom Python 
+        # image and the test cases
         run_results = agent.run_container(run_msg, False)
 
         if run_results:
