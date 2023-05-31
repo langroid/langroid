@@ -6,7 +6,7 @@ from llmagent.mytypes import Document, DocMetaData
 from rich import print
 import json
 from llmagent.agent.message import AgentMessage, INSTRUCTION
-from llmagent.language_models.base import LanguageModel, LLMMessage
+from llmagent.language_models.base import LanguageModel
 from llmagent.vector_store.base import VectorStore
 from llmagent.parsing.parser import Parser
 from llmagent.vector_store.base import VectorStoreConfig
@@ -74,6 +74,8 @@ class Agent(ABC):
         self.current_response: Document = None
         # other agents that can process messages
         self.other_agents: List[Agent] = []
+        self.parent_agent: Agent = None
+        self.level: int = 0  # level of agent hiearchy, 0 is top level
 
     def update_dialog(self, prompt: str, output: str) -> None:
         self.dialog.append((prompt, output))
@@ -373,7 +375,7 @@ class Agent(ABC):
                 else self.pending_message.metadata.sender
             )
             for a in self.other_agents:
-                result = a.do_task(msg=pending_message, main=False, rounds=rounds)
+                result = a.do_task(msg=pending_message, rounds=rounds)
                 if result is not None:
                     break
                 pending_message = (
@@ -415,26 +417,30 @@ class Agent(ABC):
             ent: initial sender; optional, default is Entity.USER
 
         """
-        self._allow_all_responders_except(Entity.USER)
+        self._allow_all_responders_except(ent)
         self.pending_message = (
             None
             if msg is None
             else Document(content=msg, metadata=DocMetaData(source=ent, sender=ent))
         )
 
-    def _task_loop(self, rounds: int = None, main: bool = True) -> Optional[Document]:
+    def _task_loop(self, rounds: int = None) -> Optional[Document]:
         i = 0
-        print("[bold magenta]>>> " f"Starting Agent {self.config.name} [/bold magenta]")
+        indent = "...|" * self.level
+        enter = indent + ">>>"
+        leave = indent + "<<<"
+        print(f"[bold magenta]{enter} Starting Agent {self.config.name}[/bold magenta]")
+
         while True:
-            self.process_pending_message(rounds - i if rounds is not None else None)
+            self.process_pending_message()
             if self.task_done():
-                if main:
+                if self.level == 0:
                     print("[magenta]Bye, hope this was useful!")
                 break
             i += 1
             if rounds is not None and i >= rounds:
                 break
-        print("[bold magenta]<<< " f"Finished Agent {self.config.name} [/bold magenta]")
+        print(f"[bold magenta]{leave} Finished Agent {self.config.name}[/bold magenta]")
         return self.task_result()
 
     def do_task(self, msg: str = None, rounds: int = None) -> Optional[Document]:
@@ -460,6 +466,8 @@ class Agent(ABC):
         # have come from another LLM), as far as this agent is concerned, the initial
         # message can be considered to be from the USER.
         self.setup_task(msg)
+        if self.parent_agent is not None:
+            self.level = self.parent_agent.level + 1
         return self._task_loop(rounds)
 
     def add_agent(self, agent: "Agent"):
@@ -468,6 +476,7 @@ class Agent(ABC):
         Args:
             agent (Agent): agent to add
         """
+        agent.parent_agent = self
         self.other_agents.append(agent)
 
     def task_result(self) -> Optional[Document]:
@@ -525,39 +534,6 @@ class Agent(ABC):
             print("[green]" + response.message)
             displayed = True
 
-        return Document(
-            content=response.message,
-            metadata=DocMetaData(
-                source=Entity.LLM.value,
-                sender=Entity.LLM.value,
-                usage=response.usage,
-                displayed=displayed,
-                cached=response.cached,
-            ),
-        )
-
-    def llm_response_messages(
-        self, messages: List[LLMMessage], output_len: int = None
-    ) -> Document:
-        """
-        Respond to a series of messages, e.g. with OpenAI ChatCompletion
-        Args:
-            messages: seq of messages (with role, content fields) sent to LLM
-        Returns:
-            Document (i.e. with fields "content", "metadata")
-        """
-        output_len = output_len or self.config.llm.max_output_tokens
-        with ExitStack() as stack:  # for conditionally using rich spinner
-            if not self.llm.get_stream():
-                # show rich spinner only if not streaming!
-                cm = console.status("LLM responding to messages...")
-                stack.enter_context(cm)
-            response = self.llm.chat(messages, output_len)
-        displayed = False
-        if not self.llm.get_stream() or response.cached:
-            displayed = True
-            cached = "[red](cached)[/red]" if response.cached else ""
-            print(cached + "[green]" + response.message)
         return Document(
             content=response.message,
             metadata=DocMetaData(

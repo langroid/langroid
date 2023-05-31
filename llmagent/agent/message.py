@@ -40,11 +40,11 @@ INSTRUCTION = """
     ask in the following JSON format: 
     
     The JSON format will be:
-    {
+    \\{
         "request": "country_capital",
         "country": "France",
         "city": "Paris"
-    }
+    \\}
     
     On the other hand suppose you want to:
     
