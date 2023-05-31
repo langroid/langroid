@@ -7,6 +7,8 @@ from examples.dockerchat.dockerchat_agent_messages import (
     RunContainerMessage,
 )
 
+from examples.dockerchat.build_run_utils import _build_docker_image, _save_dockerfile
+
 from llmagent.cachedb.redis_cachedb import RedisCacheConfig
 from typing import Optional
 
@@ -46,6 +48,9 @@ class _TestDockerChatAgent(DockerChatAgent):
 
     def validate_dockerfile(self, msg: ValidateDockerfileMessage) -> str:
         return super().validate_dockerfile(msg, confirm=False)
+
+    # def run_container(self, msg: RunContainerMessage, img_name: str) -> List[Tuple[str, int, str]]:
+    #     return super().run_container(msg, "")
 
 
 PROPOSED_DOCKERFILE_CONTENT = """
