@@ -1,5 +1,5 @@
 from llmagent.agent.chat_agent import ChatAgent
-from llmagent.agent.base import AgentConfig, Entity
+from llmagent.agent.base import AgentConfig, Entity, LLM_NO_ANSWER
 from llmagent.vector_store.base import VectorStoreConfig
 from llmagent.language_models.base import LLMMessage, Role
 from llmagent.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
@@ -60,8 +60,8 @@ def test_inter_agent_chat(test_settings: Settings, helper_human_response: str):
 def test_multi_agent(test_settings: Settings):
     set_global(test_settings)
     smith_cfg = _TestChatAgentConfig(name="Agent Smith")
-    london_cfg = _TestChatAgentConfig(name="London")
-    good_cfg = _TestChatAgentConfig(name="Good")
+    ignorant_cfg = _TestChatAgentConfig(name="Ignoramus")
+    smart_cfg = _TestChatAgentConfig(name="Smart")
 
     smith = ChatAgent(
         smith_cfg,
@@ -77,27 +77,28 @@ def test_multi_agent(test_settings: Settings):
         ],
     )
 
-    london = ChatAgent(
-        london_cfg,
+    ignoramus = ChatAgent(
+        ignorant_cfg,
         task=[
             LLMMessage(
                 role=Role.SYSTEM,
-                content="Your job is to answer 'London' for any question",
+                content=f"""Your job is to answer "{LLM_NO_ANSWER}" for any question""",
             ),
             LLMMessage(
                 role=Role.USER,
-                content="Always answer 'London' no matter what the question is",
+                content=f"""
+                Always answer "{LLM_NO_ANSWER}" no matter what the question is""",
             ),
         ],
     )
 
-    good = ChatAgent(good_cfg)
+    smart = ChatAgent(smart_cfg)
 
-    london.add_agent(good)
-    smith.add_agent(london)
+    ignoramus.add_agent(smart)
+    smith.add_agent(ignoramus)
 
-    good.default_human_response = ""
-    london.default_human_response = ""
+    smart.default_human_response = ""
+    ignoramus.default_human_response = ""
     smith.default_human_response = ""
 
     smith.setup_task()
@@ -106,10 +107,9 @@ def test_multi_agent(test_settings: Settings):
     assert "What" in smith.pending_message.content
     assert smith.pending_message.metadata.source == Entity.LLM
 
-    # smith.process_pending_message(rounds=2)
-    #
-    # assert not smith.task_done()
-    # assert "London" in smith.task_result().content
-    #
-    # smith.process_pending_message(rounds=1)
-    # assert not smith.task_done()
+    smith.process_pending_message(rounds=1)
+
+    assert not smith.task_done()
+    assert "Paris" in smith.task_result().content
+    assert smith.pending_message.metadata.sender == Entity.USER
+
