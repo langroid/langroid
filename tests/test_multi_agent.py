@@ -112,4 +112,3 @@ def test_multi_agent(test_settings: Settings):
     assert not smith.task_done()
     assert "Paris" in smith.task_result().content
     assert smith.pending_message.metadata.sender == Entity.USER
-
