@@ -135,4 +135,4 @@ def test_doc_chat_process(test_settings: Settings):
         ans = agent.current_response.content
         expected = [e.strip() for e in expected.split(",")]
         assert all([e in ans for e in expected])
-        assert agent.sender == Entity.LLM
+        assert agent.current_response.metadata.sender == Entity.LLM
