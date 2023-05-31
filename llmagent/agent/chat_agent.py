@@ -162,6 +162,13 @@ class ChatAgent(Agent):
         """
         if system_message is not None:
             self.task_messages[0].content = system_message
+        if msg is None:
+            assert (
+                len(self.task_messages) > 0
+            ), """
+                message can be None only if there is at least one message in
+                """
+            msg = self.task_messages[-1].content
         super().setup_task(msg, ent=ent)
 
     def do_task(
@@ -258,13 +265,13 @@ class ChatAgent(Agent):
                     )
 
         with StreamingIfAllowed(self.llm):
-            response = self.respond_messages(hist, output_len)
+            response = self.llm_response_messages(hist, output_len)
         self.message_history.append(
             LLMMessage(role=Role.ASSISTANT, content=response.content)
         )
         return Document(content=response.content, metadata=response.metadata)
 
-    def respond_temp_context(self, message: str, prompt: str) -> Document:
+    def _llm_response_temp_context(self, message: str, prompt: str) -> Document:
         """
         Get LLM response to `prompt` (which presumably includes the `message`
         somewhere, along with possible large "context" passages),
@@ -283,9 +290,9 @@ class ChatAgent(Agent):
         self.update_last_message(message, role=Role.USER)
         return answer_doc
 
-    def respond_forget(self, message: str) -> Document:
+    def llm_response_forget(self, message: str) -> Document:
         """
-        Respond to single message, and restore message_history.
+        LLM Response to single message, and restore message_history.
         In effect a "one-off" message & response that leaves agent
         message history state intact.
 

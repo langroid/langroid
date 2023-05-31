@@ -32,6 +32,7 @@ class Entity(str, Enum):
 
 USER_QUIT = ["q", "x", "quit", "exit", "bye"]
 LLM_NO_ANSWER = "I don't know"
+LLM_DONE = "DONE"
 
 
 class AgentConfig(BaseSettings):
@@ -61,14 +62,15 @@ class Agent(ABC):
         self.parser = Parser(config.parsing) if config.parsing else None
 
         self.allowed_responders: Set[Entity] = None
-        self._entity_map = {
+        self._entity_responder_map = {
             Entity.USER: self.user_response,
             Entity.LLM: self.llm_response,
             Entity.AGENT: self.agent_response,
         }
-        # latest message that needs a response
+        # latest "meaningful" message that needs a response, i.e.
+        # not "I don't know", or quit or done, etc.
         self.pending_message: Document = None
-        # latest response from an entity
+        # latest response from an entity regardless of content
         self.current_response: Document = None
         # other agents that can process messages
         self.other_agents: List[Agent] = []
@@ -327,10 +329,11 @@ class Agent(ABC):
         """
         msg = None if self.pending_message is None else self.pending_message.content
         if self._is_allowed_responder(e):
-            result: Document = self._entity_map[e](msg)
+            result: Document = self._entity_responder_map[e](msg)
             self._disallow_responder(e)
             if result is not None and LLM_NO_ANSWER not in result.content:
-                # enable all but the current entity to respond to the next message
+                # We have a fresh "meaningful" message, so
+                # enable all but the current entity to respond
                 self._allow_all_responders_except(e)
                 return result
 
@@ -383,7 +386,10 @@ class Agent(ABC):
                 self.pending_message = result
             if native_result is None:
                 # we got `result` from another agent so
-                # set up the state with the right entity
+                # set up the state with the right entity:
+                # if our pending msg (before delegating to other agents)
+                # was sent by LLM, then we act as if this result is produced by USER,
+                # and vice versa.
                 ent = Entity.USER if pending_sender == Entity.LLM else Entity.LLM
                 self.pending_message.metadata.sender = ent
                 self.current_response.metadata.sender = ent
@@ -530,7 +536,7 @@ class Agent(ABC):
             ),
         )
 
-    def respond_messages(
+    def llm_response_messages(
         self, messages: List[LLMMessage], output_len: int = None
     ) -> Document:
         """
