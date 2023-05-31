@@ -1,4 +1,4 @@
-from llmagent.agent.base import AgentConfig
+from llmagent.agent.base import AgentConfig, Entity
 from llmagent.agent.chat_agent import ChatAgent
 from llmagent.language_models.base import StreamingIfAllowed, LLMMessage, Role
 from llmagent.prompts.templates import SUMMARY_ANSWER_PROMPT_GPT4
@@ -193,6 +193,7 @@ class DocChatAgent(ChatAgent):
             content=content,
             metadata=DocMetaData(
                 source="SOURCE: " + sources,
+                sender=Entity.LLM,
                 cached=getattr(answer_doc.metadata, "cached", False),
             ),
         )

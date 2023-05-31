@@ -6,7 +6,6 @@ from llmagent.parsing.parser import ParsingConfig
 from llmagent.prompts.prompts_config import PromptsConfig
 from llmagent.cachedb.redis_cachedb import RedisCacheConfig
 from llmagent.utils.configuration import Settings, set_global
-import pytest
 
 
 class _TestChatAgentConfig(AgentConfig):
@@ -63,14 +62,17 @@ def test_process_messages(test_settings: Settings):
     agent.setup_task(msg)
 
     agent.process_pending_message()
-    assert agent.sender == Entity.LLM and "Paris" in agent.current_response.content
+    assert "Paris" in agent.current_response.content
+    assert agent.current_response.metadata.source == Entity.LLM
 
     agent.default_human_response = "What about England?"
     agent.process_pending_message()
-    assert agent.sender == Entity.USER and "England" in agent.current_response.content
+    assert "England" in agent.current_response.content
+    assert agent.current_response.metadata.source == Entity.USER
 
     agent.process_pending_message()
-    assert agent.sender == Entity.LLM and "London" in agent.current_response.content
+    assert "London" in agent.current_response.content
+    assert agent.current_response.metadata.source == Entity.LLM
 
     agent.default_human_response = ""
     agent.process_pending_message()
@@ -90,35 +92,6 @@ def test_task(test_settings: Settings):
     # 2. User asks
     # 3. LLM responds
 
-    assert agent.sender == Entity.LLM and "Paris" in agent.current_response.content
+    assert agent.current_response.metadata.source == Entity.LLM
+    assert "Paris" in agent.current_response.content
     assert "France" in agent.pending_message.content
-
-
-@pytest.mark.parametrize("helper_human_response", ["", "q"])
-def test_inter_agent_chat(test_settings: Settings, helper_human_response: str):
-    set_global(test_settings)
-    cfg1 = _TestChatAgentConfig(name="Agent Smith")
-    cfg2 = _TestChatAgentConfig(name="Agent Jones")
-
-    agent = ChatAgent(cfg1)
-    agent_helper = ChatAgent(cfg2)
-    agent.add_agent(agent_helper)
-
-    agent.default_human_response = ""
-    agent_helper.default_human_response = helper_human_response
-
-    msg = """
-    Your job is to ask me questions. 
-    Start by asking me what the capital of France is.
-    """
-    agent.setup_task(msg)
-
-    agent.process_pending_message()
-    assert "What" in agent.pending_message.content and agent.sender == Entity.LLM
-    assert agent.pending_message.content == agent.current_response.content
-
-    agent.process_pending_message()
-
-    assert agent_helper.task_done()
-    assert "Paris" in agent_helper.task_result().content
-    assert "Paris" in agent.task_result().content

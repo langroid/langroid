@@ -3,6 +3,7 @@ from llmagent.agent.base import Agent, AgentConfig, AgentMessage
 from llmagent.mytypes import Document
 from llmagent.utils.configuration import settings
 from typing import List, Optional, Type
+from llmagent.agent.base import Entity
 from rich import print
 import logging
 
@@ -148,17 +149,20 @@ class ChatAgent(Agent):
         if len(self.message_history) > 0:
             self.message_history[self.json_instructions_idx].content = json_instructions
 
-    def setup_task(self, msg: str = None, system_message: str = None):
+    def setup_task(
+        self, msg: str = None, ent: Entity = Entity.USER, system_message: str = None
+    ):
         """
         Set up the task by sending the initial messages to the LLM.
 
         Args:
             msg (str): user message (including instructions, initial question etc)
+            ent (Entity): entity to use for the first message
             system_message (str): system message containing role etc.
         """
         if system_message is not None:
             self.task_messages[0].content = system_message
-        super().setup_task(msg)
+        super().setup_task(msg, ent=ent)
 
     def do_task(
         self,
@@ -178,7 +182,7 @@ class ChatAgent(Agent):
         Returns:
             Document: result in the form of a Document object
         """
-        self.setup_task(msg, system_message)
+        self.setup_task(msg, ent=Entity.USER, system_message=system_message)
         return super()._task_loop(rounds=rounds, main=main)
 
     def llm_response(self, message: str = None) -> Document:
