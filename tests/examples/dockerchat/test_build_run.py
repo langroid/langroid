@@ -48,9 +48,6 @@ class _TestDockerChatAgent(DockerChatAgent):
     def validate_dockerfile(self, msg: ValidateDockerfileMessage) -> str:
         return super().validate_dockerfile(msg, confirm=False)
 
-    # def run_container(self, msg: RunContainerMessage, img_name: str) -> List[Tuple[str, int, str]]:
-    #     return super().run_container(msg, "")
-
 
 PROPOSED_DOCKERFILE_CONTENT = """
     FROM python:3.9
