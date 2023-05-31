@@ -334,7 +334,7 @@ class Agent(ABC):
                 self._allow_all_responders_except(e)
                 return result
 
-    def process_pending_message(self, rounds:int = None) -> None:
+    def process_pending_message(self, rounds: int = None) -> None:
         """
         Process current message, which could be from ANY entity
         (e.g. LLM, human, another agent), to get a response.
@@ -416,7 +416,7 @@ class Agent(ABC):
         i = 0
         print("[bold magenta]>>> " f"Starting Agent {self.config.name} [/bold magenta]")
         while True:
-            self.process_pending_message(rounds-i if rounds is not None else None)
+            self.process_pending_message(rounds - i if rounds is not None else None)
             if self.task_done():
                 if main:
                     print("[magenta]Bye, hope this was useful!")
