@@ -4,7 +4,10 @@ from examples.dockerchat.docker_chat_agent import DockerChatAgent
 from examples.dockerchat.dockerchat_agent_messages import (
     AskURLMessage,
     ValidateDockerfileMessage,
+    RunContainerMessage,
 )
+
+from examples.dockerchat.build_run_utils import _build_docker_image, _save_dockerfile
 
 from llmagent.cachedb.redis_cachedb import RedisCacheConfig
 from typing import Optional
@@ -46,6 +49,9 @@ class _TestDockerChatAgent(DockerChatAgent):
     def validate_dockerfile(self, msg: ValidateDockerfileMessage) -> str:
         return super().validate_dockerfile(msg, confirm=False)
 
+    # def run_container(self, msg: RunContainerMessage, img_name: str) -> List[Tuple[str, int, str]]:
+    #     return super().run_container(msg, "")
+
 
 PROPOSED_DOCKERFILE_CONTENT = """
     FROM python:3.9
@@ -84,3 +90,45 @@ def test_validate_dockerfile():
             file_path = os.path.join(temp_folder_path, filename)
             os.remove(file_path)
         os.rmdir(temp_folder_path)
+
+
+def test_run_container():
+    agent = _TestDockerChatAgent(cfg)
+    # create a temporary directory
+    with tempfile.TemporaryDirectory() as temp_dir:
+        agent.repo_path = temp_dir
+        # Create a requirements.txt file in the folder
+        temp_file_path = os.path.join(temp_dir, "requirements.txt")
+        open(temp_file_path, "a").close()
+        img_tag = "validate_img"
+        proposed_dockerfile_name = "Dockerfile_proposed"
+        # write a Dockerfile
+        with open(os.path.join(temp_dir, "Dockerfile"), "w") as f:
+            f.write(PROPOSED_DOCKERFILE_CONTENT)
+            _ = _save_dockerfile(
+                temp_dir, PROPOSED_DOCKERFILE_CONTENT, proposed_dockerfile_name
+            )
+
+        # build the Docker image
+        img, _, _ = _build_docker_image(temp_dir, proposed_dockerfile_name, img_tag)
+
+        # write a test case file
+        test_case_filename = "test_case.py"
+        with open(os.path.join(temp_dir, test_case_filename), "w") as f:
+            f.write("import math\nprint(math.sqrt(16))")
+
+        # create the RunContainerMessage object
+        run_msg = RunContainerMessage()
+        run_msg.cmd = "python"
+        run_msg.tests = ["test_case.py"]
+
+        # create the object and run the function with the custom Python image and the test cases
+        run_results = agent.run_container(run_msg, img.id)
+
+        if run_results:
+            # check that all test cases exited with code 0 (success)
+            assert all(result[1] == 0 for result in run_results)
+
+            # check that the logs contain the expected output
+            for test_result in run_results:
+                assert "4.0" in test_result[2]

@@ -146,3 +146,31 @@ class EntryPointAndCMDMessage(AgentMessage):
             cls(result="I don't know."),
             cls(result="This repo doesn't have main script"),
         ]
+
+
+class RunContainerMessage(AgentMessage):
+    request: str = "run_container"
+    purpose: str = "Verify the container works correctly and preserves the intended behavior. The container will use the image built using the <proposed_dockerfile>"
+    cmd: str = "python"
+    tests: List[str] = ["tests/t1.py", "tests/t2.py"]
+    result: str = "The container runs correctly"
+
+    @classmethod
+    def examples(cls) -> List["AgentMessage"]:
+        """
+        Return a list of example messages of this type, for use in testing.
+        Returns:
+            List[AgentMessage]: list of example messages of this type
+        """
+        return [
+            cls(
+                cmd="python",
+                tests=["tests/t1.py"],
+                result="Container works successfully.",
+            ),
+            cls(
+                cmd="python",
+                tests=["tests/t1.py", "tests/t2.py"],
+                result="Test case t2 has failed.",
+            ),
+        ]
