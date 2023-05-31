@@ -329,14 +329,14 @@ class Agent(ABC):
         if self._is_allowed_responder(e):
             result: Document = self._entity_map[e](msg)
             self._disallow_responder(e)
-            if result is not None:
+            if result is not None and LLM_NO_ANSWER not in result.content:
                 # enable all but the current entity to respond to the next message
                 self._allow_all_responders_except(e)
                 return result
 
     def process_pending_message(self, rounds: int = None) -> None:
         """
-        Process current message, which could be from ANY entity
+        Process pending message, which could be from ANY entity
         (e.g. LLM, human, another agent), to get a response.
         Effectively, this constitutes 1 "turn" of a conversation,
         e.g. if msg is from the LLM, the returned Document represents
@@ -346,16 +346,12 @@ class Agent(ABC):
 
         Args:
             rounds (int): number of rounds to process. Typically used in testing
-                where there is no human to "quit out" of current level.
+                where there is no human to "quit out" of current level, or in cases
+                where we want to limit the number of rounds of a delegated agent.
 
         Returns:
             Document: response to message
         """
-        # First see if agent itself can handle msg via hard-coded method;
-        # this only applies when msg is "structured", i.e. contains a
-        # JSON-formatted substring that matches the structure expected by one of
-        # the agent's enabled message classes. Therefore it would not apply when
-        # msg originates from the human user.
         result = (
             self._entity_response(Entity.AGENT)
             or self._entity_response(Entity.LLM)
@@ -368,11 +364,17 @@ class Agent(ABC):
             pending_message = (
                 None if self.pending_message is None else self.pending_message.content
             )
+            pending_sender = (
+                None if self.pending_message is None else
+                self.pending_message.metadata.sender
+            )
             for a in self.other_agents:
                 result = a.do_task(msg=pending_message, main=False, rounds=rounds)
                 if result is not None:
                     break
-                pending_message = a.pending_message.content
+                pending_message = (
+                    None if a.pending_message is None else a.pending_message.content
+                )
 
         self.current_response = result
         if result is not None:
@@ -380,9 +382,10 @@ class Agent(ABC):
                 self.pending_message = result
             if native_result is None:
                 # we got `result` from another agent so
-                # set up the state as if USER sent this message to current
-                pending_sender = self.pending_message.metadata.sender
+                # set up the state with the right entity
                 ent = Entity.USER if pending_sender == Entity.LLM else Entity.LLM
+                self.pending_message.metadata.sender = ent
+                self.current_response.metadata.sender = ent
                 self.setup_task(msg=result.content, ent=ent)
 
     def task_done(self) -> bool:
