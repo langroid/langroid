@@ -1,6 +1,6 @@
 from llmagent.agent.chat_agent import ChatAgent
 from pydantic import BaseModel, HttpUrl
-from typing import Optional, Tuple, List
+from typing import Optional, List, Dict, Any
 from examples.codechat.code_chat_agent import CodeChatAgentConfig, CodeChatAgent
 from examples.dockerchat.dockerchat_agent_messages import (
     RunPython,
@@ -30,6 +30,7 @@ from examples.dockerchat.build_run_utils import (
 import os
 import logging
 import docker
+import json
 
 console = Console()
 logger = logging.getLogger(__name__)
@@ -315,14 +316,18 @@ class DockerChatAgent(ChatAgent):
         self,
         dockerrun_msg: RunContainerMessage,
         confirm: bool = True,
-    ) -> Optional[List[Tuple[str, int, str]]]:
+    ) -> Optional[Dict[str, Any]]:
         """
-        Runs a container based on the image built using the proposed_dockerfile. It then executes test cases inside the running container and reports the results.
+        Runs a container based on the image built using the proposed_dockerfile.
+        It then executes test cases inside the running container and reports 
+        the results.
         Args:
             dockerrun_msg (RunContainerMessage): LLM message contains the
             command and list of test cases
         Returns:
-            A list of tuples that reports the execution results and logs for each test case. Elements of the tuple are: test_case, exit_code, and log.
+            A list of tuples that reports the execution results and logs for 
+            each test case. Elements of the tuple are: test_case, exit_code, 
+            and log.
         """
         if confirm:
             user_response = Prompt.ask(
@@ -351,7 +356,7 @@ class DockerChatAgent(ChatAgent):
 
         cmd = dockerrun_msg.cmd
         test_case_files = dockerrun_msg.tests
-        test_results = []
+        test_results_dic = {}
         try:
             # We use tail to make sure the container keeps running
             container = client.containers.run(
@@ -362,11 +367,11 @@ class DockerChatAgent(ChatAgent):
                 with open(os.path.join(self.repo_path, test_case_file), "r") as file:
                     test_cases = file.read()
 
-                # The assumption here is that the test case will run inside the container. This doesn't count for test cases to be executed from outside the container (i.e., service containers)
+                # The assumption here is that the test case will run inside the 
+                # container. This doesn't count for test cases to be executed 
+                # from outside the container (i.e., service containers)
                 exec_result = container.exec_run(f'{cmd} -c "{test_cases}"')
-                exit_code = exec_result.exit_code
-                log = exec_result.output.decode("utf-8")
-                test_results.append((test_case_file, exit_code, log))
+                test_results_dic[test_case_file] = exec_result
 
         except Exception as e:
             logger.error(f"An error occurred: {str(e)}")
@@ -375,4 +380,4 @@ class DockerChatAgent(ChatAgent):
         finally:
             container.remove(force=True)
 
-        return test_results
+        return test_results_dic

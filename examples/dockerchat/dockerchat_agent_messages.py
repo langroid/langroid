@@ -71,8 +71,8 @@ class ValidateDockerfileMessage(AgentMessage):
     request: str = "validate_dockerfile"
     purpose: str = """
     To show a <proposed_dockerfile> to the user. Use this tool whenever you want 
-    to SHOW or VALIDATE a <proposed_dockerfile>. NEVER list out a dockerfile without 
-    using this tool
+    to SHOW or VALIDATE a <proposed_dockerfile>. NEVER list out a dockerfile 
+    without using this tool
     """
 
     proposed_dockerfile: Union[
@@ -121,16 +121,21 @@ class PythonDependencyMessage(AgentMessage):
             List[AgentMessage]: list of example messages of this type
         """
         return [
-            cls(result="This repo uses requirements.txt for managing dependencies"),
-            cls(result="This repo uses pyproject.toml for managing dependencies"),
+            cls(result="""This repo uses requirements.txt for managing 
+            dependencies
+            """),
+            cls(result="""This repo uses pyproject.toml for managing 
+            dependencies"""),
             cls(result="This repo doesn't contain any dependacy manager"),
         ]
 
 
 class EntryPointAndCMDMessage(AgentMessage):
     request: str = "find_entrypoint"
-    purpose: str = "To identify main scripts and their arguments that can be used for ENTRYPOINT, CMD, both, or none."
-    result: str = "I couldn't identify potentail main scripts for the ENTRYPOINT"
+    purpose: str = """To identify main scripts and their arguments that can 
+    be used for ENTRYPOINT, CMD, both, or none."""
+    result: str = """I couldn't identify potentail main scripts for the 
+    ENTRYPOINT"""
 
     @classmethod
     def examples(cls) -> List["AgentMessage"]:
@@ -141,7 +146,9 @@ class EntryPointAndCMDMessage(AgentMessage):
         """
         return [
             cls(
-                result="The name of the main script in this repo is main.py. To run it, you can use the command python main.py"
+                result="""The name of the main script in this repo is main.py. 
+                To run it, you can use the command python main.py
+                """
             ),
             cls(result="I don't know."),
             cls(result="This repo doesn't have main script"),
@@ -150,7 +157,11 @@ class EntryPointAndCMDMessage(AgentMessage):
 
 class RunContainerMessage(AgentMessage):
     request: str = "run_container"
-    purpose: str = "Verify the container works correctly and preserves the intended behavior. The container will use the image built using the <proposed_dockerfile>"
+    purpose: str = """Verify that the container works correctly and preserves 
+    the intended behavior. This will use the image built using 
+    the <proposed_dockerfile> and EXPECTS to receive <tests> and <cmd> to run 
+    the test cases 
+    """
     cmd: str = "python"
     tests: List[str] = ["tests/t1.py", "tests/t2.py"]
     result: str = "The container runs correctly"

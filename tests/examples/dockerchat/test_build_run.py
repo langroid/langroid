@@ -109,12 +109,13 @@ def test_run_container():
         run_msg.tests = ["test_case.py"]
 
         # create the object and run the function with the custom Python image and the test cases
-        run_results = agent.run_container(run_msg)
+        run_results = agent.run_container(run_msg, False)
 
         if run_results:
-            # check that all test cases exited with code 0 (success)
-            assert all(result[1] == 0 for result in run_results)
+            for value in run_results.values():
+                # check that all test cases exited with code 0 (success)
+                # assert all(result[1] == 0 for result in run_results)
+                assert value.exit_code == 0
 
-            # check that the logs contain the expected output
-            for test_result in run_results:
-                assert "4.0" in test_result[2]
+                # check that the logs contain the expected output
+                assert "4.0" in value.output.decode("utf-8")
