@@ -1,5 +1,5 @@
-from llmagent.agent.chat_agent import ChatAgent
-from llmagent.agent.base import AgentConfig, Entity
+from llmagent.agent.chat_agent import ChatAgent, ChatAgentConfig
+from llmagent.agent.base import Entity
 from llmagent.vector_store.base import VectorStoreConfig
 from llmagent.language_models.base import LLMMessage, Role
 from llmagent.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
@@ -12,7 +12,7 @@ from typing import Optional
 import pytest
 
 
-class _TestChatAgentConfig(AgentConfig):
+class _TestChatAgentConfig(ChatAgentConfig):
     max_tokens: int = 200
     vecdb: VectorStoreConfig = None
     llm: OpenAIGPTConfig = OpenAIGPTConfig(

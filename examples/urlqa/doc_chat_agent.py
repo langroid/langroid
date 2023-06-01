@@ -1,6 +1,6 @@
-from llmagent.agent.base import AgentConfig, Entity
-from llmagent.agent.chat_agent import ChatAgent
-from llmagent.language_models.base import StreamingIfAllowed, LLMMessage, Role
+from llmagent.agent.base import Entity
+from llmagent.agent.chat_agent import ChatAgent, ChatAgentConfig
+from llmagent.language_models.base import StreamingIfAllowed
 from llmagent.prompts.templates import SUMMARY_ANSWER_PROMPT_GPT4
 from llmagent.utils.output.printing import show_if_debug
 from llmagent.parsing.parser import ParsingConfig, Splitter
@@ -26,7 +26,7 @@ You are a helpful assistant, helping me understand a collection of documents.
 NO_ANSWER = "I don't know."
 
 
-class DocChatAgentConfig(AgentConfig):
+class DocChatAgentConfig(ChatAgentConfig):
     """
     Attributes:
         max_context_tokens (int): threshold to use for various steps, e.g.
@@ -40,7 +40,7 @@ class DocChatAgentConfig(AgentConfig):
     """
 
     system_message: str = DEFAULT_DOC_CHAT_SYSTEM_MESSAGE
-    instructions: str = DEFAULT_DOC_CHAT_INSTRUCTIONS
+    user_message: str = DEFAULT_DOC_CHAT_INSTRUCTIONS
     summarize_prompt: str = SUMMARY_ANSWER_PROMPT_GPT4
     max_context_tokens: int = 500
     conversation_mode: bool = True
@@ -64,11 +64,7 @@ class DocChatAgent(ChatAgent):
         self,
         config: DocChatAgentConfig,
     ):
-        task_messages = [
-            LLMMessage(role=Role.SYSTEM, content=config.system_message),
-            LLMMessage(role=Role.USER, content=config.instructions),
-        ]
-        super().__init__(config, task_messages)
+        super().__init__(config)
         self.original_docs: List[Document] = None
         self.original_docs_length = 0
 

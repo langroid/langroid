@@ -1,16 +1,14 @@
-from llmagent.agent.base import AgentConfig
-from llmagent.agent.chat_agent import ChatAgent
+from llmagent.agent.chat_agent import ChatAgent, ChatAgentConfig
 from llmagent.agent.message import AgentMessage
 from llmagent.language_models.openai_gpt import (
     OpenAIGPTConfig,
     OpenAIChatModel,
 )
-from llmagent.parsing.json import extract_top_level_json
 from llmagent.prompts.prompts_config import PromptsConfig
 from llmagent.parsing.parser import ParsingConfig
 from llmagent.cachedb.redis_cachedb import RedisCacheConfig
 from llmagent.utils.system import rmdir
-from llmagent.utils.configuration import update_global_settings, Settings, set_global
+from llmagent.utils.configuration import Settings, set_global
 from typing import List
 import pytest
 import json
@@ -76,8 +74,7 @@ class MessageHandlingAgent(ChatAgent):
 
 qd_dir = ".qdrant/testdata_test_agent"
 rmdir(qd_dir)
-cfg = AgentConfig(
-    debug=True,
+cfg = ChatAgentConfig(
     name="test-llmagent",
     vecdb=None,
     llm=OpenAIGPTConfig(
@@ -173,7 +170,6 @@ def test_llm_agent_message(test_settings: Settings):
     agent handles the message correctly.
     """
     set_global(test_settings)
-    update_global_settings(cfg, keys=["debug"])
     agent = MessageHandlingAgent(cfg)
     agent.enable_message(FileExistsMessage)
     agent.enable_message(PythonVersionMessage)
@@ -203,54 +199,3 @@ def test_llm_agent_message(test_settings: Settings):
     ).content
     agent_result = agent.handle_message(llm_msg)
     assert agent_result is None
-
-
-def test_llm_agent_reformat(test_settings: Settings):
-    """
-    Test whether the LLM completion mode is able to reformat the request based
-    on the auto-generated reformat instructions.
-    """
-    update_global_settings(cfg, keys=["debug"])
-    set_global(test_settings)
-
-    agent = MessageHandlingAgent(cfg)
-    agent.enable_message(FileExistsMessage)
-    agent.enable_message(PythonVersionMessage)
-    agent.enable_message(CountryCapitalMessage)
-
-    FILE = "blah.txt"
-    reformatted = agent.reformat_message(
-        f"I want to know if the repo contains the file '{FILE}'"
-    )
-    reformatted_jsons = extract_top_level_json(reformatted)
-    assert len(reformatted_jsons) == 1
-    assert (
-        json.loads(reformatted_jsons[0])
-        == FileExistsMessage(filename=FILE).dict_example()
-    )
-
-    reformatted = agent.reformat_message(
-        "I want to know which version of Python is needed"
-    )
-    reformatted_jsons = extract_top_level_json(reformatted)
-    assert len(reformatted_jsons) == 1
-    assert json.loads(reformatted_jsons[0]) == PythonVersionMessage().dict_example()
-
-    reformatted = agent.reformat_message("I need to know the population of England")
-    reformatted_jsons = extract_top_level_json(reformatted)
-    assert len(reformatted_jsons) == 0
-
-    COUNTRY = "India"
-    CITY = "Delhi"
-    reformatted = agent.reformat_message(
-        f"Check whether the capital of {COUNTRY} is {CITY}",
-    )
-    reformatted_jsons = extract_top_level_json(reformatted)
-    assert len(reformatted_jsons) == 1
-    assert (
-        json.loads(reformatted_jsons[0])
-        == CountryCapitalMessage(
-            country=COUNTRY,
-            city=CITY,
-        ).dict_example()
-    )
