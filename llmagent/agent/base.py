@@ -405,10 +405,11 @@ class Agent(ABC):
             bool: True if task is done, False otherwise
         """
         return (
-            self.current_response is None or self.current_response.content in USER_QUIT
+            self.current_response is None
+            or self.current_response.content in USER_QUIT
             or (
-                self.pending_message is not None and
-                "DONE" in self.pending_message.content
+                self.pending_message is not None
+                and "DONE" in self.pending_message.content
             )
         )
 
