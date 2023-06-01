@@ -319,14 +319,14 @@ class DockerChatAgent(ChatAgent):
     ) -> Optional[Dict[str, Any]]:
         """
         Runs a container based on the image built using the proposed_dockerfile.
-        It then executes test cases inside the running container and reports 
+        It then executes test cases inside the running container and reports
         the results.
         Args:
             dockerrun_msg (RunContainerMessage): LLM message contains the
             command and list of test cases
         Returns:
-            A list of tuples that reports the execution results and logs for 
-            each test case. Elements of the tuple are: test_case, exit_code, 
+            A list of tuples that reports the execution results and logs for
+            each test case. Elements of the tuple are: test_case, exit_code,
             and log.
         """
         if confirm:
@@ -367,8 +367,8 @@ class DockerChatAgent(ChatAgent):
                 with open(os.path.join(self.repo_path, test_case_file), "r") as file:
                     test_cases = file.read()
 
-                # The assumption here is that the test case will run inside the 
-                # container. This doesn't count for test cases to be executed 
+                # The assumption here is that the test case will run inside the
+                # container. This doesn't count for test cases to be executed
                 # from outside the container (i.e., service containers)
                 exec_result = container.exec_run(f'{cmd} -c "{test_cases}"')
                 test_results_dic[test_case_file] = exec_result

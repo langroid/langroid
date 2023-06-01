@@ -121,11 +121,15 @@ class PythonDependencyMessage(AgentMessage):
             List[AgentMessage]: list of example messages of this type
         """
         return [
-            cls(result="""This repo uses requirements.txt for managing 
+            cls(
+                result="""This repo uses requirements.txt for managing 
             dependencies
-            """),
-            cls(result="""This repo uses pyproject.toml for managing 
-            dependencies"""),
+            """
+            ),
+            cls(
+                result="""This repo uses pyproject.toml for managing 
+            dependencies"""
+            ),
             cls(result="This repo doesn't contain any dependacy manager"),
         ]
 
