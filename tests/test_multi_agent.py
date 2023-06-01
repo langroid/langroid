@@ -1,7 +1,7 @@
 from llmagent.agent.chat_agent import ChatAgent, ChatAgentConfig
 from llmagent.agent.base import Entity
 from llmagent.vector_store.base import VectorStoreConfig
-from llmagent.language_models.base import LLMMessage, Role
+from llmagent.language_models.base import  Role
 from llmagent.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
 from llmagent.parsing.parser import ParsingConfig
 from llmagent.prompts.prompts_config import PromptsConfig
@@ -94,17 +94,9 @@ EXPONENTIALS = "3**5 8**4 9**3"
 
 def test_multi_agent(test_settings: Settings):
     set_global(test_settings)
-    master_cfg = _TestChatAgentConfig(name="Master")
-    planner_cfg = _TestChatAgentConfig(name="Planner")
-    multiplier_cfg = _TestChatAgentConfig(name="Multiplier")
-
-    # master asks a series of expenenential questions, e.g. 3^6, 8^5, etc.
-    master = _MasterAgent(
-        master_cfg,
-        task=[
-            LLMMessage(
-                role=Role.SYSTEM,
-                content=f"""
+    master_cfg = _TestChatAgentConfig(
+        name="Master",
+        system_message=f"""
                 Your job is to ask me EXACTLY this series of exponential questions:
                 {EXPONENTIALS}
                 Simply present the needed computation, one at a time, 
@@ -116,20 +108,12 @@ def test_multi_agent(test_settings: Settings):
                 say "DONE:" followed by the answers without commas, 
                 e.g. "DONE: 243 512 729 125".
                 """,
-            ),
-            LLMMessage(
-                role=Role.USER, content="Start by asking me an exponential question."
-            ),
-        ],
+        user_message="Start by asking me an exponential question.",
     )
 
-    # For a given exponential computation, plans a sequence of multiplications.
-    planner = _PlannerAgent(
-        planner_cfg,
-        task=[
-            LLMMessage(
-                role=Role.SYSTEM,
-                content="""
+    planner_cfg = _TestChatAgentConfig(
+        name="Planner",
+        system_message="""
                 You understand exponentials, but you do not know how to multiply.
                 You will be given an exponential to compute, and you have to ask a 
                 sequence of multiplication questions, to figure out the exponential. 
@@ -138,23 +122,24 @@ def test_multi_agent(test_settings: Settings):
                 When you have your final answer, reply with something like 
                 "DONE: 92"
                 """,
-            ),
-        ],
     )
 
-    # Given a multiplication, returns the answer.
-    multiplier = _MultiplierAgent(
-        multiplier_cfg,
-        task=[
-            LLMMessage(
-                role=Role.SYSTEM,
-                content="""
+    multiplier_cfg = _TestChatAgentConfig(
+        name="Multiplier",
+        system_message="""
                 You are a calculator. You will be given a multiplication problem. 
                 You simply reply with the answer, say nothing else.
                 """,
-            ),
-        ],
     )
+
+    # master asks a series of expenenential questions, e.g. 3^6, 8^5, etc.
+    master = _MasterAgent(master_cfg)
+
+    # For a given exponential computation, plans a sequence of multiplications.
+    planner = _PlannerAgent(planner_cfg)
+
+    # Given a multiplication, returns the answer.
+    multiplier = _MultiplierAgent(multiplier_cfg)
 
     # planner helps master...
     master.add_agent(planner)
