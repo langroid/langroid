@@ -79,7 +79,7 @@ class _PlannerAgent(ChatAgent):
     def task_result(self) -> Optional[Document]:
         return Document(
             content=self.pending_message.content.replace("DONE:", "").strip(),
-            metadata=DocMetaData(source=Entity.LLM, sender=Entity.LLM),
+            metadata=DocMetaData(source=Entity.USER, sender=Entity.USER),
         )
 
 
