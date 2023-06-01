@@ -39,18 +39,26 @@ DEFAULT_URL = "https://github.com/eugeneyan/testing-ml"
 
 NO_ANSWER = "I don't know"
 
-DOCKER_CODE_CHAT_INSTRUCTIONS = """
-You are a savvy python programmer who has access to a python repository.
-Your would like to make a dockerfile for this repo, but you are NOT a 
-docker expert. I am a docker expert, and I know how to make a dockerfile
-in general, but since I do not have access to the repo, I will rely on 
-you for information about the codebase. Your task is to answer my questions about 
-the codebase. You will be given various extracts from the codebase, 
-such as directory listings or file contents. You can use this information to answer
-my questions. When answering my questions, keep in mind that my goal is to build a
-Dockerfile for the codebase. For example, if I ask you if a certain file
-exists, and it does not occur in the listings you are shown, then you can
-simply answer "No". Always be concise in your answers.
+PLANNER_INSTRUCTIONS = """
+You are a software developer and you want to create a dockerfile to container your 
+code repository. However: 
+(a) you are generally aware of docker, but you're not a docker expert, and
+(b) you do not have direct access to the code repository.
+You will be receiving questions from a docker expert about the code repository.
+For each MAIN question Q, you have to think step by step, and break it down into 
+small steps. For each step (since you cannot access the code repo) you have to ask me 
+a question, and I will try to answer. If I cannot, I may say "I don't know" or "NONE". 
+In that case you can try asking differently or break it down into smaller steps. 
+Once you think you have the answer to the MAIN question Q, simply say 
+"DONE: <whatever the answer is>". Then you may get another MAIN question Q, and so on.  
+"""
+
+CODE_CHAT_INSTRUCTIONS = """
+You have access to a code repository, and you will receive questions about it, 
+to help me create a dockerfile for the repository. 
+Along with the question, you may be given extracts from the code repo, and you can 
+use those extracts to answer the question. If you cannot answer given the 
+information, simply say "I don't know", or say "NONE", whichever you prefer.
 """
 
 
@@ -103,7 +111,7 @@ class DockerChatAgent(ChatAgent):
         code_chat_cfg = CodeChatAgentConfig(
             name="Coder",
             repo_url=self.url,
-            instructions=DOCKER_CODE_CHAT_INSTRUCTIONS,
+            instructions=CODE_CHAT_INSTRUCTIONS,
             content_includes=["txt", "md", "yml", "yaml", "sh", "Makefile"],
             content_excludes=["Dockerfile"],
             # USE same LLM settings as DockerChatAgent, e.g.

@@ -1,8 +1,7 @@
-from llmagent.agent.base import AgentConfig
 from llmagent.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
 from examples.dockerchat.dockerchat_agent_messages import EntryPointAndCMDMessage
-from llmagent.utils.configuration import update_global_settings, Settings, set_global
-from llmagent.agent.chat_agent import ChatAgent
+from llmagent.utils.configuration import Settings, set_global
+from llmagent.agent.chat_agent import ChatAgent, ChatAgentConfig
 from llmagent.prompts.prompts_config import PromptsConfig
 from llmagent.parsing.parser import ParsingConfig
 from llmagent.cachedb.redis_cachedb import RedisCacheConfig
@@ -13,8 +12,7 @@ class MessageHandlingAgent(ChatAgent):
         return CODE_CHAT_RESPONSE_FIND_ENTRY
 
 
-cfg = AgentConfig(
-    debug=False,
+cfg = ChatAgentConfig(
     vecdb=None,
     llm=OpenAIGPTConfig(
         type="openai",
@@ -34,7 +32,7 @@ CODE_CHAT_RESPONSE_FIND_ENTRY = """
 The name of the main script in this repo is main.py. To run it, you can use the command python main.py
 """
 
-cfg = AgentConfig(
+cfg = ChatAgentConfig(
     debug=True,
     name="test-llmagent",
     vecdb=None,
@@ -78,7 +76,6 @@ def test_llm_agent_message(test_settings: Settings):
     agent handles the message correctly.
     """
     set_global(test_settings)
-    update_global_settings(cfg, keys=["debug"])
     agent = MessageHandlingAgent(cfg)
     agent.enable_message(EntryPointAndCMDMessage)
 

@@ -364,7 +364,7 @@ class Agent(ABC):
         )
         native_result = result
         # sequentially try to get response from other agents,
-        # each one picks up `pending_message` from the previous agent
+        # with the original pending_message
         if result is None:
             pending_message = (
                 None if self.pending_message is None else self.pending_message.content
@@ -378,9 +378,6 @@ class Agent(ABC):
                 result = a.do_task(msg=pending_message, rounds=rounds)
                 if result is not None:
                     break
-                pending_message = (
-                    None if a.pending_message is None else a.pending_message.content
-                )
 
         self.current_response = result
         if result is not None:
