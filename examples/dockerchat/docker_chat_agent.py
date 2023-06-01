@@ -1,6 +1,6 @@
 from llmagent.agent.chat_agent import ChatAgent
 from pydantic import BaseModel, HttpUrl
-from typing import Optional, List, Dict, Any
+from typing import Optional, Dict, Any
 from examples.codechat.code_chat_agent import CodeChatAgentConfig, CodeChatAgent
 from examples.dockerchat.dockerchat_agent_messages import (
     RunPython,
@@ -30,7 +30,6 @@ from examples.dockerchat.build_run_utils import (
 import os
 import logging
 import docker
-import json
 
 console = Console()
 logger = logging.getLogger(__name__)
