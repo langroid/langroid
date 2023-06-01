@@ -168,9 +168,10 @@ class ChatAgent(Agent):
             self.task_messages[0].content = system_message
         if msg is None:
             assert (
-                len(self.task_messages) > 0
+                len(self.task_messages) > 1 and self.task_messages[1].role == Role.USER
             ), """
-                message can be None only if there is at least one message in
+                message can be None only if there is at least one 
+                USER message in self.task_messages. 
                 """
             msg = self.task_messages[-1].content
         super().setup_task(msg, ent=ent)
