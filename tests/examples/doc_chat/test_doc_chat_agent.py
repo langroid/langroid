@@ -125,12 +125,13 @@ def test_doc_chat_agent(test_settings: Settings, query: str, expected: str):
 
 def test_doc_chat_process(test_settings: Settings):
     set_global(test_settings)
-    agent.setup_task()
+    agent.init_chat()
     agent.message_history = []
-    agent.process_pending_message()  # LLM initiates conv
+    # LLM responds to Sys msg, initiates conv, says thank you, etc.
+    agent.process_pending_message()
     for q, expected in QUERY_EXPECTED_PAIRS:
         agent.default_human_response = q
-        agent.process_pending_message()  # user asks
+        agent.process_pending_message()  # user asks `q`
         agent.process_pending_message()  # LLM answers
         ans = agent.current_response.content
         expected = [e.strip() for e in expected.split(",")]
