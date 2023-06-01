@@ -1,5 +1,5 @@
-from llmagent.agent.chat_agent import ChatAgent
-from llmagent.agent.base import AgentConfig, Entity, LLM_NO_ANSWER
+from llmagent.agent.chat_agent import ChatAgent, ChatAgentConfig
+from llmagent.agent.base import Entity, LLM_NO_ANSWER
 from llmagent.vector_store.base import VectorStoreConfig
 from llmagent.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
 from llmagent.parsing.parser import ParsingConfig
@@ -8,7 +8,7 @@ from llmagent.cachedb.redis_cachedb import RedisCacheConfig
 from llmagent.utils.configuration import Settings, set_global
 
 
-class _TestChatAgentConfig(AgentConfig):
+class _TestChatAgentConfig(ChatAgentConfig):
     max_tokens: int = 200
     vecdb: VectorStoreConfig = None
     llm: OpenAIGPTConfig = OpenAIGPTConfig(

@@ -46,7 +46,7 @@ DEFAULT_CODE_CHAT_ANSWER_PROMPT_GPT4 = """
 
 class CodeChatAgentConfig(DocChatAgentConfig):
     system_message: str = DEFAULT_CODE_CHAT_SYSTEM_MESSAGE
-    instructions: str = DEFAULT_CODE_CHAT_INSTRUCTIONS
+    user_message: str = DEFAULT_CODE_CHAT_INSTRUCTIONS
     # threshold to decide whether to extract relevant parts
     summarize_prompt: str = ANSWER_PROMPT_USE_HISTORY_GPT4
     max_context_tokens: int = 500

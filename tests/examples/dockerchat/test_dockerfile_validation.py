@@ -1,7 +1,6 @@
-from llmagent.utils.configuration import update_global_settings, Settings, set_global
-from llmagent.language_models.base import Role, LLMMessage
+from llmagent.utils.configuration import Settings, set_global
 from llmagent.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
-from llmagent.agent.base import AgentConfig
+from llmagent.agent.chat_agent import ChatAgentConfig
 from llmagent.prompts.prompts_config import PromptsConfig
 from llmagent.parsing.parser import ParsingConfig
 from llmagent.agent.base import AgentMessage
@@ -56,7 +55,19 @@ class MessageHandlingAgent(ChatAgent):
 
 qd_dir = ".qdrant/testdata_test_agent"
 rmdir(qd_dir)
-cfg = AgentConfig(
+cfg = ChatAgentConfig(
+    system_message="""
+    You are a devops engineer, and your task is to understand a PYTHON
+    repo. Plan this out step by step, and ask me questions
+    for any info you need to understand the repo.
+    """,
+    user_message="""
+    You are an assistant whose task is to understand a Python repo.
+
+    You have to think in small steps, and at each stage, show me your 
+    THINKING, and the QUESTION you want to ask. Based on my answer, you will 
+    generate a new THINKING and QUESTION.  
+    """,
     debug=True,
     name="test-llmagent",
     vecdb=None,
@@ -131,29 +142,8 @@ def test_llm_agent_message(test_settings: Settings):
     Test whether LLM is able to generate message in required format, and the
     agent handles the message correctly.
     """
-    update_global_settings(cfg, keys=["debug"])
     set_global(test_settings)
-    task_messages = [
-        LLMMessage(
-            role=Role.SYSTEM,
-            content="""
-            You are a devops engineer, and your task is to understand a PYTHON 
-            repo. Plan this out step by step, and ask me questions 
-            for any info you need to understand the repo. 
-            """,
-        ),
-        LLMMessage(
-            role=Role.USER,
-            content="""
-            You are an assistant whose task is to understand a Python repo.
-
-            You have to think in small steps, and at each stage, show me your 
-            THINKING, and the QUESTION you want to ask. Based on my answer, you will 
-            generate a new THINKING and QUESTION.  
-            """,
-        ),
-    ]
-    agent = MessageHandlingAgent(cfg, task_messages)
+    agent = MessageHandlingAgent(cfg)
     agent.enable_message(ValidateDockerfileMessage)
     agent.default_human_response = "I don't know, please ask your next question."
 
