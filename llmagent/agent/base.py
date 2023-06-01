@@ -406,6 +406,10 @@ class Agent(ABC):
         """
         return (
             self.current_response is None or self.current_response.content in USER_QUIT
+            or (
+                self.pending_message is not None and
+                "DONE" in self.pending_message.content
+            )
         )
 
     def setup_task(self, msg: str = None, ent: Entity = Entity.USER) -> None:
@@ -486,7 +490,10 @@ class Agent(ABC):
         Returns:
             Document: result of task
         """
-        return self.pending_message
+        return Document(
+            content=self.pending_message.content.replace("DONE:", "").strip(),
+            metadata=DocMetaData(source=Entity.USER, sender=Entity.USER),
+        )
 
     def llm_response(self, prompt: str) -> Document:
         """
