@@ -43,7 +43,7 @@ def test_inter_agent_chat(test_settings: Settings, helper_human_response: str):
     Your job is to ask me questions. 
     Start by asking me what the capital of France is.
     """
-    agent.setup_task(msg)
+    agent.init_chat(user_message=msg)
 
     agent.process_pending_message()  # LLM asks
     assert "What" in agent.pending_message.content

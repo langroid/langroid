@@ -167,28 +167,33 @@ class ChatAgent(Agent):
         if len(self.message_history) > 0:
             self.message_history[self.json_instructions_idx].content = json_instructions
 
-    def setup_task(
-        self, msg: str = None, ent: Entity = Entity.USER, system_message: str = None
-    ):
+    def init_chat(self, system_message: str = None, user_message: str = None):
         """
-        Set up the task by sending the initial messages to the LLM.
+        Initialize the chat with system and user message.
+        Clear the self.message_history if there was already a chat in progress.
+        Also initialize the task with `user_message` if provided.
+        (this allows subsequent Agent._task_loop() to function correctly).
 
         Args:
-            msg (str): user message (including instructions, initial question etc)
-            ent (Entity): entity to use for the first message
-            system_message (str): system message containing role etc.
+            system_message (str): system message containing role etc; optional,
+                    if None, use default
+            user_message (str): user message containing first question, or more
+                    detailed instructions. Careful: for certain subclasses of ChatAgent,
+                    the user message may get augmented with relevant context documents,
+                    so we may want to leave this as None.
         """
+        self.message_history = []
         if system_message is not None:
+            # we always have at least 1 task_message
             self.task_messages[0].content = system_message
-        if msg is None:
-            assert (
-                len(self.task_messages) > 0
-            ), """
-                message can be None only if there is at least one 
-                message in self.task_messages. 
-                """
-            msg = self.task_messages[-1].content
-        super().setup_task(msg, ent=ent)
+        if user_message is not None:
+            if len(self.task_messages) > 1:
+                self.task_messages[1].content = user_message
+            elif len(self.task_messages) == 1:
+                self.task_messages.append(
+                    LLMMessage(role=Role.USER, content=user_message)
+                )
+        self.init_task_message(user_message)
 
     def do_task(
         self,
@@ -208,7 +213,7 @@ class ChatAgent(Agent):
         Returns:
             Document: result in the form of a Document object
         """
-        self.setup_task(msg, ent=Entity.USER, system_message=system_message)
+        self.init_chat(system_message=system_message, user_message=msg)
         return super().do_task(msg, rounds=rounds)
 
     def llm_response(self, message: str = None) -> Document:
@@ -225,7 +230,7 @@ class ChatAgent(Agent):
 
         if len(self.message_history) == 0:
             # task_messages have not yet been loaded, so load them
-            self.message_history = self.task_messages
+            self.message_history = self.task_messages.copy()
             # for debugging, show the initial message history
             if settings.debug:
                 print(

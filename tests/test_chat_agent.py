@@ -59,7 +59,7 @@ def test_process_messages(test_settings: Settings):
     cfg = _TestChatAgentConfig()
     agent = ChatAgent(cfg)
     msg = "What is the capital of France?"
-    agent.setup_task(msg)
+    agent.init_chat(user_message=msg)
     assert agent.pending_message.content == msg
 
     # LLM answers
@@ -99,11 +99,11 @@ def test_process_messages(test_settings: Settings):
 
     # reset task
     question = "What is my name?"
-    agent.setup_task(
-        msg=question,
+    agent.init_chat(
         system_message=f""" Your job is to always say "{LLM_NO_ANSWER}" """,
+        user_message=question,
     )
-    # LLM responds with LLN_NO_ANSWER
+    # LLM responds with LLM_NO_ANSWER
     agent.process_pending_message()
     assert agent.current_response is None
     assert agent.pending_message.content == question
