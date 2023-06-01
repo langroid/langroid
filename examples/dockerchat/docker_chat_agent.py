@@ -105,7 +105,7 @@ class DockerChatAgent(ChatAgent):
         code_chat_cfg = CodeChatAgentConfig(
             name="Coder",
             repo_url=self.url,
-            instructions=CODE_CHAT_INSTRUCTIONS,
+            user_message=CODE_CHAT_INSTRUCTIONS,
             content_includes=["txt", "md", "yml", "yaml", "sh", "Makefile"],
             content_excludes=["Dockerfile"],
             # USE same LLM settings as DockerChatAgent, e.g.
