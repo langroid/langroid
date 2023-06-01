@@ -1,4 +1,4 @@
-from llmagent.agent.base import AgentConfig
+from llmagent.agent.chat_agent import ChatAgentConfig
 from llmagent.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
 from examples.dockerchat.docker_chat_agent import DockerChatAgent
 from examples.dockerchat.dockerchat_agent_messages import (
@@ -12,7 +12,7 @@ from typing import Optional
 import json
 import pytest
 
-cfg = AgentConfig(
+cfg = ChatAgentConfig(
     debug=False,
     vecdb=None,
     llm=OpenAIGPTConfig(

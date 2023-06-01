@@ -14,6 +14,16 @@ console = Console()
 logger = logging.getLogger(__name__)
 
 
+class ChatAgentConfig(AgentConfig):
+    """
+    Configuration for ChatAgent
+    """
+
+    system_message: str = "You are a helpful assistant."
+    user_message: str = None
+    max_context_tokens: int = 500
+
+
 class ChatAgent(Agent):
     """
     Chat Agent interacting with external env
@@ -32,9 +42,6 @@ class ChatAgent(Agent):
         Chat-mode agent initialized with task spec as the initial message sequence
         Args:
             config: settings for the agent
-            task: seq of messages to start with. If empty a "system" msg is
-                constructed by default.
-                Note these messages are not yet issued to LLM at agent init.
 
         !!! note
              `self.message_history` is different from `self.dialog` (in Agent class):
@@ -58,9 +65,16 @@ class ChatAgent(Agent):
         super().__init__(config)
         self.message_history: List[LLMMessage] = []
         self.json_instructions_idx: int = -1
-        if task is None:
-            task = [LLMMessage(role=Role.SYSTEM, content="You are a helpful assistant")]
-        self.task_messages = task
+        priming_messages = task
+        if priming_messages is None:
+            priming_messages = [
+                LLMMessage(role=Role.SYSTEM, content=config.system_message),
+            ]
+            if config.user_message:
+                priming_messages.append(
+                    LLMMessage(role=Role.USER, content=config.user_message)
+                )
+        self.task_messages = priming_messages
 
     def clear_history(self, start: int = -2) -> None:
         """
@@ -377,17 +391,3 @@ class ChatAgent(Agent):
             return str(self.message_history[i])
         else:
             return "\n".join([str(m) for m in self.message_history[i:]])
-
-    def reformat_message(self, msg: str) -> str:
-        """
-        Reformat a message according to any applicable tool (message class).
-        If no tool is applicable, return the original message, or an equivalent.
-        Args:
-            msg: original message to be reformatted
-
-        Returns:
-            Reformatted message that makes use of a tool (message class) when possible.
-        """
-        formatter_agent = ChatAgent(self.config, task=self.task_messages)
-        reformatted = formatter_agent.llm_response(msg).content
-        return reformatted
