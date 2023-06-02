@@ -76,6 +76,9 @@ class Agent(ABC):
         self.other_agents: List[Agent] = []
         self.parent_agent: Agent = None
         self.level: int = 0  # level of agent hiearchy, 0 is top level
+        self.indent = "...|" * self.level
+        self.enter = self.indent + ">>>"
+        self.leave = self.indent + "<<<"
 
     def update_dialog(self, prompt: str, output: str) -> None:
         self.dialog.append((prompt, output))
@@ -178,6 +181,7 @@ class Agent(ABC):
         results = self.handle_message(input_str)
         if results is None:
             return None
+        console.print(f"[red]{self.indent}", end="")
         print(f"[red]Agent: {results}")
         return Document(
             content=results,
@@ -265,9 +269,9 @@ class Agent(ABC):
             user_msg = self.default_human_response
         else:
             user_msg = Prompt.ask(
-                "[blue]Human "
-                "(write response/request, q or x to exit current level, "
-                "or hit enter to continue)\n",
+                f"[blue]{self.indent}Human "
+                f"(respond or q, x to exit current level, "
+                f"or hit enter to continue)\n{self.indent}",
             ).strip()
 
         # only return non-None result if user_msg not empty
@@ -428,10 +432,10 @@ class Agent(ABC):
 
     def _task_loop(self, rounds: int = None) -> Optional[Document]:
         i = 0
-        indent = "...|" * self.level
-        enter = indent + ">>>"
-        leave = indent + "<<<"
-        print(f"[bold magenta]{enter} Starting Agent {self.config.name}[/bold magenta]")
+        print(
+            f"[bold magenta]{self.enter} Starting Agent "
+            f"{self.config.name}[/bold magenta]"
+        )
 
         while True:
             self.process_pending_message()
@@ -442,8 +446,12 @@ class Agent(ABC):
             i += 1
             if rounds is not None and i >= rounds:
                 break
-        print(f"[bold magenta]{leave} Finished Agent {self.config.name}[/bold magenta]")
-        return self.task_result()
+        result = self.task_result()
+        print(
+            f"[bold magenta]{self.leave} Finished Agent "
+            f"{self.config.name}[/bold magenta]"
+        )
+        return result
 
     def do_task(self, msg: str = None, rounds: int = None) -> Optional[Document]:
         """
@@ -470,6 +478,10 @@ class Agent(ABC):
         self.init_pending_message(msg)
         if self.parent_agent is not None:
             self.level = self.parent_agent.level + 1
+        self.indent = "...|" * self.level
+        self.enter = self.indent + ">>>"
+        self.leave = self.indent + "<<<"
+
         return self._task_loop(rounds)
 
     def add_agent(self, agent: "Agent"):
@@ -530,12 +542,14 @@ class Agent(ABC):
                     the completion context length of the LLM. 
                     """
                     )
-
+            if self.llm.get_stream():
+                console.print(f"[green]{self.indent}", end="")
             response = self.llm.generate(prompt, output_len)
         displayed = False
         if not self.llm.get_stream() or response.cached:
             # we would have already displayed the msg "live" ONLY if
             # streaming was enabled, AND we did not find a cached response
+            console.print(f"[green]{self.indent}", end="")
             print("[green]" + response.message)
             displayed = True
 

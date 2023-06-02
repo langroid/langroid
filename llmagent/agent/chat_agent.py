@@ -314,11 +314,13 @@ class ChatAgent(Agent):
                 # show rich spinner only if not streaming!
                 cm = console.status("LLM responding to messages...")
                 stack.enter_context(cm)
+            if self.llm.get_stream():
+                console.print(f"[green]{self.indent}", end="")
             response = self.llm.chat(messages, output_len)
         displayed = False
         if not self.llm.get_stream() or response.cached:
             displayed = True
-            cached = "[red](cached)[/red]" if response.cached else ""
+            cached = f"[red]{self.indent}(cached)[/red]" if response.cached else ""
             print(cached + "[green]" + response.message)
         return Document(
             content=response.message,
