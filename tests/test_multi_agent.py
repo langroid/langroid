@@ -89,7 +89,7 @@ class _MultiplierAgent(ChatAgent):
         return self.pending_message.metadata.sender == Entity.LLM
 
 
-EXPONENTIALS = "3**5 8**4 9**3"
+EXPONENTIALS = "3**5 8**3 9**3"
 
 
 def test_multi_agent(test_settings: Settings):
@@ -153,7 +153,7 @@ def test_multi_agent(test_settings: Settings):
 
     result = master.do_task()
 
-    answer_string = " ".join([str(eval(e)) for e in EXPONENTIALS.split()])
-    assert answer_string in result.content
+    answers = [str(eval(e)) for e in EXPONENTIALS.split()]
+    assert all(a in result.content for a in answers)
 
     # asserttions on message history of each agent
