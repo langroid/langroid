@@ -1,14 +1,46 @@
-from llmagent.agent.base import AgentConfig
+from llmagent.agent.chat_agent import ChatAgentConfig
 from llmagent.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
-from examples.dockerchat.dockerchat_agent_messages import RunContainerMessage
-from llmagent.utils.configuration import update_global_settings, Settings, set_global
+from llmagent.utils.configuration import Settings, set_global
 from llmagent.agent.chat_agent import ChatAgent
 from llmagent.prompts.prompts_config import PromptsConfig
+from llmagent.agent.base import AgentMessage
 from llmagent.parsing.parser import ParsingConfig
 from llmagent.cachedb.redis_cachedb import RedisCacheConfig
 
+from typing import List
+
 
 CONTAINER_RUN_RESPONSE = "Container runs successfully"
+
+
+class RunContainerMessage(AgentMessage):
+    request: str = "run_container"
+    purpose: str = """Verify that the container works correctly and preserves 
+    the intended behavior.  
+    """
+    cmd: str = "python"
+    tests: List[str] = ["tests/t1.py"]
+    result: str = "The container runs correctly"
+
+    @classmethod
+    def examples(cls) -> List["AgentMessage"]:
+        """
+        Return a list of example messages of this type, for use in testing.
+        Returns:
+            List[AgentMessage]: list of example messages of this type
+        """
+        return [
+            cls(
+                cmd="python",
+                tests=["tests/t1.py"],
+                result="Container works successfully.",
+            ),
+            cls(
+                cmd="python",
+                tests=["tests/t1.py", "tests/t2.py"],
+                result="Test case t2 has failed.",
+            ),
+        ]
 
 
 class MessageHandlingAgent(ChatAgent):
@@ -26,8 +58,7 @@ Ok, thank you.
 uses these arguments to test the container
 """
 
-cfg = AgentConfig(
-    debug=True,
+cfg = ChatAgentConfig(
     name="test-llmagent",
     vecdb=None,
     llm=OpenAIGPTConfig(
@@ -70,12 +101,12 @@ def test_llm_agent_message(test_settings: Settings):
     agent handles the message correctly.
     """
     set_global(test_settings)
-    update_global_settings(cfg, keys=["debug"])
     agent = MessageHandlingAgent(cfg)
     agent.enable_message(RunContainerMessage)
 
-    llm_msg = agent.respond_forget(
-        """Start by asking me about verifying the proposed_dockerfile by running a container based on this Dockerfile."""
+    llm_msg = agent.llm_response_forget(
+        """Start by asking me about verifying the proposed_dockerfile by 
+        running a container based on this Dockerfile."""
     ).content
 
     agent_result = agent.handle_message(llm_msg)
