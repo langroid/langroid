@@ -1,7 +1,7 @@
 from llmagent.agent.chat_agent import ChatAgent, ChatAgentConfig
 from llmagent.agent.base import Entity
 from llmagent.vector_store.base import VectorStoreConfig
-from llmagent.language_models.base import  Role
+from llmagent.language_models.base import Role
 from llmagent.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
 from llmagent.parsing.parser import ParsingConfig
 from llmagent.prompts.prompts_config import PromptsConfig
