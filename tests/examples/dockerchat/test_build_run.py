@@ -107,7 +107,7 @@ def test_run_container():
         run_msg.cmd = "python"
         run_msg.tests = ["test_case.py"]
 
-        # create the object and run the function with the custom Python 
+        # create the object and run the function with the custom Python
         # image and the test cases
         run_results = agent.run_container(run_msg, False)
 
