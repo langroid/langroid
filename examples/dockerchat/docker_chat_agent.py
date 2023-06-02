@@ -49,12 +49,16 @@ code repository. However:
 You will be receiving questions from a docker expert about the code repository.
 For each MAIN question Q, you have to think step by step, and break it down into 
 small steps. For each step (since you cannot access the code repo) you have to ask me 
-a question, and I will try to answer. If I cannot, I may say "I don't know" or "NONE". 
-In that case you can try asking differently or break it down into smaller steps. 
+a question, and I will try to answer. If I cannot, I may say "I don't know" or "NONE", 
+in that case, DO NOT MAKE UP AN ANSWER! Instead, you can try asking differently or 
+break it down into even smaller steps.  
 Only when you are SURE you have the answer to the MAIN question Q, simply say 
 "DONE: <whatever the answer is>". Then you may get another MAIN question Q, and so on.
 If you are not able to answer the MAIN question Q, simply say "I don't know", 
 and DO NOT MAKE UP AN ANSWER!
+Your only messages should be 
+(a) question for me, (b) DONE: <answer>, or (c) I don't know.
+Do you say anything else.
 """
 
 CODE_CHAT_INSTRUCTIONS = """
@@ -75,7 +79,7 @@ class UrlModel(BaseModel):
 
 class PlannerAgent(ChatAgent):
     def task_done(self) -> bool:
-        return "DONE" in self.pending_message.content
+        return super().task_done() or "DONE" in self.pending_message.content
 
     def task_result(self) -> Optional[Document]:
         return Document(
