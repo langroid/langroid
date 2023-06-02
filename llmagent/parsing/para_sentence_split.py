@@ -1,5 +1,6 @@
 import re
 from typing import Callable, List
+
 from bs4 import BeautifulSoup
 
 

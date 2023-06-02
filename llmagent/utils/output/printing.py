@@ -1,8 +1,10 @@
+import sys
+
 from rich import print as rprint
 from rich.text import Text
-from llmagent.utils.constants import Colors
+
 from llmagent.utils.configuration import settings
-import sys
+from llmagent.utils.constants import Colors
 
 
 def print_long_text(

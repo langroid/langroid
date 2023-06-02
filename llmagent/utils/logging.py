@@ -1,4 +1,5 @@
 import logging
+
 import colorlog
 
 
@@ -57,8 +58,8 @@ def setup_loggers_for_package(package_name: str, level: int) -> None:
         level: desired logging level
     Returns:
     """
-    import pkgutil
     import importlib
+    import pkgutil
 
     package = importlib.import_module(package_name)
     for _, module_name, _ in pkgutil.walk_packages(

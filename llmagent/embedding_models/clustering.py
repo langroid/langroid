@@ -1,13 +1,14 @@
-from sklearn.preprocessing import StandardScaler
-from sklearn.cluster import DBSCAN
+import logging
 from collections import Counter
-from llmagent.mytypes import Document
 from typing import Callable, List, Tuple
 
-import numpy as np
 import faiss
+import numpy as np
+from sklearn.cluster import DBSCAN
 from sklearn.neighbors import NearestNeighbors
-import logging
+from sklearn.preprocessing import StandardScaler
+
+from llmagent.mytypes import Document
 
 logging.getLogger("faiss").setLevel(logging.ERROR)
 logging.getLogger("faiss-cpu").setLevel(logging.ERROR)
@@ -20,7 +21,8 @@ def find_optimal_clusters(X, max_clusters, threshold=0.1):
     Args:
         X (np.ndarray): A 2D NumPy array of data points.
         max_clusters (int): The maximum number of clusters to try.
-        threshold (float): Threshold for the rate of change in inertia values. Defaults to 0.1.
+        threshold (float): Threshold for the rate of change in inertia values.
+        Defaults to 0.1.
 
     Returns:
         int: The optimal number of clusters.
@@ -59,7 +61,8 @@ def densest_clusters(
     """
     Find the top k densest clusters in the given list of embeddings using FAISS K-means.
     See here:
-    https://github.com/facebookresearch/faiss/wiki/Faiss-building-blocks%3A-clustering%2C-PCA%2C-quantization
+    'https://github.com/facebookresearch/faiss/wiki/Faiss-building-blocks%3A-clustering%
+     2C-PCA%2C-quantization'
 
     Args:
         embeddings (List[np.ndarray]): A list of embedding vectors.

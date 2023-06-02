@@ -1,10 +1,11 @@
 # from openai-cookbook
+import asyncio
+import logging
 import random
 import time
+
 import aiohttp
-import asyncio
 import openai
-import logging
 import requests
 
 logger = logging.getLogger(__name__)
@@ -37,7 +38,7 @@ def retry_with_exponential_backoff(
         num_retries = 0
         delay = initial_delay
 
-        # Loop until a successful response or max_retries is hit or an exception is raised
+        # Loop until a successful response or max_retries is hit or exception is raised
         while True:
             try:
                 return func(*args, **kwargs)
@@ -99,7 +100,7 @@ def async_retry_with_exponential_backoff(
         num_retries = 0
         delay = initial_delay
 
-        # Loop until a successful response or max_retries is hit or an exception is raised
+        # Loop until a successful response or max_retries is hit or exception is raised
         while True:
             try:
                 result = await func(*args, **kwargs)

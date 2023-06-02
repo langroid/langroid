@@ -1,7 +1,8 @@
-from pydantic import BaseSettings
-from abc import ABC, abstractmethod
 import logging
+from abc import ABC, abstractmethod
+
 from chromadb.api.types import EmbeddingFunction
+from pydantic import BaseSettings
 
 logging.getLogger("openai").setLevel(logging.ERROR)
 

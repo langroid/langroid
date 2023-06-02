@@ -1,5 +1,6 @@
+from typing import List, Union
+
 from pydantic import BaseModel, Extra
-from typing import Union, List
 
 Number = Union[int, float]
 Embedding = List[Number]

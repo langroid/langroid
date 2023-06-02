@@ -1,25 +1,27 @@
-from llmagent.vector_store.base import VectorStore, VectorStoreConfig
+import logging
+import os
+from typing import List, Tuple
+
+from chromadb.api.types import EmbeddingFunction
+from dotenv import load_dotenv
+from qdrant_client import QdrantClient
+from qdrant_client.conversions.common_types import ScoredPoint
+from qdrant_client.http.models import (
+    Batch,
+    CollectionStatus,
+    Distance,
+    Filter,
+    SearchParams,
+    VectorParams,
+)
+
 from llmagent.embedding_models.base import (
-    EmbeddingModelsConfig,
     EmbeddingModel,
+    EmbeddingModelsConfig,
 )
 from llmagent.mytypes import Document
 from llmagent.utils.configuration import settings
-from qdrant_client import QdrantClient
-from qdrant_client.http.models import (
-    Distance,
-    VectorParams,
-    Filter,
-    CollectionStatus,
-    Batch,
-    SearchParams,
-)
-from qdrant_client.conversions.common_types import ScoredPoint
-from typing import List, Tuple
-from chromadb.api.types import EmbeddingFunction
-from dotenv import load_dotenv
-import os
-import logging
+from llmagent.vector_store.base import VectorStore, VectorStoreConfig
 
 logger = logging.getLogger(__name__)
 

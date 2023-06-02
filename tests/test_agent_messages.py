@@ -1,17 +1,19 @@
+import json
+from typing import List
+
+import pytest
+
 from llmagent.agent.chat_agent import ChatAgent, ChatAgentConfig
 from llmagent.agent.message import AgentMessage
-from llmagent.language_models.openai_gpt import (
-    OpenAIGPTConfig,
-    OpenAIChatModel,
-)
-from llmagent.prompts.prompts_config import PromptsConfig
-from llmagent.parsing.parser import ParsingConfig
 from llmagent.cachedb.redis_cachedb import RedisCacheConfig
-from llmagent.utils.system import rmdir
+from llmagent.language_models.openai_gpt import (
+    OpenAIChatModel,
+    OpenAIGPTConfig,
+)
+from llmagent.parsing.parser import ParsingConfig
+from llmagent.prompts.prompts_config import PromptsConfig
 from llmagent.utils.configuration import Settings, set_global
-from typing import List
-import pytest
-import json
+from llmagent.utils.system import rmdir
 
 
 class CountryCapitalMessage(AgentMessage):

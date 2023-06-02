@@ -1,4 +1,5 @@
 import pytest
+
 from llmagent.utils.configuration import Settings
 
 

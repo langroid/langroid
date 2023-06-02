@@ -1,6 +1,7 @@
-from faker import Faker
 import random
+
 import nltk
+from faker import Faker
 
 nltk.download("punkt")
 nltk.download("gutenberg")

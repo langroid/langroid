@@ -1,14 +1,15 @@
+import os
+
 import pytest
-from llmagent.mytypes import Document, DocMetaData
-from llmagent.embedding_models.clustering import densest_doc_clusters
 from dotenv import load_dotenv
+
 from llmagent.embedding_models.base import EmbeddingModel
+from llmagent.embedding_models.clustering import densest_doc_clusters
 from llmagent.embedding_models.models import (
     OpenAIEmbeddingsConfig,
     SentenceTransformerEmbeddingsConfig,
 )
-import os
-
+from llmagent.mytypes import DocMetaData, Document
 
 load_dotenv()
 openai_cfg = OpenAIEmbeddingsConfig(
@@ -38,53 +39,59 @@ def test_densest_doc_clusters(emb_fn):
         Document(
             content="""Artificial intelligence (AI) is a fast-growing field that
                     aims to create intelligent machines capable of performing tasks
-                    without human intervention. These tasks include learning, problem-solving,
-                    perception, and natural language understanding. Machine learning, a subset of AI,
-                    involves the development of algorithms that allow computers to learn from and make
+                    without human intervention. These tasks include learning, 
+                    problem-solving, perception, and natural language understanding. 
+                    Machine learning, a subset of AI, involves the development of 
+                    algorithms that allow computers to learn from and make 
                     decisions based on data.""",
             metadata=DocMetaData(id=1, topic="AI", source="wikipedia"),
         ),
         Document(
-            content="""Virtual reality (VR) is an immersive technology that can transport users
-                    into simulated environments. By wearing a VR headset, users can experience
-                    a sense of presence and interact with the virtual world using handheld controllers
-                    or motion tracking. VR has applications in gaming, training, education, and
-                    healthcare, among other fields.""",
+            content="""Virtual reality (VR) is an immersive technology that can 
+            transport users into simulated environments. By wearing a VR headset, 
+            users can experience a sense of presence and interact with the virtual 
+            world using handheld controllers or motion tracking. VR has applications 
+            in gaming, training, education, and 
+            healthcare, among other fields.""",
             metadata=DocMetaData(id=2, topic="VR", source="ars-technica"),
         ),
         Document(
-            content="""The Internet of Things (IoT) is a network of interconnected physical devices
-                    that collect and exchange data. IoT devices are embedded with sensors, software,
-                    and connectivity, allowing them to collect and transmit data to a central
-                    system for analysis. This technology has applications in various industries,
-                    such as smart homes, transportation, agriculture, and manufacturing.""",
+            content="""The Internet of Things (IoT) is a network of interconnected 
+            physical devices that collect and exchange data. IoT devices are 
+            embedded with sensors, software, and connectivity, allowing them to 
+            collect and transmit data to a central system for analysis. This 
+            technology has applications in various industries, such as smart homes, 
+            transportation, agriculture, and manufacturing.""",
             metadata=DocMetaData(id=3, topic="IOT", source="ars-technica"),
         ),
     ]
 
     sports_docs = [
         Document(
-            content="""Soccer, also known as football, is a popular sport played by two teams
-                    of eleven players, with each team trying to score by getting a ball into the
-                    opponent's goal. The game is played on a rectangular field with a goal at each
-                    end. The players use any part of their body except their hands and arms to
-                    manipulate the ball.""",
+            content="""Soccer, also known as football, is a popular sport played by 
+            two teams of eleven players, with each team trying to score by getting 
+            a ball into the opponent's goal. The game is played on a rectangular 
+            field with a goal at each end. The players use any part of their body 
+            except their hands and arms to manipulate the ball.""",
             metadata=DocMetaData(id=4, topic="soccer", source="espn"),
         ),
         Document(
-            content="""Basketball is a fast-paced team sport played on a rectangular court with
-                    two teams of five players each. The objective is to score points by shooting a
-                    ball through a hoop mounted at a height of 10 feet on a backboard at each end
-                    of the court. The team with the most points at the end of the game wins.""",
+            content="""Basketball is a fast-paced team sport played on a rectangular 
+            court with 
+            two teams of five players each. The objective is to score points by 
+            shooting a ball through a hoop mounted at a height of 10 feet on a 
+            backboard at each end of the court. The team with the most points at the 
+            end of the game wins.""",
             metadata=DocMetaData(id=5, topic="basketball", source="nba-news"),
         ),
         Document(
-            content="""Tennis is a racket sport that can be played individually (singles) or
-                    between two teams of two players each (doubles). The goal is to hit a ball
-                    over a net and into the opponent's court in such a way that the opponent cannot
-                    return it. Players score points by winning individual rallies, and a match is won
-                    by winning a predetermined number of sets. Tennis is played on various surfaces,
-                    such as grass, clay, and hard courts.""",
+            content="""Tennis is a racket sport that can be played individually (
+            singles) or between two teams of two players each (doubles). The goal 
+            is to hit a ball over a net and into the opponent's court in such a way 
+            that the opponent cannot return it. Players score points by winning 
+            individual rallies, and a match is won by winning a predetermined 
+            number of sets. Tennis is played on various surfaces, 
+            such as grass, clay, and hard courts.""",
             metadata=DocMetaData(id=6, topic="tennis", source="sports-news"),
         ),
     ]

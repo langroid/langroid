@@ -7,10 +7,10 @@ an agent. The messages could represent, for example:
 """
 
 from abc import ABC, abstractmethod
-from pydantic import BaseModel
-from typing import List
 from random import choice
+from typing import List
 
+from pydantic import BaseModel
 
 INSTRUCTION = """
     When one of these tools is applicable, you must express your request in 

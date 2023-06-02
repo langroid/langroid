@@ -27,9 +27,8 @@ jobs:
         run: |
           black --check .
 
-      - name: Run flake8
-        run: |
-          flake8 .
+      - name: Install ruff
+        uses: chartboost/ruff-action@v1
 
   type-check:
     if: false # TODO: enable when ready

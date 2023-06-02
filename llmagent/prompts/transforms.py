@@ -1,10 +1,12 @@
-from llmagent.language_models.base import LanguageModel
-from llmagent.prompts.dialog import collate_chat_history
-from llmagent.mytypes import Document
-from llmagent.prompts.templates import EXTRACTION_PROMPT
-import aiohttp
 import asyncio
 from typing import List, Tuple
+
+import aiohttp
+
+from llmagent.language_models.base import LanguageModel
+from llmagent.mytypes import Document
+from llmagent.prompts.dialog import collate_chat_history
+from llmagent.prompts.templates import EXTRACTION_PROMPT
 
 
 async def get_verbatim_extract_async(
@@ -69,7 +71,8 @@ def generate_summarizer_prompt(question: str, texts: List[str], k: int = 1):
     # Placeholder for demonstrations
     demo_placeholder = "\n".join(
         [
-            f"Question: [Question {i}]\n-----------\nContent: [Relevant text {i}]\n-----------\nFinal Answer: [Answer {i}]\n"
+            f"Question: [Question {i}]\n-----------\n"
+            f"Content: [Relevant text {i}]\n-----------\nFinal Answer: [Answer {i}]\n"
             for i in range(1, k + 1)
         ]
     )
@@ -79,7 +82,8 @@ def generate_summarizer_prompt(question: str, texts: List[str], k: int = 1):
     content_lines = "\n".join([f"Content: {text}" for text in texts])
     actual_question_str += content_lines + "\n-----------\nFinal Answer:\n"
 
-    # Combine the request, demonstrations, and actual question to form the complete prompt
+    # Combine the request, demonstrations, and
+    # actual question to form the complete prompt
     complete_prompt = demo_request + demo_placeholder + "\n" + actual_question_str
     return complete_prompt
 
@@ -173,7 +177,8 @@ def get_summary_answer(
     """.strip()
 
     # templatized_prompt = LLM.generate(prompt=prompt, max_tokens=1024)
-    # Define an auxiliary function to transform the list of passages into a single string
+    # Define an auxiliary function to transform the list of
+    # passages into a single string
     def stringify_passages(passages):
         return "\n".join(
             [

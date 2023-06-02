@@ -1,6 +1,7 @@
 import pytest
-from llmagent.parsing.parser import ParsingConfig, Parser
+
 from llmagent.mytypes import Document
+from llmagent.parsing.parser import Parser, ParsingConfig
 from llmagent.parsing.utils import generate_random_text
 
 CHUNK_SIZE = 100

@@ -1,15 +1,17 @@
-from llmagent.agent.chat_agent import ChatAgent, ChatAgentConfig
+from typing import Optional
+
+import pytest
+
 from llmagent.agent.base import Entity
-from llmagent.vector_store.base import VectorStoreConfig
+from llmagent.agent.chat_agent import ChatAgent, ChatAgentConfig
+from llmagent.cachedb.redis_cachedb import RedisCacheConfig
 from llmagent.language_models.base import Role
-from llmagent.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
+from llmagent.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
+from llmagent.mytypes import DocMetaData, Document
 from llmagent.parsing.parser import ParsingConfig
 from llmagent.prompts.prompts_config import PromptsConfig
-from llmagent.cachedb.redis_cachedb import RedisCacheConfig
 from llmagent.utils.configuration import Settings, set_global
-from llmagent.mytypes import Document, DocMetaData
-from typing import Optional
-import pytest
+from llmagent.vector_store.base import VectorStoreConfig
 
 
 class _TestChatAgentConfig(ChatAgentConfig):

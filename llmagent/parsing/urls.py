@@ -1,14 +1,15 @@
+import logging
+import os
+import urllib.parse
+from typing import List, Tuple
+from urllib.parse import urljoin
+
 import fire
 import requests
 from bs4 import BeautifulSoup
-import os
-import urllib.parse
-from urllib.parse import urljoin
+from pydantic import BaseModel, HttpUrl, ValidationError
 from rich import print
 from rich.prompt import Prompt
-from typing import List, Tuple
-from pydantic import HttpUrl, ValidationError, BaseModel
-import logging
 
 logger = logging.getLogger(__name__)
 

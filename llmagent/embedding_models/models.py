@@ -1,11 +1,13 @@
+import os
+from typing import Callable, List
+
 import openai
-from llmagent.mytypes import Embeddings
+from dotenv import load_dotenv
 from sentence_transformers import SentenceTransformer
+
 from llmagent.embedding_models.base import EmbeddingModel, EmbeddingModelsConfig
 from llmagent.language_models.utils import retry_with_exponential_backoff
-from dotenv import load_dotenv
-from typing import Callable, List
-import os
+from llmagent.mytypes import Embeddings
 
 
 class OpenAIEmbeddingsConfig(EmbeddingModelsConfig):
