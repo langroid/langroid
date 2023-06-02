@@ -1,9 +1,14 @@
-from llmagent.agent.chat_agent import ChatAgent
+from llmagent.agent.chat_agent import ChatAgent, ChatAgentConfig
+from llmagent.agent.base import Entity
 from pydantic import BaseModel, HttpUrl
 from typing import Optional
 from examples.codechat.code_chat_agent import CodeChatAgentConfig, CodeChatAgent
+from examples.codechat.code_chat_tools import (
+    ShowFileContentsMessage,
+    ShowDirContentsMessage,
+)
 from examples.dockerchat.dockerchat_agent_messages import (
-    RunPython,
+    RunPythonMessage,
     AskURLMessage,
     FileExistsMessage,
     PythonVersionMessage,
@@ -15,10 +20,12 @@ from rich.console import Console
 from rich.prompt import Prompt
 from llmagent.parsing.urls import org_user_from_github
 from llmagent.parsing.repo_loader import RepoLoader, RepoLoaderConfig
+from llmagent.mytypes import Document, DocMetaData
 from examples.dockerchat.identify_python_version import get_python_version
 from examples.dockerchat.identify_python_dependency import (
     identify_dependency_management,
 )
+
 
 import os
 import logging
@@ -44,8 +51,10 @@ For each MAIN question Q, you have to think step by step, and break it down into
 small steps. For each step (since you cannot access the code repo) you have to ask me 
 a question, and I will try to answer. If I cannot, I may say "I don't know" or "NONE". 
 In that case you can try asking differently or break it down into smaller steps. 
-Once you think you have the answer to the MAIN question Q, simply say 
-"DONE: <whatever the answer is>". Then you may get another MAIN question Q, and so on.  
+Only when you are SURE you have the answer to the MAIN question Q, simply say 
+"DONE: <whatever the answer is>". Then you may get another MAIN question Q, and so on.
+If you are not able to answer the MAIN question Q, simply say "I don't know", 
+and DO NOT MAKE UP AN ANSWER!
 """
 
 CODE_CHAT_INSTRUCTIONS = """
@@ -54,6 +63,9 @@ to help me create a dockerfile for the repository.
 Along with the question, you may be given extracts from the code repo, and you can 
 use those extracts to answer the question. If you cannot answer given the 
 information, simply say "I don't know", or say "NONE", whichever you prefer.
+For some questions, you may be able to use TOOLs to answer them; if there are tools 
+available, you will be told what they are, when to use them, and what format to 
+request the TOOL.
 """
 
 
@@ -61,11 +73,40 @@ class UrlModel(BaseModel):
     url: HttpUrl
 
 
+class PlannerAgent(ChatAgent):
+    def task_done(self) -> bool:
+        return "DONE" in self.pending_message.content
+
+    def task_result(self) -> Optional[Document]:
+        return Document(
+            content=self.pending_message.content.replace("DONE:", "").strip(),
+            metadata=DocMetaData(source=Entity.USER, sender=Entity.USER),
+        )
+
+
+class DockerCodeChatAgent(CodeChatAgent):
+    def task_done(self) -> bool:
+        # allow code chat agent only 1 chance to reply
+        return self.pending_message.metadata.sender == Entity.LLM
+
+    def task_result(self) -> Optional[Document]:
+        if self.peneding_message is None or (
+            "NONE" in self.pending_message.content
+            or NO_ANSWER in self.pending_message.content
+        ):
+            return None
+
+        return Document(
+            content=self.pending_message.content,
+            metadata=DocMetaData(source=Entity.USER, sender=Entity.USER),
+        )
+
+
 class DockerChatAgent(ChatAgent):
     url: str = "https://github.com/eugeneyan/testing-ml"
     repo_tree: str = None
     repo_path: str = None
-    code_chat_agent: CodeChatAgent = None
+    code_chat_agent: DockerCodeChatAgent = None
 
     def handle_message_fallback(self, input_str: str = "") -> Optional[str]:
         if self.repo_path is None and "URL" not in input_str:
@@ -76,7 +117,7 @@ class DockerChatAgent(ChatAgent):
             you can proceed.
             """
 
-    def run_python(self, msg: RunPython) -> str:
+    def run_python(self, msg: RunPythonMessage) -> str:
         # TODO: to be implemented. Return dummy msg for now
         logger.error(
             f"""
@@ -102,16 +143,6 @@ class DockerChatAgent(ChatAgent):
                 break
 
         self.url = url_model.url
-        code_chat_cfg = CodeChatAgentConfig(
-            name="Coder",
-            repo_url=self.url,
-            user_message=CODE_CHAT_INSTRUCTIONS,
-            content_includes=["txt", "md", "yml", "yaml", "sh", "Makefile"],
-            content_excludes=["Dockerfile"],
-            # USE same LLM settings as DockerChatAgent, e.g.
-            # if DockerChatAgent uses gpt4, then use gpt4 here too
-            llm=self.config.llm,
-        )
         # Note `content_includes` and `content_excludes` are used in
         # self.code_chat_agent to create a json dump of (top k lines) of various
         # files, to be included in the initial LLM message.
@@ -122,10 +153,32 @@ class DockerChatAgent(ChatAgent):
             What would you like to name this collection?""",
             default=default_collection_name,
         )
+        code_chat_cfg = CodeChatAgentConfig(
+            name="Coder",
+            repo_url=self.url,
+            system_message=CODE_CHAT_INSTRUCTIONS,
+            content_includes=["txt", "md", "yml", "yaml", "sh", "Makefile"],
+            content_excludes=["Dockerfile"],
+            # USE same LLM settings as DockerChatAgent, e.g.
+            # if DockerChatAgent uses gpt4, then use gpt4 here too
+            llm=self.config.llm,
+        )
         code_chat_cfg.vecdb.collection_name = collection_name
-
         self.code_chat_agent = CodeChatAgent(code_chat_cfg)
-        self.add_agent(self.code_chat_agent)
+
+        planner_agent_cfg = ChatAgentConfig(
+            name="Planner",
+            system_message=PLANNER_INSTRUCTIONS,
+            vecdb=None,
+            llm=self.config.llm,
+        )
+        planner_agent = PlannerAgent(planner_agent_cfg)
+        planner_agent.add_agent(self.code_chat_agent)
+        self.code_chat_agent.enable_message(ShowDirContentsMessage)
+        self.code_chat_agent.enable_message(ShowFileContentsMessage)
+        self.code_chat_agent.enable_message(RunPythonMessage)
+        self.add_agent(planner_agent)
+
         self.repo_loader = RepoLoader(self.url, RepoLoaderConfig())
         self.repo_path = self.repo_loader.clone()
         # get the repo tree to depth d, with first k lines of each file
@@ -136,7 +189,7 @@ class DockerChatAgent(ChatAgent):
         Based on the URL, here is some information about the repo that you can use.  
         
         First, here is a list of ALL the files and directories at the ROOT of the 
-        repo. Any files of interest to you MUST be in this list, there you do NOT 
+        repo. Any files of interest to you MUST be in this list, therefore you do NOT 
         need to ask in future about whether any file exists.
         {repo_listing}
         In later parts of the conversation, only ask questions that CANNOT 

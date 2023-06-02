@@ -167,12 +167,17 @@ class ChatAgent(Agent):
         if len(self.message_history) > 0:
             self.message_history[self.json_instructions_idx].content = json_instructions
 
-    def init_chat(self, system_message: str = None, user_message: str = None):
+    def init_chat(
+        self,
+        system_message: str = None,
+        user_message: str = None,
+        restart: bool = False,
+    ):
         """
         Initialize the chat with system and user message.
-        Clear the self.message_history if there was already a chat in progress.
-        Also initialize the task with `user_message` if provided.
-        (this allows subsequent Agent._task_loop() to function correctly).
+        If self.message_history is not empty, meaning we have already started a chat,
+        then: If `restart` is False (default), we leave the message history as is,
+        and otherwise, we clear the message history, and reset the self.task_messages
 
         Args:
             system_message (str): system message containing role etc; optional,
@@ -181,25 +186,22 @@ class ChatAgent(Agent):
                     detailed instructions. Careful: for certain subclasses of ChatAgent,
                     the user message may get augmented with relevant context documents,
                     so we may want to leave this as None.
+            restart (bool): if True, clear the message history and reset the task
         """
-        self.message_history = []
-        if system_message is not None:
-            # we always have at least 1 task_message
-            self.task_messages[0].content = system_message
-        if user_message is not None:
-            if len(self.task_messages) > 1:
-                self.task_messages[1].content = user_message
-            elif len(self.task_messages) == 1:
-                self.task_messages.append(
-                    LLMMessage(role=Role.USER, content=user_message)
-                )
-        self.init_task_message(user_message)
+        if len(self.message_history) == 0 or restart:
+            self.message_history = []
+            # possibly change the task messages
+            if system_message is not None:
+                # we always have at least 1 task_message
+                self.task_messages[0].content = system_message
+        self.init_pending_message(user_message)
 
     def do_task(
         self,
         msg: str = None,
         system_message: str = None,
         rounds: int = None,
+        restart: bool = False,
     ) -> Optional[Document]:
         """
         Do the task, as specified in the optional msg
@@ -209,11 +211,12 @@ class ChatAgent(Agent):
             msg (str): optional initial msg from user
             system_message: optional system message spe
             rounds: how many rounds to run the task for
+            restart: if True, clear the message history and reset the task
 
         Returns:
             Document: result in the form of a Document object
         """
-        self.init_chat(system_message=system_message, user_message=msg)
+        self.init_chat(system_message=system_message, user_message=msg, restart=restart)
         return super().do_task(msg, rounds=rounds)
 
     def llm_response(self, message: str = None) -> Document:

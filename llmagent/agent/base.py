@@ -392,7 +392,7 @@ class Agent(ABC):
                 ent = Entity.USER if pending_sender == Entity.LLM else Entity.LLM
                 self.pending_message.metadata.sender = ent
                 self.current_response.metadata.sender = ent
-                self.init_task_message(msg=result.content, ent=ent)
+                self.init_pending_message(msg=result.content, ent=ent)
 
     def task_done(self) -> bool:
         """
@@ -410,7 +410,7 @@ class Agent(ABC):
             )
         )
 
-    def init_task_message(self, msg: str = None, ent: Entity = Entity.USER) -> None:
+    def init_pending_message(self, msg: str = None, ent: Entity = Entity.USER) -> None:
         """
         Set up pending message (the "task")  before entering processing loop.
 
@@ -467,7 +467,7 @@ class Agent(ABC):
         # Even the initial "sender" is not literally the USER (since the task could
         # have come from another LLM), as far as this agent is concerned, the initial
         # message can be considered to be from the USER.
-        self.init_task_message(msg)
+        self.init_pending_message(msg)
         if self.parent_agent is not None:
             self.level = self.parent_agent.level + 1
         return self._task_loop(rounds)

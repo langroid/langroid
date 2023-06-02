@@ -5,6 +5,7 @@ import aiohttp
 import asyncio
 import openai
 import logging
+import requests
 
 logger = logging.getLogger(__name__)
 # setlevel to warning
@@ -19,6 +20,7 @@ def retry_with_exponential_backoff(
     jitter: bool = True,
     max_retries: int = 10,
     errors: tuple = (
+        requests.exceptions.RequestException,
         openai.error.Timeout,
         openai.error.RateLimitError,
         openai.error.APIError,

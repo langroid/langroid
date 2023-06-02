@@ -17,7 +17,7 @@ class AskURLMessage(AgentMessage):
         ]
 
 
-class RunPython(AgentMessage):
+class RunPythonMessage(AgentMessage):
     request: str = "run_python"
     purpose: str = """
     To run a python <code> on the repository, to find desired info.

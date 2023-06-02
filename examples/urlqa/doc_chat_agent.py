@@ -106,15 +106,6 @@ class DocChatAgent(ChatAgent):
             return self.summarize_docs()
         else:
             response = self.answer_from_docs(query)
-            if NO_ANSWER in response.content:
-                print("[red]LLM: rephrasing query...")
-                rephrases = super().llm_response(
-                    f""" Rephrase this query, and be very concise: 
-                    {query}
-                    """
-                )
-                print(f"[green]LLM: rephrased query:\n{rephrases.content}")
-                response = self.answer_from_docs(rephrases.content)
             return response
 
     @staticmethod

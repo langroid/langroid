@@ -429,7 +429,8 @@ class RepoLoader:
 
         Args:
             path (str): The path to the directory or file.
-            file_types (List[str], optional): List of file extensions to include.
+            file_types (List[str], optional): List of file extensions OR
+                filenames OR file_path_names to  include.
                 Defaults to None, which includes all files.
             exclude_dirs (List[str], optional): List of directories to exclude.
                 Defaults to None, which includes all directories.
@@ -460,8 +461,10 @@ class RepoLoader:
                     for file in files:
                         file_path = Path(root) / file
                         if (
-                            not file_types
+                            file_types is None
                             or RepoLoader._file_type(file_path) in file_types
+                            or os.path.basename(file_path) in file_types
+                            or file_path in file_types
                         ):
                             file_paths.append(file_path)
 
@@ -635,6 +638,30 @@ class RepoLoader:
                         names.append(file["name"])
         names = [n for n in names if n not in ["", None]]
         return names
+
+    @staticmethod
+    def list_files(dir: str, depth: int = 1) -> List[str]:
+        """
+        Recursively list all files in a directory, up to a certain depth.
+
+        Args:
+            dir (str): The directory path.
+            depth (int, optional): The depth level. Defaults to 1.
+        Returns:
+            List[str]: A list of file names.
+        """
+        depth = depth if depth >= 0 else float("inf")
+        output = []
+
+        for root, dirs, files in os.walk(dir):
+            if root.count(os.sep) - dir.count(os.sep) < depth:
+                level = root.count(os.sep) - dir.count(os.sep)
+                indent = " " * 4 * level
+                output.append("{}{}/".format(indent, os.path.basename(root)))
+                sub_indent = " " * 4 * (level + 1)
+                for f in files:
+                    output.append("{}{}".format(sub_indent, f))
+        return output
 
     @staticmethod
     def show_file_contents(tree: Dict[str, Union[str, List[Dict]]]):

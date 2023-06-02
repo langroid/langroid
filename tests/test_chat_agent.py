@@ -102,6 +102,7 @@ def test_process_messages(test_settings: Settings):
     agent.init_chat(
         system_message=f""" Your job is to always say "{LLM_NO_ANSWER}" """,
         user_message=question,
+        restart=True,
     )
     # LLM responds with LLM_NO_ANSWER
     agent.process_pending_message()
