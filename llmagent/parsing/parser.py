@@ -1,11 +1,13 @@
-from pydantic import BaseSettings
-import tiktoken
-from functools import reduce
-from llmagent.parsing.para_sentence_split import create_chunks
-from llmagent.mytypes import Document
-from typing import List
-from enum import Enum
 import logging
+from enum import Enum
+from functools import reduce
+from typing import List
+
+import tiktoken
+from pydantic import BaseSettings
+
+from llmagent.mytypes import Document
+from llmagent.parsing.para_sentence_split import create_chunks
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.WARNING)
@@ -132,7 +134,8 @@ class Parser:
 
             # Skip the chunk if it is empty or whitespace
             if not chunk_text or chunk_text.isspace():
-                # Remove the tokens corresponding to the chunk text from the remaining tokens
+                # Remove the tokens corresponding to the chunk text
+                # from remaining tokens
                 tokens = tokens[len(chunk) :]
                 # Continue to the next iteration of the loop
                 continue
@@ -154,7 +157,8 @@ class Parser:
                 # Truncate the chunk text at the punctuation mark
                 chunk_text = chunk_text[: last_punctuation + 1]
 
-            # Remove any newline characters and strip any leading or trailing whitespace
+            # Remove any newline characters and strip any leading or
+            # trailing whitespace
             chunk_text_to_append = chunk_text.replace("\n", " ").strip()
 
             if len(chunk_text_to_append) > self.config.discard_chunk_chars:

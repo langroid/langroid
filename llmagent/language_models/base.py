@@ -1,18 +1,20 @@
-from pydantic import BaseSettings, BaseModel
+import asyncio
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import List, Tuple, Union, Dict
-from llmagent.mytypes import Document
+from typing import Dict, List, Tuple, Union
+
+import aiohttp
+from pydantic import BaseModel, BaseSettings
+
 from llmagent.cachedb.redis_cachedb import RedisCacheConfig
-from llmagent.utils.configuration import settings
-from llmagent.utils.output.printing import show_if_debug
+from llmagent.mytypes import Document
+from llmagent.prompts.dialog import collate_chat_history
 from llmagent.prompts.templates import (
     EXTRACTION_PROMPT_GPT4,
     SUMMARY_ANSWER_PROMPT_GPT4,
 )
-from llmagent.prompts.dialog import collate_chat_history
-import aiohttp
-import asyncio
+from llmagent.utils.configuration import settings
+from llmagent.utils.output.printing import show_if_debug
 
 
 class LLMConfig(BaseSettings):
@@ -194,7 +196,8 @@ class LanguageModel(ABC):
 
         """
 
-        # Define an auxiliary function to transform the list of passages into a single string
+        # Define an auxiliary function to transform the list of
+        # passages into a single string
         def stringify_passages(passages):
             return "\n".join(
                 [

@@ -1,8 +1,9 @@
-from github import Github
+import csv
+import os
+
 import fire
 from dotenv import load_dotenv
-import os
-import csv
+from github import Github
 
 
 def find_docker_repos(stars: int = 10000, k: int = 10, out: str = None):

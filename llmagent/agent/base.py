@@ -1,23 +1,22 @@
-from abc import ABC
-from typing import Dict, Optional, Type, List, Tuple, Set
-from contextlib import ExitStack
-from pydantic import BaseSettings, ValidationError
-from llmagent.mytypes import Document, DocMetaData
-from rich import print
 import json
-from llmagent.agent.message import AgentMessage, INSTRUCTION
-from llmagent.language_models.base import LanguageModel
-from llmagent.vector_store.base import VectorStore
-from llmagent.parsing.parser import Parser
-from llmagent.vector_store.base import VectorStoreConfig
-from llmagent.language_models.base import LLMConfig
-from llmagent.parsing.parser import ParsingConfig
-from llmagent.parsing.json import extract_top_level_json
-from llmagent.prompts.prompts_config import PromptsConfig
 import logging
+from abc import ABC
+from contextlib import ExitStack
+from enum import Enum
+from typing import Dict, List, Optional, Set, Tuple, Type
+
+from pydantic import BaseSettings, ValidationError
+from rich import print
 from rich.console import Console
 from rich.prompt import Prompt
-from enum import Enum
+
+from llmagent.agent.message import INSTRUCTION, AgentMessage
+from llmagent.language_models.base import LanguageModel, LLMConfig
+from llmagent.mytypes import DocMetaData, Document
+from llmagent.parsing.json import extract_top_level_json
+from llmagent.parsing.parser import Parser, ParsingConfig
+from llmagent.prompts.prompts_config import PromptsConfig
+from llmagent.vector_store.base import VectorStore, VectorStoreConfig
 
 console = Console()
 

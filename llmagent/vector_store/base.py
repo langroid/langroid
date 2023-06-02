@@ -1,12 +1,14 @@
-from pydantic import BaseSettings
-from abc import ABC, abstractmethod
-import logging
-from llmagent.embedding_models.base import EmbeddingModelsConfig
-from llmagent.utils.output.printing import print_long_text
-from llmagent.utils.configuration import settings
-from llmagent.mytypes import Document
-import uuid
 import hashlib
+import logging
+import uuid
+from abc import ABC, abstractmethod
+
+from pydantic import BaseSettings
+
+from llmagent.embedding_models.base import EmbeddingModelsConfig
+from llmagent.mytypes import Document
+from llmagent.utils.configuration import settings
+from llmagent.utils.output.printing import print_long_text
 
 logger = logging.getLogger(__name__)
 
@@ -27,8 +29,8 @@ class VectorStoreConfig(BaseSettings):
 class VectorStore(ABC):
     @staticmethod
     def create(config: VectorStoreConfig):
-        from llmagent.vector_store.qdrantdb import QdrantDB
         from llmagent.vector_store.chromadb import ChromaDB
+        from llmagent.vector_store.qdrantdb import QdrantDB
 
         vecstore_class = dict(qdrant=QdrantDB, chroma=ChromaDB).get(
             config.type, QdrantDB

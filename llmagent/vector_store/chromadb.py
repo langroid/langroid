@@ -1,13 +1,15 @@
-from llmagent.vector_store.base import VectorStore, VectorStoreConfig
-from llmagent.embedding_models.base import (
-    EmbeddingModelsConfig,
-    EmbeddingModel,
-)
-from llmagent.mytypes import Document, DocMetaData
-from llmagent.utils.output.printing import print_long_text
-from typing import List, Tuple
-import chromadb
 import logging
+from typing import List, Tuple
+
+import chromadb
+
+from llmagent.embedding_models.base import (
+    EmbeddingModel,
+    EmbeddingModelsConfig,
+)
+from llmagent.mytypes import DocMetaData, Document
+from llmagent.utils.output.printing import print_long_text
+from llmagent.vector_store.base import VectorStore, VectorStoreConfig
 
 logger = logging.getLogger(__name__)
 

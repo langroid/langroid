@@ -43,6 +43,8 @@ torch = "2.0.0"
 docker = "^6.1.2"
 faker = "^18.9.0"
 requests = "^2.31.0"
+ruff = "^0.0.270"
+pre-commit = "^3.3.2"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.3.1"
@@ -54,15 +56,30 @@ build-backend = "poetry.core.masonry.api"
 
 [tool.black]
 line-length = 88
-
+include = '\.pyi?$'
 
 [tool.mypy]
 python_version = "3.11"
 disallow_untyped_defs = "True"
 ignore_missing_imports = "True"
 strict = true
-exclude = [".venv", "venv", "examples", "llmagent/utils/web", "notebooks"]
+exclude = ["docs", ".venv", "venv", "examples", "llmagent/utils/web", "notebooks"]
 files=["llmagent/*"]
+
+[tool.ruff]
+line-length = 88
+# Allow unused variables when underscore-prefixed.
+dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+# Assume Python 3.11.
+target-version = "py311"
+select = [
+    "E",  # pycodestyle
+    "F",  # pyflakes
+    "I",  # isort
+]
+exclude = ["docs", ".venv", "venv", "examples", "llmagent/utils/web", "notebooks"]
+fixable = ["A", "B", "C", "D", "E", "F", "G", "I", "N", "Q", "S", "T", "W", "ANN", "ARG", "BLE", "COM", "DJ", "DTZ", "EM", "ERA", "EXE", "FBT", "ICN", "INP", "ISC", "NPY", "PD", "PGH", "PIE", "PL", "PT", "PTH", "PYI", "RET", "RSE", "RUF", "SIM", "SLF", "TCH", "TID", "TRY", "UP", "YTT"]
+unfixable = []
 
 
 [tool.pytest.ini_options]

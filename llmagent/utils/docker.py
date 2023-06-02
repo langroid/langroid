@@ -1,7 +1,8 @@
-import docker
-import os
 import logging
+import os
 import subprocess
+
+import docker
 
 logger = logging.getLogger(__name__)
 

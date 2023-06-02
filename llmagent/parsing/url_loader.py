@@ -1,12 +1,14 @@
+import logging
 from typing import List
-from llmagent.mytypes import Document
+
 import trafilatura
 from trafilatura.downloads import (
     add_to_compressed_dict,
     buffered_downloads,
     load_download_buffer,
 )
-import logging
+
+from llmagent.mytypes import Document
 
 logging.getLogger("trafilatura").setLevel(logging.ERROR)
 

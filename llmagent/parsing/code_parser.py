@@ -1,12 +1,13 @@
-from pydantic import BaseSettings
-import tiktoken
 from functools import reduce
-from llmagent.mytypes import Document
-from typing import List
+from typing import Callable, List
+
+import tiktoken
+from pydantic import BaseSettings
 from pygments import lex
-from pygments.token import Token
 from pygments.lexers import get_lexer_by_name
-from typing import Callable
+from pygments.token import Token
+
+from llmagent.mytypes import Document
 
 
 def chunk_code(

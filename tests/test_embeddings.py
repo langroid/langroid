@@ -1,10 +1,12 @@
+import os
+
 from dotenv import load_dotenv
+
 from llmagent.embedding_models.base import EmbeddingModel
 from llmagent.embedding_models.models import (
     OpenAIEmbeddingsConfig,
     SentenceTransformerEmbeddingsConfig,
 )
-import os
 
 
 def test_embeddings():
