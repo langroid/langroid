@@ -37,7 +37,7 @@ def test_inter_agent_chat(test_settings: Settings, helper_human_response: str):
     agent = ChatAgent(cfg1)
     agent_helper = ChatAgent(cfg2)
     agent.controller = Entity.LLM
-    agent.add_agent(agent_helper)
+    agent.add_agent(agent_helper, llm_delegate=False, single_round=True)
 
     agent.default_human_response = ""
     agent_helper.default_human_response = helper_human_response
@@ -144,9 +144,9 @@ def test_multi_agent(test_settings: Settings):
     multiplier = _MultiplierAgent(multiplier_cfg)
 
     # planner helps master...
-    master.add_agent(planner, llm_delegate=True)
+    master.add_agent(planner, llm_delegate=True, single_round=False)
     # multiplier helps planner...
-    planner.add_agent(multiplier)
+    planner.add_agent(multiplier, llm_delegate=False, single_round=True)
 
     # ... since human has nothing to say
     master.default_human_response = ""
