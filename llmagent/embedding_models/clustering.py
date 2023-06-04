@@ -14,7 +14,7 @@ logging.getLogger("faiss").setLevel(logging.ERROR)
 logging.getLogger("faiss-cpu").setLevel(logging.ERROR)
 
 
-def find_optimal_clusters(X, max_clusters, threshold=0.1):
+def find_optimal_clusters(X: np.ndarray, max_clusters: int, threshold=0.1) -> int:
     """
     Find the optimal number of clusters for FAISS K-means using the Elbow Method.
 

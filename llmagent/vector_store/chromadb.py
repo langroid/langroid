@@ -1,5 +1,5 @@
 import logging
-from typing import List, Tuple
+from typing import Any, List, Optional, Tuple
 
 import chromadb
 
@@ -8,6 +8,7 @@ from llmagent.embedding_models.base import (
     EmbeddingModelsConfig,
 )
 from llmagent.mytypes import DocMetaData, Document
+from llmagent.utils.configuration import settings
 from llmagent.utils.output.printing import print_long_text
 from llmagent.vector_store.base import VectorStore, VectorStoreConfig
 
@@ -48,53 +49,38 @@ class ChromaDB(VectorStore):
             # }
         )
 
-    @classmethod
-    def from_documents(
-        cls,
-        collection_name: str,
-        documents: List[Document],
-        storage_path: str = ".chromadb/data/",
-        embedding_fn_type: str = "openai",
-        embeddings=None,
-    ):
-        instance = cls(
-            collection_name=collection_name,
-            embedding_fn_type=embedding_fn_type,
-            storage_path=storage_path,
-        )
-
-        instance.add_documents(
-            embeddings=embeddings,
-            documents=documents,
-        )
-        return instance
-
-    def add_documents(self, documents: List[Document] = None):
+    def add_documents(self, documents: Optional[List[Document]] = None) -> None:
+        if documents is None:
+            return
         contents: List[str] = [document.content for document in documents]
-        metadatas: List[dict] = [document.metadata.dict() for document in documents]
+        metadatas: List[dict[str, Any]] = [
+            document.metadata.dict() for document in documents
+        ]
         ids = range(len(documents))
-        ids = ["id" + str(id) for id in ids]
+        ids_str = ["id" + str(id) for id in ids]
         self.collection.add(
             # embedding_models=embedding_models,
             documents=contents,
             metadatas=metadatas,
-            ids=ids,
+            ids=ids_str,
         )
 
-    def delete_collection(self, collection_name: str):
+    def delete_collection(self, collection_name: str) -> None:
         self.client.delete_collection(name=collection_name)
 
     def similar_texts_with_scores(
-        self, text: str, k: int = 1, where: str = None, debug: bool = False
-    ) -> List[Tuple[Document, float]]:
+        self, text: str, k: int = 1, where: Optional[str] = None
+    ) -> Optional[List[Tuple[Document, float]]]:
         results = self.collection.query(
             query_texts=[text],
             n_results=k,
             where=where,
             include=["documents", "distances", "metadatas"],
         )
+        if len(results["documents"]) == 0:
+            return None
         contents = results["documents"][0]
-        if debug:
+        if settings.debug:
             for i, c in enumerate(contents):
                 print_long_text("red", "italic red", f"MATCH-{i}", c)
         metadatas = results["metadatas"][0]
