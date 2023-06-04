@@ -79,9 +79,9 @@ class Agent(ABC):
             Entity.LLM: self.llm_response,
             Entity.AGENT: self.agent_response,
         }
-        # latest "valid, meaningful" message that needs a response, e.g.
-        # not "I don't know", or quit.
+        # latest message in a conversation among entities and agents.
         self.pending_message: Optional[ChatDocument] = None
+        self.single_round = False
         self.last_llm_message = ChatDocument(
             content="",
             metadata=ChatDocMetaData(
@@ -395,7 +395,7 @@ class Agent(ABC):
                 result = None
         return result
 
-    def process_pending_message(self, rounds: Optional[int] = None) -> None:
+    def process_pending_message(self, rounds: int = -1) -> None:
         """
         Possibly update `self.pending_message`, which could be from ANY entity
         (e.g. LLM, human, another agent).
@@ -522,9 +522,31 @@ class Agent(ABC):
         Returns:
             ChatDocument: result of task
         """
-        return self.last_llm_message
+        last_controller_message = (
+            self.last_llm_message
+            if self.controller == Entity.LLM
+            else self.last_user_message
+        )
+        last_non_controller_message = (
+            self.last_user_message
+            if self.controller == Entity.LLM
+            else self.last_llm_message
+        )
+        if self.single_round:
+            content = last_non_controller_message.content
+        else:
+            content = last_controller_message.content
+            if DONE in content:
+                content = content.replace(DONE, "").strip()
+            else:
+                content = NO_ANSWER
 
-    def _task_loop(self, rounds: Optional[int] = None) -> Optional[ChatDocument]:
+        return ChatDocument(
+            content=content,
+            metadata=DocMetaData(source=Entity.USER, sender=Entity.USER),
+        )
+
+    def _task_loop(self, rounds: int = -1) -> Optional[ChatDocument]:
         """
         Loop over `process_pending_message` until `task_done()` is True, or until
         `rounds` is reached. In each call to `process_pending_message`, the
@@ -557,7 +579,7 @@ class Agent(ABC):
                     print("[magenta]Bye, hope this was useful!")
                 break
             i += 1
-            if rounds is not None and i >= rounds:
+            if rounds > 0 and i >= rounds:
                 break
         result = self.task_result()
         print(
@@ -569,7 +591,7 @@ class Agent(ABC):
     def do_task(
         self,
         msg: Optional[str] = None,
-        rounds: Optional[int] = None,
+        rounds: int = -1,
         llm_delegate: bool = False,
     ) -> Optional[ChatDocument]:
         """
@@ -602,19 +624,29 @@ class Agent(ABC):
         self.indent = "...|" * self.level
         self.enter = self.indent + ">>>"
         self.leave = self.indent + "<<<"
-
+        # `self.rounds` may be set via `self.add_agent`
+        if self.single_round:
+            rounds = 2  # overrides rounds param above
         return self._task_loop(rounds)
 
-    def add_agent(self, agent: "Agent", llm_delegate: bool = False) -> None:
+    def add_agent(
+        self,
+        agent: "Agent",
+        llm_delegate: bool = False,
+        single_round: bool = False,
+    ) -> None:
         """
         Add an agent to process pending message when others fail.
         Args:
             agent (Agent): agent to add
             llm_delegate (bool): whether to delegate control to LLM
+            single_round (bool): whether to run for a single round
         """
         agent.parent_agent = self
         if llm_delegate:
             agent.controller = Entity.LLM
+        if single_round:
+            agent.single_round = True
         self.other_agents.append(agent)
 
     def llm_response(self, prompt: Optional[str] = None) -> Optional[ChatDocument]:

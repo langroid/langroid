@@ -205,7 +205,7 @@ class ChatAgent(Agent):
         self,
         msg: Optional[str] = None,
         system_message: Optional[str] = None,
-        rounds: Optional[int] = None,
+        rounds: int = -1,
         restart: bool = False,
         llm_delegate: bool = False,
     ) -> Optional[ChatDocument]:

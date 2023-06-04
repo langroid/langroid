@@ -40,6 +40,7 @@ DEFAULT_URL = "https://github.com/eugeneyan/testing-ml"
 # each corresponds to a method in the agent.
 
 NO_ANSWER = "I don't know"
+NONE_ANSWER = "NONE"
 
 PLANNER_INSTRUCTIONS = """
 You are a software developer and you want to create a dockerfile to container your 
@@ -77,17 +78,6 @@ class UrlModel(BaseModel):
     url: HttpUrl
 
 
-class PlannerAgent(ChatAgent):
-    def _task_done(self) -> bool:
-        return super()._task_done() or "DONE" in self.pending_message.content
-
-    def task_result(self) -> Optional[Document]:
-        return Document(
-            content=self.pending_message.content.replace("DONE:", "").strip(),
-            metadata=DocMetaData(source=Entity.USER, sender=Entity.USER),
-        )
-
-
 class DockerCodeChatAgent(CodeChatAgent):
     def _task_done(self) -> bool:
         # allow code chat agent only 1 chance to reply
@@ -95,7 +85,7 @@ class DockerCodeChatAgent(CodeChatAgent):
 
     def task_result(self) -> Optional[Document]:
         if self.pending_message is None or (
-            "NONE" in self.pending_message.content
+            NONE_ANSWER in self.pending_message.content
             or NO_ANSWER in self.pending_message.content
         ):
             return None
@@ -176,12 +166,14 @@ class DockerChatAgent(ChatAgent):
             vecdb=None,
             llm=self.config.llm,
         )
-        planner_agent = PlannerAgent(planner_agent_cfg)
-        planner_agent.add_agent(self.code_chat_agent)
+        planner_agent = ChatAgent(planner_agent_cfg)
+        planner_agent.add_agent(
+            self.code_chat_agent, llm_delegate=False, single_round=True
+        )
         self.code_chat_agent.enable_message(ShowDirContentsMessage)
         self.code_chat_agent.enable_message(ShowFileContentsMessage)
         self.code_chat_agent.enable_message(RunPythonMessage)
-        self.add_agent(planner_agent, llm_delegate=True)
+        self.add_agent(planner_agent, llm_delegate=True, single_round=False)
 
         self.repo_loader = RepoLoader(self.url, RepoLoaderConfig())
         self.repo_path = self.repo_loader.clone()
