@@ -1,11 +1,12 @@
 from abc import ABC, abstractmethod
+from typing import Any, Dict, Optional
 
 
 class CacheDB(ABC):
     """Abstract base class for a cache database."""
 
     @abstractmethod
-    def store(self, key: str, value: dict) -> None:
+    def store(self, key: str, value: Dict[str, Any]) -> None:
         """
         Abstract method to store a value associated with a key.
 
@@ -16,7 +17,7 @@ class CacheDB(ABC):
         pass
 
     @abstractmethod
-    def retrieve(self, key: str) -> dict:
+    def retrieve(self, key: str) -> Optional[Dict[str, Any]]:
         """
         Abstract method to retrieve the value associated with a key.
 

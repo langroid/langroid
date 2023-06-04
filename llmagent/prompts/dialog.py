@@ -1,7 +1,7 @@
-from typing import List, Tuple
+from typing import List
 
 
-def collate_chat_history(inputs: List[Tuple[str]]) -> str:
+def collate_chat_history(inputs: List[tuple[str, str]]) -> str:
     """
     Collate (human, ai) pairs into a single, string
     Args:

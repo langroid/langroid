@@ -88,7 +88,7 @@ def chat(config: DockerChatAgentConfig) -> None:
     # agent.enable_message(PythonDependencyMessage)
     # agent.enable_message(EntryPointAndCMDMessage)
 
-    agent.do_task()
+    agent.do_task(llm_delegate=True)
 
 
 @app.command()

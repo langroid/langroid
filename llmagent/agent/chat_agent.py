@@ -1,11 +1,12 @@
 import logging
 from contextlib import ExitStack
-from typing import List, Optional, Type
+from typing import List, Optional, Type, cast, no_type_check
 
 from rich import print
 from rich.console import Console
 
-from llmagent.agent.base import Agent, AgentConfig, AgentMessage, Entity
+from llmagent.agent.base import Agent, AgentConfig, ChatDocument, Entity
+from llmagent.agent.message import AgentMessage
 from llmagent.language_models.base import LLMMessage, Role, StreamingIfAllowed
 from llmagent.mytypes import DocMetaData, Document
 from llmagent.utils.configuration import settings
@@ -21,7 +22,7 @@ class ChatAgentConfig(AgentConfig):
     """
 
     system_message: str = "You are a helpful assistant."
-    user_message: str = None
+    user_message: Optional[str] = None
     max_context_tokens: int = 500
 
 
@@ -38,7 +39,9 @@ class ChatAgent(Agent):
     - LLM thinks
     """
 
-    def __init__(self, config: AgentConfig, task: Optional[List[LLMMessage]] = None):
+    def __init__(
+        self, config: ChatAgentConfig, task: Optional[List[LLMMessage]] = None
+    ):
         """
         Chat-mode agent initialized with task spec as the initial message sequence
         Args:
@@ -170,10 +173,10 @@ class ChatAgent(Agent):
 
     def init_chat(
         self,
-        system_message: str = None,
-        user_message: str = None,
-        restart: bool = False,
-    ):
+        system_message: Optional[str] = None,
+        user_message: Optional[str] = None,
+        restart: Optional[bool] = False,
+    ) -> None:
         """
         Initialize the chat with system and user message.
         If self.message_history is not empty, meaning we have already started a chat,
@@ -195,15 +198,17 @@ class ChatAgent(Agent):
             if system_message is not None:
                 # we always have at least 1 task_message
                 self.task_messages[0].content = system_message
-        self.init_pending_message(user_message)
+        self.reset_pending_message(user_message)
 
+    @no_type_check
     def do_task(
         self,
-        msg: str = None,
-        system_message: str = None,
-        rounds: int = None,
+        msg: Optional[str] = None,
+        system_message: Optional[str] = None,
+        rounds: Optional[int] = None,
         restart: bool = False,
-    ) -> Optional[Document]:
+        llm_delegate: bool = False,
+    ) -> Optional[ChatDocument]:
         """
         Do the task, as specified in the optional msg
         (if absent use the self.task_messages),
@@ -213,14 +218,16 @@ class ChatAgent(Agent):
             system_message: optional system message spe
             rounds: how many rounds to run the task for
             restart: if True, clear the message history and reset the task
+            llm_delegate: whether to delegate control to LLM
 
         Returns:
             Document: result in the form of a Document object
         """
         self.init_chat(system_message=system_message, user_message=msg, restart=restart)
-        return super().do_task(msg, rounds=rounds)
+        return super().do_task(msg, rounds=rounds, llm_delegate=llm_delegate)
 
-    def llm_response(self, message: str = None) -> Document:
+    @no_type_check
+    def llm_response(self, message: Optional[str] = None) -> Optional[ChatDocument]:
         """
         Respond to a single user message, appended to the message history,
         in "chat" mode
@@ -300,8 +307,8 @@ class ChatAgent(Agent):
         return Document(content=response.content, metadata=response.metadata)
 
     def llm_response_messages(
-        self, messages: List[LLMMessage], output_len: int = None
-    ) -> Document:
+        self, messages: List[LLMMessage], output_len: Optional[int] = None
+    ) -> ChatDocument:
         """
         Respond to a series of messages, e.g. with OpenAI ChatCompletion
         Args:
@@ -323,7 +330,7 @@ class ChatAgent(Agent):
             displayed = True
             cached = f"[red]{self.indent}(cached)[/red]" if response.cached else ""
             print(cached + "[green]" + response.message)
-        return Document(
+        return ChatDocument(
             content=response.message,
             metadata=DocMetaData(
                 source=Entity.LLM.value,
@@ -334,7 +341,7 @@ class ChatAgent(Agent):
             ),
         )
 
-    def _llm_response_temp_context(self, message: str, prompt: str) -> Document:
+    def _llm_response_temp_context(self, message: str, prompt: str) -> ChatDocument:
         """
         Get LLM response to `prompt` (which presumably includes the `message`
         somewhere, along with possible large "context" passages),
@@ -349,11 +356,11 @@ class ChatAgent(Agent):
         """
         # we explicitly call THIS class's respond method,
         # not a derived class's (or else there would be infinite recursion!)
-        answer_doc = ChatAgent.llm_response(self, prompt)
+        answer_doc = cast(ChatDocument, ChatAgent.llm_response(self, prompt))
         self.update_last_message(message, role=Role.USER)
         return answer_doc
 
-    def llm_response_forget(self, message: str) -> Document:
+    def llm_response_forget(self, message: str) -> ChatDocument:
         """
         LLM Response to single message, and restore message_history.
         In effect a "one-off" message & response that leaves agent
@@ -368,7 +375,7 @@ class ChatAgent(Agent):
         """
         # explicitly call THIS class's respond method,
         # not a derived class's (or else there would be infinite recursion!)
-        response = ChatAgent.llm_response(self, message)
+        response = cast(ChatDocument, ChatAgent.llm_response(self, message))
         # clear the last two messages, which are the
         # user message and the assistant response
         self.message_history.pop()
@@ -385,6 +392,12 @@ class ChatAgent(Agent):
         Returns:
             int: number of tokens in message history
         """
+        if self.parser is None:
+            raise ValueError(
+                "ChatAgent.parser is None. "
+                "You must set ChatAgent.parser "
+                "before calling chat_num_tokens()."
+            )
         hist = messages if messages is not None else self.message_history
         return sum([self.parser.num_tokens(m.content) for m in hist])
 

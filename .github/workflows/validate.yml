@@ -31,7 +31,7 @@ jobs:
         uses: chartboost/ruff-action@v1
 
   type-check:
-    if: false # TODO: enable when ready
+    #if: false # TODO: enable when ready
     runs-on: ubuntu-latest
 
     steps:
