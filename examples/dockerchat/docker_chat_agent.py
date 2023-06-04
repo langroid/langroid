@@ -78,8 +78,8 @@ class UrlModel(BaseModel):
 
 
 class PlannerAgent(ChatAgent):
-    def task_done(self) -> bool:
-        return super().task_done() or "DONE" in self.pending_message.content
+    def _task_done(self) -> bool:
+        return super()._task_done() or "DONE" in self.pending_message.content
 
     def task_result(self) -> Optional[Document]:
         return Document(
@@ -89,12 +89,12 @@ class PlannerAgent(ChatAgent):
 
 
 class DockerCodeChatAgent(CodeChatAgent):
-    def task_done(self) -> bool:
+    def _task_done(self) -> bool:
         # allow code chat agent only 1 chance to reply
         return self.pending_message.metadata.sender == Entity.LLM
 
     def task_result(self) -> Optional[Document]:
-        if self.peneding_message is None or (
+        if self.pending_message is None or (
             "NONE" in self.pending_message.content
             or NO_ANSWER in self.pending_message.content
         ):
@@ -181,7 +181,7 @@ class DockerChatAgent(ChatAgent):
         self.code_chat_agent.enable_message(ShowDirContentsMessage)
         self.code_chat_agent.enable_message(ShowFileContentsMessage)
         self.code_chat_agent.enable_message(RunPythonMessage)
-        self.add_agent(planner_agent)
+        self.add_agent(planner_agent, llm_delegate=True)
 
         self.repo_loader = RepoLoader(self.url, RepoLoaderConfig())
         self.repo_path = self.repo_loader.clone()

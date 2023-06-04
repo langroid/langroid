@@ -10,46 +10,34 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - name: Check out code
-        uses: actions/checkout@v2
-      
-      - name: Set up Python
-        uses: actions/setup-python@v2
-        with:
-          python-version: 3.8
+      - name: Check out repository
+        uses: actions/checkout@v3
 
-      - name: Install dependencies
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: 3.11  # Replace with your desired Python version
+
+      - name: Install Poetry
+        uses: Gr1N/setup-poetry@v8
+
+      - name: Install Poetry dependencies
         run: |
+          poetry --version
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
           python -m pip install --upgrade pip
-          pip install flake8 black
+          
+          poetry install
 
       - name: Run black
         run: |
-          black --check .
+          poetry run black --check .
 
       - name: Install ruff
         uses: chartboost/ruff-action@v1
 
-  type-check:
-    if: false # TODO: enable when ready
-    runs-on: ubuntu-latest
-
-    steps:
-      - name: Check out code
-        uses: actions/checkout@v2
-
-      - name: Set up Python
-        uses: actions/setup-python@v2
-        with:
-          python-version: 3.8
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install mypy
-
       - name: Run mypy
         run: |
-          mypy -p llmagent
+          poetry run mypy -p llmagent
 
   # Any additional jobs...

@@ -36,6 +36,7 @@ def test_inter_agent_chat(test_settings: Settings, helper_human_response: str):
 
     agent = ChatAgent(cfg1)
     agent_helper = ChatAgent(cfg2)
+    agent.controller = Entity.LLM
     agent.add_agent(agent_helper)
 
     agent.default_human_response = ""
@@ -50,20 +51,19 @@ def test_inter_agent_chat(test_settings: Settings, helper_human_response: str):
     agent.process_pending_message()  # LLM asks
     assert "What" in agent.pending_message.content
     assert agent.pending_message.metadata.source == Entity.LLM
-    assert agent.pending_message.content == agent.current_response.content
 
     agent.process_pending_message()
     # user responds '' (empty) to force agent to hand off to agent_helper,
     # and we test two possible human answers: empty or 'q'
 
-    assert agent_helper.task_done()
+    assert agent_helper._task_done()
     assert "Paris" in agent_helper.task_result().content
-    assert "Paris" in agent.task_result().content
+    assert not agent._task_done()
 
 
 # The classes below are for the mult-agent test
 class _MasterAgent(ChatAgent):
-    def task_done(self) -> bool:
+    def _task_done(self) -> bool:
         return "DONE" in self.pending_message.content
 
     def task_result(self) -> Optional[Document]:
@@ -75,7 +75,7 @@ class _MasterAgent(ChatAgent):
 
 
 class _PlannerAgent(ChatAgent):
-    def task_done(self) -> bool:
+    def _task_done(self) -> bool:
         return "DONE" in self.pending_message.content
 
     def task_result(self) -> Optional[Document]:
@@ -86,7 +86,7 @@ class _PlannerAgent(ChatAgent):
 
 
 class _MultiplierAgent(ChatAgent):
-    def task_done(self) -> bool:
+    def _task_done(self) -> bool:
         # multiplication gets done in 1 round, so stop as soon as LLM replies
         return self.pending_message.metadata.sender == Entity.LLM
 
@@ -144,7 +144,7 @@ def test_multi_agent(test_settings: Settings):
     multiplier = _MultiplierAgent(multiplier_cfg)
 
     # planner helps master...
-    master.add_agent(planner)
+    master.add_agent(planner, llm_delegate=True)
     # multiplier helps planner...
     planner.add_agent(multiplier)
 
@@ -153,7 +153,7 @@ def test_multi_agent(test_settings: Settings):
     planner.default_human_response = ""
     multiplier.default_human_response = ""
 
-    result = master.do_task()
+    result = master.do_task(llm_delegate=True)
 
     answers = [str(eval(e)) for e in EXPONENTIALS.split()]
     assert all(a in result.content for a in answers)

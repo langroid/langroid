@@ -26,13 +26,15 @@ class OpenAIEmbeddings(EmbeddingModel):
         super().__init__()
         self.config = config
         load_dotenv()
-        self.config.api_key = os.getenv("OPENAI_API_KEY")
+        self.config.api_key = os.getenv("OPENAI_API_KEY", "")
         openai.api_key = self.config.api_key
 
     def embedding_fn(self) -> Callable[[List[str]], Embeddings]:
         @retry_with_exponential_backoff
         def fn(texts: List[str]) -> Embeddings:
-            result = openai.Embedding.create(input=texts, model=self.config.model_name)
+            result = openai.Embedding.create(  # type: ignore
+                input=texts, model=self.config.model_name
+            )
             return [d["embedding"] for d in result["data"]]
 
         return fn
@@ -50,7 +52,9 @@ class SentenceTransformerEmbeddings(EmbeddingModel):
 
     def embedding_fn(self) -> Callable[[List[str]], Embeddings]:
         def fn(texts: List[str]) -> Embeddings:
-            return self.model.encode(texts, convert_to_numpy=True).tolist()
+            return self.model.encode(  # type: ignore
+                texts, convert_to_numpy=True
+            ).tolist()
 
         return fn
 
@@ -68,6 +72,6 @@ def embedding_model(embedding_fn_type: str = "openai") -> EmbeddingModel:
         EmbeddingModel
     """
     if embedding_fn_type == "openai":
-        return OpenAIEmbeddings
+        return OpenAIEmbeddings  # type: ignore
     else:  # default sentence transformer
-        return SentenceTransformerEmbeddings
+        return SentenceTransformerEmbeddings  # type: ignore

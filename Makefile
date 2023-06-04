@@ -19,10 +19,8 @@ check:
 	@echo "Running flake8 on git-tracked files ONLY! ..."
 	@git ls-files | grep '\.py$$' | xargs flake8 --exclude=.git,__pycache__,.venv
 	@poetry run ruff .
-	@if false; then \
-		echo "Running mypy..."; \
-		mypy -p llmagent; \
-	fi
+	@echo "Running mypy...";
+	@poetry run mypy -p llmagent
 	@echo "All checks passed!"
 
 lint:

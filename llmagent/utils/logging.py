@@ -4,7 +4,7 @@ import colorlog
 
 
 # Define a function to set up the colored logger
-def setup_colored_logging():
+def setup_colored_logging() -> None:
     # Define the log format with color codes
     log_format = "%(log_color)s%(asctime)s - %(levelname)s - %(message)s%(reset)s"
     # Create a color formatter
@@ -28,7 +28,7 @@ def setup_colored_logging():
     # logger.setLevel(logging.DEBUG)
 
 
-def setup_logger(name: str, level: int):
+def setup_logger(name: str, level: int) -> logging.Logger:
     """
     Set up a logger of module `name` at a desired level.
     Args:

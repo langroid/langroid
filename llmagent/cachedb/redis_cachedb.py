@@ -1,5 +1,6 @@
 import json
 import os
+from typing import Any, Dict, Optional
 
 import fakeredis
 import redis
@@ -31,9 +32,9 @@ class RedisCache(CacheDB):
         load_dotenv()
         redis_password = os.getenv("REDIS_PASSWORD")
         if self.config.fake:
-            self.client = fakeredis.FakeStrictRedis()
+            self.client = fakeredis.FakeStrictRedis()  # type: ignore
         else:
-            self.client = redis.Redis(
+            self.client = redis.Redis(  # type: ignore
                 host=self.config.hostname,
                 port=self.config.port,
                 password=redis_password,
@@ -47,17 +48,17 @@ class RedisCache(CacheDB):
         """Clear all keys from all dbs."""
         self.client.flushall()
 
-    def store(self, key: str, value: dict) -> None:
+    def store(self, key: str, value: Any) -> None:
         """
         Store a value associated with a key.
 
         Args:
             key (str): The key under which to store the value.
-            value (dict): The value to store.
+            value (Any): The value to store.
         """
         self.client.set(key, json.dumps(value))
 
-    def retrieve(self, key: str) -> dict:
+    def retrieve(self, key: str) -> Optional[Dict[str, Any]]:
         """
         Retrieve the value associated with a key.
 

@@ -45,6 +45,8 @@ faker = "^18.9.0"
 requests = "^2.31.0"
 ruff = "^0.0.270"
 pre-commit = "^3.3.2"
+types-redis = "^4.5.5.2"
+types-requests = "^2.31.0.1"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.3.1"
@@ -60,11 +62,21 @@ include = '\.pyi?$'
 
 [tool.mypy]
 python_version = "3.11"
+#follow_imports = "skip"
+#check_untyped_defs = "True"
 disallow_untyped_defs = "True"
 ignore_missing_imports = "True"
 strict = true
-exclude = ["docs", ".venv", "venv", "examples", "llmagent/utils/web", "notebooks"]
+exclude = [
+    "docs", ".venv", "venv", "examples", "llmagent/utils/web",
+    "notebooks",
+    "llmagent/parsing/repo_loader.py",
+    "llmagent/embedding_models/clustering.py",
+]
 files=["llmagent/*"]
+plugins = [
+    "pydantic.mypy"
+]
 
 [tool.ruff]
 line-length = 88
