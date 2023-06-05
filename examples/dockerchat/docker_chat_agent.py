@@ -1,6 +1,6 @@
 from llmagent.agent.chat_agent import ChatAgent, ChatAgentConfig
 from pydantic import BaseModel, HttpUrl
-from typing import Optional, Dict, Any
+from typing import Optional, Any
 from examples.codechat.code_chat_agent import CodeChatAgentConfig, CodeChatAgent
 from examples.codechat.code_chat_tools import (
     ShowFileContentsMessage,
