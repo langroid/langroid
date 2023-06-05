@@ -1,25 +1,27 @@
-from llmagent.vector_store.base import VectorStore, VectorStoreConfig
+import logging
+import os
+from typing import List, Optional, Tuple
+
+from chromadb.api.types import EmbeddingFunction
+from dotenv import load_dotenv
+from qdrant_client import QdrantClient
+from qdrant_client.conversions.common_types import ScoredPoint
+from qdrant_client.http.models import (
+    Batch,
+    CollectionStatus,
+    Distance,
+    Filter,
+    SearchParams,
+    VectorParams,
+)
+
 from llmagent.embedding_models.base import (
-    EmbeddingModelsConfig,
     EmbeddingModel,
+    EmbeddingModelsConfig,
 )
 from llmagent.mytypes import Document
 from llmagent.utils.configuration import settings
-from qdrant_client import QdrantClient
-from qdrant_client.http.models import (
-    Distance,
-    VectorParams,
-    Filter,
-    CollectionStatus,
-    Batch,
-    SearchParams,
-)
-from qdrant_client.conversions.common_types import ScoredPoint
-from typing import List, Tuple
-from chromadb.api.types import EmbeddingFunction
-from dotenv import load_dotenv
-import os
-import logging
+from llmagent.vector_store.base import VectorStore, VectorStoreConfig
 
 logger = logging.getLogger(__name__)
 
@@ -87,18 +89,18 @@ class QdrantDB(VectorStore):
             ),
         )
 
-    def delete_collection(self, collection_name: str):
+    def delete_collection(self, collection_name: str) -> None:
         self.client.delete_collection(collection_name=collection_name)
 
     def similar_texts_with_scores(
         self,
         text: str,
         k: int = 1,
-        where: str = None,
-    ) -> List[Tuple[Document, float]]:
+        where: Optional[str] = None,
+    ) -> Optional[List[Tuple[Document, float]]]:
         embedding = self.embedding_fn([text])[0]
         # TODO filter may not work yet
-        filter = Filter() if where is None else Filter.from_json(where)
+        filter = Filter() if where is None else Filter.from_json(where)  # type: ignore
         search_result: List[ScoredPoint] = self.client.search(
             collection_name=self.config.collection_name,
             query_vector=embedding,
@@ -110,7 +112,14 @@ class QdrantDB(VectorStore):
             ),
         )
         scores = [match.score for match in search_result]
-        docs = [Document(**(match.payload)) for match in search_result]
+        docs = [
+            Document(**(match.payload))  # type: ignore
+            for match in search_result
+            if match is not None
+        ]
+        if len(docs) == 0:
+            logger.warning(f"No matches found for {text}")
+            return None
         if settings.debug:
             logger.info(f"Found {len(docs)} matches, max score: {max(scores)}")
         doc_score_pairs = list(zip(docs, scores))

@@ -1,25 +1,28 @@
-from pydantic import BaseSettings, BaseModel
+import asyncio
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import List, Tuple, Union, Dict
-from llmagent.mytypes import Document
+from typing import Any, Dict, List, Optional, Tuple, Union
+
+import aiohttp
+from pydantic import BaseModel, BaseSettings
+
 from llmagent.cachedb.redis_cachedb import RedisCacheConfig
-from llmagent.utils.configuration import settings
-from llmagent.utils.output.printing import show_if_debug
+from llmagent.mytypes import Document
+from llmagent.prompts.dialog import collate_chat_history
 from llmagent.prompts.templates import (
     EXTRACTION_PROMPT_GPT4,
     SUMMARY_ANSWER_PROMPT_GPT4,
 )
-from llmagent.prompts.dialog import collate_chat_history
-import aiohttp
-import asyncio
+from llmagent.utils.configuration import settings
+from llmagent.utils.output.printing import show_if_debug
 
 
 class LLMConfig(BaseSettings):
     type: str = "openai"
-    chat_model: str = None
-    completion_model: str = None
-    context_length: Dict[str, int] = None
+    timeout: int = 20  # timeout for API requests
+    chat_model: Optional[str] = None
+    completion_model: Optional[str] = None
+    context_length: Optional[Dict[str, int]] = None
     max_output_tokens: int = 1024  # generate at most this many tokens
     # if input length + max_output_tokens > context length of model,
     # we will try shortening requested output
@@ -49,7 +52,7 @@ class LLMMessage(BaseModel):
     name: str = "xyz"
     content: str
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.role} ({self.name}): {self.content}"
 
 
@@ -63,7 +66,7 @@ class LanguageModel(ABC):
         self.config = config
 
     @staticmethod
-    def create(config: LLMConfig):
+    def create(config: LLMConfig) -> "LanguageModel":
         """
         Create a language model.
         Args:
@@ -75,7 +78,7 @@ class LanguageModel(ABC):
         cls = dict(
             openai=OpenAIGPT,
         ).get(config.type, OpenAIGPT)
-        return cls(config)
+        return cls(config)  # type: ignore
 
     @abstractmethod
     def set_stream(self, stream: bool) -> bool:
@@ -93,6 +96,10 @@ class LanguageModel(ABC):
         pass
 
     @abstractmethod
+    async def agenerate(self, prompt: str, max_tokens: int) -> LLMResponse:
+        pass
+
+    @abstractmethod
     def chat(
         self, messages: Union[str, List[LLMMessage]], max_tokens: int
     ) -> LLMResponse:
@@ -102,13 +109,21 @@ class LanguageModel(ABC):
         return self.generate(prompt, max_tokens)
 
     def chat_context_length(self) -> int:
+        if self.config.chat_model is None:
+            raise ValueError("No chat model specified")
+        if self.config.context_length is None:
+            raise ValueError("No context length  specified")
         return self.config.context_length[self.config.chat_model]
 
     def completion_context_length(self) -> int:
+        if self.config.completion_model is None:
+            raise ValueError("No completion model specified")
+        if self.config.context_length is None:
+            raise ValueError("No context length  specified")
         return self.config.context_length[self.config.completion_model]
 
     def followup_to_standalone(
-        self, chat_history: List[Tuple[str]], question: str
+        self, chat_history: List[Tuple[str, str]], question: str
     ) -> str:
         """
         Given a chat history and a question, convert it to a standalone question.
@@ -152,7 +167,7 @@ class LanguageModel(ABC):
         self,
         question: str,
         passages: List[Document],
-    ) -> List[str]:
+    ) -> List[Document]:
         async with aiohttp.ClientSession():
             verbatim_extracts = await asyncio.gather(
                 *(self.get_verbatim_extract_async(question, P) for P in passages)
@@ -194,23 +209,24 @@ class LanguageModel(ABC):
 
         """
 
-        # Define an auxiliary function to transform the list of passages into a single string
-        def stringify_passages(passages):
+        # Define an auxiliary function to transform the list of
+        # passages into a single string
+        def stringify_passages(passages: List[Document]) -> str:
             return "\n".join(
                 [
                     f"""
                 Extract: {p.content}
-                Source: {p.metadata["source"]}
+                Source: {p.metadata.source}
                 """
                     for p in passages
                 ]
             )
 
-        passages = stringify_passages(passages)
+        passages_str = stringify_passages(passages)
         # Substitute Q and P into the templatized prompt
 
         final_prompt = SUMMARY_ANSWER_PROMPT_GPT4.format(
-            question=f"Question:{question}", extracts=passages
+            question=f"Question:{question}", extracts=passages_str
         )
         show_if_debug(final_prompt, "SUMMARIZE_PROMPT= ")
         # Generate the final verbatim extract based on the final prompt
@@ -238,8 +254,8 @@ class StreamingIfAllowed:
         self.llm = llm
         self.stream = stream
 
-    def __enter__(self):
+    def __enter__(self) -> None:
         self.old_stream = self.llm.set_stream(settings.stream and self.stream)
 
-    def __exit__(self, exc_type, exc_val, exc_tb):
+    def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         self.llm.set_stream(self.old_stream)

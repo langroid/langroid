@@ -1,27 +1,31 @@
-from llmagent.mytypes import Document, DocMetaData
-import logging
-from github import Github, ContentFile
-from dotenv import load_dotenv
-import os
-from pathlib import Path
-from typing import List, Union, Dict, Tuple
 import itertools
-from pydantic import BaseSettings
-from collections import deque
+import json
+import logging
+import os
 import subprocess
 import tempfile
 import time
-import json
+from collections import deque
+from pathlib import Path
+from typing import Any, Dict, List, Optional, Tuple, Union
 from urllib.parse import urlparse
+
+from dotenv import load_dotenv
+from github import Github
+from github.ContentFile import ContentFile
+from github.Repository import Repository
+from pydantic import BaseSettings
+
+from llmagent.mytypes import DocMetaData, Document
 
 logger = logging.getLogger(__name__)
 
 
 def _get_decoded_content(content_file: ContentFile) -> str:
     if content_file.encoding == "base64":
-        return content_file.decoded_content.decode("utf-8")
+        return content_file.decoded_content.decode("utf-8") or ""
     elif content_file.encoding == "none":
-        return content_file.content
+        return content_file.content or ""
     else:
         raise ValueError(f"Unsupported encoding: {content_file.encoding}")
 
@@ -82,7 +86,7 @@ class RepoLoader:
         """
         self.url = url
         self.config = config
-        self.clone_path = None
+        self.clone_path: Optional[str] = None
         self.log_file = ".logs/repo_loader/download_log.json"
         os.makedirs(os.path.dirname(self.log_file), exist_ok=True)
         if not os.path.exists(self.log_file):
@@ -105,7 +109,9 @@ class RepoLoader:
         self.repo = self._get_repo_with_retry(g, repo_name)
 
     @staticmethod
-    def _get_repo_with_retry(g: Github, repo_name: str, max_retries: int = 5):
+    def _get_repo_with_retry(
+        g: Github, repo_name: str, max_retries: int = 5
+    ) -> Repository:
         """
         Get a repo from the GitHub API, retrying if the request fails,
         with exponential backoff.
@@ -185,10 +191,10 @@ class RepoLoader:
         else:
             return False
 
-    def default_clone_path(self):
+    def default_clone_path(self) -> str:
         return tempfile.mkdtemp(suffix=self._get_dir_name())
 
-    def clone(self, path: str = None) -> None:
+    def clone(self, path: Optional[str] = None) -> Optional[str]:
         """
         Clone a GitHub repository to a local directory specified by `path`,
         if it has not already been cloned.
@@ -196,9 +202,12 @@ class RepoLoader:
         Args:
             path (str): The local directory where the repository should be cloned.
                 If not specified, a temporary directory will be created.
+
+        Returns:
+            str: The path to the local directory where the repository was cloned.
         """
         with open(self.log_file, "r") as f:
-            log = json.load(f)
+            log: Dict[str, str] = json.load(f)
 
         if self.url in log and os.path.exists(log[self.url]):
             logger.warning(f"Repo Already downloaded in {log[self.url]}")
@@ -221,9 +230,11 @@ class RepoLoader:
         except Exception as e:
             logger.error(f"An error occurred while trying to clone the repository:{e}")
 
+        return self.clone_path
+
     def load_tree_from_github(
         self, depth: int, lines: int = 0
-    ) -> Dict[str, Union[str, List[Dict]]]:
+    ) -> Dict[str, Union[str, List[Dict[str, Any]]]]:
         """
         Get a nested dictionary of GitHub repository file and directory names
         up to a certain depth, with file contents.
@@ -237,6 +248,8 @@ class RepoLoader:
             A dictionary containing file and directory names, with file contents.
         """
         root_contents = self.repo.get_contents("")
+        if not isinstance(root_contents, list):
+            root_contents = [root_contents]
         repo_structure = {
             "type": "dir",
             "name": "",
@@ -264,9 +277,12 @@ class RepoLoader:
                         "path": content.path,
                     }
                     parent_structure["dirs"].append(new_dir)
+                    contents = self.repo.get_contents(content.path)
+                    if not isinstance(contents, list):
+                        contents = [contents]
                     queue.append(
                         (
-                            self.repo.get_contents(content.path),
+                            contents,
                             current_depth + 1,
                             new_dir,
                         )
@@ -287,10 +303,10 @@ class RepoLoader:
 
     def load(
         self,
-        path: str = None,
+        path: Optional[str] = None,
         depth: int = 3,
         lines: int = 0,
-    ) -> Tuple[Dict[str, Union[str, List[Dict]]], List[Document]]:
+    ) -> Tuple[Dict[str, Union[str, List[Dict[str, Any]]]], List[Document]]:
         """
         From a local folder `path` (if None, the repo clone path), get:
           a nested dictionary (tree) of dicts, files and contents
@@ -310,6 +326,8 @@ class RepoLoader:
             if self.clone_path is None:
                 self.clone()
             path = self.clone_path
+        if path is None:
+            raise ValueError("Unable to clone repo")
         return self.load_from_folder(
             path=path,
             depth=depth,
@@ -324,10 +342,10 @@ class RepoLoader:
         path: str,
         depth: int = 3,
         lines: int = 0,
-        file_types: List[str] = None,
-        exclude_dirs: List[str] = None,
+        file_types: Optional[List[str]] = None,
+        exclude_dirs: Optional[List[str]] = None,
         url: str = "",
-    ) -> Tuple[Dict[str, Union[str, List[Dict]]], List[Document]]:
+    ) -> Tuple[Dict[str, Union[str, List[Dict[str, Any]]]], List[Document]]:
         """
         From a local folder `path` (required), get:
           a nested dictionary (tree) of dicts, files and contents, restricting to
@@ -419,17 +437,18 @@ class RepoLoader:
     @staticmethod
     def get_documents(
         path: str,
-        file_types: List[str] = None,
-        exclude_dirs: List[str] = None,
+        file_types: Optional[List[str]] = None,
+        exclude_dirs: Optional[List[str]] = None,
         depth: int = -1,
-        lines: int = None,
+        lines: Optional[int] = None,
     ) -> List[Document]:
         """
         Recursively get all files under a path as Document objects.
 
         Args:
             path (str): The path to the directory or file.
-            file_types (List[str], optional): List of file extensions to include.
+            file_types (List[str], optional): List of file extensions OR
+                filenames OR file_path_names to  include.
                 Defaults to None, which includes all files.
             exclude_dirs (List[str], optional): List of directories to exclude.
                 Defaults to None, which includes all directories.
@@ -447,7 +466,7 @@ class RepoLoader:
         path_obj = Path(path).resolve()
 
         if path_obj.is_file():
-            file_paths.append(path_obj)
+            file_paths.append(str(path_obj))
         else:
             path_depth = len(path_obj.parts)
             for root, dirs, files in os.walk(path):
@@ -458,10 +477,12 @@ class RepoLoader:
                 current_depth = len(Path(root).resolve().parts) - path_depth
                 if depth == -1 or current_depth <= depth:
                     for file in files:
-                        file_path = Path(root) / file
+                        file_path = str(Path(root) / file)
                         if (
-                            not file_types
+                            file_types is None
                             or RepoLoader._file_type(file_path) in file_types
+                            or os.path.basename(file_path) in file_types
+                            or file_path in file_types
                         ):
                             file_paths.append(file_path)
 
@@ -479,7 +500,10 @@ class RepoLoader:
         return docs
 
     def load_docs_from_github(
-        self, k: int = None, depth: int = None, lines: int = None
+        self,
+        k: Optional[int] = None,
+        depth: Optional[int] = None,
+        lines: Optional[int] = None,
     ) -> List[Document]:
         """
         Directly from GitHub, recursively get all files in a repo that have one of the
@@ -496,6 +520,8 @@ class RepoLoader:
             and `metadata` has fields `url`, `filename`, `extension`, `language`
         """
         contents = self.repo.get_contents("")
+        if not isinstance(contents, list):
+            contents = [contents]
         stack = list(zip(contents, [0] * len(contents)))  # stack of (content, depth)
         # recursively get all files in repo that have one of the extensions
         docs = []
@@ -510,13 +536,16 @@ class RepoLoader:
             if file_content.type == "dir":
                 if depth is None or d <= depth:
                     items = self.repo.get_contents(file_content.path)
+                    if not isinstance(items, list):
+                        items = [items]
                     stack.extend(list(zip(items, [d + 1] * len(items))))
             else:
                 if depth is None or d <= depth:
                     # need to decode the file content, which is in bytes
-                    text = _get_decoded_content(
-                        self.repo.get_contents(file_content.path)
-                    )
+                    contents = self.repo.get_contents(file_content.path)
+                    if isinstance(contents, list):
+                        contents = contents[0]
+                    text = _get_decoded_content(contents)
                     if lines is not None:
                         text = "\n".join(text.split("\n")[:lines])
                     i += 1
@@ -543,10 +572,10 @@ class RepoLoader:
 
     @staticmethod
     def select(
-        structure: Dict[str, Union[str, List[Dict]]],
+        structure: Dict[str, Union[str, List[Dict[str, Any]]]],
         includes: List[str],
         excludes: List[str] = [],
-    ) -> Dict[str, Union[str, List[Dict]]]:
+    ) -> Dict[str, Union[str, List[Dict[str, Any]]]]:
         """
         Filter a structure dictionary for certain directories and files.
 
@@ -637,7 +666,31 @@ class RepoLoader:
         return names
 
     @staticmethod
-    def show_file_contents(tree: Dict[str, Union[str, List[Dict]]]):
+    def list_files(dir: str, depth: int = 1) -> List[str]:
+        """
+        Recursively list all files in a directory, up to a certain depth.
+
+        Args:
+            dir (str): The directory path.
+            depth (int, optional): The depth level. Defaults to 1.
+        Returns:
+            List[str]: A list of file names.
+        """
+        depth = depth if depth >= 0 else 200
+        output = []
+
+        for root, dirs, files in os.walk(dir):
+            if root.count(os.sep) - dir.count(os.sep) < depth:
+                level = root.count(os.sep) - dir.count(os.sep)
+                indent = " " * 4 * level
+                output.append("{}{}/".format(indent, os.path.basename(root)))
+                sub_indent = " " * 4 * (level + 1)
+                for f in files:
+                    output.append("{}{}".format(sub_indent, f))
+        return output
+
+    @staticmethod
+    def show_file_contents(tree: Dict[str, Union[str, List[Dict[str, Any]]]]) -> str:
         """
         Print the contents of all files from a structure dictionary.
 

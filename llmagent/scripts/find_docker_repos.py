@@ -1,11 +1,16 @@
-from github import Github
+import csv
+import os
+from typing import List, Optional
+
 import fire
 from dotenv import load_dotenv
-import os
-import csv
+from github import Github
+from github.Repository import Repository
 
 
-def find_docker_repos(stars: int = 10000, k: int = 10, out: str = None):
+def find_docker_repos(
+    stars: int = 10000, k: int = 10, out: Optional[str] = None
+) -> None:
     load_dotenv()
     access_token = os.getenv("GITHUB_ACCESS_TOKEN")
     g = Github(access_token)
@@ -17,7 +22,7 @@ def find_docker_repos(stars: int = 10000, k: int = 10, out: str = None):
     repositories = g.search_repositories(query=query)
 
     # Filter repositories with Dockerfile in the root directory
-    filtered_repos = []
+    filtered_repos: List[Repository] = []
 
     for repo in repositories:
         if len(filtered_repos) >= k:
@@ -25,7 +30,11 @@ def find_docker_repos(stars: int = 10000, k: int = 10, out: str = None):
 
         try:
             dockerfile = repo.get_contents("Dockerfile")
+            if isinstance(dockerfile, list):
+                dockerfile = dockerfile[0]
             readme = repo.get_contents("README.md")
+            if isinstance(readme, list):
+                readme = readme[0]
             if dockerfile and dockerfile.type == "file":
                 if readme and readme.type == "file":
                     # restrict to repos where the readme mentions docker
@@ -36,7 +45,7 @@ def find_docker_repos(stars: int = 10000, k: int = 10, out: str = None):
 
     # Print the filtered repository names and URLs
     c = 0
-    save_repos_to_csv = []
+    save_repos_to_csv: List[List[object]] = []
     for repo in filtered_repos:
         print(f"{c}, {repo.name}, {repo.html_url}, {repo.stargazers_count}")
         row = [c, repo.name, repo.html_url, repo.stargazers_count]
@@ -51,8 +60,8 @@ def find_docker_repos(stars: int = 10000, k: int = 10, out: str = None):
             csvwriter.writerow(["No.", "Repo_name", "URL", "Stars"])
 
             # writing each repo as a separate row in the csv
-            for repo in save_repos_to_csv:
-                csvwriter.writerow(repo)
+            for repo_row in save_repos_to_csv:
+                csvwriter.writerow(repo_row)
 
 
 if __name__ == "__main__":

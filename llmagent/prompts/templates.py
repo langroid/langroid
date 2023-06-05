@@ -47,13 +47,13 @@ EXTRACTION_PROMPT = """
 
 SUMMARY_ANSWER_PROMPT_GPT4 = """
 
-        Use the provided extracts (with sources)  to answer the question. If there's not 
-        enough information, respond with "I don't know." Use only the information in 
-        these extracts, even if your answer is factually incorrect, and even if the 
-        answer contradicts other parts of the document. The only important thing is 
-        that your answer is consistent with and supported by the extracts. Compose 
-        your complete answer and cite all supporting sources on a separate separate 
-        line as "SOURCE:". 
+        Use the provided extracts (with sources)  to answer the question. 
+        If there's not enough information, respond with "I don't know." Use only the 
+        information in these extracts, even if your answer is factually incorrect, 
+        and even if the answer contradicts other parts of the document. The only 
+        important thing is that your answer is consistent with and supported by the 
+        extracts. Compose your complete answer and cite all supporting sources on a 
+        separate separate line as "SOURCE:". 
         
         {extracts}
         
@@ -83,8 +83,8 @@ ANSWER_PROMPT_USE_HISTORY_GPT4 = """
 
 
 SUMMARY_ANSWER_PROMPT = """
-        Use the provided extracts (with sources)  to answer the question. If there's not 
-        enough information, respond with "I don't know."
+        Use the provided extracts (with sources)  to answer the question. 
+        If there's not enough information, respond with "I don't know."
         Use only the information in these extracts, even if it contradicts your prior 
         knowledge. Justify your answer by citing your sources, as in these examples:
         
@@ -97,13 +97,16 @@ SUMMARY_ANSWER_PROMPT = """
         SOURCE: https://en.wikipedia.org/wiki/Tree
         TEXT: The tree species in the garden include oak, maple, and birch.
         
-        Extract: The experiment involved three groups: control, low dose, and high dose.
+        Extract: The experiment involved three groups: control, low dose, and high 
+        dose. 
         Source: https://en.wikipedia.org/wiki/Experiment
         Extract: The high dose group showed significant improvement in symptoms.
         Source: https://en.wikipedia.org/wiki/Experiment
-        Extract: The control group did not receive any treatment and served as a baseline.
+        Extract: The control group did not receive any 
+        treatment and served as a baseline.
         Source: https://en.wikipedia.org/wiki/Experiment
-        Question: How many groups were involved which group showed significant improvement?
+        Question: How many groups were involved which group showed significant 
+        improvement? 
         Answer: There were three groups and the high dose group showed significant 
         improvement in symptoms.
         SOURCE: https://en.wikipedia.org/wiki/Experiment

@@ -1,9 +1,10 @@
 import re
 from typing import Callable, List
+
 from bs4 import BeautifulSoup
 
 
-def custom_sent_tokenize(text):
+def custom_sent_tokenize(text: str) -> List[str]:
     sentences = [
         sentence.strip()
         for sentence in re.split(r"\.\s|\.\n", text)
@@ -18,7 +19,7 @@ def create_chunks(
 ) -> List[str]:
     def _chunk_sentences(sentences: List[str], chunk_size: int) -> List[str]:
         chunks = []
-        current_chunk = []
+        current_chunk: List[str] = []
         current_chunk_length = 0
 
         for sentence in sentences:

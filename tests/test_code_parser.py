@@ -1,5 +1,5 @@
-from llmagent.parsing.code_parser import CodeParsingConfig, CodeParser
-from llmagent.mytypes import Document, DocMetaData
+from llmagent.mytypes import DocMetaData, Document
+from llmagent.parsing.code_parser import CodeParser, CodeParsingConfig
 
 MAX_CHUNK_SIZE = 10
 

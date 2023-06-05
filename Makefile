@@ -1,22 +1,35 @@
-.PHONY: check
+.PHONY: setup check lint tests docs nodocs loc
+
+SHELL := /bin/bash
+
+.PHONY: setup update
+
+setup: ## Setup the git pre-commit hooks
+	poetry run pre-commit install
+
+update: ## Update the git pre-commit hooks
+	pre-commit autoupdate
 
 check:
+	@poetry run pre-commit install
+	@poetry run pre-commit autoupdate
+	@poetry run pre-commit run --all-files
 	@echo "Running black..."
 	@black --check .
 	@echo "Running flake8 on git-tracked files ONLY! ..."
 	@git ls-files | grep '\.py$$' | xargs flake8 --exclude=.git,__pycache__,.venv
-	@if false; then \
-		echo "Running mypy..."; \
-		mypy -p llmagent; \
-	fi
+	@poetry run ruff .
+	@echo "Running mypy...";
+	@poetry run mypy -p llmagent
 	@echo "All checks passed!"
 
-.PHONY: tests
+lint:
+	black .
+	poetry run ruff . --fix
 
 tests:
 	pytest tests/
 
-.PHONY: docs nodocs
 
 docs:
 	@# Kill any existing 'mkdocs serve' processes.
@@ -33,8 +46,6 @@ nodocs:
 	@pkill -f "mkdocs serve" 2>/dev/null || echo "No 'mkdocs serve' process found."
 	@echo "Stopped serving documentation."
 
-
-.PHONY: loc
 
 loc:
 	@echo "Lines of python code in git-tracked files:"

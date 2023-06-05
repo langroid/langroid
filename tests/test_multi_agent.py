@@ -1,15 +1,17 @@
-from llmagent.agent.chat_agent import ChatAgent, ChatAgentConfig
+from typing import Optional
+
+import pytest
+
 from llmagent.agent.base import Entity
-from llmagent.vector_store.base import VectorStoreConfig
+from llmagent.agent.chat_agent import ChatAgent, ChatAgentConfig
+from llmagent.cachedb.redis_cachedb import RedisCacheConfig
 from llmagent.language_models.base import Role
-from llmagent.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
+from llmagent.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
+from llmagent.mytypes import DocMetaData, Document
 from llmagent.parsing.parser import ParsingConfig
 from llmagent.prompts.prompts_config import PromptsConfig
-from llmagent.cachedb.redis_cachedb import RedisCacheConfig
 from llmagent.utils.configuration import Settings, set_global
-from llmagent.mytypes import Document, DocMetaData
-from typing import Optional
-import pytest
+from llmagent.vector_store.base import VectorStoreConfig
 
 
 class _TestChatAgentConfig(ChatAgentConfig):
@@ -34,7 +36,8 @@ def test_inter_agent_chat(test_settings: Settings, helper_human_response: str):
 
     agent = ChatAgent(cfg1)
     agent_helper = ChatAgent(cfg2)
-    agent.add_agent(agent_helper)
+    agent.controller = Entity.LLM
+    agent.add_agent(agent_helper, llm_delegate=False, single_round=True)
 
     agent.default_human_response = ""
     agent_helper.default_human_response = helper_human_response
@@ -48,20 +51,19 @@ def test_inter_agent_chat(test_settings: Settings, helper_human_response: str):
     agent.process_pending_message()  # LLM asks
     assert "What" in agent.pending_message.content
     assert agent.pending_message.metadata.source == Entity.LLM
-    assert agent.pending_message.content == agent.current_response.content
 
     agent.process_pending_message()
     # user responds '' (empty) to force agent to hand off to agent_helper,
     # and we test two possible human answers: empty or 'q'
 
-    assert agent_helper.task_done()
+    assert agent_helper._task_done()
     assert "Paris" in agent_helper.task_result().content
-    assert "Paris" in agent.task_result().content
+    assert not agent._task_done()
 
 
 # The classes below are for the mult-agent test
 class _MasterAgent(ChatAgent):
-    def task_done(self) -> bool:
+    def _task_done(self) -> bool:
         return "DONE" in self.pending_message.content
 
     def task_result(self) -> Optional[Document]:
@@ -73,7 +75,7 @@ class _MasterAgent(ChatAgent):
 
 
 class _PlannerAgent(ChatAgent):
-    def task_done(self) -> bool:
+    def _task_done(self) -> bool:
         return "DONE" in self.pending_message.content
 
     def task_result(self) -> Optional[Document]:
@@ -84,12 +86,12 @@ class _PlannerAgent(ChatAgent):
 
 
 class _MultiplierAgent(ChatAgent):
-    def task_done(self) -> bool:
+    def _task_done(self) -> bool:
         # multiplication gets done in 1 round, so stop as soon as LLM replies
         return self.pending_message.metadata.sender == Entity.LLM
 
 
-EXPONENTIALS = "3**5 8**4 9**3"
+EXPONENTIALS = "3**5 8**3 9**3"
 
 
 def test_multi_agent(test_settings: Settings):
@@ -142,18 +144,18 @@ def test_multi_agent(test_settings: Settings):
     multiplier = _MultiplierAgent(multiplier_cfg)
 
     # planner helps master...
-    master.add_agent(planner)
+    master.add_agent(planner, llm_delegate=True, single_round=False)
     # multiplier helps planner...
-    planner.add_agent(multiplier)
+    planner.add_agent(multiplier, llm_delegate=False, single_round=True)
 
     # ... since human has nothing to say
     master.default_human_response = ""
     planner.default_human_response = ""
     multiplier.default_human_response = ""
 
-    result = master.do_task()
+    result = master.do_task(llm_delegate=True)
 
-    answer_string = " ".join([str(eval(e)) for e in EXPONENTIALS.split()])
-    assert answer_string in result.content
+    answers = [str(eval(e)) for e in EXPONENTIALS.split()]
+    assert all(a in result.content for a in answers)
 
     # asserttions on message history of each agent

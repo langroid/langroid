@@ -1,5 +1,5 @@
-import shutil
 import logging
+import shutil
 
 logger = logging.getLogger(__name__)
 
@@ -9,11 +9,11 @@ DELETION_ALLOWED_PATHS = [
 ]
 
 
-def rmdir(path) -> bool:
+def rmdir(path: str) -> bool:
     """
     Remove a directory recursively.
     Args:
-        path: path to directory to remove
+        path (str): path to directory to remove
     Returns:
         True if a dir was removed, false otherwise. Raises error if failed to remove.
     """

@@ -7,10 +7,10 @@ an agent. The messages could represent, for example:
 """
 
 from abc import ABC, abstractmethod
-from pydantic import BaseModel
-from typing import List
 from random import choice
+from typing import Any, Dict, List
 
+from pydantic import BaseModel
 
 INSTRUCTION = """
     When one of these tools is applicable, you must express your request in 
@@ -76,7 +76,7 @@ class AgentMessage(ABC, BaseModel):
     result: str
 
     class Config:
-        arbitrary_types_allowed = True
+        arbitrary_types_allowed = False
         validate_all = True
         validate_assignment = True
 
@@ -99,8 +99,8 @@ class AgentMessage(ABC, BaseModel):
         ex = choice(self.examples())
         return ex.json_example()
 
-    def json_example(self):
+    def json_example(self) -> str:
         return self.json(indent=4, exclude={"result", "purpose"})
 
-    def dict_example(self):
+    def dict_example(self) -> Dict[str, Any]:
         return self.dict(exclude={"result", "purpose"})

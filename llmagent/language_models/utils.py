@@ -1,10 +1,13 @@
 # from openai-cookbook
+import asyncio
+import logging
 import random
 import time
+from typing import Any, Callable, Dict, List
+
 import aiohttp
-import asyncio
 import openai
-import logging
+import requests
 
 logger = logging.getLogger(__name__)
 # setlevel to warning
@@ -13,12 +16,13 @@ logger.setLevel(logging.WARNING)
 
 # define a retry decorator
 def retry_with_exponential_backoff(
-    func,
+    func: Callable[..., Any],
     initial_delay: float = 1,
     exponential_base: float = 2,
     jitter: bool = True,
     max_retries: int = 10,
-    errors: tuple = (
+    errors: tuple = (  # type: ignore
+        requests.exceptions.RequestException,
         openai.error.Timeout,
         openai.error.RateLimitError,
         openai.error.APIError,
@@ -27,15 +31,15 @@ def retry_with_exponential_backoff(
         aiohttp.ServerTimeoutError,
         asyncio.TimeoutError,
     ),
-):
+) -> Callable[..., Any]:
     """Retry a function with exponential backoff."""
 
-    def wrapper(*args, **kwargs):
+    def wrapper(*args: List[Any], **kwargs: Dict[Any, Any]) -> Any:
         # Initialize variables
         num_retries = 0
         delay = initial_delay
 
-        # Loop until a successful response or max_retries is hit or an exception is raised
+        # Loop until a successful response or max_retries is hit or exception is raised
         while True:
             try:
                 return func(*args, **kwargs)
@@ -75,12 +79,12 @@ def retry_with_exponential_backoff(
 
 
 def async_retry_with_exponential_backoff(
-    func,
+    func: Callable[..., Any],
     initial_delay: float = 1,
     exponential_base: float = 2,
     jitter: bool = True,
     max_retries: int = 10,
-    errors: tuple = (
+    errors: tuple = (  # type: ignore
         openai.error.Timeout,
         openai.error.RateLimitError,
         openai.error.APIError,
@@ -89,15 +93,15 @@ def async_retry_with_exponential_backoff(
         aiohttp.ServerTimeoutError,
         asyncio.TimeoutError,
     ),
-):
+) -> Callable[..., Any]:
     """Retry a function with exponential backoff."""
 
-    async def wrapper(*args, **kwargs):
+    async def wrapper(*args: List[Any], **kwargs: Dict[Any, Any]) -> Any:
         # Initialize variables
         num_retries = 0
         delay = initial_delay
 
-        # Loop until a successful response or max_retries is hit or an exception is raised
+        # Loop until a successful response or max_retries is hit or exception is raised
         while True:
             try:
                 result = await func(*args, **kwargs)

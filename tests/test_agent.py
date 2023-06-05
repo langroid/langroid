@@ -1,11 +1,11 @@
 from llmagent.agent.base import Agent, AgentConfig
-from llmagent.language_models.base import StreamingIfAllowed
 from llmagent.cachedb.redis_cachedb import RedisCacheConfig
-from llmagent.vector_store.base import VectorStoreConfig
-from llmagent.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
+from llmagent.language_models.base import StreamingIfAllowed
+from llmagent.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
 from llmagent.parsing.parser import ParsingConfig
 from llmagent.prompts.prompts_config import PromptsConfig
 from llmagent.utils.configuration import Settings, set_global
+from llmagent.vector_store.base import VectorStoreConfig
 
 
 class CustomAgentConfig(AgentConfig):

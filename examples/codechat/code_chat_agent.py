@@ -10,16 +10,22 @@ from llmagent.parsing.code_parser import CodeParsingConfig
 from llmagent.prompts.prompts_config import PromptsConfig
 from llmagent.prompts.templates import ANSWER_PROMPT_USE_HISTORY_GPT4
 from llmagent.mytypes import Document, DocMetaData
-
+from examples.codechat.code_chat_tools import (
+    ShowFileContentsMessage,
+    ShowDirContentsMessage,
+)
+from examples.dockerchat.dockerchat_agent_messages import RunPythonMessage
+import logging
 import os
 from rich import print
 from rich.console import Console
 
+logger = logging.getLogger(__name__)
 console = Console()
 
 
 DEFAULT_CODE_CHAT_INSTRUCTIONS = """
-Your task is to answer questions about a code repository. You will be given directly 
+Your task is to answer questions about a code repository. You will be given directlory 
 listings, text and code from various files in the repository. You must answer based 
 on the information given to you. If you are asked to see if there is a certain file 
 in the repository, and it does not occur in the listings you are shown, then you can 
@@ -98,10 +104,13 @@ class CodeChatAgent(DocChatAgent):
     def __init__(self, config: CodeChatAgentConfig):
         super().__init__(config)
         self.original_docs: List[Document] = None
-        repo_loader = RepoLoader(self.config.repo_url, config=RepoLoaderConfig())
 
-        repo_tree, _ = repo_loader.load(depth=1, lines=20)
-        repo_listing = "\n".join(repo_loader.ls(repo_tree, depth=1))
+        self.repo_loader = RepoLoader(self.config.repo_url, RepoLoaderConfig())
+        self.repo_path = self.repo_loader.clone()
+        # get the repo tree to depth d, with first k lines of each file
+        self.repo_tree, _ = self.repo_loader.load(depth=1, lines=100)
+        repo_listing_shown = "\n".join(self.repo_loader.ls(self.repo_tree, depth=1))
+        self.repo_listing = self.repo_loader.ls(self.repo_tree, depth=2)
 
         repo_info_message = f"""
         Here is some information about the code repository that you can use, 
@@ -109,12 +118,12 @@ class CodeChatAgent(DocChatAgent):
         this info if needed.
         
         Here is a listing of the files and directories at the root of the repo:
-        {repo_listing}
+        {repo_listing_shown}
         """
 
         self.add_user_message(repo_info_message)
 
-        dct, documents = repo_loader.load(depth=2, lines=100)
+        dct, documents = self.repo_loader.load(depth=2, lines=100)
         listing = (
             [
                 """
@@ -123,7 +132,7 @@ class CodeChatAgent(DocChatAgent):
                       it is not in the repo!
                       """
             ]
-            + repo_loader.ls(dct, depth=1)
+            + RepoLoader.ls(dct, depth=1)
         )
         listing = Document(
             content="\n".join(listing),
@@ -153,3 +162,35 @@ class CodeChatAgent(DocChatAgent):
         {self.config.repo_url}
         """.strip()
         )
+
+    def show_file_contents(self, msg: ShowFileContentsMessage) -> str:
+        """
+        Show the contents of a file in the repo.
+        """
+        filepath = msg.filepath
+        try:
+            docs = RepoLoader.get_documents(
+                path=self.repo_path,
+                file_types=[filepath, os.path.basename(filepath)],
+                depth=3,
+                lines=100,  # show max 100 lines to keep prompt small
+            )
+            return docs[0].content
+        except Exception as e:
+            logger.error(f"Error loading file {filepath}: {e}")
+            return
+
+    def show_dir_contents(self, msg: ShowDirContentsMessage) -> str:
+        listing = RepoLoader.list_files(msg.dir, depth=1)
+        return ", ".join(listing)
+
+    def run_python(self, msg: RunPythonMessage) -> str:
+        # TODO: to be implemented. Return dummy msg for now
+        logger.error(
+            f"""
+        This is a placeholder for the run_python method.
+        Here is the code:
+        {msg.code}
+        """
+        )
+        return "No results, please continue asking your questions."

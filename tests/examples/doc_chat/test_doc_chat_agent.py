@@ -133,7 +133,7 @@ def test_doc_chat_process(test_settings: Settings):
         agent.default_human_response = q
         agent.process_pending_message()  # user asks `q`
         agent.process_pending_message()  # LLM answers
-        ans = agent.current_response.content
+        ans = agent.pending_message.content
         expected = [e.strip() for e in expected.split(",")]
         assert all([e in ans for e in expected])
-        assert agent.current_response.metadata.sender == Entity.LLM
+        assert agent.pending_message.metadata.sender == Entity.LLM

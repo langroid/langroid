@@ -1,14 +1,15 @@
+import logging
+import os
+import urllib.parse
+from typing import List, Optional, Set, Tuple
+from urllib.parse import urljoin
+
 import fire
 import requests
 from bs4 import BeautifulSoup
-import os
-import urllib.parse
-from urllib.parse import urljoin
+from pydantic import BaseModel, HttpUrl, ValidationError, parse_obj_as
 from rich import print
 from rich.prompt import Prompt
-from typing import List, Tuple
-from pydantic import HttpUrl, ValidationError, BaseModel
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -28,8 +29,8 @@ def get_user_input(msg: str, color: str = "blue") -> str:
 
 
 def get_list_from_user(
-    prompt="Enter input (type 'done' or hit return to finish)",
-    n=None,
+    prompt: str = "Enter input (type 'done' or hit return to finish)",
+    n: Optional[int] = None,
 ) -> List[str]:
     """
     Prompt the user for inputs.
@@ -75,8 +76,8 @@ def get_urls_and_paths(inputs: List[str]) -> Tuple[List[str], List[str]]:
     paths = []
     for item in inputs:
         try:
-            m = Url(url=item)
-            urls.append(m.url)
+            m = Url(url=parse_obj_as(HttpUrl, item))
+            urls.append(str(m.url))
         except ValidationError:
             if os.path.exists(item):
                 paths.append(item)
@@ -86,11 +87,11 @@ def get_urls_and_paths(inputs: List[str]) -> Tuple[List[str], List[str]]:
 
 
 def find_urls(
-    url="https://en.wikipedia.org/wiki/Generative_pre-trained_transformer",
-    visited=None,
-    depth=0,
-    max_depth=2,
-):
+    url: str = "https://en.wikipedia.org/wiki/Generative_pre-trained_transformer",
+    visited: Optional[Set[str]] = None,
+    depth: int = 0,
+    max_depth: int = 2,
+) -> Set[str]:
     """
     Recursively find all URLs on a given page.
     Args:
@@ -129,7 +130,7 @@ def find_urls(
     return visited
 
 
-def org_user_from_github(url):
+def org_user_from_github(url: str) -> str:
     parsed = urllib.parse.urlparse(url)
     org, user = parsed.path.lstrip("/").split("/")
     return f"{org}-{user}"

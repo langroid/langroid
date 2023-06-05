@@ -1,16 +1,17 @@
-from llmagent.language_models.openai_gpt import (
-    OpenAIGPT,
-    OpenAIGPTConfig,
-    OpenAIChatModel,
-    OpenAICompletionModel,
-)
-from llmagent.language_models.base import LLMMessage, Role
-from llmagent.parsing.utils import generate_random_sentences
-from llmagent.parsing.parser import ParsingConfig, Parser
-from llmagent.cachedb.redis_cachedb import RedisCacheConfig
-from llmagent.utils.configuration import Settings, set_global
 import openai
 import pytest
+
+from llmagent.cachedb.redis_cachedb import RedisCacheConfig
+from llmagent.language_models.base import LLMMessage, Role
+from llmagent.language_models.openai_gpt import (
+    OpenAIChatModel,
+    OpenAICompletionModel,
+    OpenAIGPT,
+    OpenAIGPTConfig,
+)
+from llmagent.parsing.parser import Parser, ParsingConfig
+from llmagent.parsing.utils import generate_random_sentences
+from llmagent.utils.configuration import Settings, set_global
 
 # allow streaming globally, but can be turned off by individual models
 set_global(Settings(stream=True))

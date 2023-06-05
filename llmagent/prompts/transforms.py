@@ -1,10 +1,12 @@
-from llmagent.language_models.base import LanguageModel
-from llmagent.prompts.dialog import collate_chat_history
-from llmagent.mytypes import Document
-from llmagent.prompts.templates import EXTRACTION_PROMPT
-import aiohttp
 import asyncio
 from typing import List, Tuple
+
+import aiohttp
+
+from llmagent.language_models.base import LanguageModel
+from llmagent.mytypes import DocMetaData, Document
+from llmagent.prompts.dialog import collate_chat_history
+from llmagent.prompts.templates import EXTRACTION_PROMPT
 
 
 async def get_verbatim_extract_async(
@@ -20,14 +22,14 @@ async def get_verbatim_extract_async(
         final_prompt = templatized_prompt.format(question=question, content=passage)
         final_extract = await LLM.agenerate(prompt=final_prompt, max_tokens=1024)
 
-    return final_extract.strip()
+    return final_extract.message.strip()
 
 
 async def _get_verbatim_extracts(
     question: str,
     passages: List[Document],
     LLM: LanguageModel,
-) -> List[str]:
+) -> List[Document]:
     async with aiohttp.ClientSession():
         verbatim_extracts = await asyncio.gather(
             *(get_verbatim_extract_async(question, P, LLM) for P in passages)
@@ -43,7 +45,7 @@ def get_verbatim_extracts(
     question: str,
     passages: List[Document],
     LLM: LanguageModel,
-) -> List[str]:
+) -> List[Document]:
     """
     From each passage, extract verbatim text that is relevant to a question,
     using concurrent API calls to the LLM.
@@ -52,12 +54,13 @@ def get_verbatim_extracts(
         passages: list of passages from which to extract relevant verbatim text
         LLM: LanguageModel to use for generating the prompt and extract
     Returns:
-        list of verbatim extracts from passages that are relevant to question
+        list of verbatim extracts (Documents) from passages that are relevant to
+        question
     """
     return asyncio.run(_get_verbatim_extracts(question, passages, LLM))
 
 
-def generate_summarizer_prompt(question: str, texts: List[str], k: int = 1):
+def generate_summarizer_prompt(question: str, texts: List[str], k: int = 1) -> str:
     # Request for k demonstrations
     demo_request = f"""
     Please provide {k} demonstrations of synthesizing answers based on 
@@ -69,7 +72,8 @@ def generate_summarizer_prompt(question: str, texts: List[str], k: int = 1):
     # Placeholder for demonstrations
     demo_placeholder = "\n".join(
         [
-            f"Question: [Question {i}]\n-----------\nContent: [Relevant text {i}]\n-----------\nFinal Answer: [Answer {i}]\n"
+            f"Question: [Question {i}]\n-----------\n"
+            f"Content: [Relevant text {i}]\n-----------\nFinal Answer: [Answer {i}]\n"
             for i in range(1, k + 1)
         ]
     )
@@ -79,12 +83,13 @@ def generate_summarizer_prompt(question: str, texts: List[str], k: int = 1):
     content_lines = "\n".join([f"Content: {text}" for text in texts])
     actual_question_str += content_lines + "\n-----------\nFinal Answer:\n"
 
-    # Combine the request, demonstrations, and actual question to form the complete prompt
+    # Combine the request, demonstrations, and
+    # actual question to form the complete prompt
     complete_prompt = demo_request + demo_placeholder + "\n" + actual_question_str
     return complete_prompt
 
 
-def make_summarizer_demos(k):
+def make_summarizer_demos(k: int) -> str:
     # Define modified original question for LLM.generate
     # templatized_prompt = f"""
     # generate {k} few-shot demos of answering a question based on a list of
@@ -173,26 +178,27 @@ def get_summary_answer(
     """.strip()
 
     # templatized_prompt = LLM.generate(prompt=prompt, max_tokens=1024)
-    # Define an auxiliary function to transform the list of passages into a single string
-    def stringify_passages(passages):
+    # Define an auxiliary function to transform the list of
+    # passages into a single string
+    def stringify_passages(passages: List[Document]) -> str:
         return "\n".join(
             [
                 f"""
             Extract: {p.content}
-            Source: {p.metadata["source"]}
+            Source: {p.metadata.source}
             """
                 for p in passages
             ]
         )
 
-    passages = stringify_passages(passages)
+    passages_str = stringify_passages(passages)
     # Substitute Q and P into the templatized prompt
     final_prompt = templatized_prompt.format(
-        question=f"Question:{question}", extracts=passages
+        question=f"Question:{question}", extracts=passages_str
     )
 
     # Generate the final verbatim extract based on the final prompt
-    final_answer = LLM.generate(prompt=final_prompt, max_tokens=1024).strip()
+    final_answer = LLM.generate(prompt=final_prompt, max_tokens=1024).message.strip()
     parts = final_answer.split("SOURCE:", maxsplit=1)
     if len(parts) > 1:
         content = parts[0].strip()
@@ -200,11 +206,14 @@ def get_summary_answer(
     else:
         content = final_answer
         sources = ""
-    return Document(content=content, metadata={"source": "SOURCE: " + sources})
+    return Document(
+        content=content,
+        metadata=DocMetaData(source="SOURCE: " + sources),
+    )
 
 
 def followup_to_standalone(
-    LLM: LanguageModel, chat_history: List[Tuple[str]], question: str
+    LLM: LanguageModel, chat_history: List[Tuple[str, str]], question: str
 ) -> str:
     """
     Given a chat history and a question, convert it to a standalone question.
@@ -223,5 +232,5 @@ def followup_to_standalone(
     Chat history: {history}
     Follow-up question: {question} 
     """.strip()
-    standalone = LLM.generate(prompt=prompt, max_tokens=1024).strip()
+    standalone = LLM.generate(prompt=prompt, max_tokens=1024).message.strip()
     return standalone

@@ -1,6 +1,8 @@
-from llmagent.parsing.json import extract_top_level_json
 import json
+
 import pytest
+
+from llmagent.parsing.json import extract_top_level_json
 
 
 @pytest.mark.parametrize(

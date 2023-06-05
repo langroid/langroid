@@ -1,12 +1,13 @@
-from pydantic import BaseSettings
-import tiktoken
 from functools import reduce
-from llmagent.mytypes import Document
-from typing import List
+from typing import Callable, List
+
+import tiktoken
+from pydantic import BaseSettings
 from pygments import lex
-from pygments.token import Token
 from pygments.lexers import get_lexer_by_name
-from typing import Callable
+from pygments.token import Token
+
+from llmagent.mytypes import Document
 
 
 def chunk_code(
@@ -105,14 +106,14 @@ class CodeParser:
                 Document(content=chunk, metadata=d.metadata)
                 for chunk in chunk_code(
                     d.content,
-                    d.metadata.language,
+                    d.metadata.language,  # type: ignore
                     self.config.chunk_size,
                     self.num_tokens,
                 )
                 if chunk.strip() != ""
             ]
             for d in docs
-            if d.metadata.language in self.config.extensions
+            if d.metadata.language in self.config.extensions  # type: ignore
         ]
         # collapse the list of lists into a single list
         return reduce(lambda x, y: x + y, chunked_docs)

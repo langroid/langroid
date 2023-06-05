@@ -1,17 +1,19 @@
-from llmagent.vector_store.qdrantdb import QdrantDBConfig, QdrantDB
-from llmagent.vector_store.chromadb import ChromaDBConfig, ChromaDB
-from llmagent.vector_store.base import VectorStore
+import os
+from typing import Union
+
+import pytest
+from dotenv import load_dotenv
+
+from llmagent.embedding_models.base import EmbeddingModelsConfig
 from llmagent.embedding_models.models import (
     OpenAIEmbeddingsConfig,
     SentenceTransformerEmbeddingsConfig,
 )
-from llmagent.embedding_models.base import EmbeddingModelsConfig
-from llmagent.mytypes import Document, DocMetaData
+from llmagent.mytypes import DocMetaData, Document
 from llmagent.utils.system import rmdir
-from dotenv import load_dotenv
-from typing import Union
-import os
-import pytest
+from llmagent.vector_store.base import VectorStore
+from llmagent.vector_store.chromadb import ChromaDB, ChromaDBConfig
+from llmagent.vector_store.qdrantdb import QdrantDB, QdrantDBConfig
 
 load_dotenv()
 api_key = os.getenv("OPENAI_API_KEY")

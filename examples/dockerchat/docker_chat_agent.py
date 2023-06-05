@@ -1,9 +1,13 @@
-from llmagent.agent.chat_agent import ChatAgent
+from llmagent.agent.chat_agent import ChatAgent, ChatAgentConfig
 from pydantic import BaseModel, HttpUrl
 from typing import Optional, Dict, Any
 from examples.codechat.code_chat_agent import CodeChatAgentConfig, CodeChatAgent
+from examples.codechat.code_chat_tools import (
+    ShowFileContentsMessage,
+    ShowDirContentsMessage,
+)
 from examples.dockerchat.dockerchat_agent_messages import (
-    RunPython,
+    RunPythonMessage,
     AskURLMessage,
     FileExistsMessage,
     PythonVersionMessage,
@@ -38,6 +42,7 @@ DEFAULT_URL = "https://github.com/eugeneyan/testing-ml"
 # each corresponds to a method in the agent.
 
 NO_ANSWER = "I don't know"
+NONE_ANSWER = "NONE"
 
 PLANNER_INSTRUCTIONS = """
 You are a software developer and you want to create a dockerfile to container your 
@@ -47,10 +52,16 @@ code repository. However:
 You will be receiving questions from a docker expert about the code repository.
 For each MAIN question Q, you have to think step by step, and break it down into 
 small steps. For each step (since you cannot access the code repo) you have to ask me 
-a question, and I will try to answer. If I cannot, I may say "I don't know" or "NONE". 
-In that case you can try asking differently or break it down into smaller steps. 
-Once you think you have the answer to the MAIN question Q, simply say 
-"DONE: <whatever the answer is>". Then you may get another MAIN question Q, and so on.  
+a question, and I will try to answer. If I cannot, I may say "I don't know" or "NONE", 
+in that case, DO NOT MAKE UP AN ANSWER! Instead, you can try asking differently or 
+break it down into even smaller steps.  
+Only when you are SURE you have the answer to the MAIN question Q, simply say 
+"DONE: <whatever the answer is>". Then you may get another MAIN question Q, and so on.
+If you are not able to answer the MAIN question Q, simply say "I don't know", 
+and DO NOT MAKE UP AN ANSWER!
+Your only messages should be 
+(a) question for me, (b) DONE: <answer>, or (c) I don't know.
+Do you say anything else.
 """
 
 CODE_CHAT_INSTRUCTIONS = """
@@ -59,6 +70,9 @@ to help me create a dockerfile for the repository.
 Along with the question, you may be given extracts from the code repo, and you can 
 use those extracts to answer the question. If you cannot answer given the 
 information, simply say "I don't know", or say "NONE", whichever you prefer.
+For some questions, you may be able to use TOOLs to answer them; if there are tools 
+available, you will be told what they are, when to use them, and what format to 
+request the TOOL.
 """
 
 
@@ -82,7 +96,7 @@ class DockerChatAgent(ChatAgent):
             you can proceed.
             """
 
-    def run_python(self, msg: RunPython) -> str:
+    def run_python(self, msg: RunPythonMessage) -> str:
         # TODO: to be implemented. Return dummy msg for now
         logger.error(
             f"""
@@ -108,16 +122,6 @@ class DockerChatAgent(ChatAgent):
                 break
 
         self.url = url_model.url
-        code_chat_cfg = CodeChatAgentConfig(
-            name="Coder",
-            repo_url=self.url,
-            user_message=CODE_CHAT_INSTRUCTIONS,
-            content_includes=["txt", "md", "yml", "yaml", "sh", "Makefile"],
-            content_excludes=["Dockerfile"],
-            # USE same LLM settings as DockerChatAgent, e.g.
-            # if DockerChatAgent uses gpt4, then use gpt4 here too
-            llm=self.config.llm,
-        )
         # Note `content_includes` and `content_excludes` are used in
         # self.code_chat_agent to create a json dump of (top k lines) of various
         # files, to be included in the initial LLM message.
@@ -128,10 +132,34 @@ class DockerChatAgent(ChatAgent):
             What would you like to name this collection?""",
             default=default_collection_name,
         )
+        code_chat_cfg = CodeChatAgentConfig(
+            name="Coder",
+            repo_url=self.url,
+            system_message=CODE_CHAT_INSTRUCTIONS,
+            content_includes=["txt", "md", "yml", "yaml", "sh", "Makefile"],
+            content_excludes=["Dockerfile"],
+            # USE same LLM settings as DockerChatAgent, e.g.
+            # if DockerChatAgent uses gpt4, then use gpt4 here too
+            llm=self.config.llm,
+        )
         code_chat_cfg.vecdb.collection_name = collection_name
-
         self.code_chat_agent = CodeChatAgent(code_chat_cfg)
-        self.add_agent(self.code_chat_agent)
+
+        planner_agent_cfg = ChatAgentConfig(
+            name="Planner",
+            system_message=PLANNER_INSTRUCTIONS,
+            vecdb=None,
+            llm=self.config.llm,
+        )
+        planner_agent = ChatAgent(planner_agent_cfg)
+        planner_agent.add_agent(
+            self.code_chat_agent, llm_delegate=False, single_round=True
+        )
+        self.code_chat_agent.enable_message(ShowDirContentsMessage)
+        self.code_chat_agent.enable_message(ShowFileContentsMessage)
+        self.code_chat_agent.enable_message(RunPythonMessage)
+        self.add_agent(planner_agent, llm_delegate=True, single_round=False)
+
         self.repo_loader = RepoLoader(self.url, RepoLoaderConfig())
         self.repo_path = self.repo_loader.clone()
         # get the repo tree to depth d, with first k lines of each file
@@ -142,7 +170,7 @@ class DockerChatAgent(ChatAgent):
         Based on the URL, here is some information about the repo that you can use.  
         
         First, here is a list of ALL the files and directories at the ROOT of the 
-        repo. Any files of interest to you MUST be in this list, there you do NOT 
+        repo. Any files of interest to you MUST be in this list, therefore you do NOT 
         need to ask in future about whether any file exists.
         {repo_listing}
         In later parts of the conversation, only ask questions that CANNOT 

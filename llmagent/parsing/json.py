@@ -1,6 +1,7 @@
-import regex
 import json
 from typing import List
+
+import regex
 
 
 def is_valid_json(json_str: str) -> bool:
