@@ -106,7 +106,7 @@ def test_run_container():
     msg.run = "docker run -d -p 5555:80 --rm validate_img:latest"
     msg.test = "curl -s http://localhost:5555"
     tst_result = agent.run_container(msg)
-    if tst_result:
+    if "Container run failed" not in tst_result:
         assert tst_result[0] is True
     else:
         assert True
@@ -115,4 +115,4 @@ def test_run_container():
     msg.run = "docker run -d -p 5555:80 --rm validate_img:latest"
     msg.test = f"pytest -m {agent.repo_path}/test/test_choice.py"
     tst_result = agent.run_container(msg)
-    assert tst_result.exit_code != 0
+    assert "exit code = 2" in tst_result

@@ -169,8 +169,6 @@ class RunContainerMessage(AgentMessage):
     is a docker run command with all required arguments that will be used to 
     run the container, where image_name is `validate_img:latest`
     """
-    # be either a list of test files in the repo or a list of commands to be executed from the host.
-    # cmd: str = "python"
     test: str = "python tests/t1.py"
     location: str = "Inside"
     run: str = "docker run"
@@ -185,14 +183,12 @@ class RunContainerMessage(AgentMessage):
         """
         return [
             cls(
-                # cmd="python",
                 test="python tests/t1.py",
                 location="Inside",
                 run="docker run",
                 result="Inside test case works successfully.",
             ),
             cls(
-                # cmd="python",
                 test="curl localhost",
                 location="Outside",
                 run="docker run",

@@ -402,15 +402,20 @@ class DockerChatAgent(ChatAgent):
                     )
                     if container:
                         container_id = container.id
-                        exec_result = container.exec_run(f"{test_case}")
-                        return exec_result
+                        test_result = container.exec_run(f"{test_case}")
+                        return f"Test case executed from inside the container: exit code = {test_result.exit_code} {test_result.output}"
+                    else:
+                        return "Container run failed"
 
                 if location == "outside":
                     # TODO: we need converter from docker commands to docker SDK
                     cmd_result = _execute_command(run)
                     if cmd_result[0] is True:
                         container_id = cmd_result[1]
-                        return _execute_command(test_case)
+                        test_result = _execute_command(test_case)
+                        return f"Test case executed from outsied the container, execution code is: {test_result[0]}"
+                    else:
+                        return f"Container run failed: {cmd_result[1]}"
             except Exception as e:
                 logger.error(f"An error occurred: {str(e)}")
 
@@ -419,4 +424,4 @@ class DockerChatAgent(ChatAgent):
                     container = client.containers.get(container_id)
                     container.remove(force=True)
 
-        return test_result
+        return "Image built failed"
