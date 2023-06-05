@@ -1,5 +1,4 @@
 from llmagent.agent.chat_agent import ChatAgent, ChatAgentConfig
-from llmagent.agent.base import Entity
 from pydantic import BaseModel, HttpUrl
 from typing import Optional
 from examples.codechat.code_chat_agent import CodeChatAgentConfig, CodeChatAgent
@@ -20,7 +19,6 @@ from rich.console import Console
 from rich.prompt import Prompt
 from llmagent.parsing.urls import org_user_from_github
 from llmagent.parsing.repo_loader import RepoLoader, RepoLoaderConfig
-from llmagent.mytypes import Document, DocMetaData
 from examples.dockerchat.identify_python_version import get_python_version
 from examples.dockerchat.identify_python_dependency import (
     identify_dependency_management,
@@ -78,29 +76,11 @@ class UrlModel(BaseModel):
     url: HttpUrl
 
 
-class DockerCodeChatAgent(CodeChatAgent):
-    def _task_done(self) -> bool:
-        # allow code chat agent only 1 chance to reply
-        return self.pending_message.metadata.sender == Entity.LLM
-
-    def task_result(self) -> Optional[Document]:
-        if self.pending_message is None or (
-            NONE_ANSWER in self.pending_message.content
-            or NO_ANSWER in self.pending_message.content
-        ):
-            return None
-
-        return Document(
-            content=self.pending_message.content,
-            metadata=DocMetaData(source=Entity.USER, sender=Entity.USER),
-        )
-
-
 class DockerChatAgent(ChatAgent):
     url: str = "https://github.com/eugeneyan/testing-ml"
     repo_tree: str = None
     repo_path: str = None
-    code_chat_agent: DockerCodeChatAgent = None
+    code_chat_agent: CodeChatAgent = None
 
     def handle_message_fallback(self, input_str: str = "") -> Optional[str]:
         if self.repo_path is None and "URL" not in input_str:

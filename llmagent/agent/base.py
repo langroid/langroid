@@ -618,6 +618,12 @@ class Agent(ABC):
         # message can be considered to be from the USER.
         if llm_delegate:
             self.controller = Entity.LLM
+            if self.single_round:
+                rounds = 3  # User instruct, LLM asks, User(proxy) replies.
+        else:
+            if self.single_round:
+                rounds = 2  # User asks, LLM replies.
+
         self.reset_pending_message(msg)
         if self.parent_agent is not None:
             self.level = self.parent_agent.level + 1
@@ -625,8 +631,6 @@ class Agent(ABC):
         self.enter = self.indent + ">>>"
         self.leave = self.indent + "<<<"
         # `self.rounds` may be set via `self.add_agent`
-        if self.single_round:
-            rounds = 2  # overrides rounds param above
         return self._task_loop(rounds)
 
     def add_agent(
