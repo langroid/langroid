@@ -1,5 +1,5 @@
 from llmagent.agent.base import AgentMessage
-from typing import Union, List
+from typing import Union, List, Dict
 import logging
 
 logger = logging.getLogger(__name__)
@@ -163,11 +163,17 @@ class RunContainerMessage(AgentMessage):
     request: str = "run_container"
     purpose: str = """Verify that the container works correctly and preserves 
     the intended behavior. This will use the image built using 
-    the <proposed_dockerfile> and EXPECTS to receive <tests> and <cmd> to run 
-    the test cases 
+    the <proposed_dockerfile> and EXPECTS to receive <test>.
+    <test> is a command and the test case. <location> indicates whether 
+    the <test> should be executed from INSIDE or OUTSIDE the container. <run> 
+    is a docker run command with all required arguments that will be used to 
+    run the container, where image_name is `validate_img:latest`
     """
-    cmd: str = "python"
-    tests: List[str] = ["tests/t1.py", "tests/t2.py"]
+    # be either a list of test files in the repo or a list of commands to be executed from the host.
+    # cmd: str = "python"
+    test: str = "python tests/t1.py"
+    location: str = "Inside"
+    run: str = "docker run"
     result: str = "The container runs correctly"
 
     @classmethod
@@ -179,13 +185,17 @@ class RunContainerMessage(AgentMessage):
         """
         return [
             cls(
-                cmd="python",
-                tests=["tests/t1.py"],
-                result="Container works successfully.",
+                # cmd="python",
+                test="python tests/t1.py",
+                location="Inside",
+                run="docker run",
+                result="Inside test case works successfully.",
             ),
             cls(
-                cmd="python",
-                tests=["tests/t1.py", "tests/t2.py"],
-                result="Test case t2 has failed.",
+                # cmd="python",
+                test="curl localhost",
+                location="Outside",
+                run="docker run",
+                result="Outside test case has failed.",
             ),
         ]

@@ -25,9 +25,9 @@ from examples.dockerchat.build_run_utils import (
     _build_docker_image,
     _cleanup_dockerfile,
     _save_dockerfile,
+    _execute_command,
 )
 
-import os
 import logging
 import docker
 
@@ -323,7 +323,7 @@ class DockerChatAgent(ChatAgent):
         self,
         dockerrun_msg: RunContainerMessage,
         confirm: bool = True,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> Optional[Any]:
         """
         Runs a container based on the image built using the proposed_dockerfile.
         It then executes test cases inside the running container and reports
@@ -332,9 +332,8 @@ class DockerChatAgent(ChatAgent):
             dockerrun_msg (RunContainerMessage): LLM message contains the
             command and list of test cases
         Returns:
-            A list of tuples that reports the execution results and logs for
-            each test case. Elements of the tuple are: test_case, exit_code,
-            and log.
+            A raw log and execution code indicate whether the test is
+            executed successfully.
         """
         if confirm:
             user_response = Prompt.ask(
@@ -361,30 +360,35 @@ class DockerChatAgent(ChatAgent):
             self.repo_path, proposed_dockerfile_name, img_tag
         )
 
-        cmd = dockerrun_msg.cmd
-        test_case_files = dockerrun_msg.tests
-        test_results_dic = {}
-        try:
-            # We use tail to make sure the container keeps running
-            container = client.containers.run(
-                img.id, "tail -f /dev/null", detach=True, auto_remove=False
-            )
+        test_case = dockerrun_msg.test
+        location = dockerrun_msg.location.lower()
+        run = dockerrun_msg.run
+        test_result = None
+        container_id = None
+        if img:
+            try:
+                if location == "inside":
+                    # We use tail to make sure the container keeps running
+                    container = client.containers.run(
+                        img.id, "tail -f /dev/null", detach=True, auto_remove=False
+                    )
+                    if container:
+                        container_id = container.id
+                        exec_result = container.exec_run(f"{test_case}")
+                        return exec_result
 
-            for test_case_file in test_case_files:
-                with open(os.path.join(self.repo_path, test_case_file), "r") as file:
-                    test_cases = file.read()
+                if location == "outside":
+                    # TODO: we need converter from docker commands to docker SDK
+                    cmd_result = _execute_command(run)
+                    if cmd_result[0] is True:
+                        container_id = cmd_result[1]
+                        return _execute_command(test_case)
+            except Exception as e:
+                logger.error(f"An error occurred: {str(e)}")
 
-                # The assumption here is that the test case will run inside the
-                # container. This doesn't count for test cases to be executed
-                # from outside the container (i.e., service containers)
-                exec_result = container.exec_run(f'{cmd} -c "{test_cases}"')
-                test_results_dic[test_case_file] = exec_result
+            finally:
+                if container_id:
+                    container = client.containers.get(container_id)
+                    container.remove(force=True)
 
-        except Exception as e:
-            logger.error(f"An error occurred: {str(e)}")
-            return None
-
-        finally:
-            container.remove(force=True)
-
-        return test_results_dic
+        return test_result

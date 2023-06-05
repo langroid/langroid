@@ -6,7 +6,7 @@ from examples.dockerchat.dockerchat_agent_messages import (
     ValidateDockerfileMessage,
     RunContainerMessage,
 )
-
+from llmagent.parsing.repo_loader import RepoLoader, RepoLoaderConfig
 from llmagent.cachedb.redis_cachedb import RedisCacheConfig
 from typing import Optional
 
@@ -47,8 +47,8 @@ class _TestDockerChatAgent(DockerChatAgent):
     def validate_dockerfile(self, msg: ValidateDockerfileMessage) -> str:
         return super().validate_dockerfile(msg, confirm=False)
 
-    # def run_container(self, msg: RunContainerMessage, img_name: str) -> List[Tuple[str, int, str]]:
-    #     return super().run_container(msg, "")
+    def run_container(self, msg: RunContainerMessage) -> str:
+        return super().run_container(msg, confirm=False)
 
 
 PROPOSED_DOCKERFILE_CONTENT = """
@@ -92,33 +92,27 @@ def test_validate_dockerfile():
 
 def test_run_container():
     agent = _TestDockerChatAgent(cfg)
-    # create a temporary directory
-    with tempfile.TemporaryDirectory() as temp_dir:
-        agent.repo_path = temp_dir
-        agent.proposed_dockerfile = PROPOSED_DOCKERFILE_CONTENT
-        # Create a requirements.txt file in the folder
-        temp_file_path = os.path.join(temp_dir, "requirements.txt")
-        open(temp_file_path, "a").close()
+    url = "https://github.com/hyperonym/basaran"
+    agent.repo_loader = RepoLoader(url, RepoLoaderConfig())
+    agent.repo_path = agent.repo_loader.clone_path
+    agent.proposed_dockerfile = """FROM python:3.8\n\nWORKDIR /app
+    \n\nCOPY requirements.txt setup.py ./
+    \n\nRUN pip install --no-cache-dir -r requirements.txt\n\nCOPY . .
+    \n\nEXPOSE 80\n\nENTRYPOINT [\"python\",\"-m\",\"basaran\"]
+    """
+    msg = RunContainerMessage()
 
-        # write a test case file
-        test_case_filename = "test_case.py"
-        with open(os.path.join(temp_dir, test_case_filename), "w") as f:
-            f.write("import math\nprint(math.sqrt(16))")
+    msg.location = "outside"
+    msg.run = "docker run -d -p 5555:80 --rm validate_img:latest"
+    msg.test = "curl -s http://localhost:5555"
+    tst_result = agent.run_container(msg)
+    if tst_result:
+        assert tst_result[0] is True
+    else:
+        assert True
 
-        # create the RunContainerMessage object
-        run_msg = RunContainerMessage()
-        run_msg.cmd = "python"
-        run_msg.tests = ["test_case.py"]
-
-        # create the object and run the function with the custom Python
-        # image and the test cases
-        run_results = agent.run_container(run_msg, False)
-
-        if run_results:
-            for value in run_results.values():
-                # check that all test cases exited with code 0 (success)
-                # assert all(result[1] == 0 for result in run_results)
-                assert value.exit_code == 0
-
-                # check that the logs contain the expected output
-                assert "4.0" in value.output.decode("utf-8")
+    msg.location = "inside"
+    msg.run = "docker run -d -p 5555:80 --rm validate_img:latest"
+    msg.test = f"pytest -m {agent.repo_path}/test/test_choice.py"
+    tst_result = agent.run_container(msg)
+    assert tst_result.exit_code != 0

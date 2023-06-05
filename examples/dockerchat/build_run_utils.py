@@ -3,6 +3,9 @@ import os
 import time
 import datetime
 import logging
+import subprocess
+from typing import Tuple
+
 
 from rich.console import Console
 
@@ -86,3 +89,41 @@ def _cleanup_dockerfile(img_id: str, dockerfile_path: str) -> None:
         logger.error("Image removal failed!")
     except docker.errors.ImageNotFound:
         logger.info("Image removed successfully!")
+
+
+def _execute_command(cmd: str) -> Tuple[bool, str]:
+    """
+    Executes a command and returns the results
+    Args:
+        cmd (str): the command to be executed
+    Returns:
+        A tuple where the 1st element is return code and the 2nd element a log.
+        This log will be stdout in case the command executed successfully,
+        otherwise, it'll be stderr
+    """
+    # Split the command into a list of commands
+    commands = cmd.split("|")
+    commands = [command.strip().split() for command in commands]
+
+    # Set up the first subprocess
+    process = subprocess.Popen(
+        commands[0], stdout=subprocess.PIPE, stderr=subprocess.PIPE
+    )
+
+    # Set up the remaining subprocesses, if any
+    for command in commands[1:]:
+        process = subprocess.Popen(
+            command,
+            stdin=process.stdout,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+
+    # Get the output and error (if any)
+    stdout, stderr = process.communicate()
+
+    # Check if the command was executed successfully
+    if process.returncode == 0:
+        return True, stdout.decode()
+    else:
+        return False, stderr.decode()
