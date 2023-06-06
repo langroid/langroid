@@ -27,7 +27,7 @@ class Task:
     def __init__(
         self,
         agent: Agent,
-        name: str= "",
+        name: str = "",
         llm_delegate: bool = False,
         single_round: bool = False,
         system_message: str = "",
