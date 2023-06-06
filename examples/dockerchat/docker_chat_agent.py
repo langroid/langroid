@@ -136,9 +136,8 @@ class DockerChatAgent(ChatAgent):
     @url.setter
     def url(self, value):
         self._url = value
-        # note this uses the setter of `code_chat_agent`, triggers vector-db
-        # creation, repo download, chunking, ingest into vector-db
-        self.code_chat_agent.repo_url = self._url
+        # clone, chunk, ingest into vector-db of `code_chat_agent`
+        self.code_chat_agent.ingest_url(self._url)
 
         self.repo_loader = RepoLoader(self._url, RepoLoaderConfig())
         self.repo_path = self.repo_loader.clone()

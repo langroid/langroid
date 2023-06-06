@@ -111,17 +111,16 @@ class CodeChatAgent(DocChatAgent):
         super().__init__(config)
         self.original_docs: List[Document] = None
         if config.repo_url:
-            # the setter below triggers the repo to be loaded
-            self.repo_url = config.repo_url
+            self.ingest_url(config.repo_url)
 
-    @property
-    def repo_url(self):
-        """Path of code, could be either a github URL or a directory path"""
-        return self._repo_url
+    def ingest_url(self, url: str) -> None:
+        """
+        Clone, chunk, ingest contents of a code repo at `url`, into the vector store.
 
-    @repo_url.setter
-    def repo_url(self, value):
-        self._repo_url = value
+        Args:
+            url (str): github URL of repo to ingest
+        """
+        self._repo_url = url
 
         default_collection_name = org_user_from_github(self._repo_url)
         collection_name = Prompt.ask(
@@ -135,7 +134,7 @@ class CodeChatAgent(DocChatAgent):
         self.config.vecdb.collection_name = collection_name
         self.vecdb = VectorStore.create(self.config.vecdb)
 
-        self.repo_loader = RepoLoader(self.repo_url, RepoLoaderConfig())
+        self.repo_loader = RepoLoader(self._repo_url, RepoLoaderConfig())
         self.repo_path = self.repo_loader.clone()
         # get the repo tree to depth d, with first k lines of each file
         self.repo_tree, _ = self.repo_loader.load(depth=1, lines=100)
@@ -190,7 +189,7 @@ class CodeChatAgent(DocChatAgent):
             f"""
         [green]I have processed {len(documents)} files from the following GitHub Repo into 
         {n_text_splits} text chunks and {n_code_splits} code chunks:
-        {self.repo_url}
+        {self._repo_url}
         """.strip()
         )
 
