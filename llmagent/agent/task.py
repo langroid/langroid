@@ -1,4 +1,6 @@
-from typing import Any, List, Optional, Set, cast
+from __future__ import annotations
+
+from typing import List, Optional, Set, Type, cast
 
 from rich import print
 
@@ -8,6 +10,8 @@ from llmagent.language_models.base import LLMMessage, Role
 from llmagent.mytypes import DocMetaData
 from llmagent.utils.configuration import settings
 from llmagent.utils.constants import DONE, NO_ANSWER, USER_QUIT
+
+Responder = Entity | Type["Task"]
 
 
 class Task:
@@ -75,8 +79,8 @@ class Task:
         if default_human_response is not None:
             self.agent.default_human_response = default_human_response
         self.only_user_quits_root = only_user_quits_root
-        self.allowed_responders: Set[Any] = set()
-        self.responders: List[Any] = [
+        self.allowed_responders: Set[Responder] = set()
+        self.responders: List[Responder] = [
             Entity.AGENT,
             Entity.LLM,
             Entity.USER,
@@ -114,8 +118,8 @@ class Task:
         )
 
         # other sub_tasks this task can delegate to
-        self.sub_tasks: List["Task"] = []
-        self.parent_task: Optional["Task"] = None
+        self.sub_tasks: List[Task] = []
+        self.parent_task: Optional[Task] = None
 
     @property
     def _level(self) -> int:
@@ -136,7 +140,7 @@ class Task:
     def _leave(self) -> str:
         return self._indent + "<<<"
 
-    def add_sub_task(self, task: "Task") -> None:
+    def add_sub_task(self, task: Task) -> None:
         """
         Add a sub-task that this task can delegate to
 
@@ -145,7 +149,7 @@ class Task:
         """
         task.parent_task = self
         self.sub_tasks.append(task)
-        self.responders.append(task)
+        self.responders.append(cast(Responder, task))
 
     def run(
         self,
@@ -336,7 +340,7 @@ class Task:
             )
             print(f"[red]pending_message: {pending_message}")
 
-    def response(self, e: Any, turns: int = -1) -> Optional[ChatDocument]:
+    def response(self, e: Responder, turns: int = -1) -> Optional[ChatDocument]:
         """
         Get response to `self.pending_message` from an entity.
         If response is __valid__ (i.e. it ends the current turn of seeking
@@ -354,11 +358,11 @@ class Task:
             if isinstance(e, Task):
                 return e.run(msg, turns=turns)
             else:
-                return self._entity_responder_map[e](msg)
+                return self._entity_responder_map[cast(Entity, e)](msg)
         else:
             return None
 
-    def _disallow_responder(self, e: Any) -> None:
+    def _disallow_responder(self, e: Responder) -> None:
         """
         Disallow a responder from responding to current message.
         Args:
@@ -366,7 +370,7 @@ class Task:
         """
         self.allowed_responders.remove(e)
 
-    def _allow_responder(self, e: Any) -> None:
+    def _allow_responder(self, e: Responder) -> None:
         """
         Allow a responder to respond to current message.
         Args:
@@ -374,7 +378,7 @@ class Task:
         """
         self.allowed_responders.add(e)
 
-    def _is_allowed_responder(self, e: Any) -> bool:
+    def _is_allowed_responder(self, e: Responder) -> bool:
         """
         Check if a responder is allowed to respond to current message.
         Args:
@@ -390,7 +394,7 @@ class Task:
         """
         self.allowed_responders = set(self.responders)
 
-    def _allow_all_responders_except(self, e: Any) -> None:
+    def _allow_all_responders_except(self, e: Responder) -> None:
         """
         Allow all responders to respond to current message, except for `e`.
         Args:
