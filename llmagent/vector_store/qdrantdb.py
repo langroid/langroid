@@ -59,18 +59,22 @@ class QdrantDB(VectorStore):
                 path=config.storage_path,
             )
 
-        self.client.recreate_collection(
-            collection_name=config.collection_name,
-            vectors_config=VectorParams(
-                size=self.embedding_dim,
-                distance=Distance.COSINE,
-            ),
-        )
-        collection_info = self.client.get_collection(
-            collection_name=config.collection_name
-        )
-        assert collection_info.status == CollectionStatus.GREEN
-        assert collection_info.vectors_count == 0
+        # Note: Only create collection if a non-null collection name is provided.
+        # This is useful to delay creation of vecdb until we have a suitable
+        # collection name (e.g. we could get it from the url or folder path).
+        if config.collection_name is not None:
+            self.client.recreate_collection(
+                collection_name=config.collection_name,
+                vectors_config=VectorParams(
+                    size=self.embedding_dim,
+                    distance=Distance.COSINE,
+                ),
+            )
+            collection_info = self.client.get_collection(
+                collection_name=config.collection_name
+            )
+            assert collection_info.status == CollectionStatus.GREEN
+            assert collection_info.vectors_count == 0
         if settings.debug:
             level = logger.getEffectiveLevel()
             logger.setLevel(logging.INFO)

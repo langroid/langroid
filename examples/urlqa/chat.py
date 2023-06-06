@@ -1,5 +1,6 @@
 from llmagent.parsing.urls import get_list_from_user, get_urls_and_paths
 from llmagent.utils.logging import setup_colored_logging
+from llmagent.agent.task import Task
 from examples.urlqa.config import URLQAConfig
 from examples.urlqa.doc_chat_agent import DocChatAgent
 from llmagent.language_models.openai_gpt import OpenAIChatModel
@@ -80,7 +81,13 @@ def chat(config: URLQAConfig) -> None:
         default="a helpful assistant.",
     )
     system_msg = re.sub("you are", "", system_msg, flags=re.IGNORECASE)
-    agent.do_task(system_message="You are " + system_msg)
+    task = Task(
+        agent,
+        llm_delegate=False,
+        single_round=False,
+        system_message="You are " + system_msg,
+    )
+    task.run()
 
 
 @app.command()
