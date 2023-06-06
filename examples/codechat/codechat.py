@@ -1,4 +1,5 @@
-from llmagent.parsing.urls import get_list_from_user, org_user_from_github
+from llmagent.parsing.urls import get_list_from_user
+from llmagent.agent.task import Task
 from llmagent.utils.logging import setup_colored_logging
 from llmagent.utils import configuration
 from llmagent.language_models.openai_gpt import OpenAIChatModel
@@ -13,12 +14,14 @@ app = typer.Typer()
 
 setup_colored_logging()
 
+DEFAULT_URL = "https://github.com/eugeneyan/testing-ml"
+
 
 def chat(config: CodeChatAgentConfig) -> None:
     configuration.update_global_settings(config, keys=["debug", "stream", "cache"])
     if config.gpt4:
         config.llm.chat_model = OpenAIChatModel.GPT4
-    default_urls = [config.repo_url]
+    default_urls = [DEFAULT_URL]
 
     print("[blue]Welcome to the GitHub Repo chatbot!")
     print("[cyan]Enter x or q to quit, or ? for evidence")
@@ -26,15 +29,6 @@ def chat(config: CodeChatAgentConfig) -> None:
     urls = get_list_from_user(n=1) or default_urls
     url = urls[0]
     config.repo_url = url
-
-    default_collection_name = org_user_from_github(url)
-    collection_name = Prompt.ask(
-        f"""Creating a vector-store for contents of {url}.
-            IMPORTANT: we need a unique collection name for this repo.
-            What would you like to name this collection?""",
-        default=default_collection_name,
-    )
-    config.vecdb.collection_name = collection_name
 
     agent = CodeChatAgent(config)
 
@@ -54,7 +48,13 @@ def chat(config: CodeChatAgentConfig) -> None:
 
     system_msg = re.sub("you are", "", system_msg, flags=re.IGNORECASE)
 
-    agent.do_task(system_message="You are " + system_msg)
+    task = Task(
+        agent,
+        llm_delegate=False,
+        single_round=False,
+        system_message="You are " + system_msg,
+    )
+    task.run()
 
 
 @app.command()

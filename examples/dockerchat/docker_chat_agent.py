@@ -1,6 +1,6 @@
 from llmagent.agent.chat_agent import ChatAgent, ChatAgentConfig
 from pydantic import BaseModel, HttpUrl
-from typing import Optional
+from typing import Optional, List
 from examples.codechat.code_chat_agent import CodeChatAgentConfig, CodeChatAgent
 from examples.codechat.code_chat_tools import (
     ShowFileContentsMessage,
@@ -17,7 +17,7 @@ from examples.dockerchat.dockerchat_agent_messages import (
 )
 from rich.console import Console
 from rich.prompt import Prompt
-from llmagent.parsing.urls import org_user_from_github
+from llmagent.language_models.base import LLMMessage
 from llmagent.parsing.repo_loader import RepoLoader, RepoLoaderConfig
 from examples.dockerchat.identify_python_version import get_python_version
 from examples.dockerchat.identify_python_dependency import (
@@ -77,10 +77,37 @@ class UrlModel(BaseModel):
 
 
 class DockerChatAgent(ChatAgent):
-    url: str = "https://github.com/eugeneyan/testing-ml"
+    url: str = ""
     repo_tree: str = None
     repo_path: str = None
     code_chat_agent: CodeChatAgent = None
+
+    def __init__(
+        self, config: ChatAgentConfig, task: Optional[List[LLMMessage]] = None
+    ):
+        super().__init__(config, task)
+        code_chat_cfg = CodeChatAgentConfig(
+            name="Coder",
+            repo_url="",  # this will be set later
+            system_message=CODE_CHAT_INSTRUCTIONS,
+            content_includes=["txt", "md", "yml", "yaml", "sh", "Makefile"],
+            content_excludes=["Dockerfile"],
+            # USE same LLM settings as DockerChatAgent, e.g.
+            # if DockerChatAgent uses gpt4, then use gpt4 here too
+            llm=self.config.llm,
+        )
+        self.code_chat_agent = CodeChatAgent(code_chat_cfg)
+        self.code_chat_agent.enable_message(ShowDirContentsMessage)
+        self.code_chat_agent.enable_message(ShowFileContentsMessage)
+        self.code_chat_agent.enable_message(RunPythonMessage)
+
+        planner_agent_cfg = ChatAgentConfig(
+            name="Planner",
+            system_message=PLANNER_INSTRUCTIONS,
+            vecdb=None,
+            llm=self.config.llm,
+        )
+        self.planner_agent = ChatAgent(planner_agent_cfg)
 
     def handle_message_fallback(self, input_str: str = "") -> Optional[str]:
         if self.repo_path is None and "URL" not in input_str:
@@ -102,6 +129,22 @@ class DockerChatAgent(ChatAgent):
         )
         return "No results, please continue asking your questions."
 
+    @property
+    def url(self):
+        return self._url
+
+    @url.setter
+    def url(self, value):
+        self._url = value
+        # note this uses the setter of `code_chat_agent`, triggers vector-db
+        # creation, repo download, chunking, ingest into vector-db
+        self.code_chat_agent.repo_url = self._url
+
+        self.repo_loader = RepoLoader(self._url, RepoLoaderConfig())
+        self.repo_path = self.repo_loader.clone()
+        # get the repo tree to depth d, with first k lines of each file
+        self.repo_tree, _ = self.repo_loader.load(depth=1, lines=20)
+
     def ask_url(self, msg: AskURLMessage) -> str:
         while True:
             url = Prompt.ask(
@@ -116,49 +159,7 @@ class DockerChatAgent(ChatAgent):
             if url_model.url is not None:
                 break
 
-        self.url = url_model.url
-        # Note `content_includes` and `content_excludes` are used in
-        # self.code_chat_agent to create a json dump of (top k lines) of various
-        # files, to be included in the initial LLM message.
-        default_collection_name = org_user_from_github(url)
-        collection_name = Prompt.ask(
-            f"""Creating a vector-store for contents of {url}.
-            IMPORTANT: we need a unique collection name for this repo.
-            What would you like to name this collection?""",
-            default=default_collection_name,
-        )
-        code_chat_cfg = CodeChatAgentConfig(
-            name="Coder",
-            repo_url=self.url,
-            system_message=CODE_CHAT_INSTRUCTIONS,
-            content_includes=["txt", "md", "yml", "yaml", "sh", "Makefile"],
-            content_excludes=["Dockerfile"],
-            # USE same LLM settings as DockerChatAgent, e.g.
-            # if DockerChatAgent uses gpt4, then use gpt4 here too
-            llm=self.config.llm,
-        )
-        code_chat_cfg.vecdb.collection_name = collection_name
-        self.code_chat_agent = CodeChatAgent(code_chat_cfg)
-
-        planner_agent_cfg = ChatAgentConfig(
-            name="Planner",
-            system_message=PLANNER_INSTRUCTIONS,
-            vecdb=None,
-            llm=self.config.llm,
-        )
-        planner_agent = ChatAgent(planner_agent_cfg)
-        planner_agent.add_agent(
-            self.code_chat_agent, llm_delegate=False, single_round=True
-        )
-        self.code_chat_agent.enable_message(ShowDirContentsMessage)
-        self.code_chat_agent.enable_message(ShowFileContentsMessage)
-        self.code_chat_agent.enable_message(RunPythonMessage)
-        self.add_agent(planner_agent, llm_delegate=True, single_round=False)
-
-        self.repo_loader = RepoLoader(self.url, RepoLoaderConfig())
-        self.repo_path = self.repo_loader.clone()
-        # get the repo tree to depth d, with first k lines of each file
-        self.repo_tree, _ = self.repo_loader.load(depth=1, lines=20)
+        self.url = url_model.url  # uses setter `url` above
         repo_listing = "\n".join(self.repo_loader.ls(self.repo_tree, depth=1))
 
         return f"""

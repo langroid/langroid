@@ -6,6 +6,7 @@ from llmagent.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
 from llmagent.prompts.prompts_config import PromptsConfig
 from llmagent.parsing.parser import ParsingConfig
 from llmagent.agent.base import AgentMessage
+from llmagent.agent.task import Task
 from llmagent.agent.chat_agent import ChatAgent, ChatAgentConfig
 from llmagent.utils.system import rmdir
 from llmagent.cachedb.redis_cachedb import RedisCacheConfig
@@ -131,8 +132,12 @@ def test_llm_agent_message(test_settings: Settings):
     set_global(test_settings)
     agent = MessageHandlingAgent(cfg)
     agent.enable_message(PythonDependencyMessage)
-    agent.default_human_response = "I don't know, please ask your next question."
-    agent.do_task(rounds=2)
+    task = Task(
+        agent,
+        default_human_response="I don't know, please ask your next question.",
+    )
+    task.run(turns=2)
+    # TODO need an assert here
 
 
 @pytest.mark.parametrize("depfile", DEPENDENCY_FILES)

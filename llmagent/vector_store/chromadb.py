@@ -38,16 +38,17 @@ class ChromaDB(VectorStore):
                 persist_directory=config.storage_path,
             )
         )
-        self.collection = self.client.get_or_create_collection(
-            name=self.config.collection_name,
-            embedding_function=self.embedding_fn,
-            # metadata={
-            #     "hnsw:space": "cosine",
-            #     "hnsw:construction_ef": 9,
-            #     "hnsw:M": 4,
-            #     "hnsw:search_ef": 4,
-            # }
-        )
+        if self.config.collection_name is not None:
+            self.collection = self.client.get_or_create_collection(
+                name=self.config.collection_name,
+                embedding_function=self.embedding_fn,
+                # metadata={
+                #     "hnsw:space": "cosine",
+                #     "hnsw:construction_ef": 9,
+                #     "hnsw:M": 4,
+                #     "hnsw:search_ef": 4,
+                # }
+            )
 
     def add_documents(self, documents: Optional[List[Document]] = None) -> None:
         if documents is None:

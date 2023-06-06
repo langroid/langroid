@@ -4,6 +4,7 @@ from llmagent.agent.chat_agent import ChatAgentConfig
 from llmagent.prompts.prompts_config import PromptsConfig
 from llmagent.parsing.parser import ParsingConfig
 from llmagent.agent.base import AgentMessage
+from llmagent.agent.task import Task
 from llmagent.agent.chat_agent import ChatAgent
 from llmagent.utils.system import rmdir
 from llmagent.cachedb.redis_cachedb import RedisCacheConfig
@@ -145,9 +146,12 @@ def test_llm_agent_message(test_settings: Settings):
     set_global(test_settings)
     agent = MessageHandlingAgent(cfg)
     agent.enable_message(ValidateDockerfileMessage)
-    agent.default_human_response = "I don't know, please ask your next question."
-
-    agent.do_task(rounds=2)
+    task = Task(
+        agent,
+        default_human_response="I don't know, please ask your next question.",
+    )
+    task.run(turns=2)
+    # TODO - need to put an assertion here
 
 
 def clean_string(string: str) -> str:

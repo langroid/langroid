@@ -1,6 +1,10 @@
 from llmagent.utils.logging import setup_colored_logging
 from llmagent.utils import configuration
-from examples.dockerchat.docker_chat_agent import DockerChatAgent
+from examples.dockerchat.docker_chat_agent import (
+    DockerChatAgent,
+    PLANNER_INSTRUCTIONS,
+    CODE_CHAT_INSTRUCTIONS,
+)
 from examples.dockerchat.dockerchat_agent_messages import (
     AskURLMessage,
     ValidateDockerfileMessage,
@@ -9,6 +13,7 @@ import typer
 from llmagent.language_models.base import LLMMessage, Role
 from llmagent.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
 from llmagent.agent.base import AgentConfig
+from llmagent.agent.task import Task
 from llmagent.vector_store.qdrantdb import QdrantDBConfig
 from llmagent.embedding_models.models import OpenAIEmbeddingsConfig
 from llmagent.vector_store.base import VectorStoreConfig
@@ -88,7 +93,25 @@ def chat(config: DockerChatAgentConfig) -> None:
     # agent.enable_message(PythonDependencyMessage)
     # agent.enable_message(EntryPointAndCMDMessage)
 
-    agent.do_task(llm_delegate=True)
+    # set up tasks and their hierarchy
+    docker_task = Task(
+        agent, llm_delegate=True, single_round=False, only_user_quits_root=True
+    )
+    planner_task = Task(
+        agent.planner_agent,
+        llm_delegate=True,
+        single_round=False,
+        system_message=PLANNER_INSTRUCTIONS,
+    )
+    code_chat_task = Task(
+        agent.code_chat_agent,
+        llm_delegate=False,
+        single_round=True,
+        system_message=CODE_CHAT_INSTRUCTIONS,
+    )
+    docker_task.add_sub_task(planner_task)
+    planner_task.add_sub_task(code_chat_task)
+    docker_task.run()
 
 
 @app.command()

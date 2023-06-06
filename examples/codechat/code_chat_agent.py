@@ -3,13 +3,16 @@ from examples.urlqa.doc_chat_agent import DocChatAgent, DocChatAgentConfig
 from llmagent.parsing.repo_loader import RepoLoader, RepoLoaderConfig
 from llmagent.vector_store.qdrantdb import QdrantDBConfig
 from llmagent.embedding_models.models import OpenAIEmbeddingsConfig
-from llmagent.vector_store.base import VectorStoreConfig
+from llmagent.vector_store.base import VectorStoreConfig, VectorStore
 from llmagent.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
 from llmagent.parsing.parser import ParsingConfig, Splitter
 from llmagent.parsing.code_parser import CodeParsingConfig
 from llmagent.prompts.prompts_config import PromptsConfig
 from llmagent.prompts.templates import ANSWER_PROMPT_USE_HISTORY_GPT4
 from llmagent.mytypes import Document, DocMetaData
+from rich.prompt import Prompt
+from llmagent.parsing.urls import org_user_from_github
+
 from examples.codechat.code_chat_tools import (
     ShowFileContentsMessage,
     ShowDirContentsMessage,
@@ -59,7 +62,7 @@ class CodeChatAgentConfig(DocChatAgentConfig):
     conversation_mode: bool = True
     content_includes: List[str] = ["txt", "md", "yml", "yaml", "sh", "Makefile"]
     content_excludes: List[str] = []
-    repo_url: str = "https://github.com/eugeneyan/testing-ml"
+    repo_url: str = ""
     gpt4: bool = False
     cache: bool = True
     debug: bool = False
@@ -102,10 +105,37 @@ class CodeChatAgent(DocChatAgent):
     """
 
     def __init__(self, config: CodeChatAgentConfig):
+        # do not allow vecdb creation until we get unique collection name based
+        # on the repo url or path.
+        config.vecdb.collection_name = None
         super().__init__(config)
         self.original_docs: List[Document] = None
+        if config.repo_url:
+            # the setter below triggers the repo to be loaded
+            self.repo_url = config.repo_url
 
-        self.repo_loader = RepoLoader(self.config.repo_url, RepoLoaderConfig())
+    @property
+    def repo_url(self):
+        """Path of code, could be either a github URL or a directory path"""
+        return self._repo_url
+
+    @repo_url.setter
+    def repo_url(self, value):
+        self._repo_url = value
+
+        default_collection_name = org_user_from_github(self._repo_url)
+        collection_name = Prompt.ask(
+            f"""Creating a vector-store for contents of {self._repo_url}.
+            IMPORTANT: we need a unique collection name for this repo.
+            What would you like to name this collection?""",
+            default=default_collection_name,
+        )
+        # so far there is no vector store, so we set the vecdb config to
+        # have this collection_name, and then instantiate the vecdb.
+        self.config.vecdb.collection_name = collection_name
+        self.vecdb = VectorStore.create(self.config.vecdb)
+
+        self.repo_loader = RepoLoader(self.repo_url, RepoLoaderConfig())
         self.repo_path = self.repo_loader.clone()
         # get the repo tree to depth d, with first k lines of each file
         self.repo_tree, _ = self.repo_loader.load(depth=1, lines=100)
@@ -127,10 +157,10 @@ class CodeChatAgent(DocChatAgent):
         listing = (
             [
                 """
-                      List of ALL files and directories in this project:
-                      If a file is not in this list, then we can be sure that
-                      it is not in the repo!
-                      """
+                          List of ALL files and directories in this project:
+                          If a file is not in this list, then we can be sure that
+                          it is not in the repo!
+                          """
             ]
             + RepoLoader.ls(dct, depth=1)
         )
@@ -142,15 +172,16 @@ class CodeChatAgent(DocChatAgent):
         code_docs = [
             doc
             for doc in documents
-            if doc.metadata.language not in (["md", "txt"] + config.content_excludes)
+            if doc.metadata.language
+            not in (["md", "txt"] + self.config.content_excludes)
         ] + [listing]
 
         text_docs = [doc for doc in documents if doc.metadata.language in ["md", "txt"]]
 
         with console.status("Processing code repo..."):
-            self.config.parsing = config.parsing
+            self.config.parsing = self.config.parsing
             n_text_splits = self.ingest_docs(text_docs)
-            self.config.parsing = config.code_parsing
+            self.config.parsing = self.config.code_parsing
             n_code_splits = self.ingest_docs(code_docs)
 
         os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -159,7 +190,7 @@ class CodeChatAgent(DocChatAgent):
             f"""
         [green]I have processed {len(documents)} files from the following GitHub Repo into 
         {n_text_splits} text chunks and {n_code_splits} code chunks:
-        {self.config.repo_url}
+        {self.repo_url}
         """.strip()
         )
 
