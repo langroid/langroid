@@ -27,6 +27,7 @@ class Task:
     def __init__(
         self,
         agent: Agent,
+        name: str= "",
         llm_delegate: bool = False,
         single_round: bool = False,
         system_message: str = "",
@@ -74,7 +75,7 @@ class Task:
                 agent.task_messages[1].content = user_message
 
         self.agent = agent
-        self.name = agent.config.name
+        self.name = name or agent.config.name
         self.default_human_response = default_human_response
         if default_human_response is not None:
             self.agent.default_human_response = default_human_response
