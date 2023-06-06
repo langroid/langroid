@@ -34,6 +34,7 @@ from examples.dockerchat.build_run_utils import (
 
 import logging
 import docker
+import time
 
 console = Console()
 logger = logging.getLogger(__name__)
@@ -406,17 +407,21 @@ class DockerChatAgent(ChatAgent):
                         # TODO: I need to define some timeout here because
                         # noticed the execution of some commands takes forever
                         test_result = container.exec_run(f"{test_case}")
-                        return f"Test case executed from inside the container: exit code = {test_result.exit_code} {test_result.output}"
+                        return f"""Test case executed from inside the container:
+                        exit code = {test_result.exit_code} {test_result.output}
+                        """
                     else:
                         return "Container run failed"
 
                 if location == "outside":
                     # TODO: we need converter from docker commands to docker SDK
                     cmd_result = _execute_command(run)
-                    if cmd_result[0] is True:
-                        container_id = cmd_result[1]
+                    if cmd_result[0] is True and cmd_result[1]:
+                        container_id = cmd_result[1].strip()
+                        time.sleep(20)
                         test_result = _execute_command(test_case)
-                        return f"Test case executed from outsied the container, execution code is: {test_result[0]}"
+                        return f"""Test case executed from outside the 
+                        container, execution code is: {test_result[0]}"""
                     else:
                         return f"Container run failed: {cmd_result[1]}"
             except Exception as e:
