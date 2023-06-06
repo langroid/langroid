@@ -4,6 +4,7 @@ import pytest
 
 from llmagent.agent.base import Entity
 from llmagent.agent.chat_agent import ChatAgent, ChatAgentConfig
+from llmagent.agent.task import Task
 from llmagent.cachedb.redis_cachedb import RedisCacheConfig
 from llmagent.language_models.base import Role
 from llmagent.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
@@ -35,30 +36,39 @@ def test_inter_agent_chat(test_settings: Settings, helper_human_response: str):
     cfg2 = _TestChatAgentConfig(name="Jones")
 
     agent = ChatAgent(cfg1)
+    task = Task(
+        agent,
+        llm_delegate=True,
+        single_round=False,
+        default_human_response="",
+        only_user_quits_root=False,
+    )
     agent_helper = ChatAgent(cfg2)
-    agent.controller = Entity.LLM
-    agent.add_agent(agent_helper, llm_delegate=False, single_round=True)
-
-    agent.default_human_response = ""
-    agent_helper.default_human_response = helper_human_response
+    task_helper = Task(
+        agent_helper,
+        llm_delegate=False,
+        single_round=True,
+        default_human_response=helper_human_response,
+    )
+    task.add_sub_task(task_helper)
 
     msg = """
     Your job is to ask me questions. 
     Start by asking me what the capital of France is.
     """
-    agent.init_chat(user_message=msg)
+    task.reset_pending_message(msg)
 
-    agent.process_pending_message()  # LLM asks
-    assert "What" in agent.pending_message.content
-    assert agent.pending_message.metadata.source == Entity.LLM
+    task.step()
+    assert "What" in task.pending_message.content
+    assert task.pending_message.metadata.source == Entity.LLM
 
-    agent.process_pending_message()
+    task.step()
     # user responds '' (empty) to force agent to hand off to agent_helper,
     # and we test two possible human answers: empty or 'q'
 
-    assert agent_helper._task_done()
-    assert "Paris" in agent_helper.task_result().content
-    assert not agent._task_done()
+    assert task_helper.done()
+    assert "Paris" in task_helper.result().content
+    assert not task.done()
 
 
 # The classes below are for the mult-agent test
@@ -96,8 +106,19 @@ EXPONENTIALS = "3**5 8**3 9**3"
 
 def test_multi_agent(test_settings: Settings):
     set_global(test_settings)
-    master_cfg = _TestChatAgentConfig(
-        name="Master",
+    master_cfg = _TestChatAgentConfig(name="Master")
+
+    planner_cfg = _TestChatAgentConfig(name="Planner")
+
+    multiplier_cfg = _TestChatAgentConfig(name="Multiplier")
+
+    # master asks a series of expenenential questions, e.g. 3^6, 8^5, etc.
+    master = _MasterAgent(master_cfg)
+    task_master = Task(
+        master,
+        llm_delegate=True,
+        single_round=False,
+        default_human_response="",
         system_message=f"""
                 Your job is to ask me EXACTLY this series of exponential questions:
                 {EXPONENTIALS}
@@ -111,10 +132,16 @@ def test_multi_agent(test_settings: Settings):
                 e.g. "DONE: 243 512 729 125".
                 """,
         user_message="Start by asking me an exponential question.",
+        only_user_quits_root=False,
     )
 
-    planner_cfg = _TestChatAgentConfig(
-        name="Planner",
+    # For a given exponential computation, plans a sequence of multiplications.
+    planner = _PlannerAgent(planner_cfg)
+    task_planner = Task(
+        planner,
+        llm_delegate=True,
+        single_round=True,
+        default_human_response="",
         system_message="""
                 You understand exponentials, but you do not know how to multiply.
                 You will be given an exponential to compute, and you have to ask a 
@@ -126,36 +153,32 @@ def test_multi_agent(test_settings: Settings):
                 """,
     )
 
-    multiplier_cfg = _TestChatAgentConfig(
-        name="Multiplier",
+    # Given a multiplication, returns the answer.
+    multiplier = _MultiplierAgent(multiplier_cfg)
+    task_multiplier = Task(
+        multiplier,
+        llm_delegate=False,
+        single_round=True,
+        default_human_response="",
         system_message="""
                 You are a calculator. You will be given a multiplication problem. 
                 You simply reply with the answer, say nothing else.
                 """,
     )
 
-    # master asks a series of expenenential questions, e.g. 3^6, 8^5, etc.
-    master = _MasterAgent(master_cfg)
-
-    # For a given exponential computation, plans a sequence of multiplications.
-    planner = _PlannerAgent(planner_cfg)
-
-    # Given a multiplication, returns the answer.
-    multiplier = _MultiplierAgent(multiplier_cfg)
-
     # planner helps master...
-    master.add_agent(planner, llm_delegate=True, single_round=False)
+    task_master.add_sub_task(task_planner)
     # multiplier helps planner...
-    planner.add_agent(multiplier, llm_delegate=False, single_round=True)
+    task_planner.add_sub_task(task_multiplier)
 
     # ... since human has nothing to say
     master.default_human_response = ""
     planner.default_human_response = ""
     multiplier.default_human_response = ""
 
-    result = master.do_task(llm_delegate=True)
+    result = task_master.run()
 
     answers = [str(eval(e)) for e in EXPONENTIALS.split()]
     assert all(a in result.content for a in answers)
 
-    # asserttions on message history of each agent
+    # TODO assertions on message history of each agent

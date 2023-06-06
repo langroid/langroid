@@ -11,3 +11,8 @@ class Colors(BaseModel):
     MAGENTA: str = "\033[35m"
     YELLOW: str = "\033[33m"
     RESET: str = "\033[0m"
+
+
+USER_QUIT = ["q", "x", "quit", "exit", "bye"]
+NO_ANSWER = "I don't know"
+DONE = "DONE:"

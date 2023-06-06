@@ -1,5 +1,6 @@
 from llmagent.agent.base import NO_ANSWER, Entity
 from llmagent.agent.chat_agent import ChatAgent, ChatAgentConfig
+from llmagent.agent.task import Task
 from llmagent.cachedb.redis_cachedb import RedisCacheConfig
 from llmagent.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
 from llmagent.parsing.parser import ParsingConfig
@@ -58,80 +59,88 @@ def test_process_messages(test_settings: Settings):
     set_global(test_settings)
     cfg = _TestChatAgentConfig()
     agent = ChatAgent(cfg)
+    task = Task(
+        agent, llm_delegate=False, single_round=False, only_user_quits_root=False
+    )
     msg = "What is the capital of France?"
-    agent.init_chat(user_message=msg)
-    assert agent.pending_message.content == msg
+    task.reset_pending_message(msg)
+    assert task.pending_message.content == msg
 
     # LLM answers
-    agent.process_pending_message()
-    assert "Paris" in agent.pending_message.content
-    assert agent.pending_message.metadata.sender == Entity.LLM
+    task.step()
+    assert "Paris" in task.pending_message.content
+    assert task.pending_message.metadata.sender == Entity.LLM
 
     agent.default_human_response = "What about England?"
     # User asks about England
-    agent.process_pending_message()
-    assert "England" in agent.pending_message.content
-    assert agent.pending_message.metadata.sender == Entity.USER
+    task.step()
+    assert "England" in task.pending_message.content
+    assert task.pending_message.metadata.sender == Entity.USER
 
     # LLM answers
-    agent.process_pending_message()
-    assert "London" in agent.pending_message.content
-    assert agent.pending_message.metadata.sender == Entity.LLM
+    task.step()
+    assert "London" in task.pending_message.content
+    assert task.pending_message.metadata.sender == Entity.LLM
 
     # It's Human's turn; they say nothing,
     # and this is reflected in `self.pending_message` as NO_ANSWER
     agent.default_human_response = ""
     # Human says ''
-    agent.process_pending_message()
-    assert NO_ANSWER in agent.pending_message.content
-    assert agent.pending_message.metadata.sender == Entity.USER
+    task.step()
+    assert NO_ANSWER in task.pending_message.content
+    assert task.pending_message.metadata.sender == Entity.USER
 
     # Since chat was user-initiated, LLM can still respond to NO_ANSWER
     # with something like "How can I help?"
-    agent.process_pending_message()
-    assert NO_ANSWER not in agent.pending_message.content
-    assert agent.pending_message.metadata.sender == Entity.LLM
+    task.step()
+    assert NO_ANSWER not in task.pending_message.content
+    assert task.pending_message.metadata.sender == Entity.LLM
 
     # reset task
     question = "What is my name?"
-    agent.init_chat(
+    task = Task(
+        agent,
         system_message=f""" Your job is to always say "{NO_ANSWER}" """,
         user_message=question,
+        llm_delegate=False,
+        single_round=False,
         restart=True,
+        only_user_quits_root=False,
     )
     # LLM responds with NO_ANSWER
-    agent.process_pending_message()
-    assert NO_ANSWER in agent.pending_message.content
-    assert agent.pending_message.metadata.sender == Entity.LLM
+    task.step()
+    assert NO_ANSWER in task.pending_message.content
+    assert task.pending_message.metadata.sender == Entity.LLM
 
 
 def test_task(test_settings: Settings):
     set_global(test_settings)
     cfg = _TestChatAgentConfig()
     agent = ChatAgent(cfg)
+    task = Task(agent, llm_delegate=False, single_round=False)
     question = "What is the capital of France?"
     agent.default_human_response = question
 
-    # set up task with null initial message
-    agent.do_task(rounds=3)
+    # run task with null initial message
+    task.run(turns=3)
 
-    # Rounds:
+    # 3 Turns:
     # 1. LLM initiates convo saying thanks how can I help (since do_task msg empty)
     # 2. User asks the `default_human_response`: What is the capital of France?
     # 3. LLM responds
 
-    assert agent.pending_message.metadata.sender == Entity.LLM
-    assert "Paris" in agent.pending_message.content
+    assert task.pending_message.metadata.sender == Entity.LLM
+    assert "Paris" in task.pending_message.content
 
     agent.default_human_response = "What about England?"
 
-    # set up task with initial question
-    agent.do_task(msg=question, rounds=3)
+    # run task with initial question
+    task.run(msg=question, turns=3)
 
-    # Rounds:
-    # 1. LLM answers question, since do_task has the question already
+    # 3 Turns:
+    # 1. LLM answers question, since task is run with the question
     # 2. User asks the `default_human_response`: What about England?
     # 3. LLM responds
 
-    assert agent.pending_message.metadata.sender == Entity.LLM
-    assert "London" in agent.pending_message.content
+    assert task.pending_message.metadata.sender == Entity.LLM
+    assert "London" in task.pending_message.content
