@@ -171,61 +171,6 @@ class ChatAgent(Agent):
         if len(self.message_history) > 0:
             self.message_history[self.json_instructions_idx].content = json_instructions
 
-    def init_chat(
-        self,
-        system_message: Optional[str] = None,
-        user_message: Optional[str] = None,
-        restart: Optional[bool] = False,
-    ) -> None:
-        """
-        Initialize the chat with system and user message.
-        If self.message_history is not empty, meaning we have already started a chat,
-        then: If `restart` is False (default), we leave the message history as is,
-        and otherwise, we clear the message history, and reset the self.task_messages
-
-        Args:
-            system_message (str): system message containing role etc; optional,
-                    if None, use default
-            user_message (str): user message containing first question, or more
-                    detailed instructions. Careful: for certain subclasses of ChatAgent,
-                    the user message may get augmented with relevant context documents,
-                    so we may want to leave this as None.
-            restart (bool): if True, clear the message history and reset the task
-        """
-        if len(self.message_history) == 0 or restart:
-            self.message_history = []
-            # possibly change the task messages
-            if system_message is not None:
-                # we always have at least 1 task_message
-                self.task_messages[0].content = system_message
-        self.reset_pending_message(user_message)
-
-    @no_type_check
-    def do_task(
-        self,
-        msg: Optional[str] = None,
-        system_message: Optional[str] = None,
-        rounds: int = -1,
-        restart: bool = False,
-        llm_delegate: bool = False,
-    ) -> Optional[ChatDocument]:
-        """
-        Do the task, as specified in the optional msg
-        (if absent use the self.task_messages),
-
-        Args:
-            msg (str): optional initial msg from user
-            system_message: optional system message spe
-            rounds: how many rounds to run the task for
-            restart: if True, clear the message history and reset the task
-            llm_delegate: whether to delegate control to LLM
-
-        Returns:
-            Document: result in the form of a Document object
-        """
-        self.init_chat(system_message=system_message, user_message=msg, restart=restart)
-        return super().do_task(msg, rounds=rounds, llm_delegate=llm_delegate)
-
     @no_type_check
     def llm_response(self, message: Optional[str] = None) -> Optional[ChatDocument]:
         """

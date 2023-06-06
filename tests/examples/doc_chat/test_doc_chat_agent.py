@@ -1,5 +1,6 @@
 from examples.urlqa.doc_chat_agent import DocChatAgent, DocChatAgentConfig
 from llmagent.agent.base import Entity
+from llmagent.agent.task import Task
 from llmagent.mytypes import Document, DocMetaData
 from llmagent.utils.configuration import Settings, set_global
 from llmagent.vector_store.qdrantdb import QdrantDBConfig
@@ -125,15 +126,15 @@ def test_doc_chat_agent(test_settings: Settings, query: str, expected: str):
 
 def test_doc_chat_process(test_settings: Settings):
     set_global(test_settings)
-    agent.init_chat()
-    agent.message_history = []
+    task = Task(agent, restart=True)
+    task.reset_pending_message()
     # LLM responds to Sys msg, initiates conv, says thank you, etc.
-    agent.process_pending_message()
+    task.step()
     for q, expected in QUERY_EXPECTED_PAIRS:
         agent.default_human_response = q
-        agent.process_pending_message()  # user asks `q`
-        agent.process_pending_message()  # LLM answers
-        ans = agent.pending_message.content
+        task.step()  # user asks `q`
+        task.step()  # LLM answers
+        ans = task.pending_message.content
         expected = [e.strip() for e in expected.split(",")]
         assert all([e in ans for e in expected])
-        assert agent.pending_message.metadata.sender == Entity.LLM
+        assert task.pending_message.metadata.sender == Entity.LLM
