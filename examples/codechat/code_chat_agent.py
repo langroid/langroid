@@ -11,6 +11,7 @@ from llmagent.prompts.prompts_config import PromptsConfig
 from llmagent.prompts.templates import ANSWER_PROMPT_USE_HISTORY_GPT4
 from llmagent.mytypes import Document, DocMetaData
 from rich.prompt import Prompt
+from pathlib import Path
 from llmagent.parsing.urls import org_user_from_github
 
 from examples.codechat.code_chat_tools import (
@@ -101,7 +102,11 @@ class CodeChatAgentConfig(DocChatAgentConfig):
 
 class CodeChatAgent(DocChatAgent):
     """
-    Agent for chatting with a code repository.
+    Agent for chatting with a code repository, that uses retrieval-augmented queries
+    to answer questions about code-base in 1 turn:
+    user question =>
+        user prompt = (relevant code extracts + question)
+         => LLM answer
     """
 
     def __init__(self, config: CodeChatAgentConfig):
@@ -110,6 +115,7 @@ class CodeChatAgent(DocChatAgent):
         config.vecdb.collection_name = None
         super().__init__(config)
         self.original_docs: List[Document] = None
+        self.repo_info_message = ""
         if config.repo_url:
             self.ingest_url(config.repo_url)
 
@@ -141,7 +147,7 @@ class CodeChatAgent(DocChatAgent):
         repo_listing_shown = "\n".join(self.repo_loader.ls(self.repo_tree, depth=1))
         self.repo_listing = self.repo_loader.ls(self.repo_tree, depth=2)
 
-        repo_info_message = f"""
+        self.repo_info_message = f"""
         Here is some information about the code repository that you can use, 
         in the subsequent questions. For any future questions, you can refer back to 
         this info if needed.
@@ -150,7 +156,7 @@ class CodeChatAgent(DocChatAgent):
         {repo_listing_shown}
         """
 
-        self.add_user_message(repo_info_message)
+        self.add_user_message(self.repo_info_message)
 
         dct, documents = self.repo_loader.load(depth=2, lines=100)
         listing = (
@@ -211,7 +217,12 @@ class CodeChatAgent(DocChatAgent):
             return
 
     def show_dir_contents(self, msg: ShowDirContentsMessage) -> str:
-        listing = RepoLoader.list_files(msg.dir, depth=1)
+        # msg.dir is a relative path from the root of the repo,
+        # so we need to join it with the repo path
+        listing = RepoLoader.list_files(
+            str(Path(self.repo_path) / msg.dirpath),
+            depth=1,
+        )
         return ", ".join(listing)
 
     def run_python(self, msg: RunPythonMessage) -> str:
