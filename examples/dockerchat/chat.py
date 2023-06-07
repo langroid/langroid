@@ -79,6 +79,13 @@ def chat(config: DockerChatAgentConfig) -> None:
             Before showing me a dockerfile, first ask my permission if you can show it.
             Make sure you ask about only ONE item at a time. Do not combine multiple 
             questions into one request.
+            If you are asking for information in plain english, write it as 
+            "INFO: <question>". 
+            When you are simply making a comment, and not seeking information, 
+            write it as 
+            "COMMENT: <comment>".
+            When you are ready to show a docker file, start the sentence with "READY:".
+
             Start by asking me for the URL of the github repo.
             """,
         ),

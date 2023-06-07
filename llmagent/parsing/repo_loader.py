@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 from urllib.parse import urlparse
 
+from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from github import Github
 from github.ContentFile import ContentFile
@@ -493,8 +494,10 @@ class RepoLoader:
                     content = "\n".join(line.strip() for line in file_lines)
                 else:
                     content = f.read()
+            soup = BeautifulSoup(content, "html.parser")
+            text = soup.get_text()
             docs.append(
-                Document(content=content, metadata=DocMetaData(source=str(file_path)))
+                Document(content=text, metadata=DocMetaData(source=str(file_path)))
             )
 
         return docs

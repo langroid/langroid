@@ -143,6 +143,6 @@ class EntryPointAndCMDMessage(AgentMessage):
             cls(
                 result="The name of the main script in this repo is main.py. To run it, you can use the command python main.py"
             ),
-            cls(result="I don't know."),
+            cls(result="I could not find the entry point."),
             cls(result="This repo doesn't have main script"),
         ]

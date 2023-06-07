@@ -14,6 +14,7 @@ from rich.prompt import Prompt
 from pathlib import Path
 from llmagent.parsing.urls import org_user_from_github
 
+
 from examples.codechat.code_chat_tools import (
     ShowFileContentsMessage,
     ShowDirContentsMessage,
@@ -39,19 +40,6 @@ simply answer "No".
 DEFAULT_CODE_CHAT_SYSTEM_MESSAGE = """
 You are an expert software engineer, helping me understand a code repository.
 """
-
-DEFAULT_CODE_CHAT_ANSWER_PROMPT_GPT4 = """
-        Use either the extracts from the code repo provided below, OR any of the info 
-        shown previously, to answer the question below. If there's not enough 
-        information, respond with "I don't know." 
-        Compose your complete answer and cite all supporting sources on a separate 
-        separate line as "SOURCE:". 
-        
-        {extracts}
-        
-        {question}
-        Answer:   
-""".strip()
 
 
 class CodeChatAgentConfig(DocChatAgentConfig):
@@ -211,7 +199,11 @@ class CodeChatAgent(DocChatAgent):
                 depth=3,
                 lines=100,  # show max 100 lines to keep prompt small
             )
-            return docs[0].content
+            contents = docs[0].content
+            return f"""
+            Contents of {filepath}:
+            {contents}
+            """
         except Exception as e:
             logger.error(f"Error loading file {filepath}: {e}")
             return
@@ -223,7 +215,11 @@ class CodeChatAgent(DocChatAgent):
             str(Path(self.repo_path) / msg.dirpath),
             depth=1,
         )
-        return ", ".join(listing)
+        contents = ", ".join(listing)
+        return f"""
+        Contents of {msg.dirpath}:
+        {contents}
+        """
 
     def run_python(self, msg: RunPythonMessage) -> str:
         # TODO: to be implemented. Return dummy msg for now

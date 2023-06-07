@@ -306,7 +306,14 @@ class Agent(ABC):
         results_list = [r for r in results if r is not None]
         if len(results_list) == 0:
             return self.handle_message_fallback(input_str)
-        return "\n".join(results_list)
+        # there was a non-None result
+        final = "\n".join(results_list)
+        assert (
+            final != ""
+        ), """final result from a handler should not empty, since that would be 
+            considered an invalid result and other responders will be tried, 
+            and we may not necessarily want that"""
+        return final
 
     def handle_message_fallback(self, input_str: str) -> Optional[str]:
         """
@@ -340,11 +347,6 @@ class Agent(ABC):
 
         handler_method = getattr(self, request, None)
         if handler_method is None:
-            # raise ValueError(f"No handler method found for request '{request}'")
-            logger.warning(
-                f"No handler method found for request '{request}' in Agent "
-                f"{self.config.name}, but sub-task agents may have it."
-            )
             return None
 
         return handler_method(message)  # type: ignore

@@ -19,6 +19,7 @@ from rich.console import Console
 from rich.prompt import Prompt
 from llmagent.language_models.base import LLMMessage
 from llmagent.parsing.repo_loader import RepoLoader, RepoLoaderConfig
+from llmagent.utils.constants import NO_ANSWER
 from examples.dockerchat.identify_python_version import get_python_version
 from examples.dockerchat.identify_python_dependency import (
     identify_dependency_management,
@@ -37,10 +38,8 @@ DEFAULT_URL = "https://github.com/eugeneyan/testing-ml"
 # Message types that can be handled by the agent;
 # each corresponds to a method in the agent.
 
-NO_ANSWER = "I don't know"
-NONE_ANSWER = "NONE"
 
-PLANNER_INSTRUCTIONS = """
+PLANNER_INSTRUCTIONS = f"""
 You are a software developer and you want to create a dockerfile to container your 
 code repository. However: 
 (a) you are generally aware of docker, but you're not a docker expert, and
@@ -48,7 +47,7 @@ code repository. However:
 You will be receiving questions from a docker expert about the code repository.
 For each MAIN question Q, you have to think step by step, and break it down into 
 small steps. For each step (since you cannot access the code repo) you have to ask me 
-a question, and I will try to answer. If I cannot, I may say "I don't know" or "NONE", 
+a question, and I will try to answer. If I cannot, I will say "{NO_ANSWER}", 
 in that case, DO NOT MAKE UP AN ANSWER! Instead, you can try asking differently or 
 break it down into even smaller steps. For finding out certain types of information, 
 you have access to special TOOLS, as described below. When a TOOL is applicable, 
@@ -58,22 +57,22 @@ in  plain English.
   
 Only when you are SURE you have the answer to the MAIN question Q, simply say 
 "DONE: <whatever the answer is>". Then you may get another MAIN question Q, and so on.
-If you are not able to answer the MAIN question Q, simply say "I don't know", 
-and DO NOT MAKE UP AN ANSWER!
+If you are not able to answer the MAIN question Q, simply say "{NO_ANSWER}", 
+and nothing else; DO NOT MAKE UP AN ANSWER!
 Your only messages should be 
 (a) question for me (in plan English or using the TOOL JSON format if the tool is 
 applicable), or
 (b) DONE: <answer>, or 
-(c) I don't know.
+(c) {NO_ANSWER}
 Do not say anything else.
 """
 
-CODE_CHAT_INSTRUCTIONS = """
+CODE_CHAT_INSTRUCTIONS = f"""
 You have access to a code repository, and you will receive questions about it, 
 to help me create a dockerfile for the repository. 
 Along with the question, you may be given extracts from the code repo, and you can 
 use those extracts to answer the question. If you cannot answer given the 
-information, simply say "I don't know".
+information, simply say "{NO_ANSWER}".
 """
 
 
@@ -119,9 +118,9 @@ class DockerChatAgent(ChatAgent):
         self.planner_agent.enable_message(ShowDirContentsMessage)
         self.planner_agent.enable_message(ShowFileContentsMessage)
         self.planner_agent.enable_message(RunPythonMessage)
-        self.code_chat_agent.enable_message(ShowDirContentsMessage)
-        self.code_chat_agent.enable_message(ShowFileContentsMessage)
-        self.code_chat_agent.enable_message(RunPythonMessage)
+        self.code_chat_agent.enable_message(ShowDirContentsMessage, use=False)
+        self.code_chat_agent.enable_message(ShowFileContentsMessage, use=False)
+        self.code_chat_agent.enable_message(RunPythonMessage, use=False)
 
     def handle_message_fallback(self, input_str: str = "") -> Optional[str]:
         if self.repo_path is None and "URL" not in input_str:

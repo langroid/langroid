@@ -7,6 +7,7 @@ from llmagent.parsing.parser import ParsingConfig, Splitter
 from llmagent.utils.configuration import settings
 from contextlib import ExitStack
 from llmagent.mytypes import Document, DocMetaData
+from llmagent.utils.constants import NO_ANSWER
 from typing import List, Union
 from rich import print
 from rich.console import Console
@@ -22,8 +23,6 @@ about them, or summarize them into coherent answers.
 DEFAULT_DOC_CHAT_SYSTEM_MESSAGE = """
 You are a helpful assistant, helping me understand a collection of documents.
 """
-
-NO_ANSWER = "I don't know."
 
 
 class DocChatAgentConfig(ChatAgentConfig):
@@ -187,6 +186,12 @@ class DocChatAgent(ChatAgent):
 
     def answer_from_docs(self, query: str) -> Document:
         """Answer query based on docs in vecdb, and conv history"""
+        response = Document(
+            content=NO_ANSWER,
+            metadata=DocMetaData(
+                source="None",
+            ),
+        )
         if len(self.dialog) > 0 and not self.config.conversation_mode:
             # In conversation mode, we let self.message_history accumulate
             # and do not need to convert to standalone query
@@ -206,6 +211,8 @@ class DocChatAgent(ChatAgent):
                     query,
                     k=self.config.parsing.n_similar_docs,
                 )
+            if len(docs_and_scores) == 0:
+                return response
             passages: List[Document] = [
                 Document(content=d.content, metadata=d.metadata)
                 for (d, _) in docs_and_scores
