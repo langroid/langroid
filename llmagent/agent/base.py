@@ -340,7 +340,12 @@ class Agent(ABC):
 
         handler_method = getattr(self, request, None)
         if handler_method is None:
-            raise ValueError(f"No handler method found for request '{request}'")
+            # raise ValueError(f"No handler method found for request '{request}'")
+            logger.warning(
+                f"No handler method found for request '{request}' in Agent "
+                f"{self.config.name}, but sub-task agents may have it."
+            )
+            return None
 
         return handler_method(message)  # type: ignore
 
