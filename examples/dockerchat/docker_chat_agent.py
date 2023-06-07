@@ -50,14 +50,22 @@ For each MAIN question Q, you have to think step by step, and break it down into
 small steps. For each step (since you cannot access the code repo) you have to ask me 
 a question, and I will try to answer. If I cannot, I may say "I don't know" or "NONE", 
 in that case, DO NOT MAKE UP AN ANSWER! Instead, you can try asking differently or 
-break it down into even smaller steps.  
+break it down into even smaller steps. For finding out certain types of information, 
+you have access to special TOOLS, as described below. When a TOOL is applicable, 
+you should make your request in the precise JSON format described for the tool. If a 
+tool is not applicable for the information you are seeking, you can make the request 
+in  plain English.
+  
 Only when you are SURE you have the answer to the MAIN question Q, simply say 
 "DONE: <whatever the answer is>". Then you may get another MAIN question Q, and so on.
 If you are not able to answer the MAIN question Q, simply say "I don't know", 
 and DO NOT MAKE UP AN ANSWER!
 Your only messages should be 
-(a) question for me, (b) DONE: <answer>, or (c) I don't know.
-Do you say anything else.
+(a) question for me (in plan English or using the TOOL JSON format if the tool is 
+applicable), or
+(b) DONE: <answer>, or 
+(c) I don't know.
+Do not say anything else.
 """
 
 CODE_CHAT_INSTRUCTIONS = """
@@ -65,10 +73,7 @@ You have access to a code repository, and you will receive questions about it,
 to help me create a dockerfile for the repository. 
 Along with the question, you may be given extracts from the code repo, and you can 
 use those extracts to answer the question. If you cannot answer given the 
-information, simply say "I don't know", or say "NONE", whichever you prefer.
-For some questions, you may be able to use TOOLs to answer them; if there are tools 
-available, you will be told what they are, when to use them, and what format to 
-request the TOOL.
+information, simply say "I don't know".
 """
 
 
@@ -89,7 +94,7 @@ class DockerChatAgent(ChatAgent):
         code_chat_cfg = CodeChatAgentConfig(
             name="Coder",
             repo_url="",  # this will be set later
-            system_message=CODE_CHAT_INSTRUCTIONS,
+            system_message=PLANNER_INSTRUCTIONS,
             content_includes=["txt", "md", "yml", "yaml", "sh", "Makefile"],
             content_excludes=["Dockerfile"],
             # USE same LLM settings as DockerChatAgent, e.g.
@@ -97,9 +102,6 @@ class DockerChatAgent(ChatAgent):
             llm=self.config.llm,
         )
         self.code_chat_agent = CodeChatAgent(code_chat_cfg)
-        self.code_chat_agent.enable_message(ShowDirContentsMessage)
-        self.code_chat_agent.enable_message(ShowFileContentsMessage)
-        self.code_chat_agent.enable_message(RunPythonMessage)
 
         planner_agent_cfg = ChatAgentConfig(
             name="Planner",
@@ -107,7 +109,19 @@ class DockerChatAgent(ChatAgent):
             vecdb=None,
             llm=self.config.llm,
         )
+        # Enable tools for planner_agent so that the LLM can REQUEST these tools,
+        # but the planner_agent does NOT have methods to handle these tools,
+        # so in the planner's task-loop, the agent will detect this request, but will
+        # have a None response. The Task.step() then ensures that the JSON request is
+        # ultimately handled by the code_chat_agent, which DOES have methods
+        # corresponding to these tools.
         self.planner_agent = ChatAgent(planner_agent_cfg)
+        self.planner_agent.enable_message(ShowDirContentsMessage)
+        self.planner_agent.enable_message(ShowFileContentsMessage)
+        self.planner_agent.enable_message(RunPythonMessage)
+        self.code_chat_agent.enable_message(ShowDirContentsMessage)
+        self.code_chat_agent.enable_message(ShowFileContentsMessage)
+        self.code_chat_agent.enable_message(RunPythonMessage)
 
     def handle_message_fallback(self, input_str: str = "") -> Optional[str]:
         if self.repo_path is None and "URL" not in input_str:
@@ -161,17 +175,18 @@ class DockerChatAgent(ChatAgent):
         self.url = url_model.url  # uses setter `url` above
         repo_listing = "\n".join(self.repo_loader.ls(self.repo_tree, depth=1))
 
-        return f"""
+        repo_listing_message = f"""
         Based on the URL, here is some information about the repo that you can use.  
         
-        First, here is a list of ALL the files and directories at the ROOT of the 
-        repo. Any files of interest to you MUST be in this list, therefore you do NOT 
-        need to ask in future about whether any file exists.
+        First, here is a list of ALL the files and directories at the ROOT of the repo: 
         {repo_listing}
+        
         In later parts of the conversation, only ask questions that CANNOT 
         be answered by the information above. Do not ask for any info that is already 
         provided above! 
         """
+        self.planner_agent.add_user_message(repo_listing_message)
+        return repo_listing_message
 
     def python_version(self, m: PythonVersionMessage) -> str:
         """

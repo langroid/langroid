@@ -671,7 +671,7 @@ class RepoLoader:
         Recursively list all files in a directory, up to a certain depth.
 
         Args:
-            dir (str): The directory path.
+            dir (str): The directory path, relative to root.
             depth (int, optional): The depth level. Defaults to 1.
         Returns:
             List[str]: A list of file names.
