@@ -136,9 +136,22 @@ class ChatAgent(Agent):
                 self.message_history[i].content = message
                 break
 
-    def enable_message(self, message_class: Type[AgentMessage]) -> None:
+    def enable_message(
+        self,
+        message_class: Type[AgentMessage],
+        use: bool = True,
+    ) -> None:
+        """
+        Enable this agent to RESPOND to a message class (Tool), and if `use` is True,
+        update the message instructions so the agent can USE this tool as well.
+
+        Args:
+            message_class: The AgentMessage class (tool) to enable
+            use: whether to allow the agent (LLM) to use this tool
+        """
         super().enable_message(message_class)
-        self.update_message_instructions()
+        if use:
+            self.update_message_instructions()
 
     def disable_message(self, message_class: Type[AgentMessage]) -> None:
         super().disable_message(message_class)
@@ -244,6 +257,14 @@ class ChatAgent(Agent):
                     """
                     )
 
+        if output_len < self.config.llm.min_output_tokens:
+            raise ValueError(
+                f"""
+                Tried to shorten prompt history for chat mode 
+                but the feasible output length {output_len} is still
+                less than the minimum output length {self.config.llm.min_output_tokens}.
+                """
+            )
         with StreamingIfAllowed(self.llm):
             response = self.llm_response_messages(hist, output_len)
         self.message_history.append(

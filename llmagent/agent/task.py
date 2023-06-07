@@ -293,6 +293,10 @@ class Task:
         Is the result from an entity or sub-task such that we can stop searching
         for responses for this turn?
         """
+        # TODO caution we should ensure that no handler method (tool) returns simply
+        # an empty string (e.g when showing contents of an empty file), since that
+        # would be considered an invalid response, and other responders will wrongly
+        # be given a chance to respond.
         return (
             result is not None
             and result.content != ""
