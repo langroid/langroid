@@ -11,6 +11,7 @@ from llmagent.prompts.prompts_config import PromptsConfig
 from llmagent.prompts.templates import ANSWER_PROMPT_USE_HISTORY_GPT4
 from llmagent.mytypes import Document, DocMetaData
 from rich.prompt import Prompt
+from pathlib import Path
 from llmagent.parsing.urls import org_user_from_github
 
 from examples.codechat.code_chat_tools import (
@@ -101,7 +102,11 @@ class CodeChatAgentConfig(DocChatAgentConfig):
 
 class CodeChatAgent(DocChatAgent):
     """
-    Agent for chatting with a code repository.
+    Agent for chatting with a code repository, that uses retrieval-augmented queries
+    to answer questions about code-base in 1 turn:
+    user question =>
+        user prompt = (relevant code extracts + question)
+         => LLM answer
     """
 
     def __init__(self, config: CodeChatAgentConfig):
@@ -110,18 +115,18 @@ class CodeChatAgent(DocChatAgent):
         config.vecdb.collection_name = None
         super().__init__(config)
         self.original_docs: List[Document] = None
+        self.repo_info_message = ""
         if config.repo_url:
-            # the setter below triggers the repo to be loaded
-            self.repo_url = config.repo_url
+            self.ingest_url(config.repo_url)
 
-    @property
-    def repo_url(self):
-        """Path of code, could be either a github URL or a directory path"""
-        return self._repo_url
+    def ingest_url(self, url: str) -> None:
+        """
+        Clone, chunk, ingest contents of a code repo at `url`, into the vector store.
 
-    @repo_url.setter
-    def repo_url(self, value):
-        self._repo_url = value
+        Args:
+            url (str): github URL of repo to ingest
+        """
+        self._repo_url = url
 
         default_collection_name = org_user_from_github(self._repo_url)
         collection_name = Prompt.ask(
@@ -135,14 +140,14 @@ class CodeChatAgent(DocChatAgent):
         self.config.vecdb.collection_name = collection_name
         self.vecdb = VectorStore.create(self.config.vecdb)
 
-        self.repo_loader = RepoLoader(self.repo_url, RepoLoaderConfig())
+        self.repo_loader = RepoLoader(self._repo_url, RepoLoaderConfig())
         self.repo_path = self.repo_loader.clone()
         # get the repo tree to depth d, with first k lines of each file
         self.repo_tree, _ = self.repo_loader.load(depth=1, lines=100)
         repo_listing_shown = "\n".join(self.repo_loader.ls(self.repo_tree, depth=1))
         self.repo_listing = self.repo_loader.ls(self.repo_tree, depth=2)
 
-        repo_info_message = f"""
+        self.repo_info_message = f"""
         Here is some information about the code repository that you can use, 
         in the subsequent questions. For any future questions, you can refer back to 
         this info if needed.
@@ -151,7 +156,7 @@ class CodeChatAgent(DocChatAgent):
         {repo_listing_shown}
         """
 
-        self.add_user_message(repo_info_message)
+        self.add_user_message(self.repo_info_message)
 
         dct, documents = self.repo_loader.load(depth=2, lines=100)
         listing = (
@@ -190,7 +195,7 @@ class CodeChatAgent(DocChatAgent):
             f"""
         [green]I have processed {len(documents)} files from the following GitHub Repo into 
         {n_text_splits} text chunks and {n_code_splits} code chunks:
-        {self.repo_url}
+        {self._repo_url}
         """.strip()
         )
 
@@ -212,7 +217,12 @@ class CodeChatAgent(DocChatAgent):
             return
 
     def show_dir_contents(self, msg: ShowDirContentsMessage) -> str:
-        listing = RepoLoader.list_files(msg.dir, depth=1)
+        # msg.dir is a relative path from the root of the repo,
+        # so we need to join it with the repo path
+        listing = RepoLoader.list_files(
+            str(Path(self.repo_path) / msg.dirpath),
+            depth=1,
+        )
         return ", ".join(listing)
 
     def run_python(self, msg: RunPythonMessage) -> str:

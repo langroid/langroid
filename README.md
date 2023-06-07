@@ -25,6 +25,12 @@ python3 -m venv .venv
 # use poetry to install dependencies (these go into .venv dir)
 poetry install
 ```
+To add packages, use `poetry add <package-name>`. This will automatically 
+find the latest compatible version of the package and add it to `pyproject.
+toml`. _Do not manually edit `pyproject.toml` to add packages._
+
+## Set up environment variables (API keys, etc
+
 Copy the `.env-template` file to a new file `.env` and 
 insert these secrets:
 - OpenAI API key, 
@@ -93,9 +99,12 @@ By following these practices, we can create a clean, consistent, and
 easy-to-understand codebase for all contributors. Thank you for your
 cooperation!
 
-To check for issues locally, run `make check`, it runs linters `black`, 
-`flake8` and type-checker `mypy`. The `mypy` flags lots of issues, but 
-ignore those for now. 
+To check for issues locally, run `make check`, it runs linters `black`, `ruff`,
+`flake8` and type-checker `mypy`. Issues flagged by `black` can usually be 
+auto-fixed using `black .`, and to fix `ruff issues`, do:
+```
+poetry run ruff . --fix
+```
 
 - When you run this, `black` may warn that some files _would_ be reformatted. 
 If so, you should just run `black .` to reformat them. Also,
