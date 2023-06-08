@@ -331,7 +331,8 @@ class DockerChatAgent(ChatAgent):
             _cleanup_dockerfile(img.id, dockerfile_path)
             # For future use to run the container
             self.proposed_dockerfile = dockerfile_msg.proposed_dockerfile
-            return f"Docker image built successfully and build time took:{build_time} Seconds..."
+            return f"""Docker image built successfully and build time took:
+            {build_time} Seconds..."""
         else:
             return f"Docker build failed with error message: {build_log}"
 
@@ -392,7 +393,7 @@ class DockerChatAgent(ChatAgent):
                     """
 
         client = docker.from_env()
-
+        print(self.repo_path)
         img_tag = "validate_img"
         img = self.docker_img
         # Save the Dockerfile and build the image
@@ -405,7 +406,6 @@ class DockerChatAgent(ChatAgent):
             img, _, _ = _build_docker_image(
                 self.repo_path, proposed_dockerfile_name, img_tag
             )
-            print(type(img))
             self.docker_img = img
 
         test_case = dockerrun_msg.test

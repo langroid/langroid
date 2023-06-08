@@ -51,6 +51,8 @@ def _build_docker_image(repo_path: str, proposed_doeckerfile_name: str, img_tag:
         # I noticed the flag ``rm`` isn't used anymore,
         # so I need to do the cleanup myself later on
         with console.status("Verifying the proposed Dockerfile..."):
+            print(repo_path)
+            print(proposed_doeckerfile_name)
             image, build_logs = docker.from_env().images.build(
                 rm=True,
                 path=repo_path,
