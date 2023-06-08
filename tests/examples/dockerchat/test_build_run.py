@@ -104,13 +104,10 @@ def test_run_container():
 
     msg.location = "outside"
     msg.run = "docker run -d -p 5555:80 --rm validate_img:latest"
-    msg.test = "curl -s http://127.0.0.1:5555"
+    msg.test = "curl -s http://localhost:5555"
     tst_result = agent.run_container(msg)
     if "Container run failed" not in tst_result:
-        # for some reasons, sometimes the command is executed succeessfully
-        # othertimes not, that's why I put True and False
-        # probably the problem is from my env
-        assert "True" in tst_result or "False" in tst_result
+        assert "True" in tst_result
     else:
         assert True
 

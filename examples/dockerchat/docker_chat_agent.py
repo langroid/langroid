@@ -32,7 +32,7 @@ from examples.dockerchat.build_run_utils import (
     _save_dockerfile,
     _execute_command,
 )
-
+from docker.models.images import Image
 import logging
 import docker
 import time
@@ -90,6 +90,7 @@ class DockerChatAgent(ChatAgent):
     repo_tree: str = None
     repo_path: str = None
     proposed_dockerfile: str = None
+    docker_img: Image = None
     code_chat_agent: CodeChatAgent = None
 
     def __init__(
@@ -392,16 +393,20 @@ class DockerChatAgent(ChatAgent):
 
         client = docker.from_env()
 
-        # Save the Dockerfile and build the image
         img_tag = "validate_img"
-        proposed_dockerfile_name = "Dockerfile_proposed"
-        _ = _save_dockerfile(
-            self.repo_path, self.proposed_dockerfile, proposed_dockerfile_name
-        )
+        img = self.docker_img
+        # Save the Dockerfile and build the image
+        if img is None:
+            proposed_dockerfile_name = "Dockerfile_proposed"
+            _ = _save_dockerfile(
+                self.repo_path, self.proposed_dockerfile, proposed_dockerfile_name
+            )
 
-        img, _, _ = _build_docker_image(
-            self.repo_path, proposed_dockerfile_name, img_tag
-        )
+            img, _, _ = _build_docker_image(
+                self.repo_path, proposed_dockerfile_name, img_tag
+            )
+            print(type(img))
+            self.docker_img = img
 
         test_case = dockerrun_msg.test
         location = dockerrun_msg.location.lower()
@@ -431,8 +436,9 @@ class DockerChatAgent(ChatAgent):
                     cmd_result = _execute_command(run)
                     if cmd_result[0] is True and cmd_result[1]:
                         container_id = cmd_result[1].strip()
-                        time.sleep(20)
-                        test_result = _execute_command(test_case)
+                        # delay to allow container finishing its setup
+                        time.sleep(60) 
+                        test_result = _execute_command(test_case, shell_flg=False)
                         return f"""Test case executed from outside the 
                         container, execution code is: {test_result[0]}"""
                     else:
