@@ -437,8 +437,8 @@ class DockerChatAgent(ChatAgent):
                     if cmd_result[0] is True and cmd_result[1]:
                         container_id = cmd_result[1].strip()
                         # delay to allow container finishing its setup
-                        time.sleep(60) 
-                        test_result = _execute_command(test_case, shell_flg=False)
+                        time.sleep(60)
+                        test_result = _execute_command(test_case)
                         return f"""Test case executed from outside the 
                         container, execution code is: {test_result[0]}"""
                     else:
