@@ -48,6 +48,8 @@ class _TestDockerChatAgent(DockerChatAgent):
         return super().validate_dockerfile(msg, confirm=False)
 
     def run_container(self, msg: RunContainerMessage) -> str:
+        print("1-self.repo_path: ", self.repo_path)
+        print("1-self.proposed_dockerfile: ", self.proposed_dockerfile)
         return super().run_container(msg, confirm=False)
 
 

@@ -393,7 +393,9 @@ class DockerChatAgent(ChatAgent):
                     """
 
         client = docker.from_env()
-        print(self.repo_path)
+        print("================================")
+        print("2-: self.repo_path", self.repo_path)
+        print("2-: self.proposed_dockerfile", self.proposed_dockerfile)
         img_tag = "validate_img"
         img = self.docker_img
         # Save the Dockerfile and build the image
