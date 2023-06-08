@@ -1,3 +1,5 @@
+from llmagent.utils.constants import NO_ANSWER
+
 EXTRACT_RELEVANT = """
     Here is a passage from a long document, followed by a question. 
     In case the passage contains any text relevant to answer the question, return it 
@@ -18,7 +20,7 @@ Question: {question}
 Relevant text, if any:
 """
 
-EXTRACTION_PROMPT = """
+EXTRACTION_PROMPT = f"""
     Given the content and question below, extract a COMPLETE SENTENCE verbatim from the 
     content that is relevant to answering the question (if such text exists). Do not 
     make up an answer.
@@ -38,34 +40,34 @@ EXTRACTION_PROMPT = """
     Content: The sun rises in the east and sets in the west. It is a source of light
     and warmth for the Earth.
     Question: What is the color of the sun?
-    Relevant text, if any: I don't know.
+    Relevant text, if any: {NO_ANSWER}
     
-    Content: {content}
-    Question: {question}
+    Content: {{content}}
+    Question: {{question}}
     Relevant text (COMPLETE SENTENCE), if any:
     """.strip()
 
-SUMMARY_ANSWER_PROMPT_GPT4 = """
+SUMMARY_ANSWER_PROMPT_GPT4 = f"""
 
         Use the provided extracts (with sources)  to answer the question. 
-        If there's not enough information, respond with "I don't know." Use only the 
+        If there's not enough information, respond with {NO_ANSWER}. Use only the 
         information in these extracts, even if your answer is factually incorrect, 
         and even if the answer contradicts other parts of the document. The only 
         important thing is that your answer is consistent with and supported by the 
         extracts. Compose your complete answer and cite all supporting sources on a 
         separate separate line as "SOURCE:". 
         
-        {extracts}
+        {{extracts}}
         
-        {question}
+        {{question}}
         Answer:   
 """.strip()
 
-ANSWER_PROMPT_USE_HISTORY_GPT4 = """
+ANSWER_PROMPT_USE_HISTORY_GPT4 = f"""
 
         Use ANY of the information earlier, as well as the extracts provided below 
         (with sources)  to answer the question. If there's not 
-        enough information, respond with "I don't know."
+        enough information, respond with {NO_ANSWER}.
         Use only the information in this conversation or these extracts, 
         even if your answer is factually incorrect, and even 
         if the answer contracts other parts of the document.
@@ -76,15 +78,15 @@ ANSWER_PROMPT_USE_HISTORY_GPT4 = """
         When citing a SOURCE: be concise, whether it refers to a source in these 
         extracts, or info provided earlier.
         
-        {extracts}
-        {question}
+        {{extracts}}
+        {{question}}
         Answer:   
 """.strip()
 
 
-SUMMARY_ANSWER_PROMPT = """
+SUMMARY_ANSWER_PROMPT = f"""
         Use the provided extracts (with sources)  to answer the question. 
-        If there's not enough information, respond with "I don't know."
+        If there's not enough information, respond with {NO_ANSWER}.
         Use only the information in these extracts, even if it contradicts your prior 
         knowledge. Justify your answer by citing your sources, as in these examples:
         
@@ -120,9 +122,9 @@ SUMMARY_ANSWER_PROMPT = """
         Extract: The financial performance of the company has been strong this year.
         Source: https://en.wikipedia.org/wiki/CEO
         Question: What new initiatives did the CEO announce?
-        Answer: I don't know.
+        Answer: {NO_ANSWER}
         
-        {extracts}
-        {question}
+        {{extracts}}
+        {{question}}
         Answer:
         """.strip()

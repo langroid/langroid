@@ -1,10 +1,10 @@
 from llmagent.utils.logging import setup_colored_logging
-from llmagent.utils import configuration
 from examples.dockerchat.docker_chat_agent import (
     DockerChatAgent,
     PLANNER_INSTRUCTIONS,
     CODE_CHAT_INSTRUCTIONS,
 )
+
 from examples.dockerchat.dockerchat_agent_messages import (
     AskURLMessage,
     ValidateDockerfileMessage,
@@ -19,7 +19,9 @@ from llmagent.embedding_models.models import OpenAIEmbeddingsConfig
 from llmagent.vector_store.base import VectorStoreConfig
 from llmagent.parsing.parser import ParsingConfig
 from llmagent.prompts.prompts_config import PromptsConfig
+from llmagent.utils.configuration import set_global, Settings
 from rich import print
+
 
 app = typer.Typer()
 
@@ -54,7 +56,6 @@ class DockerChatAgentConfig(AgentConfig):
 
 
 def chat(config: DockerChatAgentConfig) -> None:
-    configuration.update_global_settings(config, keys=["debug", "stream", "cache"])
     if config.gpt4:
         config.llm.chat_model = OpenAIChatModel.GPT4
 
@@ -94,6 +95,8 @@ def chat(config: DockerChatAgentConfig) -> None:
     agent = DockerChatAgent(config, task_messages)
     # agent.enable_message(RunPython)
     agent.enable_message(AskURLMessage)
+    # agent.enable_message(ShowFileContentsMessage)
+    # agent.enable_message(ShowDirContentsMessage)
     # agent.enable_message(FileExistsMessage)
     # agent.enable_message(PythonVersionMessage)
     agent.enable_message(ValidateDockerfileMessage)
@@ -102,16 +105,22 @@ def chat(config: DockerChatAgentConfig) -> None:
 
     # set up tasks and their hierarchy
     docker_task = Task(
-        agent, llm_delegate=True, single_round=False, only_user_quits_root=True
+        agent,
+        name="DockerExpert",
+        llm_delegate=True,
+        single_round=False,
+        only_user_quits_root=True,
     )
     planner_task = Task(
         agent.planner_agent,
+        name="Planner",
         llm_delegate=True,
         single_round=False,
         system_message=PLANNER_INSTRUCTIONS,
     )
     code_chat_task = Task(
         agent.code_chat_agent,
+        name="Coder",
         llm_delegate=False,
         single_round=True,
         system_message=CODE_CHAT_INSTRUCTIONS,
@@ -126,8 +135,18 @@ def main(
     debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
     gpt4: bool = typer.Option(False, "--gpt4", "-4", help="use gpt4"),
     nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
+    no_human: bool = typer.Option(
+        False, "--nohuman", "-nh", help="no human input (for stepping in debugger)"
+    ),
 ) -> None:
     config = DockerChatAgentConfig(debug=debug, gpt4=gpt4, cache=not nocache)
+
+    set_global(
+        Settings(
+            debug=debug, gpt3_5=not gpt4, cache=not nocache, interactive=not no_human
+        )
+    )
+
     chat(config)
 
 

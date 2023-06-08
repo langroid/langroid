@@ -16,6 +16,7 @@ from llmagent.mytypes import DocMetaData, Document
 from llmagent.parsing.json import extract_top_level_json
 from llmagent.parsing.parser import Parser, ParsingConfig
 from llmagent.prompts.prompts_config import PromptsConfig
+from llmagent.utils.configuration import settings
 from llmagent.utils.constants import NO_ANSWER
 from llmagent.vector_store.base import VectorStore, VectorStoreConfig
 
@@ -32,6 +33,7 @@ class Entity(str, Enum):
 
 class ChatDocMetaData(DocMetaData):
     sender: Entity
+    recipient: str = ""
     usage: int = 0
     cached: bool = False
     displayed: bool = False
@@ -207,6 +209,8 @@ class Agent(ABC):
         if self.default_human_response is not None:
             # useful for automated testing
             user_msg = self.default_human_response
+        elif not settings.interactive:
+            user_msg = ""
         else:
             user_msg = Prompt.ask(
                 f"[blue]{self.indent}Human "
@@ -286,6 +290,22 @@ class Agent(ABC):
             ),
         )
 
+    def get_tool_messages(self, input_str: str) -> List[AgentMessage]:
+        """
+        Returns AgentMessage objects (tools) corresponding to JSON substrings, if any.
+
+        Args:
+            input_str (str): input string, typically a message sent by an LLM
+
+        Returns:
+            List[AgentMessage]: list of AgentMessage objects
+        """
+        json_substrings = extract_top_level_json(input_str)
+        if len(json_substrings) == 0:
+            return []
+        results = [self._get_one_tool_message(j) for j in json_substrings]
+        return [r for r in results if r is not None]
+
     def handle_message(self, input_str: str) -> Optional[str]:
         """
         Extract JSON substrings from input message, handle each by the appropriate
@@ -328,6 +348,23 @@ class Agent(ABC):
             be sent back to the LLM.
         """
         return None
+
+    def _get_one_tool_message(self, json_str: str) -> Optional[AgentMessage]:
+        json_data = json.loads(json_str)
+        request = json_data.get("request")
+        if request is None:
+            return None
+
+        message_class = self.handled_classes.get(request)
+        if message_class is None:
+            logger.warning(f"No message class found for request '{request}'")
+            return None
+
+        try:
+            message = message_class.parse_obj(json_data)
+        except ValidationError as ve:
+            raise ValueError("Error parsing JSON as message class") from ve
+        return message
 
     def _handle_one_json_message(self, json_str: str) -> Optional[str]:
         json_data = json.loads(json_str)
