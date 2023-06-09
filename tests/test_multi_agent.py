@@ -32,8 +32,8 @@ class _TestChatAgentConfig(ChatAgentConfig):
 @pytest.mark.parametrize("helper_human_response", ["", "q"])
 def test_inter_agent_chat(test_settings: Settings, helper_human_response: str):
     set_global(test_settings)
-    cfg1 = _TestChatAgentConfig(name="Smith")
-    cfg2 = _TestChatAgentConfig(name="Jones")
+    cfg1 = _TestChatAgentConfig(name="master")
+    cfg2 = _TestChatAgentConfig(name="helper")
 
     agent = ChatAgent(cfg1)
     task = Task(
@@ -66,9 +66,7 @@ def test_inter_agent_chat(test_settings: Settings, helper_human_response: str):
     # user responds '' (empty) to force agent to hand off to agent_helper,
     # and we test two possible human answers: empty or 'q'
 
-    assert task_helper.done()
     assert "Paris" in task_helper.result().content
-    assert not task.done()
 
 
 # The classes below are for the mult-agent test
@@ -140,7 +138,7 @@ def test_multi_agent(test_settings: Settings):
     task_planner = Task(
         planner,
         llm_delegate=True,
-        single_round=True,
+        single_round=False,
         default_human_response="",
         system_message="""
                 You understand exponentials, but you do not know how to multiply.

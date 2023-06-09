@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from typing import List, Optional, Set, Type, cast
+from typing import Dict, List, Optional, Set, Tuple, Type, cast, no_type_check
 
+from pyparsing import Empty, Literal, ParseException, SkipTo, StringEnd, Word, alphanums
 from rich import print
 
 from llmagent.agent.base import Agent, ChatDocMetaData, ChatDocument, Entity
@@ -65,14 +66,12 @@ class Task:
                 # we always have at least 1 task_message
                 agent.task_messages[0].content = system_message
             if user_message:
-                if len(agent.task_messages) < 2:
-                    agent.task_messages.append(
-                        LLMMessage(
-                            role=Role.USER,
-                            content="",
-                        )
+                agent.task_messages.append(
+                    LLMMessage(
+                        role=Role.USER,
+                        content=user_message,
                     )
-                agent.task_messages[1].content = user_message
+                )
 
         self.agent = agent
         self.name = name or agent.config.name
@@ -91,6 +90,7 @@ class Task:
             Entity.LLM: self.agent.llm_response,
             Entity.USER: self.agent.user_response,
         }
+        self.name_sub_task_map: Dict[str, Task] = {}
         # latest message in a conversation among entities and agents.
         self.pending_message: Optional[ChatDocument] = None
         self.single_round = single_round
@@ -98,12 +98,14 @@ class Task:
         if llm_delegate:
             self.controller = Entity.LLM
             if self.single_round:
-                # User instructs (delegating to LLM); LLM asks; User(proxy) replies.
-                self.turns = 3
+                # 0: User instructs (delegating to LLM);
+                # 1: LLM asks;
+                # 2: user replies.
+                self.turns = 2
         else:
             self.controller = Entity.USER
             if self.single_round:
-                self.turns = 2  # User asks, LLM replies.
+                self.turns = 1  # 0: User asks, 1: LLM replies.
 
         self.last_llm_message = ChatDocument(
             content="",
@@ -151,6 +153,7 @@ class Task:
         task.parent_task = self
         self.sub_tasks.append(task)
         self.responders.append(cast(Responder, task))
+        self.name_sub_task_map[task.name] = task
 
     def run(
         self,
@@ -222,19 +225,12 @@ class Task:
             if self.controller == Entity.LLM
             else self.last_user_message
         )
-        last_non_controller_message = (
-            self.last_user_message
-            if self.controller == Entity.LLM
-            else self.last_llm_message
-        )
         if self.single_round:
-            content = last_non_controller_message.content
+            content = self.pending_message.content if self.pending_message else ""
         else:
             content = last_controller_message.content
             if DONE in content:
                 content = content.replace(DONE, "").strip()
-            else:
-                content = NO_ANSWER
 
         return ChatDocument(
             content=content,
@@ -245,7 +241,7 @@ class Task:
         self, msg: Optional[str] = None, ent: Entity = Entity.USER
     ) -> None:
         """
-        Set up pending message (the "task")  before entering processing loop.
+        Set up pending message (the "task")  before continuing processing loop.
 
         Args:
             msg: initial msg; optional, default is None
@@ -253,11 +249,74 @@ class Task:
 
         """
         self._allow_all_responders_except(ent)
+
+        recipient_task_name, text = (
+            self._parse_message(msg) if msg is not None else ("", "")  # type: ignore
+        )
+        if recipient_task_name:
+            # disable a sub-task if it is NOT the intended recipient
+            for task in self.sub_tasks:
+                if task.name != recipient_task_name:
+                    self._disallow_responder(
+                        cast(Type["Task"], self.name_sub_task_map[task.name])
+                    )
+        if (
+            msg is not None
+            and ent == Entity.USER
+            and len(self.agent.get_tool_messages(msg)) > 0
+        ):
+            # if there is a valid "tool" message in JSON format from the USER
+            # (typically comes from an outside entity),
+            # then LLM of THIS agent should NOT respond!
+            self._disallow_responder(Entity.LLM)
+
         self.pending_message = (
             None
             if msg is None
-            else ChatDocument(content=msg, metadata=DocMetaData(source=ent, sender=ent))
+            else ChatDocument(
+                content=text,
+                metadata=ChatDocMetaData(
+                    source=ent,
+                    sender=ent,
+                    recipient=recipient_task_name,
+                ),
+            )
         )
+
+    @staticmethod
+    @no_type_check
+    def _parse_message(msg: str) -> Tuple[str, str]:
+        """
+        Parse the intended recipient and content of a message.
+        Message format is assumed to be TO[<recipient>]:<message>.
+        The TO[<recipient>]: part is optional.
+
+        Args:
+            msg (str): message to parse
+
+        Returns:
+            str, str: task-name of intended recipient, and content of message
+                (if recipient is not specified, task-name is empty string)
+
+        """
+        if msg is None:
+            return "", ""
+
+        # Grammar definition
+        name = Word(alphanums)
+        to_start = Literal("TO[").suppress()
+        to_end = Literal("]:").suppress()
+        to_field = (to_start + name("name") + to_end) | Empty().suppress()
+        message = SkipTo(StringEnd())("text")
+
+        # Parser definition
+        parser = to_field + message
+
+        try:
+            parsed = parser.parseString(msg)
+            return parsed.name, parsed.text
+        except ParseException:
+            return "", msg
 
     def done(self) -> bool:
         """
@@ -280,6 +339,11 @@ class Task:
             self.pending_message is None
             # LLM decided task is done
             or DONE in self.pending_message.content
+            or (  # current task is addressing message to parent task
+                self.parent_task is not None
+                and self.parent_task.name != ""
+                and self.pending_message.metadata.recipient == self.parent_task.name
+            )
             or (
                 # Task controller is "stuck", has nothing to say
                 NO_ANSWER in self.pending_message.content
@@ -326,11 +390,9 @@ class Task:
         # sender of current pending message
         pending_sender = (
             Entity.USER
-            if self.pending_message is None
+            if self.pending_message is None  # only at start, at root task
             else self.pending_message.metadata.sender
         )
-
-        responder = Entity.USER if pending_sender == Entity.LLM else Entity.LLM
 
         for r in self.responders:
             result = self.response(r, turns)
@@ -338,12 +400,17 @@ class Task:
                 break
 
         response = NO_ANSWER if result is None else result.content
+        if result is None:
+            responder = Entity.USER if pending_sender == Entity.LLM else Entity.LLM
+        else:
+            responder = result.metadata.sender
+
         self.reset_pending_message(msg=response, ent=responder)
         if settings.debug:
             pending_message = (
                 "" if self.pending_message is None else self.pending_message.content
             )
-            print(f"[red]pending_message: {pending_message}")
+            print(f"[red][{responder}] pending_message: {pending_message}")
 
     def response(self, e: Responder, turns: int = -1) -> Optional[ChatDocument]:
         """
@@ -361,7 +428,8 @@ class Task:
         msg = None if self.pending_message is None else self.pending_message.content
         if self._is_allowed_responder(e):
             if isinstance(e, Task):
-                return e.run(msg, turns=turns)
+                actual_turns = e.turns if e.turns > 0 else turns
+                return e.run(msg, turns=actual_turns)
             else:
                 return self._entity_responder_map[cast(Entity, e)](msg)
         else:

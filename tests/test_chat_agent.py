@@ -108,6 +108,7 @@ def test_process_messages(test_settings: Settings):
         only_user_quits_root=False,
     )
     # LLM responds with NO_ANSWER
+    task.reset_pending_message()
     task.step()
     assert NO_ANSWER in task.pending_message.content
     assert task.pending_message.metadata.sender == Entity.LLM
