@@ -90,16 +90,26 @@ def test_validate_dockerfile():
         os.rmdir(temp_folder_path)
 
 
-def test_run_container():
-    agent = _TestDockerChatAgent(cfg)
-    url = "https://github.com/hyperonym/basaran"
-    agent.repo_loader = RepoLoader(url, RepoLoaderConfig())
-    agent.repo_path = agent.repo_loader.clone()
-    agent.proposed_dockerfile = """FROM python:3.8\n\nWORKDIR /app
+AUTO_GPT_URL = "https://github.com/Significant-Gravitas/Auto-GPT"
+BASARAN_URL = "https://github.com/hyperonym/basaran"
+
+BASARAN_DOCKERFILE = """FROM python:3.8\n\nWORKDIR /app
     \n\nCOPY requirements.txt setup.py ./
     \n\nRUN pip install --no-cache-dir -r requirements.txt\n\nCOPY . .
     \n\nEXPOSE 80\n\nENTRYPOINT [\"python\",\"-m\",\"basaran\"]
     """
+AUTO_GPT_DOCKERFILE = """FROM python:3.10\n\nWORKDIR /app\n
+    \nCOPY requirements.txt .\nRUN pip install --no-cache-dir -r requirements.txt
+    \n\nCOPY . .\n\nCMD [\"./run.sh\"]
+    """
+
+
+def test_run_container():
+    agent = _TestDockerChatAgent(cfg)
+    url = BASARAN_URL
+    agent.repo_loader = RepoLoader(url, RepoLoaderConfig())
+    agent.repo_path = agent.repo_loader.clone()
+    agent.proposed_dockerfile = BASARAN_DOCKERFILE
     msg = RunContainerMessage()
 
     msg.location = "outside"
