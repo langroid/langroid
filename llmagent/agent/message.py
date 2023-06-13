@@ -13,18 +13,18 @@ from typing import Any, Dict, List
 from pydantic import BaseModel
 
 INSTRUCTION = """
-    When one of these tools is applicable, you must express your request in 
-    JSON format. The fields will be based on the tool description, which will be of 
-    the form:
+    When one of these tools is applicable, you must express your request as
+    "TOOL:" followed by the request in JSON format. The fields will be based on the 
+    tool description, which will be of the form:
     
     <tool_name>: description involving <arg1> maybe some other <arg2> and so on.
     
     The JSON format will be:
-    {
+    \\{
         "request": "<tool_name>",
         "<arg1>": <value1>,
         "<arg2>": <value2>
-    } 
+    \\} 
     where it is important to note that <arg1> is the NAME of the argument, 
     and <value1> is the VALUE of the argument.
     
@@ -37,9 +37,10 @@ INSTRUCTION = """
      "Check whether the capital of France is Paris",
       
     you realize that the `country_capital` tool is applicable, and so you must 
-    ask in the following JSON format: 
-    
-    The JSON format will be:
+    ask in the following format: "TOOL: <JSON-formatted-request>", which in this 
+    case will look like:
+
+    TOOL: 
     \\{
         "request": "country_capital",
         "country": "France",
@@ -50,12 +51,12 @@ INSTRUCTION = """
     
     "Find out the population of France".
     
-    In this case you realize there is no available tool for this, so you just ask in 
+    In this case you realize there is no available TOOL for this, so you just ask in 
     natural language: "What is the population of France?"
     
-    Whenever possible, AND ONLY IF APPLICABLE, use these tools, with the JSON syntax 
-    specified above. When a tool is applicable, simply use this syntax, do not write 
-    anything else. Only if no tool is exactly applicable, ask in natural language. 
+    Whenever possible, AND ONLY IF APPLICABLE, use these TOOL, with the JSON syntax 
+    specified above. When a TOOL is applicable, simply use this syntax, do not write 
+    anything else. Only if no TOOL is exactly applicable, ask in natural language. 
     """
 
 

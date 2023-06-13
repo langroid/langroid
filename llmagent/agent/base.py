@@ -3,7 +3,7 @@ import logging
 from abc import ABC
 from contextlib import ExitStack
 from enum import Enum
-from typing import Dict, List, Optional, Tuple, Type
+from typing import Dict, List, Optional, Tuple, Type, no_type_check
 
 from pydantic import BaseSettings, ValidationError
 from rich import print
@@ -33,6 +33,7 @@ class Entity(str, Enum):
 
 class ChatDocMetaData(DocMetaData):
     sender: Entity
+    sender_name: str = ""
     recipient: str = ""
     usage: int = 0
     cached: bool = False
@@ -52,9 +53,9 @@ class AgentConfig(BaseSettings):
     name: str = "LLM-Agent"
     debug: bool = False
     vecdb: Optional[VectorStoreConfig] = VectorStoreConfig()
-    llm: LLMConfig = LLMConfig()
+    llm: Optional[LLMConfig] = LLMConfig()
     parsing: Optional[ParsingConfig] = ParsingConfig()
-    prompts: PromptsConfig = PromptsConfig()
+    prompts: Optional[PromptsConfig] = PromptsConfig()
 
 
 class Agent(ABC):
@@ -167,13 +168,17 @@ class Agent(ABC):
         Now start, and be concise!                 
         """
 
-    def agent_response(self, input_str: Optional[str] = None) -> Optional[ChatDocument]:
+    def agent_response(
+        self, input_str: Optional[str] = None, sender_name: str = ""
+    ) -> Optional[ChatDocument]:
         """
         Response from the "agent itself", i.e., from any application "tool method"
         that was triggerred by input_str (if it contained a json substring matching
         a handler method).
         Args:
             input_str (str): the input string to respond to
+            sender_name (str): the name of the sender (ignored for now, but including
+                it here so all *_response methods have the same signature)
 
         Returns:
             Optional[ChatDocument]: the response, packaged as a ChatDocument
@@ -191,16 +196,21 @@ class Agent(ABC):
             metadata=DocMetaData(
                 source=Entity.AGENT.value,
                 sender=Entity.AGENT.value,
+                sender_name=self.config.name,
             ),
         )
 
-    def user_response(self, msg: Optional[str] = None) -> Optional[ChatDocument]:
+    def user_response(
+        self, msg: Optional[str] = None, sender_name: str = ""
+    ) -> Optional[ChatDocument]:
         """
         Get user response to current message. Could allow (human) user to intervene
         with an actual answer, or quit using "q" or "x"
 
         Args:
             msg (str): the string to respond to.
+            sender_name (str): the name of the sender (ignored for now, but including
+                it here so all *_response methods have the same signature)
 
         Returns:
             (str) User response, packaged as a ChatDocument
@@ -230,15 +240,21 @@ class Agent(ABC):
                 ),
             )
 
-    def llm_response(self, prompt: Optional[str] = None) -> Optional[ChatDocument]:
+    @no_type_check
+    def llm_response(
+        self, prompt: Optional[str] = None, sender_name: str = ""
+    ) -> Optional[ChatDocument]:
         """
         LLM response to a prompt.
         Args:
             prompt (str): prompt string
+            sender_name (str): the name of the sender (ignored for completion mode,
+                but used in chat_completion in `chat_agent.py`)
+
         Returns:
             Response from LLM, packaged as a ChatDocument
         """
-        if prompt is None:
+        if prompt is None or self.llm is None:
             return None
         with ExitStack() as stack:  # for conditionally using rich spinner
             if not self.llm.get_stream():

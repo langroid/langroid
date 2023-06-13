@@ -8,7 +8,7 @@ from llmagent.utils.configuration import settings
 from contextlib import ExitStack
 from llmagent.mytypes import Document, DocMetaData
 from llmagent.utils.constants import NO_ANSWER
-from typing import List, Union
+from typing import List, Optional
 from rich import print
 from rich.console import Console
 
@@ -87,7 +87,11 @@ class DocChatAgent(ChatAgent):
         """
         return self.parser.num_tokens(self.doc_string(docs))
 
-    def llm_response(self, query: str = None) -> Union[Document, None]:
+    def llm_response(
+        self,
+        query: str = None,
+        sender_name: str = "",
+    ) -> Optional[Document]:
         if query is None or query.startswith("!"):
             # direct query to LLM
             query = query[1:] if query is not None else None
