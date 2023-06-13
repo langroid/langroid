@@ -14,17 +14,17 @@ from pydantic import BaseModel
 
 INSTRUCTION = """
     When one of these tools is applicable, you must express your request as
-    "TOOL" followed by the request in JSON format. The fields will be based on the 
+    "TOOL:" followed by the request in JSON format. The fields will be based on the 
     tool description, which will be of the form:
     
     <tool_name>: description involving <arg1> maybe some other <arg2> and so on.
     
     The JSON format will be:
-    {
+    \\{
         "request": "<tool_name>",
         "<arg1>": <value1>,
         "<arg2>": <value2>
-    } 
+    \\} 
     where it is important to note that <arg1> is the NAME of the argument, 
     and <value1> is the VALUE of the argument.
     

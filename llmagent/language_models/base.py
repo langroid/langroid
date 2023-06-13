@@ -1,7 +1,7 @@
 import asyncio
 from abc import ABC, abstractmethod
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Dict, List, Optional, Tuple, Type, Union
 
 import aiohttp
 from pydantic import BaseModel, BaseSettings
@@ -66,7 +66,7 @@ class LanguageModel(ABC):
         self.config = config
 
     @staticmethod
-    def create(config: LLMConfig) -> "LanguageModel":
+    def create(config: Optional[LLMConfig]) -> Optional[Type["LanguageModel"]]:
         """
         Create a language model.
         Args:
@@ -75,6 +75,8 @@ class LanguageModel(ABC):
         """
         from llmagent.language_models.openai_gpt import OpenAIGPT
 
+        if config is None or config.type is None:
+            return None
         cls = dict(
             openai=OpenAIGPT,
         ).get(config.type, OpenAIGPT)

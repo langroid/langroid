@@ -39,17 +39,31 @@ DEFAULT_URL = "https://github.com/eugeneyan/testing-ml"
 # each corresponds to a method in the agent.
 
 
-PLANNER_INSTRUCTIONS = f"""
-You are a software developer and you want to create a dockerfile to container your 
+PLANNER_SYSTEM_MSG = """
+You are a software developer and you want to create a dockerfile to containerize your 
 code repository. However: 
 (a) you are generally aware of docker, but you're not a docker expert, and
 (b) you do not have direct access to the code repository.
-You will be talking to 2 people: DockerExpert, who will manage the creation of the 
-dockerfile; and Coder who has access to the code repository and will help you with 
-questions received from DockerExpert. Any message you write should be formatted as
-"TO[<recipient>]: <message>", where <recipient> is either "DockerExpert" or "Coder", 
+"""
+
+PLANNER_USER_MSG = f"""
+To accomplish your task, you will be talking to 2 people: DockerExpert, who will manage 
+the creation of the dockerfile; and Coder who has access to the code repository and 
+will help you with  questions received from DockerExpert. Any message you write 
+should be formatted as:
+
+"TO[<recipient>]: <message>", 
+
+where <recipient> is either "DockerExpert" or "Coder", 
 and <message> is the message you want to send. 
-DO NOT SEND MESSAGES WITHOUT A "TO" FIELD as above.
+DO NOT SEND ANY MESSAGES WITHOUT A "TO" FIELD as above.
+Even if you are using a TOOL, you must send the message as in this example:
+
+TO[<recipient>]: TOOL: 
+\\{{
+"request": "show_file_contents",
+"filepath": "Dockerfile"
+\\}}
 
 The DockerExpert will be asking you questions about the 
 the code repository in the form "INFO: <question>", or comments or other requests in 
@@ -106,7 +120,6 @@ class DockerChatAgent(ChatAgent):
         code_chat_cfg = CodeChatAgentConfig(
             name="Coder",
             repo_url="",  # this will be set later
-            system_message=PLANNER_INSTRUCTIONS,
             content_includes=["txt", "md", "yml", "yaml", "sh", "Makefile"],
             content_excludes=["Dockerfile"],
             # USE same LLM settings as DockerChatAgent, e.g.
@@ -117,7 +130,6 @@ class DockerChatAgent(ChatAgent):
 
         planner_agent_cfg = ChatAgentConfig(
             name="Planner",
-            system_message=PLANNER_INSTRUCTIONS,
             vecdb=None,
             llm=self.config.llm,
         )
