@@ -1,14 +1,14 @@
 from __future__ import annotations
 
-from typing import Dict, List, Optional, Set, Tuple, Type, cast, no_type_check
+from typing import Callable, Dict, List, Optional, Set, Type, cast
 
-from pyparsing import Empty, Literal, ParseException, SkipTo, StringEnd, Word, alphanums
 from rich import print
 
 from llmagent.agent.base import Agent, ChatDocMetaData, ChatDocument, Entity
 from llmagent.agent.chat_agent import ChatAgent
 from llmagent.language_models.base import LLMMessage, Role
 from llmagent.mytypes import DocMetaData
+from llmagent.parsing.agent_chats import parse_message
 from llmagent.utils.configuration import settings
 from llmagent.utils.constants import DONE, NO_ANSWER, USER_QUIT
 
@@ -85,7 +85,9 @@ class Task:
             Entity.LLM,
             Entity.USER,
         ]
-        self._entity_responder_map = {
+        self._entity_responder_map: Dict[
+            Entity, Callable[..., Optional[ChatDocument]]
+        ] = {
             Entity.AGENT: self.agent.agent_response,
             Entity.LLM: self.agent.llm_response,
             Entity.USER: self.agent.user_response,
@@ -189,9 +191,18 @@ class Task:
         if self.default_human_response is not None:
             self.agent.default_human_response = self.default_human_response
 
+        message_history_idx = -1
+        if isinstance(self.agent, ChatAgent):
+            # mark where we are in the message history, so we can reset to this when
+            # we are done with the task
+            message_history_idx = (
+                max(len(self.agent.message_history), len(self.agent.task_messages)) - 1
+            )
+
         i = 0
         print(
-            f"[bold magenta]{self._enter} Starting Agent " f"{self.name}[/bold magenta]"
+            f"[bold magenta]{self._enter} Starting Agent "
+            f"{self.name} ({message_history_idx+1}) [/bold magenta]"
         )
         while True:
             self.step()
@@ -208,51 +219,119 @@ class Task:
             if turns > 0 and i >= turns:
                 break
         final_result = self.result()
+        # delete all messages from our agent's history, AFTER the first incoming
+        # message, and BEFORE final result message
+        n_messages = 0
+        if isinstance(self.agent, ChatAgent):
+            len(self.agent.message_history)
+            del self.agent.message_history[message_history_idx + 2 : n_messages - 1]
+            n_messages = len(self.agent.message_history)
+        for t in self.sub_tasks:
+            # erase our conversation with agent of subtask t
+
+            # erase message_history of agent of subtask t
+            # TODO - here we assume that subtask-agents are
+            # ONLY talking to the current agent.
+            if isinstance(t.agent, ChatAgent):
+                t.agent.clear_history(0)
         print(
-            f"[bold magenta]{self._leave} Finished Agent " f"{self.name}[/bold magenta]"
+            f"[bold magenta]{self._leave} Finished Agent "
+            f"{self.name} ({n_messages}) [/bold magenta]"
         )
         return final_result
 
-    def result(self) -> ChatDocument:
+    def step(self, turns: int = -1) -> None:
         """
-        Get result of task. This is the default behavior.
-        Derived classes can override this.
-        Returns:
-            ChatDocument: result of task
-        """
-        last_controller_message = (
-            self.last_llm_message
-            if self.controller == Entity.LLM
-            else self.last_user_message
-        )
-        if self.single_round:
-            content = self.pending_message.content if self.pending_message else ""
-        else:
-            content = last_controller_message.content
-            if DONE in content:
-                content = content.replace(DONE, "").strip()
+        A single "turn" in the task conversation: The "allowed" responders in this
+        turn (which can be either the 3 "entities", or one of the sub-tasks) are
+        tried in sequence, until a _valid_ response is obtained; a _valid_
+        response is one that contributes to the task, either by ending it,
+        or producing a response to be further acted on.
+        Update `self.pending_message` to the latest valid response (or NO_ANSWER
+        if no valid response was obtained from any responder).
 
-        return ChatDocument(
-            content=content,
-            metadata=DocMetaData(source=Entity.USER, sender=Entity.USER),
+        Args:
+            turns (int): number of turns to process. Typically used in testing
+                where there is no human to "quit out" of current level, or in cases
+                where we want to limit the number of turns of a delegated agent.
+
+        """
+        # sender of current pending message
+        pending_sender = (
+            Entity.USER
+            if self.pending_message is None  # only at start, at root task
+            else self.pending_message.metadata.sender
         )
+
+        sender_name = ""
+        for r in self.responders:
+            result = self.response(r, turns)
+            if self.valid(result):
+                if isinstance(r, Task):
+                    sender_name = r.name
+                break
+
+        response = NO_ANSWER if result is None else result.content
+        if result is None:
+            responder = Entity.USER if pending_sender == Entity.LLM else Entity.LLM
+        else:
+            responder = result.metadata.sender
+
+        self.reset_pending_message(msg=response, ent=responder, sender_name=sender_name)
+        if settings.debug:
+            pending_message = (
+                "" if self.pending_message is None else self.pending_message.content
+            )
+            sender_name_str = f"({sender_name})" if sender_name != "" else ""
+            print(f"[red][{responder} {sender_name_str}]: {pending_message}")
+
+    def response(self, e: Responder, turns: int = -1) -> Optional[ChatDocument]:
+        """
+        Get response to `self.pending_message` from an entity.
+        If response is __valid__ (i.e. it ends the current turn of seeking
+        responses):
+            -then return the response as a ChatDocument object,
+            -otherwise return None.
+        Args:
+            e (Entity): entity to get response from
+        Returns:
+            Optional[ChatDocument]: response to `self.pending_message` from entity if
+            valid, None otherwise
+        """
+        msg = None if self.pending_message is None else self.pending_message.content
+        sender_name = ""
+        if self.pending_message is not None:
+            sender_name = self.pending_message.metadata.sender_name
+        if self._is_allowed_responder(e):
+            if isinstance(e, Task):
+                actual_turns = e.turns if e.turns > 0 else turns
+                return e.run(msg, turns=actual_turns)
+            else:
+                return self._entity_responder_map[cast(Entity, e)](
+                    msg, sender_name=sender_name
+                )
+        else:
+            return None
 
     def reset_pending_message(
-        self, msg: Optional[str] = None, ent: Entity = Entity.USER
+        self,
+        msg: Optional[str] = None,
+        ent: Entity = Entity.USER,
+        sender_name: str = "",
     ) -> None:
         """
         Set up pending message (the "task")  before continuing processing loop.
 
         Args:
-            msg: initial msg; optional, default is None
-            ent: initial sender; optional, default is Entity.USER
+            msg (str): initial msg; optional, default is None
+            ent (Entity): initial sender; optional, default is Entity.USER
+            sender_name (str): name of sender; optional, default is ""
+                (Used to fill in "name" field in OpenAI message list)
 
         """
         self._allow_all_responders_except(ent)
 
-        recipient_task_name, text = (
-            self._parse_message(msg) if msg is not None else ("", "")  # type: ignore
-        )
+        recipient_task_name, text = parse_message(msg) if msg is not None else ("", "")
         if recipient_task_name:
             # disable a sub-task if it is NOT the intended recipient
             for task in self.sub_tasks:
@@ -278,45 +357,35 @@ class Task:
                 metadata=ChatDocMetaData(
                     source=ent,
                     sender=ent,
+                    sender_name=sender_name,
                     recipient=recipient_task_name,
                 ),
             )
         )
 
-    @staticmethod
-    @no_type_check
-    def _parse_message(msg: str) -> Tuple[str, str]:
+    def result(self) -> ChatDocument:
         """
-        Parse the intended recipient and content of a message.
-        Message format is assumed to be TO[<recipient>]:<message>.
-        The TO[<recipient>]: part is optional.
-
-        Args:
-            msg (str): message to parse
-
+        Get result of task. This is the default behavior.
+        Derived classes can override this.
         Returns:
-            str, str: task-name of intended recipient, and content of message
-                (if recipient is not specified, task-name is empty string)
-
+            ChatDocument: result of task
         """
-        if msg is None:
-            return "", ""
+        last_controller_message = (
+            self.last_llm_message
+            if self.controller == Entity.LLM
+            else self.last_user_message
+        )
+        if self.single_round:
+            content = self.pending_message.content if self.pending_message else ""
+        else:
+            content = last_controller_message.content
+            if DONE in content:
+                content = content.replace(DONE, "").strip()
 
-        # Grammar definition
-        name = Word(alphanums)
-        to_start = Literal("TO[").suppress()
-        to_end = Literal("]:").suppress()
-        to_field = (to_start + name("name") + to_end) | Empty().suppress()
-        message = SkipTo(StringEnd())("text")
-
-        # Parser definition
-        parser = to_field + message
-
-        try:
-            parsed = parser.parseString(msg)
-            return parsed.name, parsed.text
-        except ParseException:
-            return "", msg
+        return ChatDocument(
+            content=content,
+            metadata=DocMetaData(source=Entity.USER, sender=Entity.USER),
+        )
 
     def done(self) -> bool:
         """
@@ -370,70 +439,6 @@ class Task:
                 or result.metadata.sender == self.controller
             )
         )
-
-    def step(self, turns: int = -1) -> None:
-        """
-        A single "turn" in the task conversation: The "allowed" responders in this
-        turn (which can be either the 3 "entities", or one of the sub-tasks) are
-        tried in sequence, until a _valid_ response is obtained; a _valid_
-        response is one that contributes to the task, either by ending it,
-        or producing a response to be further acted on.
-        Update `self.pending_message` to the latest valid response (or NO_ANSWER
-        if no valid response was obtained from any responder).
-
-        Args:
-            turns (int): number of turns to process. Typically used in testing
-                where there is no human to "quit out" of current level, or in cases
-                where we want to limit the number of turns of a delegated agent.
-
-        """
-        # sender of current pending message
-        pending_sender = (
-            Entity.USER
-            if self.pending_message is None  # only at start, at root task
-            else self.pending_message.metadata.sender
-        )
-
-        for r in self.responders:
-            result = self.response(r, turns)
-            if self.valid(result):
-                break
-
-        response = NO_ANSWER if result is None else result.content
-        if result is None:
-            responder = Entity.USER if pending_sender == Entity.LLM else Entity.LLM
-        else:
-            responder = result.metadata.sender
-
-        self.reset_pending_message(msg=response, ent=responder)
-        if settings.debug:
-            pending_message = (
-                "" if self.pending_message is None else self.pending_message.content
-            )
-            print(f"[red][{responder}] pending_message: {pending_message}")
-
-    def response(self, e: Responder, turns: int = -1) -> Optional[ChatDocument]:
-        """
-        Get response to `self.pending_message` from an entity.
-        If response is __valid__ (i.e. it ends the current turn of seeking
-        responses):
-            -then return the response as a ChatDocument object,
-            -otherwise return None.
-        Args:
-            e (Entity): entity to get response from
-        Returns:
-            Optional[ChatDocument]: response to `self.pending_message` from entity if
-            valid, None otherwise
-        """
-        msg = None if self.pending_message is None else self.pending_message.content
-        if self._is_allowed_responder(e):
-            if isinstance(e, Task):
-                actual_turns = e.turns if e.turns > 0 else turns
-                return e.run(msg, turns=actual_turns)
-            else:
-                return self._entity_responder_map[cast(Entity, e)](msg)
-        else:
-            return None
 
     def _disallow_responder(self, e: Responder) -> None:
         """

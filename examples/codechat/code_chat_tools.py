@@ -10,7 +10,7 @@ class ShowFileContentsMessage(AgentMessage):
     # name should exactly match method  name in agent
     # below will be fields that will be used by the agent method to handle the message.
     purpose: str = "To see the contents of a file path <filepath> in the repo."
-    filepath: str = "src/app.py"
+    filepath: str = None  # must provide or will raise error
     result: str = ""
 
     @classmethod

@@ -89,8 +89,8 @@ class ChatAgent(Agent):
                     (i.e. delete last 2 messages, typically these
                     are the last user and assistant messages)
         """
-        n = len(self.message_history)
         if start < 0:
+            n = len(self.message_history)
             start = max(0, n + start)
         self.message_history = self.message_history[:start]
 
@@ -185,14 +185,19 @@ class ChatAgent(Agent):
             self.message_history[self.json_instructions_idx].content = json_instructions
 
     @no_type_check
-    def llm_response(self, message: Optional[str] = None) -> Optional[ChatDocument]:
+    def llm_response(
+        self, message: Optional[str] = None, sender_name: str = ""
+    ) -> Optional[ChatDocument]:
         """
         Respond to a single user message, appended to the message history,
         in "chat" mode
         Args:
             message: user message; if None, use the self.task_messages
+            sender_name: name of the sender of the message
         Returns:
         """
+        if self.llm is None:
+            return None
         assert (
             message is not None or len(self.message_history) == 0
         ), "message can be None only if message_history is empty, i.e. at start."
@@ -210,7 +215,13 @@ class ChatAgent(Agent):
                 )
 
         if message is not None:
-            self.message_history.append(LLMMessage(role=Role.USER, content=message))
+            self.message_history.append(
+                LLMMessage(
+                    role=Role.USER,
+                    content=message,
+                    sender_name=sender_name,
+                )
+            )
 
         hist = self.message_history
         output_len = self.config.llm.max_output_tokens
@@ -282,17 +293,18 @@ class ChatAgent(Agent):
         Returns:
             Document (i.e. with fields "content", "metadata")
         """
+        assert self.config.llm is not None and self.llm is not None
         output_len = output_len or self.config.llm.max_output_tokens
         with ExitStack() as stack:  # for conditionally using rich spinner
-            if not self.llm.get_stream():
+            if not self.llm.get_stream():  # type: ignore
                 # show rich spinner only if not streaming!
                 cm = console.status("LLM responding to messages...")
                 stack.enter_context(cm)
-            if self.llm.get_stream():
+            if self.llm.get_stream():  # type: ignore
                 console.print(f"[green]{self.indent}", end="")
-            response = self.llm.chat(messages, output_len)
+            response = self.llm.chat(messages, output_len)  # type: ignore
         displayed = False
-        if not self.llm.get_stream() or response.cached:
+        if not self.llm.get_stream() or response.cached:  # type: ignore
             displayed = True
             cached = f"[red]{self.indent}(cached)[/red]" if response.cached else ""
             print(cached + "[green]" + response.message)
