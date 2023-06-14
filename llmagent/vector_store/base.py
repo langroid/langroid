@@ -21,6 +21,7 @@ class VectorStoreConfig(BaseSettings):
     embedding: EmbeddingModelsConfig = EmbeddingModelsConfig(
         model_type="openai",
     )
+    timeout: int = 60
     type: str = "qdrant"
     host: str = "127.0.0.1"
     port: int = 6333

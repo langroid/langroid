@@ -53,6 +53,7 @@ class QdrantDB(VectorStore):
             self.client = QdrantClient(
                 url=config.url,
                 api_key=os.getenv("QDRANT_API_KEY"),
+                timeout=config.timeout,
             )
         else:
             self.client = QdrantClient(
