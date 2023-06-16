@@ -31,6 +31,7 @@ from examples.dockerchat.build_run_utils import (
     _cleanup_dockerfile,
     _save_dockerfile,
     _execute_command,
+    _check_docker_daemon_url,
 )
 from docker.models.images import Image
 import logging
@@ -336,30 +337,35 @@ class DockerChatAgent(ChatAgent):
                     Not ready for dockerfile validation, please 
                     continue with your next question or request for information.
                     """
-        proposed_dockerfile_content = dockerfile_msg.proposed_dockerfile
-        # It's better to have a different name other than the default name,
-        # good for comparison in the future between
-        # generated Dockerfile and existing Dockerfile
-        proposed_dockerfile_name = "Dockerfile_proposed"
-        img_tag = "validate_img"
-        dockerfile_path = _save_dockerfile(
-            self.repo_path, proposed_dockerfile_content, proposed_dockerfile_name
-        )
-        if dockerfile_path.startswith("An error"):
-            return dockerfile_path
 
-        img, build_log, build_time = _build_docker_image(
-            self.repo_path, proposed_dockerfile_name, img_tag
-        )
+        docker_daemon = _check_docker_daemon_url()
+        if "exists" in docker_daemon:
+            proposed_dockerfile_content = dockerfile_msg.proposed_dockerfile
+            # It's better to have a different name other than the default name,
+            # good for comparison in the future between
+            # generated Dockerfile and existing Dockerfile
+            proposed_dockerfile_name = "Dockerfile_proposed"
+            img_tag = "validate_img"
+            dockerfile_path = _save_dockerfile(
+                self.repo_path, proposed_dockerfile_content, proposed_dockerfile_name
+            )
+            if dockerfile_path.startswith("An error"):
+                return dockerfile_path
 
-        if img:
-            _cleanup_dockerfile(img.id, dockerfile_path)
-            # For future use to run the container
-            self.proposed_dockerfile = dockerfile_msg.proposed_dockerfile
-            return f"""Docker image built successfully and build time took:
-            {build_time} Seconds..."""
+            img, build_log, build_time = _build_docker_image(
+                self.repo_path, proposed_dockerfile_name, img_tag
+            )
+
+            if img:
+                _cleanup_dockerfile(img.id, dockerfile_path)
+                # For future use to run the container
+                self.proposed_dockerfile = dockerfile_msg.proposed_dockerfile
+                return f"""Docker image built successfully and build time took:
+                {build_time} Seconds..."""
+            else:
+                return f"Docker build failed with error message: {build_log}"
         else:
-            return f"Docker build failed with error message: {build_log}"
+            return docker_daemon
 
     def find_entrypoint(self, m: EntryPointAndCMDMessage) -> str:
         """
@@ -376,8 +382,8 @@ class DockerChatAgent(ChatAgent):
 
         answer = self.ask_agent(
             self.code_chat_agent,
-            request="""What's the name of main script in this repo and can you SPECIFY 
-            the command line and necessary arguments to run the main script? 
+            request="""What's the name of main script in this repo and can you 
+            SPECIFY the command line and necessary arguments to run the main script? 
             If there are more than one main script, then SPECIFY the commands 
             and necessary arguments corresponding to each one
             """,
@@ -417,63 +423,67 @@ class DockerChatAgent(ChatAgent):
                     continue with your next question or request for information.
                     """
 
-        client = docker.from_env()
+        docker_daemon = _check_docker_daemon_url()
+        if "exists" in docker_daemon:
+            client = docker.from_env()
 
-        img_tag = "validate_img"
-        img = self.docker_img
-        # Save the Dockerfile and build the image
-        if img is None:
-            proposed_dockerfile_name = "Dockerfile_proposed"
-            _ = _save_dockerfile(
-                self.repo_path, self.proposed_dockerfile, proposed_dockerfile_name
-            )
+            img_tag = "validate_img"
+            img = self.docker_img
+            # Save the Dockerfile and build the image
+            if img is None:
+                proposed_dockerfile_name = "Dockerfile_proposed"
+                _ = _save_dockerfile(
+                    self.repo_path, self.proposed_dockerfile, proposed_dockerfile_name
+                )
 
-            img, _, _ = _build_docker_image(
-                self.repo_path, proposed_dockerfile_name, img_tag
-            )
-            self.docker_img = img
+                img, _, _ = _build_docker_image(
+                    self.repo_path, proposed_dockerfile_name, img_tag
+                )
+                self.docker_img = img
 
-        test_case = dockerrun_msg.test
-        location = dockerrun_msg.location.lower()
-        run = dockerrun_msg.run
-        test_result = None
-        container_id = None
-        if img:
-            try:
-                if location == "inside":
-                    # We use tail to make sure the container keeps running
-                    container = client.containers.run(
-                        img.id, "tail -f /dev/null", detach=True, auto_remove=False
-                    )
-                    if container:
-                        container_id = container.id
-                        # TODO: I need to define some timeout here because
-                        # noticed the execution of some commands takes forever
-                        test_result = container.exec_run(f"{test_case}")
-                        return f"""Test case executed from inside the container:
-                        exit code = {test_result.exit_code} {test_result.output}
-                        """
-                    else:
-                        return "Container run failed"
+            test_case = dockerrun_msg.test
+            location = dockerrun_msg.location.lower()
+            run = dockerrun_msg.run
+            test_result = None
+            container_id = None
+            if img:
+                try:
+                    if location == "inside":
+                        # We use tail to make sure the container keeps running
+                        container = client.containers.run(
+                            img.id, "tail -f /dev/null", detach=True, auto_remove=False
+                        )
+                        if container:
+                            container_id = container.id
+                            # TODO: I need to define some timeout here because
+                            # noticed the execution of some commands takes forever
+                            test_result = container.exec_run(f"{test_case}")
+                            return f"""Test case executed from inside the container:
+                            exit code = {test_result.exit_code} {test_result.output}
+                            """
+                        else:
+                            return "Container run failed"
 
-                if location == "outside":
-                    # TODO: we need converter from docker commands to docker SDK
-                    cmd_result = _execute_command(run)
-                    if cmd_result[0] is True and cmd_result[1]:
-                        container_id = cmd_result[1].strip()
-                        # delay to allow container finishing its setup
-                        time.sleep(60)
-                        test_result = _execute_command(test_case)
-                        return f"""Test case executed from outside the 
-                        container, execution code is: {test_result[0]}"""
-                    else:
-                        return f"Container run failed: {cmd_result[1]}"
-            except Exception as e:
-                logger.error(f"An error occurred: {str(e)}")
+                    if location == "outside":
+                        # TODO: we need converter from docker commands to docker SDK
+                        cmd_result = _execute_command(run)
+                        if cmd_result[0] is True and cmd_result[1]:
+                            container_id = cmd_result[1].strip()
+                            # delay to allow container finishing its setup
+                            time.sleep(60)
+                            test_result = _execute_command(test_case)
+                            return f"""Test case executed from outside the 
+                            container, execution code is: {test_result[0]}"""
+                        else:
+                            return f"Container run failed: {cmd_result[1]}"
+                except Exception as e:
+                    logger.error(f"An error occurred: {str(e)}")
 
-            finally:
-                if container_id:
-                    container = client.containers.get(container_id)
-                    container.remove(force=True)
+                finally:
+                    if container_id:
+                        container = client.containers.get(container_id)
+                        container.remove(force=True)
 
-        return "Image built failed"
+            return "Image built failed"
+        else:
+            return docker_daemon

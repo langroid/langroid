@@ -126,3 +126,22 @@ def _execute_command(cmd: str) -> Tuple[bool, str]:
         return True, stdout.decode()
     else:
         return False, stderr.decode()
+
+
+def _check_docker_daemon_url() -> str:
+    """
+    It checks the default location of docker daemon URL socket
+    Args:
+    Returns:
+        A string indicates whether the socker is found or not
+    """
+    default_socket_path = "unix://var/run/docker.sock"
+
+    try:
+        client = docker.DockerClient(base_url=default_socket_path)
+        client.ping()
+        return "exists"
+    except docker.errors.APIError:
+        return f"Unable to connect to Docker daemon at {default_socket_path}"
+    except Exception as e:
+        return f"Unexpected error: {str(e)}"
