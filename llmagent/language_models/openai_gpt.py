@@ -34,7 +34,7 @@ logging.getLogger("openai").setLevel(logging.ERROR)
 class OpenAIChatModel(str, Enum):
     """Enum for OpenAI Chat models"""
 
-    GPT3_5_TURBO = "gpt-3.5-turbo"
+    GPT3_5_TURBO = "gpt-3.5-turbo-0613"
     GPT4 = "gpt-4-0613"
 
 

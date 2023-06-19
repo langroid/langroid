@@ -146,6 +146,7 @@ def chat(config: DockerChatAgentConfig) -> None:
 def main(
     debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
     gpt4: bool = typer.Option(False, "--gpt4", "-4", help="use gpt4"),
+    no_stream: bool = typer.Option(False, "--nostream", "-ns", help="no streaming"),
     nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
     no_human: bool = typer.Option(
         False, "--nohuman", "-nh", help="no human input (for stepping in debugger)"
@@ -155,7 +156,11 @@ def main(
 
     set_global(
         Settings(
-            debug=debug, gpt3_5=not gpt4, cache=not nocache, interactive=not no_human
+            debug=debug,
+            gpt3_5=not gpt4,
+            cache=not nocache,
+            interactive=not no_human,
+            stream=not no_stream,
         )
     )
 
