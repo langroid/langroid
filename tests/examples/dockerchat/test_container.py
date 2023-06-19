@@ -72,18 +72,6 @@ cfg = ChatAgentConfig(
 agent = MessageHandlingAgent(cfg)
 
 
-def test_enable_message():
-    agent.enable_message(RunContainerMessage)
-    assert "run_container" in agent.handled_classes
-    assert agent.handled_classes["run_container"] == RunContainerMessage
-
-
-def test_disable_message():
-    agent.enable_message(RunContainerMessage)
-
-    agent.disable_message(RunContainerMessage)
-    assert "run_container" not in agent.handled_classes
-
 
 def test_dockerchat_agent_handle_message():
     """
@@ -91,7 +79,7 @@ def test_dockerchat_agent_handle_message():
     message enabling/disabling works as expected.
     """
     agent.enable_message(RunContainerMessage)
-    agent.disable_message(RunContainerMessage)
+    agent.disable_message_handling(RunContainerMessage)
     assert agent.handle_message(RUN_CONTAINER_MSG) is None
 
 

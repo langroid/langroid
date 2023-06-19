@@ -12,14 +12,6 @@ class MessageHandlingAgent(ChatAgent):
         return CODE_CHAT_RESPONSE_FIND_ENTRY
 
 
-cfg = ChatAgentConfig(
-    vecdb=None,
-    llm=OpenAIGPTConfig(
-        type="openai",
-        chat_model=OpenAIChatModel.GPT3_5_TURBO,
-        cache_config=RedisCacheConfig(fake=False),
-    ),
-)
 
 FIND_ENTRYPOINT_MSG = """
 great, please tell me this --
