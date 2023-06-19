@@ -1,7 +1,9 @@
+import itertools
 import json
-from typing import List
+from typing import List, Optional
 
 import pytest
+from pydantic import Field
 
 from llmagent.agent.chat_agent import ChatAgent, ChatAgentConfig
 from llmagent.agent.message import AgentMessage
@@ -34,7 +36,7 @@ class CountryCapitalMessage(AgentMessage):
 class FileExistsMessage(AgentMessage):
     request: str = "file_exists"
     purpose: str = "To check whether a certain <filename> is in the repo."
-    filename: str = "test.txt"
+    filename: str = Field(..., description="File name to check existence of")
     result: str = "yes"  # or "no"
 
     @classmethod
@@ -86,35 +88,85 @@ cfg = ChatAgentConfig(
     ),
     parsing=ParsingConfig(),
     prompts=PromptsConfig(),
+    use_functions_api=False,
+    use_llmagent_tools=True,
 )
 agent = MessageHandlingAgent(cfg)
 
+# Define the range of values each variable can have
+use_vals = [True, False]
+handle_vals = [True, False]
+force_vals = [True, False]
+message_classes = [None, FileExistsMessage, PythonVersionMessage]
 
-def test_enable_message():
+# Get the cartesian product
+cartesian_product = list(
+    itertools.product(message_classes, use_vals, handle_vals, force_vals)
+)
+
+agent.enable_message(FileExistsMessage)
+agent.enable_message(PythonVersionMessage)
+
+
+@pytest.mark.parametrize(
+    # cartesian product of all combinations of use, handle, force
+    "msg_class, use, handle, force",
+    cartesian_product,
+)
+def test_enable_message(
+    msg_class: Optional[AgentMessage], use: bool, handle: bool, force: bool
+):
+    agent.enable_message(msg_class, use=use, handle=handle, force=force)
+    tools = agent._get_tool_list(msg_class)
+    for tool in tools:
+        assert tool in agent.llm_tools_map
+        if msg_class is not None:
+            assert agent.llm_tools_map[tool] == msg_class
+            assert agent.llm_functions_map[tool] == msg_class.llm_function_schema()
+        assert (tool in agent.llm_tools_handled) == handle
+        assert (tool in agent.llm_tools_usable) == use
+        assert (tool in agent.llm_functions_handled) == handle
+        assert (tool in agent.llm_functions_usable) == use
+
+    if msg_class is not None:
+        assert (
+            agent.llm_function_force is not None
+            and agent.llm_function_force["name"] == tools[0]
+        ) == force
+
+
+@pytest.mark.parametrize("msg_class", [None, FileExistsMessage, PythonVersionMessage])
+def test_disable_message_handling(msg_class: Optional[AgentMessage]):
     agent.enable_message(FileExistsMessage)
-    assert "file_exists" in agent.handled_classes
-    assert agent.handled_classes["file_exists"] == FileExistsMessage
-
     agent.enable_message(PythonVersionMessage)
-    assert "python_version" in agent.handled_classes
-    assert agent.handled_classes["python_version"] == PythonVersionMessage
+
+    agent.disable_message_handling(msg_class)
+    tools = agent._get_tool_list(msg_class)
+    for tool in tools:
+        assert tool not in agent.llm_tools_handled
+        assert tool not in agent.llm_functions_handled
+        assert tool in agent.llm_tools_usable
+        assert tool in agent.llm_functions_usable
 
 
-def test_disable_message():
+@pytest.mark.parametrize("msg_class", [None, FileExistsMessage, PythonVersionMessage])
+def test_disable_message_use(msg_class: Optional[AgentMessage]):
     agent.enable_message(FileExistsMessage)
     agent.enable_message(PythonVersionMessage)
 
-    agent.disable_message(FileExistsMessage)
-    assert "file_exists" not in agent.handled_classes
-
-    agent.disable_message(PythonVersionMessage)
-    assert "python_version" not in agent.handled_classes
+    agent.disable_message_use(msg_class)
+    tools = agent._get_tool_list(msg_class)
+    for tool in tools:
+        assert tool not in agent.llm_tools_usable
+        assert tool not in agent.llm_functions_usable
+        assert tool in agent.llm_tools_handled
+        assert tool in agent.llm_functions_handled
 
 
 @pytest.mark.parametrize("msg_cls", [PythonVersionMessage, FileExistsMessage])
 def test_usage_instruction(msg_cls: AgentMessage):
-    usage = msg_cls().usage_example()
-    assert json.loads(usage)["request"] == msg_cls().request
+    usage = msg_cls.usage_example()
+    assert json.loads(usage)["request"] == msg_cls.default_value("request")
 
 
 rmdir(qd_dir)  # don't need it here
@@ -149,11 +201,11 @@ def test_agent_handle_message():
     assert agent.handle_message(FILE_EXISTS_MSG) == "no"
     assert agent.handle_message(PYTHON_VERSION_MSG) == "3.9"
 
-    agent.disable_message(FileExistsMessage)
+    agent.disable_message_handling(FileExistsMessage)
     assert agent.handle_message(FILE_EXISTS_MSG) is None
     assert agent.handle_message(PYTHON_VERSION_MSG) == "3.9"
 
-    agent.disable_message(PythonVersionMessage)
+    agent.disable_message_handling(PythonVersionMessage)
     assert agent.handle_message(FILE_EXISTS_MSG) is None
     assert agent.handle_message(PYTHON_VERSION_MSG) is None
 
@@ -166,36 +218,87 @@ def test_agent_handle_message():
     assert agent.handle_message(PYTHON_VERSION_MSG) == "3.9"
 
 
-def test_llm_agent_message(test_settings: Settings):
+@pytest.mark.parametrize(
+    "use_functions_api, message_class, prompt, result",
+    [
+        (
+            False,
+            FileExistsMessage,
+            "Start by asking me whether the file 'requirements.txt' exists",
+            "yes",
+        ),
+        (
+            False,
+            PythonVersionMessage,
+            "Start by asking me about the python version",
+            "3.9",
+        ),
+        (
+            False,
+            CountryCapitalMessage,
+            "Start by asking me whether the capital of France is Paris",
+            "yes",
+        ),
+        (
+            True,
+            FileExistsMessage,
+            "Start by asking me whether the file 'requirements.txt' exists",
+            "yes",
+        ),
+        (
+            True,
+            PythonVersionMessage,
+            "Start by asking me about the python version",
+            "3.9",
+        ),
+        (
+            True,
+            CountryCapitalMessage,
+            "Start by asking me whether the capital of France is Paris",
+            "yes",
+        ),
+    ],
+)
+def test_llm_agent_message(
+    test_settings: Settings,
+    use_functions_api: bool,
+    message_class: AgentMessage,
+    prompt: str,
+    result: str,
+):
     """
-    Test whether LLM is able to generate message in required format, and the
+    Test whether LLM is able to GENERATE message (tool) in required format, and the
     agent handles the message correctly.
+    Args:
+        test_settings: test settings from conftest.py
+        use_functions_api: whether to use LLM's functions api or not
+            (i.e. use the llmagent AgentMessage tools instead).
+        message_class: the message class (i.e. tool/function) to test
+        prompt: the prompt to use to induce the LLM to use the tool
+        result: the expected result from agent handling the tool-message
     """
     set_global(test_settings)
     agent = MessageHandlingAgent(cfg)
+    agent.config.use_functions_api = use_functions_api
+    agent.config.use_llmagent_tools = not use_functions_api
     agent.enable_message(FileExistsMessage)
     agent.enable_message(PythonVersionMessage)
     agent.enable_message(CountryCapitalMessage)
 
-    llm_msg = agent.llm_response_forget(
-        "Start by asking me about the python version."
-    ).content
+    llm_msg = agent.llm_response_forget(prompt)
+    tool_name = message_class.default_value("request")
+    if use_functions_api:
+        assert llm_msg.function_call.name == tool_name
+    else:
+        tools = agent.get_tool_messages(llm_msg)
+        assert len(tools) == 1
+        assert isinstance(tools[0], message_class)
 
     agent_result = agent.handle_message(llm_msg)
-    assert agent_result == "3.9"
+    assert result.lower() in agent_result.lower()
 
-    llm_msg = agent.llm_response_forget(
-        "Start by asking me whether file 'requirements.txt' exists."
-    ).content
-    agent_result = agent.handle_message(llm_msg)
-    assert agent_result == "yes"
 
-    llm_msg = agent.llm_response_forget(
-        "Start by asking me whether Paris is the capital of France."
-    ).content
-    agent_result = agent.handle_message(llm_msg)
-    assert agent_result == "yes"
-
+def test_llm_non_tool():
     llm_msg = agent.llm_response_forget(
         "Ask me to check what is the population of France."
     ).content

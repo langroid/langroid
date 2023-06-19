@@ -47,26 +47,13 @@ cfg = ChatAgentConfig(
 agent = MessageHandlingAgent(cfg)
 
 
-def test_enable_message():
-    agent.enable_message(EntryPointAndCMDMessage)
-    assert "find_entrypoint" in agent.handled_classes
-    assert agent.handled_classes["find_entrypoint"] == EntryPointAndCMDMessage
-
-
-def test_disable_message():
-    agent.enable_message(EntryPointAndCMDMessage)
-
-    agent.disable_message(EntryPointAndCMDMessage)
-    assert "find_entrypoint" not in agent.handled_classes
-
-
 def test_dockerchat_agent_handle_message():
     """
     Test whether messages are handled correctly, and that
     message enabling/disabling works as expected.
     """
     agent.enable_message(EntryPointAndCMDMessage)
-    agent.disable_message(EntryPointAndCMDMessage)
+    agent.disable_message_handling(EntryPointAndCMDMessage)
     assert agent.handle_message(FIND_ENTRYPOINT_MSG) is None
 
 

@@ -1,9 +1,10 @@
+import ast
 import hashlib
 import logging
 import os
 import sys
 from enum import Enum
-from typing import Any, Dict, List, Tuple, Union, cast
+from typing import Any, Dict, List, Optional, Tuple, Union, cast
 
 import openai
 from dotenv import load_dotenv
@@ -13,6 +14,8 @@ from llmagent.cachedb.redis_cachedb import RedisCache
 from llmagent.language_models.base import (
     LanguageModel,
     LLMConfig,
+    LLMFunctionCall,
+    LLMFunctionSpec,
     LLMMessage,
     LLMResponse,
     Role,
@@ -32,7 +35,7 @@ class OpenAIChatModel(str, Enum):
     """Enum for OpenAI Chat models"""
 
     GPT3_5_TURBO = "gpt-3.5-turbo"
-    GPT4 = "gpt-4"
+    GPT4 = "gpt-4-0613"
 
 
 class OpenAICompletionModel(str, Enum):
@@ -108,32 +111,75 @@ class OpenAIGPT(LanguageModel):
 
         """
         completion = ""
+        function_args = ""
+        function_name = ""
+
         sys.stdout.write(Colors().GREEN)
         sys.stdout.flush()
+        has_function = False
         for event in response:
+            event_args = ""
+            event_fn_name = ""
             if chat:
-                event_text = event["choices"][0]["delta"].get("content", "")
+                delta = event["choices"][0]["delta"]
+                if "function_call" in delta:
+                    if "name" in delta.function_call:
+                        event_fn_name = delta.function_call["name"]
+                    if "arguments" in delta.function_call:
+                        event_args = delta.function_call["arguments"]
+                event_text = delta.get("content", "")
             else:
                 event_text = event["choices"][0]["text"]
             if event_text:
                 completion += event_text
                 sys.stdout.write(Colors().GREEN + event_text)
                 sys.stdout.flush()
+            if event_fn_name:
+                function_name = event_fn_name
+                sys.stdout.write(Colors().GREEN + "FUNC: " + event_fn_name + ": ")
+                sys.stdout.flush()
+            if event_args:
+                function_args += event_args
+                sys.stdout.write(Colors().GREEN + event_args)
+                sys.stdout.flush()
+            if event.choices[0].finish_reason == "function_call":
+                # function call here using func_call
+                has_function = True
+                break
 
         print(Colors().RESET)
         # TODO- get usage info in stream mode (?)
 
         # mock openai response so we can cache it
         if chat:
-            msg = dict(message=dict(content=completion))
+            msg: Dict[str, Any] = dict(message=dict(content=completion))
+            if has_function:
+                function_call = LLMFunctionCall(name=function_name)
+                if function_args == "":
+                    function_call.arguments = None
+                else:
+                    try:
+                        args = ast.literal_eval(function_args)
+                    except (SyntaxError, ValueError):
+                        logging.warning(
+                            f"Parsing OpenAI function args failed: {function_args}"
+                        )
+                    function_call.arguments = args
+                msg["message"]["function_call"] = function_call
         else:
-            msg = dict(text=completion)  # type: ignore
+            msg = dict(text=completion)
+
         openai_response = OpenAIResponse(
             choices=[msg],
             usage=dict(total_tokens=0),
         )
         return (  # type: ignore
-            LLMResponse(message=completion, usage=0, cached=False),
+            LLMResponse(
+                message=completion,
+                usage=0,
+                cached=False,
+                function_call=function_call if has_function else None,
+            ),
             openai_response.dict(),
         )
 
@@ -260,8 +306,30 @@ class OpenAIGPT(LanguageModel):
         return LLMResponse(message=msg, usage=usage, cached=cached)
 
     def chat(
-        self, messages: Union[str, List[LLMMessage]], max_tokens: int
+        self,
+        messages: Union[str, List[LLMMessage]],
+        max_tokens: int,
+        functions: Optional[List[LLMFunctionSpec]] = None,
+        function_call: str | Dict[str, str] = "auto",
     ) -> LLMResponse:
+        """
+        ChatCompletion API call to OpenAI.
+        Args:
+            messages: list of messages  to send to the API, typically
+                represents back and forth dialogue between user and LLM, but could
+                also include "function"-role messages. If messages is a string,
+                it is assumed to be a user message.
+            max_tokens: max output tokens to generate
+            functions: list of LLMFunction specs available to the LLM, to possibly
+                use in its response
+            function_call: controls how the LLM uses `functions`:
+                - "auto": LLM decides whether to use `functions` or not,
+                - "none": LLM blocked from using any function
+                - a dict of {"name": "function_name"} which forces the LLM to use
+                    the specified function.
+        Returns:
+            LLMResponse object
+        """
         openai.api_key = self.api_key
         if type(messages) == str:
             llm_messages = [
@@ -291,7 +359,7 @@ class OpenAIGPT(LanguageModel):
                     self.cache.store(hashed_key, result)
             return cached, hashed_key, result
 
-        cached, hashed_key, response = completions_with_backoff(
+        args: Dict[str, Any] = dict(
             model=self.config.chat_model,
             messages=[m.dict() for m in llm_messages],
             max_tokens=max_tokens,
@@ -301,6 +369,17 @@ class OpenAIGPT(LanguageModel):
             request_timeout=self.config.timeout,
             stream=self.config.stream,
         )
+        # only include functions-related args if functions are provided
+        # since the OpenAI API will throw an error if `functions` is None or []
+        if functions is not None:
+            args.update(
+                dict(
+                    functions=[f.dict() for f in functions],
+                    function_call=function_call,
+                )
+            )
+        cached, hashed_key, response = completions_with_backoff(**args)
+
         if self.config.stream and not cached:
             llm_response, openai_response = self._stream_response(response, chat=True)
             self.cache.store(hashed_key, openai_response)
@@ -317,7 +396,15 @@ class OpenAIGPT(LanguageModel):
                 "index": 0,
                 "message": {
                     "role": "assistant",
+                    "name": "", 
                     "content": "\n\nHello there, how may I help you?",
+                    "function_call": {
+                        "name": "fun_name",
+                        "arguments: {
+                            "arg1": "val1",
+                            "arg2": "val2"
+                        }
+                    }, 
                 },
                 "finish_reason": "stop"
             }],
@@ -329,5 +416,10 @@ class OpenAIGPT(LanguageModel):
         }
         """
 
-        msg = response["choices"][0]["message"]["content"].strip()
-        return LLMResponse(message=msg, usage=usage, cached=cached)
+        message = response["choices"][0]["message"]
+        return LLMResponse(
+            message=message["content"].strip(),
+            function_call=message.get("function_call"),
+            usage=usage,
+            cached=cached,
+        )

@@ -1,14 +1,20 @@
 import logging
 from contextlib import ExitStack
-from typing import List, Optional, Type, cast, no_type_check
+from typing import Dict, List, Optional, Set, Type, cast, no_type_check
 
 from rich import print
 from rich.console import Console
 
 from llmagent.agent.base import Agent, AgentConfig, ChatDocument, Entity
 from llmagent.agent.message import AgentMessage
-from llmagent.language_models.base import LLMMessage, Role, StreamingIfAllowed
-from llmagent.mytypes import DocMetaData, Document
+from llmagent.language_models.base import (
+    LanguageModel,
+    LLMFunctionSpec,
+    LLMMessage,
+    Role,
+    StreamingIfAllowed,
+)
+from llmagent.mytypes import DocMetaData
 from llmagent.utils.configuration import settings
 
 console = Console()
@@ -19,11 +25,19 @@ logger = logging.getLogger(__name__)
 class ChatAgentConfig(AgentConfig):
     """
     Configuration for ChatAgent
+    Attributes:
+        system_message: system message to include in message sequence
+             (typically defines role and task of agent)
+        user_message: user message to include in message sequence
+        use_llmagent_tools: whether to use our own AgentMessages tools mechanism
+        use_functions_api: whether to use functions native to the LLM API
+                (e.g. OpenAI's `function_call` mechanism)
     """
 
     system_message: str = "You are a helpful assistant."
     user_message: Optional[str] = None
-    max_context_tokens: int = 500
+    use_llmagent_tools: bool = True
+    use_functions_api: bool = False
 
 
 class ChatAgent(Agent):
@@ -67,8 +81,14 @@ class ChatAgent(Agent):
 
         """
         super().__init__(config)
+        self.config: ChatAgentConfig = config
         self.message_history: List[LLMMessage] = []
         self.json_instructions_idx: int = -1
+        self.llm_functions_map: Dict[str, LLMFunctionSpec] = {}
+        self.llm_functions_handled: Set[str] = set()
+        self.llm_functions_usable: Set[str] = set()
+        self.llm_function_force: Optional[Dict[str, str]] = None
+
         priming_messages = task
         if priming_messages is None:
             priming_messages = [
@@ -138,24 +158,107 @@ class ChatAgent(Agent):
 
     def enable_message(
         self,
-        message_class: Type[AgentMessage],
+        message_class: Optional[Type[AgentMessage]],
         use: bool = True,
+        handle: bool = True,
+        force: bool = False,
     ) -> None:
         """
-        Enable this agent to RESPOND to a message class (Tool), and if `use` is True,
-        update the message instructions so the agent can USE this tool as well.
+        Add the tool (message class) to the agent, and enable either
+        - tool USE (i.e. the LLM can generate JSON to use this tool),
+        - tool HANDLING (i.e. the agent can handle JSON from this tool),
 
         Args:
-            message_class: The AgentMessage class (tool) to enable
-            use: whether to allow the agent (LLM) to use this tool
+            message_class: The AgentMessage class (tool) to enable,
+                for USE, or HANDLING, or both.
+                Optional; if None, then apply the enabling to all tools in the
+                agent's toolset that have been enabled so far.
+            use: IF True, allow the agent (LLM) to use this tool (or all tools),
+                else disallow
+            handle: if True, allow the agent (LLM) to handle (i.e. respond to) this
+                tool (or all tools)
+            force: whether to FORCE the agent (LLM) to USE the specific
+                 tool represented by `message_class`.
+                 `force` is ignored if `message_class` is None.
+
         """
-        super().enable_message(message_class)
-        if use:
+        super().enable_message_handling(message_class)  # enables handling only
+        tools = self._get_tool_list(message_class)
+        if message_class is not None:
+            request = message_class.default_value("request")
+            llm_function = message_class.llm_function_schema()
+            self.llm_functions_map[request] = llm_function
+            if force:
+                self.llm_function_force = dict(name=llm_function.name)
+            else:
+                self.llm_function_force = None
+        n_usable_tools = len(self.llm_tools_usable)
+        for t in tools:
+            if handle:
+                self.llm_tools_handled.add(t)
+                self.llm_functions_handled.add(t)
+            else:
+                self.llm_tools_handled.discard(t)
+                self.llm_functions_handled.discard(t)
+
+            if use:
+                self.llm_tools_usable.add(t)
+                self.llm_functions_usable.add(t)
+            else:
+                self.llm_tools_usable.discard(t)
+                self.llm_functions_usable.discard(t)
+
+        # TODO we should do this only on demand when we actually are
+        # ready to send the instructions.
+        # But for now leave as is.
+        if (
+            len(self.llm_tools_usable) != n_usable_tools
+            and self.config.use_llmagent_tools
+        ):
+            # Update JSON format instructions if the set of usable tools has changed
             self.update_message_instructions()
 
-    def disable_message(self, message_class: Type[AgentMessage]) -> None:
-        super().disable_message(message_class)
-        self.update_message_instructions()
+    def disable_message_handling(
+        self,
+        message_class: Optional[Type[AgentMessage]] = None,
+    ) -> None:
+        """
+        Disable this agent from RESPONDING to a `message_class` (Tool). If
+            `message_class` is None, then disable this agent from responding to ALL.
+        Args:
+            message_class: The AgentMessage class (tool) to disable; Optional.
+        """
+        super().disable_message_handling(message_class)
+        for t in self._get_tool_list(message_class):
+            self.llm_tools_handled.discard(t)
+            self.llm_functions_handled.discard(t)
+
+    def disable_message_use(
+        self,
+        message_class: Optional[Type[AgentMessage]],
+    ) -> None:
+        """
+        Disable this agent from USING a message class (Tool).
+        If `message_class` is None, then disable this agent from USING ALL tools.
+        Args:
+            message_class: The AgentMessage class (tool) to disable.
+                If None, disable all.
+        """
+        for t in self._get_tool_list(message_class):
+            self.llm_tools_usable.discard(t)
+            self.llm_functions_usable.discard(t)
+
+    def disable_message_use_except(self, message_class: Type[AgentMessage]) -> None:
+        """
+        Disable this agent from USING ALL messages EXCEPT a message class (Tool)
+        Args:
+            message_class: The only AgentMessage class (tool) to allow
+        """
+        request = message_class.__fields__["request"].default
+        for r in self.llm_functions_usable:
+            if r != request:
+                self.llm_tools_usable.discard(r)
+                self.llm_functions_usable.discard(r)
 
     def update_message_instructions(self) -> None:
         """
@@ -278,10 +381,16 @@ class ChatAgent(Agent):
             )
         with StreamingIfAllowed(self.llm):
             response = self.llm_response_messages(hist, output_len)
+        # TODO - when response contains function_call we should include
+        # that (and related fields) in the message_history
         self.message_history.append(
             LLMMessage(role=Role.ASSISTANT, content=response.content)
         )
-        return Document(content=response.content, metadata=response.metadata)
+        return ChatDocument(
+            content=response.content,
+            function_call=response.function_call,
+            metadata=response.metadata,
+        )
 
     def llm_response_messages(
         self, messages: List[LLMMessage], output_len: Optional[int] = None
@@ -302,7 +411,24 @@ class ChatAgent(Agent):
                 stack.enter_context(cm)
             if self.llm.get_stream():  # type: ignore
                 console.print(f"[green]{self.indent}", end="")
-            response = self.llm.chat(messages, output_len)  # type: ignore
+            functions: Optional[List[LLMFunctionSpec]] = None
+            fun_call: str | Dict[str, str] = "none"
+            if self.config.use_functions_api:
+                functions = [
+                    self.llm_functions_map[f] for f in self.llm_functions_usable
+                ]
+                fun_call = (
+                    "auto"
+                    if self.llm_function_force is None
+                    else self.llm_function_force
+                )
+            assert self.llm is not None
+            response = cast(LanguageModel, self.llm).chat(
+                messages,
+                output_len,
+                functions=functions,
+                function_call=fun_call,
+            )
         displayed = False
         if not self.llm.get_stream() or response.cached:  # type: ignore
             displayed = True
@@ -310,6 +436,7 @@ class ChatAgent(Agent):
             print(cached + "[green]" + response.message)
         return ChatDocument(
             content=response.message,
+            function_call=response.function_call,
             metadata=DocMetaData(
                 source=Entity.LLM.value,
                 sender=Entity.LLM.value,

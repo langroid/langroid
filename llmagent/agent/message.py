@@ -12,6 +12,8 @@ from typing import Any, Dict, List
 
 from pydantic import BaseModel
 
+from llmagent.language_models.base import LLMFunctionSpec
+
 INSTRUCTION = """
     When one of these tools is applicable, you must express your request as
     "TOOL:" followed by the request in JSON format. The fields will be based on the 
@@ -90,14 +92,15 @@ class AgentMessage(ABC, BaseModel):
         """
         pass
 
-    def usage_example(self) -> str:
+    @classmethod
+    def usage_example(cls) -> str:
         """
         Instruction to the LLM showing an example of how to use the message.
         Returns:
             str: example of how to use the message
         """
         # pick a random example of the fields
-        ex = choice(self.examples())
+        ex = choice(cls.examples())
         return ex.json_example()
 
     def json_example(self) -> str:
@@ -105,3 +108,53 @@ class AgentMessage(ABC, BaseModel):
 
     def dict_example(self) -> Dict[str, Any]:
         return self.dict(exclude={"result", "purpose"})
+
+    @classmethod
+    def default_value(cls, f: str) -> Any:
+        """
+        Returns the default value of the given field, for the message-class
+        Args:
+            f (str): field name
+
+        Returns:
+            str: default value of the field
+        """
+        schema = cls.schema()
+        properties = schema["properties"]
+        return properties.get(f, {}).get("default", None)
+
+    @classmethod
+    def llm_function_schema(cls) -> LLMFunctionSpec:
+        """
+        Returns schema for use in OpenAI Function Calling API.
+        Returns:
+            Dict[str, Any]: schema for use in OpenAI Function Calling API
+
+        """
+        schema = cls.schema()
+        spec = LLMFunctionSpec(
+            name=cls.default_value("request"),
+            description=cls.default_value("purpose"),
+            parameters=dict(),
+        )
+        excludes = ["result", "request", "purpose"]
+        properties = {}
+        if schema.get("properties"):
+            properties = {
+                field: details
+                for field, details in schema["properties"].items()
+                if field not in excludes
+            }
+        required = []
+        if schema.get("required"):
+            required = [field for field in schema["required"] if field not in excludes]
+        properties = {
+            k: {prop: val for prop, val in v.items() if prop != "title"}
+            for k, v in properties.items()
+        }
+        spec.parameters = dict(
+            type="object",
+            properties=properties,
+            required=required,
+        )
+        return spec

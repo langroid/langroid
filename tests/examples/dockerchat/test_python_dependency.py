@@ -71,18 +71,6 @@ cfg = ChatAgentConfig(
 agent = MessageHandlingAgent(cfg)
 
 
-def test_enable_message():
-    agent.enable_message(PythonDependencyMessage)
-    assert "python_dependency" in agent.handled_classes
-    assert agent.handled_classes["python_dependency"] == PythonDependencyMessage
-
-
-def test_disable_message():
-    agent.enable_message(PythonDependencyMessage)
-    agent.disable_message(PythonDependencyMessage)
-    assert "python_dependency" not in agent.handled_classes
-
-
 @pytest.mark.parametrize("msg_cls", [PythonDependencyMessage])
 def test_usage_instruction(msg_cls: AgentMessage):
     usage = msg_cls().usage_example()
@@ -114,7 +102,7 @@ def test_agent_handle_message():
         == "This repo uses requirements.txt for managing dependencies"
     )
 
-    agent.disable_message(PythonDependencyMessage)
+    agent.disable_message_handling(PythonDependencyMessage)
     assert agent.handle_message(PYTHON_DEPENDENCY_MSG) is None
 
     agent.enable_message(PythonDependencyMessage)
