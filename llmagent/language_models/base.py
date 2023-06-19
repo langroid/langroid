@@ -35,16 +35,41 @@ class LLMConfig(BaseSettings):
     )
 
 
+class LLMFunctionCall(BaseModel):
+    """
+    Structure of LLM response indicate it "wants" to call a function.
+    Modeled after OpenAI spec for `function_call` field in ChatCompletion API.
+    """
+
+    name: str  # name of function to call
+    to: str = ""  # intended recipient
+    arguments: Optional[Dict[str, Any]] = None
+
+
 class LLMResponse(BaseModel):
     message: str
+    function_call: Optional[LLMFunctionCall] = None
     usage: int
     cached: bool = False
+
+
+class LLMFunctionSpec(BaseModel):
+    """
+    Description of a function available for the LLM to use.
+    To be used when calling the LLM `chat()` method with the `functions` parameter.
+    Modeled after OpenAI spec for `functions` fields in ChatCompletion API.
+    """
+
+    name: str
+    description: str
+    parameters: Dict[str, Any]
 
 
 class Role(str, Enum):
     USER = "user"
     SYSTEM = "system"
     ASSISTANT = "assistant"
+    FUNCTION = "function"
 
 
 class LLMMessage(BaseModel):
@@ -103,7 +128,11 @@ class LanguageModel(ABC):
 
     @abstractmethod
     def chat(
-        self, messages: Union[str, List[LLMMessage]], max_tokens: int
+        self,
+        messages: Union[str, List[LLMMessage]],
+        max_tokens: int,
+        functions: Optional[List[LLMFunctionSpec]] = None,
+        function_call: str | Dict[str, str] = "auto",
     ) -> LLMResponse:
         pass
 
