@@ -12,7 +12,6 @@ class MessageHandlingAgent(ChatAgent):
         return CODE_CHAT_RESPONSE_FIND_ENTRY
 
 
-
 FIND_ENTRYPOINT_MSG = """
 great, please tell me this --
 {

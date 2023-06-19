@@ -72,7 +72,6 @@ cfg = ChatAgentConfig(
 agent = MessageHandlingAgent(cfg)
 
 
-
 def test_dockerchat_agent_handle_message():
     """
     Test whether messages are handled correctly, and that
