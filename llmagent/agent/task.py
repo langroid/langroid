@@ -323,8 +323,9 @@ class Task:
         Set up pending message (the "task")  before continuing processing loop.
 
         Args:
-            msg (str): initial msg; optional, default is None
-            ent (Entity): initial sender; optional, default is Entity.USER
+            msg (str): latest message sent by an entity; optional,
+                default is None.
+            ent (Entity): sender of the pending msg; optional, default is Entity.USER
             sender_name (str): name of sender; optional, default is ""
                 (Used to fill in "name" field in OpenAI message list)
 
@@ -333,7 +334,8 @@ class Task:
 
         recipient_task_name, text = parse_message(msg) if msg is not None else ("", "")
         if recipient_task_name:
-            # disable a sub-task if it is NOT the intended recipient
+            # When a recipient task is specified, we only allow that task to respond,
+            # so disable any sub-task that is NOT the recipient task
             for task in self.sub_tasks:
                 if task.name != recipient_task_name:
                     self._disallow_responder(

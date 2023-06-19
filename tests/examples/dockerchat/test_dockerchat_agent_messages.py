@@ -65,27 +65,6 @@ class _TestDockerChatAgent(DockerChatAgent):
 agent = _TestDockerChatAgent(cfg)
 
 
-def test_enable_message():
-    agent.enable_message(FileExistsMessage)
-    assert "file_exists" in agent.handled_classes
-    assert agent.handled_classes["file_exists"] == FileExistsMessage
-
-    agent.enable_message(AskURLMessage)
-    assert "ask_url" in agent.handled_classes
-    assert agent.handled_classes["ask_url"] == AskURLMessage
-
-
-def test_disable_message():
-    agent.enable_message(FileExistsMessage)
-    agent.enable_message(AskURLMessage)
-
-    agent.disable_message(FileExistsMessage)
-    assert "file_exists" not in agent.handled_classes
-
-    agent.disable_message(AskURLMessage)
-    assert "ask_url" not in agent.handled_classes
-
-
 @pytest.mark.parametrize("msg_cls", [AskURLMessage, FileExistsMessage])
 def test_usage_instruction(msg_cls: AgentMessage):
     usage = msg_cls().usage_example()
@@ -105,5 +84,5 @@ def test_dockerchat_agent_handle_message():
     assert agent.handle_message(FILE_EXISTS_MSG) == ASK_URL_RESPONSE
     assert agent.handle_message(ASK_URL_MSG) == GOT_URL_RESPONSE
 
-    agent.disable_message(FileExistsMessage)
+    agent.disable_message_handling(FileExistsMessage)
     assert agent.handle_message(FILE_EXISTS_MSG) is None

@@ -3,7 +3,7 @@ import logging
 from abc import ABC
 from contextlib import ExitStack
 from enum import Enum
-from typing import Dict, List, Optional, Tuple, Type, no_type_check
+from typing import Dict, List, Optional, Set, Tuple, Type, no_type_check
 
 from pydantic import BaseSettings, ValidationError
 from rich import print
@@ -11,7 +11,7 @@ from rich.console import Console
 from rich.prompt import Prompt
 
 from llmagent.agent.message import INSTRUCTION, AgentMessage
-from llmagent.language_models.base import LanguageModel, LLMConfig
+from llmagent.language_models.base import LanguageModel, LLMConfig, LLMFunctionCall
 from llmagent.mytypes import DocMetaData, Document
 from llmagent.parsing.json import extract_top_level_json
 from llmagent.parsing.parser import Parser, ParsingConfig
@@ -41,6 +41,7 @@ class ChatDocMetaData(DocMetaData):
 
 
 class ChatDocument(Document):
+    function_call: Optional[LLMFunctionCall] = None
     metadata: ChatDocMetaData
 
 
@@ -62,7 +63,9 @@ class Agent(ABC):
     def __init__(self, config: AgentConfig):
         self.config = config
         self.dialog: List[Tuple[str, str]] = []  # seq of LLM (prompt, response) tuples
-        self.handled_classes: Dict[str, Type[AgentMessage]] = {}
+        self.llm_tools_map: Dict[str, Type[AgentMessage]] = {}
+        self.llm_tools_handled: Set[str] = set()
+        self.llm_tools_usable: Set[str] = set()
         self.default_human_response: Optional[str] = None
         self._indent = ""
         self.llm = LanguageModel.create(config.llm)
@@ -86,32 +89,47 @@ class Agent(ABC):
     def get_dialog(self) -> List[Tuple[str, str]]:
         return self.dialog
 
-    def enable_message(self, message_class: Type[AgentMessage]) -> None:
+    def _get_tool_list(
+        self, message_class: Optional[Type[AgentMessage]] = None
+    ) -> List[str]:
+        if message_class is None:
+            return list(self.llm_tools_map.keys())
+        else:
+            if not issubclass(message_class, AgentMessage):
+                raise ValueError("message_class must be a subclass of AgentMessage")
+            tool = message_class.default_value("request")
+            self.llm_tools_map[tool] = message_class
+            return [tool]
+
+    def enable_message_handling(
+        self, message_class: Optional[Type[AgentMessage]] = None
+    ) -> None:
         """
-        Enable an agent to act on a message of a specific type from LLM
+        Enable an agent to RESPOND (i.e. handle) a "tool" message of a specific type
+            from LLM. Also "registers" (i.e. adds) the `message_class` to the
+            `self.llm_tools_map` dict.
 
         Args:
-            message_class (Type[AgentMessage]): The message class to enable.
+            message_class (Optional[Type[AgentMessage]]): The message class to enable;
+                Optional; if None, all known message classes are enabled for handling.
+
         """
-        if not issubclass(message_class, AgentMessage):
-            raise ValueError("message_class must be a subclass of AgentMessage")
+        for t in self._get_tool_list(message_class):
+            self.llm_tools_handled.add(t)
 
-        request = message_class.__fields__["request"].default
-        self.handled_classes[request] = message_class
-
-    def disable_message(self, message_class: Type[AgentMessage]) -> None:
+    def disable_message_handling(
+        self,
+        message_class: Optional[Type[AgentMessage]] = None,
+    ) -> None:
         """
         Disable a message class from being handled by this Agent.
 
         Args:
-            message_class (Type[AgentMessage]): The message class to disable.
+            message_class (Optional[Type[AgentMessage]]): The message class to disable.
+                If None, all message classes are disabled.
         """
-        if not issubclass(message_class, AgentMessage):
-            raise ValueError("message_class must be a subclass of AgentMessage")
-
-        request = message_class.__fields__["request"].default
-        if request in self.handled_classes:
-            del self.handled_classes[request]
+        for t in self._get_tool_list(message_class):
+            self.llm_tools_handled.discard(t)
 
     def json_format_rules(self) -> str:
         """
@@ -121,13 +139,15 @@ class Agent(ABC):
         Returns:
             str: formatting rules
         """
-        enabled_classes: List[Type[AgentMessage]] = list(self.handled_classes.values())
+        enabled_classes: List[Type[AgentMessage]] = list(self.llm_tools_map.values())
         if len(enabled_classes) == 0:
             return "You can ask questions in natural language."
 
         json_conditions = "\n\n".join(
             [
-                msg_cls().request + ":\n" + msg_cls().purpose  # type: ignore
+                str(msg_cls.default_value("request"))
+                + ":\n"
+                + str(msg_cls.default_value("purpose"))
                 for i, msg_cls in enumerate(enabled_classes)
             ]
         )
@@ -139,7 +159,7 @@ class Agent(ABC):
         Returns:
             str: The sample dialog string.
         """
-        enabled_classes: List[Type[AgentMessage]] = list(self.handled_classes.values())
+        enabled_classes: List[Type[AgentMessage]] = list(self.llm_tools_map.values())
         # use at most 2 sample conversations, no need to be exhaustive;
         sample_convo = [
             msg_cls().usage_example()  # type: ignore
@@ -297,6 +317,7 @@ class Agent(ABC):
 
         return ChatDocument(
             content=response.message,
+            function_call=response.function_call,
             metadata=DocMetaData(
                 source=Entity.LLM.value,
                 sender=Entity.LLM.value,
@@ -306,7 +327,28 @@ class Agent(ABC):
             ),
         )
 
-    def get_tool_messages(self, input_str: str) -> List[AgentMessage]:
+    def get_tool_messages(self, msg: str | ChatDocument) -> List[AgentMessage]:
+        if isinstance(msg, str):
+            return self.get_json_tool_messages(msg)
+        assert isinstance(msg, ChatDocument)
+        if msg.content != "":
+            return self.get_json_tool_messages(msg.content)
+
+        if msg.function_call is None:
+            return []
+        tool_name = msg.function_call.name
+        tool_msg = msg.function_call.arguments or {}
+        if tool_name not in self.llm_tools_handled:
+            return []
+        tool_class = self.llm_tools_map[tool_name]
+        tool_msg.update(dict(request=tool_name))
+        try:
+            tool = tool_class.parse_obj(tool_msg)
+        except ValidationError as ve:
+            raise ValueError("Error parsing tool_msg as message class") from ve
+        return [tool]
+
+    def get_json_tool_messages(self, input_str: str) -> List[AgentMessage]:
         """
         Returns AgentMessage objects (tools) corresponding to JSON substrings, if any.
 
@@ -322,56 +364,61 @@ class Agent(ABC):
         results = [self._get_one_tool_message(j) for j in json_substrings]
         return [r for r in results if r is not None]
 
-    def handle_message(self, input_str: str) -> Optional[str]:
+    def handle_message(self, msg: str | ChatDocument) -> Optional[str]:
         """
-        Extract JSON substrings from input message, handle each by the appropriate
-        handler method, and return the results as a combined string.
+        Handle a "tool" message either a string containing one or more
+        valie "tool" JSON substrings,  or a
+        ChatDocument containing a `function_call` attribute.
+        Handle with the corresponding handler method, and return
+        the results as a combined string.
 
         Args:
-            input_str (str): The input string possibly containing JSON.
+            msg (str | ChatDocument): The string or ChatDocument to handle
 
         Returns:
             Optional[Str]: The result of the handler method in string form so it can
-            be sent back to the LLM, or None if the input string was not successfully
+            be sent back to the LLM, or None if `msg` was not successfully
             handled by a method.
         """
-        json_substrings = extract_top_level_json(input_str)
-        if len(json_substrings) == 0:
-            return self.handle_message_fallback(input_str)
-        results = [self._handle_one_json_message(j) for j in json_substrings]
+        tools = self.get_tool_messages(msg)
+        if len(tools) == 0:
+            return self.handle_message_fallback(msg)
+
+        results = [self.handle_tool_message(t) for t in tools]
+
         results_list = [r for r in results if r is not None]
         if len(results_list) == 0:
-            return self.handle_message_fallback(input_str)
+            return self.handle_message_fallback(msg)
         # there was a non-None result
         final = "\n".join(results_list)
         assert (
             final != ""
-        ), """final result from a handler should not empty, since that would be 
+        ), """final result from a handler should not be empty str, since that would be 
             considered an invalid result and other responders will be tried, 
             and we may not necessarily want that"""
         return final
 
-    def handle_message_fallback(self, input_str: str) -> Optional[str]:
+    def handle_message_fallback(self, msg: str | ChatDocument) -> Optional[str]:
         """
-        Fallback method to handle input string if no other handler method applies,
+        Fallback method to handle possible "tool" msg if not other method applies
         or if an error is thrown.
         This method can be overridden by subclasses.
 
         Args:
-            input_str (str): The input string.
+            msg (str | ChatDocument): The input msg to handle
         Returns:
             str: The result of the handler method in string form so it can
-            be sent back to the LLM.
+                be sent back to the LLM.
         """
         return None
 
     def _get_one_tool_message(self, json_str: str) -> Optional[AgentMessage]:
         json_data = json.loads(json_str)
         request = json_data.get("request")
-        if request is None:
+        if request is None or request not in self.llm_tools_handled:
             return None
 
-        message_class = self.handled_classes.get(request)
+        message_class = self.llm_tools_map.get(request)
         if message_class is None:
             logger.warning(f"No message class found for request '{request}'")
             return None
@@ -382,27 +429,21 @@ class Agent(ABC):
             raise ValueError("Error parsing JSON as message class") from ve
         return message
 
-    def _handle_one_json_message(self, json_str: str) -> Optional[str]:
-        json_data = json.loads(json_str)
-        request = json_data.get("request")
-        if request is None:
-            return None
+    def handle_tool_message(self, tool: AgentMessage) -> Optional[str]:
+        """
+        Respond to a tool request from the LLM, in the form of an AgentMessage object.
+        Args:
+            tool: AgentMessage object representing the tool request.
 
-        message_class = self.handled_classes.get(request)
-        if message_class is None:
-            logger.warning(f"No message class found for request '{request}'")
-            return None
+        Returns:
 
-        try:
-            message = message_class.parse_obj(json_data)
-        except ValidationError as ve:
-            raise ValueError("Error parsing JSON as message class") from ve
-
-        handler_method = getattr(self, request, None)
+        """
+        tool_name = tool.default_value("request")
+        handler_method = getattr(self, tool_name, None)
         if handler_method is None:
             return None
 
-        return handler_method(message)  # type: ignore
+        return handler_method(tool)  # type: ignore
 
     def num_tokens(self, prompt: str) -> int:
         if self.parser is None:
