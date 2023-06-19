@@ -11,6 +11,8 @@ from examples.dockerchat.message_validator_agent import MessageValidatorAgent
 from examples.dockerchat.dockerchat_agent_messages import (
     AskURLMessage,
     ValidateDockerfileMessage,
+    EntryPointAndCMDMessage,
+    RunContainerMessage,
 )
 import typer
 from llmagent.language_models.base import LLMMessage, Role
@@ -33,7 +35,7 @@ setup_colored_logging()
 
 class DockerChatAgentConfig(ChatAgentConfig):
     name: str = "DockerExpert"
-    gpt4: bool = False
+    gpt4: bool = True
     debug: bool = False
     cache: bool = True
     stream: bool = True
@@ -104,7 +106,8 @@ def chat(config: DockerChatAgentConfig) -> None:
     # agent.enable_message(PythonVersionMessage)
     agent.enable_message(ValidateDockerfileMessage)
     # agent.enable_message(PythonDependencyMessage)
-    # agent.enable_message(EntryPointAndCMDMessage)
+    agent.enable_message(EntryPointAndCMDMessage)
+    agent.enable_message(RunContainerMessage)
 
     # set up tasks and their hierarchy
     docker_task = Task(

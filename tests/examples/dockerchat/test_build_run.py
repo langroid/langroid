@@ -4,8 +4,9 @@ from examples.dockerchat.docker_chat_agent import DockerChatAgent
 from examples.dockerchat.dockerchat_agent_messages import (
     AskURLMessage,
     ValidateDockerfileMessage,
+    RunContainerMessage,
 )
-
+from llmagent.parsing.repo_loader import RepoLoader, RepoLoaderConfig
 from llmagent.cachedb.redis_cachedb import RedisCacheConfig
 from typing import Optional
 
@@ -46,6 +47,9 @@ class _TestDockerChatAgent(DockerChatAgent):
     def validate_dockerfile(self, msg: ValidateDockerfileMessage) -> str:
         return super().validate_dockerfile(msg, confirm=False)
 
+    def run_container(self, msg: RunContainerMessage) -> str:
+        return super().run_container(msg, confirm=False)
+
 
 PROPOSED_DOCKERFILE_CONTENT = """
     FROM python:3.9
@@ -84,3 +88,41 @@ def test_validate_dockerfile():
             file_path = os.path.join(temp_folder_path, filename)
             os.remove(file_path)
         os.rmdir(temp_folder_path)
+
+
+AUTO_GPT_URL = "https://github.com/Significant-Gravitas/Auto-GPT"
+BASARAN_URL = "https://github.com/hyperonym/basaran"
+
+BASARAN_DOCKERFILE = """FROM python:3.8\n\nWORKDIR /app
+    \n\nCOPY requirements.txt setup.py ./
+    \n\nRUN pip install --no-cache-dir -r requirements.txt\n\nCOPY . .
+    \n\nEXPOSE 80\n\nENTRYPOINT [\"python\",\"-m\",\"basaran\"]
+    """
+AUTO_GPT_DOCKERFILE = """FROM python:3.10\n\nWORKDIR /app\n
+    \nCOPY requirements.txt .\nRUN pip install --no-cache-dir -r requirements.txt
+    \n\nCOPY . .\n\nCMD [\"./run.sh\"]
+    """
+
+
+def test_run_container():
+    agent = _TestDockerChatAgent(cfg)
+    url = BASARAN_URL
+    agent.repo_loader = RepoLoader(url, RepoLoaderConfig())
+    agent.repo_path = agent.repo_loader.clone()
+    agent.proposed_dockerfile = BASARAN_DOCKERFILE
+    msg = RunContainerMessage()
+
+    msg.location = "outside"
+    msg.run = "docker run -d -p 5555:80 --rm validate_img:latest"
+    msg.test = "curl -s http://localhost:5555"
+    tst_result = agent.run_container(msg)
+    if "Container run failed" not in tst_result:
+        assert "True" in tst_result
+    else:
+        assert True
+
+    msg.location = "inside"
+    msg.run = "docker run -d -p 5555:80 --rm validate_img:latest"
+    msg.test = f"pytest -m {agent.repo_path}/test/test_choice.py"
+    tst_result = agent.run_container(msg)
+    assert "exit code = 2" in tst_result

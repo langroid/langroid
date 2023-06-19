@@ -1,6 +1,6 @@
 from llmagent.agent.chat_agent import ChatAgent, ChatAgentConfig
 from pydantic import BaseModel, HttpUrl
-from typing import Optional, List
+from typing import Optional, List, Any
 from examples.codechat.code_chat_agent import CodeChatAgentConfig, CodeChatAgent
 from examples.codechat.code_chat_tools import (
     ShowFileContentsMessage,
@@ -14,6 +14,7 @@ from examples.dockerchat.dockerchat_agent_messages import (
     PythonDependencyMessage,
     ValidateDockerfileMessage,
     EntryPointAndCMDMessage,
+    RunContainerMessage,
 )
 from rich.console import Console
 from rich.prompt import Prompt
@@ -25,12 +26,17 @@ from examples.dockerchat.identify_python_dependency import (
     identify_dependency_management,
 )
 
-
-import os
+from examples.dockerchat.build_run_utils import (
+    _build_docker_image,
+    _cleanup_dockerfile,
+    _save_dockerfile,
+    _execute_command,
+    _check_docker_daemon_url,
+)
+from docker.models.images import Image
 import logging
 import docker
 import time
-import datetime
 
 console = Console()
 logger = logging.getLogger(__name__)
@@ -111,6 +117,8 @@ class DockerChatAgent(ChatAgent):
     url: str = ""
     repo_tree: str = None
     repo_path: str = None
+    proposed_dockerfile: str = None
+    docker_img: Image = None
     code_chat_agent: CodeChatAgent = None
 
     def __init__(
@@ -290,80 +298,6 @@ class DockerChatAgent(ChatAgent):
         else:
             return "Dependencies are not defined in this repo"
 
-    def _cleanup_dockerfile(self, img_id: str, dockerfile_path: str) -> None:
-        """
-        Remove Dockefile and built image after performing the verification process
-        Args:
-            img_id (str): the ID of the Docker image
-            dockerfile_path (str): path to the saved Dockerfile
-        """
-        client = docker.from_env()
-
-        try:
-            if os.path.exists(dockerfile_path):
-                os.remove(dockerfile_path)
-                logger.info(f"Dockerfile at path '{dockerfile_path}' has been removed.")
-            else:
-                logger.error(f"No Dockerfile found at path '{dockerfile_path}'.")
-            # Remove Dockerfile_proposed
-            client.images.remove(img_id)
-            client.images.get(img_id)
-            logger.error("Image removal failed!")
-        except docker.errors.ImageNotFound:
-            logger.info("Image removed successfully!")
-
-    def _save_dockerfile(self, dockerfile: str, proposed_dockerfile_name: str) -> str:
-        """
-        Save the proposed Dockerfile in the root directory of a repo
-        Args:
-            dockerfile (str): content of the dockerfile
-            proposed_dockerfile_name (str): the name of the Dockerfile,
-                better to use a different name to avoid changing existing one (if any).
-        Returns:
-            str: a string indicates whether the Dockerfile has been saved successfully
-        """
-        try:
-            full_path = os.path.join(self.repo_path, proposed_dockerfile_name)
-            with open(full_path, "w") as f:
-                f.write(dockerfile)
-            return full_path
-        except Exception as e:
-            return f"An error occurred while saving the Dockerfile: {e}"
-
-    def _build_docker_image(self, proposed_doeckerfile_name: str, img_tag: str):
-        """
-        Build docker image based on the repo_path by using docker SDK
-        Args:
-            proposed_doeckerfile_name (str): the name of the proposed Dockerfile
-            that should be used to build the image
-            img_tag (str): the name of the Docker image that will be built based on the
-            proposed_doeckerfile_name
-        Returns:
-            A tuple comprises three items: First, object for the image that was
-            built (if succeeded), otherwise, returns None. Second, message indicates
-            whetehr the build process succeeded or failed.
-            Third, build time or None (if failed)
-        """
-        try:
-            start = time.time()
-            # I noticed the flag ``rm`` isn't used anymore,
-            # so I need to do the cleanup myself later on
-            with console.status("Verifying the proposed Dockerfile..."):
-                image, build_logs = docker.from_env().images.build(
-                    rm=True,
-                    path=self.repo_path,
-                    tag=img_tag,
-                    dockerfile=proposed_doeckerfile_name,
-                )
-            build_time = time.time() - start
-            formatted_build_time = "{:.2f}".format(
-                datetime.timedelta(seconds=build_time).total_seconds()
-            )
-        except docker.errors.DockerException as e:
-            return (None, f"Image build failed: {e}", None)
-
-        return (image, "Image build successful!", formatted_build_time)
-
     def validate_dockerfile(
         self,
         dockerfile_msg: ValidateDockerfileMessage,
@@ -404,27 +338,34 @@ class DockerChatAgent(ChatAgent):
                     continue with your next question or request for information.
                     """
 
-        proposed_dockerfile_content = dockerfile_msg.proposed_dockerfile
-        # It's better to have a different name other than the default name,
-        # good for comparison in the future between
-        # generated Dockerfile and existing Dockerfile
-        proposed_dockerfile_name = "Dockerfile_proposed"
-        img_tag = "validate_img"
-        dockerfile_path = self._save_dockerfile(
-            proposed_dockerfile_content, proposed_dockerfile_name
-        )
-        if dockerfile_path.startswith("An error"):
-            return dockerfile_path
+        docker_daemon = _check_docker_daemon_url()
+        if "exists" in docker_daemon:
+            proposed_dockerfile_content = dockerfile_msg.proposed_dockerfile
+            # It's better to have a different name other than the default name,
+            # good for comparison in the future between
+            # generated Dockerfile and existing Dockerfile
+            proposed_dockerfile_name = "Dockerfile_proposed"
+            img_tag = "validate_img"
+            dockerfile_path = _save_dockerfile(
+                self.repo_path, proposed_dockerfile_content, proposed_dockerfile_name
+            )
+            if dockerfile_path.startswith("An error"):
+                return dockerfile_path
 
-        img, build_log, build_time = self._build_docker_image(
-            proposed_dockerfile_name, img_tag
-        )
+            img, build_log, build_time = _build_docker_image(
+                self.repo_path, proposed_dockerfile_name, img_tag
+            )
 
-        if img:
-            self._cleanup_dockerfile(img.id, dockerfile_path)
-            return f"Docker image built successfully and build time took:{build_time} Seconds..."
+            if img:
+                _cleanup_dockerfile(img.id, dockerfile_path)
+                # For future use to run the container
+                self.proposed_dockerfile = dockerfile_msg.proposed_dockerfile
+                return f"""Docker image built successfully and build time took:
+                {build_time} Seconds..."""
+            else:
+                return f"Docker build failed with error message: {build_log}"
         else:
-            return f"Docker build failed with error message: {build_log}"
+            return docker_daemon
 
     def find_entrypoint(self, m: EntryPointAndCMDMessage) -> str:
         """
@@ -441,8 +382,8 @@ class DockerChatAgent(ChatAgent):
 
         answer = self.ask_agent(
             self.code_chat_agent,
-            request="""What's the name of main script in this repo and can you SPECIFY 
-            the command line and necessary arguments to run the main script? 
+            request="""What's the name of main script in this repo and can you 
+            SPECIFY the command line and necessary arguments to run the main script? 
             If there are more than one main script, then SPECIFY the commands 
             and necessary arguments corresponding to each one
             """,
@@ -453,3 +394,96 @@ class DockerChatAgent(ChatAgent):
             return answer
 
         return "I couldn't identify potentail main scripts for the ENTRYPOINT"
+
+    def run_container(
+        self,
+        dockerrun_msg: RunContainerMessage,
+        confirm: bool = True,
+    ) -> Optional[Any]:
+        """
+        Runs a container based on the image built using the proposed_dockerfile.
+        It then executes test cases inside the running container and reports
+        the results.
+        Args:
+            dockerrun_msg (RunContainerMessage): LLM message contains the
+            command and list of test cases
+        Returns:
+            A raw log and execution code indicate whether the test is
+            executed successfully.
+        """
+        if confirm:
+            user_response = Prompt.ask(
+                "Please confirm dockerfile validation",
+                choices=["y", "n"],
+                default="y",
+            )
+            if user_response.lower() != "y":
+                return """"
+                    Not ready for dockerfile validation, please 
+                    continue with your next question or request for information.
+                    """
+
+        docker_daemon = _check_docker_daemon_url()
+        if "exists" in docker_daemon:
+            client = docker.from_env()
+
+            img_tag = "validate_img"
+            img = self.docker_img
+            # Save the Dockerfile and build the image
+            if img is None:
+                proposed_dockerfile_name = "Dockerfile_proposed"
+                _ = _save_dockerfile(
+                    self.repo_path, self.proposed_dockerfile, proposed_dockerfile_name
+                )
+
+                img, _, _ = _build_docker_image(
+                    self.repo_path, proposed_dockerfile_name, img_tag
+                )
+                self.docker_img = img
+
+            test_case = dockerrun_msg.test
+            location = dockerrun_msg.location.lower()
+            run = dockerrun_msg.run
+            test_result = None
+            container_id = None
+            if img:
+                try:
+                    if location == "inside":
+                        # We use tail to make sure the container keeps running
+                        container = client.containers.run(
+                            img.id, "tail -f /dev/null", detach=True, auto_remove=False
+                        )
+                        if container:
+                            container_id = container.id
+                            # TODO: I need to define some timeout here because
+                            # noticed the execution of some commands takes forever
+                            test_result = container.exec_run(f"{test_case}")
+                            return f"""Test case executed from inside the container:
+                            exit code = {test_result.exit_code} {test_result.output}
+                            """
+                        else:
+                            return "Container run failed"
+
+                    if location == "outside":
+                        # TODO: we need converter from docker commands to docker SDK
+                        cmd_result = _execute_command(run)
+                        if cmd_result[0] is True and cmd_result[1]:
+                            container_id = cmd_result[1].strip()
+                            # delay to allow container finishing its setup
+                            time.sleep(60)
+                            test_result = _execute_command(test_case)
+                            return f"""Test case executed from outside the 
+                            container, execution code is: {test_result[0]}"""
+                        else:
+                            return f"Container run failed: {cmd_result[1]}"
+                except Exception as e:
+                    logger.error(f"An error occurred: {str(e)}")
+
+                finally:
+                    if container_id:
+                        container = client.containers.get(container_id)
+                        container.remove(force=True)
+
+            return "Image built failed"
+        else:
+            return docker_daemon
