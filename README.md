@@ -4,6 +4,10 @@
 [![Lint](https://github.com/langroid/llmagent/actions/workflows/validate.yml/badge.svg)](https://github.com/langroid/llmagent/actions/workflows/validate.yml)
 [![Docs](https://github.com/langroid/llmagent/actions/workflows/mkdocs-deploy.yml/badge.svg)](https://github.com/langroid/llmagent/actions/workflows/mkdocs-deploy.yml)
 
+<div align="center">
+  <img src="./docs/logos/pure-lambda-non-circular.png" width="100">
+</div>
+
 ## Set up dev env
 
 We use [`poetry`](https://python-poetry.org/docs/#installation) 

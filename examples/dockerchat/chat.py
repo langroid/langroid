@@ -17,7 +17,6 @@ from examples.dockerchat.dockerchat_agent_messages import (
 import typer
 from llmagent.language_models.base import LLMMessage, Role
 from llmagent.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
-from llmagent.agent.base import AgentConfig
 from llmagent.agent.chat_agent import ChatAgentConfig
 from llmagent.agent.task import Task
 from llmagent.vector_store.qdrantdb import QdrantDBConfig
@@ -34,7 +33,7 @@ app = typer.Typer()
 setup_colored_logging()
 
 
-class DockerChatAgentConfig(AgentConfig):
+class DockerChatAgentConfig(ChatAgentConfig):
     name: str = "DockerExpert"
     gpt4: bool = True
     debug: bool = False

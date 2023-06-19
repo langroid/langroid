@@ -83,18 +83,6 @@ cfg = ChatAgentConfig(
 agent = MessageHandlingAgent(cfg)
 
 
-def test_enable_message():
-    agent.enable_message(ValidateDockerfileMessage)
-    assert "validate_dockerfile" in agent.handled_classes
-    assert agent.handled_classes["validate_dockerfile"] == ValidateDockerfileMessage
-
-
-def test_disable_message():
-    agent.enable_message(ValidateDockerfileMessage)
-    agent.disable_message(ValidateDockerfileMessage)
-    assert "validate_dockerfile" not in agent.handled_classes
-
-
 rmdir(qd_dir)  # don't need it here
 
 df = "FROM ubuntu:latest\nLABEL maintainer=blah"
@@ -131,7 +119,7 @@ def test_agent_handle_message():
     assert agent.handle_message(NONE_MSG) is None
     assert agent.handle_message(VALIDATE_DOCKERFILE_MSG) == "Built successfully"
 
-    agent.disable_message(ValidateDockerfileMessage)
+    agent.disable_message_handling(ValidateDockerfileMessage)
     assert agent.handle_message(VALIDATE_DOCKERFILE_MSG) is None
 
     agent.enable_message(ValidateDockerfileMessage)
