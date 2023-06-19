@@ -5,7 +5,7 @@
 [![Docs](https://github.com/langroid/llmagent/actions/workflows/mkdocs-deploy.yml/badge.svg)](https://github.com/langroid/llmagent/actions/workflows/mkdocs-deploy.yml)
 
 
-![logo](./docs/pure-lambda-non-circular.png)
+![logo](./docs/logos/pure-lambda-non-circular.png)
 
 ## Set up dev env
 
