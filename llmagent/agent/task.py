@@ -81,7 +81,7 @@ class Task:
         self.only_user_quits_root = only_user_quits_root
         self.allowed_responders: Set[Responder] = set()
         self.responders: List[Responder] = [
-            Entity.AGENT,
+            Entity.AGENT,  # response to LLM wanting to use tool or function_call
             Entity.LLM,
             Entity.USER,
         ]
@@ -159,14 +159,14 @@ class Task:
 
     def run(
         self,
-        msg: Optional[str] = None,
+        msg: Optional[str | ChatDocument] = None,
         turns: int = -1,
     ) -> Optional[ChatDocument]:
         """
         Loop over `step()` until task is considered done or `turns` is reached.
 
         Args:
-            msg (str): initial message to process; if None,
+            msg (str|ChatDocument): initial message to process; if None,
                 the LLM will respond to the initial `self.task_messages`
                 which set up the overall task.
                 The agent tries to achieve this goal by looping
@@ -263,26 +263,46 @@ class Task:
             else self.pending_message.metadata.sender
         )
 
-        sender_name = ""
+        responder_name = ""
         for r in self.responders:
             result = self.response(r, turns)
             if self.valid(result):
                 if isinstance(r, Task):
-                    sender_name = r.name
+                    responder_name = r.name
+                elif (
+                    self.pending_message is not None
+                    and self.pending_message.function_call is not None
+                ):
+                    # when the response was to a `function_call`, set the
+                    # `sender_name` to the name of the function that was called,
+                    # so that in the LLM message-list, the `name` field of the latest
+                    # message is set to the name of the function that was called.
+                    responder_name = self.pending_message.function_call.name
                 break
 
-        response = NO_ANSWER if result is None else result.content
+        response: str | ChatDocument # to appease mypy
         if result is None:
+            response = NO_ANSWER
             responder = Entity.USER if pending_sender == Entity.LLM else Entity.LLM
         else:
+            if result.content != "":
+                response = result.content
+            elif result.function_call is not None:
+                response = result
+            else:
+                response = NO_ANSWER
             responder = result.metadata.sender
 
-        self.reset_pending_message(msg=response, ent=responder, sender_name=sender_name)
+        self.reset_pending_message(
+            msg=response,
+            ent=responder,
+            sender_name=responder_name,
+        )
         if settings.debug:
             pending_message = (
                 "" if self.pending_message is None else self.pending_message.content
             )
-            sender_name_str = f"({sender_name})" if sender_name != "" else ""
+            sender_name_str = f"({responder_name})" if responder_name != "" else ""
             print(f"[red][{responder} {sender_name_str}]: {pending_message}")
 
     def response(self, e: Responder, turns: int = -1) -> Optional[ChatDocument]:
@@ -298,24 +318,18 @@ class Task:
             Optional[ChatDocument]: response to `self.pending_message` from entity if
             valid, None otherwise
         """
-        msg = None if self.pending_message is None else self.pending_message.content
-        sender_name = ""
-        if self.pending_message is not None:
-            sender_name = self.pending_message.metadata.sender_name
-        if self._is_allowed_responder(e):
-            if isinstance(e, Task):
-                actual_turns = e.turns if e.turns > 0 else turns
-                return e.run(msg, turns=actual_turns)
-            else:
-                return self._entity_responder_map[cast(Entity, e)](
-                    msg, sender_name=sender_name
-                )
-        else:
+        if not self._is_allowed_responder(e):
             return None
+
+        if isinstance(e, Task):
+            actual_turns = e.turns if e.turns > 0 else turns
+            return e.run(self.pending_message, turns=actual_turns)
+        else:
+            return self._entity_responder_map[cast(Entity, e)](self.pending_message)
 
     def reset_pending_message(
         self,
-        msg: Optional[str] = None,
+        msg: Optional[str | ChatDocument] = None,
         ent: Entity = Entity.USER,
         sender_name: str = "",
     ) -> None:
@@ -323,16 +337,29 @@ class Task:
         Set up pending message (the "task")  before continuing processing loop.
 
         Args:
-            msg (str): latest message sent by an entity; optional,
-                default is None.
+            msg (str|FunctionCall): latest message sent by an entity; optional,
+                default is None. Could either be a string, or a FunctionCall object
+                from the LLM (e.g. OpenAI `function_call` API response).
             ent (Entity): sender of the pending msg; optional, default is Entity.USER
             sender_name (str): name of sender; optional, default is ""
                 (Used to fill in "name" field in OpenAI message list)
 
         """
         self._allow_all_responders_except(ent)
+        fun_call = None
+        recipient_task_name = ""
+        if isinstance(msg, ChatDocument):
+            if msg.function_call is not None:
+                fun_call = msg.function_call
+                recipient_task_name = msg.function_call.to
+            else:
+                msg = msg.content
 
-        recipient_task_name, text = parse_message(msg) if msg is not None else ("", "")
+        if fun_call is None:
+            recipient_task_name, text = (
+                parse_message(msg) if msg is not None else ("", "")
+            )
+
         if recipient_task_name:
             # When a recipient task is specified, we only allow that task to respond,
             # so disable any sub-task that is NOT the recipient task
@@ -346,8 +373,8 @@ class Task:
             and ent == Entity.USER
             and len(self.agent.get_tool_messages(msg)) > 0
         ):
-            # if there is a valid "tool" message in JSON format from the USER
-            # (typically comes from an outside entity),
+            # if there is a valid "tool" message (either JSON or via `function_call`)
+            # from the USER (typically comes from an outside entity),
             # then LLM of THIS agent should NOT respond!
             self._disallow_responder(Entity.LLM)
 
@@ -356,6 +383,7 @@ class Task:
             if msg is None
             else ChatDocument(
                 content=text,
+                function_call=fun_call,
                 metadata=ChatDocMetaData(
                     source=ent,
                     sender=ent,
@@ -384,6 +412,9 @@ class Task:
             if DONE in content:
                 content = content.replace(DONE, "").strip()
 
+        # regardless of which entity actually produced the result,
+        # when we return the result, we set entity to USER
+        # since to the "parent" task, this result is equivalent to a response from USER
         return ChatDocument(
             content=content,
             metadata=DocMetaData(source=Entity.USER, sender=Entity.USER),

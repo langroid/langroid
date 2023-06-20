@@ -289,15 +289,16 @@ class ChatAgent(Agent):
 
     @no_type_check
     def llm_response(
-        self, message: Optional[str] = None, sender_name: str = ""
+        self, message: Optional[str | ChatDocument] = None
     ) -> Optional[ChatDocument]:
         """
         Respond to a single user message, appended to the message history,
         in "chat" mode
         Args:
-            message: user message; if None, use the self.task_messages
-            sender_name: name of the sender of the message
+            message (str|ChatDocument): message or ChatDocument object to respond to.
+                If None, use the self.task_messages
         Returns:
+            LLM response as a ChatDocument object
         """
         if self.llm is None:
             return None
@@ -317,11 +318,26 @@ class ChatAgent(Agent):
                 """
                 )
 
+        sender_name = ""
+        sender_role = Role.USER
+
         if message is not None:
+            if isinstance(message, ChatDocument):
+                sender_name = message.metadata.sender_name
+                if message.function_call is not None:
+                    sender_role = Role.FUNCTION
+                elif message.metadata.sender == Entity.LLM:
+                    sender_role = Role.ASSISTANT
+
+            if isinstance(message, str):
+                content = message
+            else:
+                # LLM can only respond to text content, so extract it
+                content = message.content
             self.message_history.append(
                 LLMMessage(
-                    role=Role.USER,
-                    content=message,
+                    role=sender_role,
+                    content=content,
                     sender_name=sender_name,
                 )
             )
@@ -433,13 +449,17 @@ class ChatAgent(Agent):
         if not self.llm.get_stream() or response.cached:  # type: ignore
             displayed = True
             cached = f"[red]{self.indent}(cached)[/red]" if response.cached else ""
-            print(cached + "[green]" + response.message)
+            if response.function_call is not None:
+                response_str = str(response.function_call)
+            else:
+                response_str = response.message
+            print(cached + "[green]" + response_str)
         return ChatDocument(
             content=response.message,
             function_call=response.function_call,
             metadata=DocMetaData(
-                source=Entity.LLM.value,
-                sender=Entity.LLM.value,
+                source=Entity.LLM,
+                sender=Entity.LLM,
                 usage=response.usage,
                 displayed=displayed,
                 cached=response.cached,

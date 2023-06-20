@@ -417,9 +417,16 @@ class OpenAIGPT(LanguageModel):
         """
 
         message = response["choices"][0]["message"]
+        msg = message["content"]
+        if message.get("function_call") is None:
+            fun_call = None
+        else:
+            fun_call = LLMFunctionCall(name=message["function_call"]["name"])
+            fun_args = ast.literal_eval(message["function_call"]["arguments"])
+            fun_call.arguments = fun_args
         return LLMResponse(
-            message=message["content"].strip(),
-            function_call=message.get("function_call"),
+            message=msg.strip() if msg is not None else "",
+            function_call=fun_call,
             usage=usage,
             cached=cached,
         )

@@ -1,4 +1,5 @@
 import asyncio
+import json
 from abc import ABC, abstractmethod
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple, Type, Union
@@ -44,6 +45,9 @@ class LLMFunctionCall(BaseModel):
     name: str  # name of function to call
     to: str = ""  # intended recipient
     arguments: Optional[Dict[str, Any]] = None
+
+    def __str__(self) -> str:
+        return "FUNC: " + json.dumps(self.dict(), indent=2)
 
 
 class LLMResponse(BaseModel):

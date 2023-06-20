@@ -11,7 +11,11 @@ from rich.console import Console
 from rich.prompt import Prompt
 
 from llmagent.agent.message import INSTRUCTION, AgentMessage
-from llmagent.language_models.base import LanguageModel, LLMConfig, LLMFunctionCall
+from llmagent.language_models.base import (
+    LanguageModel,
+    LLMConfig,
+    LLMFunctionCall,
+)
 from llmagent.mytypes import DocMetaData, Document
 from llmagent.parsing.json import extract_top_level_json
 from llmagent.parsing.parser import Parser, ParsingConfig
@@ -189,24 +193,23 @@ class Agent(ABC):
         """
 
     def agent_response(
-        self, input_str: Optional[str] = None, sender_name: str = ""
+        self,
+        msg: Optional[str | ChatDocument] = None,
     ) -> Optional[ChatDocument]:
         """
-        Response from the "agent itself", i.e., from any application "tool method"
-        that was triggerred by input_str (if it contained a json substring matching
-        a handler method).
+        Response from the "agent itself" handling a "tool message"
+        or LLM's `function_call` (e.g. OpenAI `function_call`)
         Args:
-            input_str (str): the input string to respond to
-            sender_name (str): the name of the sender (ignored for now, but including
-                it here so all *_response methods have the same signature)
-
+            msg (str|ChatDocument): the input to respond to: if msg is a string,
+                and it contains a valid JSON-structured "tool message", or
+                if msg is a ChatDocument, and it contains a `function_call`.
         Returns:
             Optional[ChatDocument]: the response, packaged as a ChatDocument
 
         """
-        if input_str is None:
+        if msg is None:
             return None
-        results = self.handle_message(input_str)
+        results = self.handle_message(msg)
         if results is None:
             return None
         console.print(f"[red]{self.indent}", end="")
@@ -214,23 +217,23 @@ class Agent(ABC):
         return ChatDocument(
             content=results,
             metadata=DocMetaData(
-                source=Entity.AGENT.value,
-                sender=Entity.AGENT.value,
+                source=Entity.AGENT,
+                sender=Entity.AGENT,
                 sender_name=self.config.name,
             ),
         )
 
     def user_response(
-        self, msg: Optional[str] = None, sender_name: str = ""
+        self,
+        msg: Optional[str | ChatDocument] = None,
     ) -> Optional[ChatDocument]:
         """
         Get user response to current message. Could allow (human) user to intervene
         with an actual answer, or quit using "q" or "x"
 
         Args:
-            msg (str): the string to respond to.
-            sender_name (str): the name of the sender (ignored for now, but including
-                it here so all *_response methods have the same signature)
+            msg (str|ChatDocument): the string to respond to. Ignored here, but kept
+                for signature uniformity with other *_response methods.
 
         Returns:
             (str) User response, packaged as a ChatDocument
@@ -255,27 +258,32 @@ class Agent(ABC):
             return ChatDocument(
                 content=user_msg,
                 metadata=DocMetaData(
-                    source=Entity.USER.value,
-                    sender=Entity.USER.value,
+                    source=Entity.USER,
+                    sender=Entity.USER,
                 ),
             )
 
     @no_type_check
     def llm_response(
-        self, prompt: Optional[str] = None, sender_name: str = ""
+        self,
+        msg: Optional[str | ChatDocument] = None,
     ) -> Optional[ChatDocument]:
         """
         LLM response to a prompt.
         Args:
-            prompt (str): prompt string
-            sender_name (str): the name of the sender (ignored for completion mode,
-                but used in chat_completion in `chat_agent.py`)
+            msg (str|ChatDocument): prompt string, or ChatDocument object
 
         Returns:
             Response from LLM, packaged as a ChatDocument
         """
-        if prompt is None or self.llm is None:
+        if msg is None or self.llm is None:
             return None
+
+        if isinstance(msg, ChatDocument):
+            prompt = msg.content
+        else:
+            prompt = msg
+
         with ExitStack() as stack:  # for conditionally using rich spinner
             if not self.llm.get_stream():
                 # show rich spinner only if not streaming!
@@ -331,6 +339,7 @@ class Agent(ABC):
         if isinstance(msg, str):
             return self.get_json_tool_messages(msg)
         assert isinstance(msg, ChatDocument)
+        # when `content` is non-empty, we assume there will be no `function_call`
         if msg.content != "":
             return self.get_json_tool_messages(msg.content)
 

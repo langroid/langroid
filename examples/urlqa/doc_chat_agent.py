@@ -1,4 +1,5 @@
 from llmagent.agent.base import Entity
+from llmagent.agent.base import ChatDocument
 from llmagent.agent.chat_agent import ChatAgent, ChatAgentConfig
 from llmagent.language_models.base import StreamingIfAllowed
 from llmagent.prompts.templates import SUMMARY_ANSWER_PROMPT_GPT4
@@ -89,26 +90,29 @@ class DocChatAgent(ChatAgent):
 
     def llm_response(
         self,
-        query: str = None,
-        sender_name: str = "",
+        query: str | ChatDocument = None,
     ) -> Optional[Document]:
-        if query is None or query.startswith("!"):
+        if isinstance(query, ChatDocument):
+            query_str = query.content
+        else:
+            query_str = query
+        if query_str is None or query_str.startswith("!"):
             # direct query to LLM
-            query = query[1:] if query is not None else None
+            query_str = query_str[1:] if query_str is not None else None
             with StreamingIfAllowed(self.llm):
-                response = super().llm_response(query)
-            self.update_dialog(query, response.content)
+                response = super().llm_response(query_str)
+            self.update_dialog(query_str, response.content)
             return response
-        if query == "":
+        if query_str == "":
             return None
-        elif query == "?" and self.response is not None:
+        elif query_str == "?" and self.response is not None:
             return self.justify_response()
-        elif (query.startswith(("summar", "?")) and self.response is None) or (
-            query == "??"
+        elif (query_str.startswith(("summar", "?")) and self.response is None) or (
+            query_str == "??"
         ):
             return self.summarize_docs()
         else:
-            response = self.answer_from_docs(query)
+            response = self.answer_from_docs(query_str)
             return response
 
     @staticmethod
