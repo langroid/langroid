@@ -6,13 +6,9 @@ from examples.dockerchat.dockerchat_agent_messages import (
     FileExistsMessage,
 )
 
-# from examples.dockerchat.docker_chat_agent import run_container
-
-from llmagent.agent.message import AgentMessage
 from llmagent.cachedb.redis_cachedb import RedisCacheConfig
 from typing import Optional
-import json
-import pytest
+
 
 cfg = ChatAgentConfig(
     debug=False,
@@ -65,12 +61,6 @@ class _TestDockerChatAgent(DockerChatAgent):
 
 
 agent = _TestDockerChatAgent(cfg)
-
-
-@pytest.mark.parametrize("msg_cls", [AskURLMessage, FileExistsMessage])
-def test_usage_instruction(msg_cls: AgentMessage):
-    usage = msg_cls().usage_example()
-    assert json.loads(usage)["request"] == msg_cls().request
 
 
 def test_dockerchat_agent_handle_message():

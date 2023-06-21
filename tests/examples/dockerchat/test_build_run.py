@@ -65,7 +65,7 @@ def test_validate_dockerfile():
     agent.repo_path = temp_folder_path
 
     try:
-        vdm = ValidateDockerfileMessage()
+        vdm = ValidateDockerfileMessage.examples()[0]
         vdm.proposed_dockerfile = PROPOSED_DOCKERFILE_CONTENT
         result = agent.validate_dockerfile(vdm)
 
@@ -110,7 +110,7 @@ def test_run_container():
     agent.repo_loader = RepoLoader(url, RepoLoaderConfig())
     agent.repo_path = agent.repo_loader.clone()
     agent.proposed_dockerfile = BASARAN_DOCKERFILE
-    msg = RunContainerMessage()
+    msg = RunContainerMessage.examples()[0]
 
     msg.location = "outside"
     msg.run = "docker run -d -p 5555:80 --rm validate_img:latest"

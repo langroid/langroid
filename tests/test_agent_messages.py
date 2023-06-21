@@ -218,6 +218,27 @@ def test_agent_handle_message():
     assert agent.handle_message(PYTHON_VERSION_MSG) == "3.9"
 
 
+BAD_FILE_EXISTS_MSG = """
+Ok, thank you.
+{
+"request": "file_exists"
+} 
+Hope you can tell me!
+"""
+
+
+def test_handle_bad_tool_message():
+    """
+    Test that a correct tool name with bad/missing args is
+            handled correctly, i.e. the agent returns a clear
+            error message to the LLM so it can try to fix it.
+    """
+    agent.enable_message(FileExistsMessage)
+    assert agent.handle_message(NONE_MSG) is None
+    result = agent.handle_message(BAD_FILE_EXISTS_MSG)
+    assert "file_exists" in result and "filename" in result and "required" in result
+
+
 @pytest.mark.parametrize(
     "use_functions_api, message_class, prompt, result",
     [

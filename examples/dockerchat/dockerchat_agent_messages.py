@@ -25,8 +25,8 @@ class RunPythonMessage(AgentMessage):
     The code can be as detailed as needed, including import statements.
     This tool can be used to find any info not available from the other tools.
     """
-    code: str = "print('hello world')"
-    result: str = "hello world"
+    code: str
+    result: str = ""
 
     @classmethod
     def examples(cls) -> List["AgentMessage"]:
@@ -39,8 +39,8 @@ class FileExistsMessage(AgentMessage):
     request: str = "file_exists"  # name should exactly match method name in agent
     # below will be fields that will be used by the agent method to handle the message.
     purpose: str = "To check if a file <filename> exists in the repo."
-    filename: str = "test.txt"
-    result: str = "yes"
+    filename: str
+    result: str = "no"
 
     @classmethod
     def examples(cls) -> List["AgentMessage"]:
@@ -75,15 +75,7 @@ class ValidateDockerfileMessage(AgentMessage):
     without using this tool
     """
 
-    proposed_dockerfile: Union[
-        str, List[str]
-    ] = """
-        # Use an existing base image
-        FROM ubuntu:latest
-        # Set the maintainer information
-        LABEL maintainer="your_email@example.com"
-        # Set the working directory
-        """  # contents of dockerfile
+    proposed_dockerfile: Union[str, List[str]]
     result: str = "build succeed"
 
     @classmethod
@@ -110,8 +102,8 @@ class ValidateDockerfileMessage(AgentMessage):
 
 class PythonDependencyMessage(AgentMessage):
     request: str = "python_dependency"
-    purpose: str = "To find out the python dependencies."
-    result: str = "yes"
+    purpose: str = "To find out where python dependencies are listed."
+    result: str = "This repo uses requirements.txt for managing dependencies"
 
     @classmethod
     def examples(cls) -> List["AgentMessage"]:
@@ -122,13 +114,10 @@ class PythonDependencyMessage(AgentMessage):
         """
         return [
             cls(
-                result="""This repo uses requirements.txt for managing 
-            dependencies
-            """
+                result="This repo uses requirements.txt for managing dependencies",
             ),
             cls(
-                result="""This repo uses pyproject.toml for managing 
-            dependencies"""
+                result="This repo uses pyproject.toml for managing dependencies",
             ),
             cls(result="This repo doesn't contain any dependacy manager"),
         ]
@@ -138,8 +127,7 @@ class EntryPointAndCMDMessage(AgentMessage):
     request: str = "find_entrypoint"
     purpose: str = """To identify main scripts and their arguments that can 
     be used for ENTRYPOINT, CMD, both, or none."""
-    result: str = """I couldn't identify potentail main scripts for the 
-    ENTRYPOINT"""
+    result: str = "The main script is main.py"
 
     @classmethod
     def examples(cls) -> List["AgentMessage"]:
@@ -163,16 +151,16 @@ class RunContainerMessage(AgentMessage):
     request: str = "run_container"
     purpose: str = """Verify that the container works correctly and preserves 
     the intended behavior. This will use the image built using 
-    the <proposed_dockerfile> and EXPECTS to receive <test>.
+    the proposed dockerfile and EXPECTS to receive <test>.
     <test> is a command and the test case. <location> indicates whether 
     the <test> should be executed from INSIDE or OUTSIDE the container. <run> 
     is a docker run command with all required arguments that will be used to 
     run the container, where image_name is `validate_img:latest`
     """
-    test: str = "python tests/t1.py"
-    location: str = "Inside"
-    run: str = "docker run"
-    result: str = "The container runs correctly"
+    test: str
+    location: str
+    run: str
+    result: str = "Inside test case works successfully."
 
     @classmethod
     def examples(cls) -> List["AgentMessage"]:
