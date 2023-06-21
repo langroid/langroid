@@ -1,4 +1,5 @@
 import logging
+import os.path
 
 import colorlog
 
@@ -28,7 +29,7 @@ def setup_colored_logging() -> None:
     # logger.setLevel(logging.DEBUG)
 
 
-def setup_logger(name: str, level: int) -> logging.Logger:
+def setup_logger(name: str, level: int = logging.INFO) -> logging.Logger:
     """
     Set up a logger of module `name` at a desired level.
     Args:
@@ -46,6 +47,45 @@ def setup_logger(name: str, level: int) -> logging.Logger:
         )
         handler.setFormatter(formatter)
         logger.addHandler(handler)
+    return logger
+
+
+def setup_console_logger(name: str) -> logging.Logger:
+    logger = setup_logger(name)
+    handler = logging.StreamHandler()
+    handler.setLevel(logging.INFO)
+    formatter = logging.Formatter(
+        "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+    )
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    return logger
+
+
+def setup_file_logger(
+    name: str,
+    filename: str,
+    append: bool = False,
+    log_format: bool = False,
+    propagate: bool = False,
+) -> logging.Logger:
+    os.makedirs(os.path.dirname(filename), exist_ok=True)
+    if not append:
+        if os.path.exists(filename):
+            os.remove(filename)
+
+    logger = setup_logger(name)
+    handler = logging.FileHandler(filename)
+    handler.setLevel(logging.INFO)
+    if log_format:
+        formatter = logging.Formatter(
+            "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
+        )
+    else:
+        formatter = logging.Formatter("%(message)s")
+    handler.setFormatter(formatter)
+    logger.addHandler(handler)
+    logger.propagate = propagate
     return logger
 
 

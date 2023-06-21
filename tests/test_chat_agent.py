@@ -1,5 +1,6 @@
-from llmagent.agent.base import NO_ANSWER, Entity
+from llmagent.agent.base import NO_ANSWER
 from llmagent.agent.chat_agent import ChatAgent, ChatAgentConfig
+from llmagent.agent.chat_document import Entity
 from llmagent.agent.task import Task
 from llmagent.cachedb.redis_cachedb import RedisCacheConfig
 from llmagent.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
@@ -14,7 +15,7 @@ class _TestChatAgentConfig(ChatAgentConfig):
     vecdb: VectorStoreConfig = None
     llm: OpenAIGPTConfig = OpenAIGPTConfig(
         cache_config=RedisCacheConfig(fake=False),
-        chat_model=OpenAIChatModel.GPT3_5_TURBO,
+        chat_model=OpenAIChatModel.GPT4,
         use_chat_for_completion=True,
     )
     parsing: ParsingConfig = ParsingConfig()
@@ -63,7 +64,7 @@ def test_process_messages(test_settings: Settings):
         agent, llm_delegate=False, single_round=False, only_user_quits_root=False
     )
     msg = "What is the capital of France?"
-    task.reset_pending_message(msg)
+    task.init_pending_message(msg)
     assert task.pending_message.content == msg
 
     # LLM answers
@@ -108,7 +109,7 @@ def test_process_messages(test_settings: Settings):
         only_user_quits_root=False,
     )
     # LLM responds with NO_ANSWER
-    task.reset_pending_message()
+    task.init_pending_message()
     task.step()
     assert NO_ANSWER in task.pending_message.content
     assert task.pending_message.metadata.sender == Entity.LLM
