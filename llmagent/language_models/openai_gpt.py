@@ -34,7 +34,8 @@ logging.getLogger("openai").setLevel(logging.ERROR)
 class OpenAIChatModel(str, Enum):
     """Enum for OpenAI Chat models"""
 
-    GPT3_5_TURBO = "gpt-3.5-turbo"
+    GPT3_5_TURBO = "gpt-3.5-turbo-0613"
+    GPT4_NOFUNC = "gpt-4"  # before function_call API
     GPT4 = "gpt-4-0613"
 
 
@@ -50,11 +51,12 @@ class OpenAIGPTConfig(LLMConfig):
     max_output_tokens: int = 1024
     min_output_tokens: int = 64
     timeout: int = 20
-    chat_model: OpenAIChatModel = OpenAIChatModel.GPT3_5_TURBO
+    chat_model: OpenAIChatModel = OpenAIChatModel.GPT4
     completion_model: OpenAICompletionModel = OpenAICompletionModel.TEXT_DA_VINCI_003
     context_length: Dict[str, int] = {
         OpenAIChatModel.GPT3_5_TURBO: 4096,
         OpenAIChatModel.GPT4: 8192,
+        OpenAIChatModel.GPT4_NOFUNC: 8192,
         OpenAICompletionModel.TEXT_DA_VINCI_003: 4096,
     }
 
@@ -78,6 +80,8 @@ class OpenAIGPT(LanguageModel):
             config: configuration for openai-gpt model
         """
         super().__init__(config)
+        if settings.nofunc:
+            self.chat_model = OpenAIChatModel.GPT4_NOFUNC
         load_dotenv()
         self.api_key = os.getenv("OPENAI_API_KEY")
         self.cache = RedisCache(config.cache_config)
@@ -270,7 +274,7 @@ class OpenAIGPT(LanguageModel):
 
             cached, hashed_key, response = await completions_with_backoff(
                 model=self.config.chat_model,
-                messages=[m.dict() for m in messages],
+                messages=[m.api_dict() for m in messages],
                 max_tokens=max_tokens,
                 request_timeout=self.config.timeout,
                 temperature=0,
@@ -361,7 +365,7 @@ class OpenAIGPT(LanguageModel):
 
         args: Dict[str, Any] = dict(
             model=self.config.chat_model,
-            messages=[m.dict() for m in llm_messages],
+            messages=[m.api_dict() for m in llm_messages],
             max_tokens=max_tokens,
             n=1,
             stop=None,
@@ -417,9 +421,16 @@ class OpenAIGPT(LanguageModel):
         """
 
         message = response["choices"][0]["message"]
+        msg = message["content"]
+        if message.get("function_call") is None:
+            fun_call = None
+        else:
+            fun_call = LLMFunctionCall(name=message["function_call"]["name"])
+            fun_args = ast.literal_eval(message["function_call"]["arguments"])
+            fun_call.arguments = fun_args
         return LLMResponse(
-            message=message["content"].strip(),
-            function_call=message.get("function_call"),
+            message=msg.strip() if msg is not None else "",
+            function_call=fun_call,
             usage=usage,
             cached=cached,
         )

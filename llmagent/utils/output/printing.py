@@ -8,6 +8,11 @@ from llmagent.utils.configuration import settings
 from llmagent.utils.constants import Colors
 
 
+def shorten_text(text: str, chars: int = 40) -> str:
+    text = " ".join(text.split())
+    return text[:chars] + "..." + text[-chars:] if len(text) > 2 * chars else text
+
+
 def print_long_text(
     color: str, style: str, preamble: str, text: str, chars: Optional[int] = None
 ) -> None:

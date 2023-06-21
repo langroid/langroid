@@ -4,6 +4,7 @@ import pytest
 
 from llmagent.agent.base import Entity
 from llmagent.agent.chat_agent import ChatAgent, ChatAgentConfig
+from llmagent.agent.message import AgentMessage
 from llmagent.agent.task import Task
 from llmagent.cachedb.redis_cachedb import RedisCacheConfig
 from llmagent.language_models.base import Role
@@ -13,6 +14,20 @@ from llmagent.parsing.parser import ParsingConfig
 from llmagent.prompts.prompts_config import PromptsConfig
 from llmagent.utils.configuration import Settings, set_global
 from llmagent.vector_store.base import VectorStoreConfig
+
+
+class ExponentialTool(AgentMessage):
+    request: str = "calc_expontential"
+    purpose: str = "To calculate the value of <x> raised to the power <e>"
+    x: int
+    e: int
+
+
+class MultiplicationTool(AgentMessage):
+    request: str = "calc_multiplication"
+    purpose: str = "To calculate the value of <x> multiplied by <y>"
+    x: int
+    y: int
 
 
 class _TestChatAgentConfig(ChatAgentConfig):
@@ -56,7 +71,7 @@ def test_inter_agent_chat(test_settings: Settings, helper_human_response: str):
     Your job is to ask me questions. 
     Start by asking me what the capital of France is.
     """
-    task.reset_pending_message(msg)
+    task.init_pending_message(msg)
 
     task.step()
     assert "What" in task.pending_message.content

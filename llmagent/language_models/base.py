@@ -1,4 +1,5 @@
 import asyncio
+import json
 from abc import ABC, abstractmethod
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple, Type, Union
@@ -8,6 +9,7 @@ from pydantic import BaseModel, BaseSettings
 
 from llmagent.cachedb.redis_cachedb import RedisCacheConfig
 from llmagent.mytypes import Document
+from llmagent.parsing.agent_chats import parse_message
 from llmagent.prompts.dialog import collate_chat_history
 from llmagent.prompts.templates import (
     EXTRACTION_PROMPT_GPT4,
@@ -45,12 +47,8 @@ class LLMFunctionCall(BaseModel):
     to: str = ""  # intended recipient
     arguments: Optional[Dict[str, Any]] = None
 
-
-class LLMResponse(BaseModel):
-    message: str
-    function_call: Optional[LLMFunctionCall] = None
-    usage: int
-    cached: bool = False
+    def __str__(self) -> str:
+        return "FUNC: " + json.dumps(self.dict(), indent=2)
 
 
 class LLMFunctionSpec(BaseModel):
@@ -74,11 +72,75 @@ class Role(str, Enum):
 
 class LLMMessage(BaseModel):
     role: Role
-    name: str = "xyz"
+    name: Optional[str] = None
     content: str
+    function_call: Optional[LLMFunctionCall] = None
+
+    def api_dict(self) -> Dict[str, Any]:
+        """
+        Convert to dictionary for API request.
+        Returns:
+            dict: dictionary representation of LLM message
+        """
+        d = self.dict()
+        # drop None values since API doesn't accept them
+        dict_no_none = {k: v for k, v in d.items() if v is not None}
+        if "name" in dict_no_none and dict_no_none["name"] == "":
+            # OpenAI API does not like empty name
+            del dict_no_none["name"]
+        return dict_no_none
 
     def __str__(self) -> str:
-        return f"{self.role} ({self.name}): {self.content}"
+        if self.function_call is not None:
+            content = "FUNC: " + json.dumps(self.function_call)
+        else:
+            content = self.content
+        name_str = f" ({self.name})" if self.name else ""
+        return f"{self.role} {name_str}: {content}"
+
+
+class LLMResponse(BaseModel):
+    message: str
+    function_call: Optional[LLMFunctionCall] = None
+    usage: int
+    cached: bool = False
+
+    def to_LLMMessage(self) -> LLMMessage:
+        content = self.message
+        role = Role.ASSISTANT if self.function_call is None else Role.FUNCTION
+        name = None if self.function_call is None else self.function_call.name
+        return LLMMessage(
+            role=role,
+            content=content,
+            name=name,
+            function_call=self.function_call,
+        )
+
+    def recipient_message(
+        self,
+    ) -> Tuple[str, str]:
+        """
+        If `message` or `function_call` of an LLM response contains an explicit
+        recipient name, return this recipient name and `message` stripped
+        of the recipient name if specified.
+
+        Two cases:
+        (a) `message` contains "TO: <name> <content>", or
+        (b) `message` is empty and `function_call` with `to: <name>`
+
+        Returns:
+            (str): name of recipient, which may be empty string if no recipient
+            (str): content of message
+
+        """
+
+        if self.function_call is not None:
+            return self.function_call.to, ""
+        else:
+            msg = self.message
+
+        recipient_name, content = parse_message(msg) if msg is not None else ("", "")
+        return recipient_name, content
 
 
 # Define an abstract base class for language models

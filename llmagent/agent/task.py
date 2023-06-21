@@ -1,16 +1,22 @@
 from __future__ import annotations
 
+import logging
 from typing import Callable, Dict, List, Optional, Set, Type, cast
 
 from rich import print
 
-from llmagent.agent.base import Agent, ChatDocMetaData, ChatDocument, Entity
+from llmagent.agent.base import Agent
 from llmagent.agent.chat_agent import ChatAgent
+from llmagent.agent.chat_document import (
+    ChatDocLoggerFields,
+    ChatDocMetaData,
+    ChatDocument,
+    Entity,
+)
 from llmagent.language_models.base import LLMMessage, Role
-from llmagent.mytypes import DocMetaData
-from llmagent.parsing.agent_chats import parse_message
 from llmagent.utils.configuration import settings
 from llmagent.utils.constants import DONE, NO_ANSWER, USER_QUIT
+from llmagent.utils.logging import setup_file_logger
 
 Responder = Entity | Type["Task"]
 
@@ -36,6 +42,7 @@ class Task:
         restart: bool = False,
         default_human_response: Optional[str] = None,
         only_user_quits_root: bool = True,
+        erase_substeps: bool = False,
     ):
         """
         A task to be performed by an agent.
@@ -56,6 +63,11 @@ class Task:
             default_human_response (str): default response from user; useful for
                 testing, to avoid interactive input from user.
             only_user_quits_root (bool): if true, only user can quit the root task.
+            erase_substeps (bool): if true, when task completes, erase intermediate
+                conversation with subtasks from this agent's `message_history`, and also
+                erase all subtask agents' `message_history`.
+                Note: erasing can reduce prompt sizes, but results in repetitive
+                sub-task delegation.
 
         """
         if isinstance(agent, ChatAgent) and len(agent.message_history) == 0 or restart:
@@ -72,16 +84,18 @@ class Task:
                         content=user_message,
                     )
                 )
-
+        self.logger: Optional[logging.Logger] = None
+        self.tsv_logger: Optional[logging.Logger] = None
         self.agent = agent
         self.name = name or agent.config.name
         self.default_human_response = default_human_response
         if default_human_response is not None:
             self.agent.default_human_response = default_human_response
         self.only_user_quits_root = only_user_quits_root
+        self.erase_substeps = erase_substeps
         self.allowed_responders: Set[Responder] = set()
         self.responders: List[Responder] = [
-            Entity.AGENT,
+            Entity.AGENT,  # response to LLM wanting to use tool or function_call
             Entity.LLM,
             Entity.USER,
         ]
@@ -145,28 +159,52 @@ class Task:
     def _leave(self) -> str:
         return self._indent + "<<<"
 
-    def add_sub_task(self, task: Task) -> None:
+    def add_sub_task(self, task: Task | List[Task]) -> None:
         """
-        Add a sub-task that this task can delegate to
+        Add a sub-task (or list of subtasks) that this task can delegate
+        (or fail-over) to. Note that the sequence of sub-tasks is important,
+        since these are tried in order, as the parent task searches for a valid
+        response.
 
         Args:
-            task (Task): sub-task to add
+            task (Task|List[Task]): sub-task(s) to add
         """
+
+        if isinstance(task, list):
+            for t in task:
+                self.add_sub_task(t)
+            return
         task.parent_task = self
         self.sub_tasks.append(task)
         self.responders.append(cast(Responder, task))
         self.name_sub_task_map[task.name] = task
 
+    def init_pending_message(self, msg: Optional[str | ChatDocument] = None) -> None:
+        self._allow_all_responders_except(Entity.USER)
+        if isinstance(msg, str):
+            self.pending_message = ChatDocument(
+                content=msg,
+                metadata=ChatDocMetaData(
+                    sender=Entity.USER,
+                ),
+            )
+        else:
+            self.pending_message = msg
+            if self.pending_message is not None and self.parent_task is not None:
+                # msg may have come from parent_task, so we pretend this is from
+                # the CURRENT task's USER entity
+                self.pending_message.metadata.sender = Entity.USER
+
     def run(
         self,
-        msg: Optional[str] = None,
+        msg: Optional[str | ChatDocument] = None,
         turns: int = -1,
     ) -> Optional[ChatDocument]:
         """
         Loop over `step()` until task is considered done or `turns` is reached.
 
         Args:
-            msg (str): initial message to process; if None,
+            msg (str|ChatDocument): initial message to process; if None,
                 the LLM will respond to the initial `self.task_messages`
                 which set up the overall task.
                 The agent tries to achieve this goal by looping
@@ -185,7 +223,28 @@ class Task:
         # message can be considered to be from the USER
         # (from the POV of this agent's LLM).
 
-        self.reset_pending_message(msg)
+        if (
+            isinstance(msg, ChatDocument)
+            and msg.metadata.recipient != ""
+            and msg.metadata.recipient != self.name
+        ):
+            # this task is not the intended recipient so return None
+            return None
+
+        if self.parent_task is not None and self.parent_task.logger is not None:
+            self.logger = self.parent_task.logger
+        else:
+            self.logger = setup_file_logger("task_logger", f"logs/{self.name}.log")
+
+        if self.parent_task is not None and self.parent_task.tsv_logger is not None:
+            self.tsv_logger = self.parent_task.tsv_logger
+        else:
+            self.tsv_logger = setup_file_logger("tsv_logger", f"logs/{self.name}.tsv")
+            header = ChatDocLoggerFields().tsv_header()
+            self.tsv_logger.info(f"Task\t{header}")
+
+        self.init_pending_message(msg)
+        self.log_message()
         # sets indentation to be printed prior to any output from agent
         self.agent.indent = self._indent
         if self.default_human_response is not None:
@@ -206,6 +265,7 @@ class Task:
         )
         while True:
             self.step()
+            self.log_message()
             if self.pending_message is not None:
                 if self.pending_message.metadata.sender == Entity.LLM:
                     self.last_llm_message = self.pending_message
@@ -223,17 +283,18 @@ class Task:
         # message, and BEFORE final result message
         n_messages = 0
         if isinstance(self.agent, ChatAgent):
-            len(self.agent.message_history)
-            del self.agent.message_history[message_history_idx + 2 : n_messages - 1]
+            if self.erase_substeps:
+                del self.agent.message_history[message_history_idx + 2 : n_messages - 1]
             n_messages = len(self.agent.message_history)
-        for t in self.sub_tasks:
-            # erase our conversation with agent of subtask t
+        if self.erase_substeps:
+            for t in self.sub_tasks:
+                # erase our conversation with agent of subtask t
 
-            # erase message_history of agent of subtask t
-            # TODO - here we assume that subtask-agents are
-            # ONLY talking to the current agent.
-            if isinstance(t.agent, ChatAgent):
-                t.agent.clear_history(0)
+                # erase message_history of agent of subtask t
+                # TODO - here we assume that subtask-agents are
+                # ONLY talking to the current agent.
+                if isinstance(t.agent, ChatAgent):
+                    t.agent.clear_history(0)
         print(
             f"[bold magenta]{self._leave} Finished Agent "
             f"{self.name} ({n_messages}) [/bold magenta]"
@@ -263,27 +324,29 @@ class Task:
             else self.pending_message.metadata.sender
         )
 
-        sender_name = ""
+        result = None
         for r in self.responders:
+            if not self._is_allowed_responder(r):
+                continue
             result = self.response(r, turns)
             if self.valid(result):
-                if isinstance(r, Task):
-                    sender_name = r.name
+                self._allow_all_responders_except(r)
+                assert result is not None
                 break
 
-        response = NO_ANSWER if result is None else result.content
         if result is None:
-            responder = Entity.USER if pending_sender == Entity.LLM else Entity.LLM
-        else:
-            responder = result.metadata.sender
-
-        self.reset_pending_message(msg=response, ent=responder, sender_name=sender_name)
-        if settings.debug:
-            pending_message = (
-                "" if self.pending_message is None else self.pending_message.content
+            responder = Entity.LLM if pending_sender == Entity.USER else Entity.USER
+            self.pending_message = ChatDocument(
+                content=NO_ANSWER,
+                metadata=ChatDocMetaData(sender=responder),
             )
-            sender_name_str = f"({sender_name})" if sender_name != "" else ""
-            print(f"[red][{responder} {sender_name_str}]: {pending_message}")
+            self._allow_all_responders_except(responder)
+        else:
+            self.pending_message = result
+
+        if settings.debug:
+            msg_str = str(self.pending_message)
+            print(f"[red][{msg_str}")
 
     def response(self, e: Responder, turns: int = -1) -> Optional[ChatDocument]:
         """
@@ -298,72 +361,15 @@ class Task:
             Optional[ChatDocument]: response to `self.pending_message` from entity if
             valid, None otherwise
         """
-        msg = None if self.pending_message is None else self.pending_message.content
-        sender_name = ""
-        if self.pending_message is not None:
-            sender_name = self.pending_message.metadata.sender_name
-        if self._is_allowed_responder(e):
-            if isinstance(e, Task):
-                actual_turns = e.turns if e.turns > 0 else turns
-                return e.run(msg, turns=actual_turns)
-            else:
-                return self._entity_responder_map[cast(Entity, e)](
-                    msg, sender_name=sender_name
-                )
+        # TODO we many not need this - remove later
+        # if not self._is_allowed_responder(e):
+        #     return None
+
+        if isinstance(e, Task):
+            actual_turns = e.turns if e.turns > 0 else turns
+            return e.run(self.pending_message, turns=actual_turns)
         else:
-            return None
-
-    def reset_pending_message(
-        self,
-        msg: Optional[str] = None,
-        ent: Entity = Entity.USER,
-        sender_name: str = "",
-    ) -> None:
-        """
-        Set up pending message (the "task")  before continuing processing loop.
-
-        Args:
-            msg (str): latest message sent by an entity; optional,
-                default is None.
-            ent (Entity): sender of the pending msg; optional, default is Entity.USER
-            sender_name (str): name of sender; optional, default is ""
-                (Used to fill in "name" field in OpenAI message list)
-
-        """
-        self._allow_all_responders_except(ent)
-
-        recipient_task_name, text = parse_message(msg) if msg is not None else ("", "")
-        if recipient_task_name:
-            # When a recipient task is specified, we only allow that task to respond,
-            # so disable any sub-task that is NOT the recipient task
-            for task in self.sub_tasks:
-                if task.name != recipient_task_name:
-                    self._disallow_responder(
-                        cast(Type["Task"], self.name_sub_task_map[task.name])
-                    )
-        if (
-            msg is not None
-            and ent == Entity.USER
-            and len(self.agent.get_tool_messages(msg)) > 0
-        ):
-            # if there is a valid "tool" message in JSON format from the USER
-            # (typically comes from an outside entity),
-            # then LLM of THIS agent should NOT respond!
-            self._disallow_responder(Entity.LLM)
-
-        self.pending_message = (
-            None
-            if msg is None
-            else ChatDocument(
-                content=text,
-                metadata=ChatDocMetaData(
-                    source=ent,
-                    sender=ent,
-                    sender_name=sender_name,
-                    recipient=recipient_task_name,
-                ),
-            )
-        )
+            return self._entity_responder_map[cast(Entity, e)](self.pending_message)
 
     def result(self) -> ChatDocument:
         """
@@ -384,9 +390,16 @@ class Task:
             if DONE in content:
                 content = content.replace(DONE, "").strip()
 
+        # regardless of which entity actually produced the result,
+        # when we return the result, we set entity to USER
+        # since to the "parent" task, this result is equivalent to a response from USER
         return ChatDocument(
             content=content,
-            metadata=DocMetaData(source=Entity.USER, sender=Entity.USER),
+            metadata=ChatDocMetaData(
+                source=Entity.USER,
+                sender=Entity.USER,
+                sender_name=self.name,
+            ),
         )
 
     def done(self) -> bool:
@@ -442,6 +455,24 @@ class Task:
             )
         )
 
+    def log_message(self) -> None:
+        """
+        Log current pending message, and related state, for lineage/debugging purposes.
+        """
+        default_values = ChatDocLoggerFields().dict().values()
+        msg_str_tsv = "\t".join(str(v) for v in default_values)
+        if self.pending_message is not None:
+            msg_str_tsv = self.pending_message.tsv_str()
+        msg_str = ""
+        if self.pending_message is not None:
+            msg_str = str(self.pending_message)
+        task_name = self.name if self.name != "" else "root"
+
+        if self.logger is not None:
+            self.logger.info(f"Task[{task_name}] {msg_str}")
+        if self.tsv_logger is not None:
+            self.tsv_logger.info(f"{task_name}\t{msg_str_tsv}")
+
     def _disallow_responder(self, e: Responder) -> None:
         """
         Disallow a responder from responding to current message.
@@ -482,3 +513,12 @@ class Task:
         """
         self._allow_all_responders()
         self._disallow_responder(e)
+
+    def _allow_only_responder(self, e: Responder) -> None:
+        """
+        Allow ONLY `e` to respond to current pending message.
+
+        Args:
+            e (Entity): only entity to allow
+        """
+        self.allowed_responders = {e}
