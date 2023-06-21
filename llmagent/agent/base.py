@@ -2,7 +2,7 @@ import json
 import logging
 from abc import ABC
 from contextlib import ExitStack
-from typing import Dict, List, Optional, Set, Tuple, Type, no_type_check
+from typing import Dict, List, Optional, Set, Tuple, Type, cast, no_type_check
 
 from pydantic import BaseSettings, ValidationError
 from rich import print
@@ -380,6 +380,28 @@ class Agent(ABC):
             raise ValueError("Error parsing tool_msg as message class") from ve
         return tool
 
+    def tool_validation_error(self, ve: ValidationError) -> str:
+        """
+        Handle a validation error raised when parsing a tool message,
+            when there is a legit tool name used, but it has missing/bad fields.
+        Args:
+            tool (AgentMessage): The tool message that failed validation
+            ve (ValidationError): The exception raised
+
+        Returns:
+            str: The error message to send back to the LLM
+        """
+        tool_name = cast(AgentMessage, ve.model).default_value("request")
+        bad_field_errors = "\n".join(
+            [f"{e['loc'][0]}: {e['msg']}" for e in ve.errors() if "loc" in e]
+        )
+        return f"""
+        There were one or more errors in your attempt to use the 
+        TOOL or function_call named '{tool_name}': 
+        {bad_field_errors}
+        Please write your message again, correcting the errors.
+        """
+
     def handle_message(self, msg: str | ChatDocument) -> Optional[str]:
         """
         Handle a "tool" message either a string containing one or more
@@ -396,7 +418,10 @@ class Agent(ABC):
             be sent back to the LLM, or None if `msg` was not successfully
             handled by a method.
         """
-        tools = self.get_tool_messages(msg)
+        try:
+            tools = self.get_tool_messages(msg)
+        except ValidationError as ve:
+            return self.tool_validation_error(ve)
         if len(tools) == 0:
             return self.handle_message_fallback(msg)
 
@@ -442,9 +467,7 @@ class Agent(ABC):
         try:
             message = message_class.parse_obj(json_data)
         except ValidationError as ve:
-            # TODO use this as feedback to the LLM, directly
-            # or as part of a ToolValidatorAgent
-            raise ValueError("Error parsing JSON as message class") from ve
+            raise ve
         return message
 
     def handle_tool_message(self, tool: AgentMessage) -> Optional[str]:
