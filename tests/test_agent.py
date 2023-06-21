@@ -13,7 +13,7 @@ class CustomAgentConfig(AgentConfig):
     vecdb: VectorStoreConfig = None
     llm: OpenAIGPTConfig = OpenAIGPTConfig(
         type="openai",
-        chat_model=OpenAIChatModel.GPT3_5_TURBO,
+        chat_model=OpenAIChatModel.GPT4,
         use_chat_for_completion=True,
         cache_config=RedisCacheConfig(fake=False),
     )

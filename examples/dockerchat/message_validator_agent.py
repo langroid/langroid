@@ -1,6 +1,7 @@
 from typing import Optional
 from llmagent.agent.chat_agent import ChatAgent, ChatAgentConfig
-from llmagent.agent.base import ChatDocMetaData, ChatDocument, Entity
+from llmagent.agent.base import Entity
+from llmagent.agent.chat_document import ChatDocument, ChatDocMetaData
 from llmagent.parsing.agent_chats import parse_message
 
 # TODO - this is currently hardocded to validate the TO:<recipient> format
@@ -15,13 +16,15 @@ class MessageValidatorAgent(ChatAgent):
         self.vecdb = None
 
     def user_response(
-        self, msg: Optional[str] = None, sender_name: str = ""
+        self,
+        msg: Optional[str | ChatDocument] = None,
     ) -> Optional[ChatDocument]:
         # don't get user input
         return None
 
     def agent_response(
-        self, input_str: Optional[str] = None, sender_name: str = ""
+        self,
+        input_str: Optional[str | ChatDocument] = None,
     ) -> Optional[ChatDocument]:
         """
         Check whether the incoming message is in the expected format.
@@ -40,13 +43,29 @@ class MessageValidatorAgent(ChatAgent):
         """
         if input_str is None:
             return None
-        recipient, content = parse_message(input_str)
+
+        has_func_call = False
+        if isinstance(input_str, ChatDocument):
+            recipient, content = input_str.recipient_message()
+            has_func_call = input_str.function_call is not None
+        else:
+            recipient, content = parse_message(input_str)
+
+        if has_func_call:
+            error = """
+            Expected `function_call` to have a "to" field. 
+            Please resend with an appropriate "to" field, to clarify
+            who the `function_call` is intended for.
+            """
+        else:
+            error = """
+            Since you did not include a TO[<recipient>] in your message,
+            it is not clear who this message or TOOL is for.
+            Please rewrite your request so it starts with "TO[<recipient>]:"
+            """
         if recipient == "":
             return ChatDocument(
-                content="""
-                    Expected a format of TO[<recipient>]:<message>.
-                    Please rewrite your message in this format
-                    """,
+                content=error,
                 metadata=ChatDocMetaData(
                     source=Entity.AGENT,
                     sender=Entity.AGENT,

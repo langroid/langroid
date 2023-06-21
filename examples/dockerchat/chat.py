@@ -51,7 +51,7 @@ class DockerChatAgentConfig(ChatAgentConfig):
     )
     llm: OpenAIGPTConfig = OpenAIGPTConfig(
         type="openai",
-        chat_model=OpenAIChatModel.GPT3_5_TURBO,
+        chat_model=OpenAIChatModel.GPT4,
     )
     parsing: ParsingConfig = ParsingConfig(
         chunk_size=100,
@@ -81,6 +81,9 @@ def chat(config: DockerChatAgentConfig) -> None:
             to containerize a python repo. Think step by step about the information 
             you need, to accomplish your task, and ask me questions for what you need.  
             If I cannot answer, further refine your question into smaller questions.
+            Even if the repo already has a dockerfile, you should completely ignore 
+            anything contained in it. You are not allowed to look at the existing 
+            dockerfile.  
             Do not create a dockerfile until you have all the information you need.
             Before showing me a dockerfile, first ask my permission if you can show it.
             Make sure you ask about only ONE item at a time. Do not combine multiple 
@@ -137,27 +140,30 @@ def chat(config: DockerChatAgentConfig) -> None:
     validator_agent = MessageValidatorAgent(validator_config)
     validator_task = Task(validator_agent, single_round=True)
     docker_task.add_sub_task(planner_task)
-    planner_task.add_sub_task(validator_task)
-    planner_task.add_sub_task(code_chat_task)
+    planner_task.add_sub_task([validator_task, code_chat_task])
     docker_task.run()
 
 
 @app.command()
 def main(
     debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
-    gpt4: bool = typer.Option(False, "--gpt4", "-4", help="use gpt4"),
+    gpt3: bool = typer.Option(False, "--gpt3_5", "-3", help="use gpt-3.5"),
+    gpt4: bool = typer.Option(False, "--gpt4", "-4", help="use gpt-4"),
     no_stream: bool = typer.Option(False, "--nostream", "-ns", help="no streaming"),
+    nofunc: bool = typer.Option(False, "--nofunc", "-nf", help="no function_call"),
     nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
     no_human: bool = typer.Option(
         False, "--nohuman", "-nh", help="no human input (for stepping in debugger)"
     ),
 ) -> None:
-    config = DockerChatAgentConfig(debug=debug, gpt4=gpt4, cache=not nocache)
+    gpt4 = gpt4  # ignore since we default to gpt4 anyway
+    config = DockerChatAgentConfig(debug=debug, gpt4=True, cache=not nocache)
 
     set_global(
         Settings(
             debug=debug,
-            gpt3_5=not gpt4,
+            gpt3_5=gpt3,
+            nofunc=nofunc,
             cache=not nocache,
             interactive=not no_human,
             stream=not no_stream,

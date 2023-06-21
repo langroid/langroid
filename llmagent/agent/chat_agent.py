@@ -5,7 +5,8 @@ from typing import Dict, List, Optional, Set, Type, cast, no_type_check
 from rich import print
 from rich.console import Console
 
-from llmagent.agent.base import Agent, AgentConfig, ChatDocument, Entity
+from llmagent.agent.base import Agent, AgentConfig
+from llmagent.agent.chat_document import ChatDocument
 from llmagent.agent.message import AgentMessage
 from llmagent.language_models.base import (
     LanguageModel,
@@ -14,7 +15,6 @@ from llmagent.language_models.base import (
     Role,
     StreamingIfAllowed,
 )
-from llmagent.mytypes import DocMetaData
 from llmagent.utils.configuration import settings
 
 console = Console()
@@ -300,8 +300,9 @@ class ChatAgent(Agent):
         Returns:
             LLM response as a ChatDocument object
         """
-        if self.llm is None:
+        if not self.llm_can_respond(message):
             return None
+
         assert (
             message is not None or len(self.message_history) == 0
         ), "message can be None only if message_history is empty, i.e. at start."
@@ -318,29 +319,9 @@ class ChatAgent(Agent):
                 """
                 )
 
-        sender_name = ""
-        sender_role = Role.USER
-
         if message is not None:
-            if isinstance(message, ChatDocument):
-                sender_name = message.metadata.sender_name
-                if message.function_call is not None:
-                    sender_role = Role.FUNCTION
-                elif message.metadata.sender == Entity.LLM:
-                    sender_role = Role.ASSISTANT
-
-            if isinstance(message, str):
-                content = message
-            else:
-                # LLM can only respond to text content, so extract it
-                content = message.content
-            self.message_history.append(
-                LLMMessage(
-                    role=sender_role,
-                    content=content,
-                    sender_name=sender_name,
-                )
-            )
+            llm_msg = ChatDocument.to_LLMMessage(message)
+            self.message_history.append(llm_msg)
 
         hist = self.message_history
         output_len = self.config.llm.max_output_tokens
@@ -399,14 +380,8 @@ class ChatAgent(Agent):
             response = self.llm_response_messages(hist, output_len)
         # TODO - when response contains function_call we should include
         # that (and related fields) in the message_history
-        self.message_history.append(
-            LLMMessage(role=Role.ASSISTANT, content=response.content)
-        )
-        return ChatDocument(
-            content=response.content,
-            function_call=response.function_call,
-            metadata=response.metadata,
-        )
+        self.message_history.append(ChatDocument.to_LLMMessage(response))
+        return response
 
     def llm_response_messages(
         self, messages: List[LLMMessage], output_len: Optional[int] = None
@@ -454,17 +429,8 @@ class ChatAgent(Agent):
             else:
                 response_str = response.message
             print(cached + "[green]" + response_str)
-        return ChatDocument(
-            content=response.message,
-            function_call=response.function_call,
-            metadata=DocMetaData(
-                source=Entity.LLM,
-                sender=Entity.LLM,
-                usage=response.usage,
-                displayed=displayed,
-                cached=response.cached,
-            ),
-        )
+
+        return ChatDocument.from_LLMResponse(response, displayed)
 
     def _llm_response_temp_context(self, message: str, prompt: str) -> ChatDocument:
         """

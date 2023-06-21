@@ -1,0 +1,180 @@
+import json
+from enum import Enum
+from typing import List, Optional, Tuple, Type
+
+from pydantic import BaseModel
+
+from llmagent.language_models.base import (
+    LLMFunctionCall,
+    LLMMessage,
+    LLMResponse,
+    Role,
+)
+from llmagent.mytypes import DocMetaData, Document
+from llmagent.parsing.agent_chats import parse_message
+from llmagent.parsing.json import extract_top_level_json
+from llmagent.utils.output.printing import shorten_text
+
+
+class Entity(str, Enum):
+    AGENT = "Agent"
+    LLM = "LLM"
+    USER = "User"
+
+
+class ChatDocMetaData(DocMetaData):
+    sender: Entity
+    sender_name: str = ""
+    recipient: str = ""
+    usage: int = 0
+    cached: bool = False
+    displayed: bool = False
+
+
+class ChatDocLoggerFields(BaseModel):
+    sender_entity: Entity = Entity.USER
+    sender_name: str = ""
+    recipient: str = ""
+    tool_type: str = ""
+    tool: str = ""
+    content: str = ""
+
+    @classmethod
+    def tsv_header(cls) -> str:
+        field_names = cls().dict().keys()
+        return "\t".join(field_names)
+
+
+class ChatDocument(Document):
+    function_call: Optional[LLMFunctionCall] = None
+    metadata: ChatDocMetaData
+
+    def __str__(self) -> str:
+        fields = self.log_fields()
+        tool_str = ""
+        if fields.tool_type != "":
+            tool_str = f"{fields.tool_type}[{fields.tool}]: "
+        recipient_str = ""
+        if fields.recipient != "":
+            recipient_str = f"=>{fields.recipient}: "
+        return (
+            f"{fields.sender_entity}[{fields.sender_name}] "
+            f"{recipient_str}{tool_str}{fields.content}"
+        )
+
+    def get_json_tools(self) -> List[str]:
+        """
+        Get names of attempted JSON tool usages in the content
+            of the message.
+        Returns:
+            List[str]: list of JSON tool names
+        """
+        jsons = extract_top_level_json(self.content)
+        tools = []
+        for j in jsons:
+            json_data = json.loads(j)
+            tool = json_data.get("request")
+            if tool is not None:
+                tools.append(tool)
+        return tools
+
+    def log_fields(self) -> ChatDocLoggerFields:
+        """
+        Fields for logging in csv/tsv logger
+        Returns:
+            List[str]: list of fields
+        """
+        tool_type = ""  # FUNC or TOOL
+        tool = ""  # tool name or function name
+        if self.function_call is not None:
+            tool_type = "FUNC"
+            tool = self.function_call.name
+        elif self.get_json_tools() != []:
+            tool_type = "TOOL"
+            tool = self.get_json_tools()[0]
+        recipient, content = self.recipient_message()
+        content = shorten_text(content, 80)
+        sender_entity = self.metadata.sender
+        sender_name = self.metadata.sender_name
+        return ChatDocLoggerFields(
+            sender_entity=sender_entity,
+            sender_name=sender_name,
+            recipient=recipient,
+            tool_type=tool_type,
+            tool=tool,
+            content=content,
+        )
+
+    def tsv_str(self) -> str:
+        field_values = self.log_fields().dict().values()
+        return "\t".join(str(v) for v in field_values)
+
+    def recipient_message(self) -> Tuple[str, str]:
+        """
+        If `content` or `function_call` of contains an explicit
+        recipient name, return this recipient name and `message` stripped
+        of the recipient name if specified.
+
+        Two cases:
+        (a) `content` contains "TO: <name> <content>", or
+        (b) `content` is empty and `function_call` with `to: <name>`
+
+        Returns:
+            (str): name of recipient, which may be empty string if no recipient
+            (str): content of message
+
+        """
+
+        if self.function_call is not None:
+            return self.function_call.to, ""
+        else:
+            msg = self.content
+
+        recipient_name, content = parse_message(msg) if msg is not None else ("", "")
+        return recipient_name, content
+
+    @staticmethod
+    def from_LLMResponse(
+        response: LLMResponse, displayed: bool = False
+    ) -> "ChatDocument":
+        recipient, message = response.recipient_message()
+        return ChatDocument(
+            content=message,
+            function_call=response.function_call,
+            metadata=ChatDocMetaData(
+                source=Entity.LLM,
+                sender=Entity.LLM,
+                usage=response.usage,
+                displayed=displayed,
+                cached=response.cached,
+                recipient=recipient,
+            ),
+        )
+
+    @staticmethod
+    def to_LLMMessage(message: str | Type["ChatDocument"]) -> LLMMessage:
+        """
+        Convert to LLMMessage for use with LLM.
+
+        Args:
+            message (str|ChatDocument): Message to convert.
+        Returns:
+            LLMMessage: LLMMessage representation of this str or ChatDocument.
+
+        """
+        sender_name = None
+        sender_role = Role.USER
+
+        if isinstance(message, ChatDocument):
+            sender_name = message.metadata.sender_name
+            if message.function_call is not None:
+                sender_role = Role.FUNCTION
+            elif message.metadata.sender == Entity.LLM:
+                sender_role = Role.ASSISTANT
+
+        if isinstance(message, str):
+            content = message
+        else:
+            # LLM can only respond to text content, so extract it
+            content = message.content
+        return LLMMessage(role=sender_role, content=content, name=sender_name)

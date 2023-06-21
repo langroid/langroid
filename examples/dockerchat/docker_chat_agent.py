@@ -184,8 +184,13 @@ class DockerChatAgent(ChatAgent):
         self._url = value
         # clone, chunk, ingest into vector-db of `code_chat_agent`
         self.code_chat_agent.ingest_url(self._url)
+        loader_cfg = RepoLoaderConfig()
+        set(loader_cfg.file_types).remove("Dockerfile")
 
-        self.repo_loader = RepoLoader(self._url, RepoLoaderConfig())
+        self.repo_loader = RepoLoader(
+            self._url,
+            loader_cfg,
+        )
         self.repo_path = self.repo_loader.clone()
         # get the repo tree to depth d, with first k lines of each file
         self.repo_tree, _ = self.repo_loader.load(depth=1, lines=20)
@@ -205,7 +210,12 @@ class DockerChatAgent(ChatAgent):
                 break
 
         self.url = url_model.url  # uses setter `url` above
-        repo_listing = "\n".join(self.repo_loader.ls(self.repo_tree, depth=1))
+        repo_files = [
+            f
+            for f in self.repo_loader.ls(self.repo_tree, depth=1)
+            if "docker" not in f.lower()
+        ]
+        repo_listing = "\n".join(repo_files)
 
         repo_listing_message = f"""
         Based on the URL, here is some information about the repo that you can use.  

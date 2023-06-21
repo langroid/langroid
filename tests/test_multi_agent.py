@@ -71,7 +71,7 @@ def test_inter_agent_chat(test_settings: Settings, helper_human_response: str):
     Your job is to ask me questions. 
     Start by asking me what the capital of France is.
     """
-    task.reset_pending_message(msg)
+    task.init_pending_message(msg)
 
     task.step()
     assert "What" in task.pending_message.content

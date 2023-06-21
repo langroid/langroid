@@ -127,7 +127,7 @@ def test_doc_chat_agent(test_settings: Settings, query: str, expected: str):
 def test_doc_chat_process(test_settings: Settings):
     set_global(test_settings)
     task = Task(agent, restart=True)
-    task.reset_pending_message()
+    task.init_pending_message()
     # LLM responds to Sys msg, initiates conv, says thank you, etc.
     task.step()
     for q, expected in QUERY_EXPECTED_PAIRS:

@@ -2,7 +2,6 @@ import json
 import logging
 from abc import ABC
 from contextlib import ExitStack
-from enum import Enum
 from typing import Dict, List, Optional, Set, Tuple, Type, no_type_check
 
 from pydantic import BaseSettings, ValidationError
@@ -10,13 +9,13 @@ from rich import print
 from rich.console import Console
 from rich.prompt import Prompt
 
+from llmagent.agent.chat_document import ChatDocMetaData, ChatDocument, Entity
 from llmagent.agent.message import INSTRUCTION, AgentMessage
 from llmagent.language_models.base import (
     LanguageModel,
     LLMConfig,
-    LLMFunctionCall,
 )
-from llmagent.mytypes import DocMetaData, Document
+from llmagent.mytypes import DocMetaData
 from llmagent.parsing.json import extract_top_level_json
 from llmagent.parsing.parser import Parser, ParsingConfig
 from llmagent.prompts.prompts_config import PromptsConfig
@@ -27,26 +26,6 @@ from llmagent.vector_store.base import VectorStore, VectorStoreConfig
 console = Console()
 
 logger = logging.getLogger(__name__)
-
-
-class Entity(str, Enum):
-    AGENT = "Agent"
-    LLM = "LLM"
-    USER = "User"
-
-
-class ChatDocMetaData(DocMetaData):
-    sender: Entity
-    sender_name: str = ""
-    recipient: str = ""
-    usage: int = 0
-    cached: bool = False
-    displayed: bool = False
-
-
-class ChatDocument(Document):
-    function_call: Optional[LLMFunctionCall] = None
-    metadata: ChatDocMetaData
 
 
 class AgentConfig(BaseSettings):
@@ -209,17 +188,27 @@ class Agent(ABC):
         """
         if msg is None:
             return None
+        if isinstance(msg, ChatDocument) and msg.metadata.sender == Entity.AGENT:
+            # Agent cannot respond to message emitted by itself
+            return None
+
         results = self.handle_message(msg)
         if results is None:
             return None
         console.print(f"[red]{self.indent}", end="")
         print(f"[red]Agent: {results}")
+        sender_name = self.config.name
+        if isinstance(msg, ChatDocument) and msg.function_call is not None:
+            # if result was from handling an LLM `function_call`,
+            # set sender_name to "request", i.e. name of the function_call
+            sender_name = msg.function_call.name
+
         return ChatDocument(
             content=results,
-            metadata=DocMetaData(
+            metadata=ChatDocMetaData(
                 source=Entity.AGENT,
                 sender=Entity.AGENT,
-                sender_name=self.config.name,
+                sender_name=sender_name,
             ),
         )
 
@@ -232,13 +221,16 @@ class Agent(ABC):
         with an actual answer, or quit using "q" or "x"
 
         Args:
-            msg (str|ChatDocument): the string to respond to. Ignored here, but kept
-                for signature uniformity with other *_response methods.
+            msg (str|ChatDocument): the string to respond to.
 
         Returns:
             (str) User response, packaged as a ChatDocument
 
         """
+        if isinstance(msg, ChatDocument) and msg.metadata.sender == Entity.USER:
+            # User cannot respond to message emitted by user
+            return None
+
         if self.default_human_response is not None:
             # useful for automated testing
             user_msg = self.default_human_response
@@ -264,6 +256,26 @@ class Agent(ABC):
             )
 
     @no_type_check
+    def llm_can_respond(self, message: Optional[str | ChatDocument] = None) -> bool:
+        """
+        Whether the LLM can respond to a message.
+        Args:
+            message (str|ChatDocument): message or ChatDocument object to respond to.
+
+        Returns:
+
+        """
+        if self.llm is None:
+            return False
+
+        if message is not None and len(self.get_tool_messages(message)) > 0:
+            # if there is a valid "tool" message (either JSON or via `function_call`)
+            # then LLM cannot respond to it
+            return False
+
+        return True
+
+    @no_type_check
     def llm_response(
         self,
         msg: Optional[str | ChatDocument] = None,
@@ -276,7 +288,7 @@ class Agent(ABC):
         Returns:
             Response from LLM, packaged as a ChatDocument
         """
-        if msg is None or self.llm is None:
+        if msg is None or not self.llm_can_respond(msg):
             return None
 
         if isinstance(msg, ChatDocument):
@@ -323,17 +335,7 @@ class Agent(ABC):
             print("[green]" + response.message)
             displayed = True
 
-        return ChatDocument(
-            content=response.message,
-            function_call=response.function_call,
-            metadata=DocMetaData(
-                source=Entity.LLM.value,
-                sender=Entity.LLM.value,
-                usage=response.usage,
-                displayed=displayed,
-                cached=response.cached,
-            ),
-        )
+        return ChatDocument.from_LLMResponse(response, displayed)
 
     def get_tool_messages(self, msg: str | ChatDocument) -> List[AgentMessage]:
         if isinstance(msg, str):
@@ -343,19 +345,9 @@ class Agent(ABC):
         if msg.content != "":
             return self.get_json_tool_messages(msg.content)
 
-        if msg.function_call is None:
-            return []
-        tool_name = msg.function_call.name
-        tool_msg = msg.function_call.arguments or {}
-        if tool_name not in self.llm_tools_handled:
-            return []
-        tool_class = self.llm_tools_map[tool_name]
-        tool_msg.update(dict(request=tool_name))
-        try:
-            tool = tool_class.parse_obj(tool_msg)
-        except ValidationError as ve:
-            raise ValueError("Error parsing tool_msg as message class") from ve
-        return [tool]
+        # otherwise, we check look for a `function_call`
+        fun_call_cls = self.get_function_call_class(msg)
+        return [fun_call_cls] if fun_call_cls is not None else []
 
     def get_json_tool_messages(self, input_str: str) -> List[AgentMessage]:
         """
@@ -372,6 +364,21 @@ class Agent(ABC):
             return []
         results = [self._get_one_tool_message(j) for j in json_substrings]
         return [r for r in results if r is not None]
+
+    def get_function_call_class(self, msg: ChatDocument) -> Optional[AgentMessage]:
+        if msg.function_call is None:
+            return None
+        tool_name = msg.function_call.name
+        tool_msg = msg.function_call.arguments or {}
+        if tool_name not in self.llm_tools_handled:
+            return None
+        tool_class = self.llm_tools_map[tool_name]
+        tool_msg.update(dict(request=tool_name))
+        try:
+            tool = tool_class.parse_obj(tool_msg)
+        except ValidationError as ve:
+            raise ValueError("Error parsing tool_msg as message class") from ve
+        return tool
 
     def handle_message(self, msg: str | ChatDocument) -> Optional[str]:
         """
@@ -435,6 +442,8 @@ class Agent(ABC):
         try:
             message = message_class.parse_obj(json_data)
         except ValidationError as ve:
+            # TODO use this as feedback to the LLM, directly
+            # or as part of a ToolValidatorAgent
             raise ValueError("Error parsing JSON as message class") from ve
         return message
 

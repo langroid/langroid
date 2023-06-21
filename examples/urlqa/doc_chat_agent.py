@@ -1,5 +1,5 @@
 from llmagent.agent.base import Entity
-from llmagent.agent.base import ChatDocument
+from llmagent.agent.chat_document import ChatDocument, ChatDocMetaData
 from llmagent.agent.chat_agent import ChatAgent, ChatAgentConfig
 from llmagent.language_models.base import StreamingIfAllowed
 from llmagent.prompts.templates import SUMMARY_ANSWER_PROMPT_GPT4
@@ -91,7 +91,9 @@ class DocChatAgent(ChatAgent):
     def llm_response(
         self,
         query: str | ChatDocument = None,
-    ) -> Optional[Document]:
+    ) -> Optional[ChatDocument]:
+        if not self.llm_can_respond(query):
+            return None
         if isinstance(query, ChatDocument):
             query_str = query.content
         else:
@@ -113,7 +115,13 @@ class DocChatAgent(ChatAgent):
             return self.summarize_docs()
         else:
             response = self.answer_from_docs(query_str)
-            return response
+            return ChatDocument(
+                content=response.content,
+                metadata=ChatDocMetaData(
+                    source=response.metadata.source,
+                    sender=Entity.LLM,
+                ),
+            )
 
     @staticmethod
     def doc_string(docs: List[Document]) -> str:

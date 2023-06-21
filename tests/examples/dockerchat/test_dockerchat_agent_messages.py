@@ -19,7 +19,7 @@ cfg = ChatAgentConfig(
     vecdb=None,
     llm=OpenAIGPTConfig(
         type="openai",
-        chat_model=OpenAIChatModel.GPT3_5_TURBO,
+        chat_model=OpenAIChatModel.GPT4,
         cache_config=RedisCacheConfig(fake=False),
     ),
 )
