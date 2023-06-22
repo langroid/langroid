@@ -16,6 +16,12 @@ class AskURLMessage(AgentMessage):
             cls(result="https://github.com/hello/world"),
         ]
 
+class PythonVersionMessage(AgentMessage):
+    request: str = "python_version"
+    purpose: str = "To find the python version used by the repository."
+    result: str = "3.9"
+
+
 
 class RunPythonMessage(AgentMessage):
     request: str = "run_python"
