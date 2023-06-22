@@ -343,6 +343,7 @@ class Task:
             self._allow_all_responders_except(responder)
         else:
             self.pending_message = result
+            self._allow_all_responders_except(result.metadata.sender)
 
         if settings.debug:
             msg_str = str(self.pending_message)
