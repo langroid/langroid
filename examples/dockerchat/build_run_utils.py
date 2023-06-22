@@ -135,7 +135,7 @@ def _check_docker_daemon_url() -> str:
     Returns:
         A string indicates whether the socker is found or not
     """
-    default_socket_path = "unix://var/run/docker.sock"
+    default_socket_path = "unix:///var/run/docker.sock"
 
     try:
         client = docker.DockerClient(base_url=default_socket_path)
