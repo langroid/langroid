@@ -500,6 +500,9 @@ class Agent(ABC):
     ) -> Optional[str]:
         """
         Send a request to another agent, possibly after confirming with the user.
+        This is not currently used, since we rely on the task loop and "TO:" syntax
+        to send requests to other agents. It is generally best to avoid using this
+        method.
 
         Args:
             agent (Agent): agent to ask
