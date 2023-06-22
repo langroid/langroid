@@ -159,6 +159,7 @@ class OpenAIGPT(LanguageModel):
             msg: Dict[str, Any] = dict(message=dict(content=completion))
             if has_function:
                 function_call = LLMFunctionCall(name=function_name)
+                function_call_dict = function_call.dict()
                 if function_args == "":
                     function_call.arguments = None
                 else:
@@ -169,8 +170,10 @@ class OpenAIGPT(LanguageModel):
                             f"Parsing OpenAI function args failed: {function_args}"
                         )
                     function_call.arguments = args
-                msg["message"]["function_call"] = function_call
+                    function_call_dict.update({"arguments": function_args})
+                msg["message"]["function_call"] = function_call_dict
         else:
+            # non-chat mode has no function_call
             msg = dict(text=completion)
 
         openai_response = OpenAIResponse(
