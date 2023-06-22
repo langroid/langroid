@@ -46,7 +46,7 @@ class MessageValidatorAgent(ChatAgent):
 
         has_func_call = False
         if isinstance(input_str, ChatDocument):
-            recipient, content = input_str.recipient_message()
+            recipient = input_str.metadata.recipient
             has_func_call = input_str.function_call is not None
         else:
             recipient, content = parse_message(input_str)

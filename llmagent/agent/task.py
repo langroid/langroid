@@ -109,6 +109,7 @@ class Task:
         self.name_sub_task_map: Dict[str, Task] = {}
         # latest message in a conversation among entities and agents.
         self.pending_message: Optional[ChatDocument] = None
+        self.pending_sender: Responder = Entity.USER
         self.single_round = single_round
         self.turns = -1  # no limit
         if llm_delegate:
@@ -139,6 +140,9 @@ class Task:
         # other sub_tasks this task can delegate to
         self.sub_tasks: List[Task] = []
         self.parent_task: Optional[Task] = None
+
+    def __repr__(self) -> str:
+        return f"{self.name}"
 
     @property
     def _level(self) -> int:
@@ -181,6 +185,7 @@ class Task:
 
     def init_pending_message(self, msg: Optional[str | ChatDocument] = None) -> None:
         self._allow_all_responders_except(Entity.USER)
+        self.pending_sender = Entity.USER
         if isinstance(msg, str):
             self.pending_message = ChatDocument(
                 content=msg,
@@ -317,37 +322,31 @@ class Task:
                 where we want to limit the number of turns of a delegated agent.
 
         """
-        # sender of current pending message
-        pending_sender = (
-            Entity.USER
-            if self.pending_message is None  # only at start, at root task
-            else self.pending_message.metadata.sender
-        )
-
         result = None
         for r in self.responders:
-            if not self._is_allowed_responder(r):
-                continue
-            result = self.response(r, turns)
+            if self.pending_sender != r:
+                # entity cannot respond to itself
+                result = self.response(r, turns)
             if self.valid(result):
-                self._allow_all_responders_except(r)
                 assert result is not None
+                self.pending_sender = r
+                self.pending_message = result
                 break
 
-        if result is None:
-            responder = Entity.LLM if pending_sender == Entity.USER else Entity.USER
+        if not self.valid(result):
+            responder = (
+                Entity.LLM if self.pending_sender == Entity.USER else Entity.USER
+            )
             self.pending_message = ChatDocument(
                 content=NO_ANSWER,
                 metadata=ChatDocMetaData(sender=responder),
             )
-            self._allow_all_responders_except(responder)
-        else:
-            self.pending_message = result
-            self._allow_all_responders_except(result.metadata.sender)
+            self.pending_sender = responder
 
         if settings.debug:
+            sender_str = str(self.pending_sender)
             msg_str = str(self.pending_message)
-            print(f"[red][{msg_str}")
+            print(f"[red][{sender_str}]{msg_str}")
 
     def response(self, e: Responder, turns: int = -1) -> Optional[ChatDocument]:
         """
@@ -362,10 +361,6 @@ class Task:
             Optional[ChatDocument]: response to `self.pending_message` from entity if
             valid, None otherwise
         """
-        # TODO we many not need this - remove later
-        # if not self._is_allowed_responder(e):
-        #     return None
-
         if isinstance(e, Task):
             actual_turns = e.turns if e.turns > 0 else turns
             return e.run(self.pending_message, turns=actual_turns)

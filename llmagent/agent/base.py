@@ -132,6 +132,7 @@ class Agent(ABC):
                 + ":\n"
                 + str(msg_cls.default_value("purpose"))
                 for i, msg_cls in enumerate(enabled_classes)
+                if msg_cls.default_value("request") in self.llm_tools_usable
             ]
         )
         return json_conditions
@@ -188,9 +189,6 @@ class Agent(ABC):
         """
         if msg is None:
             return None
-        if isinstance(msg, ChatDocument) and msg.metadata.sender == Entity.AGENT:
-            # Agent cannot respond to message emitted by itself
-            return None
 
         results = self.handle_message(msg)
         if results is None:
@@ -227,10 +225,6 @@ class Agent(ABC):
             (str) User response, packaged as a ChatDocument
 
         """
-        if isinstance(msg, ChatDocument) and msg.metadata.sender == Entity.USER:
-            # User cannot respond to message emitted by user
-            return None
-
         if self.default_human_response is not None:
             # useful for automated testing
             user_msg = self.default_human_response

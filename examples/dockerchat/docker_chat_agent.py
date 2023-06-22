@@ -9,7 +9,6 @@ from examples.dockerchat.dockerchat_agent_messages import (
     PythonVersionMessage,
     PythonDependencyMessage,
     ValidateDockerfileMessage,
-    EntryPointAndCMDMessage,
     RunContainerMessage,
 )
 from rich.console import Console
@@ -334,30 +333,6 @@ class DockerChatAgent(ChatAgent):
                 return f"Docker build failed with error message: {build_log}"
         else:
             return docker_daemon
-
-    def find_entrypoint(self, m: EntryPointAndCMDMessage) -> str:
-        """
-        Finds corresponding command to the ENTRYPOINT
-        Args:
-            m (EntryPointAndCMDMessage): LLM message contains a request to identify
-                entrypoints
-        Retruns:
-            str: forward a query to `code_chat_agent`
-        """
-        if self.repo_path is None:
-            return self.handle_message_fallback()
-
-        # TODO here we should really be using the task name not agent name,
-        # to ensure it gets delivered to the right sub-task, but we don't have
-        # a task defined yet. So we just use agent name, since we know the task name
-        # is the same as the agent name.
-        return f"""
-            TO[{self.code_chat_agent.config.name}]: 
-            What's the name of main script in this repo and can you 
-            SPECIFY the command line and necessary arguments to run the main script? 
-            If there are more than one main script, then SPECIFY the commands 
-            and necessary arguments corresponding to each one
-            """
 
     def run_container(
         self,

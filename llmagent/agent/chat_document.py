@@ -1,6 +1,6 @@
 import json
 from enum import Enum
-from typing import List, Optional, Tuple, Type
+from typing import List, Optional, Type
 
 from pydantic import BaseModel
 
@@ -11,7 +11,6 @@ from llmagent.language_models.base import (
     Role,
 )
 from llmagent.mytypes import DocMetaData, Document
-from llmagent.parsing.agent_chats import parse_message
 from llmagent.parsing.json import extract_top_level_json
 from llmagent.utils.output.printing import shorten_text
 
@@ -92,7 +91,8 @@ class ChatDocument(Document):
         elif self.get_json_tools() != []:
             tool_type = "TOOL"
             tool = self.get_json_tools()[0]
-        recipient, content = self.recipient_message()
+        recipient = self.metadata.recipient
+        content = self.content
         content = shorten_text(content, 80)
         sender_entity = self.metadata.sender
         sender_name = self.metadata.sender_name
@@ -108,30 +108,6 @@ class ChatDocument(Document):
     def tsv_str(self) -> str:
         field_values = self.log_fields().dict().values()
         return "\t".join(str(v) for v in field_values)
-
-    def recipient_message(self) -> Tuple[str, str]:
-        """
-        If `content` or `function_call` of contains an explicit
-        recipient name, return this recipient name and `message` stripped
-        of the recipient name if specified.
-
-        Two cases:
-        (a) `content` contains "TO: <name> <content>", or
-        (b) `content` is empty and `function_call` with `to: <name>`
-
-        Returns:
-            (str): name of recipient, which may be empty string if no recipient
-            (str): content of message
-
-        """
-
-        if self.function_call is not None:
-            return self.function_call.to, ""
-        else:
-            msg = self.content
-
-        recipient_name, content = parse_message(msg) if msg is not None else ("", "")
-        return recipient_name, content
 
     @staticmethod
     def from_LLMResponse(

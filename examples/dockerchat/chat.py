@@ -14,7 +14,6 @@ from examples.codechat.code_chat_tools import (
 from examples.dockerchat.dockerchat_agent_messages import (
     AskURLMessage,
     ValidateDockerfileMessage,
-    EntryPointAndCMDMessage,
     RunContainerMessage,
 )
 import typer
@@ -106,8 +105,6 @@ def chat(config: DockerChatAgentConfig) -> None:
     agent = DockerChatAgent(config, task_messages)
     agent.enable_message(AskURLMessage)
     agent.enable_message(ValidateDockerfileMessage)
-    agent.enable_message(EntryPointAndCMDMessage, use=True, handle=False)
-    agent.planner_agent.enable_message(EntryPointAndCMDMessage, use=False, handle=True)
     agent.enable_message(RunContainerMessage)
 
     agent.planner_agent.enable_message(ShowDirContentsMessage)
