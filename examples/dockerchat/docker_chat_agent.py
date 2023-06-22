@@ -2,10 +2,6 @@ from llmagent.agent.chat_agent import ChatAgent, ChatAgentConfig
 from pydantic import BaseModel, HttpUrl
 from typing import Optional, List, Any
 from examples.codechat.code_chat_agent import CodeChatAgentConfig, CodeChatAgent
-from examples.codechat.code_chat_tools import (
-    ShowFileContentsMessage,
-    ShowDirContentsMessage,
-)
 from examples.dockerchat.dockerchat_agent_messages import (
     RunPythonMessage,
     AskURLMessage,
@@ -141,19 +137,7 @@ class DockerChatAgent(ChatAgent):
             vecdb=None,
             llm=self.config.llm,
         )
-        # Enable tools for planner_agent so that the LLM can REQUEST these tools,
-        # but the planner_agent does NOT have methods to handle these tools,
-        # so in the planner's task-loop, the agent will detect this request, but will
-        # have a None response. The Task.step() then ensures that the JSON request is
-        # ultimately handled by the code_chat_agent, which DOES have methods
-        # corresponding to these tools.
         self.planner_agent = ChatAgent(planner_agent_cfg)
-        self.planner_agent.enable_message(ShowDirContentsMessage)
-        self.planner_agent.enable_message(ShowFileContentsMessage)
-        self.planner_agent.enable_message(RunPythonMessage)
-        self.code_chat_agent.enable_message(ShowDirContentsMessage, use=False)
-        self.code_chat_agent.enable_message(ShowFileContentsMessage, use=False)
-        self.code_chat_agent.enable_message(RunPythonMessage, use=False)
 
     def handle_message_fallback(self, input_str: str = "") -> Optional[str]:
         if self.repo_path is None and "URL" not in input_str:
@@ -384,26 +368,22 @@ class DockerChatAgent(ChatAgent):
             m (EntryPointAndCMDMessage): LLM message contains a request to identify
                 entrypoints
         Retruns:
-            str: description of the main scripts and corresponding argument in the
-                repo that are potential candidates to become ENTRYPOINT
+            str: forward a query to `code_chat_agent`
         """
         if self.repo_path is None:
             return self.handle_message_fallback()
 
-        answer = self.ask_agent(
-            self.code_chat_agent,
-            request="""What's the name of main script in this repo and can you 
+        # TODO here we should really be using the task name not agent name,
+        # to ensure it gets delivered to the right sub-task, but we don't have
+        # a task defined yet. So we just use agent name, since we know the task name
+        # is the same as the agent name.
+        return f"""
+            TO[{self.code_chat_agent.config.name}]: 
+            What's the name of main script in this repo and can you 
             SPECIFY the command line and necessary arguments to run the main script? 
             If there are more than one main script, then SPECIFY the commands 
             and necessary arguments corresponding to each one
-            """,
-            no_answer=NO_ANSWER,
-            user_confirm=False,
-        )
-        if answer is not None:
-            return answer
-
-        return "I couldn't identify potentail main scripts for the ENTRYPOINT"
+            """
 
     def run_container(
         self,

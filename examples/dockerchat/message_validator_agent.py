@@ -59,9 +59,8 @@ class MessageValidatorAgent(ChatAgent):
             """
         else:
             error = """
-            Since you did not include a TO[<recipient>] in your message,
-            it is not clear who this message or TOOL is for.
-            Please rewrite your request so it starts with "TO[<recipient>]:"
+            Please rewrite your message so it starts with 'TO[<recipient>]:'
+            to clarify who the message is intended for. 
             """
         if recipient == "":
             return ChatDocument(

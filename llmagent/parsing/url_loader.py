@@ -21,19 +21,20 @@ class URLLoader:
     def load(self) -> List[Document]:
         docs = []
         threads = 4
-        backoff_dict = dict()
         # converted the input list to an internal format
         dl_dict = add_to_compressed_dict(self.urls)
         # processing loop
-        while dl_dict:
+        while not dl_dict.done:
             buffer, dl_dict = load_download_buffer(
                 dl_dict,
-                backoff_dict,
+                sleep_time=5,
             )
-            if dl_dict.done:
-                break
             for url, result in buffered_downloads(buffer, threads):
-                text = trafilatura.extract(result, no_fallback=True)
+                text = trafilatura.extract(
+                    result,
+                    no_fallback=False,
+                    favor_recall=True,
+                )
                 if text is not None:
                     docs.append(
                         Document(content=text, metadata=DocMetaData(source=url))

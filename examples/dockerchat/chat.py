@@ -6,7 +6,10 @@ from examples.dockerchat.docker_chat_agent import (
     CODE_CHAT_INSTRUCTIONS,
 )
 from examples.dockerchat.message_validator_agent import MessageValidatorAgent
-
+from examples.codechat.code_chat_tools import (
+    ShowFileContentsMessage,
+    ShowDirContentsMessage,
+)
 
 from examples.dockerchat.dockerchat_agent_messages import (
     AskURLMessage,
@@ -101,16 +104,18 @@ def chat(config: DockerChatAgentConfig) -> None:
     ]
 
     agent = DockerChatAgent(config, task_messages)
-    # agent.enable_message(RunPython)
     agent.enable_message(AskURLMessage)
-    # agent.enable_message(ShowFileContentsMessage)
-    # agent.enable_message(ShowDirContentsMessage)
-    # agent.enable_message(FileExistsMessage)
-    # agent.enable_message(PythonVersionMessage)
     agent.enable_message(ValidateDockerfileMessage)
-    # agent.enable_message(PythonDependencyMessage)
-    agent.enable_message(EntryPointAndCMDMessage)
+    agent.enable_message(EntryPointAndCMDMessage, use=True, handle=False)
+    agent.planner_agent.enable_message(EntryPointAndCMDMessage, use=False, handle=True)
     agent.enable_message(RunContainerMessage)
+
+    agent.planner_agent.enable_message(ShowDirContentsMessage)
+    agent.planner_agent.enable_message(ShowFileContentsMessage)
+    agent.code_chat_agent.enable_message(ShowDirContentsMessage, use=False, handle=True)
+    agent.code_chat_agent.enable_message(
+        ShowFileContentsMessage, use=False, handle=True
+    )
 
     # set up tasks and their hierarchy
     docker_task = Task(
