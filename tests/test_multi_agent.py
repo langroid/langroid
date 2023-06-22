@@ -193,5 +193,64 @@ def test_multi_agent(test_settings: Settings):
 
     answers = [str(eval(e)) for e in EXPONENTIALS.split()]
     assert all(a in result.content for a in answers)
-
     # TODO assertions on message history of each agent
+
+
+def test_multi_agent_directed(test_settings: Settings):
+    """
+    Test whether TO:[<recipient>] works as expected.
+    """
+    set_global(test_settings)
+    cfg_a = _TestChatAgentConfig(name="A")
+
+    cfg_b = _TestChatAgentConfig(name="B")
+
+    cfg_c = _TestChatAgentConfig(name="C")
+
+    agent_a = ChatAgent(cfg_a)
+    agent_b = ChatAgent(cfg_b)
+    agent_c = ChatAgent(cfg_c)
+
+    task_a = Task(
+        agent_a,
+        default_human_response="",
+        system_message="""
+        You are talking to two people B and C, and 
+        your job is to pick B or C and ask that person 'Who are you?'.
+        Whoever you address, make sure you say it in the form 
+        TO[<recipient>]: <your message>.
+        As the conversation progresses your job is always keep asking 
+        this question to either B or C.
+        """,
+        user_message="Start by asking B or C 'Who are you?'",
+    )
+    B_RESPONSE = "hello I am B"
+    C_RESPONSE = "hello I am C"
+    task_b = Task(
+        agent_b,
+        system_message=f"your job is to always say '{B_RESPONSE}'",
+        default_human_response="",
+        single_round=True,
+    )
+
+    task_c = Task(
+        agent_c,
+        system_message=f"your job is to always say '{C_RESPONSE}'",
+        default_human_response="",
+        single_round=True,
+    )
+
+    task_a.add_sub_task([task_b, task_c])
+    # kick off with empty msg, so LLM will respond based on initial sys, user messages
+    task_a.init_pending_message()
+    for _ in range(2):
+        # LLM asks, addressing B or C
+        task_a.step()
+        recipient = task_a.pending_message.metadata.recipient
+        # recipient replies
+        task_a.step()
+        assert recipient in task_a.pending_message.content
+
+    task_a.agent.clear_history(0)
+    result = task_a.run(turns=2)
+    assert "B" in result.content or "C" in result.content
