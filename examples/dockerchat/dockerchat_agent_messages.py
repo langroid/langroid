@@ -54,19 +54,6 @@ class FileExistsMessage(AgentMessage):
         ]
 
 
-class PythonVersionMessage(AgentMessage):
-    request: str = "python_version"
-    purpose: str = "To check which version of Python is needed."
-    result: str = "3.9"
-
-    @classmethod
-    def examples(cls) -> List["AgentMessage"]:
-        return [
-            cls(result="3.7"),
-            cls(result="3.8"),
-        ]
-
-
 class ValidateDockerfileMessage(AgentMessage):
     request: str = "validate_dockerfile"
     purpose: str = """

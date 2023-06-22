@@ -224,14 +224,6 @@ class DockerChatAgent(ChatAgent):
         """
         if self.repo_path is None:
             return self.handle_message_fallback()
-        answer = self.ask_agent(
-            self.code_chat_agent,
-            request="What is the Python version of this repo?",
-            no_answer=NO_ANSWER,
-            user_confirm=False,
-        )
-        if answer is not None:
-            return answer
 
         answer = get_python_version(self.repo_path)
         if answer:
@@ -244,15 +236,6 @@ class DockerChatAgent(ChatAgent):
         if self.repo_path is None:
             return self.handle_message_fallback()
         # dummy result, fill with actual code.
-
-        answer = self.ask_agent(
-            self.code_chat_agent,
-            request=f"Does this project contain a file named {message.filename}?",
-            no_answer=NO_ANSWER,
-            user_confirm=False,
-        )
-        if answer is not None:
-            return answer
 
         matches = RepoLoader.select(self.repo_tree, includes=[message.filename])
         exists = False
@@ -276,15 +259,6 @@ class DockerChatAgent(ChatAgent):
         """
         if self.repo_path is None:
             return self.handle_message_fallback()
-
-        answer = self.ask_agent(
-            self.code_chat_agent,
-            request="Which file is used to manage dependencies in this project?",
-            no_answer=NO_ANSWER,
-            user_confirm=False,
-        )
-        if answer is not None:
-            return answer
 
         python_dependency = identify_dependency_management(self.repo_path)
         if python_dependency:
