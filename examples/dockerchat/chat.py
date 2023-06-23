@@ -41,6 +41,9 @@ class DockerChatAgentConfig(ChatAgentConfig):
     debug: bool = False
     cache: bool = True
     stream: bool = True
+    use_functions_api: bool = False
+    use_llmagent_tools: bool = True
+
     vecdb: VectorStoreConfig = QdrantDBConfig(
         type="qdrant",
         collection_name="llmagent-dockerchat",
