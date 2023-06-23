@@ -22,6 +22,7 @@ class Entity(str, Enum):
 
 
 class ChatDocMetaData(DocMetaData):
+    parent: Optional["ChatDocument"] = None
     sender: Entity
     sender_name: str = ""
     recipient: str = ""
@@ -93,7 +94,6 @@ class ChatDocument(Document):
             tool = self.get_json_tools()[0]
         recipient = self.metadata.recipient
         content = self.content
-        content = shorten_text(content, 80)
         sender_entity = self.metadata.sender
         sender_name = self.metadata.sender_name
         return ChatDocLoggerFields(
@@ -106,7 +106,9 @@ class ChatDocument(Document):
         )
 
     def tsv_str(self) -> str:
-        field_values = self.log_fields().dict().values()
+        fields = self.log_fields()
+        fields.content = shorten_text(fields.content, 80)
+        field_values = fields.dict().values()
         return "\t".join(str(v) for v in field_values)
 
     @staticmethod
@@ -143,8 +145,12 @@ class ChatDocument(Document):
 
         if isinstance(message, ChatDocument):
             sender_name = message.metadata.sender_name
-            if message.function_call is not None:
+            if (
+                message.metadata.parent is not None
+                and message.metadata.parent.function_call is not None
+            ):
                 sender_role = Role.FUNCTION
+                sender_name = message.metadata.parent.function_call.name
             elif message.metadata.sender == Entity.LLM:
                 sender_role = Role.ASSISTANT
 
@@ -154,3 +160,6 @@ class ChatDocument(Document):
             # LLM can only respond to text content, so extract it
             content = message.content
         return LLMMessage(role=sender_role, content=content, name=sender_name)
+
+
+ChatDocMetaData.update_forward_refs()
