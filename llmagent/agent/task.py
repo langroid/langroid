@@ -144,6 +144,9 @@ class Task:
     def __repr__(self) -> str:
         return f"{self.name}"
 
+    def __str__(self) -> str:
+        return f"{self.name}"
+
     @property
     def _level(self) -> int:
         if self.parent_task is None:
@@ -200,6 +203,20 @@ class Task:
                 # the CURRENT task's USER entity
                 self.pending_message.metadata.sender = Entity.USER
 
+        if self.parent_task is not None and self.parent_task.logger is not None:
+            self.logger = self.parent_task.logger
+        else:
+            self.logger = setup_file_logger("task_logger", f"logs/{self.name}.log")
+
+        if self.parent_task is not None and self.parent_task.tsv_logger is not None:
+            self.tsv_logger = self.parent_task.tsv_logger
+        else:
+            self.tsv_logger = setup_file_logger("tsv_logger", f"logs/{self.name}.tsv")
+            header = ChatDocLoggerFields().tsv_header()
+            self.tsv_logger.info(f"Task\tResponder\t{header}")
+
+        self.log_message(Entity.USER, self.pending_message)
+
     def run(
         self,
         msg: Optional[str | ChatDocument] = None,
@@ -236,20 +253,7 @@ class Task:
             # this task is not the intended recipient so return None
             return None
 
-        if self.parent_task is not None and self.parent_task.logger is not None:
-            self.logger = self.parent_task.logger
-        else:
-            self.logger = setup_file_logger("task_logger", f"logs/{self.name}.log")
-
-        if self.parent_task is not None and self.parent_task.tsv_logger is not None:
-            self.tsv_logger = self.parent_task.tsv_logger
-        else:
-            self.tsv_logger = setup_file_logger("tsv_logger", f"logs/{self.name}.tsv")
-            header = ChatDocLoggerFields().tsv_header()
-            self.tsv_logger.info(f"Task\t{header}")
-
         self.init_pending_message(msg)
-        self.log_message()
         # sets indentation to be printed prior to any output from agent
         self.agent.indent = self._indent
         if self.default_human_response is not None:
@@ -270,7 +274,6 @@ class Task:
         )
         while True:
             self.step()
-            self.log_message()
             if self.pending_message is not None:
                 if self.pending_message.metadata.sender == Entity.LLM:
                     self.last_llm_message = self.pending_message
@@ -323,15 +326,38 @@ class Task:
 
         """
         result = None
+        parent = self.pending_message
+        recipient = (
+            ""
+            if self.pending_message is None
+            else self.pending_message.metadata.recipient
+        )
         for r in self.responders:
-            if self.pending_sender != r:
-                # entity cannot respond to itself
-                result = self.response(r, turns)
+            if self.pending_sender == r:
+                # entity cannot respond to itself or to a message not intended for it
+
+                # create dummy msg for logging
+                log_doc = ChatDocument(
+                    content="[CANNOT RESPOND]",
+                    function_call=None,
+                    metadata=ChatDocMetaData(
+                        sender=r if isinstance(r, Entity) else Entity.USER,
+                        sender_name=str(r),
+                        recipient=recipient,
+                    ),
+                )
+                self.log_message(r, log_doc)
+                continue
+            result = self.response(r, turns)
             if self.valid(result):
                 assert result is not None
                 self.pending_sender = r
+                result.metadata.parent = parent
                 self.pending_message = result
+                self.log_message(r, result, mark=True)
                 break
+            else:
+                self.log_message(r, result)
 
         if not self.valid(result):
             responder = (
@@ -339,9 +365,10 @@ class Task:
             )
             self.pending_message = ChatDocument(
                 content=NO_ANSWER,
-                metadata=ChatDocMetaData(sender=responder),
+                metadata=ChatDocMetaData(sender=responder, parent=parent),
             )
             self.pending_sender = responder
+            self.log_message(self.pending_sender, self.pending_message, mark=True)
 
         if settings.debug:
             sender_str = str(self.pending_sender)
@@ -379,22 +406,27 @@ class Task:
             if self.controller == Entity.LLM
             else self.last_user_message
         )
-        if self.single_round:
-            content = self.pending_message.content if self.pending_message else ""
-        else:
-            content = last_controller_message.content
-            if DONE in content:
-                content = content.replace(DONE, "").strip()
+        result_msg = (
+            self.pending_message if self.single_round else last_controller_message
+        )
+        content = result_msg.content if result_msg else ""
+        if DONE in content:
+            # assuming it is of the form "DONE: <content>"
+            content = content.replace(DONE, "").strip()
+        recipient = result_msg.metadata.recipient if result_msg else ""
+        fun_call = result_msg.function_call if result_msg else None
 
         # regardless of which entity actually produced the result,
         # when we return the result, we set entity to USER
         # since to the "parent" task, this result is equivalent to a response from USER
         return ChatDocument(
             content=content,
+            function_call=fun_call,
             metadata=ChatDocMetaData(
                 source=Entity.USER,
                 sender=Entity.USER,
                 sender_name=self.name,
+                recipient=recipient,
             ),
         )
 
@@ -443,7 +475,7 @@ class Task:
         # be given a chance to respond.
         return (
             result is not None
-            and result.content != ""
+            and (result.content != "" or result.function_call is not None)
             and (  # if NO_ANSWER is from controller, then it means
                 # controller is stuck and we are done with task loop
                 NO_ANSWER not in result.content
@@ -451,23 +483,36 @@ class Task:
             )
         )
 
-    def log_message(self) -> None:
+    def log_message(
+        self,
+        resp: Responder,
+        msg: ChatDocument | None = None,
+        mark: bool = False,
+    ) -> None:
         """
         Log current pending message, and related state, for lineage/debugging purposes.
+
+        Args:
+            resp (Responder): Responder that generated the `msg`
+            msg (ChatDocument, optional): Message to log. Defaults to None.
+            mark (bool, optional): Whether to mark the message as the final result of
+                a `task.step()` call. Defaults to False.
         """
         default_values = ChatDocLoggerFields().dict().values()
         msg_str_tsv = "\t".join(str(v) for v in default_values)
-        if self.pending_message is not None:
-            msg_str_tsv = self.pending_message.tsv_str()
+        if msg is not None:
+            msg_str_tsv = msg.tsv_str()
         msg_str = ""
-        if self.pending_message is not None:
-            msg_str = str(self.pending_message)
+        if msg is not None:
+            msg_str = str(msg)
         task_name = self.name if self.name != "" else "root"
 
+        mark_str = "*" if mark else " "
         if self.logger is not None:
-            self.logger.info(f"Task[{task_name}] {msg_str}")
+            self.logger.info(f"{mark_str}Task[{task_name}] {msg_str}")
         if self.tsv_logger is not None:
-            self.tsv_logger.info(f"{task_name}\t{msg_str_tsv}")
+            resp_str = str(resp) + ("*" if mark else "")
+            self.tsv_logger.info(f"{task_name}\t{resp_str}\t{msg_str_tsv}")
 
     def _disallow_responder(self, e: Responder) -> None:
         """

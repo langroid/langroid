@@ -11,12 +11,14 @@ from llmagent.mytypes import Embeddings
 
 
 class OpenAIEmbeddingsConfig(EmbeddingModelsConfig):
+    model_type: str = "openai"
     model_name: str = "text-embedding-ada-002"
     api_key: str = ""
     dims: int = 1536
 
 
 class SentenceTransformerEmbeddingsConfig(EmbeddingModelsConfig):
+    model_type: str = "sentence-transformer"
     model_name: str = "all-MiniLM-L6-v2"
     dims: int = 384
 
