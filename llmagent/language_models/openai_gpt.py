@@ -163,14 +163,15 @@ class OpenAIGPT(LanguageModel):
                 if function_args == "":
                     function_call.arguments = None
                 else:
+                    args = {}
                     try:
-                        args = ast.literal_eval(function_args)
+                        args = ast.literal_eval(function_args.strip())
                     except (SyntaxError, ValueError):
                         logging.warning(
                             f"Parsing OpenAI function args failed: {function_args}"
                         )
                     function_call.arguments = args
-                    function_call_dict.update({"arguments": function_args})
+                    function_call_dict.update({"arguments": function_args.strip()})
                 msg["message"]["function_call"] = function_call_dict
         else:
             # non-chat mode has no function_call
