@@ -4,6 +4,9 @@ from llmagent.agent.base import Entity
 from llmagent.agent.chat_document import ChatDocument, ChatDocMetaData
 from llmagent.parsing.agent_chats import parse_message
 
+import logging
+
+logger = logging.getLogger(__name__)
 # TODO - this is currently hardocded to validate the TO:<recipient> format
 # but we could have a much more general declarative grammar-based validator
 
@@ -24,7 +27,7 @@ class MessageValidatorAgent(ChatAgent):
 
     def agent_response(
         self,
-        input_str: Optional[str | ChatDocument] = None,
+        msg: Optional[str | ChatDocument] = None,
     ) -> Optional[ChatDocument]:
         """
         Check whether the incoming message is in the expected format.
@@ -32,7 +35,7 @@ class MessageValidatorAgent(ChatAgent):
         in the expected format.
 
         Args:
-            input_str (str): the incoming message (pending message of the task)
+            msg (str): the incoming message (pending message of the task)
             sender_name (str): the name of the sender
 
         Returns:
@@ -41,36 +44,38 @@ class MessageValidatorAgent(ChatAgent):
                 (this is intended to be sent to the LLM of the calling agent).
 
         """
-        if input_str is None:
+        if msg is None:
             return None
 
         has_func_call = False
-        if isinstance(input_str, ChatDocument):
-            recipient = input_str.metadata.recipient
-            has_func_call = input_str.function_call is not None
+        if isinstance(msg, ChatDocument):
+            recipient = msg.metadata.recipient
+            has_func_call = msg.function_call is not None
+            content = msg.content
         else:
-            recipient, content = parse_message(input_str)
+            recipient, content = parse_message(msg)
 
-        if has_func_call:
-            error = """
-            Expected `function_call` to have a "to" field. 
-            Please resend with an appropriate "to" field, to clarify
-            who the `function_call` is intended for.
-            """
-        else:
-            error = """
-            Please rewrite your message so it starts with 'TO[<recipient>]:'
-            to clarify who the message is intended for. 
-            """
-        if recipient == "":
-            return ChatDocument(
-                content=error,
-                metadata=ChatDocMetaData(
-                    source=Entity.AGENT,
-                    sender=Entity.AGENT,
-                    sender_name=self.config.name,
-                ),
-            )
-        else:
-            # no objections, let the task loop continue
+        if recipient != "":
+            # there is a clear recipient, return None (no objections)
             return None
+
+        if has_func_call or "TOOL" in content:
+            # assume it is meant for Coder
+            recipient = "Coder"
+        else:
+            # recipient = "DockerExpert"
+            # logger.warning("TO[] not specified; assuming message is for DockerExpert")
+            # we don't know who it is for, return a message asking for clarification
+            content = """
+            Remember to use TO[...]: to clarify who the message is for.
+            """
+        return ChatDocument(
+            content=content,
+            function_call=msg.function_call if has_func_call else None,
+            metadata=ChatDocMetaData(
+                source=Entity.AGENT,
+                sender=Entity.AGENT,
+                sender_name=self.config.name,
+                recipient=recipient,
+            ),
+        )
