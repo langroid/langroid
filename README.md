@@ -160,6 +160,11 @@ and then a follow-up question:
 
 > what did she build?
 
+### "Chat" with a code repo, given the GitHub URL
+```bash
+python3 examples/codechat/codechat.py
+```
+
 ### "chat"-based dockerfile creator. 
   
 This is just a prelim starting point, 

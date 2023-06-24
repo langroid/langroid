@@ -60,10 +60,9 @@ def chat(config: CodeChatAgentConfig) -> None:
 @app.command()
 def main(
     debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
-    gpt4: bool = typer.Option(False, "--gpt4", "-4", help="use GPT-4"),
     nocache: bool = typer.Option(False, "--nocache", "-nc", help="do no use cache"),
 ) -> None:
-    config = CodeChatAgentConfig(debug=debug, gpt4=gpt4, cache=not nocache)
+    config = CodeChatAgentConfig(debug=debug, gpt4=True, cache=not nocache)
     chat(config)
 
 
