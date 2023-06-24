@@ -502,11 +502,15 @@ class Task:
         msg_str_tsv = "\t".join(str(v) for v in default_values)
         if msg is not None:
             msg_str_tsv = msg.tsv_str()
-        msg_str = ""
 
         mark_str = "*" if mark else " "
         task_name = self.name if self.name != "" else "root"
-        if msg is not None:
+        resp_color = "white" if mark else "red"
+        resp_str = f"[{resp_color}] {resp} [/{resp_color}]"
+
+        if msg is None:
+            msg_str = f"{mark_str}({task_name}) {resp_str}"
+        else:
             color = {
                 Entity.LLM: "green",
                 Entity.USER: "blue",
@@ -514,16 +518,16 @@ class Task:
             }[msg.metadata.sender]
             f = msg.log_fields()
             tool_type = f.tool_type.rjust(6)
+            tool_name = f.tool.rjust(10)
+            tool_str = f"{tool_type}({tool_name})" if tool_name != "" else ""
             sender = f"[{color}]" + str(f.sender_entity).rjust(10) + f"[/{color}]"
             sender_name = f.sender_name.rjust(10)
             recipient = "=>" + str(f.recipient).rjust(10)
             content = f"[{color}]{f.content}[/{color}]"
-            resp_color = "white" if mark else "red"
-            resp_str = f"[{resp_color}] {resp} [/{resp_color}]"
             msg_str = (
                 f"{mark_str}({task_name}) "
                 f"{resp_str} {sender}({sender_name}) "
-                f"({recipient}) {tool_type} {content}"
+                f"({recipient}) {tool_str} {content}"
             )
 
         if self.logger is not None:

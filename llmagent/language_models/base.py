@@ -24,6 +24,7 @@ class LLMConfig(BaseSettings):
     timeout: int = 20  # timeout for API requests
     chat_model: Optional[str] = None
     completion_model: Optional[str] = None
+    temperature: float = 0.0
     context_length: Optional[Dict[str, int]] = None
     max_output_tokens: int = 1024  # generate at most this many tokens
     # if input length + max_output_tokens > context length of model,
@@ -88,6 +89,12 @@ class LLMMessage(BaseModel):
         if "name" in dict_no_none and dict_no_none["name"] == "":
             # OpenAI API does not like empty name
             del dict_no_none["name"]
+        if "function_call" in dict_no_none:
+            # arguments must be a string
+            if "arguments" in dict_no_none["function_call"]:
+                dict_no_none["function_call"]["arguments"] = json.dumps(
+                    dict_no_none["function_call"]["arguments"]
+                )
         return dict_no_none
 
     def __str__(self) -> str:

@@ -262,6 +262,13 @@ class Agent(ABC):
         if self.llm is None:
             return False
 
+        if isinstance(message, ChatDocument) and message.function_call is not None:
+            # LLM should not handle `function_call` messages,
+            # EVEN if message.function_call is not a legit function_call
+            # The OpenAI API raises error if there is a message in history
+            # from a non-Assistant role, with a `function_call` in it
+            return False
+
         if message is not None and len(self.get_tool_messages(message)) > 0:
             # if there is a valid "tool" message (either JSON or via `function_call`)
             # then LLM cannot respond to it
@@ -365,7 +372,7 @@ class Agent(ABC):
         tool_name = msg.function_call.name
         tool_msg = msg.function_call.arguments or {}
         if tool_name not in self.llm_tools_handled:
-            return None
+            raise ValueError(f"{tool_name} is not a valid function_call!")
         tool_class = self.llm_tools_map[tool_name]
         tool_msg.update(dict(request=tool_name))
         try:
@@ -415,7 +422,15 @@ class Agent(ABC):
         try:
             tools = self.get_tool_messages(msg)
         except ValidationError as ve:
+            # correct tool name but bad fields
             return self.tool_validation_error(ve)
+        except ValueError:
+            # invalid tool name
+            # We return None since returning "invalid tool name" would
+            # be considered a valid result in task loop, and would be treated
+            # as a response to the tool message even though the tool was not intended
+            # for this agent.
+            return None
         if len(tools) == 0:
             return self.handle_message_fallback(msg)
 
