@@ -206,5 +206,8 @@ by doing `less <log_file>`. The format is:
 ```
 
 The structure of the `tsv` logs is similar. A great way to view these is to 
-install and use `visidata` (https://www.visidata.org/).
+install and use `visidata` (https://www.visidata.org/):
+```bash
+vd logs/<task_name>.tsv
+```
 
