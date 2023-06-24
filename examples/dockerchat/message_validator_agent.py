@@ -61,13 +61,21 @@ class MessageValidatorAgent(ChatAgent):
 
         if has_func_call or "TOOL" in content:
             # assume it is meant for Coder
+            # TODO- but what if it is not a legit function call
+            recipient = "Coder"
+        elif "DockerExpert" in content:
+            content = msg.metadata.parent.metadata.parent.content
+            recipient = "DockerExpert"
+        elif "Coder" in content:
+            content = msg.metadata.parent.content
             recipient = "Coder"
         else:
             # recipient = "DockerExpert"
             # logger.warning("TO[] not specified; assuming message is for DockerExpert")
             # we don't know who it is for, return a message asking for clarification
             content = """
-            Remember to use TO[...]: to clarify who the message is for.
+            Is this message for DockerExpert, or for Coder?
+            Please simply respond with "DockerExpert" or "Coder"
             """
         return ChatDocument(
             content=content,
