@@ -51,6 +51,7 @@ class OpenAIGPTConfig(LLMConfig):
     max_output_tokens: int = 1024
     min_output_tokens: int = 64
     timeout: int = 20
+    temperature: float = 0.0
     chat_model: OpenAIChatModel = OpenAIChatModel.GPT4
     completion_model: OpenAICompletionModel = OpenAICompletionModel.TEXT_DA_VINCI_003
     context_length: Dict[str, int] = {
@@ -239,7 +240,7 @@ class OpenAIGPT(LanguageModel):
             prompt=prompt,
             max_tokens=max_tokens,  # for output/completion
             request_timeout=self.config.timeout,
-            temperature=0,
+            temperature=self.config.temperature,
             echo=False,
             stream=self.config.stream,
         )
