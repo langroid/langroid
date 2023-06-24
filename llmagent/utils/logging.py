@@ -1,7 +1,9 @@
 import logging
 import os.path
+from typing import no_type_check
 
 import colorlog
+from rich.console import Console
 
 
 # Define a function to set up the colored logger
@@ -107,3 +109,22 @@ def setup_loggers_for_package(package_name: str, level: int) -> None:
     ):
         module = importlib.import_module(module_name)
         setup_logger(module.__name__, level)
+
+
+class RichFileLogger:
+    def __init__(self, log_file: str, append: bool = False):
+        os.makedirs(os.path.dirname(log_file), exist_ok=True)
+        self.log_file = log_file
+        if not append:
+            if os.path.exists(self.log_file):
+                os.remove(self.log_file)
+        self.file = None
+        self.console = None
+        self.append = append
+
+    @no_type_check
+    def log(self, message: str) -> None:
+        self.file = open(self.log_file, "a")
+        self.console = Console(file=self.file, force_terminal=True, width=200)
+        self.console.print(message)
+        self.file.close()
