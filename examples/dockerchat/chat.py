@@ -57,6 +57,7 @@ class DockerChatAgentConfig(ChatAgentConfig):
     llm: OpenAIGPTConfig = OpenAIGPTConfig(
         type="openai",
         chat_model=OpenAIChatModel.GPT4,
+        temperature=0.2,
     )
     parsing: ParsingConfig = ParsingConfig(
         chunk_size=100,
