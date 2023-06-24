@@ -127,4 +127,5 @@ class RichFileLogger:
         self.file = open(self.log_file, "a")
         self.console = Console(file=self.file, force_terminal=True, width=200)
         self.console.print(message)
+        self.file.flush()
         self.file.close()

@@ -142,8 +142,10 @@ class ChatDocument(Document):
         """
         sender_name = None
         sender_role = Role.USER
-
+        fun_call = None
         if isinstance(message, ChatDocument):
+            content = message.content
+            fun_call = message.function_call
             sender_name = message.metadata.sender_name
             if (
                 message.metadata.parent is not None
@@ -153,13 +155,13 @@ class ChatDocument(Document):
                 sender_name = message.metadata.parent.function_call.name
             elif message.metadata.sender == Entity.LLM:
                 sender_role = Role.ASSISTANT
-
-        if isinstance(message, str):
-            content = message
         else:
             # LLM can only respond to text content, so extract it
-            content = message.content
-        return LLMMessage(role=sender_role, content=content, name=sender_name)
+            content = message
+
+        return LLMMessage(
+            role=sender_role, content=content, function_call=fun_call, name=sender_name
+        )
 
 
 ChatDocMetaData.update_forward_refs()

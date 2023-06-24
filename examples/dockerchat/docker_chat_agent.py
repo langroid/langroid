@@ -46,19 +46,20 @@ code repository. However:
 (a) you are generally aware of docker, but you're not a docker expert, and
 (b) you do not have direct access to the code repository.
 
-To accomplish your task, you will be talking to 2 people: DockerExpert, who will manage 
-the creation of the dockerfile; and Coder who has access to the code repository and 
-will help you with  questions received from DockerExpert. Any message you write 
-should be formatted as:
-
-"TO[<recipient>]: <message>", 
-
-where <recipient> is either "DockerExpert" or "Coder", 
-and <message> is the message you want to send. 
-DO NOT SEND ANY MESSAGES WITHOUT A "TO" FIELD as above.
 """
 
 PLANNER_USER_MSG = f"""
+
+To accomplish your task, you will be talking to 2 people: DockerExpert, who will manage 
+the creation of the dockerfile; and Coder who has access to the code repository and 
+will help you with  questions received from DockerExpert. When you are NOT using a 
+function_call, any message you write should be formatted as:
+
+"TO[<recipient>]: <message>", 
+
+where <recipient> is either "DockerExpert" or "Coder", and <message> is the message 
+you want to send.  
+ALWAYS USE THIS FORMAT WHEN YOU ARE NOT USING A FUNCTION_CALL
 
 The DockerExpert will be asking you questions about the 
 the code repository in the form "INFO: <question>", or comments or other requests in 
