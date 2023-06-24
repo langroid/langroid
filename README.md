@@ -115,6 +115,20 @@ If so, you should just run `black .` to reformat them. Also,
 - `flake8` may warn about some issues; read about each one and fix those 
   issues.
 
+You can also run `make lint` to (try to) auto-tix `black` and `ruff`
+issues. 
+
+So, typically when submitting a PR, you would do this sequence:
+- run `pytest tests -nc` (`-nc` means "no cache", i.e. do not use cached LLM 
+  API call responses)
+- fix things so tests pass, then proceed to lint/style/type checks
+- `make check` to see what issues there are
+- `make lint` to auto-fix some of them
+- `make check` again to see what issues remain
+- possibly manually fix `flake8` issues, and any `mypy` issues flagged.
+- `make check` again to see if all issues are fixed.
+- repeat if needed, until all clean. 
+
 When done with these, git-commit, push to github and submit the PR. If this 
 is an ongoing PR, just push to github again and the PR will be updated. 
 
@@ -163,10 +177,29 @@ or give a set of possible options, and ask the human to confirm/choose.
 python3 examples/dockerfile/chat.py
 ```
 
-By default this uses `gpt-3.5-turbo`. 
-For better results, you can specify the option `-4`, so it uses `gpt4` 
-(CAUTION GPT4 is ~20-30 times more expensive per token):
+By default this uses `gpt-4-0613`.
+
+
+
+## Logs of multi-agent interactions
+
+When running a multi-agent chat, e.g. using `task.run()`, two types of logs 
+are generated:
+- plain-text logs in `logs/<task_name>.log`
+- tsv logs in `logs/<task_name>.tsv`
+
+We will go into details of inter-agent chat structure in another place, 
+but for now it is important to realize that the logs show _every attempt at 
+  responding to the current pending message, even those that are not allowed_.
+The ones marked with an asterisk (*) are the ones that are considered the 
+responses for a given `step()` (which is a "turn" in the conversation).
+
+The plain text logs have color-coding ANSI chars to make them easier to read 
+by doing `less <log_file>`. The format is:
 ```
-python3 examples/dockerfile/chat.py -4
+(TaskName) Responder SenderEntity (EntityName) (=> Recipient) TOOL Content
 ```
+
+The structure of the `tsv` logs is similar. A great way to view these is to 
+install and use `visidata` (https://www.visidata.org/).
 

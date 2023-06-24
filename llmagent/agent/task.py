@@ -16,7 +16,7 @@ from llmagent.agent.chat_document import (
 from llmagent.language_models.base import LLMMessage, Role
 from llmagent.utils.configuration import settings
 from llmagent.utils.constants import DONE, NO_ANSWER, USER_QUIT
-from llmagent.utils.logging import setup_file_logger
+from llmagent.utils.logging import RichFileLogger, setup_file_logger
 
 Responder = Entity | Type["Task"]
 
@@ -84,8 +84,8 @@ class Task:
                         content=user_message,
                     )
                 )
-        self.logger: Optional[logging.Logger] = None
-        self.tsv_logger: Optional[logging.Logger] = None
+        self.logger: None | RichFileLogger = None
+        self.tsv_logger: None | logging.Logger = None
         self.agent = agent
         self.name = name or agent.config.name
         self.default_human_response = default_human_response
@@ -206,14 +206,14 @@ class Task:
         if self.parent_task is not None and self.parent_task.logger is not None:
             self.logger = self.parent_task.logger
         else:
-            self.logger = setup_file_logger("task_logger", f"logs/{self.name}.log")
+            self.logger = RichFileLogger(f"logs/{self.name}.log")
 
         if self.parent_task is not None and self.parent_task.tsv_logger is not None:
             self.tsv_logger = self.parent_task.tsv_logger
         else:
             self.tsv_logger = setup_file_logger("tsv_logger", f"logs/{self.name}.tsv")
             header = ChatDocLoggerFields().tsv_header()
-            self.tsv_logger.info(f"Task\tResponder\t{header}")
+            self.tsv_logger.info(f" \tTask\tResponder\t{header}")
 
         self.log_message(Entity.USER, self.pending_message)
 
@@ -503,16 +503,34 @@ class Task:
         if msg is not None:
             msg_str_tsv = msg.tsv_str()
         msg_str = ""
-        if msg is not None:
-            msg_str = str(msg)
-        task_name = self.name if self.name != "" else "root"
 
         mark_str = "*" if mark else " "
+        task_name = self.name if self.name != "" else "root"
+        if msg is not None:
+            color = {
+                Entity.LLM: "green",
+                Entity.USER: "blue",
+                Entity.AGENT: "red",
+            }[msg.metadata.sender]
+            f = msg.log_fields()
+            tool_type = f.tool_type.rjust(6)
+            sender = f"[{color}]" + str(f.sender_entity).rjust(10) + f"[/{color}]"
+            sender_name = f.sender_name.rjust(10)
+            recipient = "=>" + str(f.recipient).rjust(10)
+            content = f"[{color}]{f.content}[/{color}]"
+            resp_color = "white" if mark else "red"
+            resp_str = f"[{resp_color}] {resp} [/{resp_color}]"
+            msg_str = (
+                f"{mark_str}({task_name}) "
+                f"{resp_str} {sender}({sender_name}) "
+                f"({recipient}) {tool_type} {content}"
+            )
+
         if self.logger is not None:
-            self.logger.info(f"{mark_str}Task[{task_name}] {msg_str}")
+            self.logger.log(msg_str)
         if self.tsv_logger is not None:
-            resp_str = str(resp) + ("*" if mark else "")
-            self.tsv_logger.info(f"{task_name}\t{resp_str}\t{msg_str_tsv}")
+            resp_str = str(resp)
+            self.tsv_logger.info(f"{mark_str}\t{task_name}\t{resp_str}\t{msg_str_tsv}")
 
     def _disallow_responder(self, e: Responder) -> None:
         """
