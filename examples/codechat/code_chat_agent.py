@@ -212,7 +212,7 @@ class CodeChatAgent(DocChatAgent):
         # msg.dir is a relative path from the root of the repo,
         # so we need to join it with the repo path
         listing = RepoLoader.list_files(
-            str(Path(self.repo_path) / msg.dirpath),
+            str(Path(self.repo_path) / msg.dirpath.strip().lstrip("/")),
             depth=1,
         )
         contents = ", ".join(listing)
