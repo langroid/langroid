@@ -1,5 +1,6 @@
 from llmagent.utils.logging import setup_colored_logging
 from examples.dockerchat.docker_chat_agent import (
+    DockerChatAgentConfig,
     DockerChatAgent,
     PLANNER_SYSTEM_MSG,
     PLANNER_USER_MSG,
@@ -18,14 +19,9 @@ from examples.dockerchat.dockerchat_agent_messages import (
 )
 import typer
 from llmagent.language_models.base import LLMMessage, Role
-from llmagent.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
+from llmagent.language_models.openai_gpt import OpenAIChatModel
 from llmagent.agent.chat_agent import ChatAgentConfig
 from llmagent.agent.task import Task
-from llmagent.vector_store.qdrantdb import QdrantDBConfig
-from llmagent.embedding_models.models import OpenAIEmbeddingsConfig
-from llmagent.vector_store.base import VectorStoreConfig
-from llmagent.parsing.parser import ParsingConfig
-from llmagent.prompts.prompts_config import PromptsConfig
 from llmagent.utils.configuration import set_global, Settings
 from rich import print
 
@@ -33,37 +29,6 @@ from rich import print
 app = typer.Typer()
 
 setup_colored_logging()
-
-
-class DockerChatAgentConfig(ChatAgentConfig):
-    name: str = "DockerExpert"
-    gpt4: bool = True
-    debug: bool = False
-    cache: bool = True
-    stream: bool = True
-    use_functions_api: bool = False
-    use_llmagent_tools: bool = True
-
-    vecdb: VectorStoreConfig = QdrantDBConfig(
-        type="qdrant",
-        collection_name="llmagent-dockerchat",
-        storage_path=".qdrant/llmagent-dockerchat/",
-        embedding=OpenAIEmbeddingsConfig(
-            model_type="openai",
-            model_name="text-embedding-ada-002",
-            dims=1536,
-        ),
-    )
-    llm: OpenAIGPTConfig = OpenAIGPTConfig(
-        type="openai",
-        chat_model=OpenAIChatModel.GPT4,
-        temperature=0.2,
-    )
-    parsing: ParsingConfig = ParsingConfig(
-        chunk_size=100,
-    )
-
-    prompts: PromptsConfig = PromptsConfig()
 
 
 def chat(config: DockerChatAgentConfig) -> None:
@@ -155,6 +120,7 @@ def main(
     debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
     gpt3: bool = typer.Option(False, "--gpt3_5", "-3", help="use gpt-3.5"),
     gpt4: bool = typer.Option(False, "--gpt4", "-4", help="use gpt-4"),
+    fn_api: bool = typer.Option(False, "--fn_api", "-f", help="use functions api"),
     no_stream: bool = typer.Option(False, "--nostream", "-ns", help="no streaming"),
     nofunc: bool = typer.Option(False, "--nofunc", "-nf", help="no function_call"),
     nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
@@ -163,13 +129,19 @@ def main(
     ),
 ) -> None:
     gpt4 = gpt4  # ignore since we default to gpt4 anyway
-    config = DockerChatAgentConfig(debug=debug, gpt4=True, cache=not nocache)
+    config = DockerChatAgentConfig(
+        debug=debug,
+        gpt4=True,
+        cache=not nocache,
+        use_functions_api=fn_api,
+        use_llmagent_tools=not fn_api,
+    )
 
     set_global(
         Settings(
             debug=debug,
             gpt3_5=gpt3,
-            nofunc=nofunc,
+            nofunc=nofunc,  # if true, use the GPT4 model before fn calls release
             cache=not nocache,
             interactive=not no_human,
             stream=not no_stream,
