@@ -59,6 +59,7 @@ class MessageValidatorAgent(ChatAgent):
             # there is a clear recipient, return None (no objections)
             return None
 
+        block: Entity = None
         if has_func_call or "TOOL" in content:
             # assume it is meant for Coder
             # TODO- but what if it is not a legit function call
@@ -66,9 +67,13 @@ class MessageValidatorAgent(ChatAgent):
         elif "DockerExpert" in content:
             content = msg.metadata.parent.metadata.parent.content
             recipient = "DockerExpert"
+            # we are fixing LLM msg from parent, so disallow LLM from responding
+            block = Entity.LLM
         elif "Coder" in content:
-            content = msg.metadata.parent.content
+            content = msg.metadata.parent.metadata.parent.content
             recipient = "Coder"
+            # we are fixing LLM msg from parent, so disallow LLM from responding
+            block = Entity.LLM
         else:
             # recipient = "DockerExpert"
             # logger.warning("TO[] not specified; assuming message is for DockerExpert")
@@ -83,6 +88,7 @@ class MessageValidatorAgent(ChatAgent):
             metadata=ChatDocMetaData(
                 source=Entity.AGENT,
                 sender=Entity.AGENT,
+                block=block,
                 sender_name=self.config.name,
                 recipient=recipient,
             ),
