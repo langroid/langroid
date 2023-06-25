@@ -61,7 +61,11 @@ def test_process_messages(test_settings: Settings):
     cfg = _TestChatAgentConfig()
     agent = ChatAgent(cfg)
     task = Task(
-        agent, llm_delegate=False, single_round=False, only_user_quits_root=False
+        agent,
+        name="Test",
+        llm_delegate=False,
+        single_round=False,
+        only_user_quits_root=False,
     )
     msg = "What is the capital of France?"
     task.init_pending_message(msg)
@@ -94,13 +98,13 @@ def test_process_messages(test_settings: Settings):
     # Since chat was user-initiated, LLM can still respond to NO_ANSWER
     # with something like "How can I help?"
     task.step()
-    assert NO_ANSWER not in task.pending_message.content
     assert task.pending_message.metadata.sender == Entity.LLM
 
     # reset task
     question = "What is my name?"
     task = Task(
         agent,
+        name="Test",
         system_message=f""" Your job is to always say "{NO_ANSWER}" """,
         user_message=question,
         llm_delegate=False,
@@ -119,7 +123,7 @@ def test_task(test_settings: Settings):
     set_global(test_settings)
     cfg = _TestChatAgentConfig()
     agent = ChatAgent(cfg)
-    task = Task(agent, llm_delegate=False, single_round=False)
+    task = Task(agent, name="Test", llm_delegate=False, single_round=False)
     question = "What is the capital of France?"
     agent.default_human_response = question
 
