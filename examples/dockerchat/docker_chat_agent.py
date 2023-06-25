@@ -13,6 +13,12 @@ from examples.dockerchat.dockerchat_agent_messages import (
 )
 from rich.console import Console
 from rich.prompt import Prompt
+from llmagent.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
+from llmagent.vector_store.qdrantdb import QdrantDBConfig
+from llmagent.embedding_models.models import OpenAIEmbeddingsConfig
+from llmagent.vector_store.base import VectorStoreConfig
+from llmagent.parsing.parser import ParsingConfig
+from llmagent.prompts.prompts_config import PromptsConfig
 from llmagent.language_models.base import LLMMessage
 from llmagent.parsing.repo_loader import RepoLoader, RepoLoaderConfig
 from llmagent.utils.constants import NO_ANSWER
@@ -103,6 +109,37 @@ class UrlModel(BaseModel):
     url: HttpUrl
 
 
+class DockerChatAgentConfig(ChatAgentConfig):
+    name: str = "DockerExpert"
+    gpt4: bool = True
+    debug: bool = False
+    cache: bool = True
+    stream: bool = True
+    use_functions_api: bool = False
+    use_llmagent_tools: bool = True
+
+    vecdb: VectorStoreConfig = QdrantDBConfig(
+        type="qdrant",
+        collection_name="llmagent-dockerchat",
+        storage_path=".qdrant/llmagent-dockerchat/",
+        embedding=OpenAIEmbeddingsConfig(
+            model_type="openai",
+            model_name="text-embedding-ada-002",
+            dims=1536,
+        ),
+    )
+    llm: OpenAIGPTConfig = OpenAIGPTConfig(
+        type="openai",
+        chat_model=OpenAIChatModel.GPT4,
+        temperature=0.2,
+    )
+    parsing: ParsingConfig = ParsingConfig(
+        chunk_size=100,
+    )
+
+    prompts: PromptsConfig = PromptsConfig()
+
+
 class DockerChatAgent(ChatAgent):
     url: str = ""
     repo_tree: str = None
@@ -112,7 +149,7 @@ class DockerChatAgent(ChatAgent):
     code_chat_agent: CodeChatAgent = None
 
     def __init__(
-        self, config: ChatAgentConfig, task: Optional[List[LLMMessage]] = None
+        self, config: DockerChatAgentConfig, task: Optional[List[LLMMessage]] = None
     ):
         super().__init__(config, task)
         code_chat_cfg = CodeChatAgentConfig(
@@ -128,8 +165,8 @@ class DockerChatAgent(ChatAgent):
 
         planner_agent_cfg = ChatAgentConfig(
             name="Planner",
-            use_llmagent_tools=True,
-            use_functions_api=False,
+            use_llmagent_tools=config.use_llmagent_tools,
+            use_functions_api=config.use_functions_api,
             vecdb=None,
             llm=self.config.llm,
         )

@@ -124,19 +124,6 @@ class Task:
             if self.single_round:
                 self.turns = 1  # 0: User asks, 1: LLM replies.
 
-        self.last_llm_message = ChatDocument(
-            content="",
-            metadata=ChatDocMetaData(
-                sender=Entity.LLM,
-            ),
-        )
-        self.last_user_message = ChatDocument(
-            content="",
-            metadata=ChatDocMetaData(
-                sender=Entity.USER,
-            ),
-        )
-
         # other sub_tasks this task can delegate to
         self.sub_tasks: List[Task] = []
         self.parent_task: Optional[Task] = None
@@ -274,11 +261,6 @@ class Task:
         )
         while True:
             self.step()
-            if self.pending_message is not None:
-                if self.pending_message.metadata.sender == Entity.LLM:
-                    self.last_llm_message = self.pending_message
-                else:
-                    self.last_user_message = self.pending_message
             if self.done():
                 if self._level == 0:
                     print("[magenta]Bye, hope this was useful!")
@@ -333,9 +315,7 @@ class Task:
             else self.pending_message.metadata.recipient
         )
         for r in self.responders:
-            if self.pending_sender == r:
-                # entity cannot respond to itself or to a message not intended for it
-
+            if not self._can_respond(r):
                 # create dummy msg for logging
                 log_doc = ChatDocument(
                     content="[CANNOT RESPOND]",
@@ -401,20 +381,15 @@ class Task:
         Returns:
             ChatDocument: result of task
         """
-        last_controller_message = (
-            self.last_llm_message
-            if self.controller == Entity.LLM
-            else self.last_user_message
-        )
-        result_msg = (
-            self.pending_message if self.single_round else last_controller_message
-        )
+        result_msg = self.pending_message
+
         content = result_msg.content if result_msg else ""
         if DONE in content:
             # assuming it is of the form "DONE: <content>"
             content = content.replace(DONE, "").strip()
         recipient = result_msg.metadata.recipient if result_msg else ""
         fun_call = result_msg.function_call if result_msg else None
+        block = result_msg.metadata.block if result_msg else None
 
         # regardless of which entity actually produced the result,
         # when we return the result, we set entity to USER
@@ -425,6 +400,7 @@ class Task:
             metadata=ChatDocMetaData(
                 source=Entity.USER,
                 sender=Entity.USER,
+                block=block,
                 sender_name=self.name,
                 recipient=recipient,
             ),
@@ -535,6 +511,11 @@ class Task:
         if self.tsv_logger is not None:
             resp_str = str(resp)
             self.tsv_logger.info(f"{mark_str}\t{task_name}\t{resp_str}\t{msg_str_tsv}")
+
+    def _can_respond(self, e: Responder) -> bool:
+        if self.pending_sender == e:
+            return False
+        return self.pending_message is None or self.pending_message.metadata.block != e
 
     def _disallow_responder(self, e: Responder) -> None:
         """

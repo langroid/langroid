@@ -155,6 +155,20 @@ class OpenAIGPT(LanguageModel):
         print(Colors().RESET)
         # TODO- get usage info in stream mode (?)
 
+        # check if function_call args are valid, if not,
+        # treat this as a normal msg, not a function call
+        args = {}
+        if has_function and function_args != "":
+            try:
+                args = ast.literal_eval(function_args.strip())
+            except (SyntaxError, ValueError):
+                logging.warning(
+                    f"Parsing OpenAI function args failed: {function_args};"
+                    " treating args as normal message"
+                )
+                has_function = False
+                completion = completion + function_args
+
         # mock openai response so we can cache it
         if chat:
             msg: Dict[str, Any] = dict(message=dict(content=completion))
@@ -164,13 +178,6 @@ class OpenAIGPT(LanguageModel):
                 if function_args == "":
                     function_call.arguments = None
                 else:
-                    args = {}
-                    try:
-                        args = ast.literal_eval(function_args.strip())
-                    except (SyntaxError, ValueError):
-                        logging.warning(
-                            f"Parsing OpenAI function args failed: {function_args}"
-                        )
                     function_call.arguments = args
                     function_call_dict.update({"arguments": function_args.strip()})
                 msg["message"]["function_call"] = function_call_dict
@@ -426,13 +433,24 @@ class OpenAIGPT(LanguageModel):
         """
 
         message = response["choices"][0]["message"]
-        msg = message["content"]
+        msg = message["content"] or ""
         if message.get("function_call") is None:
             fun_call = None
         else:
             fun_call = LLMFunctionCall(name=message["function_call"]["name"])
-            fun_args = ast.literal_eval(message["function_call"]["arguments"])
-            fun_call.arguments = fun_args
+            try:
+                fun_args = ast.literal_eval(message["function_call"]["arguments"])
+                fun_call.arguments = fun_args
+            except (ValueError, SyntaxError):
+                logging.warning(
+                    f"Could not parse function arguments: "
+                    f"{message['function_call']['arguments']} "
+                    f"for function {message['function_call']['name']} "
+                    f"treating as normal non-function message"
+                )
+                fun_call = None
+                msg = message["content"] + message["function_call"]["arguments"]
+
         return LLMResponse(
             message=msg.strip() if msg is not None else "",
             function_call=fun_call,

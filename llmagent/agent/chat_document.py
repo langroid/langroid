@@ -24,6 +24,7 @@ class Entity(str, Enum):
 class ChatDocMetaData(DocMetaData):
     parent: Optional["ChatDocument"] = None
     sender: Entity
+    block: None | Entity = None
     sender_name: str = ""
     recipient: str = ""
     usage: int = 0
