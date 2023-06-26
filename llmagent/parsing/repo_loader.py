@@ -669,13 +669,22 @@ class RepoLoader:
         return names
 
     @staticmethod
-    def list_files(dir: str, depth: int = 1) -> List[str]:
+    def list_files(
+        dir: str,
+        depth: int = 1,
+        include_types: List[str] = [],
+        exclude_types: List[str] = [],
+    ) -> List[str]:
         """
         Recursively list all files in a directory, up to a certain depth.
 
         Args:
             dir (str): The directory path, relative to root.
             depth (int, optional): The depth level. Defaults to 1.
+            include_types (List[str], optional): A list of file types to include.
+                Defaults to empty list.
+            exclude_types (List[str], optional): A list of file types to exclude.
+                Defaults to empty list.
         Returns:
             List[str]: A list of file names.
         """
@@ -688,7 +697,13 @@ class RepoLoader:
                 indent = " " * 4 * level
                 output.append("{}{}/".format(indent, os.path.basename(root)))
                 sub_indent = " " * 4 * (level + 1)
+                for d in dirs:
+                    output.append("{}{}/".format(sub_indent, d))
                 for f in files:
+                    if include_types and RepoLoader._file_type(f) not in include_types:
+                        continue
+                    if exclude_types and RepoLoader._file_type(f) in exclude_types:
+                        continue
                     output.append("{}{}".format(sub_indent, f))
         return output
 
