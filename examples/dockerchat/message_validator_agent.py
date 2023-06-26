@@ -64,12 +64,12 @@ class MessageValidatorAgent(ChatAgent):
             # assume it is meant for Coder
             # TODO- but what if it is not a legit function call
             recipient = "Coder"
-        elif "DockerExpert" in content:
+        elif "DockerExpert" == content:
             content = msg.metadata.parent.metadata.parent.content
             recipient = "DockerExpert"
             # we are fixing LLM msg from parent, so disallow LLM from responding
             block = Entity.LLM
-        elif "Coder" in content:
+        elif "Coder" == content:
             content = msg.metadata.parent.metadata.parent.content
             recipient = "Coder"
             # we are fixing LLM msg from parent, so disallow LLM from responding
