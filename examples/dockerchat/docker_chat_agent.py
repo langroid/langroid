@@ -117,6 +117,7 @@ class DockerChatAgentConfig(ChatAgentConfig):
     stream: bool = True
     use_functions_api: bool = False
     use_llmagent_tools: bool = True
+    exclude_file_types: List[str] = ["Dockerfile"]  # file-types to exclude from repo
 
     vecdb: VectorStoreConfig = QdrantDBConfig(
         type="qdrant",
@@ -152,10 +153,20 @@ class DockerChatAgent(ChatAgent):
         self, config: DockerChatAgentConfig, task: Optional[List[LLMMessage]] = None
     ):
         super().__init__(config, task)
+        self.config = config
         code_chat_cfg = CodeChatAgentConfig(
             name="Coder",
             repo_url="",  # this will be set later
-            content_includes=["txt", "md", "yml", "yaml", "sh", "Makefile"],
+            content_includes=[
+                "txt",
+                "md",
+                "yml",
+                "yaml",
+                "sh",
+                "Makefile",
+                "py",
+                "json",
+            ],
             content_excludes=["Dockerfile"],
             # USE same LLM settings as DockerChatAgent, e.g.
             # if DockerChatAgent uses gpt4, then use gpt4 here too
@@ -202,7 +213,8 @@ class DockerChatAgent(ChatAgent):
         # clone, chunk, ingest into vector-db of `code_chat_agent`
         self.code_chat_agent.ingest_url(self._url)
         loader_cfg = RepoLoaderConfig()
-        set(loader_cfg.file_types).remove("Dockerfile")
+        for ftype in self.config.exclude_file_types:
+            loader_cfg.file_types.remove(ftype)
 
         self.repo_loader = RepoLoader(
             self._url,
@@ -229,7 +241,9 @@ class DockerChatAgent(ChatAgent):
         self.url = url_model.url  # uses setter `url` above
         repo_files = [
             f
-            for f in self.repo_loader.ls(self.repo_tree, depth=1)
+            for f in RepoLoader.list_files(
+                self.repo_path, depth=1, exclude_types=self.config.exclude_file_types
+            )
             if "docker" not in f.lower()
         ]
         repo_listing = "\n".join(repo_files)

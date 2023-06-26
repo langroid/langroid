@@ -49,7 +49,18 @@ class CodeChatAgentConfig(DocChatAgentConfig):
     summarize_prompt: str = ANSWER_PROMPT_USE_HISTORY_GPT4
     max_context_tokens: int = 500
     conversation_mode: bool = True
-    content_includes: List[str] = ["txt", "md", "yml", "yaml", "sh", "Makefile"]
+    content_includes: List[str] = [
+        "txt",
+        "md",
+        "yml",
+        "yaml",
+        "sh",
+        "Makefile",
+        "ini",
+        "toml",
+        "json",
+        "py",
+    ]
     content_excludes: List[str] = []
     repo_url: str = ""
     gpt4: bool = False
