@@ -694,8 +694,6 @@ class RepoLoader:
         for root, dirs, files in os.walk(dir):
             if root.count(os.sep) - dir.count(os.sep) < depth:
                 level = root.count(os.sep) - dir.count(os.sep)
-                indent = " " * 4 * level
-                output.append("{}{}/".format(indent, os.path.basename(root)))
                 sub_indent = " " * 4 * (level + 1)
                 for d in dirs:
                     output.append("{}{}/".format(sub_indent, d))
