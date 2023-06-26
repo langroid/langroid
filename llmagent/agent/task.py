@@ -499,11 +499,12 @@ class Task:
             sender = f"[{color}]" + str(f.sender_entity).rjust(10) + f"[/{color}]"
             sender_name = f.sender_name.rjust(10)
             recipient = "=>" + str(f.recipient).rjust(10)
+            block = "X " + str(f.block or "").rjust(10)
             content = f"[{color}]{f.content}[/{color}]"
             msg_str = (
                 f"{mark_str}({task_name}) "
                 f"{resp_str} {sender}({sender_name}) "
-                f"({recipient}) {tool_str} {content}"
+                f"({recipient}) ({block}) {tool_str} {content}"
             )
 
         if self.logger is not None:
@@ -514,6 +515,13 @@ class Task:
 
     def _can_respond(self, e: Responder) -> bool:
         if self.pending_sender == e:
+            return False
+        if self.pending_message is None:
+            return True
+        if self.pending_message.metadata.block == e:
+            # the entity should only be blocked at the first try;
+            # Remove the block so it does not block the entity forever
+            self.pending_message.metadata.block = None
             return False
         return self.pending_message is None or self.pending_message.metadata.block != e
 
