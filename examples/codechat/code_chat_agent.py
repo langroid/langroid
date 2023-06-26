@@ -49,7 +49,18 @@ class CodeChatAgentConfig(DocChatAgentConfig):
     summarize_prompt: str = ANSWER_PROMPT_USE_HISTORY_GPT4
     max_context_tokens: int = 500
     conversation_mode: bool = True
-    content_includes: List[str] = ["txt", "md", "yml", "yaml", "sh", "Makefile"]
+    content_includes: List[str] = [
+        "txt",
+        "md",
+        "yml",
+        "yaml",
+        "sh",
+        "Makefile",
+        "ini",
+        "toml",
+        "json",
+        "py",
+    ]
     content_excludes: List[str] = []
     repo_url: str = ""
     gpt4: bool = False
@@ -128,7 +139,9 @@ class CodeChatAgent(DocChatAgent):
         self.config.vecdb.collection_name = collection_name
         self.vecdb = VectorStore.create(self.config.vecdb)
 
-        self.repo_loader = RepoLoader(self._repo_url, RepoLoaderConfig())
+        self.repo_loader = RepoLoader(
+            self._repo_url, RepoLoaderConfig(file_types=self.config.content_includes)
+        )
         self.repo_path = self.repo_loader.clone()
         # get the repo tree to depth d, with first k lines of each file
         self.repo_tree, _ = self.repo_loader.load(depth=1, lines=100)
@@ -214,6 +227,8 @@ class CodeChatAgent(DocChatAgent):
         listing = RepoLoader.list_files(
             str(Path(self.repo_path) / msg.dirpath.strip().lstrip("/")),
             depth=1,
+            include_types=self.config.content_includes,
+            exclude_types=self.config.content_excludes,
         )
         contents = ", ".join(listing)
         return f"""
