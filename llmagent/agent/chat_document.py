@@ -36,6 +36,7 @@ class ChatDocLoggerFields(BaseModel):
     sender_entity: Entity = Entity.USER
     sender_name: str = ""
     recipient: str = ""
+    block: Entity | None = None
     tool_type: str = ""
     tool: str = ""
     content: str = ""
@@ -101,6 +102,7 @@ class ChatDocument(Document):
             sender_entity=sender_entity,
             sender_name=sender_name,
             recipient=recipient,
+            block=self.metadata.block,
             tool_type=tool_type,
             tool=tool,
             content=content,
