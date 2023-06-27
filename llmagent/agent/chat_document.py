@@ -2,7 +2,7 @@ import json
 from enum import Enum
 from typing import List, Optional, Type
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Extra
 
 from llmagent.language_models.base import (
     LLMFunctionCall,
@@ -21,9 +21,17 @@ class Entity(str, Enum):
     USER = "User"
 
 
+class ChatDocAttachment(BaseModel):
+    # any additional data that should be attached to the document
+    class Config:
+        extra = Extra.allow
+
+
 class ChatDocMetaData(DocMetaData):
     parent: Optional["ChatDocument"] = None
     sender: Entity
+    # when result returns to parent, pretend message is from this entity
+    parent_responder: None | Entity = None
     block: None | Entity = None
     sender_name: str = ""
     recipient: str = ""
@@ -50,6 +58,7 @@ class ChatDocLoggerFields(BaseModel):
 class ChatDocument(Document):
     function_call: Optional[LLMFunctionCall] = None
     metadata: ChatDocMetaData
+    attachment: None | ChatDocAttachment = None
 
     def __str__(self) -> str:
         fields = self.log_fields()
