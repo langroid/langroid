@@ -332,9 +332,23 @@ class Task:
             if self.valid(result):
                 assert result is not None
                 self.pending_sender = r
+                if result.metadata.parent_responder is not None and not isinstance(
+                    r, Entity
+                ):
+                    # pretend this result was from this responder
+                    self.pending_sender = result.metadata.parent_responder
+                    # Since we've just used the "pretend responder",
+                    # clear out the pretend responder in metadata
+                    result.metadata.parent_responder = None
                 result.metadata.parent = parent
+                old_attachment = (
+                    self.pending_message.attachment if self.pending_message else None
+                )
                 self.pending_message = result
-                self.log_message(r, result, mark=True)
+                # if result has no attachment, preserve the old attachment
+                if result.attachment is None:
+                    self.pending_message.attachment = old_attachment
+                self.log_message(self.pending_sender, result, mark=True)
                 break
             else:
                 self.log_message(r, result)
@@ -387,9 +401,11 @@ class Task:
         if DONE in content:
             # assuming it is of the form "DONE: <content>"
             content = content.replace(DONE, "").strip()
-        recipient = result_msg.metadata.recipient if result_msg else ""
         fun_call = result_msg.function_call if result_msg else None
+        attachment = result_msg.attachment if result_msg else None
         block = result_msg.metadata.block if result_msg else None
+        recipient = result_msg.metadata.recipient if result_msg else None
+        responder = result_msg.metadata.parent_responder if result_msg else None
 
         # regardless of which entity actually produced the result,
         # when we return the result, we set entity to USER
@@ -397,10 +413,12 @@ class Task:
         return ChatDocument(
             content=content,
             function_call=fun_call,
+            attachment=attachment,
             metadata=ChatDocMetaData(
                 source=Entity.USER,
                 sender=Entity.USER,
                 block=block,
+                parent_responder=responder,
                 sender_name=self.name,
                 recipient=recipient,
             ),

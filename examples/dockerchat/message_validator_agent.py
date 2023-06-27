@@ -1,7 +1,11 @@
 from typing import Optional
 from llmagent.agent.chat_agent import ChatAgent, ChatAgentConfig
 from llmagent.agent.base import Entity
-from llmagent.agent.chat_document import ChatDocument, ChatDocMetaData
+from llmagent.agent.chat_document import (
+    ChatDocument,
+    ChatDocMetaData,
+    ChatDocAttachment,
+)
 from llmagent.parsing.agent_chats import parse_message
 
 import logging
@@ -59,25 +63,30 @@ class MessageValidatorAgent(ChatAgent):
             # there is a clear recipient, return None (no objections)
             return None
 
-        block: Entity = None
+        attachment: None | ChatDocAttachment = None
+        responder: None | Entity = None
+        sender_name = self.config.name
         if has_func_call or "TOOL" in content:
-            # assume it is meant for Coder
+            # assume it is meant for Coder, so simply set the recipient field,
+            # and the parent task loop continues as normal
             # TODO- but what if it is not a legit function call
             recipient = "Coder"
-        elif "DockerExpert" == content:
-            content = msg.metadata.parent.metadata.parent.content
-            recipient = "DockerExpert"
-            # we are fixing LLM msg from parent, so disallow LLM from responding
-            block = Entity.LLM
-        elif "Coder" == content:
-            content = msg.metadata.parent.metadata.parent.content
-            recipient = "Coder"
-            # we are fixing LLM msg from parent, so disallow LLM from responding
-            block = Entity.LLM
+        elif content in ["DockerExpert", "Coder"]:
+            # the incoming message is a clarification response from LLM
+            recipient = content
+            try:
+                content = msg.attachment.content
+            except Exception as e:
+                content = msg.content
+                logger.warning(f"MessageValidatorAgent: {str(e)}")
+            # we are rewriting an LLM message from parent, so
+            # pretend it is from LLM
+            responder = Entity.LLM
+            sender_name = ""
         else:
-            # recipient = "DockerExpert"
-            # logger.warning("TO[] not specified; assuming message is for DockerExpert")
-            # we don't know who it is for, return a message asking for clarification
+            # save the original message so when the Validator sees the
+            # response, it can use it as the `content` field
+            attachment = ChatDocAttachment(content=content)
             content = """
             Is this message for DockerExpert, or for Coder?
             Please simply respond with "DockerExpert" or "Coder"
@@ -85,11 +94,12 @@ class MessageValidatorAgent(ChatAgent):
         return ChatDocument(
             content=content,
             function_call=msg.function_call if has_func_call else None,
+            attachment=attachment,
             metadata=ChatDocMetaData(
                 source=Entity.AGENT,
                 sender=Entity.AGENT,
-                block=block,
-                sender_name=self.config.name,
+                parent_responder=responder,
+                sender_name=sender_name,
                 recipient=recipient,
             ),
         )
