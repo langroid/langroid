@@ -335,10 +335,13 @@ class Task:
                 if result.metadata.parent_responder is not None and not isinstance(
                     r, Entity
                 ):
-                    # pretend this result was from this responder
+                    # When result is from a sub-task, and `result.metadata` contains
+                    # a non-null `parent_responder`, pretend this result was
+                    # from the parent_responder, by setting `self.pending_sender`.
                     self.pending_sender = result.metadata.parent_responder
                     # Since we've just used the "pretend responder",
                     # clear out the pretend responder in metadata
+                    # (so that it doesn't get used again)
                     result.metadata.parent_responder = None
                 result.metadata.parent = parent
                 old_attachment = (
