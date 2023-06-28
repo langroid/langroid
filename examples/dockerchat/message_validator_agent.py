@@ -39,14 +39,14 @@ class MessageValidatorAgent(ChatAgent):
         in the expected format.
 
         Args:
-            msg (str): the incoming message (pending message of the task)
-            sender_name (str): the name of the sender
+            msg (str|ChatDocument): the incoming message (pending message of the task)
 
         Returns:
-            ChatDocument: None if message is in the expected format, otherwise
-                a ChatDocument with an instruction on how to rewrite the message.
-                (this is intended to be sent to the LLM of the calling agent).
-
+            Optional[ChatDocument]:
+            - if msg is in expected format, return None (no objections)
+            - otherwise, a ChatDocument that either contains a request to
+                LLM to clarify/fix the msg, or a fixed version of the LLM's original
+                message.
         """
         if msg is None:
             return None
@@ -76,6 +76,8 @@ class MessageValidatorAgent(ChatAgent):
             recipient = content
             try:
                 content = msg.attachment.content
+                # we've used the attachment, don't need anymore
+                attachment = ChatDocAttachment(content="")
             except Exception as e:
                 content = msg.content
                 logger.warning(f"MessageValidatorAgent: {str(e)}")
