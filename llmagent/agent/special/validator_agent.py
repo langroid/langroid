@@ -1,24 +1,32 @@
-from typing import Optional
+import logging
+from typing import List, Optional
+
 from llmagent.agent.chat_agent import ChatAgent, ChatAgentConfig
 from llmagent.agent.chat_document import (
-    Entity,
-    ChatDocument,
-    ChatDocMetaData,
     ChatDocAttachment,
+    ChatDocMetaData,
+    ChatDocument,
+    Entity,
 )
-from llmagent.parsing.agent_chats import parse_message
-
-import logging
 
 logger = logging.getLogger(__name__)
 # TODO - this is currently hardocded to validate the TO:<recipient> format
 # but we could have a much more general declarative grammar-based validator
 
 
-class MessageValidatorAgent(ChatAgent):
-    def __init__(self, config: ChatAgentConfig):
+class ValidatorAgentConfig(ChatAgentConfig):
+    recipients: List[str]
+    tool_recipient: str
+
+
+class ValidatorAttachment(ChatDocAttachment):
+    content: str = ""
+
+
+class ValidatorAgent(ChatAgent):
+    def __init__(self, config: ValidatorAgentConfig):
         super().__init__(config)
-        self.config = config
+        self.config: ValidatorAgentConfig = config
         self.llm = None
         self.vecdb = None
 
@@ -48,16 +56,11 @@ class MessageValidatorAgent(ChatAgent):
                 LLM to clarify/fix the msg, or a fixed version of the LLM's original
                 message.
         """
-        if msg is None:
+        if msg is None or isinstance(msg, str):
             return None
-
-        has_func_call = False
-        if isinstance(msg, ChatDocument):
-            recipient = msg.metadata.recipient
-            has_func_call = msg.function_call is not None
-            content = msg.content
-        else:
-            recipient, content = parse_message(msg)
+        recipient = msg.metadata.recipient
+        has_func_call = msg.function_call is not None
+        content = msg.content
 
         if recipient != "":
             # there is a clear recipient, return None (no objections)
@@ -70,17 +73,19 @@ class MessageValidatorAgent(ChatAgent):
             # assume it is meant for Coder, so simply set the recipient field,
             # and the parent task loop continues as normal
             # TODO- but what if it is not a legit function call
-            recipient = "Coder"
-        elif content in ["DockerExpert", "Coder"]:
+            recipient = self.config.tool_recipient
+        elif content in self.config.recipients:
             # the incoming message is a clarification response from LLM
             recipient = content
-            try:
+            if msg.attachment is not None and isinstance(
+                msg.attachment, ValidatorAttachment
+            ):
                 content = msg.attachment.content
-                # we've used the attachment, don't need anymore
-                attachment = ChatDocAttachment(content="")
-            except Exception as e:
-                content = msg.content
-                logger.warning(f"MessageValidatorAgent: {str(e)}")
+            else:
+                logger.warning("ValidatorAgent: Did not find content to correct")
+                content = ""
+            # we've used the attachment, don't need anymore
+            attachment = ValidatorAttachment(content="")
             # we are rewriting an LLM message from parent, so
             # pretend it is from LLM
             responder = Entity.LLM
@@ -89,7 +94,7 @@ class MessageValidatorAgent(ChatAgent):
             # save the original message so when the Validator
             # receives the LLM clarification,
             # it can use it as the `content` field
-            attachment = ChatDocAttachment(content=content)
+            attachment = ValidatorAttachment(content=content)
             content = """
             Is this message for DockerExpert, or for Coder?
             Please simply respond with "DockerExpert" or "Coder"

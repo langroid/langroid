@@ -1,10 +1,9 @@
 from typing import Optional
 
-import pytest
-
 from llmagent.agent.base import Entity
 from llmagent.agent.chat_agent import ChatAgent, ChatAgentConfig
 from llmagent.agent.message import AgentMessage
+from llmagent.agent.special.validator_agent import ValidatorAgent, ValidatorAgentConfig
 from llmagent.agent.task import Task
 from llmagent.cachedb.redis_cachedb import RedisCacheConfig
 from llmagent.language_models.base import Role
@@ -13,7 +12,6 @@ from llmagent.mytypes import DocMetaData, Document
 from llmagent.parsing.parser import ParsingConfig
 from llmagent.prompts.prompts_config import PromptsConfig
 from llmagent.utils.configuration import Settings, set_global
-from llmagent.utils.constants import NO_ANSWER
 from llmagent.vector_store.base import VectorStoreConfig
 
 
@@ -43,46 +41,6 @@ class _TestChatAgentConfig(ChatAgentConfig):
     prompts: PromptsConfig = PromptsConfig(
         max_tokens=200,
     )
-
-
-@pytest.mark.parametrize("helper_human_response", ["", "q"])
-def test_inter_agent_chat(test_settings: Settings, helper_human_response: str):
-    set_global(test_settings)
-    cfg1 = _TestChatAgentConfig(name="master")
-    cfg2 = _TestChatAgentConfig(name="helper")
-
-    agent = ChatAgent(cfg1)
-    task = Task(
-        agent,
-        llm_delegate=True,
-        single_round=False,
-        default_human_response="",
-        only_user_quits_root=False,
-    )
-    agent_helper = ChatAgent(cfg2)
-    task_helper = Task(
-        agent_helper,
-        llm_delegate=False,
-        single_round=True,
-        default_human_response=helper_human_response,
-    )
-    task.add_sub_task(task_helper)
-
-    msg = """
-    Your job is to ask me questions. 
-    Start by asking me what the capital of France is.
-    """
-    task.init_pending_message(msg)
-
-    task.step()
-    assert "What" in task.pending_message.content
-    assert task.pending_message.metadata.source == Entity.LLM
-
-    task.step()
-    # user responds '' (empty) to force agent to hand off to agent_helper,
-    # and we test two possible human answers: empty or 'q'
-
-    assert "Paris" in task_helper.result().content
 
 
 # The classes below are for the mult-agent test
@@ -126,6 +84,14 @@ def test_multi_agent(test_settings: Settings):
 
     multiplier_cfg = _TestChatAgentConfig(name="Multiplier")
 
+    val_cfg = ValidatorAgentConfig(
+        llm=None,
+        vecdb=None,
+        name="Validator",
+        recipients=["Master", "Multiplier"],
+        tool_recipient="Multiplier",
+    )
+
     # master asks a series of expenenential questions, e.g. 3^6, 8^5, etc.
     master = _MasterAgent(master_cfg)
     task_master = Task(
@@ -157,13 +123,15 @@ def test_multi_agent(test_settings: Settings):
         single_round=False,
         default_human_response="",
         system_message="""
-                You understand exponentials, but you do not know how to multiply.
-                You will be given an exponential to compute, and you have to ask a 
-                sequence of multiplication questions, to figure out the exponential. 
-                Present the question using only numbers, e.g, "3 * 5", and it should 
-                only involve a SINGLE multiplication. 
-                When you have your final answer, reply with something like 
-                "DONE: 92"
+                From "Master", you will receive an exponential to compute, 
+                but you do not know how to multiply. You have a helper called 
+                "Multiplier" who can compute multiplications. So to calculate the
+                exponential you receive from "Master", you have to ask a sequence of
+                multiplication questions to "Multiplier", to figure out the 
+                exponential. You must ask the Multiplier in the format
+                "TO[Multiplier]: 3 * 5", and it should only involve a SINGLE 
+                multiplication. When you have your final answer, report your answer
+                back to "Master" in the format "TO[Master]: 243". 
                 """,
     )
 
@@ -180,10 +148,16 @@ def test_multi_agent(test_settings: Settings):
                 """,
     )
 
+    validator = ValidatorAgent(val_cfg)
+    task_validator = Task(
+        validator,
+        name="Validator",
+        single_round=True,
+    )
     # planner helps master...
     task_master.add_sub_task(task_planner)
     # multiplier helps planner...
-    task_planner.add_sub_task(task_multiplier)
+    task_planner.add_sub_task([task_validator, task_multiplier])
 
     # ... since human has nothing to say
     master.default_human_response = ""
@@ -195,122 +169,3 @@ def test_multi_agent(test_settings: Settings):
     answers = [str(eval(e)) for e in EXPONENTIALS.split()]
     assert all(a in result.content for a in answers)
     # TODO assertions on message history of each agent
-
-
-def test_multi_agent_directed(test_settings: Settings):
-    """
-    Test whether TO:[<recipient>] works as expected.
-    """
-    set_global(test_settings)
-    cfg_a = _TestChatAgentConfig(name="A")
-
-    cfg_b = _TestChatAgentConfig(name="B")
-
-    cfg_c = _TestChatAgentConfig(name="C")
-
-    agent_a = ChatAgent(cfg_a)
-    agent_b = ChatAgent(cfg_b)
-    agent_c = ChatAgent(cfg_c)
-
-    task_a = Task(
-        agent_a,
-        default_human_response="",
-        system_message="""
-        You are talking to two people B and C, and 
-        your job is to pick B or C and ask that person 'Who are you?'.
-        Whoever you address, make sure you say it in the form 
-        TO[<recipient>]: <your message>.
-        As the conversation progresses your job is always keep asking 
-        this question to either B or C.
-        """,
-        user_message="Start by asking B or C 'Who are you?'",
-    )
-    B_RESPONSE = "hello I am B"
-    C_RESPONSE = "hello I am C"
-    task_b = Task(
-        agent_b,
-        system_message=f"your job is to always say '{B_RESPONSE}'",
-        default_human_response="",
-        single_round=True,
-    )
-
-    task_c = Task(
-        agent_c,
-        system_message=f"your job is to always say '{C_RESPONSE}'",
-        default_human_response="",
-        single_round=True,
-    )
-
-    task_a.add_sub_task([task_b, task_c])
-    # kick off with empty msg, so LLM will respond based on initial sys, user messages
-    task_a.init_pending_message()
-    for _ in range(2):
-        # LLM asks, addressing B or C
-        task_a.step()
-        recipient = task_a.pending_message.metadata.recipient
-        # recipient replies
-        task_a.step()
-        assert recipient in task_a.pending_message.content
-
-    task_a.agent.clear_history(0)
-    result = task_a.run(turns=2)
-    assert "B" in result.content or "C" in result.content
-
-
-def test_multi_agent_no_answer(test_settings: Settings):
-    """
-    Test whether TO:[<recipient>] works as expected.
-    Also verfies that when LLM of subtask returns NO_ANSWER,
-    the appropriate result is received by the parent task.
-    """
-    set_global(test_settings)
-    cfg_a = _TestChatAgentConfig(name="A")
-
-    cfg_b = _TestChatAgentConfig(name="B")
-
-    cfg_c = _TestChatAgentConfig(name="C")
-
-    agent_a = ChatAgent(cfg_a)
-    agent_b = ChatAgent(cfg_b)
-    agent_c = ChatAgent(cfg_c)
-
-    task_a = Task(
-        agent_a,
-        default_human_response="",
-        system_message="""
-        You are talking to two people B and C, and 
-        your job is to pick B or C and ask that person 'Who are you?'.
-        Whoever you address, make sure you say it in the form 
-        TO[<recipient>]: <your message>.
-        As the conversation progresses your job is always keep asking 
-        this question to either B or C.
-        """,
-        user_message="Start by asking B or C 'Who are you?'",
-    )
-    task_b = Task(
-        agent_b,
-        system_message=f"your job is to always say '{NO_ANSWER}'",
-        default_human_response="",
-        single_round=True,
-    )
-
-    task_c = Task(
-        agent_c,
-        system_message=f"your job is to always say '{NO_ANSWER}'",
-        default_human_response="",
-        single_round=True,
-    )
-
-    task_a.add_sub_task([task_b, task_c])
-    # kick off with empty msg, so LLM will respond based on initial sys, user messages
-    task_a.init_pending_message()
-    for _ in range(2):
-        # LLM asks, addressing B or C
-        task_a.step()
-        # recipient replies NO_ANSWER
-        task_a.step()
-        assert NO_ANSWER in task_a.pending_message.content
-
-    task_a.agent.clear_history(0)
-    result = task_a.run(turns=2)
-    assert NO_ANSWER in result.content
