@@ -56,8 +56,11 @@ class ValidatorAgent(ChatAgent):
                 LLM to clarify/fix the msg, or a fixed version of the LLM's original
                 message.
         """
-        if msg is None or isinstance(msg, str):
+        if msg is None:
             return None
+        if isinstance(msg, str):
+            msg = ChatDocument.from_str(msg)
+
         recipient = msg.metadata.recipient
         has_func_call = msg.function_call is not None
         content = msg.content

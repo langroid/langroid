@@ -76,7 +76,7 @@ class _MultiplierAgent(ChatAgent):
 EXPONENTIALS = "3**5 8**3 9**3"
 
 
-def test_multi_agent(test_settings: Settings):
+def test_agents_with_validator(test_settings: Settings):
     set_global(test_settings)
     master_cfg = _TestChatAgentConfig(name="Master")
 
