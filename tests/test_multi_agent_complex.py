@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import List, Optional
 
 from llmagent.agent.base import Entity
 from llmagent.agent.chat_agent import ChatAgent, ChatAgentConfig
@@ -20,6 +20,14 @@ class ExponentialTool(AgentMessage):
     purpose: str = "To calculate the value of <x> raised to the power <e>"
     x: int
     e: int
+    result: int
+
+    @classmethod
+    def examples(cls) -> List["AgentMessage"]:
+        return [
+            cls(x=3, e=5, result=243),
+            cls(x=8, e=3, result=512),
+        ]
 
 
 class MultiplicationTool(AgentMessage):
@@ -27,6 +35,14 @@ class MultiplicationTool(AgentMessage):
     purpose: str = "To calculate the value of <x> multiplied by <y>"
     x: int
     y: int
+    result: int
+
+    @classmethod
+    def examples(cls) -> List["AgentMessage"]:
+        return [
+            cls(x=3, y=5, result=15),
+            cls(x=8, y=3, result=24),
+        ]
 
 
 class _TestChatAgentConfig(ChatAgentConfig):
@@ -156,7 +172,9 @@ def test_agents_with_validator(test_settings: Settings):
     )
     # planner helps master...
     task_master.add_sub_task(task_planner)
-    # multiplier helps planner...
+    # multiplier helps planner, but use Validator to ensure
+    # recipient is specified via TO[recipient], and if not
+    # then the validator will ask for clarification
     task_planner.add_sub_task([task_validator, task_multiplier])
 
     # ... since human has nothing to say
