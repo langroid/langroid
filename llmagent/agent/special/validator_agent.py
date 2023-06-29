@@ -1,6 +1,9 @@
 import logging
 from typing import List, Optional
 
+from rich import print
+from rich.console import Console
+
 from llmagent.agent.chat_agent import ChatAgent, ChatAgentConfig
 from llmagent.agent.chat_document import (
     ChatDocAttachment,
@@ -8,6 +11,8 @@ from llmagent.agent.chat_document import (
     ChatDocument,
     Entity,
 )
+
+console = Console()
 
 logger = logging.getLogger(__name__)
 # TODO - this is currently hardocded to validate the TO:<recipient> format
@@ -98,10 +103,15 @@ class ValidatorAgent(ChatAgent):
             # receives the LLM clarification,
             # it can use it as the `content` field
             attachment = ValidatorAttachment(content=content)
-            content = """
-            Is this message for DockerExpert, or for Coder?
-            Please simply respond with "DockerExpert" or "Coder"
+            recipient_str = ", ".join(self.config.recipients)
+            content = f"""
+            Who is this message for? 
+            Please simply respond with one of:
+            {recipient_str}
             """
+            console.print(f"[red]{self.indent}", end="")
+            print(f"[red]Validator: {content}")
+
         return ChatDocument(
             content=content,
             function_call=msg.function_call if has_func_call else None,

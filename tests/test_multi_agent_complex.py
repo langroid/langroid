@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import List, Optional
 
 from llmagent.agent.base import Entity
 from llmagent.agent.chat_agent import ChatAgent, ChatAgentConfig
@@ -20,6 +20,14 @@ class ExponentialTool(AgentMessage):
     purpose: str = "To calculate the value of <x> raised to the power <e>"
     x: int
     e: int
+    result: int
+
+    @classmethod
+    def examples(cls) -> List["AgentMessage"]:
+        return [
+            cls(x=3, e=5, result=243),
+            cls(x=8, e=3, result=512),
+        ]
 
 
 class MultiplicationTool(AgentMessage):
@@ -27,6 +35,14 @@ class MultiplicationTool(AgentMessage):
     purpose: str = "To calculate the value of <x> multiplied by <y>"
     x: int
     y: int
+    result: int
+
+    @classmethod
+    def examples(cls) -> List["AgentMessage"]:
+        return [
+            cls(x=3, y=5, result=15),
+            cls(x=8, y=3, result=24),
+        ]
 
 
 class _TestChatAgentConfig(ChatAgentConfig):
