@@ -156,7 +156,9 @@ def test_agents_with_validator(test_settings: Settings):
     )
     # planner helps master...
     task_master.add_sub_task(task_planner)
-    # multiplier helps planner...
+    # multiplier helps planner, but use Validator to ensure
+    # recipient is specified via TO[recipient], and if not
+    # then the validator will ask for clarification
     task_planner.add_sub_task([task_validator, task_multiplier])
 
     # ... since human has nothing to say
