@@ -11,6 +11,7 @@ from llmagent.language_models.base import (
     Role,
 )
 from llmagent.mytypes import DocMetaData, Document
+from llmagent.parsing.agent_chats import parse_message
 from llmagent.parsing.json import extract_top_level_json
 from llmagent.utils.output.printing import shorten_text
 
@@ -137,6 +138,18 @@ class ChatDocument(Document):
                 usage=response.usage,
                 displayed=displayed,
                 cached=response.cached,
+                recipient=recipient,
+            ),
+        )
+
+    @staticmethod
+    def from_str(msg: str) -> "ChatDocument":
+        recipient, message = parse_message(msg)
+        return ChatDocument(
+            content=message,
+            metadata=ChatDocMetaData(
+                source=Entity.USER,
+                sender=Entity.USER,
                 recipient=recipient,
             ),
         )
