@@ -39,16 +39,30 @@ class ChromaDB(VectorStore):
             )
         )
         if self.config.collection_name is not None:
-            self.collection = self.client.get_or_create_collection(
-                name=self.config.collection_name,
-                embedding_function=self.embedding_fn,
-                # metadata={
-                #     "hnsw:space": "cosine",
-                #     "hnsw:construction_ef": 9,
-                #     "hnsw:M": 4,
-                #     "hnsw:search_ef": 4,
-                # }
-            )
+            self.create_collection(self.config.collection_name)
+
+    def clear_empty_collections(self) -> int:
+        colls = self.client.list_collections()
+        n_deletes = 0
+        for coll in colls:
+            if coll.count() == 0:
+                n_deletes += 1
+                self.client.delete_collection(name=coll.name)
+        return n_deletes
+
+    def list_collections(self) -> List[str]:
+        colls = self.client.list_collections()
+        return [coll.name for coll in colls]
+
+    def create_collection(self, collection_name: str) -> None:
+        self.config.collection_name = collection_name
+        self.collection = self.client.get_or_create_collection(
+            name=self.config.collection_name,
+            embedding_function=self.embedding_fn,
+        )
+
+    def set_collection(self, collection_name: str) -> None:
+        self.create_collection(collection_name)
 
     def add_documents(self, documents: Optional[List[Document]] = None) -> None:
         if documents is None:
@@ -71,7 +85,7 @@ class ChromaDB(VectorStore):
 
     def similar_texts_with_scores(
         self, text: str, k: int = 1, where: Optional[str] = None
-    ) -> Optional[List[Tuple[Document, float]]]:
+    ) -> List[Tuple[Document, float]]:
         results = self.collection.query(
             query_texts=[text],
             n_results=k,
@@ -79,7 +93,7 @@ class ChromaDB(VectorStore):
             include=["documents", "distances", "metadatas"],
         )
         if len(results["documents"]) == 0:
-            return None
+            return []
         contents = results["documents"][0]
         if settings.debug:
             for i, c in enumerate(contents):

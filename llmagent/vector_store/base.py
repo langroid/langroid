@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 class VectorStoreConfig(BaseSettings):
-    collection_name: str = "default"
+    collection_name: str | None = None
     storage_path: str = ".qdrant/data"
     cloud: bool = False
     embedding: EmbeddingModelsConfig = EmbeddingModelsConfig(
@@ -40,11 +40,26 @@ class VectorStore(ABC):
 
         return vecstore_class(config)  # type: ignore
 
-    # @abstractmethod
-    # def from_documents(self, collection_name, documents, embeddings=None,
-    #                    storage_path=None,
-    #                    metadatas=None, ids=None):
-    #     pass
+    @abstractmethod
+    def clear_empty_collections(self) -> int:
+        """Clear all empty collections in the vector store.
+        Returns the number of collections deleted.
+        """
+        pass
+
+    @abstractmethod
+    def list_collections(self) -> List[str]:
+        """List all collections in the vector store."""
+        pass
+
+    @abstractmethod
+    def set_collection(self, collection_name: str) -> None:
+        """Set the current collection to the given collection name."""
+        pass
+
+    @abstractmethod
+    def create_collection(self, collection_name: str) -> None:
+        pass
 
     @abstractmethod
     def add_documents(self, documents: List[Document]) -> None:
@@ -56,7 +71,7 @@ class VectorStore(ABC):
         text: str,
         k: int = 1,
         where: Optional[str] = None,
-    ) -> Optional[List[Tuple[Document, float]]]:
+    ) -> List[Tuple[Document, float]]:
         pass
 
     @staticmethod
