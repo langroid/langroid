@@ -14,7 +14,7 @@ app = typer.Typer()
 
 setup_colored_logging()
 
-DEFAULT_URL = "https://github.com/eugeneyan/testing-ml"
+DEFAULT_URL = "https://github.com/hyperonym/basaran"
 
 
 def chat(config: CodeChatAgentConfig) -> None:

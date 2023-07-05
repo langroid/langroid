@@ -41,7 +41,7 @@ import time
 
 console = Console()
 logger = logging.getLogger(__name__)
-DEFAULT_URL = "https://github.com/eugeneyan/testing-ml"
+DEFAULT_URL = "https://github.com/hyperonym/basaran"
 # Message types that can be handled by the agent;
 # each corresponds to a method in the agent.
 
