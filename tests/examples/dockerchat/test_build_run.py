@@ -60,7 +60,7 @@ PROPOSED_DOCKERFILE_CONTENT = """
     COPY requirements.txt .
 """
 
-@pytest.skip("this test is too slow")
+@pytest.mark.skip(reason="too slow")
 def test_validate_dockerfile():
     agent = _TestDockerChatAgent(cfg)
     temp_folder_path = tempfile.mkdtemp()
@@ -105,7 +105,7 @@ AUTO_GPT_DOCKERFILE = """FROM python:3.10\n\nWORKDIR /app\n
     \n\nCOPY . .\n\nCMD [\"./run.sh\"]
     """
 
-@pytest.skip("This test is too slow")
+@pytest.mark.skip(reason="too slow")
 def test_run_container():
     agent = _TestDockerChatAgent(cfg)
     url = BASARAN_URL
