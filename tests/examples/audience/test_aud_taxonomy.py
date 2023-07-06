@@ -105,6 +105,7 @@ QUERY_EXPECTED_PAIRS = [
     ("in market to visit a zoo", "intent,zoo"),
     ("people looking to buy productivity software", "intent,productivity"),
     ("language learners", "language"),
+    ("unmarried people", "single,marital")
 ]
 
 
