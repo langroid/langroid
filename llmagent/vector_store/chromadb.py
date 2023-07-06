@@ -1,5 +1,5 @@
 import logging
-from typing import Any, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 import chromadb
 
@@ -71,14 +71,17 @@ class ChromaDB(VectorStore):
         metadatas: List[dict[str, Any]] = [
             document.metadata.dict() for document in documents
         ]
-        ids = range(len(documents))
-        ids_str = ["id" + str(id) for id in ids]
+        ids = [str(d.id()) for d in documents]
         self.collection.add(
             # embedding_models=embedding_models,
             documents=contents,
             metadatas=metadatas,
-            ids=ids_str,
+            ids=ids,
         )
+
+    def get_documents_by_ids(self, ids: List[str]) -> List[Document]:
+        results = self.collection.get(ids=ids, include=["documents", "metadatas"])
+        return self._docs_from_results(results)
 
     def delete_collection(self, collection_name: str) -> None:
         self.client.delete_collection(name=collection_name)
@@ -92,6 +95,19 @@ class ChromaDB(VectorStore):
             where=where,
             include=["documents", "distances", "metadatas"],
         )
+        docs = self._docs_from_results(results)
+        scores = results["distances"][0]
+        return list(zip(docs, scores))
+
+    def _docs_from_results(self, results: Dict[str, Any]) -> List[Document]:
+        """
+        Helper function to convert results from ChromaDB to a list of Documents
+        Args:
+            results (dict): results from ChromaDB
+
+        Returns:
+            List[Document]: list of Documents
+        """
         if len(results["documents"]) == 0:
             return []
         contents = results["documents"][0]
@@ -103,8 +119,7 @@ class ChromaDB(VectorStore):
             Document(content=d, metadata=DocMetaData.parse_obj(m))
             for d, m in zip(contents, metadatas)
         ]
-        scores = results["distances"][0]
-        return list(zip(docs, scores))
+        return docs
 
 
 # Example usage and testing
