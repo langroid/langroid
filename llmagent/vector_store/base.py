@@ -1,6 +1,4 @@
-import hashlib
 import logging
-import uuid
 from abc import ABC, abstractmethod
 from typing import List, Optional, Tuple
 
@@ -18,6 +16,7 @@ class VectorStoreConfig(BaseSettings):
     collection_name: str | None = None
     storage_path: str = ".qdrant/data"
     cloud: bool = False
+    batch_size: int = 200
     embedding: EmbeddingModelsConfig = EmbeddingModelsConfig(
         model_type="openai",
     )
@@ -74,24 +73,17 @@ class VectorStore(ABC):
     ) -> List[Tuple[Document, float]]:
         pass
 
-    @staticmethod
-    def _unique_hash_id(doc: Document) -> str:
-        # Encode the document as UTF-8
-        doc_utf8 = str(doc).encode("utf-8")
+    @abstractmethod
+    def get_documents_by_ids(self, ids: List[str]) -> List[Document]:
+        """
+        Get documents by their ids.
+        Args:
+            ids (List[str]): List of document ids.
 
-        # Create a SHA256 hash object
-        sha256_hash = hashlib.sha256()
-
-        # Update the hash object with the bytes of the document
-        sha256_hash.update(doc_utf8)
-
-        # Get the hexadecimal representation of the hash
-        hash_hex = sha256_hash.hexdigest()
-
-        # Convert the first part of the hash to a UUID
-        hash_uuid = uuid.UUID(hash_hex[:32])
-
-        return str(hash_uuid)
+        Returns:
+            List[Document]: List of documents
+        """
+        pass
 
     @abstractmethod
     def delete_collection(self, collection_name: str) -> None:

@@ -104,21 +104,46 @@ class QdrantDB(VectorStore):
             logger.setLevel(level)
 
     def add_documents(self, documents: List[Document]) -> None:
+        if len(documents) == 0:
+            return
         embedding_vecs = self.embedding_fn([doc.content for doc in documents])
         if self.config.collection_name is None:
             raise ValueError("No collection name set, cannot ingest docs")
-        ids = [self._unique_hash_id(d) for d in documents]
-        self.client.upsert(
-            collection_name=self.config.collection_name,
-            points=Batch(
-                ids=ids,  # TODO do we need ids?
-                vectors=embedding_vecs,
-                payloads=documents,
-            ),
-        )
+        ids = [d.id() for d in documents]
+        # don't insert all at once, batch in chunks of b,
+        # else we get an API error
+        b = self.config.batch_size
+        for i in range(0, len(ids), b):
+            self.client.upsert(
+                collection_name=self.config.collection_name,
+                points=Batch(
+                    ids=ids[i : i + b],
+                    vectors=embedding_vecs[i : i + b],
+                    payloads=documents[i : i + b],
+                ),
+            )
 
     def delete_collection(self, collection_name: str) -> None:
         self.client.delete_collection(collection_name=collection_name)
+
+    def _to_int_or_uuid(self, id: str) -> int | str:
+        try:
+            return int(id)
+        except ValueError:
+            return id
+
+    def get_documents_by_ids(self, ids: List[str]) -> List[Document]:
+        if self.config.collection_name is None:
+            raise ValueError("No collection name set, cannot retrieve docs")
+        _ids = [self._to_int_or_uuid(id) for id in ids]
+        records = self.client.retrieve(
+            collection_name=self.config.collection_name,
+            ids=_ids,
+            with_vectors=False,
+            with_payload=True,
+        )
+        docs = [Document(**record.payload) for record in records]  # type: ignore
+        return docs
 
     def similar_texts_with_scores(
         self,

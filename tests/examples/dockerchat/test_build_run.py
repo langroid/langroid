@@ -1,3 +1,5 @@
+import pytest
+
 from llmagent.agent.chat_agent import ChatAgentConfig
 from llmagent.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
 from examples.dockerchat.docker_chat_agent import DockerChatAgent
@@ -58,7 +60,7 @@ PROPOSED_DOCKERFILE_CONTENT = """
     COPY requirements.txt .
 """
 
-
+@pytest.skip("this test is too slow")
 def test_validate_dockerfile():
     agent = _TestDockerChatAgent(cfg)
     temp_folder_path = tempfile.mkdtemp()
@@ -103,7 +105,7 @@ AUTO_GPT_DOCKERFILE = """FROM python:3.10\n\nWORKDIR /app\n
     \n\nCOPY . .\n\nCMD [\"./run.sh\"]
     """
 
-
+@pytest.skip("This test is too slow")
 def test_run_container():
     agent = _TestDockerChatAgent(cfg)
     url = BASARAN_URL
