@@ -60,6 +60,7 @@ PROPOSED_DOCKERFILE_CONTENT = """
     COPY requirements.txt .
 """
 
+
 @pytest.mark.skip(reason="too slow")
 def test_validate_dockerfile():
     agent = _TestDockerChatAgent(cfg)
@@ -104,6 +105,7 @@ AUTO_GPT_DOCKERFILE = """FROM python:3.10\n\nWORKDIR /app\n
     \nCOPY requirements.txt .\nRUN pip install --no-cache-dir -r requirements.txt
     \n\nCOPY . .\n\nCMD [\"./run.sh\"]
     """
+
 
 @pytest.mark.skip(reason="too slow")
 def test_run_container():

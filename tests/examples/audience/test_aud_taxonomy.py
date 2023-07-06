@@ -102,10 +102,10 @@ warnings.filterwarnings(
 QUERY_EXPECTED_PAIRS = [
     # (english_description, words expected in retrieved taxonomy names)
     ("video games", "gaming"),
-    ("in market to visit a zoo", "intent,zoo"),
-    ("people looking to buy productivity software", "intent,productivity"),
+    ("in market to visit a zoo", "intent, purchase, zoo"),
+    ("people looking to buy productivity software", "intent, productivity"),
     ("language learners", "language"),
-    ("unmarried people", "single,marital")
+    ("unmarried people", "single, marital"),
 ]
 
 
@@ -113,7 +113,7 @@ QUERY_EXPECTED_PAIRS = [
 def test_segmentor(test_settings: Settings, segmentor_agent, query: str, expected: str):
     set_global(test_settings)
     nearest_docs = segmentor_agent.get_nearest_docs(query)
-    expected = [e.strip() for e in expected.split(",")]
+    expected = [e.strip().lower() for e in expected.split(",")]
     # at least one of the nearest docs has all the expected words
     assert any(
         [all([e in doc.content.lower() for e in expected]) for doc in nearest_docs]
