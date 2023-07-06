@@ -162,7 +162,8 @@ class RetrieverAgent(DocChatAgent, ABC):
     ) -> List[Document]:
         """
         Given a query and a list of docs, select the docs whose contents match best,
-            according to the LLM.
+            according to the LLM. Use the doc IDs to select the docs from the vector
+            store.
         Args:
             query: query string
             docs: list of Document objects
