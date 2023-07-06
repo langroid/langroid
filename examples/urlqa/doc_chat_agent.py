@@ -65,6 +65,7 @@ class DocChatAgent(ChatAgent):
         config: DocChatAgentConfig,
     ):
         super().__init__(config)
+        self.config = config
         self.original_docs: List[Document] = None
         self.original_docs_length = 0
 
