@@ -25,6 +25,12 @@ class AudienceTaxonomyRecord(RecordDoc):
 
 
 class SegmentorConfig(RetrieverAgentConfig):
+    system_message: str = "You are a marketing expert"
+    user_message: str = """
+        Your task is to map audience description to a standard taxonomy.
+        You will be given a description of an audience segment and you will need to
+        map it to one or more categories in the standard IAB taxonomy.
+    """
     filename: str = None  # contains taxonomy records
     n_tiers: int = 6
     debug: bool = False
@@ -68,11 +74,10 @@ class Segmentor(RetrieverAgent):
     def __init__(self, config: SegmentorConfig):
         super().__init__(config)
         self.config = config
-        self.ingest()
 
     def get_records(self) -> List[AudienceTaxonomyRecord]:
         if self.config.filename is None:
-            return
+            return []
         taxonomy_records = []
         with open(self.config.filename, "r") as csvfile:
             reader = csv.DictReader(csvfile)

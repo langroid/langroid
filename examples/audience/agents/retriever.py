@@ -1,6 +1,3 @@
-from llmagent.language_models.base import StreamingIfAllowed
-from llmagent.utils.configuration import settings
-from contextlib import ExitStack
 from rich.console import Console
 
 from examples.urlqa.doc_chat_agent import DocChatAgentConfig, DocChatAgent
@@ -87,6 +84,8 @@ class RetrieverAgent(DocChatAgent, ABC):
     ) -> Optional[ChatDocument]:
         if not self.llm_can_respond(query):
             return None
+        if query is None:
+            return super().llm_response(None)
         if isinstance(query, ChatDocument):
             query_str = query.content
         else:
@@ -95,6 +94,7 @@ class RetrieverAgent(DocChatAgent, ABC):
         if len(docs) == 0:
             return None
         content = "\n\n".join([d.content for d in docs])
+        print(f"[green]{content}")
         meta = dict(
             sender=Entity.LLM,
         )
@@ -145,14 +145,7 @@ class RetrieverAgent(DocChatAgent, ABC):
         nearest_docs = self.get_nearest_docs(query)
         if len(nearest_docs) == 0:
             return [response]
-        with ExitStack() as stack:
-            # conditionally use Streaming or rich console context
-            cm = (
-                StreamingIfAllowed(self.llm)
-                if settings.stream
-                else console.status("LLM Finding good matches from retrieved docs...")
-            )
-            stack.enter_context(cm)
+        with console.status("LLM selecting relevant docs from retrieved ones..."):
             response = self.llm_select_relevant_docs(query, nearest_docs)
 
         return response
