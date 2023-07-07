@@ -77,8 +77,16 @@ class QdrantDB(VectorStore):
         return n_deletes
 
     def list_collections(self) -> List[str]:
+        """
+        Returns:
+            List of collection names that have at least one vector.
+        """
         colls = list(self.client.get_collections())[0][1]
-        return [coll.name for coll in colls]
+        counts = [
+            self.client.get_collection(collection_name=coll.name).points_count
+            for coll in colls
+        ]
+        return [coll.name for coll, count in zip(colls, counts) if count > 0]
 
     def set_collection(self, collection_name: str) -> None:
         self.config.collection_name = collection_name
@@ -87,6 +95,12 @@ class QdrantDB(VectorStore):
 
     def create_collection(self, collection_name: str) -> None:
         self.config.collection_name = collection_name
+        collections = self.list_collections()
+        if collection_name in collections:
+            coll = self.client.get_collection(collection_name=collection_name)
+            if coll.status == CollectionStatus.GREEN and coll.points_count > 0:
+                logger.warning(f"Non-empty Collection {collection_name} already exists")
+                return
         self.client.recreate_collection(
             collection_name=collection_name,
             vectors_config=VectorParams(
