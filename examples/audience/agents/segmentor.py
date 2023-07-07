@@ -42,7 +42,7 @@ class SegmentorConfig(RetrieverAgentConfig):
     max_tokens: int = 10000
     vecdb: VectorStoreConfig = QdrantDBConfig(
         type="qdrant",
-        collection_name="audience-taxonomy",
+        collection_name="IAB-audience-taxonomy",
         storage_path=".qdrant/data/",
         embedding=OpenAIEmbeddingsConfig(
             model_type="openai",
