@@ -46,10 +46,12 @@ def chat(config: SegmentorConfig) -> None:
     )
 
     print("[blue]Welcome to the audience targeting bot!")
+    print("[blue]Please describe your business, or hit enter to use default:\n")
+    print("[blue](Default = An online store selling shoes for trendy teens)\n")
+    default_answer = "An online store selling shoes for trendy teens"
     biz_description = Prompt.ask(
-        "Please describe your business, or hit enter to use default",
-        default="An online store selling shoes for trendy teens",
-    )
+        "",
+    ) or default_answer
 
     researcher = ChatAgent(
         ChatAgentConfig(
@@ -97,9 +99,13 @@ def chat(config: SegmentorConfig) -> None:
         To clarify who you are talking to, you must always start your message with 
         "TO[<recipient>]:..." where <recipient> is either "Researcher" or "Segmentor".
         
-        You can ask the Researcher about likely customers for the business, such as 
-        what age, demographic, or lifestyle, etc, and the 
-        Researcher will respond with a simple description of a customer profile. 
+        You can ask the Researcher in different ways about who might be 
+        good customers for the business, such as what age, demographic, or lifestyle, 
+        etc, and the Researcher will respond with a simple description of a customer 
+        profile. 
+        Be specific in your questions, do not simply say 
+        "Can you describe a customer profile for the business".
+        
         You can ask the Segmentor to map a specific customer profile description 
         to the IAB taxonomy, ONE AT A TIME. Simply provide the customer profile, 
         do not say anything else, e.g. :
