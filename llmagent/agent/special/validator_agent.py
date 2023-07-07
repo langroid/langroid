@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 class ValidatorAgentConfig(ChatAgentConfig):
     recipients: List[str]
-    tool_recipient: str
+    tool_recipient: str | None = None
 
 
 class ValidatorAttachment(ChatDocAttachment):
@@ -77,7 +77,9 @@ class ValidatorAgent(ChatAgent):
         attachment: None | ChatDocAttachment = None
         responder: None | Entity = None
         sender_name = self.config.name
-        if has_func_call or "TOOL" in content:
+        if (
+            has_func_call or "TOOL" in content
+        ) and self.config.tool_recipient is not None:
             # assume it is meant for Coder, so simply set the recipient field,
             # and the parent task loop continues as normal
             # TODO- but what if it is not a legit function call
