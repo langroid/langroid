@@ -29,7 +29,6 @@ def chat(config: SegmentorConfig) -> None:
             f"[bold]{segmentor.config.vecdb.collection_name}[/bold]"
         )
     else:
-        segmentor.vecdb.set_collection(segmentor.config.vecdb.collection_name)
         with console.status("[bold green]Loading IAB audience taxonomy..."):
             segmentor.ingest()
 
