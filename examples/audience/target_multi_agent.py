@@ -1,18 +1,11 @@
 from llmagent.utils.logging import setup_colored_logging
 from llmagent.agent.task import Task
-<<<<<<< HEAD
 from llmagent.agent.special.validator_agent import ValidatorAgent, ValidatorAgentConfig
 from llmagent.agent.chat_agent import ChatAgent, ChatAgentConfig
 from examples.audience.agents.segmentor import Segmentor, SegmentorConfig
 from llmagent.language_models.openai_gpt import OpenAIChatModel
 from llmagent.utils.configuration import update_global_settings, set_global, Settings
 
-=======
-from examples.audience.agents.segmentor import Segmentor, SegmentorConfig
-from llmagent.language_models.openai_gpt import OpenAIChatModel
-from llmagent.utils.configuration import update_global_settings, set_global, Settings
-import re
->>>>>>> 80275de (init commit target_multi_agent.py)
 import typer
 
 from rich.console import Console
@@ -41,7 +34,6 @@ def chat(config: SegmentorConfig) -> None:
         with console.status("[bold green]Loading IAB audience taxonomy..."):
             segmentor.ingest()
 
-<<<<<<< HEAD
     segmentor_task = Task(
         segmentor,
         name="Segmentor",
@@ -115,8 +107,8 @@ def chat(config: SegmentorConfig) -> None:
         TO[Segmentor]: trendy males under 40 who like to play basketball
         
         You may receive multiple STANDARD SEGMENTS in response one per line.
-        Once you have accumulated 5 different STANDARD SEGMENTS,
-        OR asked the Segmentor 5 times, whichever comes first, say DONE, and 
+        Once you have accumulated 4 different STANDARD SEGMENTS,
+        OR asked the Segmentor 4 times, whichever comes first, say DONE, and 
         put these STANDARD SEGMENTS together into a list.
         """,
     )
