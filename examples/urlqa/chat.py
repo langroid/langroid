@@ -34,6 +34,7 @@ def chat(config: URLQAConfig) -> None:
     collections = agent.vecdb.list_collections()
     collection_name = "NEW"
     is_new_collection = False
+    replace_collection = False
     if len(collections) > 1:
         n = len(collections)
         delete_str = f"(deleted {n_deletes} empty collections)" if n_deletes > 0 else ""
@@ -52,15 +53,20 @@ def chat(config: URLQAConfig) -> None:
         if int(choice) > 0:
             collection_name = collections[int(choice) - 1]
             print(f"Using collection {collection_name}")
+            choice = Prompt.ask(
+                "Would you like to replace this collection?",
+                choices=["y", "n"],
+                default="n",
+            )
+            replace_collection = choice == "y"
 
     if collection_name == "NEW":
         is_new_collection = True
         collection_name = Prompt.ask(
             "What would you like to name the NEW collection?", default="urlqa-chat"
         )
-    config.vecdb.collection_name = collection_name
 
-    agent.vecdb.set_collection(collection_name)
+    agent.vecdb.set_collection(collection_name, replace=replace_collection)
 
     print("[blue]Welcome to the document chatbot!")
     print("[cyan]Enter x or q to quit, or ? for evidence")

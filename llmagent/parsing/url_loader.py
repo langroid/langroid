@@ -35,7 +35,7 @@ class URLLoader:
                     no_fallback=False,
                     favor_recall=True,
                 )
-                if text is not None:
+                if text is not None and text != "":
                     docs.append(
                         Document(content=text, metadata=DocMetaData(source=url))
                     )

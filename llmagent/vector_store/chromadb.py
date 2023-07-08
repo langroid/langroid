@@ -28,7 +28,7 @@ class ChromaDBConfig(VectorStoreConfig):
 
 class ChromaDB(VectorStore):
     def __init__(self, config: ChromaDBConfig):
-        super().__init__()
+        super().__init__(config)
         self.config = config
         emb_model = EmbeddingModel.create(config.embedding)
         self.embedding_fn = emb_model.embedding_fn()
@@ -51,18 +51,30 @@ class ChromaDB(VectorStore):
         return n_deletes
 
     def list_collections(self) -> List[str]:
+        """
+        List non-empty collections in the vector store.
+        Returns:
+            List[str]: List of non-empty collection names.
+        """
         colls = self.client.list_collections()
-        return [coll.name for coll in colls]
+        return [coll.name for coll in colls if coll.count() > 0]
 
-    def create_collection(self, collection_name: str) -> None:
+    def create_collection(self, collection_name: str, replace: bool = False) -> None:
+        """
+        Create a collection in the vector store, optionally replacing an existing
+            collection if `replace` is True.
+        Args:
+            collection_name (str): Name of the collection to create or replace.
+            replace (bool, optional): Whether to replace an existing collection.
+                Defaults to False.
+
+        """
         self.config.collection_name = collection_name
-        self.collection = self.client.get_or_create_collection(
+        self.collection = self.client.create_collection(
             name=self.config.collection_name,
             embedding_function=self.embedding_fn,
+            get_or_create=not replace,
         )
-
-    def set_collection(self, collection_name: str) -> None:
-        self.create_collection(collection_name)
 
     def add_documents(self, documents: Optional[List[Document]] = None) -> None:
         if documents is None:

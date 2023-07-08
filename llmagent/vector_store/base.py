@@ -28,6 +28,9 @@ class VectorStoreConfig(BaseSettings):
 
 
 class VectorStore(ABC):
+    def __init__(self, config: VectorStoreConfig):
+        self.config = config
+
     @staticmethod
     def create(config: VectorStoreConfig) -> "VectorStore":
         from llmagent.vector_store.chromadb import ChromaDB
@@ -51,13 +54,27 @@ class VectorStore(ABC):
         """List all collections in the vector store."""
         pass
 
-    @abstractmethod
-    def set_collection(self, collection_name: str) -> None:
-        """Set the current collection to the given collection name."""
-        pass
+    def set_collection(self, collection_name: str, replace: bool = False) -> None:
+        """
+        Set the current collection to the given collection name.
+        Args:
+            collection_name (str): Name of the collection.
+            replace (bool, optional): Whether to replace the collection if it
+                already exists. Defaults to False.
+        """
+
+        self.config.collection_name = collection_name
+        if collection_name not in self.list_collections() or replace:
+            self.create_collection(collection_name, replace=replace)
 
     @abstractmethod
-    def create_collection(self, collection_name: str) -> None:
+    def create_collection(self, collection_name: str, replace: bool = False) -> None:
+        """Create a collection with the given name.
+        Args:
+            collection_name (str): Name of the collection.
+            replace (bool, optional): Whether to replace the
+                collection if it already exists. Defaults to False.
+        """
         pass
 
     @abstractmethod

@@ -41,7 +41,7 @@ class QdrantDBConfig(VectorStoreConfig):
 
 class QdrantDB(VectorStore):
     def __init__(self, config: QdrantDBConfig):
-        super().__init__()
+        super().__init__(config)
         self.config = config
         emb_model = EmbeddingModel.create(config.embedding)
         self.embedding_fn: EmbeddingFunction = emb_model.embedding_fn()
@@ -88,19 +88,26 @@ class QdrantDB(VectorStore):
         ]
         return [coll.name for coll, count in zip(colls, counts) if count > 0]
 
-    def set_collection(self, collection_name: str) -> None:
-        self.config.collection_name = collection_name
-        if collection_name not in self.list_collections():
-            self.create_collection(collection_name)
-
-    def create_collection(self, collection_name: str) -> None:
+    def create_collection(self, collection_name: str, replace: bool = False) -> None:
+        """
+        Create a collection with the given name, optionally replacing an existing
+            collection if `replace` is True.
+        Args:
+            collection_name (str): Name of the collection to create.
+            replace (bool): Whether to replace an existing collection
+                with the same name. Defaults to False.
+        """
         self.config.collection_name = collection_name
         collections = self.list_collections()
         if collection_name in collections:
             coll = self.client.get_collection(collection_name=collection_name)
             if coll.status == CollectionStatus.GREEN and coll.points_count > 0:
                 logger.warning(f"Non-empty Collection {collection_name} already exists")
-                return
+                if not replace:
+                    logger.warning("Not replacing collection")
+                    return
+                else:
+                    logger.warning("Recreating fresh collection")
         self.client.recreate_collection(
             collection_name=collection_name,
             vectors_config=VectorParams(
