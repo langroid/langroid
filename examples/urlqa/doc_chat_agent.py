@@ -1,4 +1,7 @@
 from llmagent.agent.base import Entity
+from llmagent.parsing.urls import get_urls_and_paths
+from llmagent.parsing.repo_loader import RepoLoader
+from llmagent.parsing.url_loader import URLLoader
 from llmagent.agent.chat_document import ChatDocument, ChatDocMetaData
 from llmagent.agent.chat_agent import ChatAgent, ChatAgentConfig
 from llmagent.language_models.base import StreamingIfAllowed
@@ -9,7 +12,7 @@ from llmagent.utils.configuration import settings
 from contextlib import ExitStack
 from llmagent.mytypes import Document, DocMetaData
 from llmagent.utils.constants import NO_ANSWER
-from typing import List, Optional
+from typing import List, Optional, Dict, Any
 from rich import print
 from rich.console import Console
 
@@ -44,6 +47,7 @@ class DocChatAgentConfig(ChatAgentConfig):
     summarize_prompt: str = SUMMARY_ANSWER_PROMPT_GPT4
     max_context_tokens: int = 500
     conversation_mode: bool = True
+    doc_paths: List[str] = []  # URLs or local paths to documents
     parsing = ParsingConfig(  # modify as needed
         splitter=Splitter.TOKENS,
         chunk_size=200,  # aim for this many tokens per chunk
@@ -68,6 +72,34 @@ class DocChatAgent(ChatAgent):
         self.config = config
         self.original_docs: List[Document] = None
         self.original_docs_length = 0
+        if len(config.doc_paths) > 0:
+            self.ingest()
+
+    def ingest(self) -> Dict[str, Any]:
+        """
+        Chunk + embed + store docs specified by self.config.doc_paths
+
+        Returns:
+            dict with keys:
+                n_splits: number of splits
+                urls: list of urls
+                paths: list of file paths
+        """
+        urls, paths = get_urls_and_paths(self.config.doc_paths)
+        docs = []
+        if len(urls) > 0:
+            loader = URLLoader(urls=urls)
+            docs: List[Document] = loader.load()
+        if len(paths) > 0:
+            for p in paths:
+                path_docs = RepoLoader.get_documents(p)
+                docs.extend(path_docs)
+        n_splits = self.ingest_docs(docs)
+        return dict(
+            n_splits=n_splits,
+            urls=urls,
+            paths=paths,
+        )
 
     def ingest_docs(self, docs: List[Document]) -> int:
         """

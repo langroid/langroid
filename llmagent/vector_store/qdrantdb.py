@@ -64,7 +64,9 @@ class QdrantDB(VectorStore):
         # This is useful to delay creation of vecdb until we have a suitable
         # collection name (e.g. we could get it from the url or folder path).
         if config.collection_name is not None:
-            self.create_collection(config.collection_name)
+            self.create_collection(
+                config.collection_name, replace=config.replace_collection
+            )
 
     def clear_empty_collections(self) -> int:
         coll_names = self.list_collections()

@@ -5,6 +5,7 @@ from typing import List, Optional, Tuple
 from pydantic import BaseSettings
 
 from llmagent.embedding_models.base import EmbeddingModelsConfig
+from llmagent.embedding_models.models import OpenAIEmbeddingsConfig
 from llmagent.mytypes import Document
 from llmagent.utils.configuration import settings
 from llmagent.utils.output.printing import print_long_text
@@ -14,10 +15,11 @@ logger = logging.getLogger(__name__)
 
 class VectorStoreConfig(BaseSettings):
     collection_name: str | None = None
+    replace_collection: bool = False  # replace collection if it already exists
     storage_path: str = ".qdrant/data"
     cloud: bool = False
     batch_size: int = 200
-    embedding: EmbeddingModelsConfig = EmbeddingModelsConfig(
+    embedding: EmbeddingModelsConfig = OpenAIEmbeddingsConfig(
         model_type="openai",
     )
     timeout: int = 60

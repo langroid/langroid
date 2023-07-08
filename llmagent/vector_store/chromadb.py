@@ -39,7 +39,10 @@ class ChromaDB(VectorStore):
             )
         )
         if self.config.collection_name is not None:
-            self.create_collection(self.config.collection_name)
+            self.create_collection(
+                self.config.collection_name,
+                replace=self.config.replace_collection,
+            )
 
     def clear_empty_collections(self) -> int:
         colls = self.client.list_collections()
