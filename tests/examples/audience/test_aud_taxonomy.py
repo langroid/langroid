@@ -82,6 +82,7 @@ def segmentor_agent():
         temp_file.write(file_content)
     config = _TestSegmentorConfig(filename=temp_file_name)
     agent = Segmentor(config=config)
+    agent.ingest()
 
     yield agent
 
