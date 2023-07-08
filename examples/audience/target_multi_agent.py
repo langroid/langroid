@@ -49,9 +49,12 @@ def chat(config: SegmentorConfig) -> None:
     print("[blue]Please describe your business, or hit enter to use default:\n")
     print("[blue](Default = An online store selling shoes for trendy teens)\n")
     default_answer = "An online store selling shoes for trendy teens"
-    biz_description = Prompt.ask(
-        "",
-    ) or default_answer
+    biz_description = (
+        Prompt.ask(
+            "",
+        )
+        or default_answer
+    )
 
     researcher = ChatAgent(
         ChatAgentConfig(
@@ -138,7 +141,6 @@ def chat(config: SegmentorConfig) -> None:
 def main(
     debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
     gpt3: bool = typer.Option(False, "--gpt3_5", "-3", help="use gpt-3.5"),
-    gpt4: bool = typer.Option(False, "--gpt4", "-4", help="use gpt-4"),
     fn_api: bool = typer.Option(False, "--fn_api", "-f", help="use functions api"),
     no_stream: bool = typer.Option(False, "--nostream", "-ns", help="no streaming"),
     nofunc: bool = typer.Option(False, "--nofunc", "-nf", help="no function_call"),
@@ -147,7 +149,6 @@ def main(
         False, "--nohuman", "-nh", help="no human input (for stepping in debugger)"
     ),
 ) -> None:
-    gpt4 = gpt4  # ignore since we default to gpt4 anyway
     config = SegmentorConfig(
         debug=debug,
         gpt4=True,
