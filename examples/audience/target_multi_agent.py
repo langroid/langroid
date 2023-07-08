@@ -2,10 +2,14 @@ from llmagent.utils.logging import setup_colored_logging
 from llmagent.agent.task import Task
 from llmagent.agent.special.validator_agent import ValidatorAgent, ValidatorAgentConfig
 from llmagent.agent.chat_agent import ChatAgent, ChatAgentConfig
+from llmagent.embedding_models.models import OpenAIEmbeddingsConfig
+from llmagent.vector_store.qdrantdb import QdrantDBConfig
+from llmagent.parsing.parser import ParsingConfig, Splitter
 from examples.audience.agents.segmentor import Segmentor, SegmentorConfig
-from llmagent.language_models.openai_gpt import OpenAIChatModel
+from llmagent.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
 from llmagent.utils.configuration import update_global_settings, set_global, Settings
-
+from llmagent.parsing.urls import is_url
+from examples.urlqa.doc_chat_agent import DocChatAgent, DocChatAgentConfig
 import typer
 
 from rich.console import Console
@@ -46,15 +50,47 @@ def chat(config: SegmentorConfig) -> None:
     )
 
     print("[blue]Welcome to the audience targeting bot!")
-    print("[blue]Please describe your business, or hit enter to use default:\n")
+    print(
+        "[blue]Please describe your business, or enter URL of the business, "
+        "or hit enter to use default:\n"
+    )
     print("[blue](Default = An online store selling shoes for trendy teens)\n")
     default_answer = "An online store selling shoes for trendy teens"
-    biz_description = (
+    biz_or_url = (
         Prompt.ask(
             "",
         )
         or default_answer
     )
+    if is_url(biz_or_url):
+        # get business description from url
+        doc_chat_agent = DocChatAgent(
+            DocChatAgentConfig(
+                name="URLChat",
+                conversation_mode=True,
+                doc_paths=[biz_or_url],
+                vecdb=QdrantDBConfig(
+                    type="qdrant",
+                    collection_name="marketing-temp",
+                    replace_collection=True,
+                    embedding=OpenAIEmbeddingsConfig(),
+                ),
+                llm=OpenAIGPTConfig(
+                    type="openai",
+                    chat_model=OpenAIChatModel.GPT3_5_TURBO,
+                ),
+                parsing=ParsingConfig(
+                    splitter=Splitter.TOKENS,
+                    chunk_size=100,
+                ),
+            )
+        )
+        answer = doc_chat_agent.llm_response(
+            "describe this business in 1 short sentence"
+        )
+        biz_description = answer.content
+    else:
+        biz_description = biz_or_url
 
     researcher = ChatAgent(
         ChatAgentConfig(

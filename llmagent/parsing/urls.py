@@ -64,6 +64,14 @@ class Url(BaseModel):
     url: HttpUrl
 
 
+def is_url(s: str) -> bool:
+    try:
+        Url(url=parse_obj_as(HttpUrl, s))
+        return True
+    except ValidationError:
+        return False
+
+
 def get_urls_and_paths(inputs: List[str]) -> Tuple[List[str], List[str]]:
     """
     Given a list of inputs, return a list of URLs and a list of paths.

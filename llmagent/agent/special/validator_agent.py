@@ -108,7 +108,7 @@ class ValidatorAgent(ChatAgent):
             recipient_str = ", ".join(self.config.recipients)
             content = f"""
             Who is this message for? 
-            Please simply respond with one of:
+            Please simply respond with one of these names:
             {recipient_str}
             """
             console.print(f"[red]{self.indent}", end="")

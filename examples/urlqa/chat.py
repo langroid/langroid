@@ -1,14 +1,11 @@
-from llmagent.parsing.urls import get_list_from_user, get_urls_and_paths
+from llmagent.parsing.urls import get_list_from_user
 from llmagent.utils.logging import setup_colored_logging
 from llmagent.agent.task import Task
 from examples.urlqa.config import URLQAConfig
 from examples.urlqa.doc_chat_agent import DocChatAgent
 from llmagent.language_models.openai_gpt import OpenAIChatModel
-from llmagent.mytypes import Document
-from llmagent.parsing.url_loader import URLLoader
-from llmagent.parsing.repo_loader import RepoLoader
 from llmagent.utils import configuration
-from typing import List
+
 import re
 import typer
 
@@ -75,28 +72,24 @@ def chat(config: URLQAConfig) -> None:
     inputs = get_list_from_user()
     if len(inputs) == 0 and is_new_collection:
         inputs = default_urls
-    urls, paths = get_urls_and_paths(inputs)
-    documents = []
-    if len(urls) > 0:
-        loader = URLLoader(urls=urls)
-        documents: List[Document] = loader.load()
-    if len(paths) > 0:
-        for p in paths:
-            path_docs = RepoLoader.get_documents(p)
-            documents.extend(path_docs)
+    agent.config.doc_paths = inputs
+    doc_results = agent.ingest()
+    n_docs = len(doc_results["urls"]) + len(doc_results["paths"])
 
-    if len(documents) > 0:
-        nsplits = agent.ingest_docs(documents)
+    if n_docs > 0:
+        n_urls = len(doc_results["urls"])
+        n_paths = len(doc_results["paths"])
+        n_splits = doc_results["n_splits"]
         os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
         print(
             f"""
-        [green]I have processed the following {len(urls)} URLs 
-        and {len(paths)} paths into {nsplits} parts:
+        [green]I have processed the following {n_urls} URLs 
+        and {n_paths} paths into {n_splits} parts:
         """.strip()
         )
-        print("\n".join(urls))
-        print("\n".join(paths))
+        print("\n".join(doc_results["urls"]))
+        print("\n".join(doc_results["paths"]))
 
     warnings.filterwarnings(
         "ignore",
