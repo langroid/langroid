@@ -46,18 +46,3 @@ class PrintColored:
 
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         print(Colors().RESET)
-
-
-# code to show a spinner while waiting for a long-running process
-
-# from tqdm import trange
-#
-# def black_box():
-# # ...code for your black box function here...
-#
-# # Use trange to display a spinner
-# for i in trange(1, desc="Processing", unit="call", ncols=75, ascii=True, leave=False):
-#     result = black_box()
-#
-# # Update progress bar to completion
-# print("Done!")
