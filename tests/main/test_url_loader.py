@@ -1,6 +1,6 @@
 import re
 
-from llmagent.parsing.url_loader import URLLoader
+from llmagent.parsing.url_loader_cookies import URLLoader
 
 
 def test_url_loader():

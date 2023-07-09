@@ -48,7 +48,6 @@ class DocChatAgentConfig(ChatAgentConfig):
     system_message: str = DEFAULT_DOC_CHAT_SYSTEM_MESSAGE
     user_message: str = DEFAULT_DOC_CHAT_INSTRUCTIONS
     summarize_prompt: str = SUMMARY_ANSWER_PROMPT_GPT4
-    max_context_tokens: int = 500
     conversation_mode: bool = True
     doc_paths: List[str] = []  # URLs or local paths to documents
     parsing = ParsingConfig(  # modify as needed
@@ -313,13 +312,19 @@ class DocChatAgent(ChatAgent):
             return
         full_text = "\n\n".join([d.content for d in self.original_docs])
         tot_tokens = self.parser.num_tokens(full_text)
-        MAX_TOKENS = 0.9 * self.config.llm.context_length[self.config.llm.chat_model]
-        if tot_tokens > MAX_TOKENS:
+        MAX_INPUT_TOKENS = (
+            self.config.llm.context_length[self.config.llm.completion_model]
+            - self.config.llm.max_output_tokens
+            - 100
+        )
+        if tot_tokens > MAX_INPUT_TOKENS:
             # truncate
             full_text = self.parser.tokenizer.decode(
-                self.parser.tokenizer.encode(full_text)[:MAX_TOKENS]
+                self.parser.tokenizer.encode(full_text)[:MAX_INPUT_TOKENS]
             )
-            logger.warning(f"Summarizing after truncating text to {MAX_TOKENS} tokens")
+            logger.warning(
+                f"Summarizing after truncating text to {MAX_INPUT_TOKENS} tokens"
+            )
         prompt = f"""
         Give a concise summary of the following text:
         {full_text}
