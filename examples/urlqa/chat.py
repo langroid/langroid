@@ -70,11 +70,14 @@ def chat(config: URLQAConfig) -> None:
     default_urls_str = " (or leave empty for default URLs)" if is_new_collection else ""
     print("[blue]Enter some URLs or file/dir paths below " f"{default_urls_str}")
     inputs = get_list_from_user()
-    if len(inputs) == 0 and is_new_collection:
-        inputs = default_urls
-    agent.config.doc_paths = inputs
-    doc_results = agent.ingest()
-    n_docs = len(doc_results["urls"]) + len(doc_results["paths"])
+    n_docs = 0
+    if len(inputs) == 0:
+        if is_new_collection:
+            inputs = default_urls
+    else:
+        agent.config.doc_paths = inputs
+        doc_results = agent.ingest()
+        n_docs = len(doc_results["urls"]) + len(doc_results["paths"])
 
     if n_docs > 0:
         n_urls = len(doc_results["urls"])

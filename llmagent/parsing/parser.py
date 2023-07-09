@@ -183,6 +183,8 @@ class Parser:
         return chunks
 
     def split(self, docs: List[Document]) -> List[Document]:
+        if len(docs) == 0:
+            return []
         if self.config.splitter == Splitter.PARA_SENTENCE:
             return self.split_para_sentence(docs)
         elif self.config.splitter == Splitter.TOKENS:
