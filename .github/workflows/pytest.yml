@@ -35,7 +35,7 @@ jobs:
         echo "$HOME/.local/bin" >> $GITHUB_PATH
         python -m pip install --upgrade pip
         
-        poetry install
+        poetry install -E docker
 
     - name: Run tests with coverage
       run: |
