@@ -1,6 +1,9 @@
 from llmagent.utils.logging import setup_colored_logging
 from llmagent.agent.task import Task
-from llmagent.agent.special.validator_agent import ValidatorAgent, ValidatorAgentConfig
+from llmagent.agent.special.recipient_validator_agent import (
+    RecipientValidator,
+    RecipientValidatorConfig,
+)
 from llmagent.agent.chat_agent import ChatAgent, ChatAgentConfig
 from llmagent.embedding_models.models import OpenAIEmbeddingsConfig
 from llmagent.vector_store.qdrantdb import QdrantDBConfig
@@ -161,8 +164,8 @@ def chat(config: SegmentorConfig) -> None:
         """,
     )
 
-    validator_agent = ValidatorAgent(
-        ValidatorAgentConfig(
+    validator_agent = RecipientValidator(
+        RecipientValidatorConfig(
             vecdb=None,
             llm=None,
             name="Validator",

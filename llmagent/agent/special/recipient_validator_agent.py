@@ -19,19 +19,19 @@ logger = logging.getLogger(__name__)
 # but we could have a much more general declarative grammar-based validator
 
 
-class ValidatorAgentConfig(ChatAgentConfig):
+class RecipientValidatorConfig(ChatAgentConfig):
     recipients: List[str]
     tool_recipient: str | None = None
 
 
-class ValidatorAttachment(ChatDocAttachment):
+class RecipientValidatorAttachment(ChatDocAttachment):
     content: str = ""
 
 
-class ValidatorAgent(ChatAgent):
-    def __init__(self, config: ValidatorAgentConfig):
+class RecipientValidator(ChatAgent):
+    def __init__(self, config: RecipientValidatorConfig):
         super().__init__(config)
-        self.config: ValidatorAgentConfig = config
+        self.config: RecipientValidatorConfig = config
         self.llm = None
         self.vecdb = None
 
@@ -88,14 +88,14 @@ class ValidatorAgent(ChatAgent):
             # the incoming message is a clarification response from LLM
             recipient = content
             if msg.attachment is not None and isinstance(
-                msg.attachment, ValidatorAttachment
+                msg.attachment, RecipientValidatorAttachment
             ):
                 content = msg.attachment.content
             else:
                 logger.warning("ValidatorAgent: Did not find content to correct")
                 content = ""
             # we've used the attachment, don't need anymore
-            attachment = ValidatorAttachment(content="")
+            attachment = RecipientValidatorAttachment(content="")
             # we are rewriting an LLM message from parent, so
             # pretend it is from LLM
             responder = Entity.LLM
@@ -104,7 +104,7 @@ class ValidatorAgent(ChatAgent):
             # save the original message so when the Validator
             # receives the LLM clarification,
             # it can use it as the `content` field
-            attachment = ValidatorAttachment(content=content)
+            attachment = RecipientValidatorAttachment(content=content)
             recipient_str = ", ".join(self.config.recipients)
             content = f"""
             Who is this message for? 

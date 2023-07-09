@@ -3,7 +3,10 @@ from typing import List, Optional
 from llmagent.agent.base import Entity
 from llmagent.agent.chat_agent import ChatAgent, ChatAgentConfig
 from llmagent.agent.message import AgentMessage
-from llmagent.agent.special.validator_agent import ValidatorAgent, ValidatorAgentConfig
+from llmagent.agent.special.recipient_validator_agent import (
+    RecipientValidator,
+    RecipientValidatorConfig,
+)
 from llmagent.agent.task import Task
 from llmagent.cachedb.redis_cachedb import RedisCacheConfig
 from llmagent.language_models.base import Role
@@ -100,7 +103,7 @@ def test_agents_with_validator(test_settings: Settings):
 
     multiplier_cfg = _TestChatAgentConfig(name="Multiplier")
 
-    val_cfg = ValidatorAgentConfig(
+    val_cfg = RecipientValidatorConfig(
         llm=None,
         vecdb=None,
         name="Validator",
@@ -164,7 +167,7 @@ def test_agents_with_validator(test_settings: Settings):
                 """,
     )
 
-    validator = ValidatorAgent(val_cfg)
+    validator = RecipientValidator(val_cfg)
     task_validator = Task(
         validator,
         name="Validator",

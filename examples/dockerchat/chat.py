@@ -20,7 +20,10 @@ from examples.dockerchat.dockerchat_agent_messages import (
 import typer
 from llmagent.language_models.base import LLMMessage, Role
 from llmagent.language_models.openai_gpt import OpenAIChatModel
-from llmagent.agent.special.validator_agent import ValidatorAgentConfig, ValidatorAgent
+from llmagent.agent.special.recipient_validator_agent import (
+    RecipientValidator,
+    RecipientValidatorConfig,
+)
 from llmagent.agent.task import Task
 from llmagent.utils.configuration import set_global, Settings
 from rich import print
@@ -107,14 +110,14 @@ def chat(config: DockerChatAgentConfig) -> None:
         system_message=CODE_CHAT_INSTRUCTIONS,
     )
 
-    validator_config = ValidatorAgentConfig(
+    validator_config = RecipientValidatorConfig(
         vecdb=None,
         llm=None,
         name="Validator",
         recipients=["DockerExpert", "Coder"],
         tool_recipient="Coder",
     )
-    validator_agent = ValidatorAgent(validator_config)
+    validator_agent = RecipientValidator(validator_config)
     validator_task = Task(validator_agent, single_round=True)
     docker_task.add_sub_task(planner_task)
     planner_task.add_sub_task([validator_task, code_chat_task])
