@@ -86,7 +86,10 @@ def chat(config: SegmentorConfig) -> None:
             )
         )
         answer = doc_chat_agent.llm_response(
-            "describe this business in 1 short sentence"
+            f"""Describe this business in 1 short sentence.
+            The URL of the business is {biz_or_url}. You can 
+            use this URL and/or the provided extracts to answer the question.
+            """,
         )
         biz_description = answer.content
     else:
