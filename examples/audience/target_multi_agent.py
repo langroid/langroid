@@ -9,7 +9,7 @@ from examples.audience.agents.segmentor import Segmentor, SegmentorConfig
 from llmagent.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
 from llmagent.utils.configuration import update_global_settings, set_global, Settings
 from llmagent.parsing.urls import is_url
-from examples.urlqa.doc_chat_agent import DocChatAgent, DocChatAgentConfig
+from llmagent.agent.special.doc_chat_agent import DocChatAgent, DocChatAgentConfig
 import typer
 
 from rich.console import Console
