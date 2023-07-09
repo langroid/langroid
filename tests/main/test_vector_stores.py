@@ -5,10 +5,7 @@ import pytest
 from dotenv import load_dotenv
 
 from llmagent.embedding_models.base import EmbeddingModelsConfig
-from llmagent.embedding_models.models import (
-    OpenAIEmbeddingsConfig,
-    SentenceTransformerEmbeddingsConfig,
-)
+from llmagent.embedding_models.models import OpenAIEmbeddingsConfig
 from llmagent.mytypes import DocMetaData, Document
 from llmagent.utils.system import rmdir
 from llmagent.vector_store.base import VectorStore
@@ -20,10 +17,6 @@ api_key = os.getenv("OPENAI_API_KEY")
 openai_cfg = OpenAIEmbeddingsConfig(
     model_type="openai",
     api_key=api_key,
-)
-
-sentence_cfg = SentenceTransformerEmbeddingsConfig(
-    model_type="sentence-transformer",
 )
 
 
@@ -62,9 +55,7 @@ def generate_vecdbs(embed_cfg: EmbeddingModelsConfig) -> VectorStore:
     return [qd, qd_cloud, cd]
 
 
-@pytest.mark.parametrize(
-    "vecdb", generate_vecdbs(openai_cfg) + generate_vecdbs(sentence_cfg)
-)
+@pytest.mark.parametrize("vecdb", generate_vecdbs(openai_cfg))
 def test_vector_stores(vecdb: Union[ChromaDB, QdrantDB]):
     docs = [
         Document(content="hello", metadata=DocMetaData(id=1)),

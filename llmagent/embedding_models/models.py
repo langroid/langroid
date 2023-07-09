@@ -3,7 +3,6 @@ from typing import Callable, List
 
 import openai
 from dotenv import load_dotenv
-from sentence_transformers import SentenceTransformer
 
 from llmagent.embedding_models.base import EmbeddingModel, EmbeddingModelsConfig
 from llmagent.language_models.utils import retry_with_exponential_backoff
@@ -48,6 +47,9 @@ class OpenAIEmbeddings(EmbeddingModel):
 
 class SentenceTransformerEmbeddings(EmbeddingModel):
     def __init__(self, config: SentenceTransformerEmbeddingsConfig):
+        # this is an "extra" optional dependency, so we import it here
+        from sentence_transformers import SentenceTransformer
+
         super().__init__()
         self.config = config
         self.model = SentenceTransformer(self.config.model_name)
@@ -67,7 +69,6 @@ class SentenceTransformerEmbeddings(EmbeddingModel):
 
 def embedding_model(embedding_fn_type: str = "openai") -> EmbeddingModel:
     """
-    Thin wrapper around chromadb.utils.embedding_functions.
     Args:
         embedding_fn_type: "openai" or "sentencetransformer" # others soon
     Returns:

@@ -14,6 +14,17 @@ logging.getLogger("trafilatura").setLevel(logging.ERROR)
 
 
 class URLLoader:
+    """
+    Load a list of URLs and extract the text content.
+    Alternative approaches could use `bs4` or `scrapy`.
+
+    TODO - this currently does not handle cookie dialogs,
+     i.e. if there is a cookie pop-up, most/all of the extracted
+     content could be cookie policy text.
+     We could use `playwright` to simulate a user clicking
+     the "accept" button on the cookie dialog.
+    """
+
     def __init__(self, urls: List[str]):
         self.urls = urls
 
