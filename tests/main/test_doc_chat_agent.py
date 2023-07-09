@@ -1,23 +1,23 @@
-from examples.urlqa.doc_chat_agent import DocChatAgent, DocChatAgentConfig
-from llmagent.agent.base import Entity
-from llmagent.agent.task import Task
-from llmagent.mytypes import Document, DocMetaData
-from llmagent.utils.configuration import Settings, set_global
-from llmagent.vector_store.qdrantdb import QdrantDBConfig
-from llmagent.embedding_models.models import OpenAIEmbeddingsConfig
-from llmagent.vector_store.base import VectorStoreConfig
-from llmagent.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
-from llmagent.parsing.parser import ParsingConfig, Splitter
-from llmagent.prompts.prompts_config import PromptsConfig
-from llmagent.cachedb.redis_cachedb import RedisCacheConfig
-from llmagent.utils.system import rmdir
-from llmagent.parsing.utils import generate_random_text
-
-
-from typing import List
 import os
 import warnings
+from typing import List
+
 import pytest
+
+from llmagent.agent.base import Entity
+from llmagent.agent.special.doc_chat_agent import DocChatAgent, DocChatAgentConfig
+from llmagent.agent.task import Task
+from llmagent.cachedb.redis_cachedb import RedisCacheConfig
+from llmagent.embedding_models.models import OpenAIEmbeddingsConfig
+from llmagent.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
+from llmagent.mytypes import DocMetaData, Document
+from llmagent.parsing.parser import ParsingConfig, Splitter
+from llmagent.parsing.utils import generate_random_text
+from llmagent.prompts.prompts_config import PromptsConfig
+from llmagent.utils.configuration import Settings, set_global
+from llmagent.utils.system import rmdir
+from llmagent.vector_store.base import VectorStoreConfig
+from llmagent.vector_store.qdrantdb import QdrantDBConfig
 
 storage_path = ".qdrant/testdata1"
 rmdir(storage_path)
