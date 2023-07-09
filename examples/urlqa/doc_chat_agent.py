@@ -1,4 +1,4 @@
-from llmagent.agent.base import Entity
+from llmagent.agent.base import Entity, Agent
 from llmagent.parsing.urls import get_urls_and_paths
 from llmagent.parsing.repo_loader import RepoLoader
 from llmagent.parsing.url_loader import URLLoader
@@ -15,6 +15,9 @@ from llmagent.utils.constants import NO_ANSWER
 from typing import List, Optional, Dict, Any
 from rich import print
 from rich.console import Console
+import logging
+
+logger = logging.getLogger(__name__)
 
 console = Console()
 
@@ -52,7 +55,8 @@ class DocChatAgentConfig(ChatAgentConfig):
         splitter=Splitter.TOKENS,
         chunk_size=200,  # aim for this many tokens per chunk
         max_chunks=10_000,
-        # aim to have at least this many chars per chunk when truncating due to punctuation
+        # aim to have at least this many chars per chunk when
+        # truncating due to punctuation
         min_chunk_chars=350,
         discard_chunk_chars=5,  # discard chunks with fewer than this many chars
         n_similar_docs=4,
@@ -72,6 +76,7 @@ class DocChatAgent(ChatAgent):
         self.config = config
         self.original_docs: List[Document] = None
         self.original_docs_length = 0
+        self.response: None | Document = None
         if len(config.doc_paths) > 0:
             self.ingest()
 
@@ -85,6 +90,8 @@ class DocChatAgent(ChatAgent):
                 urls: list of urls
                 paths: list of file paths
         """
+        if len(self.config.doc_paths) == 0:
+            return dict(n_splits=0, urls=[], paths=[])
         urls, paths = get_urls_and_paths(self.config.doc_paths)
         docs = []
         if len(urls) > 0:
@@ -294,18 +301,31 @@ class DocChatAgent(ChatAgent):
 
     def summarize_docs(self) -> None:
         """Summarize all docs"""
+        if self.original_docs is None:
+            logger.warning(
+                """
+                No docs to summarize! Perhaps you are re-using a previously
+                defined collection? 
+                In that case, we don't have access to the original docs.
+                To create a summary, use a new collection, and specify a list of docs. 
+                """
+            )
+            return
         full_text = "\n\n".join([d.content for d in self.original_docs])
         tot_tokens = self.parser.num_tokens(full_text)
-        if tot_tokens < 10000:
-            # todo make this a config param
-            prompt = f"""
-            Give a concise summary of the following text:
-            {full_text}
-            """.strip()
-            with StreamingIfAllowed(self.llm):
-                super().llm_response(prompt)  # raw LLM call
-        else:
-            print("[red] No summarization for more than 1000 tokens, sorry!")
+        MAX_TOKENS = 0.9 * self.config.llm.context_length[self.config.llm.chat_model]
+        if tot_tokens > MAX_TOKENS:
+            # truncate
+            full_text = self.parser.tokenizer.decode(
+                self.parser.tokenizer.encode(full_text)[:MAX_TOKENS]
+            )
+            logger.warning(f"Summarizing after truncating text to {MAX_TOKENS} tokens")
+        prompt = f"""
+        Give a concise summary of the following text:
+        {full_text}
+        """.strip()
+        with StreamingIfAllowed(self.llm):
+            Agent.llm_response(self, prompt)  # raw LLM call
 
     def justify_response(self) -> None:
         """Show evidence for last response"""

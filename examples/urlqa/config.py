@@ -30,7 +30,7 @@ class URLQAConfig(DocChatAgentConfig):
 
     llm: OpenAIGPTConfig = OpenAIGPTConfig(
         type="openai",
-        chat_model=OpenAIChatModel.GPT3_5_TURBO,
+        chat_model=OpenAIChatModel.GPT4,
     )
     parsing: ParsingConfig = ParsingConfig(
         splitter=Splitter.TOKENS,
