@@ -1,10 +1,9 @@
 from llmagent.parsing.urls import get_list_from_user
 from llmagent.utils.logging import setup_colored_logging
 from llmagent.agent.task import Task
-from examples.urlqa.config import URLQAConfig
-from examples.urlqa.doc_chat_agent import DocChatAgent
-from llmagent.language_models.openai_gpt import OpenAIChatModel
+from llmagent.agent.special.doc_chat_agent import DocChatAgent, DocChatAgentConfig
 from llmagent.utils import configuration
+
 
 import re
 import typer
@@ -20,12 +19,10 @@ app = typer.Typer()
 setup_colored_logging()
 
 
-def chat(config: URLQAConfig) -> None:
+def chat(config: DocChatAgentConfig) -> None:
     configuration.update_global_settings(config, keys=["debug", "stream", "cache"])
-    if config.gpt4:
-        config.llm.chat_model = OpenAIChatModel.GPT4
 
-    default_urls = config.urls
+    default_paths = config.default_paths
     agent = DocChatAgent(config)
     n_deletes = agent.vecdb.clear_empty_collections()
     collections = agent.vecdb.list_collections()
@@ -72,7 +69,7 @@ def chat(config: URLQAConfig) -> None:
     inputs = get_list_from_user()
     if len(inputs) == 0:
         if is_new_collection:
-            inputs = default_urls
+            inputs = default_paths
     agent.config.doc_paths = inputs
     doc_results = agent.ingest()
     n_docs = len(doc_results["urls"]) + len(doc_results["paths"])
@@ -119,10 +116,9 @@ def chat(config: URLQAConfig) -> None:
 @app.command()
 def main(
     debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
-    gpt4: bool = typer.Option(False, "--gpt4", "-4", help="use gpt4"),
     nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
 ) -> None:
-    config = URLQAConfig(debug=debug, gpt4=gpt4, cache=not nocache)
+    config = DocChatAgentConfig(debug=debug, cache=not nocache)
     chat(config)
 
 
