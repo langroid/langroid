@@ -1,5 +1,5 @@
 from typing import List
-from examples.urlqa.doc_chat_agent import DocChatAgent, DocChatAgentConfig
+from llmagent.agent.special.doc_chat_agent import DocChatAgent, DocChatAgentConfig
 from llmagent.parsing.repo_loader import RepoLoader, RepoLoaderConfig
 from llmagent.vector_store.qdrantdb import QdrantDBConfig
 from llmagent.embedding_models.models import OpenAIEmbeddingsConfig

@@ -1,6 +1,6 @@
 import logging
 from contextlib import ExitStack
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, no_type_check
 
 from rich import print
 from rich.console import Console
@@ -114,12 +114,6 @@ class DocChatAgent(ChatAgent):
         self.original_docs: None | List[Document] = None
         self.original_docs_length = 0
         self.response: None | Document = None
-        if self.llm is None:
-            raise ValueError("Must specify llm")
-        if self.vecdb is None:
-            raise ValueError("Must specify vecdb")
-        if self.parsing is None:
-            raise ValueError("Must specify parsing")
         if len(config.doc_paths) > 0:
             self.ingest()
 
@@ -156,7 +150,11 @@ class DocChatAgent(ChatAgent):
         Chunk docs into pieces, map each chunk to vec-embedding, store in vec-db
         """
         self.original_docs = docs
+        if self.parser is None:
+            raise ValueError("Parser not set")
         docs = self.parser.split(docs)
+        if self.vecdb is None:
+            raise ValueError("VecDB not set")
         self.vecdb.add_documents(docs)
         self.original_docs_length = self.doc_length(docs)
         return len(docs)
@@ -169,14 +167,18 @@ class DocChatAgent(ChatAgent):
         Returns:
             int: number of tokens
         """
+        if self.parser is None:
+            raise ValueError("Parser not set")
         return self.parser.num_tokens(self.doc_string(docs))
 
+    @no_type_check
     def llm_response(
         self,
-        query: str | ChatDocument = None,
+        query: None | str | ChatDocument = None,
     ) -> Optional[ChatDocument]:
         if not self.llm_can_respond(query):
             return None
+        query_str: str | None
         if isinstance(query, ChatDocument):
             query_str = query.content
         else:
@@ -184,9 +186,12 @@ class DocChatAgent(ChatAgent):
         if query_str is None or query_str.startswith("!"):
             # direct query to LLM
             query_str = query_str[1:] if query_str is not None else None
+            if self.llm is None:
+                raise ValueError("LLM not set")
             with StreamingIfAllowed(self.llm):
                 response = super().llm_response(query_str)
-            self.update_dialog(query_str, response.content)
+            if query_str is not None:
+                self.update_dialog(query_str, response.content)
             return response
         if query_str == "":
             return None
@@ -242,11 +247,11 @@ class DocChatAgent(ChatAgent):
 
         """
 
-        passages = self.doc_string(passages)
+        passages_str = self.doc_string(passages)
         # Substitute Q and P into the templatized prompt
 
         final_prompt = self.config.summarize_prompt.format(
-            question=f"Question:{question}", extracts=passages
+            question=f"Question:{question}", extracts=passages_str
         )
         show_if_debug(final_prompt, "SUMMARIZE_PROMPT= ")
 
@@ -283,6 +288,7 @@ class DocChatAgent(ChatAgent):
             ),
         )
 
+    @no_type_check
     def answer_from_docs(self, query: str) -> Document:
         """Answer query based on docs in vecdb, and conv history"""
         response = Document(
@@ -315,7 +321,7 @@ class DocChatAgent(ChatAgent):
                 )
             if len(docs_and_scores) == 0:
                 return response
-            passages: List[Document] = [
+            passages = [
                 Document(content=d.content, metadata=d.metadata)
                 for (d, _) in docs_and_scores
             ]
@@ -325,9 +331,7 @@ class DocChatAgent(ChatAgent):
         if self.doc_length(passages) > self.config.max_context_tokens:
             with console.status("[cyan]LLM Extracting verbatim passages..."):
                 with StreamingIfAllowed(self.llm, False):
-                    extracts: List[Document] = self.llm.get_verbatim_extracts(
-                        query, passages
-                    )
+                    extracts = self.llm.get_verbatim_extracts(query, passages)
         with ExitStack() as stack:
             # conditionally use Streaming or rich console context
             cm = (
@@ -355,6 +359,8 @@ class DocChatAgent(ChatAgent):
             )
             return
         full_text = "\n\n".join([d.content for d in self.original_docs])
+        if self.parser is None:
+            raise ValueError("No parser defined")
         tot_tokens = self.parser.num_tokens(full_text)
         MAX_INPUT_TOKENS = (
             self.config.llm.context_length[self.config.llm.completion_model]
@@ -373,11 +379,14 @@ class DocChatAgent(ChatAgent):
         Give a concise summary of the following text:
         {full_text}
         """.strip()
-        with StreamingIfAllowed(self.llm):
+        with StreamingIfAllowed(self.llm):  # type: ignore
             Agent.llm_response(self, prompt)  # raw LLM call
 
     def justify_response(self) -> None:
         """Show evidence for last response"""
+        if self.response is None:
+            print("[magenta]No response yet")
+            return
         source = self.response.metadata.source
         if len(source) > 0:
             print("[magenta]" + source)

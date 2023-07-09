@@ -1,6 +1,6 @@
 from rich.console import Console
 from rich import print
-from examples.urlqa.doc_chat_agent import DocChatAgentConfig, DocChatAgent
+from llmagent.agent.special.doc_chat_agent import DocChatAgentConfig, DocChatAgent
 from llmagent.vector_store.qdrantdb import QdrantDBConfig
 from llmagent.embedding_models.models import OpenAIEmbeddingsConfig
 from llmagent.vector_store.base import VectorStoreConfig
