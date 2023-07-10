@@ -4,13 +4,13 @@ from typing import Union
 import pytest
 from dotenv import load_dotenv
 
-from llmagent.embedding_models.base import EmbeddingModelsConfig
-from llmagent.embedding_models.models import OpenAIEmbeddingsConfig
-from llmagent.mytypes import DocMetaData, Document
-from llmagent.utils.system import rmdir
-from llmagent.vector_store.base import VectorStore
-from llmagent.vector_store.chromadb import ChromaDB, ChromaDBConfig
-from llmagent.vector_store.qdrantdb import QdrantDB, QdrantDBConfig
+from langroid.embedding_models.base import EmbeddingModelsConfig
+from langroid.embedding_models.models import OpenAIEmbeddingsConfig
+from langroid.mytypes import DocMetaData, Document
+from langroid.utils.system import rmdir
+from langroid.vector_store.base import VectorStore
+from langroid.vector_store.chromadb import ChromaDB, ChromaDBConfig
+from langroid.vector_store.qdrantdb import QdrantDB, QdrantDBConfig
 
 load_dotenv()
 api_key = os.getenv("OPENAI_API_KEY")

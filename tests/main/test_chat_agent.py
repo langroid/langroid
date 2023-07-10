@@ -1,13 +1,13 @@
-from llmagent.agent.base import NO_ANSWER
-from llmagent.agent.chat_agent import ChatAgent, ChatAgentConfig
-from llmagent.agent.chat_document import Entity
-from llmagent.agent.task import Task
-from llmagent.cachedb.redis_cachedb import RedisCacheConfig
-from llmagent.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
-from llmagent.parsing.parser import ParsingConfig
-from llmagent.prompts.prompts_config import PromptsConfig
-from llmagent.utils.configuration import Settings, set_global
-from llmagent.vector_store.base import VectorStoreConfig
+from langroid.agent.base import NO_ANSWER
+from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
+from langroid.agent.chat_document import Entity
+from langroid.agent.task import Task
+from langroid.cachedb.redis_cachedb import RedisCacheConfig
+from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
+from langroid.parsing.parser import ParsingConfig
+from langroid.prompts.prompts_config import PromptsConfig
+from langroid.utils.configuration import Settings, set_global
+from langroid.vector_store.base import VectorStoreConfig
 
 
 class _TestChatAgentConfig(ChatAgentConfig):

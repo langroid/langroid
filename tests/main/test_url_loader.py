@@ -1,6 +1,6 @@
 import re
 
-from llmagent.parsing.url_loader import URLLoader
+from langroid.parsing.url_loader import URLLoader
 
 
 def test_url_loader():

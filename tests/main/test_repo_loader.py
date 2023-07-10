@@ -1,7 +1,7 @@
 import json
 from pathlib import Path
 
-from llmagent.parsing.repo_loader import RepoLoader, RepoLoaderConfig
+from langroid.parsing.repo_loader import RepoLoader, RepoLoaderConfig
 
 
 def test_repo_loader() -> None:

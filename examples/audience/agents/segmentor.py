@@ -4,12 +4,12 @@ from examples.audience.agents.retriever import (
     RecordDoc,
     RecordMetadata,
 )
-from llmagent.vector_store.qdrantdb import QdrantDBConfig
-from llmagent.embedding_models.models import OpenAIEmbeddingsConfig
-from llmagent.vector_store.base import VectorStoreConfig
-from llmagent.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
-from llmagent.parsing.parser import ParsingConfig, Splitter
-from llmagent.prompts.prompts_config import PromptsConfig
+from langroid.vector_store.qdrantdb import QdrantDBConfig
+from langroid.embedding_models.models import OpenAIEmbeddingsConfig
+from langroid.vector_store.base import VectorStoreConfig
+from langroid.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
+from langroid.parsing.parser import ParsingConfig, Splitter
+from langroid.prompts.prompts_config import PromptsConfig
 from typing import List
 import csv
 

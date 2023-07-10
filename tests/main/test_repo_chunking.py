@@ -3,8 +3,8 @@ Test of:
 GitHub Repo URL -> content files -> chunk
 """
 
-from llmagent.parsing.code_parser import CodeParser, CodeParsingConfig
-from llmagent.parsing.repo_loader import RepoLoader
+from langroid.parsing.code_parser import CodeParser, CodeParsingConfig
+from langroid.parsing.repo_loader import RepoLoader
 
 MAX_CHUNK_SIZE = 20
 

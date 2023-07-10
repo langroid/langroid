@@ -1,8 +1,8 @@
-# llmagent
+# langroid
 
-[![Pytest](https://github.com/langroid/llmagent/actions/workflows/pytest.yml/badge.svg)](https://github.com/langroid/llmagent/actions/workflows/pytest.yml)
-[![Lint](https://github.com/langroid/llmagent/actions/workflows/validate.yml/badge.svg)](https://github.com/langroid/llmagent/actions/workflows/validate.yml)
-[![Docs](https://github.com/langroid/llmagent/actions/workflows/mkdocs-deploy.yml/badge.svg)](https://github.com/langroid/llmagent/actions/workflows/mkdocs-deploy.yml)
+[![Pytest](https://github.com/langroid/langroid/actions/workflows/pytest.yml/badge.svg)](https://github.com/langroid/langroid/actions/workflows/pytest.yml)
+[![Lint](https://github.com/langroid/langroid/actions/workflows/validate.yml/badge.svg)](https://github.com/langroid/langroid/actions/workflows/validate.yml)
+[![Docs](https://github.com/langroid/langroid/actions/workflows/mkdocs-deploy.yml/badge.svg)](https://github.com/langroid/langroid/actions/workflows/mkdocs-deploy.yml)
 
 <div align="center">
   <img src="./docs/logos/pure-lambda-non-circular.png" width="100">
@@ -17,8 +17,8 @@ First install `poetry`, then create virtual env and install dependencies:
 
 ```bash
 # clone the repo and cd into repo root
-git clone https://github.com/langroid/llmagent.git
-cd llmagent
+git clone https://github.com/langroid/langroid.git
+cd langroid
 
 # create a virtual env under project root, .venv directory
 python3 -m venv .venv

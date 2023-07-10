@@ -1,6 +1,6 @@
 import pytest
 
-from llmagent.cachedb.redis_cachedb import RedisCache, RedisCacheConfig
+from langroid.cachedb.redis_cachedb import RedisCache, RedisCacheConfig
 
 
 @pytest.fixture

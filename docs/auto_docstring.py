@@ -4,8 +4,8 @@ import mkdocs_gen_files
 # -----------------------------------------------------#
 #                    Configuration                    #
 # -----------------------------------------------------#
-src_dir = "llmagent"
-repo_root = "https://github.com/langroid/llmagent/tree/main/"
+src_dir = "langroid"
+repo_root = "https://github.com/langroid/langroid/tree/main/"
 nav = mkdocs_gen_files.Nav()
 
 # -----------------------------------------------------#

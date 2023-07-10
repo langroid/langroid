@@ -5,17 +5,17 @@ from typing import List, Optional
 import pytest
 from pydantic import Field
 
-from llmagent.agent.chat_agent import ChatAgent, ChatAgentConfig
-from llmagent.agent.message import AgentMessage
-from llmagent.cachedb.redis_cachedb import RedisCacheConfig
-from llmagent.language_models.openai_gpt import (
+from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
+from langroid.agent.message import AgentMessage
+from langroid.cachedb.redis_cachedb import RedisCacheConfig
+from langroid.language_models.openai_gpt import (
     OpenAIChatModel,
     OpenAIGPTConfig,
 )
-from llmagent.parsing.parser import ParsingConfig
-from llmagent.prompts.prompts_config import PromptsConfig
-from llmagent.utils.configuration import Settings, set_global
-from llmagent.utils.system import rmdir
+from langroid.parsing.parser import ParsingConfig
+from langroid.prompts.prompts_config import PromptsConfig
+from langroid.utils.configuration import Settings, set_global
+from langroid.utils.system import rmdir
 
 
 class CountryCapitalMessage(AgentMessage):
@@ -79,7 +79,7 @@ class MessageHandlingAgent(ChatAgent):
 qd_dir = ".qdrant/testdata_test_agent"
 rmdir(qd_dir)
 cfg = ChatAgentConfig(
-    name="test-llmagent",
+    name="test-langroid",
     vecdb=None,
     llm=OpenAIGPTConfig(
         type="openai",
@@ -89,7 +89,7 @@ cfg = ChatAgentConfig(
     parsing=ParsingConfig(),
     prompts=PromptsConfig(),
     use_functions_api=False,
-    use_llmagent_tools=True,
+    use_tools=True,
 )
 agent = MessageHandlingAgent(cfg)
 
@@ -293,7 +293,7 @@ def test_llm_agent_message(
     Args:
         test_settings: test settings from conftest.py
         use_functions_api: whether to use LLM's functions api or not
-            (i.e. use the llmagent AgentMessage tools instead).
+            (i.e. use the langroid AgentMessage tools instead).
         message_class: the message class (i.e. tool/function) to test
         prompt: the prompt to use to induce the LLM to use the tool
         result: the expected result from agent handling the tool-message
@@ -301,7 +301,7 @@ def test_llm_agent_message(
     set_global(test_settings)
     agent = MessageHandlingAgent(cfg)
     agent.config.use_functions_api = use_functions_api
-    agent.config.use_llmagent_tools = not use_functions_api
+    agent.config.use_tools = not use_functions_api
     agent.enable_message(FileExistsMessage)
     agent.enable_message(PythonVersionMessage)
     agent.enable_message(CountryCapitalMessage)

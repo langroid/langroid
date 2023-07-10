@@ -1,8 +1,8 @@
-from llmagent.utils.logging import setup_colored_logging
-from llmagent.agent.task import Task
+from langroid.utils.logging import setup_colored_logging
+from langroid.agent.task import Task
 from examples.audience.agents.segmentor import Segmentor, SegmentorConfig
-from llmagent.language_models.openai_gpt import OpenAIChatModel
-from llmagent.utils.configuration import update_global_settings, set_global, Settings
+from langroid.language_models.openai_gpt import OpenAIChatModel
+from langroid.utils.configuration import update_global_settings, set_global, Settings
 import re
 import typer
 
@@ -72,7 +72,7 @@ def main(
         gpt4=True,
         cache=not nocache,
         use_functions_api=fn_api,
-        use_llmagent_tools=not fn_api,
+        use_tools=not fn_api,
     )
 
     set_global(

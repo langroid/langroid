@@ -1,6 +1,6 @@
 import pytest
 
-from llmagent.utils.configuration import Settings
+from langroid.utils.configuration import Settings
 
 
 def pytest_addoption(parser) -> None:

@@ -1,16 +1,16 @@
 from rich.console import Console
 from rich import print
-from llmagent.agent.special.doc_chat_agent import DocChatAgentConfig, DocChatAgent
-from llmagent.vector_store.qdrantdb import QdrantDBConfig
-from llmagent.embedding_models.models import OpenAIEmbeddingsConfig
-from llmagent.vector_store.base import VectorStoreConfig
-from llmagent.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
-from llmagent.parsing.parser import ParsingConfig, Splitter
-from llmagent.prompts.prompts_config import PromptsConfig
-from llmagent.mytypes import Document, DocMetaData
-from llmagent.agent.chat_document import ChatDocument, ChatDocMetaData
-from llmagent.agent.base import Entity
-from llmagent.utils.constants import NO_ANSWER
+from langroid.agent.special.doc_chat_agent import DocChatAgentConfig, DocChatAgent
+from langroid.vector_store.qdrantdb import QdrantDBConfig
+from langroid.embedding_models.models import OpenAIEmbeddingsConfig
+from langroid.vector_store.base import VectorStoreConfig
+from langroid.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
+from langroid.parsing.parser import ParsingConfig, Splitter
+from langroid.prompts.prompts_config import PromptsConfig
+from langroid.mytypes import Document, DocMetaData
+from langroid.agent.chat_document import ChatDocument, ChatDocMetaData
+from langroid.agent.base import Entity
+from langroid.utils.constants import NO_ANSWER
 from typing import List, Optional
 from abc import ABC, abstractmethod
 

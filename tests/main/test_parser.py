@@ -1,8 +1,8 @@
 import pytest
 
-from llmagent.mytypes import Document
-from llmagent.parsing.parser import Parser, ParsingConfig
-from llmagent.parsing.utils import generate_random_text
+from langroid.mytypes import Document
+from langroid.parsing.parser import Parser, ParsingConfig
+from langroid.parsing.utils import generate_random_text
 
 CHUNK_SIZE = 100
 

@@ -1,10 +1,10 @@
-from llmagent.utils.logging import setup_colored_logging
+from langroid.utils.logging import setup_colored_logging
 from examples.urlqa.config import URLQAConfig
-from llmagent.utils import configuration
-from llmagent.agent.base import AgentConfig
-from llmagent.agent.chat_agent import ChatAgent
-from llmagent.vector_store.base import VectorStoreConfig
-from llmagent.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
+from langroid.utils import configuration
+from langroid.agent.base import AgentConfig
+from langroid.agent.chat_agent import ChatAgent
+from langroid.vector_store.base import VectorStoreConfig
+from langroid.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
 import textwrap
 import typer
 

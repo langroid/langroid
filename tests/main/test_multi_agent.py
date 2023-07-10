@@ -2,19 +2,19 @@ from typing import Optional
 
 import pytest
 
-from llmagent.agent.base import Entity
-from llmagent.agent.chat_agent import ChatAgent, ChatAgentConfig
-from llmagent.agent.message import AgentMessage
-from llmagent.agent.task import Task
-from llmagent.cachedb.redis_cachedb import RedisCacheConfig
-from llmagent.language_models.base import Role
-from llmagent.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
-from llmagent.mytypes import DocMetaData, Document
-from llmagent.parsing.parser import ParsingConfig
-from llmagent.prompts.prompts_config import PromptsConfig
-from llmagent.utils.configuration import Settings, set_global
-from llmagent.utils.constants import NO_ANSWER
-from llmagent.vector_store.base import VectorStoreConfig
+from langroid.agent.base import Entity
+from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
+from langroid.agent.message import AgentMessage
+from langroid.agent.task import Task
+from langroid.cachedb.redis_cachedb import RedisCacheConfig
+from langroid.language_models.base import Role
+from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
+from langroid.mytypes import DocMetaData, Document
+from langroid.parsing.parser import ParsingConfig
+from langroid.prompts.prompts_config import PromptsConfig
+from langroid.utils.configuration import Settings, set_global
+from langroid.utils.constants import NO_ANSWER
+from langroid.vector_store.base import VectorStoreConfig
 
 
 class ExponentialTool(AgentMessage):
