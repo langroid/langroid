@@ -231,7 +231,7 @@ class OpenAIGPT(LanguageModel):
                 cached = True
                 if settings.debug:
                     with PrintColored(Colors().RED):
-                        print(Colors().RED + "CACHED")
+                        print("CACHED")
             else:
                 # If it's not in the cache, call the API
                 result = openai.Completion.create(**kwargs)  # type: ignore
@@ -364,7 +364,7 @@ class OpenAIGPT(LanguageModel):
                 cached = True
                 if settings.debug:
                     with PrintColored(Colors().RED):
-                        print(Colors().RED + "CACHED")
+                        print("CACHED")
             else:
                 # If it's not in the cache, call the API
                 result = openai.ChatCompletion.create(**kwargs)  # type: ignore

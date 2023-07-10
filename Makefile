@@ -28,7 +28,7 @@ lint:
 	poetry run ruff . --fix
 
 tests:
-	pytest tests/
+	pytest tests/main
 
 
 docs:
@@ -50,3 +50,41 @@ nodocs:
 loc:
 	@echo "Lines of python code in git-tracked files:"
 	@git ls-files | grep '\.py$$' | xargs cat | grep -v '^\s*$$' | wc -l
+
+.PHONY: bump
+bump:
+	@VERSION=$$(./bump_version.sh $(BUMP_TYPE))
+
+.PHONY: bump-patch
+bump-patch:
+	@$(MAKE) bump BUMP_TYPE=patch
+
+.PHONY: bump-minor
+bump-minor:
+	@$(MAKE) bump BUMP_TYPE=minor
+
+.PHONY: bump-major
+bump-major:
+	@$(MAKE) bump BUMP_TYPE=major
+
+.PHONY: build
+build:
+	@poetry build
+
+.PHONY: push
+push:
+	@git push origin main
+
+.PHONY: release
+release:
+	@gh release create $(VERSION) dist/*
+
+.PHONY: all-patch
+all-patch: bump-patch build push release
+
+.PHONY: all-minor
+all-minor: bump-minor build push release
+
+.PHONY: all-major
+all-major: bump-major build push release
+

@@ -8,6 +8,11 @@
   <img src="./docs/logos/pure-lambda-non-circular.png" width="100">
 </div>
 
+## Contributors:
+- Prasad Chalasani (Independent ML Consultant)
+- Mohannad Alhanahnah (Research Associate, U Wisc at Madison)
+- Ashish Hooda (PhD Candidate, U Wisc at Madison)
+
 ## Set up dev env
 
 We use [`poetry`](https://python-poetry.org/docs/#installation) 
