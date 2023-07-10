@@ -1,0 +1,1 @@
+FROM python:3.10\n\nRUN apt-get update && apt-get install -y \\\n    chromium-driver \\\n    firefox-esr \\\n    ca-certificates \\\n    curl \\\n    jq \\\n    wget \\\n    git\n\nWORKDIR /app\n\nCOPY requirements.txt .\n\nRUN pip install --no-cache-dir -r requirements.txt\n\nCOPY . .\n\nCMD [\"python\", \"main.py\"]
