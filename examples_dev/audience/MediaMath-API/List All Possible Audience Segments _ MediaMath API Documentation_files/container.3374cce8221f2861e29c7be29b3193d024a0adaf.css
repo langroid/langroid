@@ -1,0 +1,406 @@
+appcues-layer .hotspot > iframe, appcues-layer .appcues-hotspot > iframe, appcues-layer, appcues-container > iframe[src="about:blank"] {
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  font-size: 100% !important;
+  font: inherit !important;
+  vertical-align: baseline !important;
+  display: block !important;
+  line-height: 1 !important;
+  box-shadow: none !important;
+  opacity: 1;
+  box-sizing: content-box !important;
+  outline: none !important;
+  border-radius: 0 !important;
+  overflow-x: visible !important;
+  overflow-y: visible !important;
+}
+
+appcues-container.fullscreen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+}
+appcues-container.ontop {
+  z-index: 2147483547;
+}
+appcues-container:not(.fullscreen)[data-pattern-type=shorty], appcues-container:not(.fullscreen)[data-pattern-type=slideout] {
+  position: fixed;
+  box-shadow: 2px 3px 9px 0 rgba(0, 0, 0, 0.3);
+  transform: none;
+  transition: transform 0.8s cubic-bezier(0.2, 0.84, 0.35, 1), opacity 0.5s cubic-bezier(0, 0, 0, 1) 0.1s;
+  width: 400px;
+  height: 150px;
+  max-height: calc(100vh - 40px);
+  overflow-y: auto;
+}
+@media screen and (max-width: 440px) {
+  appcues-container:not(.fullscreen)[data-pattern-type=shorty], appcues-container:not(.fullscreen)[data-pattern-type=slideout] {
+    width: calc(100% - 40px) !important;
+  }
+}
+appcues-container:not(.fullscreen)[data-pattern-type=shorty][data-position=topRight], appcues-container:not(.fullscreen)[data-pattern-type=shorty][data-position=right], appcues-container:not(.fullscreen)[data-pattern-type=shorty][data-position=bottomRight], appcues-container:not(.fullscreen)[data-pattern-type=slideout][data-position=topRight], appcues-container:not(.fullscreen)[data-pattern-type=slideout][data-position=right], appcues-container:not(.fullscreen)[data-pattern-type=slideout][data-position=bottomRight] {
+  right: 20px;
+}
+appcues-container:not(.fullscreen)[data-pattern-type=shorty][data-position=topLeft], appcues-container:not(.fullscreen)[data-pattern-type=shorty][data-position=left], appcues-container:not(.fullscreen)[data-pattern-type=shorty][data-position=bottomLeft], appcues-container:not(.fullscreen)[data-pattern-type=slideout][data-position=topLeft], appcues-container:not(.fullscreen)[data-pattern-type=slideout][data-position=left], appcues-container:not(.fullscreen)[data-pattern-type=slideout][data-position=bottomLeft] {
+  left: 20px;
+}
+appcues-container:not(.fullscreen)[data-pattern-type=shorty][data-position=left], appcues-container:not(.fullscreen)[data-pattern-type=shorty][data-position=right], appcues-container:not(.fullscreen)[data-pattern-type=shorty][data-position=center], appcues-container:not(.fullscreen)[data-pattern-type=slideout][data-position=left], appcues-container:not(.fullscreen)[data-pattern-type=slideout][data-position=right], appcues-container:not(.fullscreen)[data-pattern-type=slideout][data-position=center] {
+  top: 50%;
+  transform: translateY(-50%);
+}
+appcues-container:not(.fullscreen)[data-pattern-type=shorty][data-position=center], appcues-container:not(.fullscreen)[data-pattern-type=slideout][data-position=center] {
+  transform: translateY(-54%);
+}
+appcues-container:not(.fullscreen)[data-pattern-type=shorty][data-position=top], appcues-container:not(.fullscreen)[data-pattern-type=shorty][data-position=center], appcues-container:not(.fullscreen)[data-pattern-type=shorty][data-position=bottom], appcues-container:not(.fullscreen)[data-pattern-type=slideout][data-position=top], appcues-container:not(.fullscreen)[data-pattern-type=slideout][data-position=center], appcues-container:not(.fullscreen)[data-pattern-type=slideout][data-position=bottom] {
+  right: 0;
+  left: 0;
+  margin: auto;
+}
+appcues-container:not(.fullscreen)[data-pattern-type=shorty][data-position^=top], appcues-container:not(.fullscreen)[data-pattern-type=slideout][data-position^=top] {
+  top: 20px;
+}
+appcues-container:not(.fullscreen)[data-pattern-type=shorty][data-position^=bottom], appcues-container:not(.fullscreen)[data-pattern-type=slideout][data-position^=bottom] {
+  bottom: 20px;
+}
+appcues-container:not(.fullscreen)[data-pattern-type=shorty].apc-hidden, appcues-container:not(.fullscreen)[data-pattern-type=slideout].apc-hidden {
+  transition: transform 0.5s ease-in, opacity 0.4s cubic-bezier(0.5, 1, 1, 1);
+  opacity: 0;
+}
+appcues-container:not(.fullscreen)[data-pattern-type=shorty].apc-hidden[data-position=center], appcues-container:not(.fullscreen)[data-pattern-type=slideout].apc-hidden[data-position=center] {
+  transform: translateY(-50%);
+}
+appcues-container:not(.fullscreen)[data-pattern-type=shorty].apc-hidden[data-position=top], appcues-container:not(.fullscreen)[data-pattern-type=slideout].apc-hidden[data-position=top] {
+  transform: translateY(-50%);
+}
+appcues-container:not(.fullscreen)[data-pattern-type=shorty].apc-hidden[data-position=topLeft], appcues-container:not(.fullscreen)[data-pattern-type=shorty].apc-hidden[data-position=bottomLeft], appcues-container:not(.fullscreen)[data-pattern-type=slideout].apc-hidden[data-position=topLeft], appcues-container:not(.fullscreen)[data-pattern-type=slideout].apc-hidden[data-position=bottomLeft] {
+  transform: translateX(-50%);
+}
+appcues-container:not(.fullscreen)[data-pattern-type=shorty].apc-hidden[data-position=bottom], appcues-container:not(.fullscreen)[data-pattern-type=slideout].apc-hidden[data-position=bottom] {
+  transform: translateY(50%);
+}
+appcues-container:not(.fullscreen)[data-pattern-type=shorty].apc-hidden[data-position=topRight], appcues-container:not(.fullscreen)[data-pattern-type=shorty].apc-hidden[data-position=bottomRight], appcues-container:not(.fullscreen)[data-pattern-type=slideout].apc-hidden[data-position=topRight], appcues-container:not(.fullscreen)[data-pattern-type=slideout].apc-hidden[data-position=bottomRight] {
+  transform: translateX(50%);
+}
+appcues-container:not(.fullscreen)[data-pattern-type=shorty].apc-hidden[data-position=left], appcues-container:not(.fullscreen)[data-pattern-type=slideout].apc-hidden[data-position=left] {
+  transform: translateY(-50%) translateX(-50%);
+}
+appcues-container:not(.fullscreen)[data-pattern-type=shorty].apc-hidden[data-position=right], appcues-container:not(.fullscreen)[data-pattern-type=slideout].apc-hidden[data-position=right] {
+  transform: translateY(-50%) translateX(50%);
+}
+
+.appcues-noscroll {
+  overflow: hidden;
+}
+
+.appcues iframe.appcues-tooltip-container.appcues-tooltip-hidden {
+  display: none !important;
+}
+
+appcues-layer .hotspot > iframe, appcues-layer .appcues-hotspot > iframe, appcues-layer, appcues-container > iframe[src="about:blank"] {
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  font-size: 100% !important;
+  font: inherit !important;
+  vertical-align: baseline !important;
+  display: block !important;
+  line-height: 1 !important;
+  box-shadow: none !important;
+  opacity: 1;
+  box-sizing: content-box !important;
+  outline: none !important;
+  border-radius: 0 !important;
+  overflow-x: visible !important;
+  overflow-y: visible !important;
+}
+
+appcues-layer .beacon {
+  position: relative;
+  cursor: pointer;
+  -webkit-transform-origin: 12px 12px 0;
+  -moz-transform-origin: 12px 12px 0;
+  -ms-transform-origin: 12px 12px 0;
+  -o-transform-origin: 12px 12px 0;
+  transform-origin: 12px 12px 0;
+  -webkit-transition: -webkit-transform 0.1s;
+  -moz-transition: -moz-transform 0.1s;
+  transition: transform 0.1s;
+}
+appcues-layer .beacon .beacon-inner {
+  -webkit-transition: -webkit-transform 0.1s;
+  -moz-transition: -moz-transform 0.1s;
+  transition: transform 0.1s;
+  -webkit-transform-origin: 12px 12px 0;
+  -moz-transform-origin: 12px 12px 0;
+  -ms-transform-origin: 12px 12px 0;
+  -o-transform-origin: 12px 12px 0;
+  transform-origin: 12px 12px 0;
+}
+appcues-layer .beacon:hover {
+  -webkit-animation-fill-mode: backwards;
+  -moz-animation-fill-mode: backwards;
+  animation-fill-mode: backwards;
+  -webkit-transform: scale(1.25);
+  -moz-transform: scale(1.25);
+  -ms-transform: scale(1.25);
+  -o-transform: scale(1.25);
+  transform: scale(1.25);
+}
+appcues-layer .beacon:hover .beacon-inner {
+  -webkit-transform: scale(1.5);
+  -moz-transform: scale(1.5);
+  -ms-transform: scale(1.5);
+  -o-transform: scale(1.5);
+  transform: scale(1.5);
+}
+appcues-layer .beacon:active, appcues-layer .beacon:focus {
+  -webkit-animation-fill-mode: backwards;
+  -moz-animation-fill-mode: backwards;
+  animation-fill-mode: backwards;
+  -webkit-transform: scale(0.75);
+  -moz-transform: scale(0.75);
+  -ms-transform: scale(0.75);
+  -o-transform: scale(0.75);
+  transform: scale(0.75);
+}
+appcues-layer .beacon:active:after, appcues-layer .beacon:focus:after {
+  -webkit-transform: scale(1.8);
+  -moz-transform: scale(1.8);
+  -ms-transform: scale(1.8);
+  -o-transform: scale(1.8);
+  transform: scale(1.8);
+}
+appcues-layer .beacon.bounce-in {
+  -webkit-animation: bounceIn 0.5s linear;
+  -moz-animation: bounceIn 0.5s linear;
+  animation: bounceIn 0.5s linear;
+}
+appcues-layer .beacon.bounce-out {
+  -webkit-animation: bounceOut 0.5s ease-in;
+  -moz-animation: bounceOut 0.5s ease-in;
+  animation: bounceOut 0.5s ease-in;
+  -webkit-animation-fill-mode: both;
+  -moz-animation-fill-mode: both;
+  animation-fill-mode: both;
+}
+appcues-layer .beacon .beacon-outer {
+  -webkit-transform-origin: 11px 11px;
+  -moz-transform-origin: 11px 11px;
+  -ms-transform-origin: 11px 11px;
+  -o-transform-origin: 11px 11px;
+  transform-origin: 11px 11px;
+}
+@-webkit-keyframes appcues-beacon-pulse {
+  0% {
+    stroke-width: 22;
+    -moz-transform: scale(0.1);
+    -ms-transform: scale(0.1);
+    -webkit-transform: scale(0.1);
+    transform: scale(0.1);
+  }
+  25% {
+    -moz-transform: scale(1);
+    -ms-transform: scale(1);
+    -webkit-transform: scale(1);
+    transform: scale(1);
+    stroke-width: 0.5;
+  }
+  30% {
+    stroke-width: 0;
+  }
+  100% {
+    stroke-width: 0;
+  }
+}
+@-moz-keyframes appcues-beacon-pulse {
+  0% {
+    stroke-width: 22;
+    -moz-transform: scale(0.1);
+    -ms-transform: scale(0.1);
+    -webkit-transform: scale(0.1);
+    transform: scale(0.1);
+  }
+  25% {
+    -moz-transform: scale(1);
+    -ms-transform: scale(1);
+    -webkit-transform: scale(1);
+    transform: scale(1);
+    stroke-width: 0.5;
+  }
+  30% {
+    stroke-width: 0;
+  }
+  100% {
+    stroke-width: 0;
+  }
+}
+@keyframes appcues-beacon-pulse {
+  0% {
+    stroke-width: 22;
+    -moz-transform: scale(0.1);
+    -ms-transform: scale(0.1);
+    -webkit-transform: scale(0.1);
+    transform: scale(0.1);
+  }
+  25% {
+    -moz-transform: scale(1);
+    -ms-transform: scale(1);
+    -webkit-transform: scale(1);
+    transform: scale(1);
+    stroke-width: 0.5;
+  }
+  30% {
+    stroke-width: 0;
+  }
+  100% {
+    stroke-width: 0;
+  }
+}
+appcues-layer .beacon .hotspot-animation-pulse {
+  -webkit-animation: appcues-beacon-pulse 3s ease-out 2s infinite;
+  -moz-animation: appcues-beacon-pulse 3s ease-out 2s infinite;
+  animation: appcues-beacon-pulse 3s ease-out 2s infinite;
+}
+appcues-layer .beacon-container {
+  width: 24px;
+  max-width: 24px;
+  position: relative;
+}
+
+appcues-layer .hotspot > iframe, appcues-layer .appcues-hotspot > iframe, appcues-layer, appcues-container > iframe[src="about:blank"] {
+  margin: 0 !important;
+  padding: 0 !important;
+  border: 0 !important;
+  font-size: 100% !important;
+  font: inherit !important;
+  vertical-align: baseline !important;
+  display: block !important;
+  line-height: 1 !important;
+  box-shadow: none !important;
+  opacity: 1;
+  box-sizing: content-box !important;
+  outline: none !important;
+  border-radius: 0 !important;
+  overflow-x: visible !important;
+  overflow-y: visible !important;
+}
+
+@media screen and (min-width: 0\0 ) {
+  appcues-layer .hotspot .apc-spotlight, appcues-layer .appcues-hotspot .apc-spotlight {
+    display: none;
+  }
+}
+appcues-layer .hotspots, appcues-layer .hotspots .hotspot, appcues-layer .hotspots, appcues-layer .hotspots .appcues-hotspot, appcues-layer .appcues-hotspots, appcues-layer .appcues-hotspots .hotspot, appcues-layer .appcues-hotspots, appcues-layer .appcues-hotspots .appcues-hotspot {
+  position: static;
+}
+appcues-layer .hotspots .apc-full-backdrop, appcues-layer .appcues-hotspots .apc-full-backdrop {
+  opacity: 0;
+  visibility: hidden;
+}
+appcues-layer .hotspots .hotspot:first-child .show-full-backdrop, appcues-layer .appcues-hotspots .hotspot:first-child .show-full-backdrop {
+  opacity: 1;
+  visibility: visible;
+  z-index: 2147482647;
+}
+appcues-layer .hotspot, appcues-layer .appcues-hotspot {
+  top: 50%;
+  left: 50%;
+}
+appcues-layer .hotspot.appcues-animated, appcues-layer .appcues-hotspot.appcues-animated {
+  transition: top 0.1s, left 0.1s;
+}
+appcues-layer .hotspot .apc-animated-backdrop, appcues-layer .appcues-hotspot .apc-animated-backdrop {
+  transition: opacity 0.3s;
+}
+appcues-layer .hotspot.apc-hidden .beacon, appcues-layer .appcues-hotspot.apc-hidden .beacon {
+  transform: scale(0);
+  visibility: hidden;
+}
+appcues-layer .hotspot.apc-hidden .apc-spotlight, appcues-layer .appcues-hotspot.apc-hidden .apc-spotlight {
+  opacity: 0;
+  visibility: hidden;
+}
+appcues-layer .hotspot.apc-beacon-hidden .beacon-container, appcues-layer .appcues-hotspot.apc-beacon-hidden .beacon-container {
+  display: none;
+}
+appcues-layer .hotspot .beacon, appcues-layer .appcues-hotspot .beacon {
+  transition: transform 0.08s cubic-bezier(0, 0, 0, 1);
+  transform: none;
+}
+appcues-layer .hotspot > iframe, appcues-layer .appcues-hotspot > iframe {
+  background-color: transparent;
+  min-width: 0;
+  min-height: 0;
+  opacity: 1;
+  transform: none;
+  transition: opacity 0.16s cubic-bezier(0, 0, 0, 1), transform 0.08s cubic-bezier(0, 0, 0, 1);
+}
+appcues-layer .hotspot > iframe.apc-hidden, appcues-layer .appcues-hotspot > iframe.apc-hidden {
+  opacity: 0.01;
+  transform: scale(0.97);
+  visibility: hidden;
+}
+appcues-layer .hotspot > iframe.align-top, appcues-layer .appcues-hotspot > iframe.align-top {
+  transform-origin: bottom;
+}
+appcues-layer .hotspot > iframe.align-top-left, appcues-layer .appcues-hotspot > iframe.align-top-left {
+  transform-origin: bottom right;
+}
+appcues-layer .hotspot > iframe.align-top-right, appcues-layer .appcues-hotspot > iframe.align-top-right {
+  transform-origin: bottom left;
+}
+appcues-layer .hotspot > iframe.align-bottom, appcues-layer .appcues-hotspot > iframe.align-bottom {
+  transform-origin: top;
+}
+appcues-layer .hotspot > iframe.align-bottom-left, appcues-layer .appcues-hotspot > iframe.align-bottom-left {
+  transform-origin: top right;
+}
+appcues-layer .hotspot > iframe.align-bottom-right, appcues-layer .appcues-hotspot > iframe.align-bottom-right {
+  transform-origin: top left;
+}
+
+appcues-debugger {
+  position: fixed;
+  bottom: 0;
+  left: 15px;
+  overflow-wrap: break-word;
+  z-index: 2147483548;
+  color: white;
+}
+appcues-debugger.expanded {
+  max-height: 450px;
+  min-width: 600px;
+}
+appcues-debugger.collapsed {
+  max-height: 35px;
+}
+appcues-debugger iframe {
+  overflow: hidden;
+}
+
+appcues-checklist {
+  position: fixed;
+  bottom: 30px;
+  z-index: 2147483647;
+  transition: all 0.5s ease-in-out;
+}
+appcues-checklist.apcl-right {
+  right: 30px;
+}
+appcues-checklist.apcl-right.first-view {
+  right: -300px;
+}
+appcues-checklist.apcl-left {
+  left: 30px;
+}
+appcues-checklist.apcl-left.first-view {
+  left: -300px;
+}
+
+div.appcues, div.appcues > appcues-layer {
+  position: static;
+}
