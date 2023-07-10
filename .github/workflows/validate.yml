@@ -38,6 +38,6 @@ jobs:
 
       - name: Run mypy
         run: |
-          poetry run mypy -p llmagent
+          poetry run mypy -p langroid
 
   # Any additional jobs...

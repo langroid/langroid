@@ -35,12 +35,11 @@ jobs:
         echo "$HOME/.local/bin" >> $GITHUB_PATH
         python -m pip install --upgrade pip
         
-        poetry install -E docker
+        poetry install
 
     - name: Run tests with coverage
       run: |
-        poetry run coverage run --source=llmagent -m pytest tests/main
-        poetry run coverage run --append --source=llmagent -m pytest tests/examples
+        poetry run coverage run --source=langroid -m pytest tests/main
         poetry run coverage report
     - name: Generate HTML coverage report
       run: |
