@@ -1,4 +1,4 @@
-site_name: "llmagent"
+site_name: "langroid"
 repo_url:
 edit_uri: ""
 theme:
@@ -34,7 +34,7 @@ plugins:
   - mkdocstrings:
       default_handler: python
       watch:
-        - llmagent
+        - langroid
   - section-index
 nav:
   - Repo Overview: Overview.md

@@ -1,18 +1,18 @@
 from typing import List
-from llmagent.agent.special.doc_chat_agent import DocChatAgent, DocChatAgentConfig
-from llmagent.parsing.repo_loader import RepoLoader, RepoLoaderConfig
-from llmagent.vector_store.qdrantdb import QdrantDBConfig
-from llmagent.embedding_models.models import OpenAIEmbeddingsConfig
-from llmagent.vector_store.base import VectorStoreConfig, VectorStore
-from llmagent.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
-from llmagent.parsing.parser import ParsingConfig, Splitter
-from llmagent.parsing.code_parser import CodeParsingConfig
-from llmagent.prompts.prompts_config import PromptsConfig
-from llmagent.prompts.templates import ANSWER_PROMPT_USE_HISTORY_GPT4
-from llmagent.mytypes import Document, DocMetaData
+from langroid.agent.special.doc_chat_agent import DocChatAgent, DocChatAgentConfig
+from langroid.parsing.repo_loader import RepoLoader, RepoLoaderConfig
+from langroid.vector_store.qdrantdb import QdrantDBConfig
+from langroid.embedding_models.models import OpenAIEmbeddingsConfig
+from langroid.vector_store.base import VectorStoreConfig, VectorStore
+from langroid.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
+from langroid.parsing.parser import ParsingConfig, Splitter
+from langroid.parsing.code_parser import CodeParsingConfig
+from langroid.prompts.prompts_config import PromptsConfig
+from langroid.prompts.templates import ANSWER_PROMPT_USE_HISTORY_GPT4
+from langroid.mytypes import Document, DocMetaData
 from rich.prompt import Prompt
 from pathlib import Path
-from llmagent.parsing.urls import org_user_from_github
+from langroid.parsing.urls import org_user_from_github
 
 
 from examples.codechat.code_chat_tools import (
@@ -69,7 +69,7 @@ class CodeChatAgentConfig(DocChatAgentConfig):
     stream: bool = True  # allow streaming where needed
     vecdb: VectorStoreConfig = QdrantDBConfig(
         type="qdrant",
-        collection_name="llmagent-codechat",
+        collection_name="langroid-codechat",
         storage_path=".qdrant/codechat/",
         embedding=OpenAIEmbeddingsConfig(
             model_type="openai",

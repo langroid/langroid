@@ -20,7 +20,7 @@ check:
 	@git ls-files | grep '\.py$$' | xargs flake8 --exclude=.git,__pycache__,.venv
 	@poetry run ruff .
 	@echo "Running mypy...";
-	@poetry run mypy -p llmagent
+	@poetry run mypy -p langroid
 	@echo "All checks passed!"
 
 lint:

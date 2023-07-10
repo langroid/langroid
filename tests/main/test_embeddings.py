@@ -2,8 +2,8 @@ import os
 
 from dotenv import load_dotenv
 
-from llmagent.embedding_models.base import EmbeddingModel
-from llmagent.embedding_models.models import OpenAIEmbeddingsConfig
+from langroid.embedding_models.base import EmbeddingModel
+from langroid.embedding_models.models import OpenAIEmbeddingsConfig
 
 
 def test_embeddings():

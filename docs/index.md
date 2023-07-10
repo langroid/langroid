@@ -1,5 +1,5 @@
-# LLMagent: LLM-powered agents
+# Langroid: Harness LLMs with Multi-Agent Programming
 
-This documentation page will be expanded later. For now we are just testing 
-how doc pages work.
+This documentation page will be expanded later. 
+
 

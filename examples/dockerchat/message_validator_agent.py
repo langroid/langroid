@@ -1,12 +1,12 @@
 from typing import Optional
-from llmagent.agent.chat_agent import ChatAgent, ChatAgentConfig
-from llmagent.agent.chat_document import (
+from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
+from langroid.agent.chat_document import (
     Entity,
     ChatDocument,
     ChatDocMetaData,
     ChatDocAttachment,
 )
-from llmagent.parsing.agent_chats import parse_message
+from langroid.parsing.agent_chats import parse_message
 
 import logging
 

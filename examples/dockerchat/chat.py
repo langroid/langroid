@@ -1,4 +1,4 @@
-from llmagent.utils.logging import setup_colored_logging
+from langroid.utils.logging import setup_colored_logging
 from examples.dockerchat.docker_chat_agent import (
     DockerChatAgentConfig,
     DockerChatAgent,
@@ -18,14 +18,14 @@ from examples.dockerchat.dockerchat_agent_messages import (
     RunContainerMessage,
 )
 import typer
-from llmagent.language_models.base import LLMMessage, Role
-from llmagent.language_models.openai_gpt import OpenAIChatModel
-from llmagent.agent.special.recipient_validator_agent import (
+from langroid.language_models.base import LLMMessage, Role
+from langroid.language_models.openai_gpt import OpenAIChatModel
+from langroid.agent.special.recipient_validator_agent import (
     RecipientValidator,
     RecipientValidatorConfig,
 )
-from llmagent.agent.task import Task
-from llmagent.utils.configuration import set_global, Settings
+from langroid.agent.task import Task
+from langroid.utils.configuration import set_global, Settings
 from rich import print
 
 
@@ -143,7 +143,7 @@ def main(
         gpt4=True,
         cache=not nocache,
         use_functions_api=fn_api,
-        use_llmagent_tools=not fn_api,
+        use_tools=not fn_api,
     )
 
     set_global(

@@ -1,11 +1,11 @@
-from llmagent.agent.chat_agent import ChatAgentConfig
-from llmagent.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
-from llmagent.utils.configuration import Settings, set_global
-from llmagent.agent.chat_agent import ChatAgent
-from llmagent.prompts.prompts_config import PromptsConfig
-from llmagent.agent.base import AgentMessage
-from llmagent.parsing.parser import ParsingConfig
-from llmagent.cachedb.redis_cachedb import RedisCacheConfig
+from langroid.agent.chat_agent import ChatAgentConfig
+from langroid.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
+from langroid.utils.configuration import Settings, set_global
+from langroid.agent.chat_agent import ChatAgent
+from langroid.prompts.prompts_config import PromptsConfig
+from langroid.agent.base import AgentMessage
+from langroid.parsing.parser import ParsingConfig
+from langroid.cachedb.redis_cachedb import RedisCacheConfig
 
 from typing import List
 
@@ -59,7 +59,7 @@ uses these arguments to test the container
 """
 
 cfg = ChatAgentConfig(
-    name="test-llmagent",
+    name="test-langroid",
     vecdb=None,
     llm=OpenAIGPTConfig(
         type="openai",

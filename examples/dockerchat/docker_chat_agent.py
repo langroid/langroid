@@ -1,4 +1,4 @@
-from llmagent.agent.chat_agent import ChatAgent, ChatAgentConfig
+from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from pydantic import BaseModel, HttpUrl
 from typing import Optional, List, Any
 from examples.codechat.code_chat_agent import CodeChatAgentConfig, CodeChatAgent
@@ -13,15 +13,15 @@ from examples.dockerchat.dockerchat_agent_messages import (
 )
 from rich.console import Console
 from rich.prompt import Prompt
-from llmagent.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
-from llmagent.vector_store.qdrantdb import QdrantDBConfig
-from llmagent.embedding_models.models import OpenAIEmbeddingsConfig
-from llmagent.vector_store.base import VectorStoreConfig
-from llmagent.parsing.parser import ParsingConfig
-from llmagent.prompts.prompts_config import PromptsConfig
-from llmagent.language_models.base import LLMMessage
-from llmagent.parsing.repo_loader import RepoLoader, RepoLoaderConfig
-from llmagent.utils.constants import NO_ANSWER
+from langroid.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
+from langroid.vector_store.qdrantdb import QdrantDBConfig
+from langroid.embedding_models.models import OpenAIEmbeddingsConfig
+from langroid.vector_store.base import VectorStoreConfig
+from langroid.parsing.parser import ParsingConfig
+from langroid.prompts.prompts_config import PromptsConfig
+from langroid.language_models.base import LLMMessage
+from langroid.parsing.repo_loader import RepoLoader, RepoLoaderConfig
+from langroid.utils.constants import NO_ANSWER
 from examples.dockerchat.identify_python_version import get_python_version
 from examples.dockerchat.identify_python_dependency import (
     identify_dependency_management,
@@ -116,13 +116,13 @@ class DockerChatAgentConfig(ChatAgentConfig):
     cache: bool = True
     stream: bool = True
     use_functions_api: bool = False
-    use_llmagent_tools: bool = True
+    use_tools: bool = True
     exclude_file_types: List[str] = ["Dockerfile"]  # file-types to exclude from repo
 
     vecdb: VectorStoreConfig = QdrantDBConfig(
         type="qdrant",
-        collection_name="llmagent-dockerchat",
-        storage_path=".qdrant/llmagent-dockerchat/",
+        collection_name="langroid-dockerchat",
+        storage_path=".qdrant/langroid-dockerchat/",
         embedding=OpenAIEmbeddingsConfig(
             model_type="openai",
             model_name="text-embedding-ada-002",
@@ -176,7 +176,7 @@ class DockerChatAgent(ChatAgent):
 
         planner_agent_cfg = ChatAgentConfig(
             name="Planner",
-            use_llmagent_tools=config.use_llmagent_tools,
+            use_tools=config.use_tools,
             use_functions_api=config.use_functions_api,
             vecdb=None,
             llm=self.config.llm,

@@ -1,4 +1,4 @@
-from llmagent.agent.base import AgentMessage
+from langroid.agent.base import AgentMessage
 from typing import Union, List
 import logging
 

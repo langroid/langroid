@@ -1,21 +1,21 @@
 from typing import List, Optional
 
-from llmagent.agent.base import Entity
-from llmagent.agent.chat_agent import ChatAgent, ChatAgentConfig
-from llmagent.agent.message import AgentMessage
-from llmagent.agent.special.recipient_validator_agent import (
+from langroid.agent.base import Entity
+from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
+from langroid.agent.message import AgentMessage
+from langroid.agent.special.recipient_validator_agent import (
     RecipientValidator,
     RecipientValidatorConfig,
 )
-from llmagent.agent.task import Task
-from llmagent.cachedb.redis_cachedb import RedisCacheConfig
-from llmagent.language_models.base import Role
-from llmagent.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
-from llmagent.mytypes import DocMetaData, Document
-from llmagent.parsing.parser import ParsingConfig
-from llmagent.prompts.prompts_config import PromptsConfig
-from llmagent.utils.configuration import Settings, set_global
-from llmagent.vector_store.base import VectorStoreConfig
+from langroid.agent.task import Task
+from langroid.cachedb.redis_cachedb import RedisCacheConfig
+from langroid.language_models.base import Role
+from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
+from langroid.mytypes import DocMetaData, Document
+from langroid.parsing.parser import ParsingConfig
+from langroid.prompts.prompts_config import PromptsConfig
+from langroid.utils.configuration import Settings, set_global
+from langroid.vector_store.base import VectorStoreConfig
 
 
 class ExponentialTool(AgentMessage):

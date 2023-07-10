@@ -1,13 +1,13 @@
-from llmagent.utils.configuration import Settings, set_global
-from llmagent.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
-from llmagent.agent.chat_agent import ChatAgentConfig
-from llmagent.prompts.prompts_config import PromptsConfig
-from llmagent.parsing.parser import ParsingConfig
-from llmagent.agent.base import AgentMessage
-from llmagent.agent.task import Task
-from llmagent.agent.chat_agent import ChatAgent
-from llmagent.utils.system import rmdir
-from llmagent.cachedb.redis_cachedb import RedisCacheConfig
+from langroid.utils.configuration import Settings, set_global
+from langroid.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
+from langroid.agent.chat_agent import ChatAgentConfig
+from langroid.prompts.prompts_config import PromptsConfig
+from langroid.parsing.parser import ParsingConfig
+from langroid.agent.base import AgentMessage
+from langroid.agent.task import Task
+from langroid.agent.chat_agent import ChatAgent
+from langroid.utils.system import rmdir
+from langroid.cachedb.redis_cachedb import RedisCacheConfig
 
 from typing import List
 
@@ -70,7 +70,7 @@ cfg = ChatAgentConfig(
     generate a new THINKING and QUESTION.  
     """,
     debug=True,
-    name="test-llmagent",
+    name="test-langroid",
     vecdb=None,
     llm=OpenAIGPTConfig(
         type="openai",

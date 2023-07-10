@@ -1,13 +1,13 @@
 import os
 import tempfile
 import pytest
-from llmagent.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
-from llmagent.prompts.prompts_config import PromptsConfig
-from llmagent.parsing.parser import ParsingConfig
-from llmagent.agent.base import AgentMessage
-from llmagent.agent.chat_agent import ChatAgent, ChatAgentConfig
-from llmagent.utils.system import rmdir
-from llmagent.cachedb.redis_cachedb import RedisCacheConfig
+from langroid.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
+from langroid.prompts.prompts_config import PromptsConfig
+from langroid.parsing.parser import ParsingConfig
+from langroid.agent.base import AgentMessage
+from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
+from langroid.utils.system import rmdir
+from langroid.cachedb.redis_cachedb import RedisCacheConfig
 from examples.dockerchat.identify_python_dependency import (
     identify_dependency_management,
     DEPENDENCY_FILES,
@@ -44,7 +44,7 @@ class MessageHandlingAgent(ChatAgent):
 qd_dir = ".qdrant/testdata_test_agent"
 rmdir(qd_dir)
 cfg = ChatAgentConfig(
-    name="test-llmagent",
+    name="test-langroid",
     system_message="""
     You are a devops engineer, and your task is to understand a PYTHON
     repo. Plan this out step by step, and ask me questions

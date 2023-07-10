@@ -1,11 +1,11 @@
-from llmagent.agent.base import Agent, AgentConfig
-from llmagent.cachedb.redis_cachedb import RedisCacheConfig
-from llmagent.language_models.base import StreamingIfAllowed
-from llmagent.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
-from llmagent.parsing.parser import ParsingConfig
-from llmagent.prompts.prompts_config import PromptsConfig
-from llmagent.utils.configuration import Settings, set_global
-from llmagent.vector_store.base import VectorStoreConfig
+from langroid.agent.base import Agent, AgentConfig
+from langroid.cachedb.redis_cachedb import RedisCacheConfig
+from langroid.language_models.base import StreamingIfAllowed
+from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
+from langroid.parsing.parser import ParsingConfig
+from langroid.prompts.prompts_config import PromptsConfig
+from langroid.utils.configuration import Settings, set_global
+from langroid.vector_store.base import VectorStoreConfig
 
 
 class CustomAgentConfig(AgentConfig):

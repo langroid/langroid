@@ -1,17 +1,17 @@
 import openai
 import pytest
 
-from llmagent.cachedb.redis_cachedb import RedisCacheConfig
-from llmagent.language_models.base import LLMMessage, Role
-from llmagent.language_models.openai_gpt import (
+from langroid.cachedb.redis_cachedb import RedisCacheConfig
+from langroid.language_models.base import LLMMessage, Role
+from langroid.language_models.openai_gpt import (
     OpenAIChatModel,
     OpenAICompletionModel,
     OpenAIGPT,
     OpenAIGPTConfig,
 )
-from llmagent.parsing.parser import Parser, ParsingConfig
-from llmagent.parsing.utils import generate_random_sentences
-from llmagent.utils.configuration import Settings, set_global
+from langroid.parsing.parser import Parser, ParsingConfig
+from langroid.parsing.utils import generate_random_sentences
+from langroid.utils.configuration import Settings, set_global
 
 # allow streaming globally, but can be turned off by individual models
 set_global(Settings(stream=True))

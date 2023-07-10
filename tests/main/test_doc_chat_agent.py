@@ -4,20 +4,20 @@ from typing import List
 
 import pytest
 
-from llmagent.agent.base import Entity
-from llmagent.agent.special.doc_chat_agent import DocChatAgent, DocChatAgentConfig
-from llmagent.agent.task import Task
-from llmagent.cachedb.redis_cachedb import RedisCacheConfig
-from llmagent.embedding_models.models import OpenAIEmbeddingsConfig
-from llmagent.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
-from llmagent.mytypes import DocMetaData, Document
-from llmagent.parsing.parser import ParsingConfig, Splitter
-from llmagent.parsing.utils import generate_random_text
-from llmagent.prompts.prompts_config import PromptsConfig
-from llmagent.utils.configuration import Settings, set_global
-from llmagent.utils.system import rmdir
-from llmagent.vector_store.base import VectorStoreConfig
-from llmagent.vector_store.qdrantdb import QdrantDBConfig
+from langroid.agent.base import Entity
+from langroid.agent.special.doc_chat_agent import DocChatAgent, DocChatAgentConfig
+from langroid.agent.task import Task
+from langroid.cachedb.redis_cachedb import RedisCacheConfig
+from langroid.embedding_models.models import OpenAIEmbeddingsConfig
+from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
+from langroid.mytypes import DocMetaData, Document
+from langroid.parsing.parser import ParsingConfig, Splitter
+from langroid.parsing.utils import generate_random_text
+from langroid.prompts.prompts_config import PromptsConfig
+from langroid.utils.configuration import Settings, set_global
+from langroid.utils.system import rmdir
+from langroid.vector_store.base import VectorStoreConfig
+from langroid.vector_store.qdrantdb import QdrantDBConfig
 
 storage_path = ".qdrant/testdata1"
 rmdir(storage_path)

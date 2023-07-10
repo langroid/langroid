@@ -1,5 +1,5 @@
-from llmagent.mytypes import DocMetaData, Document
-from llmagent.parsing.code_parser import CodeParser, CodeParsingConfig
+from langroid.mytypes import DocMetaData, Document
+from langroid.parsing.code_parser import CodeParser, CodeParsingConfig
 
 MAX_CHUNK_SIZE = 10
 

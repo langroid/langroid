@@ -1,8 +1,8 @@
-from llmagent.parsing.urls import get_list_from_user
-from llmagent.utils.logging import setup_colored_logging
-from llmagent.agent.task import Task
-from llmagent.agent.special.doc_chat_agent import DocChatAgent, DocChatAgentConfig
-from llmagent.utils import configuration
+from langroid.parsing.urls import get_list_from_user
+from langroid.utils.logging import setup_colored_logging
+from langroid.agent.task import Task
+from langroid.agent.special.doc_chat_agent import DocChatAgent, DocChatAgentConfig
+from langroid.utils import configuration
 
 
 import re

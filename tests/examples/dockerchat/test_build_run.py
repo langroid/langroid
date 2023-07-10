@@ -1,15 +1,15 @@
 import pytest
 
-from llmagent.agent.chat_agent import ChatAgentConfig
-from llmagent.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
+from langroid.agent.chat_agent import ChatAgentConfig
+from langroid.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
 from examples.dockerchat.docker_chat_agent import DockerChatAgent
 from examples.dockerchat.dockerchat_agent_messages import (
     AskURLMessage,
     ValidateDockerfileMessage,
     RunContainerMessage,
 )
-from llmagent.parsing.repo_loader import RepoLoader, RepoLoaderConfig
-from llmagent.cachedb.redis_cachedb import RedisCacheConfig
+from langroid.parsing.repo_loader import RepoLoader, RepoLoaderConfig
+from langroid.cachedb.redis_cachedb import RedisCacheConfig
 from typing import Optional
 
 import os

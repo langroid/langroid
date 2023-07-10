@@ -1,18 +1,18 @@
-from llmagent.utils.logging import setup_colored_logging
-from llmagent.agent.task import Task
-from llmagent.agent.special.recipient_validator_agent import (
+from langroid.utils.logging import setup_colored_logging
+from langroid.agent.task import Task
+from langroid.agent.special.recipient_validator_agent import (
     RecipientValidator,
     RecipientValidatorConfig,
 )
-from llmagent.agent.chat_agent import ChatAgent, ChatAgentConfig
-from llmagent.embedding_models.models import OpenAIEmbeddingsConfig
-from llmagent.vector_store.qdrantdb import QdrantDBConfig
-from llmagent.parsing.parser import ParsingConfig, Splitter
+from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
+from langroid.embedding_models.models import OpenAIEmbeddingsConfig
+from langroid.vector_store.qdrantdb import QdrantDBConfig
+from langroid.parsing.parser import ParsingConfig, Splitter
 from examples.audience.agents.segmentor import Segmentor, SegmentorConfig
-from llmagent.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
-from llmagent.utils.configuration import update_global_settings, set_global, Settings
-from llmagent.parsing.urls import is_url
-from llmagent.agent.special.doc_chat_agent import DocChatAgent, DocChatAgentConfig
+from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
+from langroid.utils.configuration import update_global_settings, set_global, Settings
+from langroid.parsing.urls import is_url
+from langroid.agent.special.doc_chat_agent import DocChatAgent, DocChatAgentConfig
 import typer
 
 from rich.console import Console
@@ -101,7 +101,7 @@ def chat(config: SegmentorConfig) -> None:
     researcher = ChatAgent(
         ChatAgentConfig(
             name="Researcher",
-            use_llmagent_tools=config.use_llmagent_tools,
+            use_tools=config.use_tools,
             use_functions_api=config.use_functions_api,
             vecdb=None,
             llm=config.llm,
@@ -125,7 +125,7 @@ def chat(config: SegmentorConfig) -> None:
     marketer = ChatAgent(
         ChatAgentConfig(
             name="Marketer",
-            use_llmagent_tools=config.use_llmagent_tools,
+            use_tools=config.use_tools,
             use_functions_api=config.use_functions_api,
             vecdb=None,
             llm=config.llm,
@@ -196,7 +196,7 @@ def main(
         gpt4=True,
         cache=not nocache,
         use_functions_api=fn_api,
-        use_llmagent_tools=not fn_api,
+        use_tools=not fn_api,
     )
 
     set_global(

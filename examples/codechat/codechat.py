@@ -1,8 +1,8 @@
-from llmagent.parsing.urls import get_list_from_user
-from llmagent.agent.task import Task
-from llmagent.utils.logging import setup_colored_logging
-from llmagent.utils import configuration
-from llmagent.language_models.openai_gpt import OpenAIChatModel
+from langroid.parsing.urls import get_list_from_user
+from langroid.agent.task import Task
+from langroid.utils.logging import setup_colored_logging
+from langroid.utils import configuration
+from langroid.language_models.openai_gpt import OpenAIChatModel
 from examples.codechat.code_chat_agent import CodeChatAgent, CodeChatAgentConfig
 import re
 import typer

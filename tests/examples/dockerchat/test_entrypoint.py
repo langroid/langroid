@@ -1,10 +1,10 @@
-from llmagent.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
+from langroid.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
 from examples.dockerchat.dockerchat_agent_messages import EntryPointAndCMDMessage
-from llmagent.utils.configuration import Settings, set_global
-from llmagent.agent.chat_agent import ChatAgent, ChatAgentConfig
-from llmagent.prompts.prompts_config import PromptsConfig
-from llmagent.parsing.parser import ParsingConfig
-from llmagent.cachedb.redis_cachedb import RedisCacheConfig
+from langroid.utils.configuration import Settings, set_global
+from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
+from langroid.prompts.prompts_config import PromptsConfig
+from langroid.parsing.parser import ParsingConfig
+from langroid.cachedb.redis_cachedb import RedisCacheConfig
 
 
 class MessageHandlingAgent(ChatAgent):
@@ -25,7 +25,7 @@ The name of the main script in this repo is main.py. To run it, you can use the 
 
 cfg = ChatAgentConfig(
     debug=True,
-    name="test-llmagent",
+    name="test-langroid",
     vecdb=None,
     llm=OpenAIGPTConfig(
         type="openai",

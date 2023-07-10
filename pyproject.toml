@@ -1,5 +1,5 @@
 [tool.poetry]
-name = "llmagent"
+name = "langroid"
 version = "0.1.0"
 description = ""
 authors = ["Prasad Chalasani <pchalasani@gmail.com>"]
