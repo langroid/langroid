@@ -1,14 +1,12 @@
-from langroid.agent.chat_agent import ChatAgentConfig
-from langroid.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
-from langroid.utils.configuration import Settings, set_global
-from langroid.agent.chat_agent import ChatAgent
-from langroid.prompts.prompts_config import PromptsConfig
-from langroid.agent.base import AgentMessage
-from langroid.parsing.parser import ParsingConfig
-from langroid.cachedb.redis_cachedb import RedisCacheConfig
-
 from typing import List
 
+from langroid.agent.base import AgentMessage
+from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
+from langroid.cachedb.redis_cachedb import RedisCacheConfig
+from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
+from langroid.parsing.parser import ParsingConfig
+from langroid.prompts.prompts_config import PromptsConfig
+from langroid.utils.configuration import Settings, set_global
 
 CONTAINER_RUN_RESPONSE = "Container runs successfully"
 

@@ -1,14 +1,13 @@
-from langroid.agent.chat_agent import ChatAgentConfig
-from langroid.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
-from examples.dockerchat.docker_chat_agent import DockerChatAgent
-from examples.dockerchat.dockerchat_agent_messages import (
+from typing import Optional
+
+from examples_dev.dockerchat.docker_chat_agent import DockerChatAgent
+from examples_dev.dockerchat.dockerchat_agent_messages import (
     AskURLMessage,
     FileExistsMessage,
 )
-
+from langroid.agent.chat_agent import ChatAgentConfig
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
-from typing import Optional
-
+from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
 
 cfg = ChatAgentConfig(
     debug=False,

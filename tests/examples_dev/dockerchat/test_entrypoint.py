@@ -1,10 +1,10 @@
-from langroid.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
-from examples.dockerchat.dockerchat_agent_messages import EntryPointAndCMDMessage
-from langroid.utils.configuration import Settings, set_global
+from examples_dev.dockerchat.dockerchat_agent_messages import EntryPointAndCMDMessage
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
-from langroid.prompts.prompts_config import PromptsConfig
-from langroid.parsing.parser import ParsingConfig
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
+from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
+from langroid.parsing.parser import ParsingConfig
+from langroid.prompts.prompts_config import PromptsConfig
+from langroid.utils.configuration import Settings, set_global
 
 
 class MessageHandlingAgent(ChatAgent):

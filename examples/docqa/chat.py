@@ -1,18 +1,16 @@
-from langroid.parsing.urls import get_list_from_user
-from langroid.utils.logging import setup_colored_logging
-from langroid.agent.task import Task
-from langroid.agent.special.doc_chat_agent import DocChatAgent, DocChatAgentConfig
-from langroid.utils import configuration
-
-
-import re
-import typer
-
-
 import os
+import re
+import warnings
+
+import typer
 from rich import print
 from rich.prompt import Prompt
-import warnings
+
+from langroid.agent.special.doc_chat_agent import DocChatAgent, DocChatAgentConfig
+from langroid.agent.task import Task
+from langroid.parsing.urls import get_list_from_user
+from langroid.utils import configuration
+from langroid.utils.logging import setup_colored_logging
 
 app = typer.Typer()
 

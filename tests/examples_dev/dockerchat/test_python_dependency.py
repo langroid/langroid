@@ -1,20 +1,21 @@
+import json
 import os
 import tempfile
+from typing import List
+
 import pytest
-from langroid.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
-from langroid.prompts.prompts_config import PromptsConfig
-from langroid.parsing.parser import ParsingConfig
+
+from examples_dev.dockerchat.identify_python_dependency import (
+    DEPENDENCY_FILES,
+    identify_dependency_management,
+)
 from langroid.agent.base import AgentMessage
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
-from langroid.utils.system import rmdir
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
-from examples.dockerchat.identify_python_dependency import (
-    identify_dependency_management,
-    DEPENDENCY_FILES,
-)
-
-import json
-from typing import List
+from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
+from langroid.parsing.parser import ParsingConfig
+from langroid.prompts.prompts_config import PromptsConfig
+from langroid.utils.system import rmdir
 
 
 class PythonDependencyMessage(AgentMessage):

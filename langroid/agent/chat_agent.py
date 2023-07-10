@@ -211,10 +211,7 @@ class ChatAgent(Agent):
         # TODO we should do this only on demand when we actually are
         # ready to send the instructions.
         # But for now leave as is.
-        if (
-            len(self.llm_tools_usable) != n_usable_tools
-            and self.config.use_tools
-        ):
+        if len(self.llm_tools_usable) != n_usable_tools and self.config.use_tools:
             # Update JSON format instructions if the set of usable tools has changed
             self.update_message_instructions()
 

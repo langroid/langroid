@@ -1,24 +1,23 @@
-from langroid.utils.logging import setup_colored_logging
-from examples.urlqa.config import URLQAConfig
-from langroid.utils import configuration
-from langroid.agent.base import AgentConfig
-from langroid.agent.chat_agent import ChatAgent
-from langroid.vector_store.base import VectorStoreConfig
-from langroid.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
-import textwrap
-import typer
-
-
 import os
-from rich import print
+import textwrap
 import warnings
+
+import typer
+from rich import print
+
+from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
+from langroid.agent.task import Task
+from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
+from langroid.utils import configuration
+from langroid.utils.logging import setup_colored_logging
+from langroid.vector_store.base import VectorStoreConfig
 
 app = typer.Typer()
 
 setup_colored_logging()
 
 
-class BasicConfig(AgentConfig):
+class BasicConfig(ChatAgentConfig):
     debug: bool = False
     max_context_tokens = 500
     conversation_mode = True
@@ -26,17 +25,15 @@ class BasicConfig(AgentConfig):
     gpt4: bool = False  # use GPT-4?
     stream: bool = True  # allow streaming where needed
     max_tokens: int = 10000
-    vecdb: VectorStoreConfig = None
+    vecdb: None | VectorStoreConfig = None
     llm: OpenAIGPTConfig = OpenAIGPTConfig(
         type="openai",
-        chat_model=OpenAIChatModel.GPT3_5_TURBO,
+        chat_model=OpenAIChatModel.GPT4,
     )
 
 
 def chat(config: BasicConfig) -> None:
     configuration.update_global_settings(config, keys=["debug", "stream", "cache"])
-    if config.gpt4:
-        config.llm.chat_model = OpenAIChatModel.GPT4
 
     print(
         textwrap.dedent(
@@ -56,16 +53,15 @@ def chat(config: BasicConfig) -> None:
         # category=UserWarning,
         module="transformers",
     )
-    agent.do_task()
+    task = Task(agent)
+    task.run()
 
 
 @app.command()
 def main(
     debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
-    gpt4: bool = typer.Option(False, "--gpt4", "-4", help="use gpt4"),
-    nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
 ) -> None:
-    config = URLQAConfig(debug=debug, gpt4=gpt4, cache=not nocache)
+    config = BasicConfig(debug=debug)
     chat(config)
 
 

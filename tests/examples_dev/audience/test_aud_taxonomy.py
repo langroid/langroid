@@ -1,19 +1,19 @@
-from examples.audience.agents.segmentor import SegmentorConfig, Segmentor
-from langroid.utils.configuration import Settings, set_global
-from langroid.vector_store.qdrantdb import QdrantDBConfig
+import os
+import tempfile
+import warnings
+
+import pytest
+
+from examples_dev.audience.agents.segmentor import Segmentor, SegmentorConfig
+from langroid.cachedb.redis_cachedb import RedisCacheConfig
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
-from langroid.vector_store.base import VectorStoreConfig
-from langroid.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
+from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
 from langroid.parsing.parser import ParsingConfig, Splitter
 from langroid.prompts.prompts_config import PromptsConfig
-from langroid.cachedb.redis_cachedb import RedisCacheConfig
+from langroid.utils.configuration import Settings, set_global
 from langroid.utils.system import rmdir
-
-import os
-import warnings
-import pytest
-import tempfile
-
+from langroid.vector_store.base import VectorStoreConfig
+from langroid.vector_store.qdrantdb import QdrantDBConfig
 
 storage_path = ".qdrant/testdata1"
 rmdir(storage_path)
