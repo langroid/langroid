@@ -78,12 +78,12 @@ disallow_untyped_defs = "True"
 ignore_missing_imports = "True"
 strict = true
 exclude = [
-    "docs", ".venv", "venv", "examples", "llmagent/utils/web",
+    "docs", ".venv", "venv", "examples", "examples_dev", "langroid/utils/web",
     "notebooks",
-    "llmagent/parsing/repo_loader.py",
-    "llmagent/embedding_models/clustering.py",
+    "langroid/parsing/repo_loader.py",
+    "langroid/embedding_models/clustering.py",
 ]
-files=["llmagent/*"]
+files=["langroid/*"]
 plugins = [
     "pydantic.mypy"
 ]
@@ -99,7 +99,7 @@ select = [
     "F",  # pyflakes
     "I",  # isort
 ]
-exclude = ["docs", ".venv", "venv", "examples", "llmagent/utils/web", "notebooks"]
+exclude = ["docs", ".venv", "venv", "examples", "examples_dev", "langroid/utils/web", "notebooks"]
 fixable = ["A", "B", "C", "D", "E", "F", "G", "I", "N", "Q", "S", "T", "W", "ANN", "ARG", "BLE", "COM", "DJ", "DTZ", "EM", "ERA", "EXE", "FBT", "ICN", "INP", "ISC", "NPY", "PD", "PGH", "PIE", "PL", "PT", "PTH", "PYI", "RET", "RSE", "RUF", "SIM", "SLF", "TCH", "TID", "TRY", "UP", "YTT"]
 unfixable = []
 
