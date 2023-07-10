@@ -51,21 +51,20 @@ loc:
 	@echo "Lines of python code in git-tracked files:"
 	@git ls-files | grep '\.py$$' | xargs cat | grep -v '^\s*$$' | wc -l
 
-.PHONY: bump
-bump:
-	@VERSION=$$(./bump_version.sh $(BUMP_TYPE))
-
 .PHONY: bump-patch
 bump-patch:
-	@$(MAKE) bump BUMP_TYPE=patch
+	@poetry version patch
+	@git commit pyproject.toml -m "Bump version"
 
 .PHONY: bump-minor
 bump-minor:
-	@$(MAKE) bump BUMP_TYPE=minor
+	@poetry version minor
+	@git commit pyproject.toml -m "Bump version"
 
 .PHONY: bump-major
 bump-major:
-	@$(MAKE) bump BUMP_TYPE=major
+	@poetry version major
+	@git commit pyproject.toml -m "Bump version"
 
 .PHONY: build
 build:
@@ -77,7 +76,7 @@ push:
 
 .PHONY: release
 release:
-	@gh release create $(VERSION) dist/*
+	@VERSION=$$(poetry version | cut -d' ' -f2) && gh release create $${VERSION} dist/*
 
 .PHONY: all-patch
 all-patch: bump-patch build push release
@@ -87,4 +86,3 @@ all-minor: bump-minor build push release
 
 .PHONY: all-major
 all-major: bump-major build push release
-
