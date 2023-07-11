@@ -71,7 +71,7 @@ def test_inter_agent_chat(test_settings: Settings, helper_human_response: str):
     Your job is to ask me questions. 
     Start by asking me what the capital of France is.
     """
-    task.init_pending_message(msg)
+    task.init(msg)
 
     task.step()
     assert "What" in task.pending_message.content
@@ -242,7 +242,7 @@ def test_multi_agent_directed(test_settings: Settings):
 
     task_a.add_sub_task([task_b, task_c])
     # kick off with empty msg, so LLM will respond based on initial sys, user messages
-    task_a.init_pending_message()
+    task_a.init()
     for _ in range(2):
         # LLM asks, addressing B or C
         task_a.step()
@@ -302,7 +302,7 @@ def test_multi_agent_no_answer(test_settings: Settings):
 
     task_a.add_sub_task([task_b, task_c])
     # kick off with empty msg, so LLM will respond based on initial sys, user messages
-    task_a.init_pending_message()
+    task_a.init()
     for _ in range(2):
         # LLM asks, addressing B or C
         task_a.step()

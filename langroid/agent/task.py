@@ -172,7 +172,17 @@ class Task:
         self.responders.append(cast(Responder, task))
         self.name_sub_task_map[task.name] = task
 
-    def init_pending_message(self, msg: Optional[str | ChatDocument] = None) -> None:
+    def init(self, msg: None | str | ChatDocument = None) -> ChatDocument | None:
+        """
+        Initialize the task, with an optional message to start the conversation.
+        Initializes `self.pending_message` and `self.pending_sender`.
+        Args:
+            msg (str|ChatDocument): optional message to start the conversation.
+
+        Returns:
+            (ChatDocument|None): the initialized `self.pending_message`.
+            Currently not used in the code, but provided for convenience.
+        """
         self.pending_sender = Entity.USER
         if isinstance(msg, str):
             self.pending_message = ChatDocument(
@@ -201,6 +211,7 @@ class Task:
             self.tsv_logger.info(f" \tTask\tResponder\t{header}")
 
         self.log_message(Entity.USER, self.pending_message)
+        return self.pending_message
 
     def run(
         self,
@@ -238,7 +249,7 @@ class Task:
             # this task is not the intended recipient so return None
             return None
 
-        self.init_pending_message(msg)
+        self.init(msg)
         # sets indentation to be printed prior to any output from agent
         self.agent.indent = self._indent
         if self.default_human_response is not None:
@@ -303,7 +314,7 @@ class Task:
             turns (int): number of turns to process. Typically used in testing
                 where there is no human to "quit out" of current level, or in cases
                 where we want to limit the number of turns of a delegated agent.
-        Returns:
+        Returns (ChatDocument|None):
             Updated `self.pending_message`. Currently the return value is not used
                 by the `task.run()` method, but we return this as a convenience for
                 other use-cases, e.g. where we want to run a task step by step in a

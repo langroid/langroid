@@ -68,7 +68,7 @@ def test_process_messages(test_settings: Settings):
         only_user_quits_root=False,
     )
     msg = "What is the capital of France?"
-    task.init_pending_message(msg)
+    task.init(msg)
     assert task.pending_message.content == msg
 
     # LLM answers
@@ -113,7 +113,7 @@ def test_process_messages(test_settings: Settings):
         only_user_quits_root=False,
     )
     # LLM responds with NO_ANSWER
-    task.init_pending_message()
+    task.init()
     task.step()
     assert NO_ANSWER in task.pending_message.content
     assert task.pending_message.metadata.sender == Entity.LLM
