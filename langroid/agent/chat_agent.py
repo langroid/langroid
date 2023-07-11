@@ -7,7 +7,7 @@ from rich.console import Console
 
 from langroid.agent.base import Agent, AgentConfig
 from langroid.agent.chat_document import ChatDocument
-from langroid.agent.message import ToolMessage
+from langroid.agent.tool_message import ToolMessage
 from langroid.language_models.base import (
     LanguageModel,
     LLMFunctionSpec,

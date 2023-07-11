@@ -1,12 +1,12 @@
 from typing import List, Optional
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
-from langroid.agent.message import ToolMessage
 from langroid.agent.special.recipient_validator_agent import (
     RecipientValidator,
     RecipientValidatorConfig,
 )
 from langroid.agent.task import Task
+from langroid.agent.tool_message import ToolMessage
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
 from langroid.language_models.base import Role
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig

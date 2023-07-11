@@ -3,8 +3,8 @@ from typing import Optional
 import pytest
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
-from langroid.agent.message import ToolMessage
 from langroid.agent.task import Task
+from langroid.agent.tool_message import ToolMessage
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
 from langroid.language_models.base import Role
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig

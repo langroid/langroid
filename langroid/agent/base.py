@@ -10,7 +10,7 @@ from rich.console import Console
 from rich.prompt import Prompt
 
 from langroid.agent.chat_document import ChatDocMetaData, ChatDocument
-from langroid.agent.message import INSTRUCTION, ToolMessage
+from langroid.agent.tool_message import INSTRUCTION, ToolMessage
 from langroid.language_models.base import (
     LanguageModel,
     LLMConfig,

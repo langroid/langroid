@@ -6,7 +6,7 @@ import pytest
 from pydantic import Field
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
-from langroid.agent.message import ToolMessage
+from langroid.agent.tool_message import ToolMessage
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
 from langroid.language_models.openai_gpt import (
     OpenAIChatModel,
