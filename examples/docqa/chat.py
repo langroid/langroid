@@ -1,3 +1,7 @@
+"""
+Single agent to use to chat with a Retrieval-augmented LLM.
+Repeat: User asks question -> LLM answers.
+"""
 import re
 import typer
 from rich import print

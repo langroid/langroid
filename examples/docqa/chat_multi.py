@@ -1,3 +1,10 @@
+"""
+Two-agent chat with Retrieval-augmented LLM.
+WriterAgent (has no access to docs) is tasked with writing 5 bullet points based on
+some docs.
+DocAgent (has access to docs) helps answer questions about the docs.
+Repeat: WriterAgent --Question--> DocAgent --> Answer
+"""
 import typer
 from rich import print
 
