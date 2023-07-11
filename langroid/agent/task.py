@@ -289,7 +289,7 @@ class Task:
         )
         return final_result
 
-    def step(self, turns: int = -1) -> None:
+    def step(self, turns: int = -1) -> ChatDocument | None:
         """
         A single "turn" in the task conversation: The "allowed" responders in this
         turn (which can be either the 3 "entities", or one of the sub-tasks) are
@@ -303,7 +303,11 @@ class Task:
             turns (int): number of turns to process. Typically used in testing
                 where there is no human to "quit out" of current level, or in cases
                 where we want to limit the number of turns of a delegated agent.
-
+        Returns:
+            Updated `self.pending_message`. Currently the return value is not used
+                by the `task.run()` method, but we return this as a convenience for
+                other use-cases, e.g. where we want to run a task step by step in a
+                different context.
         """
         result = None
         parent = self.pending_message
@@ -369,6 +373,7 @@ class Task:
             sender_str = str(self.pending_sender)
             msg_str = str(self.pending_message)
             print(f"[red][{sender_str}]{msg_str}")
+        return self.pending_message
 
     def response(self, e: Responder, turns: int = -1) -> Optional[ChatDocument]:
         """
