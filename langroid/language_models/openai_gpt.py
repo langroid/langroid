@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union, cast
 import openai
 from dotenv import load_dotenv
 from pydantic import BaseModel
+from rich import print
 
 from langroid.cachedb.redis_cachedb import RedisCache
 from langroid.language_models.base import (
@@ -26,7 +27,6 @@ from langroid.language_models.utils import (
 )
 from langroid.utils.configuration import settings
 from langroid.utils.constants import Colors
-from langroid.utils.output.printing import PrintColored
 
 logging.getLogger("openai").setLevel(logging.ERROR)
 
@@ -153,7 +153,7 @@ class OpenAIGPT(LanguageModel):
                 has_function = True
                 break
 
-        print(Colors().RESET)
+        print("")
         # TODO- get usage info in stream mode (?)
 
         # check if function_call args are valid, if not,
@@ -220,8 +220,7 @@ class OpenAIGPT(LanguageModel):
         openai.api_key = self.api_key
 
         if settings.debug:
-            with PrintColored(Colors().RED):
-                print(Colors().RED + f"PROMPT: {prompt}")
+            print(f"[red]PROMPT: {prompt}[/red]")
 
         @retry_with_exponential_backoff
         def completions_with_backoff(**kwargs):  # type: ignore
@@ -230,8 +229,7 @@ class OpenAIGPT(LanguageModel):
             if result is not None:
                 cached = True
                 if settings.debug:
-                    with PrintColored(Colors().RED):
-                        print("CACHED")
+                    print("[red]CACHED[/red]")
             else:
                 # If it's not in the cache, call the API
                 result = openai.Completion.create(**kwargs)  # type: ignore
@@ -363,8 +361,7 @@ class OpenAIGPT(LanguageModel):
             if result is not None:
                 cached = True
                 if settings.debug:
-                    with PrintColored(Colors().RED):
-                        print("CACHED")
+                    print("[red]CACHED[/red]")
             else:
                 # If it's not in the cache, call the API
                 result = openai.ChatCompletion.create(**kwargs)  # type: ignore
