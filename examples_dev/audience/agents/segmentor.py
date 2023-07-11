@@ -1,7 +1,7 @@
 import csv
 from typing import List
 
-from examples_dev.audience.agents.retriever import (
+from langroid.agent.special.retriever_agent import (
     RecordDoc,
     RecordMetadata,
     RetrieverAgent,

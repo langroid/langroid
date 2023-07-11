@@ -1,3 +1,10 @@
+"""
+Agent that supports asking queries about a set of documents, using
+retrieval-augmented queries.
+Functionality includes:
+- summarizing a document, with a custom instruction; see `summarize_docs`
+- asking a question about a document; see `answer_from_docs`
+"""
 import logging
 from contextlib import ExitStack
 from typing import List, Optional, no_type_check
@@ -7,11 +14,11 @@ from rich.console import Console
 
 from langroid.agent.base import Agent
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
-from langroid.agent.chat_document import ChatDocMetaData, ChatDocument, Entity
+from langroid.agent.chat_document import ChatDocMetaData, ChatDocument
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
 from langroid.language_models.base import StreamingIfAllowed
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
-from langroid.mytypes import DocMetaData, Document
+from langroid.mytypes import DocMetaData, Document, Entity
 from langroid.parsing.parser import ParsingConfig, Splitter
 from langroid.parsing.repo_loader import RepoLoader
 from langroid.parsing.url_loader import URLLoader

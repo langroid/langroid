@@ -2,20 +2,20 @@ import json
 import logging
 from abc import ABC
 from contextlib import ExitStack
-from typing import Dict, List, Optional, Set, Tuple, Type, cast, no_type_check
+from typing import Callable, Dict, List, Optional, Set, Tuple, Type, cast, no_type_check
 
 from pydantic import BaseSettings, ValidationError
 from rich import print
 from rich.console import Console
 from rich.prompt import Prompt
 
-from langroid.agent.chat_document import ChatDocMetaData, ChatDocument, Entity
+from langroid.agent.chat_document import ChatDocMetaData, ChatDocument
 from langroid.agent.message import INSTRUCTION, AgentMessage
 from langroid.language_models.base import (
     LanguageModel,
     LLMConfig,
 )
-from langroid.mytypes import DocMetaData
+from langroid.mytypes import DocMetaData, Entity
 from langroid.parsing.json import extract_top_level_json
 from langroid.parsing.parser import Parser, ParsingConfig
 from langroid.prompts.prompts_config import PromptsConfig
@@ -56,6 +56,24 @@ class Agent(ABC):
         self.parser: Optional[Parser] = (
             Parser(config.parsing) if config.parsing else None
         )
+
+    def entity_responders(
+        self,
+    ) -> List[
+        Tuple[Entity, Callable[[None | str | ChatDocument], None | ChatDocument]]
+    ]:
+        """
+        Sequence of (entity, response_method) pairs. This sequence is used
+            in a `Task` to respond to the current pending message.
+            See `Task.step()` for details.
+        Returns:
+            Sequence of (entity, response_method) pairs.
+        """
+        return [
+            (Entity.AGENT, self.agent_response),
+            (Entity.LLM, self.llm_response),
+            (Entity.USER, self.user_response),
+        ]
 
     @property
     def indent(self) -> str:

@@ -2,14 +2,13 @@ from typing import Optional
 
 import pytest
 
-from langroid.agent.base import Entity
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.message import AgentMessage
 from langroid.agent.task import Task
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
 from langroid.language_models.base import Role
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
-from langroid.mytypes import DocMetaData, Document
+from langroid.mytypes import DocMetaData, Document, Entity
 from langroid.parsing.parser import ParsingConfig
 from langroid.prompts.prompts_config import PromptsConfig
 from langroid.utils.configuration import Settings, set_global

@@ -6,8 +6,8 @@ from langroid.agent.chat_document import (
     ChatDocAttachment,
     ChatDocMetaData,
     ChatDocument,
-    Entity,
 )
+from langroid.mytypes import Entity
 from langroid.parsing.agent_chats import parse_message
 
 logger = logging.getLogger(__name__)

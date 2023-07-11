@@ -11,9 +11,9 @@ from langroid.agent.chat_document import (
     ChatDocLoggerFields,
     ChatDocMetaData,
     ChatDocument,
-    Entity,
 )
 from langroid.language_models.base import LLMMessage, Role
+from langroid.mytypes import Entity
 from langroid.utils.configuration import settings
 from langroid.utils.constants import DONE, NO_ANSWER, USER_QUIT
 from langroid.utils.logging import RichFileLogger, setup_file_logger
@@ -94,18 +94,13 @@ class Task:
         self.only_user_quits_root = only_user_quits_root
         self.erase_substeps = erase_substeps
         self.allowed_responders: Set[Responder] = set()
-        self.responders: List[Responder] = [
-            Entity.AGENT,  # response to LLM wanting to use tool or function_call
-            Entity.LLM,
-            Entity.USER,
-        ]
+
+        agent_entity_responders = agent.entity_responders()
+        self.responders: List[Responder] = [e for e, _ in agent_entity_responders]
         self._entity_responder_map: Dict[
             Entity, Callable[..., Optional[ChatDocument]]
-        ] = {
-            Entity.AGENT: self.agent.agent_response,
-            Entity.LLM: self.agent.llm_response,
-            Entity.USER: self.agent.user_response,
-        }
+        ] = dict(agent_entity_responders)
+
         self.name_sub_task_map: Dict[str, Task] = {}
         # latest message in a conversation among entities and agents.
         self.pending_message: Optional[ChatDocument] = None

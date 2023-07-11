@@ -1,8 +1,12 @@
+"""
+Test for HuggingFace embeddings.
+This depends on sentence-transformers being installed:
+ poetry install -E hf-embeddings
+"""
+
+
 from langroid.embedding_models.base import EmbeddingModel
 from langroid.embedding_models.models import SentenceTransformerEmbeddingsConfig
-
-# this depends on sentence-transformers being installed
-# poetry install -E hf-embeddings
 
 
 def test_embeddings():

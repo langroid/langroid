@@ -1,15 +1,18 @@
+"""
+Agent to retrieve relevant verbatim whole docs/records from a vector store.
+"""
+import logging
 from abc import ABC, abstractmethod
-from typing import List, Optional
+from typing import List, Optional, Sequence
 
 from rich import print
 from rich.console import Console
 
-from langroid.agent.base import Entity
 from langroid.agent.chat_document import ChatDocMetaData, ChatDocument
 from langroid.agent.special.doc_chat_agent import DocChatAgent, DocChatAgentConfig
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
-from langroid.mytypes import DocMetaData, Document
+from langroid.mytypes import DocMetaData, Document, Entity
 from langroid.parsing.parser import ParsingConfig, Splitter
 from langroid.prompts.prompts_config import PromptsConfig
 from langroid.utils.constants import NO_ANSWER
@@ -17,10 +20,11 @@ from langroid.vector_store.base import VectorStoreConfig
 from langroid.vector_store.qdrantdb import QdrantDBConfig
 
 console = Console()
+logger = logging.getLogger(__name__)
 
 
 class RecordMetadata(DocMetaData):
-    id: int | str = None
+    id: None | int | str = None
 
 
 class RecordDoc(Document):
@@ -69,24 +73,26 @@ class RetrieverAgent(DocChatAgent, ABC):
 
     def __init__(self, config: RetrieverAgentConfig):
         super().__init__(config)
-        self.config = config
+        self.config: RetrieverAgentConfig = config
 
     @abstractmethod
-    def get_records(self) -> List[RecordDoc]:
+    def get_records(self) -> Sequence[RecordDoc]:
         pass
 
     def ingest(self) -> None:
         records = self.get_records()
+        if self.vecdb is None:
+            raise ValueError("No vector store specified")
         self.vecdb.add_documents(records)
 
     def llm_response(
         self,
-        query: str | ChatDocument = None,
+        query: None | str | ChatDocument = None,
     ) -> Optional[ChatDocument]:
         if not self.llm_can_respond(query):
             return None
         if query is None:
-            return super().llm_response(None)
+            return super().llm_response(None)  # type: ignore
         if isinstance(query, ChatDocument):
             query_str = query.content
         else:
@@ -115,6 +121,9 @@ class RetrieverAgent(DocChatAgent, ABC):
         Returns:
             list of Document objects
         """
+        if self.vecdb is None:
+            logger.warning("No vector store specified")
+            return []
         with console.status("[cyan]Searching VecDB for similar docs/records..."):
             docs_and_scores = self.vecdb.similar_texts_with_scores(
                 query,
@@ -146,10 +155,13 @@ class RetrieverAgent(DocChatAgent, ABC):
         nearest_docs = self.get_nearest_docs(query)
         if len(nearest_docs) == 0:
             return [response]
+        if self.llm is None:
+            logger.warning("No LLM specified")
+            return nearest_docs
         with console.status("LLM selecting relevant docs from retrieved ones..."):
-            response = self.llm_select_relevant_docs(query, nearest_docs)
+            doc_list = self.llm_select_relevant_docs(query, nearest_docs)
 
-        return response
+        return doc_list
 
     def llm_select_relevant_docs(
         self, query: str, docs: List[Document]
@@ -184,13 +196,19 @@ class RetrieverAgent(DocChatAgent, ABC):
             ),
         )
 
-        response = self.llm.generate(
-            prompt, max_tokens=self.config.llm.max_output_tokens
+        if self.llm is None:
+            logger.warning("No LLM specified")
+            return [default_response]
+        response = self.llm.generate(  # type: ignore
+            prompt, max_tokens=self.config.llm.max_output_tokens  # type: ignore
         )
         if response.message == NO_ANSWER:
             return [default_response]
         ids = response.message.split()
         if len(ids) == 0:
+            return [default_response]
+        if self.vecdb is None:
+            logger.warning("No vector store specified")
             return [default_response]
         docs = self.vecdb.get_documents_by_ids(ids)
         return [
