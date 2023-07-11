@@ -1,7 +1,12 @@
+"""
+Class that runs the Task loop of an agent;
+maintains state while various responders (agent's own methods, or external sub-tasks)
+take turns attempting to respond to the `self.pending_message`.
+"""
 from __future__ import annotations
 
 import logging
-from typing import Callable, Dict, List, Optional, Set, Type, cast
+from typing import Callable, Dict, List, Optional, Type, cast
 
 from rich import print
 
@@ -23,7 +28,7 @@ Responder = Entity | Type["Task"]
 
 class Task:
     """
-    Class to maintain state needed to run a __task__. A __task__ generally
+    Class to loop through maintain state needed to run a __task__. A __task__ generally
     is associated with a goal, typically represented by the initial "priming"
     messages of the LLM. Various entities take turns responding to
     `pending_message`, which is updated with the latest response.
@@ -93,7 +98,6 @@ class Task:
             self.agent.default_human_response = default_human_response
         self.only_user_quits_root = only_user_quits_root
         self.erase_substeps = erase_substeps
-        self.allowed_responders: Set[Responder] = set()
 
         agent_entity_responders = agent.entity_responders()
         self.responders: List[Responder] = [e for e, _ in agent_entity_responders]
@@ -169,7 +173,6 @@ class Task:
         self.name_sub_task_map[task.name] = task
 
     def init_pending_message(self, msg: Optional[str | ChatDocument] = None) -> None:
-        self._allow_all_responders_except(Entity.USER)
         self.pending_sender = Entity.USER
         if isinstance(msg, str):
             self.pending_message = ChatDocument(
@@ -540,53 +543,3 @@ class Task:
             self.pending_message.metadata.block = None
             return False
         return self.pending_message is None or self.pending_message.metadata.block != e
-
-    def _disallow_responder(self, e: Responder) -> None:
-        """
-        Disallow a responder from responding to current message.
-        Args:
-            e (Entity): entity to disallow
-        """
-        self.allowed_responders.remove(e)
-
-    def _allow_responder(self, e: Responder) -> None:
-        """
-        Allow a responder to respond to current message.
-        Args:
-            e (Entity): entity to allow
-        """
-        self.allowed_responders.add(e)
-
-    def _is_allowed_responder(self, e: Responder) -> bool:
-        """
-        Check if a responder is allowed to respond to current message.
-        Args:
-            e (Entity): entity to check
-        Returns:
-            bool: True if allowed, False otherwise
-        """
-        return e in self.allowed_responders
-
-    def _allow_all_responders(self) -> None:
-        """
-        Allow all responders to respond to current message.
-        """
-        self.allowed_responders = set(self.responders)
-
-    def _allow_all_responders_except(self, e: Responder) -> None:
-        """
-        Allow all responders to respond to current message, except for `e`.
-        Args:
-            e (Entity): entity to disallow
-        """
-        self._allow_all_responders()
-        self._disallow_responder(e)
-
-    def _allow_only_responder(self, e: Responder) -> None:
-        """
-        Allow ONLY `e` to respond to current pending message.
-
-        Args:
-            e (Entity): only entity to allow
-        """
-        self.allowed_responders = {e}
