@@ -9,7 +9,7 @@ from examples_dev.dockerchat.identify_python_dependency import (
     DEPENDENCY_FILES,
     identify_dependency_management,
 )
-from langroid.agent.base import AgentMessage
+from langroid.agent.base import ToolMessage
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
@@ -18,17 +18,17 @@ from langroid.prompts.prompts_config import PromptsConfig
 from langroid.utils.system import rmdir
 
 
-class PythonDependencyMessage(AgentMessage):
+class PythonDependencyMessage(ToolMessage):
     request: str = "python_dependency"
     purpose: str = "To find out the python dependencies."
     result: str = "yes"
 
     @classmethod
-    def examples(cls) -> List["AgentMessage"]:
+    def examples(cls) -> List["ToolMessage"]:
         """
         Return a list of example messages of this type, for use in testing.
         Returns:
-            List[AgentMessage]: list of example messages of this type
+            List[ToolMessage]: list of example messages of this type
         """
         return [
             cls(result="This repo uses requirements.txt for managing dependencies"),
@@ -71,7 +71,7 @@ agent = MessageHandlingAgent(cfg)
 
 
 @pytest.mark.parametrize("msg_cls", [PythonDependencyMessage])
-def test_usage_instruction(msg_cls: AgentMessage):
+def test_usage_instruction(msg_cls: ToolMessage):
     usage = msg_cls().usage_example()
     assert json.loads(usage)["request"] == msg_cls().request
 

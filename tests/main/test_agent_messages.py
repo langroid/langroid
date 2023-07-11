@@ -6,7 +6,7 @@ import pytest
 from pydantic import Field
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
-from langroid.agent.message import AgentMessage
+from langroid.agent.message import ToolMessage
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
 from langroid.language_models.openai_gpt import (
     OpenAIChatModel,
@@ -18,7 +18,7 @@ from langroid.utils.configuration import Settings, set_global
 from langroid.utils.system import rmdir
 
 
-class CountryCapitalMessage(AgentMessage):
+class CountryCapitalMessage(ToolMessage):
     request: str = "country_capital"
     purpose: str = "To check whether <city> is the capital of <country>."
     country: str = "France"
@@ -33,7 +33,7 @@ class CountryCapitalMessage(AgentMessage):
         ]
 
 
-class FileExistsMessage(AgentMessage):
+class FileExistsMessage(ToolMessage):
     request: str = "file_exists"
     purpose: str = "To check whether a certain <filename> is in the repo."
     filename: str = Field(..., description="File name to check existence of")
@@ -47,7 +47,7 @@ class FileExistsMessage(AgentMessage):
         ]
 
 
-class PythonVersionMessage(AgentMessage):
+class PythonVersionMessage(ToolMessage):
     request: str = "python_version"
     purpose: str = "To check which version of Python is needed."
     result: str = "3.9"
@@ -114,7 +114,7 @@ agent.enable_message(PythonVersionMessage)
     cartesian_product,
 )
 def test_enable_message(
-    msg_class: Optional[AgentMessage], use: bool, handle: bool, force: bool
+    msg_class: Optional[ToolMessage], use: bool, handle: bool, force: bool
 ):
     agent.enable_message(msg_class, use=use, handle=handle, force=force)
     tools = agent._get_tool_list(msg_class)
@@ -136,7 +136,7 @@ def test_enable_message(
 
 
 @pytest.mark.parametrize("msg_class", [None, FileExistsMessage, PythonVersionMessage])
-def test_disable_message_handling(msg_class: Optional[AgentMessage]):
+def test_disable_message_handling(msg_class: Optional[ToolMessage]):
     agent.enable_message(FileExistsMessage)
     agent.enable_message(PythonVersionMessage)
 
@@ -150,7 +150,7 @@ def test_disable_message_handling(msg_class: Optional[AgentMessage]):
 
 
 @pytest.mark.parametrize("msg_class", [None, FileExistsMessage, PythonVersionMessage])
-def test_disable_message_use(msg_class: Optional[AgentMessage]):
+def test_disable_message_use(msg_class: Optional[ToolMessage]):
     agent.enable_message(FileExistsMessage)
     agent.enable_message(PythonVersionMessage)
 
@@ -164,7 +164,7 @@ def test_disable_message_use(msg_class: Optional[AgentMessage]):
 
 
 @pytest.mark.parametrize("msg_cls", [PythonVersionMessage, FileExistsMessage])
-def test_usage_instruction(msg_cls: AgentMessage):
+def test_usage_instruction(msg_cls: ToolMessage):
     usage = msg_cls.usage_example()
     assert json.loads(usage)["request"] == msg_cls.default_value("request")
 
@@ -283,7 +283,7 @@ def test_handle_bad_tool_message():
 def test_llm_agent_message(
     test_settings: Settings,
     use_functions_api: bool,
-    message_class: AgentMessage,
+    message_class: ToolMessage,
     prompt: str,
     result: str,
 ):
@@ -293,7 +293,7 @@ def test_llm_agent_message(
     Args:
         test_settings: test settings from conftest.py
         use_functions_api: whether to use LLM's functions api or not
-            (i.e. use the langroid AgentMessage tools instead).
+            (i.e. use the langroid ToolMessage tools instead).
         message_class: the message class (i.e. tool/function) to test
         prompt: the prompt to use to induce the LLM to use the tool
         result: the expected result from agent handling the tool-message

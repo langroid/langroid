@@ -3,7 +3,7 @@ from typing import Optional
 import pytest
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
-from langroid.agent.message import AgentMessage
+from langroid.agent.message import ToolMessage
 from langroid.agent.task import Task
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
 from langroid.language_models.base import Role
@@ -16,14 +16,14 @@ from langroid.utils.constants import NO_ANSWER
 from langroid.vector_store.base import VectorStoreConfig
 
 
-class ExponentialTool(AgentMessage):
+class ExponentialTool(ToolMessage):
     request: str = "calc_expontential"
     purpose: str = "To calculate the value of <x> raised to the power <e>"
     x: int
     e: int
 
 
-class MultiplicationTool(AgentMessage):
+class MultiplicationTool(ToolMessage):
     request: str = "calc_multiplication"
     purpose: str = "To calculate the value of <x> multiplied by <y>"
     x: int

@@ -7,7 +7,7 @@ from rich.console import Console
 
 from langroid.agent.base import Agent, AgentConfig
 from langroid.agent.chat_document import ChatDocument
-from langroid.agent.message import AgentMessage
+from langroid.agent.message import ToolMessage
 from langroid.language_models.base import (
     LanguageModel,
     LLMFunctionSpec,
@@ -29,7 +29,7 @@ class ChatAgentConfig(AgentConfig):
         system_message: system message to include in message sequence
              (typically defines role and task of agent)
         user_message: user message to include in message sequence
-        use_tools: whether to use our own AgentMessages tools mechanism
+        use_tools: whether to use our own ToolMessages mechanism
         use_functions_api: whether to use functions native to the LLM API
                 (e.g. OpenAI's `function_call` mechanism)
     """
@@ -158,7 +158,7 @@ class ChatAgent(Agent):
 
     def enable_message(
         self,
-        message_class: Optional[Type[AgentMessage]],
+        message_class: Optional[Type[ToolMessage]],
         use: bool = True,
         handle: bool = True,
         force: bool = False,
@@ -169,7 +169,7 @@ class ChatAgent(Agent):
         - tool HANDLING (i.e. the agent can handle JSON from this tool),
 
         Args:
-            message_class: The AgentMessage class (tool) to enable,
+            message_class: The ToolMessage class to enable,
                 for USE, or HANDLING, or both.
                 Optional; if None, then apply the enabling to all tools in the
                 agent's toolset that have been enabled so far.
@@ -217,13 +217,13 @@ class ChatAgent(Agent):
 
     def disable_message_handling(
         self,
-        message_class: Optional[Type[AgentMessage]] = None,
+        message_class: Optional[Type[ToolMessage]] = None,
     ) -> None:
         """
         Disable this agent from RESPONDING to a `message_class` (Tool). If
             `message_class` is None, then disable this agent from responding to ALL.
         Args:
-            message_class: The AgentMessage class (tool) to disable; Optional.
+            message_class: The ToolMessage class to disable; Optional.
         """
         super().disable_message_handling(message_class)
         for t in self._get_tool_list(message_class):
@@ -232,24 +232,24 @@ class ChatAgent(Agent):
 
     def disable_message_use(
         self,
-        message_class: Optional[Type[AgentMessage]],
+        message_class: Optional[Type[ToolMessage]],
     ) -> None:
         """
         Disable this agent from USING a message class (Tool).
         If `message_class` is None, then disable this agent from USING ALL tools.
         Args:
-            message_class: The AgentMessage class (tool) to disable.
+            message_class: The ToolMessage class to disable.
                 If None, disable all.
         """
         for t in self._get_tool_list(message_class):
             self.llm_tools_usable.discard(t)
             self.llm_functions_usable.discard(t)
 
-    def disable_message_use_except(self, message_class: Type[AgentMessage]) -> None:
+    def disable_message_use_except(self, message_class: Type[ToolMessage]) -> None:
         """
         Disable this agent from USING ALL messages EXCEPT a message class (Tool)
         Args:
-            message_class: The only AgentMessage class (tool) to allow
+            message_class: The only ToolMessage class to allow
         """
         request = message_class.__fields__["request"].default
         for r in self.llm_functions_usable:

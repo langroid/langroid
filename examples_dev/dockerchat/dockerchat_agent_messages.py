@@ -1,30 +1,30 @@
 import logging
 from typing import List, Union
 
-from langroid.agent.base import AgentMessage
+from langroid.agent.base import ToolMessage
 
 logger = logging.getLogger(__name__)
 
 
-class AskURLMessage(AgentMessage):
+class AskURLMessage(ToolMessage):
     request: str = "ask_url"
     purpose: str = "To get the github repo url from the user."
     result: str = ""
 
     @classmethod
-    def examples(cls) -> List["AgentMessage"]:
+    def examples(cls) -> List["ToolMessage"]:
         return [
             cls(result="https://github.com/hello/world"),
         ]
 
 
-class PythonVersionMessage(AgentMessage):
+class PythonVersionMessage(ToolMessage):
     request: str = "python_version"
     purpose: str = "To find the python version used by the repository."
     result: str = "3.9"
 
 
-class RunPythonMessage(AgentMessage):
+class RunPythonMessage(ToolMessage):
     request: str = "run_python"
     purpose: str = """
     To run a python <code> on the repository, to find desired info.
@@ -36,13 +36,13 @@ class RunPythonMessage(AgentMessage):
     result: str = ""
 
     @classmethod
-    def examples(cls) -> List["AgentMessage"]:
+    def examples(cls) -> List["ToolMessage"]:
         return [
             cls(code="print('hello world')", result="hello world"),
         ]
 
 
-class FileExistsMessage(AgentMessage):
+class FileExistsMessage(ToolMessage):
     request: str = "file_exists"  # name should exactly match method name in agent
     # below will be fields that will be used by the agent method to handle the message.
     purpose: str = "To check if a file <filename> exists in the repo."
@@ -50,18 +50,18 @@ class FileExistsMessage(AgentMessage):
     result: str = "no"
 
     @classmethod
-    def examples(cls) -> List["AgentMessage"]:
+    def examples(cls) -> List["ToolMessage"]:
         """
         Return a list of example messages of this type, for use in testing.
         Returns:
-            List[AgentMessage]: list of example messages of this type
+            List[ToolMessage]: list of example messages of this type
         """
         return [
             cls(filename="blah.md", result="yes"),
         ]
 
 
-class ValidateDockerfileMessage(AgentMessage):
+class ValidateDockerfileMessage(ToolMessage):
     request: str = "validate_dockerfile"
     purpose: str = """
     To show a <proposed_dockerfile> to the user. Use this tool whenever you want 
@@ -73,7 +73,7 @@ class ValidateDockerfileMessage(AgentMessage):
     result: str = "build succeed"
 
     @classmethod
-    def examples(cls) -> List["AgentMessage"]:
+    def examples(cls) -> List["ToolMessage"]:
         return [
             cls(
                 proposed_dockerfile="""
@@ -94,17 +94,17 @@ class ValidateDockerfileMessage(AgentMessage):
         ]
 
 
-class PythonDependencyMessage(AgentMessage):
+class PythonDependencyMessage(ToolMessage):
     request: str = "python_dependency"
     purpose: str = "To find out where python dependencies are listed."
     result: str = "This repo uses requirements.txt for managing dependencies"
 
     @classmethod
-    def examples(cls) -> List["AgentMessage"]:
+    def examples(cls) -> List["ToolMessage"]:
         """
         Return a list of example messages of this type, for use in testing.
         Returns:
-            List[AgentMessage]: list of example messages of this type
+            List[ToolMessage]: list of example messages of this type
         """
         return [
             cls(
@@ -117,18 +117,18 @@ class PythonDependencyMessage(AgentMessage):
         ]
 
 
-class EntryPointAndCMDMessage(AgentMessage):
+class EntryPointAndCMDMessage(ToolMessage):
     request: str = "find_entrypoint"
     purpose: str = """To identify main scripts and their arguments that can 
     be used for ENTRYPOINT, CMD, both, or none."""
     result: str = "The main script is main.py"
 
     @classmethod
-    def examples(cls) -> List["AgentMessage"]:
+    def examples(cls) -> List["ToolMessage"]:
         """
         Return a list of example messages of this type, for use in testing.
         Returns:
-            List[AgentMessage]: list of example messages of this type
+            List[ToolMessage]: list of example messages of this type
         """
         return [
             cls(
@@ -141,7 +141,7 @@ class EntryPointAndCMDMessage(AgentMessage):
         ]
 
 
-class RunContainerMessage(AgentMessage):
+class RunContainerMessage(ToolMessage):
     request: str = "run_container"
     purpose: str = """Verify that the container works correctly and preserves 
     the intended behavior. This will use the image built using 
@@ -157,11 +157,11 @@ class RunContainerMessage(AgentMessage):
     result: str = "Inside test case works successfully."
 
     @classmethod
-    def examples(cls) -> List["AgentMessage"]:
+    def examples(cls) -> List["ToolMessage"]:
         """
         Return a list of example messages of this type, for use in testing.
         Returns:
-            List[AgentMessage]: list of example messages of this type
+            List[ToolMessage]: list of example messages of this type
         """
         return [
             cls(

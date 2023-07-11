@@ -1,6 +1,6 @@
 from typing import List
 
-from langroid.agent.base import AgentMessage
+from langroid.agent.base import ToolMessage
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
@@ -11,7 +11,7 @@ from langroid.utils.configuration import Settings, set_global
 CONTAINER_RUN_RESPONSE = "Container runs successfully"
 
 
-class RunContainerMessage(AgentMessage):
+class RunContainerMessage(ToolMessage):
     request: str = "run_container"
     purpose: str = """Verify that the container works correctly and preserves 
     the intended behavior.  
@@ -21,11 +21,11 @@ class RunContainerMessage(AgentMessage):
     result: str = "The container runs correctly"
 
     @classmethod
-    def examples(cls) -> List["AgentMessage"]:
+    def examples(cls) -> List["ToolMessage"]:
         """
         Return a list of example messages of this type, for use in testing.
         Returns:
-            List[AgentMessage]: list of example messages of this type
+            List[ToolMessage]: list of example messages of this type
         """
         return [
             cls(

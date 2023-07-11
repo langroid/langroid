@@ -62,16 +62,19 @@ INSTRUCTION = """
     """
 
 
-class AgentMessage(ABC, BaseModel):
+class ToolMessage(ABC, BaseModel):
     """
-    A (structured) message to an agent, typically from an LLM, to be handled by
-    the agent. The message could represent
-    - information or data given to the agent
-    - request for information or data from the agent
+    Abstract Class for a class that defines the structure of a "Tool" message from an
+    LLM. Depending on context, "tools" are also referred to as "plugins",
+    or "function calls" (in the context of OpenAI LLMs).
+    Essentially, they are a way for the LLM to express its intent to run a special
+    function or method. Currently we implement these as methods of the agent.
+
     Attributes:
         request (str): name of agent method to map to.
         purpose (str): purpose of agent method, expressed in general terms.
-        result (str): result of agent method.
+            (This is used when auto-generating the tool instruction to the LLM)
+        result (str): example of result of agent method.
     """
 
     request: str
@@ -85,7 +88,7 @@ class AgentMessage(ABC, BaseModel):
 
     @classmethod
     @abstractmethod
-    def examples(cls) -> List["AgentMessage"]:
+    def examples(cls) -> List["ToolMessage"]:
         """
         Examples to use in few-shot demos with JSON formatting instructions.
         Returns:

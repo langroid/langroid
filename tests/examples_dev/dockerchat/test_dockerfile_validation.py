@@ -1,7 +1,7 @@
 import json
 from typing import List
 
-from langroid.agent.base import AgentMessage
+from langroid.agent.base import ToolMessage
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
@@ -12,7 +12,7 @@ from langroid.utils.configuration import Settings, set_global
 from langroid.utils.system import rmdir
 
 
-class ValidateDockerfileMessage(AgentMessage):
+class ValidateDockerfileMessage(ToolMessage):
     request: str = "validate_dockerfile"
     purpose: str = "To check whether a Dockerfile is valid."
     proposed_dockerfile: str = """
@@ -25,7 +25,7 @@ class ValidateDockerfileMessage(AgentMessage):
     result: str = "build succeed"
 
     @classmethod
-    def examples(cls) -> List["AgentMessage"]:
+    def examples(cls) -> List["ToolMessage"]:
         return [
             cls(
                 proposed_dockerfile="""

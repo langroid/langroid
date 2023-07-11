@@ -1,12 +1,12 @@
 import logging
 from typing import List
 
-from langroid.agent.base import AgentMessage
+from langroid.agent.base import ToolMessage
 
 logger = logging.getLogger(__name__)
 
 
-class ShowFileContentsMessage(AgentMessage):
+class ShowFileContentsMessage(ToolMessage):
     request: str = "show_file_contents"
     # name should exactly match method  name in agent
     # below will be fields that will be used by the agent method to handle the message.
@@ -15,7 +15,7 @@ class ShowFileContentsMessage(AgentMessage):
     result: str = ""
 
     @classmethod
-    def examples(cls) -> List["AgentMessage"]:
+    def examples(cls) -> List["ToolMessage"]:
         return [
             cls(
                 filepath="src/main.py",
@@ -24,7 +24,7 @@ class ShowFileContentsMessage(AgentMessage):
         ]
 
 
-class ShowDirContentsMessage(AgentMessage):
+class ShowDirContentsMessage(ToolMessage):
     request: str = "show_dir_contents"
     # name should exactly match method  name in agent
     # below will be fields that will be used by the agent method to handle the message.
@@ -33,7 +33,7 @@ class ShowDirContentsMessage(AgentMessage):
     result: str = ""
 
     @classmethod
-    def examples(cls) -> List["AgentMessage"]:
+    def examples(cls) -> List["ToolMessage"]:
         return [
             cls(
                 dirpath="src/",

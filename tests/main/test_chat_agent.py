@@ -51,7 +51,7 @@ def test_responses(test_settings: Settings):
     assert "London" in response.content
 
     # agent attempts to handle the query, but has no response since
-    # the message is not a structured msg that matches an enabled AgentMessage.
+    # the message is not a structured msg that matches an enabled ToolMessage.
     response = agent.agent_response("What is the capital of France?")
     assert response is None
 
