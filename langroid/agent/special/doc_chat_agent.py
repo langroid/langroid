@@ -1,6 +1,6 @@
 import logging
 from contextlib import ExitStack
-from typing import Any, Dict, List, Optional, no_type_check
+from typing import List, Optional, no_type_check
 
 from rich import print
 from rich.console import Console
@@ -117,7 +117,7 @@ class DocChatAgent(ChatAgent):
         if len(config.doc_paths) > 0:
             self.ingest()
 
-    def ingest(self) -> Dict[str, Any]:
+    def ingest(self) -> None:
         """
         Chunk + embed + store docs specified by self.config.doc_paths
 
@@ -128,7 +128,7 @@ class DocChatAgent(ChatAgent):
                 paths: list of file paths
         """
         if len(self.config.doc_paths) == 0:
-            return dict(n_splits=0, urls=[], paths=[])
+            return
         urls, paths = get_urls_and_paths(self.config.doc_paths)
         docs: List[Document] = []
         if len(urls) > 0:
@@ -138,12 +138,20 @@ class DocChatAgent(ChatAgent):
             for p in paths:
                 path_docs = RepoLoader.get_documents(p)
                 docs.extend(path_docs)
+        n_docs = len(docs)
         n_splits = self.ingest_docs(docs)
-        return dict(
-            n_splits=n_splits,
-            urls=urls,
-            paths=paths,
+        if n_docs == 0:
+            return
+        n_urls = len(urls)
+        n_paths = len(paths)
+        print(
+            f"""
+        [green]I have processed the following {n_urls} URLs 
+        and {n_paths} paths into {n_splits} parts:
+        """.strip()
         )
+        print("\n".join(urls))
+        print("\n".join(paths))
 
     def ingest_docs(self, docs: List[Document]) -> int:
         """
@@ -346,7 +354,10 @@ class DocChatAgent(ChatAgent):
         self.response = response  # save last response
         return response
 
-    def summarize_docs(self) -> None:
+    def summarize_docs(
+        self,
+        instruction: str = "Give a concise summary of the following text:",
+    ) -> None | ChatDocument:
         """Summarize all docs"""
         if self.original_docs is None:
             logger.warning(
@@ -357,7 +368,7 @@ class DocChatAgent(ChatAgent):
                 To create a summary, use a new collection, and specify a list of docs. 
                 """
             )
-            return
+            return None
         full_text = "\n\n".join([d.content for d in self.original_docs])
         if self.parser is None:
             raise ValueError("No parser defined")
@@ -376,11 +387,12 @@ class DocChatAgent(ChatAgent):
                 f"Summarizing after truncating text to {MAX_INPUT_TOKENS} tokens"
             )
         prompt = f"""
-        Give a concise summary of the following text:
+        {instruction}
         {full_text}
         """.strip()
         with StreamingIfAllowed(self.llm):  # type: ignore
-            Agent.llm_response(self, prompt)  # raw LLM call
+            summary = Agent.llm_response(self, prompt)
+            return summary  # type: ignore
 
     def justify_response(self) -> None:
         """Show evidence for last response"""

@@ -1,0 +1,85 @@
+import typer
+from rich import print
+
+from langroid.agent.special.doc_chat_agent import DocChatAgent, DocChatAgentConfig
+from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
+from langroid.agent.task import Task
+from langroid.parsing.urls import get_list_from_user
+from langroid.language_models.openai_gpt import OpenAIGPTConfig
+from langroid.utils.configuration import set_global, Settings
+from langroid.utils.logging import setup_colored_logging
+
+app = typer.Typer()
+
+setup_colored_logging()
+
+
+def chat(config: DocChatAgentConfig) -> None:
+    doc_agent = DocChatAgent(config)
+    doc_agent.vecdb.set_collection("docqa-chat-multi", replace=True)
+    print("[blue]Welcome to the document chatbot!")
+    print("[cyan]Enter x or q to quit, or ? for evidence")
+    print(
+        """
+        [blue]Enter some URLs or file/dir paths below (or leave empty for default URLs)
+        """.strip()
+    )
+    inputs = get_list_from_user()
+    if len(inputs) == 0:
+        inputs = config.default_paths
+    doc_agent.config.doc_paths = inputs
+    doc_agent.ingest()
+    topics_doc = doc_agent.summarize_docs(
+        instruction="""
+        Give me a list of up to 3 main topics from the following text,
+        in the form of short sentences.
+        """,
+    )
+    topics = topics_doc.content
+    doc_task = Task(
+        doc_agent,
+        name="DocAgent",
+        llm_delegate=False,
+        single_round=True,
+        system_message="""You will receive various questions about some documents, and
+        your job is to answer them concisely in at most 2 sentences, citing sources.
+        """,
+    )
+
+    writer_agent = ChatAgent(ChatAgentConfig(llm=OpenAIGPTConfig()))
+    writer_task = Task(
+        writer_agent,
+        name="WriterAgent",
+        llm_delegate=True,
+        single_round=False,
+        system_message=f"""
+        You have to collect some information from some documents, on these topics:
+        {topics}
+        However you do not have access to those documents. 
+        You can ask me questions about them, ONE AT A TIME, I will answer each 
+        question. 
+        Once you have collected 5 key pieces of information, say "DONE" and summarize 
+        them in bullet points.  
+        """,
+    )
+    writer_task.add_sub_task(doc_task)
+    writer_task.run()
+
+
+@app.command()
+def main(
+    debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
+    nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
+) -> None:
+    config = DocChatAgentConfig()
+    set_global(
+        Settings(
+            debug=debug,
+            cache=not nocache,
+        )
+    )
+    chat(config)
+
+
+if __name__ == "__main__":
+    app()

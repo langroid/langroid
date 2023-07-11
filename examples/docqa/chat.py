@@ -1,7 +1,4 @@
-import os
 import re
-import warnings
-
 import typer
 from rich import print
 from rich.prompt import Prompt
@@ -9,7 +6,7 @@ from rich.prompt import Prompt
 from langroid.agent.special.doc_chat_agent import DocChatAgent, DocChatAgentConfig
 from langroid.agent.task import Task
 from langroid.parsing.urls import get_list_from_user
-from langroid.utils import configuration
+from langroid.utils.configuration import set_global, Settings
 from langroid.utils.logging import setup_colored_logging
 
 app = typer.Typer()
@@ -18,9 +15,6 @@ setup_colored_logging()
 
 
 def chat(config: DocChatAgentConfig) -> None:
-    configuration.update_global_settings(config, keys=["debug", "stream", "cache"])
-
-    default_paths = config.default_paths
     agent = DocChatAgent(config)
     n_deletes = agent.vecdb.clear_empty_collections()
     collections = agent.vecdb.list_collections()
@@ -67,32 +61,9 @@ def chat(config: DocChatAgentConfig) -> None:
     inputs = get_list_from_user()
     if len(inputs) == 0:
         if is_new_collection:
-            inputs = default_paths
+            inputs = config.default_paths
     agent.config.doc_paths = inputs
-    doc_results = agent.ingest()
-    n_docs = len(doc_results["urls"]) + len(doc_results["paths"])
-
-    if n_docs > 0:
-        n_urls = len(doc_results["urls"])
-        n_paths = len(doc_results["paths"])
-        n_splits = doc_results["n_splits"]
-        os.environ["TOKENIZERS_PARALLELISM"] = "false"
-
-        print(
-            f"""
-        [green]I have processed the following {n_urls} URLs 
-        and {n_paths} paths into {n_splits} parts:
-        """.strip()
-        )
-        print("\n".join(doc_results["urls"]))
-        print("\n".join(doc_results["paths"]))
-
-    warnings.filterwarnings(
-        "ignore",
-        message="Token indices sequence length.*",
-        # category=UserWarning,
-        module="transformers",
-    )
+    agent.ingest()
     system_msg = Prompt.ask(
         """
     [blue] Tell me who I am; complete this sentence: You are...
@@ -116,7 +87,13 @@ def main(
     debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
     nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
 ) -> None:
-    config = DocChatAgentConfig(debug=debug, cache=not nocache)
+    config = DocChatAgentConfig()
+    set_global(
+        Settings(
+            debug=debug,
+            cache=not nocache,
+        )
+    )
     chat(config)
 
 

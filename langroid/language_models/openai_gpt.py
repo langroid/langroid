@@ -54,7 +54,7 @@ class OpenAIGPTConfig(LLMConfig):
     timeout: int = 20
     temperature: float = 0.0
     chat_model: OpenAIChatModel = OpenAIChatModel.GPT4
-    completion_model: OpenAICompletionModel = OpenAICompletionModel.TEXT_DA_VINCI_003
+    completion_model: OpenAICompletionModel = OpenAICompletionModel.GPT4
     context_length: Dict[str, int] = {
         OpenAIChatModel.GPT3_5_TURBO: 4096,
         OpenAIChatModel.GPT4: 8192,
