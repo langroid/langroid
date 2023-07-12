@@ -401,7 +401,7 @@ class ChatAgent(Agent):
                 console.print(f"[green]{self.indent}", end="")
             functions: Optional[List[LLMFunctionSpec]] = None
             fun_call: str | Dict[str, str] = "none"
-            if self.config.use_functions_api:
+            if self.config.use_functions_api and len(self.llm_functions_usable) > 0:
                 functions = [
                     self.llm_functions_map[f] for f in self.llm_functions_usable
                 ]

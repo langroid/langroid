@@ -25,7 +25,6 @@ from langroid.agent.tool_message import ToolMessage
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
 from langroid.utils.configuration import set_global, Settings
 from langroid.utils.logging import setup_colored_logging
-from langroid.vector_store.base import VectorStoreConfig
 
 app = typer.Typer()
 
@@ -63,7 +62,10 @@ class ExtractorAgent(ChatAgent):
         super().__init__(config)
 
     def methods_list(self, message: MethodsList) -> str:
-        print("Tool handled: Methods list:", message.methods)
+        print(f"""
+        DONE! Successfully extracted ML Methods list:
+        {message.methods}
+        """)
         return "\n".join(json.dumps(m.dict()) for m in message.methods)
 
 
@@ -78,7 +80,6 @@ class ExtractorConfig(ChatAgentConfig):
     max_tokens: int = 10000
     use_tools = False
     use_functions_api = True
-    vecdb: None | VectorStoreConfig = None
     llm: OpenAIGPTConfig = OpenAIGPTConfig(
         type="openai",
         chat_model=OpenAIChatModel.GPT4,
