@@ -511,7 +511,12 @@ class Agent(ABC):
         if handler_method is None:
             return None
 
-        return handler_method(tool)  # type: ignore
+        try:
+            result = handler_method(tool)
+        except Exception as e:
+            logger.warning(f"Error handling tool-message {tool_name}: {e}")
+            return None
+        return result  # type: ignore
 
     def num_tokens(self, prompt: str) -> int:
         if self.parser is None:

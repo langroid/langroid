@@ -1,15 +1,22 @@
 """
 Extract structured data from text using function_calling/tools.
-Based on https://www.kaggle.com/code/thedrcat/using-llms-to-extract-structured-data
+Inspired by this W&B example notebook, but goes beyond, i.e. gets slightly
+more structured output to include model quality:
+https://wandb.ai/darek/llmapps/reports/Using-LLMs-to-Extract-Structured-Data-OpenAI-Function-Calling-in-Action--Vmlldzo0Nzc0MzQ3
+
+Example usage, to use Langroid tool:
+python3 examples/basic/extract.py -nc
+
+Use -f option to use OpenAI function calling API instead of Langroid tool.
 
 """
-import os
 import textwrap
-import warnings
+import json
 
 import typer
 from typing import List
 from rich import print
+from pydantic import BaseModel
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
@@ -25,10 +32,17 @@ app = typer.Typer()
 setup_colored_logging()
 
 
+class MethodQuality(BaseModel):
+    name: str
+    quality: str
+
+
 class MethodsList(ToolMessage):
     request: str = "methods_list"
-    purpose: str = "list of Machine Learning methods"
-    methods: List[str]
+    purpose: str = """
+        Make a list of Machine Learning methods and their quality
+        """
+    methods: List[MethodQuality]
     result: str = ""
 
     @classmethod
@@ -36,9 +50,8 @@ class MethodsList(ToolMessage):
         return [
             cls(
                 methods=[
-                    "XGBoost, bad",
-                    "Random Forest, good",
-                    "SVM, good",
+                    MethodQuality(name="XGBoost", quality="good"),
+                    MethodQuality(name="Random Forest", quality="bad"),
                 ],
                 result="",
             ),
@@ -51,7 +64,7 @@ class ExtractorAgent(ChatAgent):
 
     def methods_list(self, message: MethodsList) -> str:
         print("Tool handled: Methods list:", message.methods)
-        return ",".join(message.methods)
+        return "\n".join(json.dumps(m.dict()) for m in message.methods)
 
 
 class ExtractorConfig(ChatAgentConfig):
@@ -88,20 +101,15 @@ def chat(config: ExtractorConfig) -> None:
         handle=True,
         force=True,
     )
-    os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-    warnings.filterwarnings(
-        "ignore",
-        message="Token indices sequence length.*",
-        # category=UserWarning,
-        module="transformers",
-    )
     task = Task(
         agent,
         system_message="""
         You are a machine learning engineer analyzing Kaggle competition solutions.
-        Your goal is to create a list of Machine Learning methods based on the 
-        user's message.
+        Your goal is to create a list of Machine Learning methods and their 
+        quality, based on the user's description. 
+        The "quality" can be "good" or "bad", based on your understanding of the 
+        description.
         The methods must be very short names, not long phrases.
         Don't add any methods not mentioned in the solution description.
         Call the methods_list function or Tool to accomplish this.
