@@ -8,7 +8,7 @@ setup: ## Setup the git pre-commit hooks
 	poetry run pre-commit install
 
 update: ## Update the git pre-commit hooks
-	pre-commit autoupdate
+	poetry run pre-commit autoupdate
 
 check:
 	@poetry run pre-commit install
@@ -48,7 +48,7 @@ nodocs:
 
 
 loc:
-	@echo "Lines of python code in git-tracked files:"
+	@echo "Lines in git-tracked files python files:"
 	@git ls-files | grep '\.py$$' | xargs cat | grep -v '^\s*$$' | wc -l
 
 .PHONY: bump-patch
