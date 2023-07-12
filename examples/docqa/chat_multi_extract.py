@@ -36,10 +36,13 @@ class LeaseFinancials(BaseModel):
 
 
 class Lease(BaseModel):
-    start: str
-    end: str
-    monthly_rent: str
-    deposit: str
+    """
+    Various lease terms.
+    Nested fields to make this more interesting/realistic
+    """
+
+    period: LeasePeriod
+    financials: LeaseFinancials
     address: str
 
 
@@ -134,8 +137,9 @@ def chat(opts: CLIOptions) -> None:
         You have to collect some information about a Commercial Lease, but you do not 
         have access to the lease itself. 
         You can ask me questions about the lease, ONE AT A TIME, I will answer each 
-        question. You only need to collect the following info:
-        {Lease.__fields__.keys()}
+        question. You only need to collect info corresponding to the fields in this 
+        example:
+        {LeaseMessage.usage_example()}
         If some info cannot be found, fill in {NO_ANSWER}.
         When you have collected this info, present it to me using the 
         'lease_info' function/tool.
