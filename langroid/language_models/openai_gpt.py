@@ -36,7 +36,7 @@ class OpenAIChatModel(str, Enum):
 
     GPT3_5_TURBO = "gpt-3.5-turbo-0613"
     GPT4_NOFUNC = "gpt-4"  # before function_call API
-    GPT4 = "gpt-4"
+    GPT4 = "gpt-4-0613"
 
 
 class OpenAICompletionModel(str, Enum):
@@ -44,7 +44,7 @@ class OpenAICompletionModel(str, Enum):
 
     TEXT_DA_VINCI_003 = "text-davinci-003"
     TEXT_ADA_001 = "text-ada-001"
-    GPT4 = "gpt-4"
+    GPT4 = "gpt-4-0613"
 
 
 class OpenAIGPTConfig(LLMConfig):
@@ -142,15 +142,17 @@ class OpenAIGPT(LanguageModel):
                 sys.stdout.flush()
             if event_fn_name:
                 function_name = event_fn_name
+                has_function = True
                 sys.stdout.write(Colors().GREEN + "FUNC: " + event_fn_name + ": ")
                 sys.stdout.flush()
             if event_args:
                 function_args += event_args
                 sys.stdout.write(Colors().GREEN + event_args)
                 sys.stdout.flush()
-            if event.choices[0].finish_reason == "function_call":
-                # function call here using func_call
-                has_function = True
+            if event.choices[0].finish_reason in ["stop", "function_call"]:
+                # for function_call, finish_reason does not necessarily
+                # contain "function_call" as mentioned in the docs.
+                # So we check for "stop" or "function_call" here.
                 break
 
         print("")
