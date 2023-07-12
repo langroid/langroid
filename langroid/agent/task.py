@@ -6,7 +6,8 @@ take turns attempting to respond to the `self.pending_message`.
 from __future__ import annotations
 
 import logging
-from typing import Callable, Dict, List, Optional, Type, cast
+from collections import deque
+from typing import Callable, Deque, Dict, List, Optional, Type, cast
 
 from rich import print
 
@@ -100,7 +101,9 @@ class Task:
         self.erase_substeps = erase_substeps
 
         agent_entity_responders = agent.entity_responders()
-        self.responders: List[Responder] = [e for e, _ in agent_entity_responders]
+        self.responders: Deque[Responder] = deque(
+            [e for e, _ in agent_entity_responders]
+        )
         self._entity_responder_map: Dict[
             Entity, Callable[..., Optional[ChatDocument]]
         ] = dict(agent_entity_responders)
@@ -169,7 +172,6 @@ class Task:
             return
         task.parent_task = self
         self.sub_tasks.append(task)
-        self.responders.append(cast(Responder, task))
         self.name_sub_task_map[task.name] = task
 
     def init(self, msg: None | str | ChatDocument = None) -> ChatDocument | None:
@@ -327,7 +329,12 @@ class Task:
             if self.pending_message is None
             else self.pending_message.metadata.recipient
         )
-        for r in self.responders:
+        task_responders = [cast(Responder, t) for t in self.sub_tasks]
+        responders = list(self.responders) + task_responders
+        # rotate at each step so that we don't always start with the same responder
+        # (which can result in an infinite loop)
+        self.responders.rotate(-1)
+        for r in responders:
             if not self._can_respond(r):
                 # create dummy msg for logging
                 log_doc = ChatDocument(
