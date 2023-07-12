@@ -123,7 +123,7 @@ def test_agent_handle_message():
     assert agent.handle_message(VALIDATE_DOCKERFILE_MSG) == "Built successfully"
 
 
-def test_llm_agent_message(test_settings: Settings):
+def test_llm_tool_message(test_settings: Settings):
     """
     Test whether LLM is able to generate message in required format, and the
     agent handles the message correctly.

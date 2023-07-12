@@ -11,7 +11,7 @@ from examples_dev.codechat.code_chat_tools import (
     ShowDirContentsMessage,
     ShowFileContentsMessage,
 )
-from examples_dev.dockerchat.dockerchat_agent_messages import RunPythonMessage
+from examples_dev.dockerchat.dockerchat_tool_messages import RunPythonMessage
 from langroid.agent.special.doc_chat_agent import DocChatAgent, DocChatAgentConfig
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig

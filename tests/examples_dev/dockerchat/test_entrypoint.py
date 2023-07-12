@@ -1,4 +1,4 @@
-from examples_dev.dockerchat.dockerchat_agent_messages import EntryPointAndCMDMessage
+from examples_dev.dockerchat.dockerchat_tool_messages import EntryPointAndCMDMessage
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
@@ -48,7 +48,7 @@ def test_dockerchat_agent_handle_message():
     assert agent.handle_message(FIND_ENTRYPOINT_MSG) is None
 
 
-def test_llm_agent_message(test_settings: Settings):
+def test_llm_tool_message(test_settings: Settings):
     """
     Test whether LLM is able to generate message in required format, and the
     agent handles the message correctly.

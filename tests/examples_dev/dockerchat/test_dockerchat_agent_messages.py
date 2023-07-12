@@ -1,7 +1,7 @@
 from typing import Optional
 
 from examples_dev.dockerchat.docker_chat_agent import DockerChatAgent
-from examples_dev.dockerchat.dockerchat_agent_messages import (
+from examples_dev.dockerchat.dockerchat_tool_messages import (
     AskURLMessage,
     FileExistsMessage,
 )

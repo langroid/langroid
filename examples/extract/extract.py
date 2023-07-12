@@ -62,10 +62,12 @@ class ExtractorAgent(ChatAgent):
         super().__init__(config)
 
     def methods_list(self, message: MethodsList) -> str:
-        print(f"""
+        print(
+            f"""
         DONE! Successfully extracted ML Methods list:
         {message.methods}
-        """)
+        """
+        )
         return "\n".join(json.dumps(m.dict()) for m in message.methods)
 
 

@@ -280,7 +280,7 @@ def test_handle_bad_tool_message():
         ),
     ],
 )
-def test_llm_agent_message(
+def test_llm_tool_message(
     test_settings: Settings,
     use_functions_api: bool,
     message_class: ToolMessage,

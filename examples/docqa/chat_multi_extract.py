@@ -24,13 +24,16 @@ app = typer.Typer()
 
 setup_colored_logging()
 
+
 class LeasePeriod(BaseModel):
     start_date: str
     end_date: str
 
+
 class LeaseFinancials(BaseModel):
     monthly_rent: str
     deposit: str
+
 
 class Lease(BaseModel):
     start: str
@@ -75,11 +78,14 @@ class LeaseExtractorAgent(ChatAgent):
         super().__init__(config)
 
     def lease_info(self, message: LeaseMessage) -> str:
-        print(f"""
+        print(
+            f"""
         DONE! Successfully extracted Lease Info:
         {message.terms}
-        """)
+        """
+        )
         return json.dumps(message.terms.dict())
+
 
 class CLIOptions(BaseSettings):
     debug: bool = False
@@ -141,9 +147,9 @@ def chat(opts: CLIOptions) -> None:
 
 @app.command()
 def main(
-        debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
-        nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
-        fn_api: bool = typer.Option(False, "--fn_api", "-f", help="use functions api"),
+    debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
+    nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
+    fn_api: bool = typer.Option(False, "--fn_api", "-f", help="use functions api"),
 ) -> None:
     cli_opts = CLIOptions(
         fn_api=fn_api,

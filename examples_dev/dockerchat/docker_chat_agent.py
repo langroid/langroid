@@ -16,7 +16,7 @@ from examples_dev.dockerchat.build_run_utils import (
     _execute_command,
     _save_dockerfile,
 )
-from examples_dev.dockerchat.dockerchat_agent_messages import (
+from examples_dev.dockerchat.dockerchat_tool_messages import (
     AskURLMessage,
     FileExistsMessage,
     PythonDependencyMessage,
