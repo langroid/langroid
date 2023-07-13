@@ -1,10 +1,8 @@
-<table>
-  <tr>
-    <td><img src="./docs/assets/orange-logo.png" alt="Logo" 
-        width="80"height="80"></td>
-    <td><h1>Langroid</h1></td>
-  </tr>
-</table>
+<div style="display: flex; align-items: center;">
+  <img src="docs/assets/orange-logo.png" alt="Logo" 
+        width="80" height="80"align="left">
+  <h1>Langroid</h1>
+</div>
 
 [![Pytest](https://github.com/langroid/langroid/actions/workflows/pytest.yml/badge.svg)](https://github.com/langroid/langroid/actions/workflows/pytest.yml)
 [![Lint](https://github.com/langroid/langroid/actions/workflows/validate.yml/badge.svg)](https://github.com/langroid/langroid/actions/workflows/validate.yml)
