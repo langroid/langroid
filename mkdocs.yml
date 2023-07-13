@@ -43,6 +43,7 @@ plugins:
   - section-index
 nav:
   - Home: index.md
+  - Quick Start: quick-start.md
   - Repo Overview: Overview.md
   - Resources: Resources.md
   - Writeups:

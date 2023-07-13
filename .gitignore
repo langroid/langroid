@@ -6,6 +6,13 @@ __pycache__/
 # C extensions
 *.so
 
+.logs/
+logs/
+.idea/
+.qdrant/
+.DS_Store
+
+
 # Distribution / packaging
 .Python
 build/

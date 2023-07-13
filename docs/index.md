@@ -32,4 +32,5 @@ collaboration. Agents act as message-transformers, and take turns responding to 
 transforming) the current message. The architecture is lightweight, transparent, 
 flexible, and allows other types of orchestration to be implemented.
 
-
+Besides Agents, Langroid also provides simple ways to directly interact with  
+LLMs and vector-stores.  
