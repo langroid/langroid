@@ -11,7 +11,7 @@ logs/
 .idea/
 .qdrant/
 .DS_Store
-
+poetry.lock
 
 # Distribution / packaging
 .Python

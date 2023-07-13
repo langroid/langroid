@@ -146,7 +146,9 @@ def chat(opts: CLIOptions) -> None:
         question. You only need to collect info corresponding to the fields in this 
         example:
         {LeaseMessage.usage_example()}
-        If some info cannot be found, fill in {NO_ANSWER}.
+        If I am unable to answer your question initially, try asking me 
+        differently. If I am still unable to answer after 3 tries, fill in 
+        {NO_ANSWER} for that field.
         When you have collected this info, present it to me using the 
         'lease_info' function/tool.
         """,

@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 from typing import Any, Dict, Optional
 
@@ -8,6 +9,8 @@ from dotenv import load_dotenv
 from pydantic import BaseModel
 
 from langroid.cachedb.base import CacheDB
+
+logger = logging.getLogger(__name__)
 
 
 class RedisCacheConfig(BaseModel):
@@ -30,15 +33,23 @@ class RedisCache(CacheDB):
         """
         self.config = config
         load_dotenv()
-        redis_password = os.getenv("REDIS_PASSWORD")
+
         if self.config.fake:
             self.client = fakeredis.FakeStrictRedis()  # type: ignore
         else:
-            self.client = redis.Redis(  # type: ignore
-                host=self.config.hostname,
-                port=self.config.port,
-                password=redis_password,
-            )
+            redis_password = os.getenv("REDIS_PASSWORD")
+            if redis_password is None:
+                logger.warning(
+                    """REDIS_PASSWORD not set in .env file,
+                    using fake redis client"""
+                )
+                self.client = fakeredis.FakeStrictRedis()  # type: ignore
+            else:
+                self.client = redis.Redis(  # type: ignore
+                    host=self.config.hostname,
+                    port=self.config.port,
+                    password=redis_password,
+                )
 
     def clear(self) -> None:
         """Clear keys from current db."""
