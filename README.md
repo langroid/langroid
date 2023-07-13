@@ -25,6 +25,7 @@ First install `poetry`, then create virtual env and install dependencies:
 ```bash
 # clone the repo and cd into repo root
 git clone https://github.com/langroid/langroid_dev.git
+# Go into the repo root
 cd langroid_dev
 
 # create a virtual env under project root, .venv directory
