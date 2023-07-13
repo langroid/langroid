@@ -58,7 +58,7 @@ cp .env-template .env
 Currently only OpenAI models are supported. Others will be added later.
 
 ## Run tests
-To verify your env is correctly setup, run all tests using `make test`.
+To verify your env is correctly setup, run all tests using `make tests`.
 
 ## Generate docs (private only for now)
 
