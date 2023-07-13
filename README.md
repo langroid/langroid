@@ -155,7 +155,7 @@ e.g.:
 - `-d` or `--debug` to see more output
 - `-f` to enable using OpenAI function-calling instead of Langroid tools.
 
-All apps will be described later, but here are some examples:
+Here are some apps to try (others will be described later):
 
 ### "Chat" with a set of URLs.
 
