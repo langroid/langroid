@@ -146,15 +146,21 @@ Read more [here](docs/development/github-cli.md).
 
 ## Run some examples
 
+There  are now several examples under `examples` and `examples_dev`. 
+They are typically run with `python3 examples/.../chat.py`, but sometimes 
+the app name may not be `chat.py`.
+Generally speaking, these commands can take additional command-line options, 
+e.g.: 
+- `-nc` to disable using cached LLM responses (i.e. forces fresh response)
+- `-d` or `--debug` to see more output
+- `-f` to enable using OpenAI function-calling instead of Langroid tools.
+
+All apps will be described later, but here are some examples:
+
 ### "Chat" with a set of URLs.
 
 ```bash
-python3 examples/urlqa/chat.py
-```
-
-To see more output, run with `--debug` or `-d`:
-```bash
-python3 examples/urlqa/chat.py -d
+python3 examples/docqa/chat.py
 ```
 
 Ask a question you want answered based on the URLs content. The default 
@@ -169,29 +175,19 @@ and then a follow-up question:
 
 ### "Chat" with a code repo, given the GitHub URL
 ```bash
-python3 examples/codechat/codechat.py
+python3 examples_dev/codechat/codechat.py
 ```
+For the default URL, try asking: 
+
+> What version of python is used?
 
 ### "chat"-based dockerfile creator. 
-  
-This is just a prelim starting point, 
-where we leverage the knowledge, reasoning and planning ability of the LLM.
-We don't hard-code any logic. All the smarts are in the initial prompt, 
-which instructs the LLM to _ask any info it needs_ to help it build the 
-dockerfile. The LLM then generates a series of questions, answered by the 
-human. The next step will be to nearly eliminate the human from this loop, 
-and have the LLM questions trigger scripts or semantic lookups in the 
-sharded + vectorized code-repo. The LLM could then show the answer it found 
-or give a set of possible options, and ask the human to confirm/choose.  
+This is a 3-agent system to generate a docker file for a (Python) github repo.
 
 
 ```bash
-python3 examples/dockerfile/chat.py
+python3 examples_dev/dockerfile/chat.py
 ```
-
-By default this uses `gpt-4-0613`.
-
-
 
 ## Logs of multi-agent interactions
 

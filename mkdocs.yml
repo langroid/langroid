@@ -42,6 +42,7 @@ plugins:
         - langroid
   - section-index
 nav:
+  - Home: index.md
   - Repo Overview: Overview.md
   - Resources: Resources.md
   - Writeups:
