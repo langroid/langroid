@@ -1,12 +1,15 @@
-# langroid
+<table>
+  <tr>
+    <td><img src="./docs/assets/orange-logo.png" alt="Logo" 
+        width="80"height="80"></td>
+    <td><h1>Langroid</h1></td>
+  </tr>
+</table>
 
 [![Pytest](https://github.com/langroid/langroid/actions/workflows/pytest.yml/badge.svg)](https://github.com/langroid/langroid/actions/workflows/pytest.yml)
 [![Lint](https://github.com/langroid/langroid/actions/workflows/validate.yml/badge.svg)](https://github.com/langroid/langroid/actions/workflows/validate.yml)
 [![Docs](https://github.com/langroid/langroid/actions/workflows/mkdocs-deploy.yml/badge.svg)](https://github.com/langroid/langroid/actions/workflows/mkdocs-deploy.yml)
 
-<div align="center">
-  <img src="./docs/assets/orange-logo.png" width="100">
-</div>
 
 ## Contributors:
 - Prasad Chalasani (Independent ML Consultant)

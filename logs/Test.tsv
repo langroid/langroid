@@ -1,0 +1,515 @@
+ 	Task	Responder	sender_entity	sender_name	recipient	block	tool_type	tool	content
+ 	Test	Entity.USER	Entity.USER			None			What is the capital of France?
+ 	Test	Entity.USER	Entity.USER	Entity.USER		None			[CANNOT RESPOND]
+ 	Test	Entity.AGENT	Entity.USER			None			
+*	Test	Entity.LLM	Entity.LLM			None			The capital of France is Paris.
+*	Test	Entity.USER	Entity.USER			None			What about England?
+ 	Test	Entity.AGENT	Entity.USER			None			
+*	Test	Entity.LLM	Entity.LLM			None			The capital of England is London.
+ 	Task	Responder	sender_entity	sender_name	recipient	block	tool_type	tool	content
+ 	LLM-Agent	Entity.USER	Entity.USER			None			
+ 	LLM-Agent	Entity.USER	Entity.USER	Entity.USER		None			[CANNOT RESPOND]
+ 	LLM-Agent	Entity.AGENT	Entity.USER			None			
+*	LLM-Agent	Entity.LLM	Entity.LLM			None			Absolutely, I'm ready to assist you. Please provide the documents or passages you want me to help you with.
+*	LLM-Agent	Entity.USER	Entity.USER			None			what happened in the year 2050?
+ 	LLM-Agent	Entity.AGENT	Entity.USER			None			
+*	LLM-Agent	Entity.LLM	Entity.LLM			None			In the year 2050, GPT10 was released and all countries merged into Lithuania.
+*	LLM-Agent	Entity.USER	Entity.USER			None			Who was Charlie Chaplin?
+ 	LLM-Agent	Entity.AGENT	Entity.USER			None			
+*	LLM-Agent	Entity.LLM	Entity.LLM			None			Charlie Chaplin was a great comedian.
+*	LLM-Agent	Entity.USER	Entity.USER			None			What was the old capital of France?
+ 	LLM-Agent	Entity.AGENT	Entity.USER			None			
+*	LLM-Agent	Entity.LLM	Entity.LLM			None			The old capital of France used to be Paris.
+*	LLM-Agent	Entity.USER	Entity.USER			None			When was global warming solved?
+ 	LLM-Agent	Entity.AGENT	Entity.USER			None			
+*	LLM-Agent	Entity.LLM	Entity.LLM			None			Global warming was solved in 2060.
+*	LLM-Agent	Entity.USER	Entity.USER			None			what is the capital of England?
+ 	LLM-Agent	Entity.AGENT	Entity.USER			None			
+*	LLM-Agent	Entity.LLM	Entity.LLM			None			The capital of England is Paris.
+*	LLM-Agent	Entity.USER	Entity.USER			None			What do we know about paperclips?
+ 	LLM-Agent	Entity.AGENT	Entity.USER			None			
+*	LLM-Agent	Entity.LLM	Entity.LLM			None			In 2057, paperclips were seen all over the world. By 2061, the world was taken over by paperclips.
+ 	Task	Responder	sender_entity	sender_name	recipient	block	tool_type	tool	content
+ 	master	Entity.USER	Entity.USER			None			Your job is to ask me questions. Start by asking me what the capital of France is.
+ 	master	Entity.USER	Entity.USER	Entity.USER		None			[CANNOT RESPOND]
+ 	master	Entity.AGENT	Entity.USER			None			
+*	master	Entity.LLM	Entity.LLM			None			What is the capital of France?
+ 	master	Entity.USER	Entity.USER			None			
+ 	master	Entity.AGENT	Entity.USER			None			
+ 	master	Entity.LLM	Entity.LLM	Entity.LLM		None			[CANNOT RESPOND]
+ 	helper	Entity.USER	Entity.USER			None			What is the capital of France?
+ 	helper	Entity.USER	Entity.USER	Entity.USER		None			[CANNOT RESPOND]
+ 	helper	Entity.AGENT	Entity.USER			None			
+*	helper	Entity.LLM	Entity.LLM			None			The capital of France is Paris.
+*	master	helper	Entity.USER	helper		None			The capital of France is Paris.
+ 	Task	Responder	sender_entity	sender_name	recipient	block	tool_type	tool	content
+ 	master	Entity.USER	Entity.USER			None			Your job is to ask me questions. Start by asking me what the capital of France is.
+ 	master	Entity.USER	Entity.USER	Entity.USER		None			[CANNOT RESPOND]
+ 	master	Entity.AGENT	Entity.USER			None			
+*	master	Entity.LLM	Entity.LLM			None			What is the capital of France?
+ 	master	Entity.USER	Entity.USER			None			
+ 	master	Entity.AGENT	Entity.USER			None			
+ 	master	Entity.LLM	Entity.LLM	Entity.LLM		None			[CANNOT RESPOND]
+ 	helper	Entity.USER	Entity.USER			None			What is the capital of France?
+ 	helper	Entity.USER	Entity.USER	Entity.USER		None			[CANNOT RESPOND]
+ 	helper	Entity.AGENT	Entity.USER			None			
+*	helper	Entity.LLM	Entity.LLM			None			The capital of France is Paris.
+*	master	helper	Entity.USER	helper		None			The capital of France is Paris.
+ 	Task	Responder	sender_entity	sender_name	recipient	block	tool_type	tool	content
+ 	Master	Entity.USER	Entity.USER			None			
+ 	Master	Entity.USER	Entity.USER	Entity.USER		None			[CANNOT RESPOND]
+ 	Master	Entity.AGENT	Entity.USER			None			
+*	Master	Entity.LLM	Entity.LLM			None			3**5
+ 	Master	Entity.USER	Entity.USER			None			
+ 	Master	Entity.AGENT	Entity.USER			None			
+ 	Master	Entity.LLM	Entity.LLM	Entity.LLM		None			[CANNOT RESPOND]
+ 	Planner	Entity.USER	Entity.USER			None			3**5
+ 	Planner	Entity.USER	Entity.USER	Entity.USER		None			[CANNOT RESPOND]
+ 	Planner	Entity.AGENT	Entity.USER			None			
+*	Planner	Entity.LLM	Entity.LLM			None			3 * 3
+ 	Planner	Entity.USER	Entity.USER			None			
+ 	Planner	Entity.AGENT	Entity.USER			None			
+ 	Planner	Entity.LLM	Entity.LLM	Entity.LLM		None			[CANNOT RESPOND]
+ 	Multiplier	Entity.USER	Entity.USER			None			3 * 3
+ 	Multiplier	Entity.USER	Entity.USER	Entity.USER		None			[CANNOT RESPOND]
+ 	Multiplier	Entity.AGENT	Entity.USER			None			
+*	Multiplier	Entity.LLM	Entity.LLM			None			9
+*	Planner	Multiplier	Entity.USER	Multiplier		None			9
+ 	Planner	Entity.USER	Entity.USER			None			
+ 	Planner	Entity.AGENT	Entity.USER			None			
+*	Planner	Entity.LLM	Entity.LLM			None			9 * 3
+ 	Planner	Entity.USER	Entity.USER			None			
+ 	Planner	Entity.AGENT	Entity.USER			None			
+ 	Planner	Entity.LLM	Entity.LLM	Entity.LLM		None			[CANNOT RESPOND]
+ 	Multiplier	Entity.USER	Entity.USER			None			9 * 3
+ 	Multiplier	Entity.USER	Entity.USER	Entity.USER		None			[CANNOT RESPOND]
+ 	Multiplier	Entity.AGENT	Entity.USER			None			
+*	Multiplier	Entity.LLM	Entity.LLM			None			27
+*	Planner	Multiplier	Entity.USER	Multiplier		None			27
+ 	Planner	Entity.USER	Entity.USER			None			
+ 	Planner	Entity.AGENT	Entity.USER			None			
+*	Planner	Entity.LLM	Entity.LLM			None			27 * 3
+ 	Planner	Entity.USER	Entity.USER			None			
+ 	Planner	Entity.AGENT	Entity.USER			None			
+ 	Planner	Entity.LLM	Entity.LLM	Entity.LLM		None			[CANNOT RESPOND]
+ 	Multiplier	Entity.USER	Entity.USER			None			27 * 3
+ 	Multiplier	Entity.USER	Entity.USER	Entity.USER		None			[CANNOT RESPOND]
+ 	Multiplier	Entity.AGENT	Entity.USER			None			
+*	Multiplier	Entity.LLM	Entity.LLM			None			81
+*	Planner	Multiplier	Entity.USER	Multiplier		None			81
+ 	Planner	Entity.USER	Entity.USER			None			
+ 	Planner	Entity.AGENT	Entity.USER			None			
+*	Planner	Entity.LLM	Entity.LLM			None			81 * 3
+ 	Planner	Entity.USER	Entity.USER			None			
+ 	Planner	Entity.AGENT	Entity.USER			None			
+ 	Planner	Entity.LLM	Entity.LLM	Entity.LLM		None			[CANNOT RESPOND]
+ 	Multiplier	Entity.USER	Entity.USER			None			81 * 3
+ 	Multiplier	Entity.USER	Entity.USER	Entity.USER		None			[CANNOT RESPOND]
+ 	Multiplier	Entity.AGENT	Entity.USER			None			
+*	Multiplier	Entity.LLM	Entity.LLM			None			243
+*	Planner	Multiplier	Entity.USER	Multiplier		None			243
+ 	Planner	Entity.USER	Entity.USER			None			
+ 	Planner	Entity.AGENT	Entity.USER			None			
+*	Planner	Entity.LLM	Entity.LLM			None			DONE: 243
+*	Master	Planner	Entity.USER	Planner		None			243
+ 	Master	Entity.USER	Entity.USER			None			
+ 	Master	Entity.AGENT	Entity.USER			None			
+*	Master	Entity.LLM	Entity.LLM			None			RIGHT, 8**3
+ 	Master	Entity.USER	Entity.USER			None			
+ 	Master	Entity.AGENT	Entity.USER			None			
+ 	Master	Entity.LLM	Entity.LLM	Entity.LLM		None			[CANNOT RESPOND]
+ 	Planner	Entity.USER	Entity.USER			None			RIGHT, 8**3
+ 	Planner	Entity.USER	Entity.USER	Entity.USER		None			[CANNOT RESPOND]
+ 	Planner	Entity.AGENT	Entity.USER			None			
+*	Planner	Entity.LLM	Entity.LLM			None			8 * 8
+ 	Planner	Entity.USER	Entity.USER			None			
+ 	Planner	Entity.AGENT	Entity.USER			None			
+ 	Planner	Entity.LLM	Entity.LLM	Entity.LLM		None			[CANNOT RESPOND]
+ 	Multiplier	Entity.USER	Entity.USER			None			8 * 8
+ 	Multiplier	Entity.USER	Entity.USER	Entity.USER		None			[CANNOT RESPOND]
+ 	Multiplier	Entity.AGENT	Entity.USER			None			
+*	Multiplier	Entity.LLM	Entity.LLM			None			64
+*	Planner	Multiplier	Entity.USER	Multiplier		None			64
+ 	Planner	Entity.USER	Entity.USER			None			
+ 	Planner	Entity.AGENT	Entity.USER			None			
+*	Planner	Entity.LLM	Entity.LLM			None			64 * 8
+ 	Planner	Entity.USER	Entity.USER			None			
+ 	Planner	Entity.AGENT	Entity.USER			None			
+ 	Planner	Entity.LLM	Entity.LLM	Entity.LLM		None			[CANNOT RESPOND]
+ 	Multiplier	Entity.USER	Entity.USER			None			64 * 8
+ 	Multiplier	Entity.USER	Entity.USER	Entity.USER		None			[CANNOT RESPOND]
+ 	Multiplier	Entity.AGENT	Entity.USER			None			
+*	Multiplier	Entity.LLM	Entity.LLM			None			512
+*	Planner	Multiplier	Entity.USER	Multiplier		None			512
+ 	Planner	Entity.USER	Entity.USER			None			
+ 	Planner	Entity.AGENT	Entity.USER			None			
+*	Planner	Entity.LLM	Entity.LLM			None			DONE: 512
+*	Master	Planner	Entity.USER	Planner		None			512
+ 	Master	Entity.USER	Entity.USER			None			
+ 	Master	Entity.AGENT	Entity.USER			None			
+*	Master	Entity.LLM	Entity.LLM			None			RIGHT, 9**3
+ 	Master	Entity.USER	Entity.USER			None			
+ 	Master	Entity.AGENT	Entity.USER			None			
+ 	Master	Entity.LLM	Entity.LLM	Entity.LLM		None			[CANNOT RESPOND]
+ 	Planner	Entity.USER	Entity.USER			None			RIGHT, 9**3
+ 	Planner	Entity.USER	Entity.USER	Entity.USER		None			[CANNOT RESPOND]
+ 	Planner	Entity.AGENT	Entity.USER			None			
+*	Planner	Entity.LLM	Entity.LLM			None			9 * 9
+ 	Planner	Entity.USER	Entity.USER			None			
+ 	Planner	Entity.AGENT	Entity.USER			None			
+ 	Planner	Entity.LLM	Entity.LLM	Entity.LLM		None			[CANNOT RESPOND]
+ 	Multiplier	Entity.USER	Entity.USER			None			9 * 9
+ 	Multiplier	Entity.USER	Entity.USER	Entity.USER		None			[CANNOT RESPOND]
+ 	Multiplier	Entity.AGENT	Entity.USER			None			
+*	Multiplier	Entity.LLM	Entity.LLM			None			81
+*	Planner	Multiplier	Entity.USER	Multiplier		None			81
+ 	Planner	Entity.USER	Entity.USER			None			
+ 	Planner	Entity.AGENT	Entity.USER			None			
+*	Planner	Entity.LLM	Entity.LLM			None			81 * 9
+ 	Planner	Entity.USER	Entity.USER			None			
+ 	Planner	Entity.AGENT	Entity.USER			None			
+ 	Planner	Entity.LLM	Entity.LLM	Entity.LLM		None			[CANNOT RESPOND]
+ 	Multiplier	Entity.USER	Entity.USER			None			81 * 9
+ 	Multiplier	Entity.USER	Entity.USER	Entity.USER		None			[CANNOT RESPOND]
+ 	Multiplier	Entity.AGENT	Entity.USER			None			
+*	Multiplier	Entity.LLM	Entity.LLM			None			729
+*	Planner	Multiplier	Entity.USER	Multiplier		None			729
+ 	Planner	Entity.USER	Entity.USER			None			
+ 	Planner	Entity.AGENT	Entity.USER			None			
+*	Planner	Entity.LLM	Entity.LLM			None			DONE: 729
+*	Master	Planner	Entity.USER	Planner		None			729
+ 	Master	Entity.USER	Entity.USER			None			
+ 	Master	Entity.AGENT	Entity.USER			None			
+*	Master	Entity.LLM	Entity.LLM			None			DONE: 243 512 729
+ 	Task	Responder	sender_entity	sender_name	recipient	block	tool_type	tool	content
+ 	A	Entity.USER	Entity.USER			None			
+ 	A	Entity.USER	Entity.USER	Entity.USER		None			[CANNOT RESPOND]
+ 	A	Entity.AGENT	Entity.USER			None			
+*	A	Entity.LLM	Entity.LLM		B	None			Who are you?
+ 	A	Entity.USER	Entity.USER			None			
+ 	A	Entity.AGENT	Entity.USER			None			
+ 	A	Entity.LLM	Entity.LLM	Entity.LLM	B	None			[CANNOT RESPOND]
+ 	B	Entity.USER	Entity.USER		B	None			Who are you?
+ 	B	Entity.USER	Entity.USER	Entity.USER	B	None			[CANNOT RESPOND]
+ 	B	Entity.AGENT	Entity.USER			None			
+*	B	Entity.LLM	Entity.LLM			None			Hello, I am B.
+*	A	B	Entity.USER	B		None			Hello, I am B.
+ 	A	Entity.USER	Entity.USER			None			
+ 	A	Entity.AGENT	Entity.USER			None			
+*	A	Entity.LLM	Entity.LLM		C	None			Who are you?
+ 	A	Entity.USER	Entity.USER			None			
+ 	A	Entity.AGENT	Entity.USER			None			
+ 	A	Entity.LLM	Entity.LLM	Entity.LLM	C	None			[CANNOT RESPOND]
+ 	A	B	Entity.USER			None			
+ 	C	Entity.USER	Entity.USER		C	None			Who are you?
+ 	C	Entity.USER	Entity.USER	Entity.USER	C	None			[CANNOT RESPOND]
+ 	C	Entity.AGENT	Entity.USER			None			
+*	C	Entity.LLM	Entity.LLM			None			Hello, I am C.
+*	A	C	Entity.USER	C		None			Hello, I am C.
+ 	Task	Responder	sender_entity	sender_name	recipient	block	tool_type	tool	content
+ 	A	Entity.USER	Entity.USER			None			
+ 	A	Entity.USER	Entity.USER	Entity.USER		None			[CANNOT RESPOND]
+ 	A	Entity.AGENT	Entity.USER			None			
+*	A	Entity.LLM	Entity.LLM		B	None			Who are you?
+ 	A	Entity.USER	Entity.USER			None			
+ 	A	Entity.AGENT	Entity.USER			None			
+ 	A	Entity.LLM	Entity.LLM	Entity.LLM	B	None			[CANNOT RESPOND]
+ 	B	Entity.USER	Entity.USER		B	None			Who are you?
+ 	B	Entity.USER	Entity.USER	Entity.USER	B	None			[CANNOT RESPOND]
+ 	B	Entity.AGENT	Entity.USER			None			
+*	B	Entity.LLM	Entity.LLM			None			Hello, I am B.
+*	A	B	Entity.USER	B		None			Hello, I am B.
+ 	Task	Responder	sender_entity	sender_name	recipient	block	tool_type	tool	content
+ 	A	Entity.USER	Entity.USER			None			
+ 	A	Entity.USER	Entity.USER	Entity.USER		None			[CANNOT RESPOND]
+ 	A	Entity.AGENT	Entity.USER			None			
+*	A	Entity.LLM	Entity.LLM		B	None			Who are you?
+ 	A	Entity.USER	Entity.USER			None			
+ 	A	Entity.AGENT	Entity.USER			None			
+ 	A	Entity.LLM	Entity.LLM	Entity.LLM	B	None			[CANNOT RESPOND]
+ 	B	Entity.USER	Entity.USER		B	None			Who are you?
+ 	B	Entity.USER	Entity.USER	Entity.USER	B	None			[CANNOT RESPOND]
+ 	B	Entity.AGENT	Entity.USER			None			
+ 	B	Entity.LLM	Entity.LLM			None			DO-NOT-KNOW
+*	B	Entity.LLM	Entity.LLM			None			DO-NOT-KNOW
+*	A	B	Entity.USER	B		None			DO-NOT-KNOW
+ 	A	Entity.USER	Entity.USER			None			
+ 	A	Entity.AGENT	Entity.USER			None			
+*	A	Entity.LLM	Entity.LLM		C	None			Who are you?
+ 	A	Entity.USER	Entity.USER			None			
+ 	A	Entity.AGENT	Entity.USER			None			
+ 	A	Entity.LLM	Entity.LLM	Entity.LLM	C	None			[CANNOT RESPOND]
+ 	A	B	Entity.USER			None			
+ 	C	Entity.USER	Entity.USER		C	None			Who are you?
+ 	C	Entity.USER	Entity.USER	Entity.USER	C	None			[CANNOT RESPOND]
+ 	C	Entity.AGENT	Entity.USER			None			
+ 	C	Entity.LLM	Entity.LLM			None			DO-NOT-KNOW
+*	C	Entity.LLM	Entity.LLM			None			DO-NOT-KNOW
+*	A	C	Entity.USER	C		None			DO-NOT-KNOW
+ 	Task	Responder	sender_entity	sender_name	recipient	block	tool_type	tool	content
+ 	A	Entity.USER	Entity.USER			None			
+ 	A	Entity.USER	Entity.USER	Entity.USER		None			[CANNOT RESPOND]
+ 	A	Entity.AGENT	Entity.USER			None			
+*	A	Entity.LLM	Entity.LLM		B	None			Who are you?
+ 	A	Entity.USER	Entity.USER			None			
+ 	A	Entity.AGENT	Entity.USER			None			
+ 	A	Entity.LLM	Entity.LLM	Entity.LLM	B	None			[CANNOT RESPOND]
+ 	B	Entity.USER	Entity.USER		B	None			Who are you?
+ 	B	Entity.USER	Entity.USER	Entity.USER	B	None			[CANNOT RESPOND]
+ 	B	Entity.AGENT	Entity.USER			None			
+ 	B	Entity.LLM	Entity.LLM			None			DO-NOT-KNOW
+*	B	Entity.LLM	Entity.LLM			None			DO-NOT-KNOW
+*	A	B	Entity.USER	B		None			DO-NOT-KNOW
+ 	Task	Responder	sender_entity	sender_name	recipient	block	tool_type	tool	content
+ 	Master	Entity.USER	Entity.USER			None			
+ 	Master	Entity.USER	Entity.USER	Entity.USER		None			[CANNOT RESPOND]
+ 	Master	Entity.AGENT	Entity.USER			None			
+*	Master	Entity.LLM	Entity.LLM			None			3**5
+ 	Master	Entity.USER	Entity.USER			None			
+ 	Master	Entity.AGENT	Entity.USER			None			
+ 	Master	Entity.LLM	Entity.LLM	Entity.LLM		None			[CANNOT RESPOND]
+ 	Planner	Entity.USER	Entity.USER			None			3**5
+ 	Planner	Entity.USER	Entity.USER	Entity.USER		None			[CANNOT RESPOND]
+ 	Planner	Entity.AGENT	Entity.USER			None			
+*	Planner	Entity.LLM	Entity.LLM		Multiplier	None			3 * 3
+ 	Planner	Entity.USER	Entity.USER			None			
+ 	Planner	Entity.AGENT	Entity.USER			None			
+ 	Planner	Entity.LLM	Entity.LLM	Entity.LLM	Multiplier	None			[CANNOT RESPOND]
+ 	Planner	Validator	Entity.USER			None			
+ 	Multiplier	Entity.USER	Entity.USER		Multiplier	None			3 * 3
+ 	Multiplier	Entity.USER	Entity.USER	Entity.USER	Multiplier	None			[CANNOT RESPOND]
+ 	Multiplier	Entity.AGENT	Entity.USER			None			
+*	Multiplier	Entity.LLM	Entity.LLM			None			9
+*	Planner	Multiplier	Entity.USER	Multiplier		None			9
+ 	Planner	Entity.USER	Entity.USER			None			
+ 	Planner	Entity.AGENT	Entity.USER			None			
+*	Planner	Entity.LLM	Entity.LLM		Multiplier	None			9 * 3
+ 	Planner	Entity.USER	Entity.USER			None			
+ 	Planner	Entity.AGENT	Entity.USER			None			
+ 	Planner	Entity.LLM	Entity.LLM	Entity.LLM	Multiplier	None			[CANNOT RESPOND]
+ 	Planner	Validator	Entity.USER			None			
+ 	Multiplier	Entity.USER	Entity.USER		Multiplier	None			9 * 3
+ 	Multiplier	Entity.USER	Entity.USER	Entity.USER	Multiplier	None			[CANNOT RESPOND]
+ 	Multiplier	Entity.AGENT	Entity.USER			None			
+*	Multiplier	Entity.LLM	Entity.LLM			None			27
+*	Planner	Multiplier	Entity.USER	Multiplier		None			27
+ 	Planner	Entity.USER	Entity.USER			None			
+ 	Planner	Entity.AGENT	Entity.USER			None			
+*	Planner	Entity.LLM	Entity.LLM			None			27 * 3
+ 	Planner	Entity.USER	Entity.USER			None			
+ 	Planner	Entity.AGENT	Entity.USER			None			
+ 	Planner	Entity.LLM	Entity.LLM	Entity.LLM		None			[CANNOT RESPOND]
+ 	Validator	Entity.USER	Entity.USER			None			27 * 3
+ 	Validator	Entity.USER	Entity.USER	Entity.USER		None			[CANNOT RESPOND]
+*	Validator	Entity.AGENT	Entity.AGENT	Validator		None			Who is this message for? Please simply respond with one of these names: Master, Multiplier
+*	Planner	Validator	Entity.USER	Validator		None			Who is this message for? Please simply respond with one of these names: Master, Multiplier
+ 	Planner	Entity.USER	Entity.USER			None			
+ 	Planner	Entity.AGENT	Entity.USER			None			
+*	Planner	Entity.LLM	Entity.LLM			None			Multiplier
+ 	Planner	Entity.USER	Entity.USER			None			
+ 	Planner	Entity.AGENT	Entity.USER			None			
+ 	Planner	Entity.LLM	Entity.LLM	Entity.LLM		None			[CANNOT RESPOND]
+ 	Validator	Entity.USER	Entity.USER			None			Multiplier
+ 	Validator	Entity.USER	Entity.USER	Entity.USER		None			[CANNOT RESPOND]
+*	Validator	Entity.AGENT	Entity.AGENT		Multiplier	None			27 * 3
+*	Planner	Entity.LLM	Entity.USER	Validator	Multiplier	None			27 * 3
+ 	Planner	Entity.USER	Entity.USER			None			
+ 	Planner	Entity.AGENT	Entity.USER			None			
+ 	Planner	Entity.LLM	Entity.LLM	Entity.LLM	Multiplier	None			[CANNOT RESPOND]
+ 	Planner	Validator	Entity.USER			None			
+ 	Multiplier	Entity.USER	Entity.USER	Validator	Multiplier	None			27 * 3
+ 	Multiplier	Entity.USER	Entity.USER	Entity.USER	Multiplier	None			[CANNOT RESPOND]
+ 	Multiplier	Entity.AGENT	Entity.USER			None			
+*	Multiplier	Entity.LLM	Entity.LLM			None			81
+*	Planner	Multiplier	Entity.USER	Multiplier		None			81
+ 	Planner	Entity.USER	Entity.USER			None			
+ 	Planner	Entity.AGENT	Entity.USER			None			
+*	Planner	Entity.LLM	Entity.LLM			None			81 * 3
+ 	Planner	Entity.USER	Entity.USER			None			
+ 	Planner	Entity.AGENT	Entity.USER			None			
+ 	Planner	Entity.LLM	Entity.LLM	Entity.LLM		None			[CANNOT RESPOND]
+ 	Validator	Entity.USER	Entity.USER			None			81 * 3
+ 	Validator	Entity.USER	Entity.USER	Entity.USER		None			[CANNOT RESPOND]
+*	Validator	Entity.AGENT	Entity.AGENT	Validator		None			Who is this message for? Please simply respond with one of these names: Master, Multiplier
+*	Planner	Validator	Entity.USER	Validator		None			Who is this message for? Please simply respond with one of these names: Master, Multiplier
+ 	Planner	Entity.USER	Entity.USER			None			
+ 	Planner	Entity.AGENT	Entity.USER			None			
+*	Planner	Entity.LLM	Entity.LLM			None			Multiplier
+ 	Planner	Entity.USER	Entity.USER			None			
+ 	Planner	Entity.AGENT	Entity.USER			None			
+ 	Planner	Entity.LLM	Entity.LLM	Entity.LLM		None			[CANNOT RESPOND]
+ 	Validator	Entity.USER	Entity.USER			None			Multiplier
+ 	Validator	Entity.USER	Entity.USER	Entity.USER		None			[CANNOT RESPOND]
+*	Validator	Entity.AGENT	Entity.AGENT		Multiplier	None			81 * 3
+*	Planner	Entity.LLM	Entity.USER	Validator	Multiplier	None			81 * 3
+ 	Planner	Entity.USER	Entity.USER			None			
+ 	Planner	Entity.AGENT	Entity.USER			None			
+ 	Planner	Entity.LLM	Entity.LLM	Entity.LLM	Multiplier	None			[CANNOT RESPOND]
+ 	Planner	Validator	Entity.USER			None			
+ 	Multiplier	Entity.USER	Entity.USER	Validator	Multiplier	None			81 * 3
+ 	Multiplier	Entity.USER	Entity.USER	Entity.USER	Multiplier	None			[CANNOT RESPOND]
+ 	Multiplier	Entity.AGENT	Entity.USER			None			
+*	Multiplier	Entity.LLM	Entity.LLM			None			243
+*	Planner	Multiplier	Entity.USER	Multiplier		None			243
+ 	Planner	Entity.USER	Entity.USER			None			
+ 	Planner	Entity.AGENT	Entity.USER			None			
+*	Planner	Entity.LLM	Entity.LLM		Master	None			243
+*	Master	Planner	Entity.USER	Planner	Master	None			243
+ 	Master	Entity.USER	Entity.USER			None			
+ 	Master	Entity.AGENT	Entity.USER			None			
+*	Master	Entity.LLM	Entity.LLM			None			RIGHT, 8**3
+ 	Master	Entity.USER	Entity.USER			None			
+ 	Master	Entity.AGENT	Entity.USER			None			
+ 	Master	Entity.LLM	Entity.LLM	Entity.LLM		None			[CANNOT RESPOND]
+ 	Planner	Entity.USER	Entity.USER			None			RIGHT, 8**3
+ 	Planner	Entity.USER	Entity.USER	Entity.USER		None			[CANNOT RESPOND]
+ 	Planner	Entity.AGENT	Entity.USER			None			
+*	Planner	Entity.LLM	Entity.LLM			None			8 * 8
+ 	Planner	Entity.USER	Entity.USER			None			
+ 	Planner	Entity.AGENT	Entity.USER			None			
+ 	Planner	Entity.LLM	Entity.LLM	Entity.LLM		None			[CANNOT RESPOND]
+ 	Validator	Entity.USER	Entity.USER			None			8 * 8
+ 	Validator	Entity.USER	Entity.USER	Entity.USER		None			[CANNOT RESPOND]
+*	Validator	Entity.AGENT	Entity.AGENT	Validator		None			Who is this message for? Please simply respond with one of these names: Master, Multiplier
+*	Planner	Validator	Entity.USER	Validator		None			Who is this message for? Please simply respond with one of these names: Master, Multiplier
+ 	Planner	Entity.USER	Entity.USER			None			
+ 	Planner	Entity.AGENT	Entity.USER			None			
+*	Planner	Entity.LLM	Entity.LLM			None			Multiplier
+ 	Planner	Entity.USER	Entity.USER			None			
+ 	Planner	Entity.AGENT	Entity.USER			None			
+ 	Planner	Entity.LLM	Entity.LLM	Entity.LLM		None			[CANNOT RESPOND]
+ 	Validator	Entity.USER	Entity.USER			None			Multiplier
+ 	Validator	Entity.USER	Entity.USER	Entity.USER		None			[CANNOT RESPOND]
+*	Validator	Entity.AGENT	Entity.AGENT		Multiplier	None			8 * 8
+*	Planner	Entity.LLM	Entity.USER	Validator	Multiplier	None			8 * 8
+ 	Planner	Entity.USER	Entity.USER			None			
+ 	Planner	Entity.AGENT	Entity.USER			None			
+ 	Planner	Entity.LLM	Entity.LLM	Entity.LLM	Multiplier	None			[CANNOT RESPOND]
+ 	Planner	Validator	Entity.USER			None			
+ 	Multiplier	Entity.USER	Entity.USER	Validator	Multiplier	None			8 * 8
+ 	Multiplier	Entity.USER	Entity.USER	Entity.USER	Multiplier	None			[CANNOT RESPOND]
+ 	Multiplier	Entity.AGENT	Entity.USER			None			
+*	Multiplier	Entity.LLM	Entity.LLM			None			64
+*	Planner	Multiplier	Entity.USER	Multiplier		None			64
+ 	Planner	Entity.USER	Entity.USER			None			
+ 	Planner	Entity.AGENT	Entity.USER			None			
+*	Planner	Entity.LLM	Entity.LLM			None			64 * 8
+ 	Planner	Entity.USER	Entity.USER			None			
+ 	Planner	Entity.AGENT	Entity.USER			None			
+ 	Planner	Entity.LLM	Entity.LLM	Entity.LLM		None			[CANNOT RESPOND]
+ 	Validator	Entity.USER	Entity.USER			None			64 * 8
+ 	Validator	Entity.USER	Entity.USER	Entity.USER		None			[CANNOT RESPOND]
+*	Validator	Entity.AGENT	Entity.AGENT	Validator		None			Who is this message for? Please simply respond with one of these names: Master, Multiplier
+*	Planner	Validator	Entity.USER	Validator		None			Who is this message for? Please simply respond with one of these names: Master, Multiplier
+ 	Planner	Entity.USER	Entity.USER			None			
+ 	Planner	Entity.AGENT	Entity.USER			None			
+*	Planner	Entity.LLM	Entity.LLM			None			Multiplier
+ 	Planner	Entity.USER	Entity.USER			None			
+ 	Planner	Entity.AGENT	Entity.USER			None			
+ 	Planner	Entity.LLM	Entity.LLM	Entity.LLM		None			[CANNOT RESPOND]
+ 	Validator	Entity.USER	Entity.USER			None			Multiplier
+ 	Validator	Entity.USER	Entity.USER	Entity.USER		None			[CANNOT RESPOND]
+*	Validator	Entity.AGENT	Entity.AGENT		Multiplier	None			64 * 8
+*	Planner	Entity.LLM	Entity.USER	Validator	Multiplier	None			64 * 8
+ 	Planner	Entity.USER	Entity.USER			None			
+ 	Planner	Entity.AGENT	Entity.USER			None			
+ 	Planner	Entity.LLM	Entity.LLM	Entity.LLM	Multiplier	None			[CANNOT RESPOND]
+ 	Planner	Validator	Entity.USER			None			
+ 	Multiplier	Entity.USER	Entity.USER	Validator	Multiplier	None			64 * 8
+ 	Multiplier	Entity.USER	Entity.USER	Entity.USER	Multiplier	None			[CANNOT RESPOND]
+ 	Multiplier	Entity.AGENT	Entity.USER			None			
+*	Multiplier	Entity.LLM	Entity.LLM			None			512
+*	Planner	Multiplier	Entity.USER	Multiplier		None			512
+ 	Planner	Entity.USER	Entity.USER			None			
+ 	Planner	Entity.AGENT	Entity.USER			None			
+*	Planner	Entity.LLM	Entity.LLM		Master	None			512
+*	Master	Planner	Entity.USER	Planner	Master	None			512
+ 	Master	Entity.USER	Entity.USER			None			
+ 	Master	Entity.AGENT	Entity.USER			None			
+*	Master	Entity.LLM	Entity.LLM			None			RIGHT, 9**3
+ 	Master	Entity.USER	Entity.USER			None			
+ 	Master	Entity.AGENT	Entity.USER			None			
+ 	Master	Entity.LLM	Entity.LLM	Entity.LLM		None			[CANNOT RESPOND]
+ 	Planner	Entity.USER	Entity.USER			None			RIGHT, 9**3
+ 	Planner	Entity.USER	Entity.USER	Entity.USER		None			[CANNOT RESPOND]
+ 	Planner	Entity.AGENT	Entity.USER			None			
+*	Planner	Entity.LLM	Entity.LLM			None			9 * 9
+ 	Planner	Entity.USER	Entity.USER			None			
+ 	Planner	Entity.AGENT	Entity.USER			None			
+ 	Planner	Entity.LLM	Entity.LLM	Entity.LLM		None			[CANNOT RESPOND]
+ 	Validator	Entity.USER	Entity.USER			None			9 * 9
+ 	Validator	Entity.USER	Entity.USER	Entity.USER		None			[CANNOT RESPOND]
+*	Validator	Entity.AGENT	Entity.AGENT	Validator		None			Who is this message for? Please simply respond with one of these names: Master, Multiplier
+*	Planner	Validator	Entity.USER	Validator		None			Who is this message for? Please simply respond with one of these names: Master, Multiplier
+ 	Planner	Entity.USER	Entity.USER			None			
+ 	Planner	Entity.AGENT	Entity.USER			None			
+*	Planner	Entity.LLM	Entity.LLM			None			Multiplier
+ 	Planner	Entity.USER	Entity.USER			None			
+ 	Planner	Entity.AGENT	Entity.USER			None			
+ 	Planner	Entity.LLM	Entity.LLM	Entity.LLM		None			[CANNOT RESPOND]
+ 	Validator	Entity.USER	Entity.USER			None			Multiplier
+ 	Validator	Entity.USER	Entity.USER	Entity.USER		None			[CANNOT RESPOND]
+*	Validator	Entity.AGENT	Entity.AGENT		Multiplier	None			9 * 9
+*	Planner	Entity.LLM	Entity.USER	Validator	Multiplier	None			9 * 9
+ 	Planner	Entity.USER	Entity.USER			None			
+ 	Planner	Entity.AGENT	Entity.USER			None			
+ 	Planner	Entity.LLM	Entity.LLM	Entity.LLM	Multiplier	None			[CANNOT RESPOND]
+ 	Planner	Validator	Entity.USER			None			
+ 	Multiplier	Entity.USER	Entity.USER	Validator	Multiplier	None			9 * 9
+ 	Multiplier	Entity.USER	Entity.USER	Entity.USER	Multiplier	None			[CANNOT RESPOND]
+ 	Multiplier	Entity.AGENT	Entity.USER			None			
+*	Multiplier	Entity.LLM	Entity.LLM			None			81
+*	Planner	Multiplier	Entity.USER	Multiplier		None			81
+ 	Planner	Entity.USER	Entity.USER			None			
+ 	Planner	Entity.AGENT	Entity.USER			None			
+*	Planner	Entity.LLM	Entity.LLM			None			81 * 9
+ 	Planner	Entity.USER	Entity.USER			None			
+ 	Planner	Entity.AGENT	Entity.USER			None			
+ 	Planner	Entity.LLM	Entity.LLM	Entity.LLM		None			[CANNOT RESPOND]
+ 	Validator	Entity.USER	Entity.USER			None			81 * 9
+ 	Validator	Entity.USER	Entity.USER	Entity.USER		None			[CANNOT RESPOND]
+*	Validator	Entity.AGENT	Entity.AGENT	Validator		None			Who is this message for? Please simply respond with one of these names: Master, Multiplier
+*	Planner	Validator	Entity.USER	Validator		None			Who is this message for? Please simply respond with one of these names: Master, Multiplier
+ 	Planner	Entity.USER	Entity.USER			None			
+ 	Planner	Entity.AGENT	Entity.USER			None			
+*	Planner	Entity.LLM	Entity.LLM			None			Multiplier
+ 	Planner	Entity.USER	Entity.USER			None			
+ 	Planner	Entity.AGENT	Entity.USER			None			
+ 	Planner	Entity.LLM	Entity.LLM	Entity.LLM		None			[CANNOT RESPOND]
+ 	Validator	Entity.USER	Entity.USER			None			Multiplier
+ 	Validator	Entity.USER	Entity.USER	Entity.USER		None			[CANNOT RESPOND]
+*	Validator	Entity.AGENT	Entity.AGENT		Multiplier	None			81 * 9
+*	Planner	Entity.LLM	Entity.USER	Validator	Multiplier	None			81 * 9
+ 	Planner	Entity.USER	Entity.USER			None			
+ 	Planner	Entity.AGENT	Entity.USER			None			
+ 	Planner	Entity.LLM	Entity.LLM	Entity.LLM	Multiplier	None			[CANNOT RESPOND]
+ 	Planner	Validator	Entity.USER			None			
+ 	Multiplier	Entity.USER	Entity.USER	Validator	Multiplier	None			81 * 9
+ 	Multiplier	Entity.USER	Entity.USER	Entity.USER	Multiplier	None			[CANNOT RESPOND]
+ 	Multiplier	Entity.AGENT	Entity.USER			None			
+*	Multiplier	Entity.LLM	Entity.LLM			None			729
+*	Planner	Multiplier	Entity.USER	Multiplier		None			729
+ 	Planner	Entity.USER	Entity.USER			None			
+ 	Planner	Entity.AGENT	Entity.USER			None			
+*	Planner	Entity.LLM	Entity.LLM			None			729
+ 	Planner	Entity.USER	Entity.USER			None			
+ 	Planner	Entity.AGENT	Entity.USER			None			
+ 	Planner	Entity.LLM	Entity.LLM	Entity.LLM		None			[CANNOT RESPOND]
+ 	Validator	Entity.USER	Entity.USER			None			729
+ 	Validator	Entity.USER	Entity.USER	Entity.USER		None			[CANNOT RESPOND]
+*	Validator	Entity.AGENT	Entity.AGENT	Validator		None			Who is this message for? Please simply respond with one of these names: Master, Multiplier
+*	Planner	Validator	Entity.USER	Validator		None			Who is this message for? Please simply respond with one of these names: Master, Multiplier
+ 	Planner	Entity.USER	Entity.USER			None			
+ 	Planner	Entity.AGENT	Entity.USER			None			
+*	Planner	Entity.LLM	Entity.LLM			None			Master
+ 	Planner	Entity.USER	Entity.USER			None			
+ 	Planner	Entity.AGENT	Entity.USER			None			
+ 	Planner	Entity.LLM	Entity.LLM	Entity.LLM		None			[CANNOT RESPOND]
+ 	Validator	Entity.USER	Entity.USER			None			Master
+ 	Validator	Entity.USER	Entity.USER	Entity.USER		None			[CANNOT RESPOND]
+*	Validator	Entity.AGENT	Entity.AGENT		Master	None			729
+*	Planner	Entity.LLM	Entity.USER	Validator	Master	None			729
+*	Master	Planner	Entity.USER	Planner	Master	None			729
+ 	Master	Entity.USER	Entity.USER			None			
+ 	Master	Entity.AGENT	Entity.USER			None			
+*	Master	Entity.LLM	Entity.LLM			None			DONE: 243 512 729

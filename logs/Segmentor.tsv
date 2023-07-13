@@ -1,0 +1,12 @@
+ 	Task	Responder	sender_entity	sender_name	recipient	block	tool_type	tool	content
+ 	Segmentor	Entity.USER	Entity.USER			None			
+ 	Segmentor	Entity.AGENT	Entity.USER			None			
+*	Segmentor	Entity.LLM	Entity.LLM			None			Sure, I can help with that. Please provide the audience segment descriptions.
+ 	Segmentor	Entity.AGENT	Entity.USER			None			
+ 	Segmentor	Entity.LLM	Entity.LLM	Entity.LLM		None			[CANNOT RESPOND]
+*	Segmentor	Entity.USER	Entity.USER			None			men under 45
+ 	Segmentor	Entity.AGENT	Entity.USER			None			
+*	Segmentor	Entity.LLM	Entity.LLM			None			Demographic|Age Range|40-44 Demographic|Age Range|35-39
+ 	Segmentor	Entity.AGENT	Entity.USER			None			
+ 	Segmentor	Entity.LLM	Entity.LLM	Entity.LLM		None			[CANNOT RESPOND]
+*	Segmentor	Entity.USER	Entity.USER			None			q
