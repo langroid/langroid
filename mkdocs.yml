@@ -1,7 +1,12 @@
 site_name: "langroid"
 repo_url:
 edit_uri: ""
+extra_css:
+  - stylesheets/extra.css
+
 theme:
+  logo: assets/orange-logo.png
+  favicon: assets/orange-logo.png
   features:
     - navigation.tabs
     - toc

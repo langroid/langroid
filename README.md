@@ -5,11 +5,12 @@
 [![Docs](https://github.com/langroid/langroid/actions/workflows/mkdocs-deploy.yml/badge.svg)](https://github.com/langroid/langroid/actions/workflows/mkdocs-deploy.yml)
 
 <div align="center">
-  <img src="./docs/logos/pure-lambda-non-circular.png" width="100">
+  <img src="./docs/assets/orange-logo.png" width="100">
 </div>
 
 ## Contributors:
 - Prasad Chalasani (Independent ML Consultant)
+- Somesh Jha (Professor of CS, U Wisc at Madison)
 - Mohannad Alhanahnah (Research Associate, U Wisc at Madison)
 - Ashish Hooda (PhD Candidate, U Wisc at Madison)
 
