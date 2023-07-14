@@ -4,9 +4,6 @@ on:
   push:
     branches:
       - main
-  pull_request:
-    branches:
-      - main  # Replace with your default branch name
 
 permissions:
   contents: write
