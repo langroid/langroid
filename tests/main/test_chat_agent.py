@@ -1,9 +1,9 @@
 from langroid.agent.base import NO_ANSWER
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
-from langroid.agent.chat_document import Entity
 from langroid.agent.task import Task
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
+from langroid.mytypes import Entity
 from langroid.parsing.parser import ParsingConfig
 from langroid.prompts.prompts_config import PromptsConfig
 from langroid.utils.configuration import Settings, set_global
@@ -51,7 +51,7 @@ def test_responses(test_settings: Settings):
     assert "London" in response.content
 
     # agent attempts to handle the query, but has no response since
-    # the message is not a structured msg that matches an enabled AgentMessage.
+    # the message is not a structured msg that matches an enabled ToolMessage.
     response = agent.agent_response("What is the capital of France?")
     assert response is None
 
@@ -68,7 +68,7 @@ def test_process_messages(test_settings: Settings):
         only_user_quits_root=False,
     )
     msg = "What is the capital of France?"
-    task.init_pending_message(msg)
+    task.init(msg)
     assert task.pending_message.content == msg
 
     # LLM answers
@@ -113,7 +113,7 @@ def test_process_messages(test_settings: Settings):
         only_user_quits_root=False,
     )
     # LLM responds with NO_ANSWER
-    task.init_pending_message()
+    task.init()
     task.step()
     assert NO_ANSWER in task.pending_message.content
     assert task.pending_message.metadata.sender == Entity.LLM

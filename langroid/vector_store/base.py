@@ -1,6 +1,6 @@
 import logging
 from abc import ABC, abstractmethod
-from typing import List, Optional, Tuple
+from typing import List, Optional, Sequence, Tuple
 
 from pydantic import BaseSettings
 
@@ -80,7 +80,7 @@ class VectorStore(ABC):
         pass
 
     @abstractmethod
-    def add_documents(self, documents: List[Document]) -> None:
+    def add_documents(self, documents: Sequence[Document]) -> None:
         pass
 
     @abstractmethod

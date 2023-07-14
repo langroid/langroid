@@ -1,0 +1,30 @@
+Advantest develops Semiconductor and Component Test Systems. Your job includes improving the C++ development experience for our software engineers developing the software controlling the V93000 test system. No domain knowledge in semiconductor testing is required.
+
+- We are moving the build system from Ant, SCons and Make to Bazel.
+
+- We will be writing AST transformations (Clang AST) to automatically replace dated types and operations with their C++ standard library counterparts.
+
+- We plan to move all code to C++20 modules.
+
+Your impact:
+
+- Contribute to our efforts to move the build of our C++ and Java code from legacy build systems to Bazel.
+
+- Contribute to our efforts to use `clangd` as the LSP-provider of our IDE, Eclipse.
+
+- Implement and run automated transformations to free our code from legacy cruft.
+
+- Provide first-level support to our developers facing issues with the build system.
+
+The skills you will demonstrate:
+
+- Required:
+
+  - Strong knowledge of the Linux environment (Shell, Python, Ruby, Git, RPM-based packaging, GDB, LLDB, util-linux, coreutils, iproute2, bcc, perf, ...)
+
+  - Knowledge of the C++ build process (compiling, linking, build systems).
+- Preferred:
+  - Knowledge of the LLVM/Clang ecosystem, particularly libAST and clang-tidy internals
+
+  - Development or maintenance of a SCons-, CMake- or Bazel-based build system.
+Technologies: C++17 and newer; Linux (RHEL7/RHEL9) only; Bazel; Clang AST (clang-tidy); GNU Make; SCons; Ant; Eclipse CDT; Java

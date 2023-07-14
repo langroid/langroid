@@ -1,24 +1,23 @@
 from typing import List, Optional
 
-from langroid.agent.base import Entity
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
-from langroid.agent.message import AgentMessage
 from langroid.agent.special.recipient_validator_agent import (
     RecipientValidator,
     RecipientValidatorConfig,
 )
 from langroid.agent.task import Task
+from langroid.agent.tool_message import ToolMessage
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
 from langroid.language_models.base import Role
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
-from langroid.mytypes import DocMetaData, Document
+from langroid.mytypes import DocMetaData, Document, Entity
 from langroid.parsing.parser import ParsingConfig
 from langroid.prompts.prompts_config import PromptsConfig
 from langroid.utils.configuration import Settings, set_global
 from langroid.vector_store.base import VectorStoreConfig
 
 
-class ExponentialTool(AgentMessage):
+class ExponentialTool(ToolMessage):
     request: str = "calc_expontential"
     purpose: str = "To calculate the value of <x> raised to the power <e>"
     x: int
@@ -26,14 +25,14 @@ class ExponentialTool(AgentMessage):
     result: int
 
     @classmethod
-    def examples(cls) -> List["AgentMessage"]:
+    def examples(cls) -> List["ToolMessage"]:
         return [
             cls(x=3, e=5, result=243),
             cls(x=8, e=3, result=512),
         ]
 
 
-class MultiplicationTool(AgentMessage):
+class MultiplicationTool(ToolMessage):
     request: str = "calc_multiplication"
     purpose: str = "To calculate the value of <x> multiplied by <y>"
     x: int
@@ -41,7 +40,7 @@ class MultiplicationTool(AgentMessage):
     result: int
 
     @classmethod
-    def examples(cls) -> List["AgentMessage"]:
+    def examples(cls) -> List["ToolMessage"]:
         return [
             cls(x=3, y=5, result=15),
             cls(x=8, y=3, result=24),

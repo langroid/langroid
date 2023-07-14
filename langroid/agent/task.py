@@ -1,7 +1,12 @@
+"""
+Class that runs the Task loop of an agent;
+maintains state while various responders (agent's own methods, or external sub-tasks)
+take turns attempting to respond to the `self.pending_message`.
+"""
 from __future__ import annotations
 
 import logging
-from typing import Callable, Dict, List, Optional, Set, Type, cast
+from typing import Callable, Dict, List, Optional, Type, cast
 
 from rich import print
 
@@ -11,9 +16,9 @@ from langroid.agent.chat_document import (
     ChatDocLoggerFields,
     ChatDocMetaData,
     ChatDocument,
-    Entity,
 )
 from langroid.language_models.base import LLMMessage, Role
+from langroid.mytypes import Entity
 from langroid.utils.configuration import settings
 from langroid.utils.constants import DONE, NO_ANSWER, USER_QUIT
 from langroid.utils.logging import RichFileLogger, setup_file_logger
@@ -23,7 +28,7 @@ Responder = Entity | Type["Task"]
 
 class Task:
     """
-    Class to maintain state needed to run a __task__. A __task__ generally
+    Class to loop through maintain state needed to run a __task__. A __task__ generally
     is associated with a goal, typically represented by the initial "priming"
     messages of the LLM. Various entities take turns responding to
     `pending_message`, which is updated with the latest response.
@@ -93,19 +98,17 @@ class Task:
             self.agent.default_human_response = default_human_response
         self.only_user_quits_root = only_user_quits_root
         self.erase_substeps = erase_substeps
-        self.allowed_responders: Set[Responder] = set()
-        self.responders: List[Responder] = [
-            Entity.AGENT,  # response to LLM wanting to use tool or function_call
-            Entity.LLM,
-            Entity.USER,
+
+        agent_entity_responders = agent.entity_responders()
+        self.responders: List[Responder] = [e for e, _ in agent_entity_responders]
+        self.non_human_responders: List[Responder] = [
+            r for r in self.responders if r != Entity.USER
         ]
+        self.human_tried = False  # did human get a chance to respond in last step?
         self._entity_responder_map: Dict[
             Entity, Callable[..., Optional[ChatDocument]]
-        ] = {
-            Entity.AGENT: self.agent.agent_response,
-            Entity.LLM: self.agent.llm_response,
-            Entity.USER: self.agent.user_response,
-        }
+        ] = dict(agent_entity_responders)
+
         self.name_sub_task_map: Dict[str, Task] = {}
         # latest message in a conversation among entities and agents.
         self.pending_message: Optional[ChatDocument] = None
@@ -170,11 +173,21 @@ class Task:
             return
         task.parent_task = self
         self.sub_tasks.append(task)
-        self.responders.append(cast(Responder, task))
         self.name_sub_task_map[task.name] = task
+        self.responders.append(cast(Responder, task))
+        self.non_human_responders.append(cast(Responder, task))
 
-    def init_pending_message(self, msg: Optional[str | ChatDocument] = None) -> None:
-        self._allow_all_responders_except(Entity.USER)
+    def init(self, msg: None | str | ChatDocument = None) -> ChatDocument | None:
+        """
+        Initialize the task, with an optional message to start the conversation.
+        Initializes `self.pending_message` and `self.pending_sender`.
+        Args:
+            msg (str|ChatDocument): optional message to start the conversation.
+
+        Returns:
+            (ChatDocument|None): the initialized `self.pending_message`.
+            Currently not used in the code, but provided for convenience.
+        """
         self.pending_sender = Entity.USER
         if isinstance(msg, str):
             self.pending_message = ChatDocument(
@@ -203,6 +216,7 @@ class Task:
             self.tsv_logger.info(f" \tTask\tResponder\t{header}")
 
         self.log_message(Entity.USER, self.pending_message)
+        return self.pending_message
 
     def run(
         self,
@@ -240,7 +254,7 @@ class Task:
             # this task is not the intended recipient so return None
             return None
 
-        self.init_pending_message(msg)
+        self.init(msg)
         # sets indentation to be printed prior to any output from agent
         self.agent.indent = self._indent
         if self.default_human_response is not None:
@@ -291,7 +305,7 @@ class Task:
         )
         return final_result
 
-    def step(self, turns: int = -1) -> None:
+    def step(self, turns: int = -1) -> ChatDocument | None:
         """
         A single "turn" in the task conversation: The "allowed" responders in this
         turn (which can be either the 3 "entities", or one of the sub-tasks) are
@@ -305,7 +319,11 @@ class Task:
             turns (int): number of turns to process. Typically used in testing
                 where there is no human to "quit out" of current level, or in cases
                 where we want to limit the number of turns of a delegated agent.
-
+        Returns (ChatDocument|None):
+            Updated `self.pending_message`. Currently the return value is not used
+                by the `task.run()` method, but we return this as a convenience for
+                other use-cases, e.g. where we want to run a task step by step in a
+                different context.
         """
         result = None
         parent = self.pending_message
@@ -314,7 +332,13 @@ class Task:
             if self.pending_message is None
             else self.pending_message.metadata.recipient
         )
-        for r in self.responders:
+        responders: List[Responder] = self.non_human_responders.copy()
+        if Entity.USER in self.responders and not self.human_tried:
+            # give human first chance if they haven't been tried in last step:
+            # ensures human gets chance at each turn.
+            responders.insert(0, Entity.USER)
+
+        for r in responders:
             if not self._can_respond(r):
                 # create dummy msg for logging
                 log_doc = ChatDocument(
@@ -328,6 +352,7 @@ class Task:
                 )
                 self.log_message(r, log_doc)
                 continue
+            self.human_tried = r == Entity.USER
             result = self.response(r, turns)
             if self.valid(result):
                 assert result is not None
@@ -371,6 +396,7 @@ class Task:
             sender_str = str(self.pending_sender)
             msg_str = str(self.pending_message)
             print(f"[red][{sender_str}]{msg_str}")
+        return self.pending_message
 
     def response(self, e: Responder, turns: int = -1) -> Optional[ChatDocument]:
         """
@@ -545,53 +571,3 @@ class Task:
             self.pending_message.metadata.block = None
             return False
         return self.pending_message is None or self.pending_message.metadata.block != e
-
-    def _disallow_responder(self, e: Responder) -> None:
-        """
-        Disallow a responder from responding to current message.
-        Args:
-            e (Entity): entity to disallow
-        """
-        self.allowed_responders.remove(e)
-
-    def _allow_responder(self, e: Responder) -> None:
-        """
-        Allow a responder to respond to current message.
-        Args:
-            e (Entity): entity to allow
-        """
-        self.allowed_responders.add(e)
-
-    def _is_allowed_responder(self, e: Responder) -> bool:
-        """
-        Check if a responder is allowed to respond to current message.
-        Args:
-            e (Entity): entity to check
-        Returns:
-            bool: True if allowed, False otherwise
-        """
-        return e in self.allowed_responders
-
-    def _allow_all_responders(self) -> None:
-        """
-        Allow all responders to respond to current message.
-        """
-        self.allowed_responders = set(self.responders)
-
-    def _allow_all_responders_except(self, e: Responder) -> None:
-        """
-        Allow all responders to respond to current message, except for `e`.
-        Args:
-            e (Entity): entity to disallow
-        """
-        self._allow_all_responders()
-        self._disallow_responder(e)
-
-    def _allow_only_responder(self, e: Responder) -> None:
-        """
-        Allow ONLY `e` to respond to current pending message.
-
-        Args:
-            e (Entity): only entity to allow
-        """
-        self.allowed_responders = {e}

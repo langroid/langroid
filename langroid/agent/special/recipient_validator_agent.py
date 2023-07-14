@@ -9,8 +9,8 @@ from langroid.agent.chat_document import (
     ChatDocAttachment,
     ChatDocMetaData,
     ChatDocument,
-    Entity,
 )
+from langroid.mytypes import Entity
 
 console = Console()
 

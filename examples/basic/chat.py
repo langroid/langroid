@@ -8,7 +8,7 @@ from rich import print
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
-from langroid.utils import configuration
+from langroid.utils.configuration import set_global, Settings
 from langroid.utils.logging import setup_colored_logging
 from langroid.vector_store.base import VectorStoreConfig
 
@@ -33,8 +33,6 @@ class BasicConfig(ChatAgentConfig):
 
 
 def chat(config: BasicConfig) -> None:
-    configuration.update_global_settings(config, keys=["debug", "stream", "cache"])
-
     print(
         textwrap.dedent(
             """
@@ -60,8 +58,17 @@ def chat(config: BasicConfig) -> None:
 @app.command()
 def main(
     debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
+    no_stream: bool = typer.Option(False, "--nostream", "-ns", help="no streaming"),
+    nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
 ) -> None:
-    config = BasicConfig(debug=debug)
+    config = BasicConfig()
+    set_global(
+        Settings(
+            debug=debug,
+            cache=not nocache,
+            stream=not no_stream,
+        )
+    )
     chat(config)
 
 

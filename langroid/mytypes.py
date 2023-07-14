@@ -1,5 +1,6 @@
 import hashlib
 import uuid
+from enum import Enum
 from typing import Any, List, Union
 
 from pydantic import BaseModel, Extra
@@ -7,6 +8,12 @@ from pydantic import BaseModel, Extra
 Number = Union[int, float]
 Embedding = List[Number]
 Embeddings = List[Embedding]
+
+
+class Entity(str, Enum):
+    AGENT = "Agent"
+    LLM = "LLM"
+    USER = "User"
 
 
 class DocMetaData(BaseModel):

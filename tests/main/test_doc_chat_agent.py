@@ -4,13 +4,12 @@ from typing import List
 
 import pytest
 
-from langroid.agent.base import Entity
 from langroid.agent.special.doc_chat_agent import DocChatAgent, DocChatAgentConfig
 from langroid.agent.task import Task
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
-from langroid.mytypes import DocMetaData, Document
+from langroid.mytypes import DocMetaData, Document, Entity
 from langroid.parsing.parser import ParsingConfig, Splitter
 from langroid.parsing.utils import generate_random_text
 from langroid.prompts.prompts_config import PromptsConfig
@@ -127,7 +126,7 @@ def test_doc_chat_agent(test_settings: Settings, query: str, expected: str):
 def test_doc_chat_process(test_settings: Settings):
     set_global(test_settings)
     task = Task(agent, restart=True)
-    task.init_pending_message()
+    task.init()
     # LLM responds to Sys msg, initiates conv, says thank you, etc.
     task.step()
     for q, expected in QUERY_EXPECTED_PAIRS:
