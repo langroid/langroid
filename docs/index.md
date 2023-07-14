@@ -34,3 +34,29 @@ flexible, and allows other types of orchestration to be implemented.
 
 Besides Agents, Langroid also provides simple ways to directly interact with  
 LLMs and vector-stores.  
+
+## Highlights
+Highlights of Langroid's features as of July 2023:
+
+- **LLM Support**: Langroid supports OpenAI LLMs including GPT-3.5-Turbo, 
+  GPT-4-0613
+- **Caching of LLM prompts, responses:** Langroid uses [Redis](https://redis.com/try-free/) for caching.
+- **Vector Store Support**: [Qdrant](https://qdrant.tech/) and [Chroma](https://www.trychroma.com/) are currently supported.
+- **Tools/Plugins/Function-calling**: Langroid supports OpenAI's recently 
+  released [function calling](https://platform.openai.com/docs/guides/gpt/function-calling) 
+  feature. In addition, Langroid has its own native equivalent, which we 
+  call **tools** (also known as "plugins" in other contexts). Function 
+  calling and tools have the same developer-facing interface, implemented 
+  using [Pydantic] (https://docs.pydantic.dev/latest/), 
+  which makes it very easy to define tools/functions and enable agents 
+  to use them. Benefits of using Pydantic are that you never have to write 
+  complex JSON specs for function calling, and when the LLM 
+  hallucinates malformed JSON, the Pydantic error message is sent back to 
+  the LLM so it can fix it!
+- **Agents**
+- **Tasks**
+
+
+Don't worry if some of these terms are not clear to you. 
+The [Quick-start page](quick-start.md) and subsequent pages will help you get up to 
+speed.

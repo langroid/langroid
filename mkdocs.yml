@@ -10,6 +10,8 @@ theme:
   features:
     - navigation.tabs
     - toc
+    - content.code.copy
+    - content.code.select
   icon:
       repo: fontawesome/brands/github
   name: material
@@ -86,6 +88,12 @@ markdown_extensions:
   - admonition
   - pymdownx.details
   - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
   - pymdownx.arithmatex:
       generic: true
   - markdown.extensions.attr_list:
