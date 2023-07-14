@@ -1,0 +1,2298 @@
+
+<!doctype html>
+<html lang="en" class="no-js">
+  <head>
+    
+      <meta charset="utf-8">
+      <meta name="viewport" content="width=device-width,initial-scale=1">
+      
+      
+      
+      
+        <link rel="prev" href="../../Resources/">
+      
+      
+        <link rel="next" href="../../development/pdf-extract-text/">
+      
+      <link rel="icon" href="../../assets/orange-logo.png">
+      <meta name="generator" content="mkdocs-1.4.3, mkdocs-material-9.1.18">
+    
+    
+      
+        <title>Specifying LLM Agents - langroid</title>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/stylesheets/main.26e3688c.min.css">
+      
+        
+        <link rel="stylesheet" href="../../assets/stylesheets/palette.ecc896b0.min.css">
+      
+      
+
+    
+    
+    
+      
+        
+        
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Roboto:300,300i,400,400i,700,700i%7CRoboto+Mono:400,400i,700,700i&display=fallback">
+        <style>:root{--md-text-font:"Roboto";--md-code-font:"Roboto Mono"}</style>
+      
+    
+    
+      <link rel="stylesheet" href="../../assets/_mkdocstrings.css">
+    
+      <link rel="stylesheet" href="../../stylesheets/extra.css">
+    
+    <script>__md_scope=new URL("../..",location),__md_hash=e=>[...e].reduce((e,_)=>(e<<5)-e+_.charCodeAt(0),0),__md_get=(e,_=localStorage,t=__md_scope)=>JSON.parse(_.getItem(t.pathname+"."+e)),__md_set=(e,_,t=localStorage,a=__md_scope)=>{try{t.setItem(a.pathname+"."+e,JSON.stringify(_))}catch(e){}}</script>
+    
+      
+
+    
+    
+    
+  </head>
+  
+  
+    
+    
+      
+    
+    
+    
+    
+    <body dir="ltr" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo">
+  
+    
+    
+      <script>var palette=__md_get("__palette");if(palette&&"object"==typeof palette.color)for(var key of Object.keys(palette.color))document.body.setAttribute("data-md-color-"+key,palette.color[key])</script>
+    
+    <input class="md-toggle" data-md-toggle="drawer" type="checkbox" id="__drawer" autocomplete="off">
+    <input class="md-toggle" data-md-toggle="search" type="checkbox" id="__search" autocomplete="off">
+    <label class="md-overlay" for="__drawer"></label>
+    <div data-md-component="skip">
+      
+        
+        <a href="#specifying-and-implementing-llm-agents" class="md-skip">
+          Skip to content
+        </a>
+      
+    </div>
+    <div data-md-component="announce">
+      
+    </div>
+    
+    
+      
+
+<header class="md-header" data-md-component="header">
+  <nav class="md-header__inner md-grid" aria-label="Header">
+    <a href="../.." title="langroid" class="md-header__button md-logo" aria-label="langroid" data-md-component="logo">
+      
+  <img src="../../assets/orange-logo.png" alt="logo">
+
+    </a>
+    <label class="md-header__button md-icon" for="__drawer">
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M3 6h18v2H3V6m0 5h18v2H3v-2m0 5h18v2H3v-2Z"/></svg>
+    </label>
+    <div class="md-header__title" data-md-component="header-title">
+      <div class="md-header__ellipsis">
+        <div class="md-header__topic">
+          <span class="md-ellipsis">
+            langroid
+          </span>
+        </div>
+        <div class="md-header__topic" data-md-component="header-topic">
+          <span class="md-ellipsis">
+            
+              Specifying LLM Agents
+            
+          </span>
+        </div>
+      </div>
+    </div>
+    
+      
+        <form class="md-header__option" data-md-component="palette">
+          
+            
+            
+            
+            <input class="md-option" data-md-color-media="" data-md-color-scheme="default" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to dark mode"  type="radio" name="__palette" id="__palette_1">
+            
+              <label class="md-header__button md-icon" title="Switch to dark mode" for="__palette_2" hidden>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 8a4 4 0 0 0-4 4 4 4 0 0 0 4 4 4 4 0 0 0 4-4 4 4 0 0 0-4-4m0 10a6 6 0 0 1-6-6 6 6 0 0 1 6-6 6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12 20 8.69Z"/></svg>
+              </label>
+            
+          
+            
+            
+            
+            <input class="md-option" data-md-color-media="" data-md-color-scheme="slate" data-md-color-primary="indigo" data-md-color-accent="indigo"  aria-label="Switch to light mode"  type="radio" name="__palette" id="__palette_2">
+            
+              <label class="md-header__button md-icon" title="Switch to light mode" for="__palette_1" hidden>
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M12 18c-.89 0-1.74-.2-2.5-.55C11.56 16.5 13 14.42 13 12c0-2.42-1.44-4.5-3.5-5.45C10.26 6.2 11.11 6 12 6a6 6 0 0 1 6 6 6 6 0 0 1-6 6m8-9.31V4h-4.69L12 .69 8.69 4H4v4.69L.69 12 4 15.31V20h4.69L12 23.31 15.31 20H20v-4.69L23.31 12 20 8.69Z"/></svg>
+              </label>
+            
+          
+        </form>
+      
+    
+    
+    
+      <label class="md-header__button md-icon" for="__search">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+      </label>
+      <div class="md-search" data-md-component="search" role="dialog">
+  <label class="md-search__overlay" for="__search"></label>
+  <div class="md-search__inner" role="search">
+    <form class="md-search__form" name="search">
+      <input type="text" class="md-search__input" name="query" aria-label="Search" placeholder="Search" autocapitalize="off" autocorrect="off" autocomplete="off" spellcheck="false" data-md-component="search-query" required>
+      <label class="md-search__icon md-icon" for="__search">
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M9.5 3A6.5 6.5 0 0 1 16 9.5c0 1.61-.59 3.09-1.56 4.23l.27.27h.79l5 5-1.5 1.5-5-5v-.79l-.27-.27A6.516 6.516 0 0 1 9.5 16 6.5 6.5 0 0 1 3 9.5 6.5 6.5 0 0 1 9.5 3m0 2C7 5 5 7 5 9.5S7 14 9.5 14 14 12 14 9.5 12 5 9.5 5Z"/></svg>
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M20 11v2H8l5.5 5.5-1.42 1.42L4.16 12l7.92-7.92L13.5 5.5 8 11h12Z"/></svg>
+      </label>
+      <nav class="md-search__options" aria-label="Search">
+        
+        <button type="reset" class="md-search__icon md-icon" title="Clear" aria-label="Clear" tabindex="-1">
+          <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><path d="M19 6.41 17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12 19 6.41Z"/></svg>
+        </button>
+      </nav>
+      
+    </form>
+    <div class="md-search__output">
+      <div class="md-search__scrollwrap" data-md-scrollfix>
+        <div class="md-search-result" data-md-component="search-result">
+          <div class="md-search-result__meta">
+            Initializing search
+          </div>
+          <ol class="md-search-result__list" role="presentation"></ol>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+    
+    
+  </nav>
+  
+</header>
+    
+    <div class="md-container" data-md-component="container">
+      
+      
+        
+          
+            
+<nav class="md-tabs" aria-label="Tabs" data-md-component="tabs">
+  <div class="md-grid">
+    <ul class="md-tabs__list">
+      
+        
+  
+  
+
+
+  <li class="md-tabs__item">
+    <a href="../.." class="md-tabs__link">
+      Home
+    </a>
+  </li>
+
+      
+        
+  
+  
+
+
+  <li class="md-tabs__item">
+    <a href="../../quick-start.md" class="md-tabs__link">
+      Quick Start
+    </a>
+  </li>
+
+      
+        
+  
+  
+
+
+  <li class="md-tabs__item">
+    <a href="../../Overview/" class="md-tabs__link">
+      Repo Overview
+    </a>
+  </li>
+
+      
+        
+  
+  
+
+
+  <li class="md-tabs__item">
+    <a href="../../Resources/" class="md-tabs__link">
+      Resources
+    </a>
+  </li>
+
+      
+        
+  
+  
+    
+  
+
+
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="./" class="md-tabs__link md-tabs__link--active">
+        Writeups
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+
+
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../development/pdf-extract-text/" class="md-tabs__link">
+        Development
+      </a>
+    </li>
+  
+
+      
+        
+  
+  
+
+
+  
+  
+  
+    
+
+  
+  
+  
+    <li class="md-tabs__item">
+      <a href="../../reference/agent/" class="md-tabs__link">
+        Code Reference
+      </a>
+    </li>
+  
+
+  
+
+      
+    </ul>
+  </div>
+</nav>
+          
+        
+      
+      <main class="md-main" data-md-component="main">
+        <div class="md-main__inner md-grid">
+          
+            
+              
+              <div class="md-sidebar md-sidebar--primary" data-md-component="sidebar" data-md-type="navigation" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+  
+
+
+<nav class="md-nav md-nav--primary md-nav--lifted" aria-label="Navigation" data-md-level="0">
+  <label class="md-nav__title" for="__drawer">
+    <a href="../.." title="langroid" class="md-nav__button md-logo" aria-label="langroid" data-md-component="logo">
+      
+  <img src="../../assets/orange-logo.png" alt="logo">
+
+    </a>
+    langroid
+  </label>
+  
+  <ul class="md-nav__list" data-md-scrollfix>
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../.." class="md-nav__link">
+        Home
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../quick-start.md" class="md-nav__link">
+        Quick Start
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../Overview/" class="md-nav__link">
+        Repo Overview
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../Resources/" class="md-nav__link">
+        Resources
+      </a>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+    
+  
+  
+    
+    <li class="md-nav__item md-nav__item--active md-nav__item--nested">
+      
+      
+      
+      
+      <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_5" checked>
+      
+      
+      
+        <label class="md-nav__link" for="__nav_5" id="__nav_5_label" tabindex="0">
+          Writeups
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_5_label" aria-expanded="true">
+        <label class="md-nav__title" for="__nav_5">
+          <span class="md-nav__icon md-icon"></span>
+          Writeups
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+    
+  
+  
+    <li class="md-nav__item md-nav__item--active">
+      
+      <input class="md-nav__toggle md-toggle" type="checkbox" id="__toc">
+      
+      
+        
+      
+      
+        <label class="md-nav__link md-nav__link--active" for="__toc">
+          Specifying LLM Agents
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <a href="./" class="md-nav__link md-nav__link--active">
+        Specifying LLM Agents
+      </a>
+      
+        
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#background" class="md-nav__link">
+    Background
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#example-querying-your-docs" class="md-nav__link">
+    Example: Querying your docs
+  </a>
+  
+    <nav class="md-nav" aria-label="Example: Querying your docs">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#define-llmextract" class="md-nav__link">
+    Define LLM.extract
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#define-llmcompose" class="md-nav__link">
+    Define LLM.compose
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#follow-up-questions" class="md-nav__link">
+    Follow-up questions
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#a-text-classifier" class="md-nav__link">
+    A text classifier
+  </a>
+  
+    <nav class="md-nav" aria-label="A text classifier">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#remarks" class="md-nav__link">
+    Remarks:
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+      
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+      
+      
+      <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_6" >
+      
+      
+      
+        <label class="md-nav__link" for="__nav_6" id="__nav_6_label" tabindex="0">
+          Development
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_6_label" aria-expanded="false">
+        <label class="md-nav__title" for="__nav_6">
+          <span class="md-nav__icon md-icon"></span>
+          Development
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../development/pdf-extract-text/" class="md-nav__link">
+        Extracting, summarizing text from a PDF
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../development/running-code-container/" class="md-nav__link">
+        Running Code in a Container
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../development/dockerfile-generation/" class="md-nav__link">
+        Dockerfile Generation
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../development/code-analysis-packages/" class="md-nav__link">
+        Code Analysis Packages
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../development/github-cli/" class="md-nav__link">
+        GitHub CLI
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../development/cache-api/" class="md-nav__link">
+        Caching for API Calls
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../development/clustering-vectors/" class="md-nav__link">
+        Clustering Vectors
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../development/code-chunking/" class="md-nav__link">
+        Code Chunking
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../development/releases/" class="md-nav__link">
+        Releases from your poetry project
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../development/autofix-lints/" class="md-nav__link">
+        Autofixing Lint Errors
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../development/coverage-badge/" class="md-nav__link">
+        Coverage Badge
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../development/code-coverage/" class="md-nav__link">
+        Code Coverage
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../development/ghost-blog-migration/" class="md-nav__link">
+        Ghost Blog Migration
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../development/git-branch-divergence/" class="md-nav__link">
+        Git Branch Divergence
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../development/git-add-files-from-pr/" class="md-nav__link">
+        Git Add files from a PR
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../development/github-workflow-testing/" class="md-nav__link">
+        GitHub Workflow Testing
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../development/github-workflow-cuda/" class="md-nav__link">
+        GitHub Actions CUDA Install
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../development/poetry-package-building/" class="md-nav__link">
+        Poetry Package Building
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../development/pydantic-abstract-class/" class="md-nav__link">
+        Pydantic Abstract Classes
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../development/pydantic-class-as-arg/" class="md-nav__link">
+        Pydantic Class As Arg
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../development/pydantic-docstring/" class="md-nav__link">
+        Pydantic DocString
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../development/pydantic-fields/" class="md-nav__link">
+        Pydantic Fields
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../development/search-github/" class="md-nav__link">
+        Searching Github
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../development/viewing-git-pr/" class="md-nav__link">
+        View GitHub PR Locally
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../development/mkdocs-macros/" class="md-nav__link">
+        MkDocs Macros
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+    
+      
+      
+      
+
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+      
+      
+      <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7" >
+      
+      
+      
+        <label class="md-nav__link" for="__nav_7" id="__nav_7_label" tabindex="0">
+          Code Reference
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <nav class="md-nav" data-md-level="1" aria-labelledby="__nav_7_label" aria-expanded="false">
+        <label class="md-nav__title" for="__nav_7">
+          <span class="md-nav__icon md-icon"></span>
+          Code Reference
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+      
+      
+      <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7_1" >
+      
+      
+      
+        <label class="md-nav__link" for="__nav_7_1" id="__nav_7_1_label" tabindex="0">
+          langroid
+          <span class="md-nav__icon md-icon"></span>
+        </label>
+      
+      <nav class="md-nav" data-md-level="2" aria-labelledby="__nav_7_1_label" aria-expanded="false">
+        <label class="md-nav__title" for="__nav_7_1">
+          <span class="md-nav__icon md-icon"></span>
+          langroid
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+      
+      
+      <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7_1_1" >
+      
+      
+      
+        
+        
+        <div class="md-nav__link md-nav__link--index ">
+          <a href="../../reference/agent/">agent</a>
+          
+            <label for="__nav_7_1_1">
+              <span class="md-nav__icon md-icon"></span>
+            </label>
+          
+        </div>
+      
+      <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_7_1_1_label" aria-expanded="false">
+        <label class="md-nav__title" for="__nav_7_1_1">
+          <span class="md-nav__icon md-icon"></span>
+          agent
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/agent/base/" class="md-nav__link">
+        base
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/agent/chat_agent/" class="md-nav__link">
+        chat_agent
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/agent/chat_document/" class="md-nav__link">
+        chat_document
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+      
+      
+      <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7_1_1_4" >
+      
+      
+      
+        
+        
+        <div class="md-nav__link md-nav__link--index ">
+          <a href="../../reference/agent/special/">special</a>
+          
+            <label for="__nav_7_1_1_4">
+              <span class="md-nav__icon md-icon"></span>
+            </label>
+          
+        </div>
+      
+      <nav class="md-nav" data-md-level="4" aria-labelledby="__nav_7_1_1_4_label" aria-expanded="false">
+        <label class="md-nav__title" for="__nav_7_1_1_4">
+          <span class="md-nav__icon md-icon"></span>
+          special
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/agent/special/doc_chat_agent/" class="md-nav__link">
+        doc_chat_agent
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/agent/special/recipient_validator_agent/" class="md-nav__link">
+        recipient_validator_agent
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/agent/special/retriever_agent/" class="md-nav__link">
+        retriever_agent
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/agent/task/" class="md-nav__link">
+        task
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/agent/tool_message/" class="md-nav__link">
+        tool_message
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+      
+      
+      <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7_1_2" >
+      
+      
+      
+        
+        
+        <div class="md-nav__link md-nav__link--index ">
+          <a href="../../reference/cachedb/">cachedb</a>
+          
+            <label for="__nav_7_1_2">
+              <span class="md-nav__icon md-icon"></span>
+            </label>
+          
+        </div>
+      
+      <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_7_1_2_label" aria-expanded="false">
+        <label class="md-nav__title" for="__nav_7_1_2">
+          <span class="md-nav__icon md-icon"></span>
+          cachedb
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/cachedb/base/" class="md-nav__link">
+        base
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/cachedb/redis_cachedb/" class="md-nav__link">
+        redis_cachedb
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+      
+      
+      <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7_1_3" >
+      
+      
+      
+        
+        
+        <div class="md-nav__link md-nav__link--index ">
+          <a href="../../reference/embedding_models/">embedding_models</a>
+          
+            <label for="__nav_7_1_3">
+              <span class="md-nav__icon md-icon"></span>
+            </label>
+          
+        </div>
+      
+      <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_7_1_3_label" aria-expanded="false">
+        <label class="md-nav__title" for="__nav_7_1_3">
+          <span class="md-nav__icon md-icon"></span>
+          embedding_models
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/embedding_models/base/" class="md-nav__link">
+        base
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/embedding_models/models/" class="md-nav__link">
+        models
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+      
+      
+      <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7_1_4" >
+      
+      
+      
+        
+        
+        <div class="md-nav__link md-nav__link--index ">
+          <a href="../../reference/language_models/">language_models</a>
+          
+            <label for="__nav_7_1_4">
+              <span class="md-nav__icon md-icon"></span>
+            </label>
+          
+        </div>
+      
+      <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_7_1_4_label" aria-expanded="false">
+        <label class="md-nav__title" for="__nav_7_1_4">
+          <span class="md-nav__icon md-icon"></span>
+          language_models
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/language_models/base/" class="md-nav__link">
+        base
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/language_models/openai_gpt/" class="md-nav__link">
+        openai_gpt
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/language_models/utils/" class="md-nav__link">
+        utils
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/mytypes/" class="md-nav__link">
+        mytypes
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+      
+      
+      <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7_1_6" >
+      
+      
+      
+        
+        
+        <div class="md-nav__link md-nav__link--index ">
+          <a href="../../reference/parsing/">parsing</a>
+          
+            <label for="__nav_7_1_6">
+              <span class="md-nav__icon md-icon"></span>
+            </label>
+          
+        </div>
+      
+      <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_7_1_6_label" aria-expanded="false">
+        <label class="md-nav__title" for="__nav_7_1_6">
+          <span class="md-nav__icon md-icon"></span>
+          parsing
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/parsing/agent_chats/" class="md-nav__link">
+        agent_chats
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/parsing/code_parser/" class="md-nav__link">
+        code_parser
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/parsing/json/" class="md-nav__link">
+        json
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/parsing/para_sentence_split/" class="md-nav__link">
+        para_sentence_split
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/parsing/parser/" class="md-nav__link">
+        parser
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/parsing/repo_loader/" class="md-nav__link">
+        repo_loader
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/parsing/url_loader/" class="md-nav__link">
+        url_loader
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/parsing/urls/" class="md-nav__link">
+        urls
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/parsing/utils/" class="md-nav__link">
+        utils
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+      
+      
+      <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7_1_7" >
+      
+      
+      
+        
+        
+        <div class="md-nav__link md-nav__link--index ">
+          <a href="../../reference/prompts/">prompts</a>
+          
+            <label for="__nav_7_1_7">
+              <span class="md-nav__icon md-icon"></span>
+            </label>
+          
+        </div>
+      
+      <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_7_1_7_label" aria-expanded="false">
+        <label class="md-nav__title" for="__nav_7_1_7">
+          <span class="md-nav__icon md-icon"></span>
+          prompts
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/prompts/dialog/" class="md-nav__link">
+        dialog
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/prompts/prompts_config/" class="md-nav__link">
+        prompts_config
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/prompts/templates/" class="md-nav__link">
+        templates
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/prompts/transforms/" class="md-nav__link">
+        transforms
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/scripts/" class="md-nav__link">
+        scripts
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+      
+      
+      <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7_1_9" >
+      
+      
+      
+        
+        
+        <div class="md-nav__link md-nav__link--index ">
+          <a href="../../reference/utils/">utils</a>
+          
+            <label for="__nav_7_1_9">
+              <span class="md-nav__icon md-icon"></span>
+            </label>
+          
+        </div>
+      
+      <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_7_1_9_label" aria-expanded="false">
+        <label class="md-nav__title" for="__nav_7_1_9">
+          <span class="md-nav__icon md-icon"></span>
+          utils
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/utils/configuration/" class="md-nav__link">
+        configuration
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/utils/constants/" class="md-nav__link">
+        constants
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/utils/logging/" class="md-nav__link">
+        logging
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+      
+      
+      <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7_1_9_4" >
+      
+      
+      
+        
+        
+        <div class="md-nav__link md-nav__link--index ">
+          <a href="../../reference/utils/output/">output</a>
+          
+            <label for="__nav_7_1_9_4">
+              <span class="md-nav__icon md-icon"></span>
+            </label>
+          
+        </div>
+      
+      <nav class="md-nav" data-md-level="4" aria-labelledby="__nav_7_1_9_4_label" aria-expanded="false">
+        <label class="md-nav__title" for="__nav_7_1_9_4">
+          <span class="md-nav__icon md-icon"></span>
+          output
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/utils/output/printing/" class="md-nav__link">
+        printing
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/utils/system/" class="md-nav__link">
+        system
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    
+    <li class="md-nav__item md-nav__item--nested">
+      
+      
+      
+      
+      <input class="md-nav__toggle md-toggle " type="checkbox" id="__nav_7_1_10" >
+      
+      
+      
+        
+        
+        <div class="md-nav__link md-nav__link--index ">
+          <a href="../../reference/vector_store/">vector_store</a>
+          
+            <label for="__nav_7_1_10">
+              <span class="md-nav__icon md-icon"></span>
+            </label>
+          
+        </div>
+      
+      <nav class="md-nav" data-md-level="3" aria-labelledby="__nav_7_1_10_label" aria-expanded="false">
+        <label class="md-nav__title" for="__nav_7_1_10">
+          <span class="md-nav__icon md-icon"></span>
+          vector_store
+        </label>
+        <ul class="md-nav__list" data-md-scrollfix>
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/vector_store/base/" class="md-nav__link">
+        base
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/vector_store/chromadb/" class="md-nav__link">
+        chromadb
+      </a>
+    </li>
+  
+
+            
+          
+            
+              
+  
+  
+  
+    <li class="md-nav__item">
+      <a href="../../reference/vector_store/qdrantdb/" class="md-nav__link">
+        qdrantdb
+      </a>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+            
+          
+        </ul>
+      </nav>
+    </li>
+  
+
+    
+  </ul>
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+            
+              
+              <div class="md-sidebar md-sidebar--secondary" data-md-component="sidebar" data-md-type="toc" >
+                <div class="md-sidebar__scrollwrap">
+                  <div class="md-sidebar__inner">
+                    
+
+<nav class="md-nav md-nav--secondary" aria-label="Table of contents">
+  
+  
+  
+    
+  
+  
+    <label class="md-nav__title" for="__toc">
+      <span class="md-nav__icon md-icon"></span>
+      Table of contents
+    </label>
+    <ul class="md-nav__list" data-md-component="toc" data-md-scrollfix>
+      
+        <li class="md-nav__item">
+  <a href="#background" class="md-nav__link">
+    Background
+  </a>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#example-querying-your-docs" class="md-nav__link">
+    Example: Querying your docs
+  </a>
+  
+    <nav class="md-nav" aria-label="Example: Querying your docs">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#define-llmextract" class="md-nav__link">
+    Define LLM.extract
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#define-llmcompose" class="md-nav__link">
+    Define LLM.compose
+  </a>
+  
+</li>
+        
+          <li class="md-nav__item">
+  <a href="#follow-up-questions" class="md-nav__link">
+    Follow-up questions
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+        <li class="md-nav__item">
+  <a href="#a-text-classifier" class="md-nav__link">
+    A text classifier
+  </a>
+  
+    <nav class="md-nav" aria-label="A text classifier">
+      <ul class="md-nav__list">
+        
+          <li class="md-nav__item">
+  <a href="#remarks" class="md-nav__link">
+    Remarks:
+  </a>
+  
+</li>
+        
+      </ul>
+    </nav>
+  
+</li>
+      
+    </ul>
+  
+</nav>
+                  </div>
+                </div>
+              </div>
+            
+          
+          
+            <div class="md-content" data-md-component="content">
+              <article class="md-content__inner md-typeset">
+                
+                  
+
+
+<h1 id="specifying-and-implementing-llm-agents">Specifying and Implementing LLM Agents</h1>
+<p>Created by: Prasad Chalasani
+Created time: April 15, 2023 11:19 AM
+Last edited by: Prasad Chalasani
+Last edited time: April 16, 2023 8:28 AM</p>
+<h2 id="background">Background</h2>
+<p>We wanted to build a simple app to query a set of documents using Langchain. Here are our observations from this experience:</p>
+<ul>
+<li>We had to hunt down multiple pages of documentation to find exactly what we needed to do</li>
+<li>We had to look at examples in multiple notebooks, to mix and match the functionality we were looking for</li>
+<li>The exact prompts used behind the scenes were deep inside the code</li>
+<li>Stepping through the debugger to see what is going on lead us down rabbit holes of complex class hierarchies.</li>
+</ul>
+<p><strong><em>It should not have been this hard!</em></strong></p>
+<p>This experience motivated us to develop a composable, hackable, flexible, transparent framework to build LLM-driven systems. The intended users are developers who like to see what is under the hood, and at the same time want a set of primitives they can work with at the right level of abstraction. </p>
+<p>As a first example of how this level of abstraction might work, we specify an implementation of this document-query system in the next section. In a later section we consider a text classifier.</p>
+<hr />
+<h2 id="example-querying-your-docs">Example: Querying your docs</h2>
+<p><strong>Given:</strong> document <span class="arithmatex">\(D\)</span>
+<strong>Goal:</strong> answer <strong>standalone</strong> query <span class="arithmatex">\(q\)</span> on document <span class="arithmatex">\(D\)</span></p>
+<div class="arithmatex">\[
+a = \text{query}(D,q)
+\]</div>
+<p>where <span class="arithmatex">\(a\)</span> answers <span class="arithmatex">\(q\)</span> using info in <span class="arithmatex">\(D\)</span>.</p>
+<p>A framework like <a href="https://python.langchain.com/en/latest/index.html#">Langchain</a> allows us to accomplish this in a few lines of code:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-0-1"><a id="__codelineno-0-1" name="__codelineno-0-1" href="#__codelineno-0-1"></a><span class="n">llm</span> <span class="o">=</span> <span class="n">OpenAI</span><span class="p">(</span><span class="n">temperature</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+</span><span id="__span-0-2"><a id="__codelineno-0-2" name="__codelineno-0-2" href="#__codelineno-0-2"></a>
+</span><span id="__span-0-3"><a id="__codelineno-0-3" name="__codelineno-0-3" href="#__codelineno-0-3"></a><span class="n">text_splitter</span> <span class="o">=</span> <span class="n">CharacterTextSplitter</span><span class="p">(</span><span class="n">chunk_size</span><span class="o">=</span><span class="mi">10000</span><span class="p">,</span> <span class="n">chunk_overlap</span><span class="o">=</span><span class="mi">0</span><span class="p">)</span>
+</span><span id="__span-0-4"><a id="__codelineno-0-4" name="__codelineno-0-4" href="#__codelineno-0-4"></a>
+</span><span id="__span-0-5"><a id="__codelineno-0-5" name="__codelineno-0-5" href="#__codelineno-0-5"></a><span class="n">texts</span> <span class="o">=</span> <span class="n">text_splitter</span><span class="o">.</span><span class="n">split_documents</span><span class="p">(</span><span class="n">documents</span><span class="p">)</span>
+</span><span id="__span-0-6"><a id="__codelineno-0-6" name="__codelineno-0-6" href="#__codelineno-0-6"></a>
+</span><span id="__span-0-7"><a id="__codelineno-0-7" name="__codelineno-0-7" href="#__codelineno-0-7"></a><span class="n">embeddings</span> <span class="o">=</span> <span class="n">OpenAIEmbeddings</span><span class="p">()</span>
+</span><span id="__span-0-8"><a id="__codelineno-0-8" name="__codelineno-0-8" href="#__codelineno-0-8"></a><span class="n">vectorstore</span> <span class="o">=</span> <span class="n">FAISS</span><span class="o">.</span><span class="n">from_documents</span><span class="p">(</span><span class="n">texts</span><span class="p">,</span> <span class="n">embeddings</span><span class="p">)</span>
+</span><span id="__span-0-9"><a id="__codelineno-0-9" name="__codelineno-0-9" href="#__codelineno-0-9"></a>
+</span><span id="__span-0-10"><a id="__codelineno-0-10" name="__codelineno-0-10" href="#__codelineno-0-10"></a><span class="n">qa</span> <span class="o">=</span> <span class="n">RetrievalQA</span><span class="o">.</span><span class="n">from_chain_type</span><span class="p">(</span><span class="n">llm</span><span class="o">=</span><span class="n">OpenAI</span><span class="p">(),</span>
+</span><span id="__span-0-11"><a id="__codelineno-0-11" name="__codelineno-0-11" href="#__codelineno-0-11"></a>                                 <span class="n">chain_type</span><span class="o">=</span><span class="s2">&quot;stuff&quot;</span><span class="p">,</span>
+</span><span id="__span-0-12"><a id="__codelineno-0-12" name="__codelineno-0-12" href="#__codelineno-0-12"></a>                                 <span class="n">retriever</span><span class="o">=</span><span class="n">vectorstore</span><span class="o">.</span><span class="n">as_retriever</span><span class="p">())</span>
+</span><span id="__span-0-13"><a id="__codelineno-0-13" name="__codelineno-0-13" href="#__codelineno-0-13"></a>
+</span><span id="__span-0-14"><a id="__codelineno-0-14" name="__codelineno-0-14" href="#__codelineno-0-14"></a><span class="n">qa</span><span class="o">.</span><span class="n">run</span><span class="p">(</span><span class="s2">&quot;What is the total cost of tuition at Rutgers?&quot;</span><span class="p">)</span>
+</span></code></pre></div>
+<p>However, these statements lack transparency regarding the specifics of how it is achieved. For example, the prompts being created to accomplish this are not visible. To modify them, one must refer to the Langchain documentation to explore other types of "chains" that are available and then locate and modify the code to fit our requirements.</p>
+<p>A more transparent approach is to expose the different primitives, building blocks, and prompts so that developers can customize them according to their needs. One such specification is shown below. This can be viewed as high-level Python code, which could itself be the output of processing a higher-level (declarative?) specification.</p>
+<ol>
+<li>
+<p>Preprocess: store embeddings of <span class="arithmatex">\(k\)</span> chunks of <span class="arithmatex">\(D\)</span> in a vector database</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-1-1"><a id="__codelineno-1-1" name="__codelineno-1-1" href="#__codelineno-1-1"></a><span class="n">d</span><span class="p">[</span><span class="mi">1</span><span class="p">:</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">split</span><span class="p">(</span><span class="n">D</span><span class="p">,</span> <span class="n">k</span><span class="p">)</span> <span class="c1"># k roughly equal size chunks</span>
+</span><span id="__span-1-2"><a id="__codelineno-1-2" name="__codelineno-1-2" href="#__codelineno-1-2"></a><span class="n">For</span> <span class="n">each</span> <span class="n">i</span> <span class="ow">in</span> <span class="p">[</span><span class="n">k</span><span class="p">]:</span>
+</span><span id="__span-1-3"><a id="__codelineno-1-3" name="__codelineno-1-3" href="#__codelineno-1-3"></a>    <span class="n">e</span><span class="p">[</span><span class="n">i</span><span class="p">]</span> <span class="o">=</span> <span class="n">embed</span><span class="p">(</span><span class="n">d</span><span class="p">[</span><span class="n">i</span><span class="p">])</span>
+</span><span id="__span-1-4"><a id="__codelineno-1-4" name="__codelineno-1-4" href="#__codelineno-1-4"></a>    <span class="n">vecDB</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="n">e</span><span class="p">[</span><span class="n">i</span><span class="p">],</span> <span class="n">d</span><span class="p">[</span><span class="n">i</span><span class="p">])</span> <span class="c1"># attach d[i] as metadata to e[i]</span>
+</span></code></pre></div>
+</li>
+<li>
+<p>Respond to query <span class="arithmatex">\(q\)</span>
+a. Find relevant doc-chunks from vecDB:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-2-1"><a id="__codelineno-2-1" name="__codelineno-2-1" href="#__codelineno-2-1"></a> e = embed(q)
+</span><span id="__span-2-2"><a id="__codelineno-2-2" name="__codelineno-2-2" href="#__codelineno-2-2"></a> e[1:m] = vecDB.nearest(e,m) # find m nearest neighbor vectors
+</span><span id="__span-2-3"><a id="__codelineno-2-3" name="__codelineno-2-3" href="#__codelineno-2-3"></a> d[1:m] = vecDB.lookup(d[1:m]) # find the associated chunks
+</span></code></pre></div>
+<p>b. Extract relevant verbatim text from each chunk d[i] with LLM</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-3-1"><a id="__codelineno-3-1" name="__codelineno-3-1" href="#__codelineno-3-1"></a> For each i in [m]:
+</span><span id="__span-3-2"><a id="__codelineno-3-2" name="__codelineno-3-2" href="#__codelineno-3-2"></a>     x[i] = LLM.extract(d[i], q)
+</span></code></pre></div>
+<p>c. Compose final answer</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-4-1"><a id="__codelineno-4-1" name="__codelineno-4-1" href="#__codelineno-4-1"></a><span class="n">a</span> <span class="o">=</span> <span class="n">LLM</span><span class="o">.</span><span class="n">compose</span><span class="p">(</span><span class="n">x</span><span class="p">[</span><span class="mi">1</span><span class="p">:</span><span class="n">m</span><span class="p">],</span> <span class="n">q</span><span class="p">)</span>
+</span></code></pre></div>
+</li>
+</ol>
+<p>In the next sections we define the primitives <code>LLM.extrac()</code> and <code>LLM.compose()</code></p>
+<h3 id="define-llmextract">Define <code>LLM.extract</code></h3>
+<p><code>LLM.extract(d,q):</code> extract verbatim text relevant to query q from document (or chunk) d</p>
+<p>We implement this via the “core” primitive of any LLM, namely text-completion, which we denote as <code>complete</code> , using a special <code>ExtractPrompt</code>:</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-5-1"><a id="__codelineno-5-1" name="__codelineno-5-1" href="#__codelineno-5-1"></a>ExtractPrompt[d,q] =
+</span><span id="__span-5-2"><a id="__codelineno-5-2" name="__codelineno-5-2" href="#__codelineno-5-2"></a>    &quot;Here is a part of a long doc,
+</span><span id="__span-5-3"><a id="__codelineno-5-3" name="__codelineno-5-3" href="#__codelineno-5-3"></a>    see if it contains text relevant to the question. 
+</span><span id="__span-5-4"><a id="__codelineno-5-4" name="__codelineno-5-4" href="#__codelineno-5-4"></a>        Return any relevant text verbatim.
+</span><span id="__span-5-5"><a id="__codelineno-5-5" name="__codelineno-5-5" href="#__codelineno-5-5"></a>    Content: {d}
+</span><span id="__span-5-6"><a id="__codelineno-5-6" name="__codelineno-5-6" href="#__codelineno-5-6"></a>    Question: {q}
+</span><span id="__span-5-7"><a id="__codelineno-5-7" name="__codelineno-5-7" href="#__codelineno-5-7"></a>
+</span><span id="__span-5-8"><a id="__codelineno-5-8" name="__codelineno-5-8" href="#__codelineno-5-8"></a>    Relevant text, if any:&quot;
+</span><span id="__span-5-9"><a id="__codelineno-5-9" name="__codelineno-5-9" href="#__codelineno-5-9"></a>
+</span><span id="__span-5-10"><a id="__codelineno-5-10" name="__codelineno-5-10" href="#__codelineno-5-10"></a>LLM.extract(d,q) = LLM.complete(ExtractPrompt[d,q])
+</span></code></pre></div>
+<h3 id="define-llmcompose">Define <code>LLM.compose</code></h3>
+<p><code>LLM.compose(d[1:m], q):</code> compose an answer to q based on text fragments d[1:m]</p>
+<p>We implement this via the <code>complete</code> primitive of the LLM, with a special "ComposePrompt", which includes some few-shot examples.</p>
+<div class="language-text highlight"><pre><span></span><code><span id="__span-6-1"><a id="__codelineno-6-1" name="__codelineno-6-1" href="#__codelineno-6-1"></a>ComposePrompt[d[1:m],q] =
+</span><span id="__span-6-2"><a id="__codelineno-6-2" name="__codelineno-6-2" href="#__codelineno-6-2"></a>    &quot;Here are some portions of a long document, relevant to a question.
+</span><span id="__span-6-3"><a id="__codelineno-6-3" name="__codelineno-6-3" href="#__codelineno-6-3"></a>    Return the final answer. Some examples are below.
+</span><span id="__span-6-4"><a id="__codelineno-6-4" name="__codelineno-6-4" href="#__codelineno-6-4"></a>    Content: …
+</span><span id="__span-6-5"><a id="__codelineno-6-5" name="__codelineno-6-5" href="#__codelineno-6-5"></a>    Content: …
+</span><span id="__span-6-6"><a id="__codelineno-6-6" name="__codelineno-6-6" href="#__codelineno-6-6"></a>    Question: when was Washington born?
+</span><span id="__span-6-7"><a id="__codelineno-6-7" name="__codelineno-6-7" href="#__codelineno-6-7"></a>    Final Answer: Washington was born in 1750
+</span><span id="__span-6-8"><a id="__codelineno-6-8" name="__codelineno-6-8" href="#__codelineno-6-8"></a>    Content: …
+</span><span id="__span-6-9"><a id="__codelineno-6-9" name="__codelineno-6-9" href="#__codelineno-6-9"></a>    Content: …
+</span><span id="__span-6-10"><a id="__codelineno-6-10" name="__codelineno-6-10" href="#__codelineno-6-10"></a>    Question: What did Biden say about Obama?
+</span><span id="__span-6-11"><a id="__codelineno-6-11" name="__codelineno-6-11" href="#__codelineno-6-11"></a>    Final Answer: Bid did not mention Obama
+</span><span id="__span-6-12"><a id="__codelineno-6-12" name="__codelineno-6-12" href="#__codelineno-6-12"></a>    Content: {d[1]}
+</span><span id="__span-6-13"><a id="__codelineno-6-13" name="__codelineno-6-13" href="#__codelineno-6-13"></a>    Content: {d[2]}
+</span><span id="__span-6-14"><a id="__codelineno-6-14" name="__codelineno-6-14" href="#__codelineno-6-14"></a>    …
+</span><span id="__span-6-15"><a id="__codelineno-6-15" name="__codelineno-6-15" href="#__codelineno-6-15"></a>    Content: {d[m]}
+</span><span id="__span-6-16"><a id="__codelineno-6-16" name="__codelineno-6-16" href="#__codelineno-6-16"></a>    Question: {q}
+</span><span id="__span-6-17"><a id="__codelineno-6-17" name="__codelineno-6-17" href="#__codelineno-6-17"></a>    Final answer:&quot;
+</span><span id="__span-6-18"><a id="__codelineno-6-18" name="__codelineno-6-18" href="#__codelineno-6-18"></a>
+</span><span id="__span-6-19"><a id="__codelineno-6-19" name="__codelineno-6-19" href="#__codelineno-6-19"></a>LLM.compose(d[1:m],q) := LLM.complete(ComposePrompt[d[1:m],q))`
+</span></code></pre></div>
+<h3 id="follow-up-questions">Follow-up questions</h3>
+<p>There are two ways to handle follow-up questions in a dialog with an LLM</p>
+<ul>
+<li>Pass in the entire dialog history, along with any contextual documents, to the LLM as context, and add the current query as the “actual” question needing a response</li>
+<li>First convert the follow-up question to a stand-alone question, and then use the standalone-query approach in the first section to answer the question.</li>
+</ul>
+<p>The first approach can be expensive in terms of token cost. We consider the second approach.</p>
+<p><strong><em>*</em></strong><strong><em>*</em></strong>Given:<strong><em>*</em></strong><strong><em>*</em></strong> </p>
+<ul>
+<li>A Dialog, i.e. a sequence of question-response pairs <span class="arithmatex">\(D = \{(q_i, a_i)\}\)</span> where <span class="arithmatex">\(q_i\)</span> is the human query, and <span class="arithmatex">\(a_i\)</span> is the LLM response</li>
+<li>a follow-up question <span class="arithmatex">\(f\)</span></li>
+</ul>
+<p><strong><em>*</em></strong><strong><em>*</em></strong><strong><em>*</em></strong><em>Goal:</em><strong><em>*</em></strong><strong><em>*</em></strong><strong><em>*</em></strong> convert <span class="arithmatex">\(f\)</span> to a <strong><em>*</em></strong><strong><em>*</em>stand-alone</strong><strong><em>*</em></strong>*** question <span class="arithmatex">\(q\)</span> </p>
+<p>For this we define an LLM primitive <code>LLM.standAlone(D, f)</code>which can be implemented as follows.</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-7-1"><a id="__codelineno-7-1" name="__codelineno-7-1" href="#__codelineno-7-1"></a><span class="n">DialogToStandAlonePrompt</span><span class="p">[</span><span class="n">D</span><span class="p">,</span><span class="n">f</span><span class="p">]</span> <span class="o">=</span> 
+</span><span id="__span-7-2"><a id="__codelineno-7-2" name="__codelineno-7-2" href="#__codelineno-7-2"></a>    <span class="s2">&quot;Given the following conversation and a follow-up question,</span>
+</span><span id="__span-7-3"><a id="__codelineno-7-3" name="__codelineno-7-3" href="#__codelineno-7-3"></a>  <span class="n">rephrase</span> <span class="n">the</span> <span class="n">follow</span><span class="o">-</span><span class="n">up</span> <span class="n">question</span> <span class="n">to</span> <span class="n">be</span> <span class="n">a</span> <span class="n">stand</span><span class="o">-</span><span class="n">alone</span> <span class="n">question</span><span class="p">:</span>
+</span><span id="__span-7-4"><a id="__codelineno-7-4" name="__codelineno-7-4" href="#__codelineno-7-4"></a>    <span class="n">Human</span><span class="p">:</span> <span class="p">{</span><span class="n">q_1</span><span class="p">}</span>
+</span><span id="__span-7-5"><a id="__codelineno-7-5" name="__codelineno-7-5" href="#__codelineno-7-5"></a>    <span class="n">Assistant</span><span class="p">:</span> <span class="p">{</span><span class="n">a_1</span><span class="p">}</span>
+</span><span id="__span-7-6"><a id="__codelineno-7-6" name="__codelineno-7-6" href="#__codelineno-7-6"></a>    <span class="n">Human</span><span class="p">:</span> <span class="p">{</span><span class="n">q_2</span><span class="p">}</span>
+</span><span id="__span-7-7"><a id="__codelineno-7-7" name="__codelineno-7-7" href="#__codelineno-7-7"></a>    <span class="n">Assistant</span><span class="p">:</span> <span class="p">{</span><span class="n">a_2</span><span class="p">}</span>
+</span><span id="__span-7-8"><a id="__codelineno-7-8" name="__codelineno-7-8" href="#__codelineno-7-8"></a>  <span class="o">...</span>
+</span><span id="__span-7-9"><a id="__codelineno-7-9" name="__codelineno-7-9" href="#__codelineno-7-9"></a>    <span class="n">Human</span><span class="p">:</span> <span class="p">{</span><span class="n">q_m</span><span class="p">}</span>
+</span><span id="__span-7-10"><a id="__codelineno-7-10" name="__codelineno-7-10" href="#__codelineno-7-10"></a>    <span class="n">Assistant</span><span class="p">:</span> <span class="p">{</span><span class="n">a_m</span><span class="p">}</span>
+</span><span id="__span-7-11"><a id="__codelineno-7-11" name="__codelineno-7-11" href="#__codelineno-7-11"></a>  <span class="n">Follow</span><span class="o">-</span><span class="n">up</span> <span class="n">Input</span><span class="p">:</span> <span class="o">&lt;</span><span class="n">f</span><span class="o">&gt;</span>
+</span><span id="__span-7-12"><a id="__codelineno-7-12" name="__codelineno-7-12" href="#__codelineno-7-12"></a>  <span class="n">Standalone</span> <span class="n">question</span><span class="p">:</span><span class="s2">&quot;</span>
+</span><span id="__span-7-13"><a id="__codelineno-7-13" name="__codelineno-7-13" href="#__codelineno-7-13"></a>
+</span><span id="__span-7-14"><a id="__codelineno-7-14" name="__codelineno-7-14" href="#__codelineno-7-14"></a><span class="n">LLM</span><span class="o">.</span><span class="n">standAlone</span><span class="p">(</span><span class="n">D</span><span class="p">,</span><span class="n">f</span><span class="p">)</span> <span class="o">=</span> <span class="n">LLM</span><span class="o">.</span><span class="n">complete</span><span class="p">(</span><span class="n">DialogToStandAlonePrompt</span><span class="p">[</span><span class="n">D</span><span class="p">,</span><span class="n">f</span><span class="p">])</span>   
+</span></code></pre></div>
+<hr />
+<h2 id="a-text-classifier">A text classifier</h2>
+<p>Given a text passage, label it as one of <span class="arithmatex">\(m\)</span> categories.</p>
+<p>Here is how we could leverage the LM + Retrieval Model (vectorDB) to do text classification.</p>
+<p>Over time, collect human-labeled examples of (doc, category) pairs <span class="arithmatex">\((d_i, c_i)\)</span> where <span class="arithmatex">\(c_i \in [m]\)</span>. As we see each such pair, we store the embedding-vector of the doc <span class="arithmatex">\(d_i\)</span> into our vecDB, with metadata <span class="arithmatex">\(c_i\)</span> attached:</p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-8-1"><a id="__codelineno-8-1" name="__codelineno-8-1" href="#__codelineno-8-1"></a><span class="n">Preprocessing</span><span class="p">:</span> <span class="k">for</span> <span class="n">each</span> <span class="p">(</span><span class="n">doc</span><span class="p">,</span> <span class="n">category</span><span class="p">)</span> <span class="n">labeled</span> <span class="n">pair</span> <span class="p">(</span><span class="n">d_i</span><span class="p">,</span> <span class="n">c_i</span><span class="p">):</span>
+</span><span id="__span-8-2"><a id="__codelineno-8-2" name="__codelineno-8-2" href="#__codelineno-8-2"></a>    <span class="n">e_i</span> <span class="o">=</span> <span class="n">embed</span><span class="p">(</span><span class="n">d_i</span><span class="p">)</span>
+</span><span id="__span-8-3"><a id="__codelineno-8-3" name="__codelineno-8-3" href="#__codelineno-8-3"></a>    <span class="n">vecDB</span><span class="o">.</span><span class="n">insert</span><span class="p">(</span><span class="n">e_i</span><span class="p">,</span> <span class="n">c_i</span><span class="p">)</span> <span class="c1"># attach metadata c_i to e_i</span>
+</span></code></pre></div>
+<p>When we see a new document <span class="arithmatex">\(d\)</span> , we categorize it using the LLM as follows. </p>
+<ol>
+<li>Map <span class="arithmatex">\(d\)</span> to an embedding vector and for each category <span class="arithmatex">\(i \in [m]\)</span> , find the closest <span class="arithmatex">\(k\)</span> documents in category <span class="arithmatex">\(i\)</span> in the vecDB.</li>
+</ol>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-9-1"><a id="__codelineno-9-1" name="__codelineno-9-1" href="#__codelineno-9-1"></a><span class="n">e</span> <span class="o">=</span> <span class="n">embed</span><span class="p">(</span><span class="n">d</span><span class="p">)</span>
+</span><span id="__span-9-2"><a id="__codelineno-9-2" name="__codelineno-9-2" href="#__codelineno-9-2"></a><span class="k">for</span> <span class="n">each</span> <span class="n">i</span> <span class="ow">in</span> <span class="mf">1.</span><span class="o">.</span><span class="n">m</span><span class="p">:</span> 
+</span><span id="__span-9-3"><a id="__codelineno-9-3" name="__codelineno-9-3" href="#__codelineno-9-3"></a>        <span class="c1">#find k nearest neighbor vectors of e in category i</span>
+</span><span id="__span-9-4"><a id="__codelineno-9-4" name="__codelineno-9-4" href="#__codelineno-9-4"></a>        <span class="n">N</span><span class="p">(</span><span class="n">e</span><span class="p">,</span><span class="n">i</span><span class="p">)[</span><span class="mi">1</span><span class="p">:</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">vecDB</span><span class="o">.</span><span class="n">nearest</span><span class="p">(</span><span class="n">e</span><span class="p">,</span> <span class="n">k</span><span class="p">,</span> <span class="n">i</span><span class="p">)</span>
+</span><span id="__span-9-5"><a id="__codelineno-9-5" name="__codelineno-9-5" href="#__codelineno-9-5"></a>        <span class="n">D</span><span class="p">(</span><span class="n">e</span><span class="p">,</span><span class="n">i</span><span class="p">)[</span><span class="mi">1</span><span class="p">:</span><span class="n">k</span><span class="p">]</span> <span class="o">=</span> <span class="n">vecDB</span><span class="o">.</span><span class="n">lookup</span><span class="p">(</span> <span class="n">N</span><span class="p">(</span><span class="n">e</span><span class="p">,</span><span class="n">i</span><span class="p">)[</span><span class="mi">1</span><span class="p">:</span><span class="n">k</span><span class="p">]</span> <span class="p">)</span> <span class="c1"># look up corresponding docs</span>
+</span></code></pre></div>
+<p>For simplicity, refer to the docs D(e,i)[1:k]  above as a collection of labeled docs (d_i, c_i) where i ranges from 1 to n</p>
+<ol>
+<li>
+<p>Construct a prompt containing few-shot classification examples from these nearest neighbors, and ask the LLM to classify the document <span class="arithmatex">\(d\)</span>. </p>
+<div class="language-python highlight"><pre><span></span><code><span id="__span-10-1"><a id="__codelineno-10-1" name="__codelineno-10-1" href="#__codelineno-10-1"></a><span class="n">ClassificationPrompt</span><span class="p">[</span><span class="n">d</span><span class="p">[</span><span class="mi">1</span><span class="p">:</span><span class="n">n</span><span class="p">],</span> <span class="n">c</span><span class="p">[</span><span class="mi">1</span><span class="p">:</span><span class="n">n</span><span class="p">],</span> <span class="n">d</span><span class="p">]</span> <span class="o">=</span>
+</span><span id="__span-10-2"><a id="__codelineno-10-2" name="__codelineno-10-2" href="#__codelineno-10-2"></a>        <span class="s2">&quot;Here are examples of context and category. </span>
+</span><span id="__span-10-3"><a id="__codelineno-10-3" name="__codelineno-10-3" href="#__codelineno-10-3"></a>    <span class="n">Label</span> <span class="n">the</span> <span class="n">last</span> <span class="n">content</span> <span class="k">with</span> <span class="n">the</span> <span class="n">right</span> <span class="n">category</span><span class="o">.</span>
+</span><span id="__span-10-4"><a id="__codelineno-10-4" name="__codelineno-10-4" href="#__codelineno-10-4"></a>        <span class="n">content</span><span class="p">:</span> <span class="p">{</span><span class="n">d_1</span><span class="p">}</span>
+</span><span id="__span-10-5"><a id="__codelineno-10-5" name="__codelineno-10-5" href="#__codelineno-10-5"></a>        <span class="n">category</span><span class="p">:</span> <span class="p">{</span><span class="n">c_1</span><span class="p">}</span>
+</span><span id="__span-10-6"><a id="__codelineno-10-6" name="__codelineno-10-6" href="#__codelineno-10-6"></a>        <span class="n">content</span><span class="p">:</span> <span class="p">{</span><span class="n">d_2</span><span class="p">}</span>
+</span><span id="__span-10-7"><a id="__codelineno-10-7" name="__codelineno-10-7" href="#__codelineno-10-7"></a>        <span class="n">category</span><span class="p">:</span> <span class="p">{</span><span class="n">c_2</span><span class="p">}</span>
+</span><span id="__span-10-8"><a id="__codelineno-10-8" name="__codelineno-10-8" href="#__codelineno-10-8"></a>        <span class="o">...</span>
+</span><span id="__span-10-9"><a id="__codelineno-10-9" name="__codelineno-10-9" href="#__codelineno-10-9"></a>        <span class="n">content</span><span class="p">:</span> <span class="p">{</span><span class="n">d_n</span><span class="p">}</span>
+</span><span id="__span-10-10"><a id="__codelineno-10-10" name="__codelineno-10-10" href="#__codelineno-10-10"></a>        <span class="n">category</span><span class="p">:</span> <span class="p">{</span><span class="n">c_n</span><span class="p">}</span>
+</span><span id="__span-10-11"><a id="__codelineno-10-11" name="__codelineno-10-11" href="#__codelineno-10-11"></a>        <span class="n">content</span><span class="p">:</span> <span class="p">{</span><span class="n">d</span><span class="p">}</span>
+</span><span id="__span-10-12"><a id="__codelineno-10-12" name="__codelineno-10-12" href="#__codelineno-10-12"></a>        <span class="n">category</span><span class="p">:</span> <span class="s2">&quot;</span>
+</span><span id="__span-10-13"><a id="__codelineno-10-13" name="__codelineno-10-13" href="#__codelineno-10-13"></a>
+</span><span id="__span-10-14"><a id="__codelineno-10-14" name="__codelineno-10-14" href="#__codelineno-10-14"></a><span class="n">category</span> <span class="o">=</span> <span class="n">LLM</span><span class="o">.</span><span class="n">complete</span><span class="p">(</span><span class="n">ClassificationPrompt</span><span class="p">[</span><span class="n">d</span><span class="p">[</span><span class="mi">1</span><span class="p">:</span><span class="n">n</span><span class="p">],</span> <span class="n">c</span><span class="p">[</span><span class="mi">1</span><span class="p">:</span><span class="n">n</span><span class="p">],</span> <span class="n">d</span><span class="p">]</span> <span class="p">)</span>
+</span></code></pre></div>
+</li>
+</ol>
+<p>Note, we could have just done this with a “frozen” set of few-shot classification examples in the prompt, but here we are constructing few-shot examples on the fly on <em>neighbors</em> of the current query. The intuition is that this might help the LLM do a better job with the classification, due to two effects:</p>
+<ul>
+<li>the examples are similar to the given query,</li>
+<li>the few-shot examples are in a sense close to the decision-boundaries (i.e. potentially confusing), so by giving these, the LLM is forced to better discriminate among the categories.</li>
+</ul>
+<p>We haven’t yet implemented this, but here is an actual interaction with GPT4, for classification with few-shot examples, where we classify sentences as “interesting” or not.</p>
+<ul>
+<li>
+<p>Prompt:</p>
+<p>Below are some examples of whether or not certain passages are "interesting" or "not".  Based on these, classify the final passage as interesting or not.
+Passage: Language models are the hottest topic.
+Interesting? Yes
+Passage: The elections are tomorrow.
+interesting? No
+Passage: The new york giants are playing tomorrow:
+Interesting? No
+Passage:  ChatGPT outperforms middle-school kids on writing tasks. What does it mean for education?
+Interesting? Yes
+Passage: There is an existential threat to humanity arising from the prospect of being able to run quantum simulation on a quantum computers in the future.
+Interesting? Yes
+Passage: Here is a FREE opportunity to learn how to use GPT-4 and create AI applications:
+Interesting? Yes
+Passage: All of my friends who don’t work in tech are actively using ChatGPT or other AI powered tools for their jobs.
+Interesting?</p>
+</li>
+<li>
+<p>Response: 
+Yes</p>
+</li>
+<li>Prompt:
+why?</li>
+<li>Response:
+The passage "All of my friends who don’t work in tech are actively using ChatGPT or other AI-powered tools for their jobs" is classified as interesting because it suggests a widespread adoption and impact of AI-powered tools, including ChatGPT, across various industries and professions outside of the tech sector. This widespread adoption and the impact on non-tech industries is a topic that is likely to be of interest to readers, as it speaks to the broader influence of AI on society and the workforce. Additionally, the passage raises questions about how AI is changing the way people work and how it is being integrated into various job functions, making it an interesting topic for discussion and exploration.</li>
+<li>Prompt: But is it interesting according to the examples I gave?</li>
+<li>
+<p>Response:</p>
+<p>Yes, the passage is interesting according to the examples provided. In the examples given, passages that are classified as interesting tend to involve topics related to technology and AI, their impact on society or specific industries, and their potential implications. For instance, the passages about language models being a hot topic, ChatGPT outperforming middle-school kids, the existential threat of quantum simulation, and the opportunity to learn GPT-4 are all considered interesting.</p>
+<p>The passage "All of my friends who don’t work in tech are actively using ChatGPT or other AI-powered tools for their jobs" fits within the same theme of discussing the impact and significance of AI and technology. It touches on the idea that AI-powered tools, including ChatGPT, have become so pervasive that they are now being used by individuals in industries outside of technology. This suggests a broader societal impact of AI, which aligns with the characteristics of the passages that were labeled as interesting in the examples provided.</p>
+</li>
+</ul>
+<h3 id="remarks">Remarks:</h3>
+<ol>
+<li>It’s nice to see that we can even get an <strong><em>*</em></strong><strong><em>*</em>explanation</strong><strong><em>*</em></strong>*** of the classification</li>
+<li>The one problem with the above scheme is that we are passing entire documents into the LLM. This will be expensive or infeasible when documents are large. The approach should work however for short documents, or document-shards, or tweets, or short messages. Maybe for storing a (doc, category) pair for larger doc, we could extract part of that doc somehow (need to think about this).</li>
+</ol>
+
+
+
+
+
+                
+              </article>
+            </div>
+          
+          
+        </div>
+        
+      </main>
+      
+        <footer class="md-footer">
+  
+  <div class="md-footer-meta md-typeset">
+    <div class="md-footer-meta__inner md-grid">
+      <div class="md-copyright">
+  
+  
+    Made with
+    <a href="https://squidfunk.github.io/mkdocs-material/" target="_blank" rel="noopener">
+      Material for MkDocs
+    </a>
+  
+</div>
+      
+    </div>
+  </div>
+</footer>
+      
+    </div>
+    <div class="md-dialog" data-md-component="dialog">
+      <div class="md-dialog__inner md-typeset"></div>
+    </div>
+    
+    <script id="__config" type="application/json">{"base": "../..", "features": ["navigation.tabs", "toc", "content.code.copy", "content.code.select"], "search": "../../assets/javascripts/workers/search.74e28a9f.min.js", "translations": {"clipboard.copied": "Copied to clipboard", "clipboard.copy": "Copy to clipboard", "search.result.more.one": "1 more on this page", "search.result.more.other": "# more on this page", "search.result.none": "No matching documents", "search.result.one": "1 matching document", "search.result.other": "# matching documents", "search.result.placeholder": "Type to start searching", "search.result.term.missing": "Missing", "select.version": "Select version"}}</script>
+    
+    
+      <script src="../../assets/javascripts/bundle.220ee61c.min.js"></script>
+      
+        
+          <script src="../../javascripts/mathjax.js"></script>
+        
+      
+        
+          <script src="https://polyfill.io/v3/polyfill.min.js?features=es6"></script>
+        
+      
+        
+          <script src="https://cdn.jsdelivr.net/npm/mathjax@3/es5/tex-mml-chtml.js"></script>
+        
+      
+    
+  </body>
+</html>
