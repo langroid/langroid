@@ -86,3 +86,7 @@ all-minor: bump-minor build push release
 
 .PHONY: all-major
 all-major: bump-major build push release
+
+.PHONY: publish
+publish:
+	poetry publish
