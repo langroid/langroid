@@ -23,11 +23,9 @@ to manage dependencies, and `python 3.11` for development.
 First install `poetry`, then create virtual env and install dependencies:
 
 ```bash
-# clone the repo and cd into repo root
-git clone https://github.com/langroid/langroid_dev.git
-# Go into the repo root
-cd langroid_dev
-
+# clone this repo and cd into repo root
+git clone ...
+cd <repo_root>
 # create a virtual env under project root, .venv directory
 python3 -m venv .venv
 
