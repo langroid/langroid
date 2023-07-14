@@ -3,7 +3,7 @@ name: Pytest
 on:
   push:
     branches:
-      - main  # Replace with your default branch name
+      - main  # Replace with your default branch name 
   pull_request:
     branches:
       - main  # Replace with your default branch name
