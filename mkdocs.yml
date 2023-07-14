@@ -1,10 +1,17 @@
 site_name: "langroid"
 repo_url:
 edit_uri: ""
+extra_css:
+  - stylesheets/extra.css
+
 theme:
+  logo: assets/orange-logo.png
+  favicon: assets/orange-logo.png
   features:
     - navigation.tabs
     - toc
+    - content.code.copy
+    - content.code.select
   icon:
       repo: fontawesome/brands/github
   name: material
@@ -37,6 +44,8 @@ plugins:
         - langroid
   - section-index
 nav:
+  - Home: index.md
+  - Quick Start: quick-start.md
   - Repo Overview: Overview.md
   - Resources: Resources.md
   - Writeups:
@@ -79,6 +88,12 @@ markdown_extensions:
   - admonition
   - pymdownx.details
   - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+      line_spans: __span
+      pygments_lang_class: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
   - pymdownx.arithmatex:
       generic: true
   - markdown.extensions.attr_list:

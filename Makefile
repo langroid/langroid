@@ -8,7 +8,7 @@ setup: ## Setup the git pre-commit hooks
 	poetry run pre-commit install
 
 update: ## Update the git pre-commit hooks
-	pre-commit autoupdate
+	poetry run pre-commit autoupdate
 
 check:
 	@poetry run pre-commit install
@@ -28,7 +28,7 @@ lint:
 	poetry run ruff . --fix
 
 tests:
-	pytest tests/
+	pytest tests/main
 
 
 docs:
@@ -48,5 +48,41 @@ nodocs:
 
 
 loc:
-	@echo "Lines of python code in git-tracked files:"
+	@echo "Lines in git-tracked files python files:"
 	@git ls-files | grep '\.py$$' | xargs cat | grep -v '^\s*$$' | wc -l
+
+.PHONY: bump-patch
+bump-patch:
+	@poetry version patch
+	@git commit pyproject.toml -m "Bump version"
+
+.PHONY: bump-minor
+bump-minor:
+	@poetry version minor
+	@git commit pyproject.toml -m "Bump version"
+
+.PHONY: bump-major
+bump-major:
+	@poetry version major
+	@git commit pyproject.toml -m "Bump version"
+
+.PHONY: build
+build:
+	@poetry build
+
+.PHONY: push
+push:
+	@git push origin main
+
+.PHONY: release
+release:
+	@VERSION=$$(poetry version | cut -d' ' -f2) && gh release create $${VERSION} dist/*
+
+.PHONY: all-patch
+all-patch: bump-patch build push release
+
+.PHONY: all-minor
+all-minor: bump-minor build push release
+
+.PHONY: all-major
+all-major: bump-major build push release

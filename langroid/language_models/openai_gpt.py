@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional, Tuple, Union, cast
 import openai
 from dotenv import load_dotenv
 from pydantic import BaseModel
+from rich import print
 
 from langroid.cachedb.redis_cachedb import RedisCache
 from langroid.language_models.base import (
@@ -26,7 +27,6 @@ from langroid.language_models.utils import (
 )
 from langroid.utils.configuration import settings
 from langroid.utils.constants import Colors
-from langroid.utils.output.printing import PrintColored
 
 logging.getLogger("openai").setLevel(logging.ERROR)
 
@@ -36,7 +36,7 @@ class OpenAIChatModel(str, Enum):
 
     GPT3_5_TURBO = "gpt-3.5-turbo-0613"
     GPT4_NOFUNC = "gpt-4"  # before function_call API
-    GPT4 = "gpt-4"
+    GPT4 = "gpt-4-0613"
 
 
 class OpenAICompletionModel(str, Enum):
@@ -44,7 +44,7 @@ class OpenAICompletionModel(str, Enum):
 
     TEXT_DA_VINCI_003 = "text-davinci-003"
     TEXT_ADA_001 = "text-ada-001"
-    GPT4 = "gpt-4"
+    GPT4 = "gpt-4-0613"
 
 
 class OpenAIGPTConfig(LLMConfig):
@@ -54,7 +54,7 @@ class OpenAIGPTConfig(LLMConfig):
     timeout: int = 20
     temperature: float = 0.0
     chat_model: OpenAIChatModel = OpenAIChatModel.GPT4
-    completion_model: OpenAICompletionModel = OpenAICompletionModel.TEXT_DA_VINCI_003
+    completion_model: OpenAICompletionModel = OpenAICompletionModel.GPT4
     context_length: Dict[str, int] = {
         OpenAIChatModel.GPT3_5_TURBO: 4096,
         OpenAIChatModel.GPT4: 8192,
@@ -142,18 +142,20 @@ class OpenAIGPT(LanguageModel):
                 sys.stdout.flush()
             if event_fn_name:
                 function_name = event_fn_name
+                has_function = True
                 sys.stdout.write(Colors().GREEN + "FUNC: " + event_fn_name + ": ")
                 sys.stdout.flush()
             if event_args:
                 function_args += event_args
                 sys.stdout.write(Colors().GREEN + event_args)
                 sys.stdout.flush()
-            if event.choices[0].finish_reason == "function_call":
-                # function call here using func_call
-                has_function = True
+            if event.choices[0].finish_reason in ["stop", "function_call"]:
+                # for function_call, finish_reason does not necessarily
+                # contain "function_call" as mentioned in the docs.
+                # So we check for "stop" or "function_call" here.
                 break
 
-        print(Colors().RESET)
+        print("")
         # TODO- get usage info in stream mode (?)
 
         # check if function_call args are valid, if not,
@@ -220,8 +222,7 @@ class OpenAIGPT(LanguageModel):
         openai.api_key = self.api_key
 
         if settings.debug:
-            with PrintColored(Colors().RED):
-                print(Colors().RED + f"PROMPT: {prompt}")
+            print(f"[red]PROMPT: {prompt}[/red]")
 
         @retry_with_exponential_backoff
         def completions_with_backoff(**kwargs):  # type: ignore
@@ -230,8 +231,7 @@ class OpenAIGPT(LanguageModel):
             if result is not None:
                 cached = True
                 if settings.debug:
-                    with PrintColored(Colors().RED):
-                        print(Colors().RED + "CACHED")
+                    print("[red]CACHED[/red]")
             else:
                 # If it's not in the cache, call the API
                 result = openai.Completion.create(**kwargs)  # type: ignore
@@ -363,8 +363,7 @@ class OpenAIGPT(LanguageModel):
             if result is not None:
                 cached = True
                 if settings.debug:
-                    with PrintColored(Colors().RED):
-                        print(Colors().RED + "CACHED")
+                    print("[red]CACHED[/red]")
             else:
                 # If it's not in the cache, call the API
                 result = openai.ChatCompletion.create(**kwargs)  # type: ignore

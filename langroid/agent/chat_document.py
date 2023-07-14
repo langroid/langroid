@@ -1,5 +1,4 @@
 import json
-from enum import Enum
 from typing import List, Optional, Type
 
 from pydantic import BaseModel, Extra
@@ -10,16 +9,10 @@ from langroid.language_models.base import (
     LLMResponse,
     Role,
 )
-from langroid.mytypes import DocMetaData, Document
+from langroid.mytypes import DocMetaData, Document, Entity
 from langroid.parsing.agent_chats import parse_message
 from langroid.parsing.json import extract_top_level_json
 from langroid.utils.output.printing import shorten_text
-
-
-class Entity(str, Enum):
-    AGENT = "Agent"
-    LLM = "LLM"
-    USER = "User"
 
 
 class ChatDocAttachment(BaseModel):

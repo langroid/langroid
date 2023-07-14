@@ -2,14 +2,13 @@ from typing import Optional
 
 import pytest
 
-from langroid.agent.base import Entity
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
-from langroid.agent.message import AgentMessage
 from langroid.agent.task import Task
+from langroid.agent.tool_message import ToolMessage
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
 from langroid.language_models.base import Role
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
-from langroid.mytypes import DocMetaData, Document
+from langroid.mytypes import DocMetaData, Document, Entity
 from langroid.parsing.parser import ParsingConfig
 from langroid.prompts.prompts_config import PromptsConfig
 from langroid.utils.configuration import Settings, set_global
@@ -17,14 +16,14 @@ from langroid.utils.constants import NO_ANSWER
 from langroid.vector_store.base import VectorStoreConfig
 
 
-class ExponentialTool(AgentMessage):
+class ExponentialTool(ToolMessage):
     request: str = "calc_expontential"
     purpose: str = "To calculate the value of <x> raised to the power <e>"
     x: int
     e: int
 
 
-class MultiplicationTool(AgentMessage):
+class MultiplicationTool(ToolMessage):
     request: str = "calc_multiplication"
     purpose: str = "To calculate the value of <x> multiplied by <y>"
     x: int
@@ -72,7 +71,7 @@ def test_inter_agent_chat(test_settings: Settings, helper_human_response: str):
     Your job is to ask me questions. 
     Start by asking me what the capital of France is.
     """
-    task.init_pending_message(msg)
+    task.init(msg)
 
     task.step()
     assert "What" in task.pending_message.content
@@ -243,7 +242,7 @@ def test_multi_agent_directed(test_settings: Settings):
 
     task_a.add_sub_task([task_b, task_c])
     # kick off with empty msg, so LLM will respond based on initial sys, user messages
-    task_a.init_pending_message()
+    task_a.init()
     for _ in range(2):
         # LLM asks, addressing B or C
         task_a.step()
@@ -303,7 +302,7 @@ def test_multi_agent_no_answer(test_settings: Settings):
 
     task_a.add_sub_task([task_b, task_c])
     # kick off with empty msg, so LLM will respond based on initial sys, user messages
-    task_a.init_pending_message()
+    task_a.init()
     for _ in range(2):
         # LLM asks, addressing B or C
         task_a.step()

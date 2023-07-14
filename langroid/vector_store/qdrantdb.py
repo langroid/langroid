@@ -1,6 +1,6 @@
 import logging
 import os
-from typing import List, Optional, Tuple
+from typing import List, Optional, Sequence, Tuple
 
 from chromadb.api.types import EmbeddingFunction
 from dotenv import load_dotenv
@@ -126,7 +126,7 @@ class QdrantDB(VectorStore):
             logger.info(collection_info)
             logger.setLevel(level)
 
-    def add_documents(self, documents: List[Document]) -> None:
+    def add_documents(self, documents: Sequence[Document]) -> None:
         if len(documents) == 0:
             return
         embedding_vecs = self.embedding_fn([doc.content for doc in documents])

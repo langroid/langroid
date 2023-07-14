@@ -1,5 +1,5 @@
 import logging
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 import chromadb
 
@@ -79,7 +79,7 @@ class ChromaDB(VectorStore):
             get_or_create=not replace,
         )
 
-    def add_documents(self, documents: Optional[List[Document]] = None) -> None:
+    def add_documents(self, documents: Optional[Sequence[Document]] = None) -> None:
         if documents is None:
             return
         contents: List[str] = [document.content for document in documents]
