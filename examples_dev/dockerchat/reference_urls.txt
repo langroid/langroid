@@ -1,8 +1,0 @@
-https://www.pybootcamp.com/blog/how-to-write-dockerfile-python-apps/
-https://docs.docker.com/develop/develop-images/dockerfile_best-practices/
-https://docs.docker.com/engine/reference/builder/
-https://testdriven.io/blog/docker-best-practices/
-https://luis-sena.medium.com/creating-the-perfect-python-dockerfile-51bdec41f1c8
-https://docs.docker.com/language/python/build-images/
-https://code.visualstudio.com/docs/containers/quickstart-python
-https://earthly.dev/blog/python-docker/
