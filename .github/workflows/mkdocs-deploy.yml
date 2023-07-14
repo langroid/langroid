@@ -38,7 +38,7 @@ jobs:
 
       - name: Build MkDocs documentation
         # change this to -b gh-pages when ready to make docs public
-        run: mkdocs gh-deploy -b pages --force
+        run: mkdocs gh-deploy -b gh-pages --force
 
 
 #      - name: Deploy to GitHub Pages
