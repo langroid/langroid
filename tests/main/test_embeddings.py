@@ -1,5 +1,3 @@
-import os
-
 from dotenv import load_dotenv
 
 from langroid.embedding_models.base import EmbeddingModel
@@ -11,7 +9,6 @@ def test_embeddings():
     openai_cfg = OpenAIEmbeddingsConfig(
         model_type="openai",
         model_name="text-embedding-ada-002",
-        api_key=os.getenv("OPENAI_API_KEY"),
         dims=1536,
     )
 

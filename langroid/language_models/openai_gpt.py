@@ -85,7 +85,13 @@ class OpenAIGPT(LanguageModel):
         if settings.nofunc:
             self.chat_model = OpenAIChatModel.GPT4_NOFUNC
         load_dotenv()
-        self.api_key = os.getenv("OPENAI_API_KEY")
+        self.api_key = os.getenv("OPENAI_API_KEY", "")
+        if self.api_key == "":
+            raise ValueError(
+                """
+                OPENAI_API_KEY not set in .env file,
+                please set it to your OpenAI API key."""
+            )
         self.cache = RedisCache(config.cache_config)
 
     def set_stream(self, stream: bool) -> bool:
