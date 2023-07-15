@@ -73,17 +73,6 @@ coverage = "^7.2.5"
 # install these using `poetry install -E hf-embeddings`
 hf-embeddings = ["sentence-transformer", "torch"]
 
-#[[tool.poetry.source]]
-#name = "repositories.testpypi"
-#url = "https://test.pypi.org/legacy/"
-#default = false
-#secondary = false
-
-#[[tool.poetry.source]]
-#name = "repositories.testpypi"
-#url = "https://test.pypi.org/legacy/"
-#default = false
-#secondary = false
 
 [build-system]
 requires = ["poetry-core"]
