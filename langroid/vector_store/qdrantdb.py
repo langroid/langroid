@@ -50,9 +50,17 @@ class QdrantDB(VectorStore):
         self.port = config.port
         load_dotenv()
         if config.cloud:
+            key = os.getenv("QDRANT_API_KEY")
+            if key is None or key == "":
+                raise ValueError(
+                    """QDRANT_API_KEY env variable must be set to use 
+                    QdrantDB in cloud mode. Please set the QDRANT_API_KEY value 
+                    in your .env file.
+                    """
+                )
             self.client = QdrantClient(
                 url=config.url,
-                api_key=os.getenv("QDRANT_API_KEY"),
+                api_key=key,
                 timeout=config.timeout,
             )
         else:

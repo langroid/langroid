@@ -1,4 +1,3 @@
-import os
 from typing import Union
 
 import pytest
@@ -13,10 +12,8 @@ from langroid.vector_store.chromadb import ChromaDB, ChromaDBConfig
 from langroid.vector_store.qdrantdb import QdrantDB, QdrantDBConfig
 
 load_dotenv()
-api_key = os.getenv("OPENAI_API_KEY")
 openai_cfg = OpenAIEmbeddingsConfig(
     model_type="openai",
-    api_key=api_key,
 )
 
 
