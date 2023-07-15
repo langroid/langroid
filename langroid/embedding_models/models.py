@@ -28,6 +28,13 @@ class OpenAIEmbeddings(EmbeddingModel):
         self.config = config
         load_dotenv()
         self.config.api_key = os.getenv("OPENAI_API_KEY", "")
+        if self.config.api_key == "":
+            raise ValueError(
+                """OPENAI_API_KEY env variable must be set to use 
+                OpenAIEmbeddings. Please set the OPENAI_API_KEY value 
+                in your .env file.
+                """
+            )
         openai.api_key = self.config.api_key
 
     def embedding_fn(self) -> Callable[[List[str]], Embeddings]:
