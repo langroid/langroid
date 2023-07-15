@@ -35,8 +35,11 @@ python3 -m venv .venv
 # use poetry to install dependencies (these go into .venv dir)
 poetry install
 
+<<<<<<< HEAD
+=======
 # To be able to run `dockerchat` you need some extras:
 poetry install -E docker
+>>>>>>> upstream/main
 ```
 To add packages, use `poetry add <package-name>`. This will automatically 
 find the latest compatible version of the package and add it to `pyproject.
@@ -174,22 +177,6 @@ compression and intelligence. If you are using the default URLs, try asking:
 and then a follow-up question:
 
 > what did she build?
-
-### "Chat" with a code repo, given the GitHub URL
-```bash
-python3 examples_dev/codechat/codechat.py
-```
-For the default URL, try asking: 
-
-> What version of python is used?
-
-### "chat"-based dockerfile creator. 
-This is a 3-agent system to generate a docker file for a (Python) github repo.
-
-
-```bash
-python3 examples_dev/dockerfile/chat.py
-```
 
 ## Logs of multi-agent interactions
 
