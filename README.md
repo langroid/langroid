@@ -45,15 +45,15 @@ To add packages, use `poetry add <package-name>`. This will automatically
 find the latest compatible version of the package and add it to `pyproject.
 toml`. _Do not manually edit `pyproject.toml` to add packages._
 
-## Set up environment variables (API keys, etc
+## Set up environment variables (API keys, etc)
 
 Copy the `.env-template` file to a new file `.env` and 
 insert these secrets:
 - OpenAI API key, 
 - GitHub Personal Access Token (needed by  PyGithub to analyze git repos; 
   token-based API calls are less rate-limited).
-- Redis Password (ask @pchalasani for this) for the redis cache.
-- Qdrant API key (ask @pchalasani for this) for the vector db.
+- Redis Password for the redis cache. 
+- Qdrant API key for the vector database.
 
 ```bash
 cp .env-template .env
