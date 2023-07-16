@@ -47,7 +47,7 @@ Highlights of Langroid's features as of July 2023:
   feature. In addition, Langroid has its own native equivalent, which we 
   call **tools** (also known as "plugins" in other contexts). Function 
   calling and tools have the same developer-facing interface, implemented 
-  using [Pydantic] (https://docs.pydantic.dev/latest/), 
+  using [Pydantic](https://docs.pydantic.dev/latest/), 
   which makes it very easy to define tools/functions and enable agents 
   to use them. Benefits of using Pydantic are that you never have to write 
   complex JSON specs for function calling, and when the LLM 
@@ -58,5 +58,5 @@ Highlights of Langroid's features as of July 2023:
 
 
 Don't worry if some of these terms are not clear to you. 
-The [Quick-start page](quick-start.md) and subsequent pages will help you get up to 
+The [Quick-start page](quick-start/index.md) and subsequent pages will help you get up to 
 speed.
