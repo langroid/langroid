@@ -18,7 +18,7 @@ from langroid.language_models.openai_gpt import (
 cfg = OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT4)
 ```
 !!! info inline end "About Configs"
-        A recurring pattern you will see in Langroid is that for most classes,
+        A recurring pattern you will see in Langroid is that for many classes,
         we have a corresponding `Config` class (an instance of a Pydantic `BaseModel`),
         and the class constructor takes this `Config` class as its only argument.
         This lets us avoid having long argument lists in constructors, and brings flexibility
@@ -54,7 +54,7 @@ msg = LLMMessage(
 To get a response from the LLM, we call the mdl's `chat` method,
 and pass in a list of messages, along with a bound on how long (in tokens)
 we want the response to be:
-```python
+```py
 messages = [
   LLMMessage(content="You are a helpful assistant",  role=Role.SYSTEM), #(1)!
   LLMMessage(content="What is the capital of Ontario?",  role=Role.USER),#(2)!
@@ -68,8 +68,8 @@ response = mdl.chat(messages, max_tokens=200)
 
 The response is an object of class [`LLMResponse`](/reference/language_models/base), 
 which we can convert to an
-`LLMMessage` to append to the conversation history:
-```python
+[`LLMMessage`](langroid.language_models.base.LLMMessage) to append to the conversation history:
+```py
 messages.append(response.to_LLMMessage())
 ```
 

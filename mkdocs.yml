@@ -64,6 +64,7 @@ nav:
     - Setup: quick-start/setup.md
     - LLM interaction: quick-start/llm-interaction.md
     - Simple Chat Agent: quick-start/chat-agent.md
+    - Multi Agent Chat: quick-start/multi-agent-chat.md
   - Repo Overview: Overview.md
   - Resources: Resources.md
   # defer to gen-files + literate-nav
@@ -73,6 +74,8 @@ nav:
 
 
 markdown_extensions:
+  - toc:
+      permalink: true
   - attr_list
   - md_in_html
   - pymdownx.emoji:
