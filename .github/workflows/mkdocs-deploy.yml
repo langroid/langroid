@@ -25,6 +25,8 @@ jobs:
       - name: Install dependencies
         run: |
           pip install mkdocs-material
+          pip install mkdocs-material-extensions
+          pip install mkdocs-awesome-pages-plugin
           pip install mkdocs-minify-plugin
           pip install mkdocs-autorefs
           pip install mkdocstrings[python]
