@@ -53,8 +53,6 @@ plugins:
             docstring_options:
               ignore_init_summary: true
             merge_init_into_class: true
-            extensions:
-              - docs/plugins/griffe_doclinks.py
 
       watch:
         - langroid
