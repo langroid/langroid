@@ -72,6 +72,9 @@ class Role(str, Enum):
 
 
 class LLMMessage(BaseModel):
+    """
+    Class representing message sent to, or received from, LLM.
+    """
     role: Role
     name: Optional[str] = None
     content: str

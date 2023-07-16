@@ -9,9 +9,13 @@ theme:
   favicon: assets/orange-logo.png
   features:
     - navigation.tabs
+#    - navigation.tracking
+#    - navigation.sections
+#    - navigation.indexes
     - toc
     - content.code.copy
     - content.code.select
+    - content.code.annotate
   icon:
       repo: fontawesome/brands/github
   name: material
@@ -40,19 +44,39 @@ plugins:
       nav_file: SUMMARY.md
   - mkdocstrings:
       default_handler: python
+      handlers:
+        python:
+          paths: [.]
+          options:
+            separate_signature: false
+            filters: ["!^_"]
+            docstring_options:
+              ignore_init_summary: true
+            merge_init_into_class: true
+            extensions:
+              - docs/plugins/griffe_doclinks.py
+
       watch:
         - langroid
   - section-index
 nav:
   - Home: index.md
-  - Quick Start: quick-start.md
+  - Getting Started:
+    - quick-start/index.md
+    - Setup: quick-start/setup.md
+    - LLM interaction: quick-start/try-llm.md
+    - Simple Chat Agent: quick-start/chat-agent.md
   - Repo Overview: Overview.md
   - Resources: Resources.md
   # defer to gen-files + literate-nav
-  - Code Reference: reference/  #
+  - API Documentation: reference/  #
+#  - API Documentation:
+#    - language_models: api/language_models_base.md
+
 
 markdown_extensions:
   - attr_list
+  - md_in_html
   - pymdownx.emoji:
       emoji_index: !!python/name:materialx.emoji.twemoji
       emoji_generator: !!python/name:materialx.emoji.to_svg
@@ -63,6 +87,7 @@ markdown_extensions:
       anchor_linenums: true
       line_spans: __span
       pygments_lang_class: true
+      use_pygments: true
   - pymdownx.inlinehilite
   - pymdownx.snippets
   - pymdownx.arithmatex:
