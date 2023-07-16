@@ -103,9 +103,9 @@ We can then run the task:
 ```py
 task.run()
 ```
-Note that the agent's `agent_response()` always returns None (since the default 
+Note that the agent's `agent_response()` always returns `None` (since the default 
 implementation of this method looks for a tool/function-call, and these never occur
-in this task). So the calls to `task.step()` alternates between 
+in this task). So the calls to `task.step()` simply alternate between 
 responses from the LLM and the user.
 
 See the [`chat-agent.py](https://github.com/langroid/langroid-examples/blob/main/examples/quick-start/chat-agent.py)
