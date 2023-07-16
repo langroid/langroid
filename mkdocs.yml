@@ -62,7 +62,7 @@ nav:
   - Getting Started:
     - quick-start/index.md
     - Setup: quick-start/setup.md
-    - LLM interaction: quick-start/try-llm.md
+    - LLM interaction: quick-start/llm-interaction.md
     - Simple Chat Agent: quick-start/chat-agent.md
   - Repo Overview: Overview.md
   - Resources: Resources.md
