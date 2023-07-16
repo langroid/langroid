@@ -75,6 +75,27 @@ messages.append(response.to_LLMMessage())
 
 You can put the above in a simple loop, 
 to get a simple command-line chat interface!
+
+```py
+from rich.prompt import Prompt #(1)!
+messages = [
+    LLMMessage(role=Role.SYSTEM, content="You are a helpful assitant"),
+    ]
+while True:
+    message = Prompt.ask("[blue]Human")
+    if message in ["x", "q"]:
+        print("[magenta]Bye!")
+        break
+    messages.append(LLMMessage(role=Role.USER, content=message))
+    response = mdl.chat(messages=messages, max_tokens=200)
+    messages.append(response.to_LLMMessage())
+    print("[green]Bot: " + response.message)
+```
+
+1. Rich is a Python library for rich text and beautiful formatting in the terminal.
+   We use it here to get a nice prompt for the user's input.
+   You can install it with `pip install rich`.
+
 See [`examples/quick-start/try-llm.py`](https://github.com/langroid/langroid-examples/blob/main/examples/quick-start/try-llm.py)
 for a complete example that you can run using
 ```bash
