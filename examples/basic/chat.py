@@ -19,9 +19,9 @@ def chat() -> None:
         [blue]Welcome to the basic chatbot!
         Enter x or q to quit
         """
-        )
+    )
     config = ChatAgentConfig(
-        llm = OpenAIGPTConfig(
+        llm=OpenAIGPTConfig(
             chat_model=OpenAIChatModel.GPT4,
         )
     )
