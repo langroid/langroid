@@ -35,11 +35,6 @@ python3 -m venv .venv
 # use poetry to install dependencies (these go into .venv dir)
 poetry install
 
-<<<<<<< HEAD
-=======
-# To be able to run `dockerchat` you need some extras:
-poetry install -E docker
->>>>>>> upstream/main
 ```
 To add packages, use `poetry add <package-name>`. This will automatically 
 find the latest compatible version of the package and add it to `pyproject.
