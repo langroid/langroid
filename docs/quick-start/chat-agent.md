@@ -8,8 +8,12 @@
 ## Agents and Tasks
 
 A [`ChatAgent`](/reference/langroid/agent/chat_agent) is an abstraction that 
-wraps a few components, including an LLM (`ChatAgent.llm`),
-possibly equipped with tools/function-calling, 
-and optionally a vector-database (`ChatAgent.vecdb`).
+wraps a few components, including:
+- an LLM (`ChatAgent.llm`), possibly equipped with tools/function-calling,
+- optionally a vector-database (`ChatAgent.vecdb`)
+The `ChatAgent` class also maintains the LLM conversation history.
+
+
+
 
 A `ChatAgent` class has various methods that can be called t

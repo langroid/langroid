@@ -13,34 +13,28 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout repository
-        uses: actions/checkout@v2
-
+      - name: Check out repository
+        uses: actions/checkout@v3
 
       - name: Set up Python
-        uses: actions/setup-python@v2
+        uses: actions/setup-python@v4
         with:
-          python-version: 3.x
+          python-version: 3.11  # Replace with your desired Python version
 
-      - name: Install dependencies
+      - name: Install Poetry
+        uses: Gr1N/setup-poetry@v8
+
+      - name: Install Poetry dependencies
         run: |
-          pip install mkdocs-material
-          pip install mkdocs-material-extensions
-          pip install mkdocs-awesome-pages-plugin
-          pip install mkdocs-minify-plugin
-          pip install mkdocs-autorefs
-          pip install mkdocstrings[python]
-          pip install mkdocs-awesome-pages-plugin
-          pip install mkdocs-gen-files
-          pip install mkdocs-literate-nav
-          pip install mkdocs-section-index
-          pip install mkdocs-redirects
-          pip install mkdocs-jupyter
-
+          poetry --version
+          echo "$HOME/.local/bin" >> $GITHUB_PATH
+          python -m pip install --upgrade pip
+          
+          poetry install
 
       - name: Build MkDocs documentation
         # change this to -b gh-pages when ready to make docs public
-        run: mkdocs gh-deploy -b gh-pages --force
+        run: poetry run mkdocs gh-deploy -b gh-pages --force
 
 
 #      - name: Deploy to GitHub Pages
