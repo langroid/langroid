@@ -21,6 +21,11 @@ Alternatively, use `pip` to install `langroid`:
 pip install langroid
 ```
 
+!!! tip "Work in a nice terminal, such as Iterm2"
+    All of the examples we will go through are command-line applications.
+    For the best experience we recommend you work in a nice terminal that supports 
+    colored outputs, such as [Iterm2](https://iterm2.com/).    
+
 ## Set up tokens/keys 
 
 Langroid uses a few APIs, and you need to set up tokens/keys for these APIs.
