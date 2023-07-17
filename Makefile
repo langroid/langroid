@@ -33,7 +33,7 @@ tests:
 
 docs:
 	@# Kill any existing 'mkdocs serve' processes.
-	@pkill -f "mkdocs serve" 2>/dev/null || true
+	@pkill -fx "mkdocs serve" 2>/dev/null || true
 	@# Build the documentation.
 	mkdocs build
 	@# Serve the documentation in the background.
@@ -43,7 +43,7 @@ docs:
 
 nodocs:
 	@# Kill any existing 'mkdocs serve' processes.
-	@pkill -f "mkdocs serve" 2>/dev/null || echo "No 'mkdocs serve' process found."
+	@pkill -fx "mkdocs serve" 2>/dev/null || echo "No 'mkdocs serve' process found."
 	@echo "Stopped serving documentation."
 
 
