@@ -14,16 +14,30 @@ functions outside the LLM, for further processing.
 In these situations, we want the LLM to "express" its "intent" unambiguously,
 and we achieve this by instructing the LLM on how to format its output
 (typically in JSON) and under what conditions it should generate such output.
-This mechanism has become known by various names over the last few months: 
-tools, plugins, or function-calling.
+This mechanism has become known by various names over the last few months
+(tools, plugins, or function-calling), and is extremely useful in numerous scenarios,
+such as:
 
-For LLM developers, Langroid provides the same uniform interface
+- **Extracting structured information** from a document: for example, we can use 
+the tool/functions mechanism to have the LLM present information from a lease document
+in a JSON structured format, to simplify further processing.
+- **Specialized computation**: the LLM can request a units conversion, 
+or request scanning a large file (which wouldn't fit into its context) for a specific
+pattern.
+- **Code execution**: the LLM can generate code that is executed in a sandboxed
+environment, and the results of the execution are returned to the LLM.
+
+
+For LLM developers, Langroid provides a clean, uniform interface
 for the recently released OpenAI [Function-calling](https://platform.openai.com/docs/guides/gpt/function-calling)
 as well Langroid's own native "tools" mechanism.
 You can choose which to enable by setting the 
 `use_tools` and `use_functions_api` flags in the `ChatAgentConfig` object.
 The implementation leverages the excellent 
 [Pydantic](https://docs.pydantic.dev/latest/) library.
+Benefits of using Pydantic are that you never have to write complex JSON specs 
+for function calling, and when the LLM hallucinates malformed JSON, 
+the Pydantic error message is sent back to the LLM so it can fix it!
 
 ## Example: a number guessing game
 

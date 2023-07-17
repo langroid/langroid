@@ -53,8 +53,9 @@ Highlights of Langroid's features as of July 2023:
   complex JSON specs for function calling, and when the LLM 
   hallucinates malformed JSON, the Pydantic error message is sent back to 
   the LLM so it can fix it!
-- **Agents**
-- **Tasks**
+- **Agents:** Abstractions that encapsulate LLM conversation state, 
+  vector-stores, and tools. Agents are the core abstraction in Langroid.
+- **Tasks:** Abstractions to orchestrate multi-agent collaboration.
 
 
 Don't worry if some of these terms are not clear to you. 
