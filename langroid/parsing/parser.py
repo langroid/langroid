@@ -16,6 +16,7 @@ logger.setLevel(logging.WARNING)
 class Splitter(str, Enum):
     TOKENS = "tokens"
     PARA_SENTENCE = "para_sentence"
+    SIMPLE = "simple"
 
 
 class ParsingConfig(BaseSettings):
@@ -38,6 +39,16 @@ class Parser:
     def num_tokens(self, text: str) -> int:
         tokens = self.tokenizer.encode(text)
         return len(tokens)
+
+    def split_simple(self, docs: List[Document]) -> List[Document]:
+        if len(self.config.separators) == 0:
+            raise ValueError("Must have at least one separator")
+        return [
+            Document(content=chunk.strip(), metadata=d.metadata)
+            for d in docs
+            for chunk in d.content.split(self.config.separators[0])
+            if chunk.strip() != ""
+        ]
 
     def split_para_sentence(self, docs: List[Document]) -> List[Document]:
         final_chunks = []
@@ -189,5 +200,7 @@ class Parser:
             return self.split_para_sentence(docs)
         elif self.config.splitter == Splitter.TOKENS:
             return self.split_chunk_tokens(docs)
+        elif self.config.splitter == Splitter.SIMPLE:
+            return self.split_simple(docs)
         else:
             raise ValueError(f"Unknown splitter: {self.config.splitter}")

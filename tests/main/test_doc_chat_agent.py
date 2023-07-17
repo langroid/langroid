@@ -45,8 +45,7 @@ class _TestDocChatAgentConfig(DocChatAgentConfig):
     )
 
     parsing: ParsingConfig = ParsingConfig(
-        splitter=Splitter.TOKENS,
-        chunk_size=500,
+        splitter=Splitter.SIMPLE,
         n_similar_docs=2,
     )
 
@@ -61,22 +60,31 @@ documents: List[Document] = (
     [
         Document(
             content="""
-        In the year 2050, GPT10 was released. In 2057,
-        paperclips were seen all over the world. Global
-        warming was solved in 2060. In 2061, the world
-        was taken over by paperclips. 
+        In the year 2050, GPT10 was released. 
+        
+        In 2057, paperclips were seen all over the world. 
+        
+        Global warming was solved in 2060. 
+        
+        In 2061, the world was taken over by paperclips. 
         
         In 2045, the Tour de France was still going on.
-        They were still using bicycles. There was one more ice age in 2040.
+        They were still using bicycles. 
+        
+        There was one more ice age in 2040.
         """,
             metadata=DocMetaData(source="wikipedia"),
         ),
         Document(
             content="""
         We are living in an alternate universe where Paris is the capital of England.
+        
         The capital of England used to be London. 
+        
         The capital of France used to be Paris.
+        
         Charlie Chaplin was a great comedian.
+        
         In 2050, all countries merged into Lithuania.
         """,
             metadata=DocMetaData(source="almanac"),

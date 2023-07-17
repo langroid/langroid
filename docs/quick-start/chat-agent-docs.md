@@ -31,8 +31,39 @@ specific, external documents:
 
 In all these scenarios, we want to augment the LLM with access to a specific
 set of documents, and use _retrieval augmented generation_ (RAG) to generate
-more relevant, useful responses. Langroid provides a simple, flexible mechanism 
-RAG using vector-stores.
+more relevant, useful, accurate responses. Langroid provides a simple, flexible mechanism 
+RAG using vector-stores, thus ensuring **grounded responses** constrained to 
+specific documents. Another key feature of Langroid is that retrieval lineage 
+is maintained, and responses based on documents are always accompanied by
+**source citations**.
+
+## Langroid's Special Agent: [DocChatAgent]
+
+Langroid provides a special type of agent called 
+[`DocChatAgent`](/reference/agent/special/doc_chat_agent), which is a `ChatAgent`
+augmented with a vector-store, and some special methods that enable the agent
+to ingest documents into the vector-store, and answer queries based on these documents.
+
+The `DocChatAgent` provides many ways to ingest documents into the vector-store,
+including from URLs and local file-paths and URLs. Given a collection of document paths,
+ingesting their content into the vector-store involves the following steps:
+
+1. Split the document into shards (in a configurable way)
+2. Map each shard to an embedding vector using an embedding model. The default
+  embedding model is OpenAI's `text-embedding-ada-002` model, but users can 
+  instead use `all-MiniLM-L6-v2` from HuggingFace `sentence-transformers` library.[^1]
+3. Store embedding vectors in the vector-store, along with the shard's content and 
+  any document-level meta-data (this ensures Langroid knows which document a shard
+  came from when it retrieves it augment an LLM query)
+
+[^1]: To use the HuggingFace model, you need to install Langroid with the "extras"
+option enabled.
+
+`DocChatAgent`'s `llm_response` overrides the default `ChatAgent` method, 
+but augmenting the input message with relevant shards from the vector-store,
+along with instructions to the LLM to respond based on the shards.
+
+## Example: Answer questions based on documents
 
 
 

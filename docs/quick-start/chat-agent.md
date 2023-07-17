@@ -109,7 +109,7 @@ need to be aware of these details. In fact our basic human + LLM chat loop can b
 implemented with a `Task`, in a couple of lines of code:
 ```py
 from langroid.agent.task import Task
-task = Task(agent, system_message="You are a helpful assistant")
+task = Task(agent, name="Bot", system_message="You are a helpful assistant")
 ```
 We can then run the task:
 ```py
@@ -131,7 +131,7 @@ for a working example that you can run with
 python3 examples/quick-start/chat-agent.py
 ```
 
-Here is a screenshot of the chat in action:
+Here is a screenshot of the chat in action:[^1]
 
 ![chat.png](chat.png)
 
@@ -139,6 +139,11 @@ Here is a screenshot of the chat in action:
 In the [next section](multi-agent-task-delegation.md) you will 
 learn some general principles on how to have multiple agents collaborate 
 on a task using Langroid.
+
+[^1]: In the screenshot, the numbers in parentheses indicate how many 
+    messages have accumulated in the LLM's message history. 
+    This is only provided for informational and debugging purposes, and 
+    you can ignore it for now.
 
 
 
