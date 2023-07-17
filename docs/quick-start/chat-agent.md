@@ -131,6 +131,7 @@ for a working example that you can run with
 python3 examples/quick-start/chat-agent.py
 ```
 
+
 In the [next section](multi-agent-task-delegation.md) you will 
 learn some general principles on how to have multiple agents collaborate 
 on a task using Langroid.
