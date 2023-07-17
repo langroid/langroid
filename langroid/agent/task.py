@@ -171,6 +171,8 @@ class Task:
             for t in task:
                 self.add_sub_task(t)
             return
+        assert isinstance(task, Task), f"added task must be a Task, not {type(task)}"
+
         task.parent_task = self
         self.sub_tasks.append(task)
         self.name_sub_task_map[task.name] = task

@@ -58,5 +58,5 @@ Highlights of Langroid's features as of July 2023:
 
 
 Don't worry if some of these terms are not clear to you. 
-The [Quick-start page](quick-start/index.md) and subsequent pages will help you get up to 
-speed.
+The [Getting Started Guide](quick-start/index.md) and subsequent pages 
+will help you get up to speed.
