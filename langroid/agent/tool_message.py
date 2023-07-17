@@ -79,7 +79,7 @@ class ToolMessage(ABC, BaseModel):
 
     request: str
     purpose: str
-    result: str
+    result: str = ""
 
     class Config:
         arbitrary_types_allowed = False

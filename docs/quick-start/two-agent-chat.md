@@ -2,7 +2,7 @@
 
 !!! tip "Script in `langroid-examples`"
         A full working example for the material in this section is
-        in the `multi-agent-chat.py` script in the `langroid-examples` repo:
+        in the `two-agent-chat.py` script in the `langroid-examples` repo:
         [`examples/quick-start/two-agent-chat.py`](https://github.com/langroid/langroid-examples/tree/main/examples/quick-start/two-agent-chat.py).
 
 
@@ -76,13 +76,18 @@ student_task.run()
 
 
 For a full working example, see the 
-[`multi-agent-chat.py`](https://github.com/langroid/langroid-examples/blob/main/examples/quick-start/multi-agent-chat.py)
+[`two-agent-chat.py`](https://github.com/langroid/langroid-examples/blob/main/examples/quick-start/two-agent-chat.py)
 script in the `langroid-examples` repo. You can run this using:
 ```bash
-python3 examples/quick-start/multi-agent-chat.py
+python3 examples/quick-start/two-agent-chat.py
 ```
 
+Here is an example of the conversation that results:
 
+![two-agent.png](two-agent.png)
+
+As a next step, look at how to set up a collaboration among three agents
+for a simple [numbers game](three-agent-chat-num.md).
 
 
 
