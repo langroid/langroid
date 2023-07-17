@@ -22,6 +22,7 @@ logger = logging.getLogger(__name__)
 class RecipientValidatorConfig(ChatAgentConfig):
     recipients: List[str]
     tool_recipient: str | None = None
+    name = "RecipientValidator"
 
 
 class RecipientValidatorAttachment(ChatDocAttachment):
