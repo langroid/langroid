@@ -102,6 +102,10 @@ for a complete example that you can run using
 python3 examples/quick-start/try-llm.py
 ```
 
+Here is a screenshot of what it looks like:
+
+![try-llm.png](try-llm.png)
+
 ### Next steps
 You might be thinking: 
 "_It is tedious to keep track of the LLM conversation history and set up a 

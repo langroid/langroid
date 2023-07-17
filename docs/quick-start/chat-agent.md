@@ -131,6 +131,10 @@ for a working example that you can run with
 python3 examples/quick-start/chat-agent.py
 ```
 
+Here is a screenshot of the chat in action:
+
+![chat.png](chat.png)
+
 
 In the [next section](multi-agent-task-delegation.md) you will 
 learn some general principles on how to have multiple agents collaborate 
