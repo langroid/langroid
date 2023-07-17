@@ -64,7 +64,8 @@ nav:
     - Setup: quick-start/setup.md
     - LLM interaction: quick-start/llm-interaction.md
     - Simple Chat Agent: quick-start/chat-agent.md
-    - Multi Agent Chat: quick-start/multi-agent-chat.md
+    - Two Agent Chat: quick-start/two-agent-chat.md
+    - Three Agent Chat: quick-start/three-agent-chat.md
   - Repo Overview: Overview.md
   - Resources: Resources.md
   # defer to gen-files + literate-nav

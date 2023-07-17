@@ -80,7 +80,9 @@ as follows:
 `Task.step()` is where all the action happens. It represents a "turn" in the 
 "conversation": in the case of a single `ChatAgent`, the conversation involves 
 only the three responders mentioned above, but when a `Task` has sub-tasks, 
-it can involve other tasks well (ignore this for now). `Task.step()` loops over 
+it can involve other tasks well 
+(we see this in the [next section](multi-agent-chat.md) but ignore this for now). 
+`Task.step()` loops over 
 the `ChatAgent`'s responders (plus sub-tasks if any) until it finds a _valid_ 
 response to the current `pending_message`, i.e. a "meaningful" response, 
 something other than `None` for example.
@@ -93,6 +95,13 @@ e.g. the USER a chance to respond after each non-USER response
 (to avoid infinite runs without human intervention),
 and preventing an entity from responding if it has just responded, etc.
 
+
+!!! note "`Task.run()` has the same signature as agent's responder methods."
+        The key to composability of tasks is that `Task.run()` 
+        _has exactly the same type-signature as any of the agent's responder methods_, 
+        i.e. `str | ChatDocument -> ChatDocument`. This means that a `Task` can be
+        used as a responder in another `Task`, and so on recursively. 
+        We will see this in action in the [next section](multi-agent-chat.md).
 
 The above details were only provided to give you a glimpse into how Agents and 
 Tasks work. Unless you are creating a custom orchestration mechanism, you do not
@@ -122,7 +131,10 @@ for a working example that you can run with
 python3 examples/quick-start/chat-agent.py
 ```
 
-In the [next section](multi-agent-chat.md) we will see how to have multiple agents collaborate on a task.
+In the [next section](multi-agent-task-delegation.md) you will 
+learn some general principles on how to have multiple agents collaborate 
+on a task using Langroid.
+
 
 
 
