@@ -19,8 +19,9 @@ This mechanism has become known by various names over the last few months
 such as:
 
 - **Extracting structured information** from a document: for example, we can use 
-the tool/functions mechanism to have the LLM present information from a lease document
-in a JSON structured format, to simplify further processing.
+the tool/functions mechanism to have the LLM present the key terms in a lease document
+in a JSON structured format, to simplify further processing. 
+See an [example](https://github.com/langroid/langroid-examples/blob/main/examples/docqa/chat_multi_extract.py) of this in the `langroid-examples` repo. 
 - **Specialized computation**: the LLM can request a units conversion, 
 or request scanning a large file (which wouldn't fit into its context) for a specific
 pattern.

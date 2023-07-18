@@ -86,6 +86,36 @@ Here is an example of the conversation that results:
 
 ![two-agent.png](two-agent.png)
 
+## Logs of multi-agent interactions
+
+!!! note "For advanced users"
+        This section is for advanced users who want more visibility into the
+        internals of multi-agent interactions.
+
+When running a multi-agent chat, e.g. using `task.run()`, two types of logs
+are generated:
+- plain-text logs in `logs/<task_name>.log`
+- tsv logs in `logs/<task_name>.tsv`
+
+It is important to realize that the logs show _every iteration 
+of the loop in `Task.step()`, i.e. every **attempt** at
+responding to the current pending message, even those that are not allowed_.
+The ones marked with an asterisk (*) are the ones that are considered valid
+responses for a given `step()` (which is a "turn" in the conversation).
+
+The plain text logs have color-coding ANSI chars to make them easier to read
+by doing `less <log_file>`. The format is (subject to change):
+```
+(TaskName) Responder SenderEntity (EntityName) (=> Recipient) TOOL Content
+```
+
+The structure of the `tsv` logs is similar. A great way to view these is to
+install and use the excellent `visidata` (https://www.visidata.org/) tool:
+```bash
+vd logs/<task_name>.tsv
+```
+
+## Next steps
 As a next step, look at how to set up a collaboration among three agents
 for a simple [numbers game](three-agent-chat-num.md).
 

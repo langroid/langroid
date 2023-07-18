@@ -1,9 +1,9 @@
 # Augmenting Agents with Retrieval
 
 !!! tip "Script in `langroid-examples`"
-A full working example for the material in this section is
-in the `chat-agent-docs.py` script in the `langroid-examples` repo:
-[`examples/quick-start/chat-agent-docs.py`](https://github.com/langroid/langroid-examples/tree/main/examples/quick-start/chat-agent-docs.py).
+    A full working example for the material in this section is
+    in the `chat-agent-docs.py` script in the `langroid-examples` repo:
+    [`examples/quick-start/chat-agent-docs.py`](https://github.com/langroid/langroid-examples/tree/main/examples/quick-start/chat-agent-docs.py).
 
 ## Why is this important?
 
@@ -60,17 +60,150 @@ ingesting their content into the vector-store involves the following steps:
 option enabled.
 
 `DocChatAgent`'s `llm_response` overrides the default `ChatAgent` method, 
-but augmenting the input message with relevant shards from the vector-store,
+by augmenting the input message with relevant shards from the vector-store,
 along with instructions to the LLM to respond based on the shards.
 
-## Example: Answer questions based on documents
+## Define some documents
 
+Let us see how `DocChatAgent` helps with retrieval-agumented generation (RAG).
+For clarity, rather than ingest documents from paths or URLs,
+let us just set up some simple documents in the code itself, 
+using Langroid's `Document` class:
 
+```py
+from langroid.mytypes import Document, DocMetaData
+documents =[
+    Document(
+        content="""
+            In the year 2050, GPT10 was released. 
+            
+            In 2057, paperclips were seen all over the world. 
+            
+            Global warming was solved in 2060. 
+            
+            In 2061, the world was taken over by paperclips.         
+            
+            In 2045, the Tour de France was still going on.
+            They were still using bicycles. 
+            
+            There was one more ice age in 2040.
+            """,
+        metadata=DocMetaData(source="wikipedia-2063"),
+    ),
+    Document(
+        content="""
+            We are living in an alternate universe 
+            where Germany has occupied the USA, and the capital of USA is Berlin.
+            
+            Charlie Chaplin was a great comedian.
+            In 2050, all Asian merged into Indonesia.
+            """,
+        metadata=DocMetaData(source="Almanac"),
+    ),
+]
+```
 
+There are two text documents. We will split them by double-newlines (`\n\n`),
+as we see below.
 
+## Configure the DocChatAgent and ingest documents
 
+Following the pattern in Langroid, we first set up a `DocChatAgentConfig` object
+and then instantiate a `DocChatAgent` from it.
 
+```py
+from langroid.agent.special.doc_chat_agent import DocChatAgent, DocChatAgentConfig
+from langroid.vector_store.base import VectorStoreConfig
+from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
 
+config = DocChatAgentConfig(
+  llm = OpenAIGPTConfig(
+    chat_model=OpenAIChatModel.GPT4,
+  ),
+  vecdb=VectorStoreConfig(
+    type="qdrant",
+    collection_name="quick-start-chat-agent-docs",
+    replace_collection=True, #(1)!
+  ),
+  parsing=ParsingConfig(
+    separators=["\n\n"],
+    splitter=Splitter.SIMPLE, #(2)!
+    n_similar_docs=2, #(3)!
+  )
+)
+
+agent = DocChatAgent(config)
+```
+
+1. Specifies that each time we run the code, we create a fresh collection, 
+rather than re-use the existing one with the same name.
+2. Specifies to split all text content by the first separator in the `separators` list
+3. Specifies that, for a query,
+   we want to retrieve at most 2 similar shards from the vector-store
+
+Now that the `DocChatAgent` is configured, we can ingest the documents 
+into the vector-store:
+
+```py
+
+agent.ingest_docs(documents)
+```
+
+## Setup the task and run it
+
+As before, all that remains is to set up the task and run it:
+
+```py
+from langroid.agent.task import Task
+task = Task(agent)
+task.run()
+```
+
+And that is all there is to it!
+Feel free to try out the 
+[`chat-agent-docs.py`](https://github.com/langroid/langroid-examples/blob/main/examples/quick-start/chat-agent-docs.py)
+script in the
+`langroid-examples` repository.
+
+Here is a screenshot of the output:
+
+![chat-docs.png](chat-docs.png)
+
+Notice how follow-up questions correctly take the preceding dialog into account,
+and every answer is accompanied by a source citation.
+
+## Answer questions from a set of URLs
+
+Instead of having in-code documents as above, what if you had a set of URLs
+instead -- how do you use Langroid to answer questions based on the content 
+of those URLS?
+
+`DocChatAgent` makes it very simple to do this. 
+First include the URLs in the `DocChatAgentConfig` object:
+
+```py
+config = DocChatAgentConfig(
+  doc_paths = [
+    "https://cthiriet.com/articles/scaling-laws",
+    "https://www.jasonwei.net/blog/emergence",
+  ]
+)
+```
+
+Then, call the `ingest()` method of the `DocChatAgent` object:
+
+```py
+agent.ingest()
+```
+And the rest of the code remains the same.
+
+## Next steps
+
+This Getting Started guide walked you through the core features of Langroid.
+If you want to see full working examples combining these elements, 
+have a look at the `langroid-examples` repo, in the 
+[`examples`](https://github.com/langroid/langroid-examples/tree/main/examples)
+folder.
 
 
 
