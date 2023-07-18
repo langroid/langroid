@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 class AgentConfig(BaseSettings):
     """
     General config settings for an LLM agent. This is nested, combining configs of
-    various components, in a hierarchy. Let us see how this works.
+    various components, in a hierarchy.
     """
 
     name: str = "LLM-Agent"

@@ -112,6 +112,8 @@ python3 examples/quick-start/three-agent-chat-num.py
 Here's a screenshot of what it looks like:
 ![three-agent-num.png](three-agent-num.png)
 
+## Next steps
+
 You will notice that the `processor_agent` did not have to 
 bother with specifying who should handle the current number.
 In the [next section](three-agent-chat-num-router.md) we add a twist to this game,

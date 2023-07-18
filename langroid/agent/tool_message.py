@@ -6,7 +6,7 @@ an agent. The messages could represent, for example:
 - request to run a method of the agent
 """
 
-from abc import ABC, abstractmethod
+from abc import ABC
 from random import choice
 from typing import Any, Dict, List
 
@@ -87,13 +87,12 @@ class ToolMessage(ABC, BaseModel):
         validate_assignment = True
 
     @classmethod
-    @abstractmethod
     def examples(cls) -> List["ToolMessage"]:
         """
         Examples to use in few-shot demos with JSON formatting instructions.
         Returns:
         """
-        pass
+        raise NotImplementedError("Subclass must implement this method")
 
     @classmethod
     def usage_example(cls) -> str:

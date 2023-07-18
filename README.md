@@ -10,7 +10,7 @@
 
 Langroid is an intuitive, lightweight, transparent, flexible, extensible and principled
 Python framework to harness LLMs using Multi-Agent Programming (MAP).
-We welcome contributions!
+We welcome [contributions](CONTRIBUTING.md)!
 
 Documentation: https://langroid.github.io/langroid/
 

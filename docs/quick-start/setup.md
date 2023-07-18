@@ -54,6 +54,8 @@ REDIS_PASSWORD=<your password>
 QDRANT_API_KEY=<your key>
 ```
 
+## Next steps
+
 Now you should be ready to use Langroid!
 As a next step, you may want to see how you can use Langroid to [interact 
 directly with the LLM](llm-interaction.md) (OpenAI GPT models only for now).

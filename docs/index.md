@@ -35,27 +35,41 @@ Besides Agents, Langroid also provides simple ways to directly interact with
 LLMs and vector-stores.  
 
 ## Highlights
-Highlights of Langroid's features as of July 2023:
-
-- **LLM Support**: Langroid supports OpenAI LLMs including GPT-3.5-Turbo, 
+- **Agents as first-class citizens:** The `Agent` class encapsulates LLM conversation state,
+  and optionally a vector-store and tools. Agents are a core abstraction in Langroid;
+  Agents act as _message transformers_, and by default provide 3 _responder_ methods, one corresponding to each 
+  entity: LLM, Agent, User. 
+- **Tasks:** A Task class wraps an Agent, gives the agent instructions (or roles, or goals),
+  manages iteration over an Agent's responder methods,
+  and orchestrates multi-agent interactions via hierarchical, recursive
+  task-delegation. The `Task.run()` method has the same
+  type-signature as an Agent's responder's methods, and this is key to how
+  a task of an agent can delegate to other sub-tasks: from the point of view of a Task,
+  sub-tasks are simply additional responders, to be used in a round-robin fashion
+  after the agent's own responders.
+- **Modularity, Reusabilily, Loose coupling:** The `Agent` and `Task` abstractions allow users to design
+  Agents with specific skills, wrap them in Tasks, and combine tasks in a flexible way.
+- **LLM Support**: Langroid supports OpenAI LLMs including GPT-3.5-Turbo,
   GPT-4-0613
 - **Caching of LLM prompts, responses:** Langroid uses [Redis](https://redis.com/try-free/) for caching.
-- **Vector Store Support**: [Qdrant](https://qdrant.tech/) and [Chroma](https://www.trychroma.com/) are currently supported.
-- **Tools/Plugins/Function-calling**: Langroid supports OpenAI's recently 
-  released [function calling](https://platform.openai.com/docs/guides/gpt/function-calling) 
-  feature. In addition, Langroid has its own native equivalent, which we 
-  call **tools** (also known as "plugins" in other contexts). Function 
-  calling and tools have the same developer-facing interface, implemented 
-  using [Pydantic](https://docs.pydantic.dev/latest/), 
-  which makes it very easy to define tools/functions and enable agents 
-  to use them. Benefits of using Pydantic are that you never have to write 
-  complex JSON specs for function calling, and when the LLM 
-  hallucinates malformed JSON, the Pydantic error message is sent back to 
+- **Vector-stores**: [Qdrant](https://qdrant.tech/) and [Chroma](https://www.trychroma.com/) are currently supported.
+  Vector stores allow for Retrieval-Augmented-Generaation (RAG).
+- **Grounding and source-citation:** Access to external documents via vector-stores
+  allows for grounding and source-citation.
+- **Observability, Logging, Lineage:** Langroid generates detailed logs of multi-agent interactions and
+  maintains provenance/lineage of messages, so that you can trace back
+  the origin of a message.
+- **Tools/Plugins/Function-calling**: Langroid supports OpenAI's recently
+  released [function calling](https://platform.openai.com/docs/guides/gpt/function-calling)
+  feature. In addition, Langroid has its own native equivalent, which we
+  call **tools** (also known as "plugins" in other contexts). Function
+  calling and tools have the same developer-facing interface, implemented
+  using [Pydantic](https://docs.pydantic.dev/latest/),
+  which makes it very easy to define tools/functions and enable agents
+  to use them. Benefits of using Pydantic are that you never have to write
+  complex JSON specs for function calling, and when the LLM
+  hallucinates malformed JSON, the Pydantic error message is sent back to
   the LLM so it can fix it!
-- **Agents:** Abstractions that encapsulate LLM conversation state, 
-  vector-stores, and tools. Agents are the core abstraction in Langroid.
-- **Tasks:** Abstractions to orchestrate multi-agent collaboration. 
-Langroid was designed from the start as a multi-agent programming framework.
 
 
 
