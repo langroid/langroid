@@ -31,7 +31,7 @@ logger = logging.getLogger(__name__)
 class AgentConfig(BaseSettings):
     """
     General config settings for an LLM agent. This is nested, combining configs of
-    various components, in a hierarchy.
+    various components.
     """
 
     name: str = "LLM-Agent"
@@ -43,6 +43,16 @@ class AgentConfig(BaseSettings):
 
 
 class Agent(ABC):
+    """
+    An Agent is an abstraction that encapsulates mainly two components:
+
+    - a language model (LLM)
+    - a vector store (vecdb)
+
+    plus associated components such as a parser, and variables that hold
+    information about any tool/function-calling messages that have been defined.
+    """
+
     def __init__(self, config: AgentConfig):
         self.config = config
         self.dialog: List[Tuple[str, str]] = []  # seq of LLM (prompt, response) tuples

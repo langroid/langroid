@@ -44,13 +44,16 @@ class ChatAgent(Agent):
     """
     Chat Agent interacting with external env
     (could be human, or external tools).
-    The agent (the LLM actually) is provided with a "Task Spec", and told to think in
-    small steps. It may be given a set of possible "Actions", and if so it is told to
-    emit the appropriate action in each round. Each round consists of:
-    - LLM emits an Action, or says Done
-    - LLM receives an Observation from that Action
-        (which could be a human response but not necessarily)
-    - LLM thinks
+    The agent (the LLM actually) is provided with an optional "Task Spec",
+    which is a sequence of `LLMMessage`s. These are used to initialize
+    the `task_messages` of the agent.
+    In most applications we will use a `ChatAgent` rather than a bare `Agent`.
+    The `Agent` class mainly exists to hold various common methods and attributes.
+    One difference between `ChatAgent` and `Agent` is that `ChatAgent`'s
+    `llm_response` method uses "chat mode" API (i.e. one that takes a
+    message sequence rather than a single message),
+    whereas the same method in the `Agent` class uses "completion mode" API (i.e. one
+    that takes a single message).
     """
 
     def __init__(
@@ -60,24 +63,6 @@ class ChatAgent(Agent):
         Chat-mode agent initialized with task spec as the initial message sequence
         Args:
             config: settings for the agent
-
-        !!! note
-             `self.message_history` is different from `self.dialog` (in Agent class):
-
-            - `self.message_history` is the sequence of messages sent to the LLM in
-            **chat mode** (e.g. when using OpenAI `ChatCompletion.create()`)
-                Typically we send a sequence of such messages to "prime"
-            the LLM context for some task, and we extend and re-send this sequence to
-            continue interaction. Note that consecutive messages in the sequence could
-            have different or same roles (e.g. "user", "assistant"). Each message has a
-            "dict" structure, which we call :class:`LLMMessage`.
-
-            - `self.dialog` is the sequence of `(prompt, response)` tuples produced
-            when interacting with an LLM in **completion mode**,
-            where `prompt (str)` is sent TO the LLM, and `response (str)` is received
-            FROM the LLM. Typically as an LLM conversation goes on, we collate
-            `self.dialog` into a single string, and insert it into the context part
-            of the next prompt to the LLM.
 
         """
         super().__init__(config)

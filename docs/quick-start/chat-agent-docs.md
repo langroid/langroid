@@ -198,6 +198,17 @@ agent.ingest()
 ```
 And the rest of the code remains the same.
 
+## See also
+In the `langroid-examples` repository, you can find full working examples of
+document question-answering:
+
+- [`examples/docqa/chat.py`](https://github.com/langroid/langroid-examples/blob/main/examples/docqa/chat.py)
+  an app that takes a list of URLs or document paths from a user, and answers questions on them.
+- [`examples/docqa/chat_multi.py`](https://github.com/langroid/langroid-examples/blob/main/examples/docqa/chat_multi.py)
+  a two-agent app where the `WriterAgent` is tasked with writing 5 key points about a topic, 
+  and takes the help of a `DocAgent` that answers its questions based on a given set of documents.
+
+
 ## Next steps
 
 This Getting Started guide walked you through the core features of Langroid.

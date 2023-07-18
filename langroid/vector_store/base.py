@@ -30,6 +30,10 @@ class VectorStoreConfig(BaseSettings):
 
 
 class VectorStore(ABC):
+    """
+    Abstract base class for a vector store.
+    """
+
     def __init__(self, config: VectorStoreConfig):
         self.config = config
 

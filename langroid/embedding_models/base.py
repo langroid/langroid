@@ -12,7 +12,10 @@ class EmbeddingModelsConfig(BaseSettings):
 
 
 class EmbeddingModel(ABC):
-    # factory method
+    """
+    Abstract base class for an embedding model.
+    """
+
     @classmethod
     def create(cls, config: EmbeddingModelsConfig) -> "EmbeddingModel":
         from langroid.embedding_models.models import (

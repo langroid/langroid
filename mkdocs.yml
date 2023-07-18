@@ -48,6 +48,7 @@ plugins:
         python:
           paths: [.]
           options:
+            members_order: source
             separate_signature: false
             filters: ["!^_"]
             docstring_options:

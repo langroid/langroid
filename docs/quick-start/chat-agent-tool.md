@@ -164,6 +164,18 @@ And if we run it with the `-f` flag (to switch to using OpenAI function-calling)
 
 ![chat-agent-fn.png](chat-agent-fn.png)
 
+## See also
+One of the uses of tools/function-calling is to **extract structured information** from 
+a document. In the `langroid-examples` repo, there are two examples of this: 
+
+- [`examples/extract/chat.py`](https://github.com/langroid/langroid-examples/blob/main/examples/extract/chat.py), 
+  which shows how to extract Machine Learning model quality information from a description of 
+  a solution approach on Kaggle.
+- [`examples/docqa/chat_multi_extract.py`](https://github.com/langroid/langroid-examples/blob/main/examples/docqa/chat_multi_extract.py)
+  which extracts key terms from a commercial lease document, in a nested JSON format.
+
+## Next steps
+
 In the [next section](chat-agent-docs.md) you will learn
 how to use Langroid with external documents.
 
