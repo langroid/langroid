@@ -1,8 +1,3 @@
-"""
-Class that runs the Task loop of an agent;
-maintains state while various responders (agent's own methods, or external sub-tasks)
-take turns attempting to respond to the `self.pending_message`.
-"""
 from __future__ import annotations
 
 import logging
