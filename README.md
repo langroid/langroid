@@ -64,11 +64,7 @@ Highlights of Langroid's features as of July 2023:
 
 --- 
 
-# Usage/quick-start
-These are quick teasers to give a glimpse of what you can do with Langroid
-and how your code would look. See the 
-[`Getting Started Guide`](https://langroid.github.io/langroid/getting_started/)
-for a detailed tutorial.
+# Installation and Setup
 
 ## Install `langroid` 
 Use `pip` to install `langroid` (from PyPi) to your virtual environment:
@@ -114,7 +110,25 @@ QDRANT_API_KEY=<your key>
 Currently only OpenAI models are supported. Others will be added later
 (Pull Requests welcome!).
 
-## Direct interaction with OpenAI LLM
+---
+
+# Usage Examples
+
+These are quick teasers to give a glimpse of what you can do with Langroid
+and how your code would look. See the
+[`Getting Started Guide`](https://langroid.github.io/langroid/getting_started/)
+for a detailed tutorial.
+
+- [Direct chat with LLM](#direct-llm)
+- [Simple Agent and Task](#agent-task)
+- [Three Communicating Agents](#three-agents)
+- [Agent with Tool/Function-calling](#agent-tool)
+- [Extract Structured Info with Tool/Function-calling](#agent-tool-structured)
+- [Retrieval-Augmented-Generation: Chat with Docs](#agent-rag)
+
+---
+
+## Direct interaction with OpenAI LLM <a name="direct-llm"></a>
 
 ```python
 from langroid.language_models.openai_gpt import ( 
@@ -133,7 +147,9 @@ messages = [
 response = mdl.chat(messages, max_tokens=200)
 ```
 
-## Define an agent, set up a task, and run it
+---
+
+## Define an agent, set up a task, and run it <a name="agent-task"></a>
 
 ```python
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
@@ -154,7 +170,9 @@ task = Task(agent, name="Bot")
 task.run() # ... a loop seeking response from Agent, LLM or User at each turn
 ```
 
-## Three communicating agents
+---
+
+## Three communicating agents <a name="three-agents"></a>
 
 A toy numbers game, where when given a number `n`:
 - `repeater_agent`'s LLM simply returns `n`,
@@ -210,8 +228,10 @@ and run the `repeater_task`, kicking it off with a number as input:
     repeater_task.add_sub_task([even_task, odd_task])
     repeater_task.run("3")
 ```
+---
 
-### Simple Tool/Function-calling example
+## Simple Tool/Function-calling example <a name="agent-tool"></a>
+
 Langroid leverages Pydantic to support OpenAI's
 [Function-calling API](https://platform.openai.com/docs/guides/gpt/function-calling)
 as well as its own native tools.
@@ -273,7 +293,9 @@ For a full working example see the
 [chat-agent-tool.py](https://github.com/langroid/langroid-examples/blob/main/examples/quick-start/chat-agent-tool.py)
 script in the `langroid-examples` repo.
 
-### Tool/Function-calling to extract structured information from text
+---
+
+## Tool/Function-calling to extract structured information from text <a name="agent-tool-structured"></a>
 
 Suppose you want an agent to extract 
 the key terms of a lease, from a lease document, as a nested JSON structure.
@@ -335,8 +357,9 @@ lease_extractor_agent.enable_message(LeaseMessage)
 See the [`chat_multi_extract.py`](https://github.com/langroid/langroid-examples/blob/main/examples/docqa/chat_multi_extract.py)
 script in the `langroid-examples` repo for a full working example.
 
+---
 
-### Chat with documents (file paths, URLs, etc)
+## Chat with documents (file paths, URLs, etc) <a name="agent-docs"></a>
 
 Langroid provides a specialized agent class `DocChatAgent` for this purpose.
 It incorporates document sharding, embedding, storage in a vector-DB, 
@@ -383,8 +406,9 @@ See full working scripts in the
 [`docqa`](https://github.com/langroid/langroid-examples/tree/main/examples/docqa)
 folder of the `langroid-examples` repo.
 
+---
 
-## Contributors
+# Contributors
 
 - Prasad Chalasani (IIT BTech/CS, CMU PhD/ML; Independent ML Consultant)
 - Somesh Jha (IIT BTech/CS, CMU PhD/CS; Professor of CS, U Wisc at Madison)
