@@ -9,50 +9,21 @@
 [![Docs](https://github.com/langroid/langroid/actions/workflows/mkdocs-deploy.yml/badge.svg)](https://github.com/langroid/langroid/actions/workflows/mkdocs-deploy.yml)
 
 Langroid is an intuitive, lightweight, transparent, flexible, extensible and principled
-Python framework to harness LLMs using Multi-Agent Programming (MAP).
+Python framework to harness LLMs using Multi-Agent Programming (MAP). 
 We welcome [contributions](CONTRIBUTING.md)!
+
+Langroid is the first Python LLM-application framework that was explicitly
+designed  with Agents as first-class citizens, and Multi-Agent Programming
+as the core  design principle. The framework is inspired by ideas from the
+[Actor Framework](https://en.wikipedia.org/wiki/Actor_model).
+For more details see [here](https://langroid.github.io/langroid/)
 
 Documentation: https://langroid.github.io/langroid/
 
 Usage examples: https://github.com/langroid/langroid-examples
 
-## Overview
+## Highlights
 
-### The LLM Opportunity
-
-Given the remarkable abilities of recent Large Language Models (LLMs), there
-is an unprecedented opportunity to build intelligent applications powered by
-this transformative technology. The top question for any enterprise is: how
-best to harness the power of LLMs for complex applications? For technical and
-practical reasons, building LLM-powered applications is not as simple as
-throwing a task at an LLM-system and expecting it to do it.
-
-### Langroid's Multi-Agent Programming Framework
-
-Effectively leveraging LLMs at scale requires a *principled programming
-framework*. In particular, there is often a need to maintain multiple LLM
-conversations, each instructed in different ways, and "responsible" for
-different aspects of a task.
-
-An *agent* is a convenient abstraction that encapsulates LLM conversation
-state, along with access to long-term memory (vector-stores) and tools (a.k.a functions
-or plugins). Thus a **Multi-Agent Programming** framework is a natural fit
-for complex LLM-based applications.
-
-> Langroid is the first Python LLM-application framework that was explicitly
-designed  with Agents as first-class citizens, and Multi-Agent Programming
-as the core  design principle. The framework is inspired by ideas from the
-[Actor Framework](https://en.wikipedia.org/wiki/Actor_model).
-
-Langroid allows an intuitive definition of agents, tasks and task-delegation
-among agents. There is a principled mechanism to orchestrate multi-agent
-collaboration. Agents act as message-transformers, and take turns responding to (and
-transforming) the current message. The architecture is lightweight, transparent,
-flexible, and allows other types of orchestration to be implemented.
-Besides Agents, Langroid also provides simple ways to directly interact with  
-LLMs and vector-stores.
-
-### Highlights
 Highlights of Langroid's features as of July 2023:
 
 - **Agents as first-class citizens:** The `Agent` class encapsulates LLM conversation state,
@@ -90,6 +61,8 @@ Highlights of Langroid's features as of July 2023:
   complex JSON specs for function calling, and when the LLM
   hallucinates malformed JSON, the Pydantic error message is sent back to
   the LLM so it can fix it!
+
+--- 
 
 # Usage/quick-start
 These are quick teasers to give a glimpse of what you can do with Langroid
