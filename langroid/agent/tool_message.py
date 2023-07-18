@@ -68,7 +68,8 @@ class ToolMessage(ABC, BaseModel):
     LLM. Depending on context, "tools" are also referred to as "plugins",
     or "function calls" (in the context of OpenAI LLMs).
     Essentially, they are a way for the LLM to express its intent to run a special
-    function or method. Currently we implement these as methods of the agent.
+    function or method. Currently these "tools" are handled by methods of the
+    agent.
 
     Attributes:
         request (str): name of agent method to map to.

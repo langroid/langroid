@@ -111,6 +111,10 @@ class LLMMessage(BaseModel):
 
 
 class LLMResponse(BaseModel):
+    """
+    Class representing response from LLM.
+    """
+
     message: str
     function_call: Optional[LLMFunctionCall] = None
     usage: int

@@ -28,12 +28,32 @@ Responder = Entity | Type["Task"]
 
 class Task:
     """
-    Class to loop through maintain state needed to run a __task__. A __task__ generally
-    is associated with a goal, typically represented by the initial "priming"
-    messages of the LLM. Various entities take turns responding to
-    `pending_message`, which is updated with the latest response.
-    Tasks can have sub-tasks. A task is finished when `done()` returns true, and the
-    final result is `result()`, which is returned to the "calling task" (if any).
+    A `Task` wraps an `Agent` object, and sets up the `Agent`'s goals and instructions.
+    A `Task` maintains two key variables:
+
+    - `self.pending_message`, which is the message awaiting a response, and
+    - `self.pending_sender`, which is the entity that sent the pending message.
+
+    The possible responders to `self.pending_message` are the `Agent`'s own "native"
+    responders (`agent_response`, `llm_response`, and `user_response`), and
+    the `run()` methods of any sub-tasks. All responders have the same type-signature
+    (somewhat simplified):
+    ```
+    str | ChatDocument -> ChatDocument
+    ```
+    Responders may or may not specify an intended recipient of their generated response.
+
+    The main top-level method in the `Task` class is `run()`, which repeatedly calls
+    `step()` until `done()` returns true. The `step()` represents a "turn" in the
+    conversation: this method sequentially (in round-robin fashion) calls the responders
+    until it finds one that generates a *valid* response to the `pending_message`
+    (as determined by the `valid()` method). Once a valid response is found,
+    `step()` updates the `pending_message` and `pending_sender` variables,
+    and on the next iteration, `step()` re-starts its search for a valid response
+    *from the beginning* of the list of responders (the exception being that the
+    human user always gets a chance to respond after each non-human valid response).
+    This process repeats until `done()` returns true, at which point `run()` returns
+    the value of `result()`, which is the final result of the task.
     """
 
     def __init__(
@@ -51,8 +71,10 @@ class Task:
     ):
         """
         A task to be performed by an agent.
+
         Args:
-            agent (Agent): agent to perform the task
+            agent (Agent): agent associated with the task
+            name (str): name of the task
             llm_delegate (bool): whether to delegate control to LLM; conceptually,
                 the "controlling entity" is the one "seeking" responses to its queries,
                 and has a goal it is aiming to achieve. The "controlling entity" is
@@ -73,7 +95,6 @@ class Task:
                 erase all subtask agents' `message_history`.
                 Note: erasing can reduce prompt sizes, but results in repetitive
                 sub-task delegation.
-
         """
         if isinstance(agent, ChatAgent) and len(agent.message_history) == 0 or restart:
             agent = cast(ChatAgent, agent)
