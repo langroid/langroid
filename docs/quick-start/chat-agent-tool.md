@@ -40,18 +40,18 @@ Benefits of using Pydantic are that you never have to write complex JSON specs
 for function calling, and when the LLM hallucinates malformed JSON, 
 the Pydantic error message is sent back to the LLM so it can fix it!
 
-## Example: a number guessing game
+## Example: find the smallest number in a list
 
 Again we will use a simple number-game as a toy example to quickly and succinctly
 illustrate the ideas without spending too much on token costs. 
 This is a modification of the `chat-agent.py` example we saw in an earlier
 [section](chat-agent.md). The idea of this single-agent game is that
-the agent has in "mind" a list of numbers between 1 and 100, and the LLM has to 
-find at least 4 numbers from this list. The LLM has access to a `probe` tool 
+the agent has in "mind" a list of numbers between 1 and 100, and the LLM has to
+find out the smallest number from this list. The LLM has access to a `probe` tool 
 (think of it as a function) that takes an argument `number`. When the LLM 
 "uses" this tool (i.e. outputs a message in the format required by the tool),
-the agent handles this structured message and responds with the
-nearest number in the list to the `number` argument. 
+the agent handles this structured message and responds with 
+the number of values in its list that are at most equal to the `number` argument. 
 
 ## Define the tool as a `ToolMessage`
 
@@ -72,21 +72,11 @@ class ProbeTool(ToolMessage):
         To find which number in my list is closest to the <number> you specify
         """ #(2)!
     number: int #(3)!
-
-    @classmethod
-    def examples(cls) -> List["ProbeTool"]: #(4)!
-        return [
-            cls(number=1),
-            cls(number=5),
-        ]
-
 ```
 
 1. this indicates that the agent's `probe` method will handle this tool-message
 2. The `purpose` is used behind the scenes to instruct the LLM
 3. `number` is a required argument of the tool-message (function)
-4. Not strictly needed, but useful for documentation and testing, or for 
-   generating an example tool-message if needed.
 
 ## Define the ChatAgent, with the `probe` method
 
@@ -107,19 +97,20 @@ config = ChatAgentConfig(
 1. whether to use langroid's native tools mechanism
 2. whether to use OpenAI's function-calling mechanism
 
-Next we define the Agent class itself, with the `probe` method, 
-and instantiate it:
+Next we define the Agent class itself, which we call `SpyGameAgent`,
+with a member variable to hold its "secret" list of numbers.
+We also add `probe` method (to handle the `ProbeTool` message)
+to this class, and instantiate it:
 
 ```py
 class SpyGameAgent(ChatAgent):
-  def __init__(self, config: ChatAgentConfig):
-    super().__init__(config)
-    self.numbers = [1, 3, 4, 8, 11, 15, 25, 40, 80, 90]
+    def __init__(self, config: ChatAgentConfig):
+        super().__init__(config)
+        self.numbers = [3, 4, 8, 11, 15, 25, 40, 80, 90]
 
-  def probe(self, msg: ProbeTool) -> str:
-    # return the number in self.numbers that is closest to the number
-    distances = [abs(msg.number - n) for n in self.numbers]
-    return str(self.numbers[distances.index(min(distances))])
+    def probe(self, msg: ProbeTool) -> str:
+        # return how many values in self.numbers are less or equal to msg.number
+        return str(len([n for n in self.numbers if n <= msg.number]))
 
 spy_game_agent = SpyGameAgent(config)
 ``` 
@@ -142,17 +133,17 @@ task = Task(
    spy_game_agent,
    system_message="""
             I have a list of numbers between 1 and 100. 
-            Your job is to find at least 4 of them.
+            Your job is to find the smallest of them.
             To help with this, you can give me a number and I will
-            tell you the nearest number in my list.
-            Once you have found at least 4 numbers, 
-            you can say DONE and report those numbers to me. 
+            tell you how many of my numbers are equal or less than your number.
+            Once you have found the smallest number,
+            you can say DONE and report your answer.
         """
 )
 task.run()
 ```
 Notice that in the task setup we 
-have not explicitly instructed the LLM to use the `probe` tool.
+have _not_ explicitly instructed the LLM to use the `probe` tool.
 But this is done "behind the scenes", either by the OpenAI API 
 (when we use function-calling by setting the `use_functions_api` flag to `True`),
 or by Langroid's native tools mechanism (when we set the `use_tools` flag to `True`).

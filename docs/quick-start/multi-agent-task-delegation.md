@@ -86,7 +86,7 @@ when it cannot respond to the current `pending_message` on its own.
 ## **Or Else** logic vs **And Then** logic
 It is important to keep in mind how `step()` works: As each responder 
 in the sequence is tried, when there is a valid response, the 
-next call to `step()` restarts its search at the beginning of the sequence
+next call to `step()` _restarts its search_ at the beginning of the sequence
 (with the only exception being that the human User is given a chance 
 to respond after each non-human response). 
 In this sense, the semantics of the responder sequence is similar to
@@ -104,6 +104,8 @@ main_task.add_subtask(helper_task1)
 ```
 
 1. When adding a single sub-task, we do not need to wrap it in a list.
+
+## Next steps
 
 In the [next section](two-agent-chat-num.md) we will see how this mechanism 
 can be used to set up a simple collaboration between two agents.

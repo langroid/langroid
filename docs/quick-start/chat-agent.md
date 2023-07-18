@@ -145,6 +145,7 @@ Here is a screenshot of the chat in action:[^2]
 
 ![chat.png](chat.png)
 
+## Next steps
 
 In the [next section](multi-agent-task-delegation.md) you will 
 learn some general principles on how to have multiple agents collaborate 
