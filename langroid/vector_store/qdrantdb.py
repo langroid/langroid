@@ -86,6 +86,15 @@ class QdrantDB(VectorStore):
                 self.client.delete_collection(collection_name=name)
         return n_deletes
 
+    def _list_all_collections(self) -> List[str]:
+        """
+        List all collections, including empty ones.
+        Returns:
+            List of collection names.
+        """
+        colls = list(self.client.get_collections())[0][1]
+        return [coll.name for coll in colls]
+
     def list_collections(self) -> List[str]:
         """
         Returns:
@@ -135,11 +144,14 @@ class QdrantDB(VectorStore):
             logger.setLevel(level)
 
     def add_documents(self, documents: Sequence[Document]) -> None:
+        colls = self._list_all_collections()
         if len(documents) == 0:
             return
         embedding_vecs = self.embedding_fn([doc.content for doc in documents])
         if self.config.collection_name is None:
             raise ValueError("No collection name set, cannot ingest docs")
+        if self.config.collection_name not in colls:
+            self.create_collection(self.config.collection_name, replace=True)
         ids = [d.id() for d in documents]
         # don't insert all at once, batch in chunks of b,
         # else we get an API error
