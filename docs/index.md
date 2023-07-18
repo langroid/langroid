@@ -36,7 +36,7 @@ LLMs and vector-stores.
 
 ## Highlights
 - **Agents as first-class citizens:** The `Agent` class encapsulates LLM conversation state,
-  and optionally a vector-store and tools. Agents are a core abstraction in Langroid;
+  and optionally a vector-store and tools. Agents are a core abstraction in Langroid; 
   Agents act as _message transformers_, and by default provide 3 _responder_ methods, one corresponding to each 
   entity: LLM, Agent, User. 
 - **Tasks:** A Task class wraps an Agent, gives the agent instructions (or roles, or goals),
