@@ -37,7 +37,7 @@ specific documents. Another key feature of Langroid is that retrieval lineage
 is maintained, and responses based on documents are always accompanied by
 **source citations**.
 
-## Langroid's Special Agent: [DocChatAgent]
+## `DocChatAgent` for Retrieval-Augmented Generation
 
 Langroid provides a special type of agent called 
 [`DocChatAgent`](/reference/agent/special/doc_chat_agent), which is a `ChatAgent`
@@ -56,8 +56,9 @@ ingesting their content into the vector-store involves the following steps:
   any document-level meta-data (this ensures Langroid knows which document a shard
   came from when it retrieves it augment an LLM query)
 
-[^1]: To use the HuggingFace model, you need to install Langroid with the "extras"
-option enabled.
+[^1]: To use this embedding model, install langroid via `pip install langroid[hf-embeddings]`
+Note that this will install `torch` and `sentence-transfoemers` libraries.
+
 
 `DocChatAgent`'s `llm_response` overrides the default `ChatAgent` method, 
 by augmenting the input message with relevant shards from the vector-store,
@@ -201,9 +202,9 @@ And the rest of the code remains the same.
 
 This Getting Started guide walked you through the core features of Langroid.
 If you want to see full working examples combining these elements, 
-have a look at the `langroid-examples` repo, in the 
+have a look at the 
 [`examples`](https://github.com/langroid/langroid-examples/tree/main/examples)
-folder.
+folder in the `langroid-examples` repo. 
 
 
 

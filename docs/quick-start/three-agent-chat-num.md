@@ -6,17 +6,14 @@
         [`examples/quick-start/three-agent-chat-num.py`](https://github.com/langroid/langroid-examples/tree/main/examples/quick-start/three-agent-chat-num.py).
 
 
-Let us set up a simple numbers exercise between 3 agents[^1].
-Suppose the current number is $n$. The three agents are: 
+Let us set up a simple numbers exercise between 3 agents.
+The `Processor` agent receives a list of numbers, and its goal is to 
+apply a transformation to each number $n$. However it does not know how to apply these
+transformations, and takes the help of two other agents to do so.
+Given a number $n$,
 
-- `repeater_agent`, whose job is to simply repeat the number, i.e. return $n$,
-- `even_agent`, whose job is to return $n/2$ if $n$ is even, 
-  and say `DO-NOT-KNOW` otherwise
-- `odd_agent`, whose job is to return $n*3+1$ if $n$ is odd, 
-  and say `DO-NOT-KNOW` otherwise.
-
-[^1]: This is a toy example for illustration purposes, and since it's numbers-based,
-the token-cost to the LLM API is very low.
+- The `EvenHandler` returns $n/2$ if n is even, otherwise says `DO-NOT-KNOW`.
+- The `OddHandler` returns $3n+1$ if n is odd, otherwise says `DO-NOT-KNOW`.
 
 As before we first create a common `ChatAgentConfig` to use for all agents:
 
@@ -31,30 +28,38 @@ config = ChatAgentConfig(
 )
 ```
 
-Next, set up the `repeater_agent`:
+Next, set up the `processor_agent`, along with instructions for the task:
 ```py
-repeater_agent = ChatAgent(config)
-repeater_task = Task(
-    repeater_agent,
-    name = "Repeater",
+processor_agent = ChatAgent(config)
+processor_task = Task(
+    processor_agent,
+    name = "Processor",
     system_message="""
-    Your job is to repeat whatever number you receive.
-    """,
+        You will receive a list of numbers from the user.
+        Your goal is to apply a transformation to each number.
+        However you do not know how to do this transformation,
+        so the user will help you. 
+        You can simply send the user each number FROM THE GIVEN LIST
+        and the user will return the result 
+        with the appropriate transformation applied.
+        IMPORTANT: only send one number at a time, concisely, say nothing else.
+        Once you have accomplished your goal, say DONE and show the result.
+        Start by asking the user for the list of numbers.
+        """,
     llm_delegate=True, #(1)!
     single_round=False, #(2)!
 )
 ```
 
-1. Setting the `llm_delegate` option to `True` means that the `repeater_task` is
+1. Setting the `llm_delegate` option to `True` means that the `processor_task` is
     delegated to the LLM (as opposed to the User), 
     in the sense that the LLM is the one "seeking" a response to the latest 
-    number. Specifically, this means that in the `repeater_task.step()` 
+    number. Specifically, this means that in the `processor_task.step()` 
     when a sub-task returns `DO-NOT-KNOW`,
     it is _not_ considered a valid response, and the search for a valid response 
     continues to the next sub-task if any.
-2. `single_round=False` means that the `repeater_task` should _not_ terminate after 
+2. `single_round=False` means that the `processor_task` should _not_ terminate after 
     a valid response from a responder.
-    
 
 Set up the other two agents and tasks:
 
@@ -86,12 +91,12 @@ odd_task = Task(
 
 ```
 
-Now add the `even_task` and `odd_task` as subtasks of the `repeater_task`, 
+Now add the `even_task` and `odd_task` as subtasks of the `processor_task`, 
 and then run it as before:
 
 ```python
-repeater_task.add_subtask([even_task, odd_task])
-repeater_task.run()
+processor_task.add_subtask([even_task, odd_task])
+processor_task.run()
 ```
 
 
@@ -105,10 +110,9 @@ python3 examples/quick-start/three-agent-chat-num.py
 ```
 
 Here's a screenshot of what it looks like:
-
 ![three-agent-num.png](three-agent-num.png)
 
-You will notice that the `repeater_agent` did not have to 
+You will notice that the `processor_agent` did not have to 
 bother with specifying who should handle the current number.
 In the [next section](three-agent-chat-num-router.md) we add a twist to this game,
-so that the `repeater_agent` has to decide who should handle the current number.
+so that the `processor_agent` has to decide who should handle the current number.

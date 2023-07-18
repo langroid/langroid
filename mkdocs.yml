@@ -64,7 +64,8 @@ nav:
     - Setup: quick-start/setup.md
     - LLM interaction: quick-start/llm-interaction.md
     - Simple Chat Agent: quick-start/chat-agent.md
-    - Two Agent Chat: quick-start/two-agent-chat.md
+    - Task Delegation: quick-start/multi-agent-task-delegation.md
+    - Two Agent Chat: quick-start/two-agent-chat-num.md
     - Three Agent Chat: quick-start/three-agent-chat-num.md
     - Three Agents, with Routing: quick-start/three-agent-chat-num-router.md
     - Agent with Tools/Functions: quick-start/chat-agent-tool.md
