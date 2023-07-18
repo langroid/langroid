@@ -24,7 +24,7 @@ str | ChatDocument -> ChatDocument
 ```
 where `ChatDocument` is a class that wraps a message content (text) and its metadata.
 There are three responder methods in `ChatAgent`, one corresponding to each 
-[responding entity](/reference/mytypes) (LLM, USER, or AGENT):
+[responding entity](/reference/mytypes) (`LLM`, `USER`, or `AGENT`):
 
 - `llm_response`: returns the LLM response to the input message.
   (The input message is added to the LLM history, and so is the subsequent response.)
@@ -48,12 +48,19 @@ agent = ChatAgent(config)
 1. This agent only has an LLM, and no vector-store. Examples of agents with
    vector-stores will be shown later.
 
-We can now use the agent's responder methods:
+We can now use the agent's responder methods, for example:
 ```py
 response = agent.llm_response("What is 2 + 4?")
 if response is not None:
     print(response.content)
+response = agent.user_response("add 3 to this")
+...
 ```
+The `ChatAgent` conveniently accumulates message history so you don't have to,
+as you did in the [previous section](llm-interaction.md) with direct LLM usage.
+However to create an interative loop involving the human user, you still 
+need to write your own. The `Task` abstraction frees you from this, as we see
+below.
 
 ## Task: orchestrator for agents
 In order to do anything useful with a `ChatAgent`, we need to have a way to 
@@ -66,7 +73,8 @@ This is one of the simplest possible loops, but in more complex applications,
 we need a general way to orchestrate the agent's responder methods.
 
 The [`Task`](/reference/agent/task) class is an abstraction around a 
-`ChatAgent`, responsible for orchestrating the agent's responder methods.
+`ChatAgent`, responsible for iterating over the agent's responder methods,
+as well as orchestrating delegation and hand-offs among multiple tasks.
 A `Task` is initialized with a specific `ChatAgent` instance, and some 
 optional arguments, including an initial message to "kick-off" the agent.
 The `Task.run()` method is the main entry point for `Task` objects, and works 
@@ -84,17 +92,19 @@ it can involve other tasks well
 (we see this in the [next section](multi-agent-chat.md) but ignore this for now). 
 `Task.step()` loops over 
 the `ChatAgent`'s responders (plus sub-tasks if any) until it finds a _valid_ 
-response to the current `pending_message`, i.e. a "meaningful" response, 
+response[^1] to the current `pending_message`, i.e. a "meaningful" response, 
 something other than `None` for example.
 Once `Task.step()` finds a valid response, it updates the `pending_message` 
 with this response,
 and the next invocation of `Task.step()` will search for a valid response to this 
 updated message, and so on.
 `Task.step()` incorporates mechanisms to ensure proper handling of messages,
-e.g. the USER a chance to respond after each non-USER response
+e.g. the USER gets a chance to respond after each non-USER response
 (to avoid infinite runs without human intervention),
 and preventing an entity from responding if it has just responded, etc.
 
+[^1]: To customize a Task's behavior you can subclass it and 
+override methods like `valid()`, `done()`, `result()`, or even `step()`.
 
 !!! note "`Task.run()` has the same signature as agent's responder methods."
         The key to composability of tasks is that `Task.run()` 
@@ -131,7 +141,7 @@ for a working example that you can run with
 python3 examples/quick-start/chat-agent.py
 ```
 
-Here is a screenshot of the chat in action:[^1]
+Here is a screenshot of the chat in action:[^2]
 
 ![chat.png](chat.png)
 
@@ -140,7 +150,7 @@ In the [next section](multi-agent-task-delegation.md) you will
 learn some general principles on how to have multiple agents collaborate 
 on a task using Langroid.
 
-[^1]: In the screenshot, the numbers in parentheses indicate how many 
+[^2]: In the screenshot, the numbers in parentheses indicate how many 
     messages have accumulated in the LLM's message history. 
     This is only provided for informational and debugging purposes, and 
     you can ignore it for now.

@@ -83,6 +83,28 @@ One way to think of this type of task delegation is that
 `main_task()` "fails-over" to `helper_task1()` and `helper_task2()`
 when it cannot respond to the current `pending_message` on its own.
 
-In the [next section](two-agent-chat.md) we will see how this mechanism 
+## **Or Else** logic vs **And Then** logic
+It is important to keep in mind how `step()` works: As each responder 
+in the sequence is tried, when there is a valid response, the 
+next call to `step()` restarts its search at the beginning of the sequence
+(with the only exception being that the human User is given a chance 
+to respond after each non-human response). 
+In this sense, the semantics of the responder sequence is similar to
+**OR Else** logic, as opposed to **AND Then** logic.
+
+If we want to have a sequence of sub-tasks that is more like
+**AND Then** logic, we can achieve this by recursively adding subtasks.
+In the above example suppose we wanted the `main_task` 
+to trigger `helper_task1` and `helper_task2` in sequence,
+then we could set it up like this:
+
+```py
+helper_task1.add_subtask(helper_task2) #(1)!
+main_task.add_subtask(helper_task1)
+```
+
+1. When adding a single sub-task, we do not need to wrap it in a list.
+
+In the [next section](two-agent-chat-num.md) we will see how this mechanism 
 can be used to set up a simple collaboration between two agents.
 
