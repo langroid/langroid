@@ -14,14 +14,14 @@ The `langroid-examples` repo already contains a `pyproject.toml` file so that yo
 use `Poetry` to manage your virtual environment and dependencies. 
 For example you can do 
 ```bash
-poetry install
+poetry install # installs latest version of langroid
 ```
-Alternatively, use `pip` to install `langroid`:
+Alternatively, use `pip` to install `langroid` into your virtual environment:
 ```bash
 pip install langroid
 ```
 
-!!! tip "Work in a nice terminal, such as Iterm2"
+!!! tip "Work in a nice terminal, such as Iterm2, rather than a notebook"
     All of the examples we will go through are command-line applications.
     For the best experience we recommend you work in a nice terminal that supports 
     colored outputs, such as [Iterm2](https://iterm2.com/).    
@@ -32,8 +32,7 @@ Langroid uses a few APIs, and you need to set up tokens/keys for these APIs.
 At the very least you need an OpenAI API key. 
 The need for other keys is indicated below.
 
-- **OpenAI API** key (required): If you don't have one, see [this OpenAI Page]
-  (https://help.openai.com/en/collections/3675940-getting-started-with-openai-api).
+- **OpenAI API** key (required): If you don't have one, see [this OpenAI Page](https://help.openai.com/en/collections/3675940-getting-started-with-openai-api).
 - **Qdrant** Vector Store API Key (required for apps that need retrieval from 
   documents): Sign up for a free 1GB account at [Qdrant cloud](https://cloud.qdrant.io)
   This capacity will suffice for quite a while (even after 3 months of 

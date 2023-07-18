@@ -43,6 +43,7 @@ of alternating messages from the LLM ("Assistant") and the user.
 Langroid provides an abstraction 
 [`LLMMessage`](langroid.language_models.base.LLMMessage) to construct messages, e.g.
 ```py
+from langroid.language_models.base import LLMMessage, Role
 msg = LLMMessage(
         content="what is the capital of Bangladesh?",
         role=Role.USER,

@@ -31,7 +31,6 @@ among agents. There is a principled mechanism to orchestrate multi-agent
 collaboration. Agents act as message-transformers, and take turns responding to (and
 transforming) the current message. The architecture is lightweight, transparent, 
 flexible, and allows other types of orchestration to be implemented.
-
 Besides Agents, Langroid also provides simple ways to directly interact with  
 LLMs and vector-stores.  
 
@@ -55,7 +54,9 @@ Highlights of Langroid's features as of July 2023:
   the LLM so it can fix it!
 - **Agents:** Abstractions that encapsulate LLM conversation state, 
   vector-stores, and tools. Agents are the core abstraction in Langroid.
-- **Tasks:** Abstractions to orchestrate multi-agent collaboration.
+- **Tasks:** Abstractions to orchestrate multi-agent collaboration. 
+Langroid was designed from the start as a multi-agent programming framework.
+
 
 
 Don't worry if some of these terms are not clear to you. 
