@@ -425,6 +425,7 @@ class PDFChatAgent(DocChatAgent):
     """
     Agent for chatting with a collection of PDF files.
     """
+
     def __init__(
         self,
         config: DocChatAgent,
@@ -439,7 +440,7 @@ class PDFChatAgent(DocChatAgent):
 
     def get_pdf_doc_url(self, url: str) -> Document:
         """
-        Args: 
+        Args:
             url (str): contains the URL to the PDF file
         Returns:
             a `Document` object containing the content of the pdf file,
@@ -449,13 +450,13 @@ class PDFChatAgent(DocChatAgent):
         response.raise_for_status()
         pdf_file = BytesIO(response.content)
         # Now we treat the PDF as a path
-        return self.get_pdf_doc_path(pdf_file, url)     
-    
+        return self.get_pdf_doc_path(pdf_file, url)
+
     def get_pdf_doc_path(self, path: str, url: None | str = None) -> Document:
         """
-        Args: 
+        Args:
             path (str): full path to the PDF file
-            url (str| None): contains the URL of the PDF file if the processed 
+            url (str| None): contains the URL of the PDF file if the processed
             PDF file obtained via URL
         Returns:
             a `Document` object containing the content of the pdf file,
