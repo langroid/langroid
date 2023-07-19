@@ -24,7 +24,19 @@ Documentation: https://langroid.github.io/langroid/
 
 Usage examples: https://github.com/langroid/langroid-examples
 
-Community: Join us on [Discord](https://discord.gg/g3nAXCbZ)!
+Community: Join us on [Discord!](https://discord.gg/g3nAXCbZ)
+
+## :rocket: Demo
+
+A `LeaseExtractor` agent is tasked with extracting structured information
+from a commercial lease document. It generates questions that are 
+answerred by a `DocAgent` using Retrieval from a vector-database
+(into which the lease has been sharded + embedded).
+When it has all the information it needs, the `LeaseExtractor` agent
+presents the information in a structured format using a Tool/Function-calling.
+
+![Demo](lease-extractor-demo.gif)
+
 
 ## :zap: Highlights
 
@@ -175,11 +187,10 @@ config = ChatAgentConfig(
 )
 agent = ChatAgent(config)
 # get response from agent's LLM, and put this in an interactive loop...
-answer = agent.llm_response("What is the capital of Ontario?")
-agent.clear_history(0)
-# ... OR instead, set up a task (which has a built-in loop) and run it
+# answer = agent.llm_response("What is the capital of Ontario?")
+  # ... OR instead, set up a task (which has a built-in loop) and run it
 task = Task(agent, name="Bot") 
-task.run() # ... a loop seeking response from Agent, LLM or User at each turn
+task.run() # ... a loop seeking response from LLM or User at each turn
 ```
 
 ---
@@ -250,7 +261,10 @@ repeater_task.run("3")
 
 Langroid leverages Pydantic to support OpenAI's
 [Function-calling API](https://platform.openai.com/docs/guides/gpt/function-calling)
-as well as its own native tools.
+as well as its own native tools. The benefits are that you don't have to write
+any JSON to specify the schema, and also if the LLM hallucinates a malformed
+tool syntax, Langroid sends the Pydantic validation error (suitiably sanitized) 
+to the LLM so it can fix it!
 
 Simple example: Say the agent has a secret list of numbers, 
 and we want the LLM to find the smallest number in the list. 
