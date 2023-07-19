@@ -1,5 +1,7 @@
 site_name: "langroid"
-repo_url:
+repo_name: langroid/langroid
+repo_url: https://github.com/langroid/langroid
+
 edit_uri: ""
 extra_css:
   - stylesheets/extra.css
