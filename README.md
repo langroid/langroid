@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="docs/assets/langroid-card-cobalt-blue.png" alt="Logo" 
+  <img src="docs/assets/langroid-card-ossem-rust.png" alt="Logo" 
         width="400" align="center">
 </div>
 
