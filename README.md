@@ -1,13 +1,14 @@
 <div style="display: flex; align-items: center;">
   <img src="docs/assets/orange-logo.png" alt="Logo" 
         width="80" height="80"align="left">
-  <h1>Langroid: Supercharge LLM Application Development with Multi-Agent Programming</h1>
+  <h1>Langroid: Harness LLMs with Multi-Agent Programming</h1>
 </div>
 
 [![Pytest](https://github.com/langroid/langroid/actions/workflows/pytest.yml/badge.svg)](https://github.com/langroid/langroid/actions/workflows/pytest.yml)
 [![Lint](https://github.com/langroid/langroid/actions/workflows/validate.yml/badge.svg)](https://github.com/langroid/langroid/actions/workflows/validate.yml)
 [![Docs](https://github.com/langroid/langroid/actions/workflows/mkdocs-deploy.yml/badge.svg)](https://github.com/langroid/langroid/actions/workflows/mkdocs-deploy.yml)
 [![Static Badge](https://img.shields.io/badge/Documentation-blue?link=https%3A%2F%2Flangroid.github.io%2Flangroid%2F&link=https%3A%2F%2Flangroid.github.io%2Flangroid%2F)](https://langroid.github.io/langroid)
+[![Static Badge](https://img.shields.io/badge/Discord-Orange?link=https%3A%2F%2Fdiscord.gg%2Fg3nAXCbZ&link=https%3A%2F%2Fdiscord.gg%2Fg3nAXCbZ)](https://discord.gg/g3nAXCbZ)
 
 Langroid is an intuitive, lightweight, transparent, flexible, extensible and principled
 Python framework to build LLM-powered applications using Multi-Agent Programming. 
@@ -22,6 +23,8 @@ For more details see [here](https://langroid.github.io/langroid/).
 Documentation: https://langroid.github.io/langroid/
 
 Usage examples: https://github.com/langroid/langroid-examples
+
+Community: Join us on [Discord](https://discord.gg/g3nAXCbZ)!
 
 ## :zap: Highlights
 
@@ -112,7 +115,7 @@ Currently only OpenAI models are supported. Others will be added later
 
 ---
 
-# Usage Examples
+# :tada: Usage Examples
 
 These are quick teasers to give a glimpse of what you can do with Langroid
 and how your code would look. 
