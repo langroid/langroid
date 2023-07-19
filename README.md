@@ -142,7 +142,7 @@ mdl = OpenAIGPT(cfg)
 messages = [
   LLMMessage(content="You are a helpful assistant",  role=Role.SYSTEM), 
   LLMMessage(content="What is the capital of Ontario?",  role=Role.USER),
-],
+]
 response = mdl.chat(messages, max_tokens=200)
 ```
 
