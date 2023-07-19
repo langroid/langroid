@@ -28,8 +28,7 @@ Highlights of Langroid's features as of July 2023:
 
 - **Agents as first-class citizens:** The `Agent` class encapsulates LLM conversation state,
   and optionally a vector-store and tools. Agents are a core abstraction in Langroid;
-  Agents act as _message transformers_, and by default provide 3 _responder_ methods,  
-  one corresponding to each entity: LLM, Agent, User.
+  Agents act as _message transformers_, and by default provide 3 _responder_ methods, one corresponding to each entity: LLM, Agent, User.
 - **Tasks:** A Task class wraps an Agent, and gives the agent instructions (or roles, or goals), 
   manages iteration over an Agent's responder methods, 
   and orchestrates multi-agent interactions via hierarchical, recursive
@@ -116,7 +115,7 @@ Currently only OpenAI models are supported. Others will be added later
 
 These are quick teasers to give a glimpse of what you can do with Langroid
 and how your code would look. See the
-[`Getting Started Guide`](https://langroid.github.io/langroid/getting_started/)
+[`Getting Started Guide`](https://langroid.github.io/langroid/quick_start/)
 for a detailed tutorial.
 
 - [Direct chat with LLM](#direct-llm)
