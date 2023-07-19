@@ -114,9 +114,16 @@ Currently only OpenAI models are supported. Others will be added later
 # Usage Examples
 
 These are quick teasers to give a glimpse of what you can do with Langroid
-and how your code would look. See the
+and how your code would look. 
+
+:warning: The code snippets below are intended to give a flavor of the code
+and they are **not** complete runnable examples! For that we encourage you to 
+consult the [`langroid-examples`](https://github.com/langroid/langroid-examples) 
+repository.
+
+Also see the
 [`Getting Started Guide`](https://langroid.github.io/langroid/quick-start/)
-for a detailed tutorial.
+for a detailed tutorial. 
 
 - [Direct chat with LLM](#direct-llm)
 - [Simple Agent and Task](#agent-task)
