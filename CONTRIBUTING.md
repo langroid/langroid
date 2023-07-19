@@ -65,7 +65,7 @@ To ensure this, please adhere to the following guidelines when contributing:
 
 1. **Type-Annotate Code:** Add type annotations to function signatures and
    variables to make the code more self-explanatory and to help catch potential
-   issues early. For example, `def greet(name: str) -> str:`. We use `pypy` for
+   issues early. For example, `def greet(name: str) -> str:`. We use [`mypy`](https://mypy.readthedocs.io/en/stable/) for
    type-checking, so please ensure your code passes `mypy` checks. 
 
 2. **Google-Style Docstrings:** Use Google-style docstrings to clearly describe
@@ -105,7 +105,7 @@ cooperation!
 To check for issues locally, run `make check`, it runs linters `black`, `ruff`,
 `flake8` and type-checker `mypy`. It also installs a pre-commit hook, 
 so that commits are blocked if there are style/type issues.
-Issues flagged by `black` or `ruff` can usually by running `make lint`. 
+Issues flagged by `black` or `ruff` can usually be fixed by running `make lint`. 
 `flake8` may warn about some issues; read about each one and fix those
   issues.
 
