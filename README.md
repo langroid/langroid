@@ -1,15 +1,16 @@
 <div style="display: flex; align-items: center;">
   <img src="docs/assets/orange-logo.png" alt="Logo" 
         width="80" height="80"align="left">
-  <h1>Langroid: Harness LLMs with Multi-Agent Programming</h1>
+  <h1>Langroid: Supercharge LLM Application Development with Multi-Agent Programming</h1>
 </div>
 
 [![Pytest](https://github.com/langroid/langroid/actions/workflows/pytest.yml/badge.svg)](https://github.com/langroid/langroid/actions/workflows/pytest.yml)
 [![Lint](https://github.com/langroid/langroid/actions/workflows/validate.yml/badge.svg)](https://github.com/langroid/langroid/actions/workflows/validate.yml)
 [![Docs](https://github.com/langroid/langroid/actions/workflows/mkdocs-deploy.yml/badge.svg)](https://github.com/langroid/langroid/actions/workflows/mkdocs-deploy.yml)
+[![Static Badge](https://img.shields.io/badge/Documentation-blue?link=https%3A%2F%2Flangroid.github.io%2Flangroid%2F&link=https%3A%2F%2Flangroid.github.io%2Flangroid%2F)](https://langroid.github.io/langroid)
 
 Langroid is an intuitive, lightweight, transparent, flexible, extensible and principled
-Python framework to harness LLMs using Multi-Agent Programming (MAP). 
+Python framework to build LLM-powered applications using Multi-Agent Programming. 
 We welcome [contributions](CONTRIBUTING.md)!
 
 Langroid is the first Python LLM-application framework that was explicitly
@@ -22,7 +23,7 @@ Documentation: https://langroid.github.io/langroid/
 
 Usage examples: https://github.com/langroid/langroid-examples
 
-## Highlights
+## :zap: Highlights
 
 Highlights of Langroid's features as of July 2023:
 
@@ -63,7 +64,7 @@ Highlights of Langroid's features as of July 2023:
 
 --- 
 
-# Installation and Setup
+# :gear: Installation and Setup
 
 ## Install `langroid` 
 Use `pip` to install `langroid` (from PyPi) to your virtual environment:
@@ -331,7 +332,7 @@ class Lease(BaseModel):
 ```
 
 Then define the `LeaseMessage` tool as a subclass of Langroid's `ToolMessage`.
-Note the tool as a required argument `terms` of type `Lease`:
+Note the tool has a required argument `terms` of type `Lease`:
 
 ```python
 class LeaseMessage(ToolMessage):
