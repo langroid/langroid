@@ -380,8 +380,13 @@ class DocChatAgent(ChatAgent):
         if self.parser is None:
             raise ValueError("No parser defined")
         tot_tokens = self.parser.num_tokens(full_text)
+        model = (
+            self.config.llm.chat_model
+            if self.config.llm.use_chat_for_completion
+            else self.config.llm.completion_model
+        )
         MAX_INPUT_TOKENS = (
-            self.config.llm.context_length[self.config.llm.completion_model]
+            self.config.llm.context_length[model]
             - self.config.llm.max_output_tokens
             - 100
         )
