@@ -1,7 +1,6 @@
-<div style="display: flex; align-items: center;">
-  <img src="docs/assets/orange-logo.png" alt="Logo" 
-        width="80" height="80"align="left">
-  <h1>Langroid: Harness LLMs with Multi-Agent Programming</h1>
+<div align="center">
+  <img src="docs/assets/langroid-card-cobalt-blue.png" alt="Logo" 
+        width="400" align="center">
 </div>
 
 <div align="center">
