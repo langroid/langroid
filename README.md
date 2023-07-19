@@ -16,7 +16,7 @@ Langroid is the first Python LLM-application framework that was explicitly
 designed  with Agents as first-class citizens, and Multi-Agent Programming
 as the core  design principle. The framework is inspired by ideas from the
 [Actor Framework](https://en.wikipedia.org/wiki/Actor_model).
-For more details see [here](https://langroid.github.io/langroid/)
+For more details see [here](https://langroid.github.io/langroid/).
 
 Documentation: https://langroid.github.io/langroid/
 
@@ -43,7 +43,7 @@ Highlights of Langroid's features as of July 2023:
   GPT-4-0613
 - **Caching of LLM prompts, responses:** Langroid uses [Redis](https://redis.com/try-free/) for caching.
 - **Vector-stores**: [Qdrant](https://qdrant.tech/) and [Chroma](https://www.trychroma.com/) are currently supported.
-  Vector stores allow for Retrieval-Augmented-Generaation (RAG).
+  Vector stores allow for Retrieval-Augmented-Generation (RAG).
 - **Grounding and source-citation:** Access to external documents via vector-stores 
    allows for grounding and source-citation.
 - **Observability, Logging, Lineage:** Langroid generates detailed logs of multi-agent interactions and
@@ -84,7 +84,7 @@ Copy the `.env-template` file to a new file `.env` and
 insert these secrets:
 - **OpenAI API** key (required): If you don't have one, see [this OpenAI Page](https://help.openai.com/en/collections/3675940-getting-started-with-openai-api).
 - **Qdrant** Vector Store API Key (required for apps that need retrieval from
-  documents): Sign up for a free 1GB account at [Qdrant cloud](https://cloud.qdrant.io)
+  documents): Sign up for a free 1GB account at [Qdrant cloud](https://cloud.qdrant.io).
   Alternatively [Chroma](https://docs.trychroma.com/) is also currently supported. 
   We use the local-storage version of Chroma, so there is no need for an API key.
 - **GitHub** Personal Access Token (required for apps that need to analyze git
