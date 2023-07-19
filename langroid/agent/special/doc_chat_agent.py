@@ -324,7 +324,7 @@ class DocChatAgent(ChatAgent):
 
         passages = self.original_docs
 
-        # if original docs not too long, no need to look for relevant parts.
+        # if original docs too long, no need to look for relevant parts.
         if (
             passages is None
             or self.original_docs_length > self.config.max_context_tokens

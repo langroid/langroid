@@ -89,7 +89,7 @@ as follows:
 "conversation": in the case of a single `ChatAgent`, the conversation involves 
 only the three responders mentioned above, but when a `Task` has sub-tasks, 
 it can involve other tasks well 
-(we see this in the [next section](multi-agent-chat.md) but ignore this for now). 
+(we see this in the [a later section](two-agent-chat-num.md) but ignore this for now). 
 `Task.step()` loops over 
 the `ChatAgent`'s responders (plus sub-tasks if any) until it finds a _valid_ 
 response[^1] to the current `pending_message`, i.e. a "meaningful" response, 
@@ -111,7 +111,7 @@ override methods like `valid()`, `done()`, `result()`, or even `step()`.
         _has exactly the same type-signature as any of the agent's responder methods_, 
         i.e. `str | ChatDocument -> ChatDocument`. This means that a `Task` can be
         used as a responder in another `Task`, and so on recursively. 
-        We will see this in action in the [next section](multi-agent-chat.md).
+        We will see this in action in the [Two Agent Chat section](two-agent-agent-chat-num.md).
 
 The above details were only provided to give you a glimpse into how Agents and 
 Tasks work. Unless you are creating a custom orchestration mechanism, you do not
