@@ -151,6 +151,7 @@ messages = [
   LLMMessage(content="What is the capital of Ontario?",  role=Role.USER),
 ]
 response = mdl.chat(messages, max_tokens=200)
+print(response.message)
 ```
 
 ---
@@ -190,6 +191,9 @@ First define the 3 agents, and set up their tasks with instructions:
 
 ```python
 from langroid.utils.constants import NO_ANSWER
+from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
+from langroid.agent.task import Task
+from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
 config = ChatAgentConfig(
     llm = OpenAIGPTConfig(
         chat_model=OpenAIChatModel.GPT4,
