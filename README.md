@@ -13,7 +13,7 @@
 
 </div>
 
-Langroid is an intuitive, lightweight, transparent, flexible, extensible and principled
+**Langroid** is an intuitive, lightweight, transparent, flexible, extensible and principled
 Python framework to build LLM-powered applications using Multi-Agent Programming. 
 We welcome [contributions](CONTRIBUTING.md)!
 
