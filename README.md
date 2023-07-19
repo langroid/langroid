@@ -115,7 +115,7 @@ Currently only OpenAI models are supported. Others will be added later
 
 These are quick teasers to give a glimpse of what you can do with Langroid
 and how your code would look. See the
-[`Getting Started Guide`](https://langroid.github.io/langroid/quick_start/)
+[`Getting Started Guide`](https://langroid.github.io/langroid/quick-start/)
 for a detailed tutorial.
 
 - [Direct chat with LLM](#direct-llm)
