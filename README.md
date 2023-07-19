@@ -171,7 +171,8 @@ config = ChatAgentConfig(
 agent = ChatAgent(config)
 # get response from agent's LLM, and put this in an interactive loop...
 answer = agent.llm_response("What is the capital of Ontario?")
-# ... or set up a task (which has a built-in loop) and run it
+agent.clear_history(0)
+# ... OR instead, set up a task (which has a built-in loop) and run it
 task = Task(agent, name="Bot") 
 task.run() # ... a loop seeking response from Agent, LLM or User at each turn
 ```
@@ -188,51 +189,52 @@ A toy numbers game, where when given a number `n`:
 First define the 3 agents, and set up their tasks with instructions:
 
 ```python
-    config = ChatAgentConfig(
-        llm = OpenAIGPTConfig(
-            chat_model=OpenAIChatModel.GPT4,
-        ),
-        vecdb = None,
-    )
-    repeater_agent = ChatAgent(config)
-    repeater_task = Task(
-        repeater_agent,
-        name = "Repeater",
-        system_message="""
-        Your job is to repeat whatever number you receive.
-        """,
-        llm_delegate=True, # LLM takes charge of task
-        single_round=False, 
-    )
-    even_agent = ChatAgent(config)
-    even_task = Task(
-        even_agent,
-        name = "EvenHandler",
-        system_message=f"""
-        You will be given a number. 
-        If it is even, divide by 2 and say the result, nothing else.
-        If it is odd, say {NO_ANSWER}
-        """,
-        single_round=True,  # task done after 1 step() with valid response
-    )
+from langroid.utils.constants import NO_ANSWER
+config = ChatAgentConfig(
+    llm = OpenAIGPTConfig(
+        chat_model=OpenAIChatModel.GPT4,
+    ),
+    vecdb = None,
+)
+repeater_agent = ChatAgent(config)
+repeater_task = Task(
+    repeater_agent,
+    name = "Repeater",
+    system_message="""
+    Your job is to repeat whatever number you receive.
+    """,
+    llm_delegate=True, # LLM takes charge of task
+    single_round=False, 
+)
+even_agent = ChatAgent(config)
+even_task = Task(
+    even_agent,
+    name = "EvenHandler",
+    system_message=f"""
+    You will be given a number. 
+    If it is even, divide by 2 and say the result, nothing else.
+    If it is odd, say {NO_ANSWER}
+    """,
+    single_round=True,  # task done after 1 step() with valid response
+)
 
-    odd_agent = ChatAgent(config)
-    odd_task = Task(
-        odd_agent,
-        name = "OddHandler",
-        system_message=f"""
-        You will be given a number n. 
-        If it is odd, return (n*3+1), say nothing else. 
-        If it is even, say {NO_ANSWER}
-        """,
-        single_round=True,  # task done after 1 step() with valid response
-    )
+odd_agent = ChatAgent(config)
+odd_task = Task(
+    odd_agent,
+    name = "OddHandler",
+    system_message=f"""
+    You will be given a number n. 
+    If it is odd, return (n*3+1), say nothing else. 
+    If it is even, say {NO_ANSWER}
+    """,
+    single_round=True,  # task done after 1 step() with valid response
+)
 ```
 Then add the `even_task` and `odd_task` as sub-tasks of `repeater_task`, 
 and run the `repeater_task`, kicking it off with a number as input:
 ```python
-    repeater_task.add_sub_task([even_task, odd_task])
-    repeater_task.run("3")
+repeater_task.add_sub_task([even_task, odd_task])
+repeater_task.run("3")
 ```
 ---
 
