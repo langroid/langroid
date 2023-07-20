@@ -41,19 +41,19 @@ This Multi-Agent paradigm is inspired by the
 
 
 # :rocket: Demo
-
-The task here is to extract structured information from a commercial lease document. 
+Suppose you want to extract structured information about the key terms 
+of a commercial lease document. You can easily do this with Langroid using a two-agent system,
+as we show in the [langroid-examples](https://github.com/langroid/langroid-examples/blob/main/examples/docqa/chat_multi_extract.py) repo.
 The demo showcases several features of Langroid:
-- Mult-agent collaboration: `LeaseExtractor` is in charge of the task, and generates questions 
+- Mult-agent collaboration: `LeaseExtractor` is in charge of the task, and its LLM generates questions 
 to be answered by the `DocAgent`.
-- Retrieval augmented question-answering: `DocAgent` uses retrieval from a vector-store to 
+- Retrieval augmented question-answering: `DocAgent` LLM uses retrieval from a vector-store to 
 answer the `LeaseExtractor`'s questions.
 - Function-calling (also known as tool/plugin): When it has all the information it 
-needs, the `LeaseExtractor` agent's LLM presents the information in a structured 
+needs, the `LeaseExtractor` LLM presents the information in a structured 
 format using a Function-call. 
 
-You can run this script from the 
-[langroid-examples](https://github.com/langroid/langroid-examples/blob/main/examples/docqa/chat_multi_extract.py) repo.
+Here is what it looks like in action:
 
 ![Demo](docs/assets/demos/lease-extractor-demo.gif)
 
@@ -458,7 +458,8 @@ See full working scripts in the
 [`docqa`](https://github.com/langroid/langroid-examples/tree/main/examples/docqa)
 folder of the `langroid-examples` repo.
 
----
+# :heart: Thank you to our supporters!
+
 [![Stargazers repo roster for @langroid/langroid](https://reporoster.com/stars/langroid/langroid)](https://github.com/langroid/langroid/stargazers)
 
 # Contributors
