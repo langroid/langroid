@@ -41,19 +41,19 @@ This Multi-Agent paradigm is inspired by the
 
 
 # :rocket: Demo
-
-The task here is to extract structured information from a commercial lease document. 
+Suppose you want to extract structured information about the key terms 
+of a commercial lease document. You can easily do this with Langroid using a two-agent system,
+as we show in the [langroid-examples](https://github.com/langroid/langroid-examples/blob/main/examples/docqa/chat_multi_extract.py) repo.
 The demo showcases several features of Langroid:
-- Mult-agent collaboration: `LeaseExtractor` is in charge of the task, and generates questions 
+- Mult-agent collaboration: `LeaseExtractor` is in charge of the task, and its LLM (GPT4) generates questions 
 to be answered by the `DocAgent`.
-- Retrieval augmented question-answering: `DocAgent` uses retrieval from a vector-store to 
+- Retrieval augmented question-answering: `DocAgent` LLM (GPT4) uses retrieval from a vector-store to 
 answer the `LeaseExtractor`'s questions.
 - Function-calling (also known as tool/plugin): When it has all the information it 
-needs, the `LeaseExtractor` agent's LLM presents the information in a structured 
+needs, the `LeaseExtractor` LLM presents the information in a structured 
 format using a Function-call. 
 
-You can run this script from the 
-[langroid-examples](https://github.com/langroid/langroid-examples/blob/main/examples/docqa/chat_multi_extract.py) repo.
+Here is what it looks like in action:
 
 ![Demo](docs/assets/demos/lease-extractor-demo.gif)
 
@@ -161,18 +161,12 @@ flag, but results may be inferior.
 
 :book: Also see the
 [`Getting Started Guide`](https://langroid.github.io/langroid/quick-start/)
-for a detailed tutorial. 
+for a detailed tutorial.
 
-- [Direct chat with LLM](#direct-llm)
-- [Simple Agent and Task](#agent-task)
-- [Three Communicating Agents](#three-agents)
-- [Agent with Tool/Function-calling](#agent-tool)
-- [Extract Structured Info with Tool/Function-calling](#agent-tool-structured)
-- [Retrieval-Augmented-Generation: Chat with Docs](#agent-rag)
+Click to expand any of the code examples below:
 
----
-
-## Direct interaction with OpenAI LLM <a name="direct-llm"></a>
+<details>
+<summary> <b> Direct interaction with OpenAI LLM </b> </summary>
 
 ```python
 from langroid.language_models.openai_gpt import ( 
@@ -191,10 +185,10 @@ messages = [
 response = mdl.chat(messages, max_tokens=200)
 print(response.message)
 ```
+</details>
 
----
-
-## Define an agent, set up a task, and run it <a name="agent-task"></a>
+<details>
+<summary> <b> Define an agent, set up a task, and run it </b> </summary>
 
 ```python
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
@@ -214,10 +208,12 @@ agent = ChatAgent(config)
 task = Task(agent, name="Bot") 
 task.run() # ... a loop seeking response from LLM or User at each turn
 ```
+</details>
 
----
+<details>
+<summary><b> Three communicating agents </b></summary>
 
-## Three communicating agents <a name="three-agents"></a>
+```python
 
 A toy numbers game, where when given a number `n`:
 - `repeater_agent`'s LLM simply returns `n`,
@@ -277,9 +273,11 @@ and run the `repeater_task`, kicking it off with a number as input:
 repeater_task.add_sub_task([even_task, odd_task])
 repeater_task.run("3")
 ```
----
 
-## Simple Tool/Function-calling example <a name="agent-tool"></a>
+</details>
+
+<details>
+<summary><b> Simple Tool/Function-calling example </b></summary>
 
 Langroid leverages Pydantic to support OpenAI's
 [Function-calling API](https://platform.openai.com/docs/guides/gpt/function-calling)
@@ -344,10 +342,10 @@ spy_game_agent.enable_message(ProbeTool)
 For a full working example see the
 [chat-agent-tool.py](https://github.com/langroid/langroid-examples/blob/main/examples/quick-start/chat-agent-tool.py)
 script in the `langroid-examples` repo.
+</details>
 
----
-
-## Tool/Function-calling to extract structured information from text <a name="agent-tool-structured"></a>
+<details>
+<summary> <b>Tool/Function-calling to extract structured information from text </b> </summary>
 
 Suppose you want an agent to extract 
 the key terms of a lease, from a lease document, as a nested JSON structure.
@@ -408,10 +406,10 @@ lease_extractor_agent.enable_message(LeaseMessage)
 
 See the [`chat_multi_extract.py`](https://github.com/langroid/langroid-examples/blob/main/examples/docqa/chat_multi_extract.py)
 script in the `langroid-examples` repo for a full working example.
+</details>
 
----
-
-## Chat with documents (file paths, URLs, etc) <a name="agent-docs"></a>
+<details>
+<summary><b> Chat with documents (file paths, URLs, etc) </b></summary>
 
 Langroid provides a specialized agent class `DocChatAgent` for this purpose.
 It incorporates document sharding, embedding, storage in a vector-DB, 
@@ -457,8 +455,12 @@ task.run()
 See full working scripts in the 
 [`docqa`](https://github.com/langroid/langroid-examples/tree/main/examples/docqa)
 folder of the `langroid-examples` repo.
+</details>
 
 ---
+
+# :heart: Thank you to our supporters!
+
 [![Stargazers repo roster for @langroid/langroid](https://reporoster.com/stars/langroid/langroid)](https://github.com/langroid/langroid/stargazers)
 
 # Contributors
