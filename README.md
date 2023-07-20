@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="docs/assets/langroid-card-ossem-rust-1200x630.png" alt="Logo" 
+  <img src="docs/assets/langroid-card-lambda-ossem-rust-1200-630.png" alt="Logo" 
         width="400" align="center">
 </div>
 
@@ -17,13 +17,13 @@
   <a target="_blank" 
     href="https://langroid.github.io/langroid/" rel="dofollow">
       <strong>Explore the docs</strong></a>
-  ·
+  &middot;
   <a target="_blank" href="https://github.com/langroid/langroid-examples" rel="dofollow">
       <strong>Examples Repo</strong></a>
-  .
+  &middot;
   <a target="_blank" href="https://discord.gg/g3nAXCbZ" rel="dofollow">
       <strong>Discord</strong></a>
-  .
+  &middot;
   <a target="_blank" href="./CONTRIBUTING.md" rel="dofollow">
       <strong>Contributing</strong></a>
 
@@ -453,6 +453,7 @@ See full working scripts in the
 folder of the `langroid-examples` repo.
 
 ---
+[![Stargazers repo roster for @langroid/langroid](https://reporoster.com/stars/langroid/langroid)](https://github.com/langroid/langroid/stargazers)
 
 # Contributors
 

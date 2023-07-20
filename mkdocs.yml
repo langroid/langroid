@@ -7,8 +7,8 @@ extra_css:
   - stylesheets/extra.css
 
 theme:
-  logo: assets/orange-logo.png
-  favicon: assets/orange-logo.png
+  logo: assets/orange-logo-lambda-563.png
+  favicon: assets/orange-logo-lambda-563.png
   features:
     - navigation.tabs
 #    - navigation.tracking
