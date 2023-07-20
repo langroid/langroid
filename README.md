@@ -1,5 +1,5 @@
 <div align="center">
-  <img src="docs/assets/langroid-card-ossem-rust.png" alt="Logo" 
+  <img src="docs/assets/langroid-card-ossem-rust-1200x630.png" alt="Logo" 
         width="400" align="center">
 </div>
 
@@ -13,7 +13,7 @@
 
 </div>
 
-**Langroid** is an intuitive, lightweight, transparent, flexible, extensible and principled
+`Langroid` is an intuitive, lightweight, transparent, flexible, extensible and principled
 Python framework to build LLM-powered applications using Multi-Agent Programming. 
 We welcome [contributions](CONTRIBUTING.md)!
 
@@ -32,11 +32,11 @@ Community: Join us on [Discord!](https://discord.gg/g3nAXCbZ)
 ## :rocket: Demo
 
 A `LeaseExtractor` agent is tasked with extracting structured information
-from a commercial lease document. It generates questions that are 
-answerred by a `DocAgent` using Retrieval from a vector-database
+from a commercial lease document. The Agent's LLM generates questions that are 
+answerred by a `DocAgent` (its LLM) using Retrieval from a vector-database
 (into which the lease has been sharded + embedded).
-When it has all the information it needs, the `LeaseExtractor` agent
-presents the information in a structured format using a Tool/Function-calling.
+When it has all the information it needs, the `LeaseExtractor` agent's LLM
+presents the information in a structured format using a Function-call.
 
 ![Demo](lease-extractor-demo.gif)
 
