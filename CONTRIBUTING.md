@@ -49,7 +49,7 @@ You are welcome to submit a PR to submit other API-based or local models.
 ## Run tests
 To verify your env is correctly setup, run all tests using `make tests`.
 
-## Generate docs (private only for now)
+## Generate docs
 
 Generate docs: `make docs`, then go to the IP address shown at the end, like
 `http://127.0.0.1:8000/`

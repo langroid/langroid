@@ -13,37 +13,46 @@
 
 </div>
 
-`Langroid` is an intuitive, lightweight, transparent, flexible, extensible and principled
-Python framework to build LLM-powered applications using Multi-Agent Programming. 
-We welcome [contributions](CONTRIBUTING.md)!
+<h3 align="center">
+  <a target="_blank" 
+    href="https://langroid.github.io/langroid/" rel="dofollow">
+      <strong>Explore the docs</strong></a>
+  ·
+  <a target="_blank" href="https://github.com/langroid/langroid-examples" rel="dofollow">
+      <strong>Examples Repo</strong></a>
+  .
+  <a target="_blank" href="https://discord.gg/g3nAXCbZ" rel="dofollow">
+      <strong>Discord</strong></a>
+  .
+  <a target="_blank" href="./CONTRIBUTING.md" rel="dofollow">
+      <strong>Contributing</strong></a>
 
-Langroid is the first Python LLM-application framework that was explicitly
-designed  with Agents as first-class citizens, and Multi-Agent Programming
-as the core  design principle. The framework is inspired by ideas from the
-[Actor Framework](https://en.wikipedia.org/wiki/Actor_model).
-For more details see [here](https://langroid.github.io/langroid/).
+  <br />
+</h3>
 
-Documentation: https://langroid.github.io/langroid/
+`Langroid` is an intuitive, lightweight, transparent, extensible and principled
+Python framework to super-charge development of LLM-powered applications using Multi-Agent Programming.
+Inspired by the [Actor Framework](https://en.wikipedia.org/wiki/Actor_model), 
+it is the first LLM-application framework that was explicitly
+designed with Agents as first-class citizens, and Multi-Agent Programming
+as the core design principle.
 
-Usage examples: https://github.com/langroid/langroid-examples
 
-Community: Join us on [Discord!](https://discord.gg/g3nAXCbZ)
-
-## :rocket: Demo
+# :rocket: Demo
 
 A `LeaseExtractor` agent is tasked with extracting structured information
 from a commercial lease document. The Agent's LLM generates questions that are 
-answerred by a `DocAgent` (its LLM) using Retrieval from a vector-database
+answered by a `DocAgent` (its LLM) using Retrieval from a vector-database
 (into which the lease has been sharded + embedded).
 When it has all the information it needs, the `LeaseExtractor` agent's LLM
 presents the information in a structured format using a Function-call.
+You can run this script from the 
+[langroid-examples](https://github.com/langroid/langroid-examples/blob/main/examples/docqa/chat_multi_extract.py) repo.
 
-![Demo](lease-extractor-demo.gif)
+![Demo](docs/assets/demos/lease-extractor-demo.gif)
 
 
-## :zap: Highlights
-
-Highlights of Langroid's features as of July 2023:
+# :zap: Highlights
 
 - **Agents as first-class citizens:** The `Agent` class encapsulates LLM conversation state,
   and optionally a vector-store and tools. Agents are a core abstraction in Langroid;
@@ -84,7 +93,7 @@ Highlights of Langroid's features as of July 2023:
 
 # :gear: Installation and Setup
 
-## Install `langroid` 
+### Install `langroid` 
 Use `pip` to install `langroid` (from PyPi) to your virtual environment:
 ```bash
 pip install langroid
@@ -95,9 +104,9 @@ from from HuggingFace, install Langroid like this:
 ```bash
 pip install langroid[hf-embeddings]
 ```
-Note that this will install `torch` and `sentence-transfoemers` libraries.
+Note that this will install `torch` and `sentence-transformers` libraries.
 
-## Set up environment variables (API keys, etc)
+### Set up environment variables (API keys, etc)
 
 Copy the `.env-template` file to a new file `.env` and 
 insert these secrets:
@@ -140,7 +149,11 @@ and they are **not** complete runnable examples! For that we encourage you to
 consult the [`langroid-examples`](https://github.com/langroid/langroid-examples) 
 repository.
 
-Also see the
+:information_source: The examples below will only work with OpenAI GPT4 model,
+which is the default in Langroid. Switching to GPT3.5-Turbo is easy via a config 
+flag, but results may be inferior.
+
+:book: Also see the
 [`Getting Started Guide`](https://langroid.github.io/langroid/quick-start/)
 for a detailed tutorial. 
 
