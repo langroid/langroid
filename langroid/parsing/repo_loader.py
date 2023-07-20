@@ -18,6 +18,7 @@ from github.Repository import Repository
 from pydantic import BaseSettings
 
 from langroid.mytypes import DocMetaData, Document
+from langroid.parsing.pdf_parser import get_doc_from_pdf_file
 
 logger = logging.getLogger(__name__)
 
@@ -488,17 +489,24 @@ class RepoLoader:
                             file_paths.append(file_path)
 
         for file_path in file_paths:
-            with open(file_path, "r") as f:
-                if lines is not None:
-                    file_lines = list(itertools.islice(f, lines))
-                    content = "\n".join(line.strip() for line in file_lines)
-                else:
-                    content = f.read()
-            soup = BeautifulSoup(content, "html.parser")
-            text = soup.get_text()
-            docs.append(
-                Document(content=text, metadata=DocMetaData(source=str(file_path)))
-            )
+            _, file_extension = os.path.splitext(file_path)
+            if file_extension == ".pdf":
+                docs.append(get_doc_from_pdf_file(file_path))
+            else:
+                with open(file_path, "r") as f:
+                    if lines is not None:
+                        file_lines = list(itertools.islice(f, lines))
+                        content = "\n".join(line.strip() for line in file_lines)
+                    else:
+                        content = f.read()
+                soup = BeautifulSoup(content, "html.parser")
+                text = soup.get_text()
+                docs.append(
+                    Document(
+                        content=text,
+                        metadata=DocMetaData(source=str(file_path)),
+                    )
+                )
 
         return docs
 
