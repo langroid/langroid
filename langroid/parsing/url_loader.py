@@ -52,8 +52,6 @@ class URLLoader:
                     )
                     if text is not None and text != "":
                         docs.append(
-                            Document(
-                                content=text, metadata=DocMetaData(source=url)
-                            )
+                            Document(content=text, metadata=DocMetaData(source=url))
                         )
         return docs
