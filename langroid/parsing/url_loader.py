@@ -8,8 +8,8 @@ from trafilatura.downloads import (
     load_download_buffer,
 )
 
-from langroid.parsing.pdf_parser import get_pdf_doc_url
 from langroid.mytypes import DocMetaData, Document
+from langroid.parsing.pdf_parser import get_pdf_doc_url
 
 logging.getLogger("trafilatura").setLevel(logging.ERROR)
 

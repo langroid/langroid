@@ -17,9 +17,8 @@ from github.ContentFile import ContentFile
 from github.Repository import Repository
 from pydantic import BaseSettings
 
-from langroid.parsing.pdf_parser import get_pdf_doc_path
-
 from langroid.mytypes import DocMetaData, Document
+from langroid.parsing.pdf_parser import get_pdf_doc_path
 
 logger = logging.getLogger(__name__)
 

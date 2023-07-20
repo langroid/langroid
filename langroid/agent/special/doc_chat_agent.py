@@ -6,7 +6,6 @@ Functionality includes:
 - asking a question about a document; see `answer_from_docs`
 """
 import logging
-
 from contextlib import ExitStack
 from typing import List, Optional, no_type_check
 

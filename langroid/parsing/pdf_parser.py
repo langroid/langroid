@@ -1,7 +1,7 @@
-import requests
-
-from PyPDF2 import PdfReader
 from io import BytesIO
+
+import requests
+from PyPDF2 import PdfReader
 
 from langroid.mytypes import DocMetaData, Document
 

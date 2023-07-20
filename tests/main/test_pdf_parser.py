@@ -1,9 +1,9 @@
-import pytest
 import os
+
 from langroid.parsing.pdf_parser import (
-    get_pdf_doc_url,
     get_pdf_doc_path,
-)  # replace 'your_module' with the actual module name
+    get_pdf_doc_url,
+)
 
 
 def test_get_pdf_doc_url():
