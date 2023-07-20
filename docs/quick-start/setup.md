@@ -26,6 +26,11 @@ pip install langroid
     For the best experience we recommend you work in a nice terminal that supports 
     colored outputs, such as [Iterm2](https://iterm2.com/).    
 
+!!! note "OpenAI GPT4 is required"
+    Currently, Langroid largely relies on GPT4 to work well.
+    Switching to GPT3.5-Turbo is easy via a config flag, and may suffice 
+    for some applications, but in general you can expect results to be inferior.
+
 ## Set up tokens/keys 
 
 Langroid uses a few APIs, and you need to set up tokens/keys for these APIs.
