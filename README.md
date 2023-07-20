@@ -30,15 +30,23 @@
   <br />
 </h3>
 
-`Langroid` is an intuitive, lightweight, transparent, extensible and principled
-Python framework to super-charge development of LLM-powered applications using Multi-Agent Programming.
-Inspired by the [Actor Framework](https://en.wikipedia.org/wiki/Actor_model), 
-it is the first LLM-application framework that was explicitly
-designed with Agents as first-class citizens, and Multi-Agent Programming
-as the core design principle.
+`Langroid` is an intuitive, lightweight, extensible and principled
+Python framework to easily build LLM-powered applications. 
+You set up Agents, equip them with optional components (LLM, 
+vector-store and methods), assign them tasks, and have them 
+collaboratively solve a problem by exchanging messages. 
+This Multi-Agent paradigm is inspired by the
+[Actor Framework](https://en.wikipedia.org/wiki/Actor_model)
+(but you do not need to know anything about this!).
 
 
 # :rocket: Demo
+
+The task here is to extract structured information from a commercial 
+lease document. The demo showcases several features of Langroid:
+- Mult-agent collaboration
+- Retrieval augmented question-answering
+- Function-calls (also known as tools)
 
 A `LeaseExtractor` agent is tasked with extracting structured information
 from a commercial lease document. The Agent's LLM generates questions that are 
