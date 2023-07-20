@@ -17,6 +17,8 @@ from github.ContentFile import ContentFile
 from github.Repository import Repository
 from pydantic import BaseSettings
 
+from langroid.parsing.pdf_parser import get_pdf_doc_path
+
 from langroid.mytypes import DocMetaData, Document
 
 logger = logging.getLogger(__name__)
@@ -138,7 +140,9 @@ class RepoLoader:
                     f"Retrying in {delay} seconds..."
                 )
                 time.sleep(delay)
-        raise Exception(f"Failed to get repo {repo_name} after {max_retries} attempts.")
+        raise Exception(
+            f"Failed to get repo {repo_name} after {max_retries} attempts."
+        )
 
     def _get_dir_name(self) -> str:
         return urlparse(self.url).path.replace("/", "_")
@@ -229,7 +233,9 @@ class RepoLoader:
         except subprocess.CalledProcessError as e:
             logger.error(f"Git clone failed: {e}")
         except Exception as e:
-            logger.error(f"An error occurred while trying to clone the repository:{e}")
+            logger.error(
+                f"An error occurred while trying to clone the repository:{e}"
+            )
 
         return self.clone_path
 
@@ -409,7 +415,9 @@ class RepoLoader:
                     # Add the file to the current dictionary
                     with open(item_path, "r") as f:
                         file_lines = list(itertools.islice(f, lines))
-                    file_content = "\n".join(line.strip() for line in file_lines)
+                    file_content = "\n".join(
+                        line.strip() for line in file_lines
+                    )
                     if file_content == "":
                         continue
 
@@ -488,17 +496,24 @@ class RepoLoader:
                             file_paths.append(file_path)
 
         for file_path in file_paths:
-            with open(file_path, "r") as f:
-                if lines is not None:
-                    file_lines = list(itertools.islice(f, lines))
-                    content = "\n".join(line.strip() for line in file_lines)
-                else:
-                    content = f.read()
-            soup = BeautifulSoup(content, "html.parser")
-            text = soup.get_text()
-            docs.append(
-                Document(content=text, metadata=DocMetaData(source=str(file_path)))
-            )
+            _, file_extension = os.path.splitext(file_path)
+            if file_extension == ".pdf":
+                docs.append(get_pdf_doc_path(file_path))
+            else:
+                with open(file_path, "r") as f:
+                    if lines is not None:
+                        file_lines = list(itertools.islice(f, lines))
+                        content = "\n".join(line.strip() for line in file_lines)
+                    else:
+                        content = f.read()
+                soup = BeautifulSoup(content, "html.parser")
+                text = soup.get_text()
+                docs.append(
+                    Document(
+                        content=text,
+                        metadata=DocMetaData(source=str(file_path)),
+                    )
+                )
 
         return docs
 
@@ -525,7 +540,9 @@ class RepoLoader:
         contents = self.repo.get_contents("")
         if not isinstance(contents, list):
             contents = [contents]
-        stack = list(zip(contents, [0] * len(contents)))  # stack of (content, depth)
+        stack = list(
+            zip(contents, [0] * len(contents))
+        )  # stack of (content, depth)
         # recursively get all files in repo that have one of the extensions
         docs = []
         i = 0
@@ -635,7 +652,9 @@ class RepoLoader:
         return filtered_structure
 
     @staticmethod
-    def ls(structure: Dict[str, Union[str, List[Dict]]], depth: int = 0) -> List[str]:
+    def ls(
+        structure: Dict[str, Union[str, List[Dict]]], depth: int = 0
+    ) -> List[str]:
         """
         Get a list of names of files or directories up to a certain depth from a
         structure dictionary.
@@ -698,15 +717,23 @@ class RepoLoader:
                 for d in dirs:
                     output.append("{}{}/".format(sub_indent, d))
                 for f in files:
-                    if include_types and RepoLoader._file_type(f) not in include_types:
+                    if (
+                        include_types
+                        and RepoLoader._file_type(f) not in include_types
+                    ):
                         continue
-                    if exclude_types and RepoLoader._file_type(f) in exclude_types:
+                    if (
+                        exclude_types
+                        and RepoLoader._file_type(f) in exclude_types
+                    ):
                         continue
                     output.append("{}{}".format(sub_indent, f))
         return output
 
     @staticmethod
-    def show_file_contents(tree: Dict[str, Union[str, List[Dict[str, Any]]]]) -> str:
+    def show_file_contents(
+        tree: Dict[str, Union[str, List[Dict[str, Any]]]]
+    ) -> str:
         """
         Print the contents of all files from a structure dictionary.
 

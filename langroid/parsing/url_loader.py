@@ -8,6 +8,7 @@ from trafilatura.downloads import (
     load_download_buffer,
 )
 
+from langroid.parsing.pdf_parser import get_pdf_doc_url
 from langroid.mytypes import DocMetaData, Document
 
 logging.getLogger("trafilatura").setLevel(logging.ERROR)
@@ -41,13 +42,18 @@ class URLLoader:
                 sleep_time=5,
             )
             for url, result in buffered_downloads(buffer, threads):
-                text = trafilatura.extract(
-                    result,
-                    no_fallback=False,
-                    favor_recall=True,
-                )
-                if text is not None and text != "":
-                    docs.append(
-                        Document(content=text, metadata=DocMetaData(source=url))
+                if ".pdf" in url:
+                    docs.append(get_pdf_doc_url(url))
+                else:
+                    text = trafilatura.extract(
+                        result,
+                        no_fallback=False,
+                        favor_recall=True,
                     )
+                    if text is not None and text != "":
+                        docs.append(
+                            Document(
+                                content=text, metadata=DocMetaData(source=url)
+                            )
+                        )
         return docs

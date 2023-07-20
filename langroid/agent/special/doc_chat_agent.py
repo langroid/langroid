@@ -6,10 +6,7 @@ Functionality includes:
 - asking a question about a document; see `answer_from_docs`
 """
 import logging
-import requests
 
-from PyPDF2 import PdfReader
-from io import BytesIO
 from contextlib import ExitStack
 from typing import List, Optional, no_type_check
 
@@ -216,9 +213,9 @@ class DocChatAgent(ChatAgent):
             return None
         elif query_str == "?" and self.response is not None:
             return self.justify_response()
-        elif (query_str.startswith(("summar", "?")) and self.response is None) or (
-            query_str == "??"
-        ):
+        elif (
+            query_str.startswith(("summar", "?")) and self.response is None
+        ) or (query_str == "??"):
             return self.summarize_docs()
         else:
             response = self.answer_from_docs(query_str)
@@ -252,7 +249,9 @@ class DocChatAgent(ChatAgent):
             ]
         )
 
-    def get_summary_answer(self, question: str, passages: List[Document]) -> Document:
+    def get_summary_answer(
+        self, question: str, passages: List[Document]
+    ) -> Document:
         """
         Given a question and a list of (possibly) doc snippets,
         generate an answer if possible
@@ -285,7 +284,9 @@ class DocChatAgent(ChatAgent):
 
         if self.config.conversation_mode:
             # respond with temporary context
-            answer_doc = super()._llm_response_temp_context(question, final_prompt)
+            answer_doc = super()._llm_response_temp_context(
+                question, final_prompt
+            )
         else:
             answer_doc = super().llm_response_forget(final_prompt)
 
@@ -321,7 +322,9 @@ class DocChatAgent(ChatAgent):
             # and do not need to convert to standalone query
             # (We rely on the LLM to interpret the new query in the context of
             # the message history so far)
-            with console.status("[cyan]Converting to stand-alone query...[/cyan]"):
+            with console.status(
+                "[cyan]Converting to stand-alone query...[/cyan]"
+            ):
                 with StreamingIfAllowed(self.llm, False):
                     query = self.llm.followup_to_standalone(self.dialog, query)
             print(f"[orange2]New query: {query}")
@@ -333,7 +336,9 @@ class DocChatAgent(ChatAgent):
             passages is None
             or self.original_docs_length > self.config.max_context_tokens
         ):
-            with console.status("[cyan]Searching VecDB for relevant doc passages..."):
+            with console.status(
+                "[cyan]Searching VecDB for relevant doc passages..."
+            ):
                 docs_and_scores = self.vecdb.similar_texts_with_scores(
                     query,
                     k=self.config.parsing.n_similar_docs,
@@ -400,7 +405,8 @@ class DocChatAgent(ChatAgent):
                 self.parser.tokenizer.encode(full_text)[:MAX_INPUT_TOKENS]
             )
             logger.warning(
-                "Summarizing after truncating text to" f" {MAX_INPUT_TOKENS} tokens"
+                "Summarizing after truncating text to"
+                f" {MAX_INPUT_TOKENS} tokens"
             )
         prompt = f"""
         {instruction}
@@ -420,92 +426,3 @@ class DocChatAgent(ChatAgent):
             print("[magenta]" + source)
         else:
             print("[magenta]No source found")
-
-
-class PDFChatAgent(DocChatAgent):
-    """
-    Agent for chatting with a collection of PDF files.
-    """
-
-    def __init__(
-        self,
-        config: DocChatAgent,
-    ):
-        super().__init__(config)
-        self.config: DocChatAgentConfig = config
-        self.original_docs: None | List[Document] = None
-        self.original_docs_length = 0
-        self.response: None | Document = None
-        if len(config.doc_paths) > 0:
-            self.ingest()
-
-    def get_pdf_doc_url(self, url: str) -> Document:
-        """
-        Args:
-            url (str): contains the URL to the PDF file
-        Returns:
-            a `Document` object containing the content of the pdf file,
-            and metadata containing url
-        """
-        response = requests.get(url)
-        response.raise_for_status()
-        pdf_file = BytesIO(response.content)
-        # Now we treat the PDF as a path
-        return self.get_pdf_doc_path(pdf_file, url)
-
-    def get_pdf_doc_path(self, path: str, url: None | str = None) -> Document:
-        """
-        Args:
-            path (str): full path to the PDF file
-            url (str| None): contains the URL of the PDF file if the processed
-            PDF file obtained via URL
-        Returns:
-            a `Document` object containing the content of the pdf file,
-            and metadata containing path/url
-        """
-        reader = PdfReader(path)
-
-        text = ""
-        for page_num in range(len(reader.pages)):
-            current_page = reader.pages[page_num]
-            text += current_page.extract_text()
-        if url:
-            path = url
-        return Document(content=text, metadata=DocMetaData(source=str(path)))
-
-    def ingest_pdf(self) -> None:
-        """
-        Chunk + embed + store docs specified by self.config.doc_paths
-
-        Returns:
-            dict with keys:
-                n_splits: number of splits
-                urls: list of urls
-                paths: list of file paths
-        """
-        docs: List[Document] = []
-        urls, paths = get_urls_and_paths(self.config.doc_paths)
-        if len(paths) > 0:
-            for p in paths:
-                path_docs = self.get_pdf_doc_path(p)
-                docs.append(path_docs)
-        if len(urls) > 0:
-            for url in urls:
-                path_docs = self.get_pdf_doc_url(url)
-                docs.append(path_docs)
-
-        n_docs = len(docs)
-        n_splits = super().ingest_docs(docs)
-        if n_docs == 0:
-            return
-        n_urls = len(urls)
-        n_paths = len(paths)
-
-        print(
-            f"""
-            [green]I have processed the following {n_urls} URLs 
-            and {n_paths} paths into {n_splits} parts:
-            """.strip()
-        )
-        print("\n".join(urls))
-        print("\n".join(paths))
