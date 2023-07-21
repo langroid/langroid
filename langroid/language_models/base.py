@@ -5,9 +5,10 @@ from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple, Type, Union
 
 import aiohttp
-from pydantic import BaseModel, BaseSettings
+from pydantic import BaseModel, BaseSettings, validator
 
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
+from langroid.cachedb.momento_cachedb import MomentoCacheConfig
 from langroid.mytypes import Document
 from langroid.parsing.agent_chats import parse_message
 from langroid.prompts.dialog import collate_chat_history
@@ -32,10 +33,20 @@ class LLMConfig(BaseSettings):
     min_output_tokens: int = 64
     use_chat_for_completion: bool = True  # use chat model for completion?
     stream: bool = False  # stream output from API?
-    cache_config: RedisCacheConfig = RedisCacheConfig(
-        hostname="redis-11524.c251.east-us-mz.azure.cloud.redislabs.com",
-        port=11524,
-    )
+    cache_config: Union[RedisCacheConfig, MomentoCacheConfig] = None  # cache configuration
+
+    @validator("cache_config", always=True)
+    def validate_date(cls, value, values):
+        if settings.cache_type == "redis":
+            return RedisCacheConfig(
+                hostname="redis-11524.c251.east-us-mz.azure.cloud.redislabs.com",
+                port=11524,
+            )
+        else:
+            return MomentoCacheConfig(
+                ttl=300,
+                cachename="langroid_momento_cache",
+            )
 
 
 class LLMFunctionCall(BaseModel):

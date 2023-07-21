@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from rich import print
 
 from langroid.cachedb.redis_cachedb import RedisCache
+from langroid.cachedb.momento_cachedb import MomentoCache
 from langroid.language_models.base import (
     LanguageModel,
     LLMConfig,
@@ -92,7 +93,7 @@ class OpenAIGPT(LanguageModel):
                 OPENAI_API_KEY not set in .env file,
                 please set it to your OpenAI API key."""
             )
-        self.cache = RedisCache(config.cache_config)
+        self.cache = MomentoCache(config.cache_config) if settings.cache_type == "momento" else RedisCache(config.cache_config)
 
     def set_stream(self, stream: bool) -> bool:
         """Enable or disable streaming output from API.
