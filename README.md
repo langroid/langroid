@@ -127,11 +127,12 @@ insert these secrets:
 - **Redis** Password, host, port (optional, only needed to cache LLM API responses):
   Redis [offers](https://redis.com/try-free/) a free 30MB Redis account
   which is more than sufficient to try out Langroid and even beyond.
-  
+
 ```bash
 cp .env-template .env
 # now edit the .env file, insert your secrets as above
 ``` 
+
 Your `.env` file should look like this:
 ```bash
 OPENAI_API_KEY=your-key-here-without-quotes
