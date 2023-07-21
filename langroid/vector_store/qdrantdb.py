@@ -29,7 +29,6 @@ logger = logging.getLogger(__name__)
 class QdrantDBConfig(VectorStoreConfig):
     type: str = "qdrant"
     cloud: bool = True
-    url = "https://644cabc3-4141-4734-91f2-0cc3176514d4.us-east-1-0.aws.cloud.qdrant.io:6333"
 
     collection_name: str | None = None
     storage_path: str = ".qdrant/data"
@@ -51,15 +50,16 @@ class QdrantDB(VectorStore):
         load_dotenv()
         if config.cloud:
             key = os.getenv("QDRANT_API_KEY")
-            if key is None or key == "":
+            url = os.getenv("QDRANT_API_URL")
+            if key is None or key == "" or url is None or url == "":
                 raise ValueError(
-                    """QDRANT_API_KEY env variable must be set to use 
-                    QdrantDB in cloud mode. Please set the QDRANT_API_KEY value 
+                    """QDRANT_API_KEY, QDRANT_API_URL env variable must be set to use 
+                    QdrantDB in cloud mode. Please set these values 
                     in your .env file.
                     """
                 )
             self.client = QdrantClient(
-                url=config.url,
+                url=url,
                 api_key=key,
                 timeout=config.timeout,
             )

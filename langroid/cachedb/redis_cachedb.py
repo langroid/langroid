@@ -17,8 +17,6 @@ class RedisCacheConfig(BaseModel):
     """Configuration model for RedisCache."""
 
     fake: bool = False
-    hostname: str = "redis-11524.c251.east-us-mz.azure.cloud.redislabs.com"
-    port: int = 11524
 
 
 class RedisCache(CacheDB):
@@ -38,16 +36,18 @@ class RedisCache(CacheDB):
             self.client = fakeredis.FakeStrictRedis()  # type: ignore
         else:
             redis_password = os.getenv("REDIS_PASSWORD")
-            if redis_password is None:
+            redis_host = os.getenv("REDIS_HOST")
+            redis_port = os.getenv("REDIS_PORT")
+            if None in [redis_password, redis_host, redis_port]:
                 logger.warning(
-                    """REDIS_PASSWORD not set in .env file,
+                    """REDIS_PASSWORD, REDIS_HOST, REDIS_PORT not set in .env file,
                     using fake redis client"""
                 )
                 self.client = fakeredis.FakeStrictRedis()  # type: ignore
             else:
                 self.client = redis.Redis(  # type: ignore
-                    host=self.config.hostname,
-                    port=self.config.port,
+                    host=redis_host,
+                    port=redis_port,
                     password=redis_password,
                 )
 
