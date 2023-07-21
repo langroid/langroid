@@ -41,7 +41,6 @@ The need for other keys is indicated below.
 In the root of the repo, copy the `.env-template` file to a new file `.env`:
 ```bash
 cp .env-template .env
-# now edit the .env file, insert your secrets as above
 ```
 Then insert your OpenAI API Key. If you don't have one, see [this OpenAI Page](https://help.openai.com/en/collections/3675940-getting-started-with-openai-api).
 Your `.env` file should look like this:
