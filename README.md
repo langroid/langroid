@@ -47,8 +47,8 @@ as we show in the [langroid-examples](https://github.com/langroid/langroid-examp
 The demo showcases just a few of the many features of Langroid, such as:
 - Multi-agent collaboration: `LeaseExtractor` is in charge of the task, and its LLM (GPT4) generates questions 
 to be answered by the `DocAgent`.
-- Retrieval augmented question-answering: `DocAgent` LLM (GPT4) uses retrieval from a vector-store to 
-answer the `LeaseExtractor`'s questions.
+- Retrieval augmented question-answering, with **source-citation**: `DocAgent` LLM (GPT4) uses retrieval from a vector-store to 
+answer the `LeaseExtractor`'s questions, cites the specific excerpt supporting the answer. 
 - Function-calling (also known as tool/plugin): When it has all the information it 
 needs, the `LeaseExtractor` LLM presents the information in a structured 
 format using a Function-call. 
