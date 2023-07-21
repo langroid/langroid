@@ -45,7 +45,7 @@ Suppose you want to extract structured information about the key terms
 of a commercial lease document. You can easily do this with Langroid using a two-agent system,
 as we show in the [langroid-examples](https://github.com/langroid/langroid-examples/blob/main/examples/docqa/chat_multi_extract.py) repo.
 The demo showcases several features of Langroid:
-- Mult-agent collaboration: `LeaseExtractor` is in charge of the task, and its LLM (GPT4) generates questions 
+- Multi-agent collaboration: `LeaseExtractor` is in charge of the task, and its LLM (GPT4) generates questions 
 to be answered by the `DocAgent`.
 - Retrieval augmented question-answering: `DocAgent` LLM (GPT4) uses retrieval from a vector-store to 
 answer the `LeaseExtractor`'s questions.
@@ -60,10 +60,10 @@ Here is what it looks like in action:
 
 # :zap: Highlights
 
-- **Agents as first-class citizens:** The `Agent` class encapsulates LLM conversation state,
+- **Agents as first-class citizens:** The [Agent](https://langroid.github.io/langroid/reference/agent/base/#langroid.agent.base.Agent) class encapsulates LLM conversation state,
   and optionally a vector-store and tools. Agents are a core abstraction in Langroid;
   Agents act as _message transformers_, and by default provide 3 _responder_ methods, one corresponding to each entity: LLM, Agent, User.
-- **Tasks:** A Task class wraps an Agent, and gives the agent instructions (or roles, or goals), 
+- **Tasks:** A [Task](https://langroid.github.io/langroid/reference/agent/task/) class wraps an Agent, and gives the agent instructions (or roles, or goals), 
   manages iteration over an Agent's responder methods, 
   and orchestrates multi-agent interactions via hierarchical, recursive
   task-delegation. The `Task.run()` method has the same 
@@ -157,7 +157,7 @@ repository.
 
 :information_source: The examples below will only work with OpenAI GPT4 model,
 which is the default in Langroid. Switching to GPT3.5-Turbo is easy via a config 
-flag, but results may be inferior.
+flag (i.e., `cfg = OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT4)`), but results may be inferior.
 
 :book: Also see the
 [`Getting Started Guide`](https://langroid.github.io/langroid/quick-start/)
