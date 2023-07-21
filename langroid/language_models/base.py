@@ -7,8 +7,8 @@ from typing import Any, Dict, List, Optional, Tuple, Type, Union
 import aiohttp
 from pydantic import BaseModel, BaseSettings, validator
 
-from langroid.cachedb.redis_cachedb import RedisCacheConfig
 from langroid.cachedb.momento_cachedb import MomentoCacheConfig
+from langroid.cachedb.redis_cachedb import RedisCacheConfig
 from langroid.mytypes import Document
 from langroid.parsing.agent_chats import parse_message
 from langroid.prompts.dialog import collate_chat_history
@@ -33,7 +33,7 @@ class LLMConfig(BaseSettings):
     min_output_tokens: int = 64
     use_chat_for_completion: bool = True  # use chat model for completion?
     stream: bool = False  # stream output from API?
-    cache_config: Union[RedisCacheConfig, MomentoCacheConfig] = None  # cache configuration
+    cache_config: Union[RedisCacheConfig, MomentoCacheConfig] = None  # cache config
 
     @validator("cache_config", always=True)
     def validate_date(cls, value, values):

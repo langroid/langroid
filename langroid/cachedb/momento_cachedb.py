@@ -1,9 +1,9 @@
 import json
 import logging
 import os
+from datetime import timedelta
 from typing import Any, Dict, Optional
 
-from datetime import timedelta
 import momento
 from dotenv import load_dotenv
 from pydantic import BaseModel
@@ -35,13 +35,13 @@ class MomentoCache(CacheDB):
 
         momento_token = os.getenv("MOMENTO_AUTH_TOKEN")
         if momento_token is None:
-            raise ValueError(
-                """MOMENTO_AUTH_TOKEN not set in .env file"""
-            )
+            raise ValueError("""MOMENTO_AUTH_TOKEN not set in .env file""")
         else:
             self.client = momento.CacheClient(
                 configuration=momento.Configurations.Laptop.v1(),
-                credential_provider=momento.CredentialProvider.from_environment_variable("MOMENTO_AUTH_TOKEN"),
+                credential_provider=momento.CredentialProvider.from_environment_variable(
+                    "MOMENTO_AUTH_TOKEN"
+                ),
                 default_ttl=timedelta(seconds=self.config.ttl),
             )
             self.client.create_cache(self.config.cachename)
@@ -74,5 +74,4 @@ class MomentoCache(CacheDB):
         match value:
             case momento.responses.CacheGet.Hit() as hit:
                 return json.loads(hit.value_string)
-            case _:
-                return None
+        return None
