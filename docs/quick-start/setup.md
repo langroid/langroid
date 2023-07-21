@@ -27,9 +27,10 @@ pip install langroid
     colored outputs, such as [Iterm2](https://iterm2.com/).    
 
 !!! note "OpenAI GPT4 is required"
-    Currently, Langroid largely relies on GPT4 to work well.
+    The various LLM prompts and instructions in Langroid 
+    have been tested to work well with GPT4.
     Switching to GPT3.5-Turbo is easy via a config flag, and may suffice 
-    for some applications, but in general you can expect results to be inferior.
+    for some applications, but in general you may see inferior results.
 
 ## Set up tokens/keys 
 

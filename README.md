@@ -159,9 +159,12 @@ and they are **not** complete runnable examples! For that we encourage you to
 consult the [`langroid-examples`](https://github.com/langroid/langroid-examples) 
 repository.
 
-:information_source: The examples below will only work with OpenAI GPT4 model,
-which is the default in Langroid. Switching to GPT3.5-Turbo is easy via a config 
-flag (i.e., `cfg = OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT4)`), but results may be inferior.
+:information_source: The various LLM prompts and instructions in Langroid
+have been tested to work well with GPT4.
+Switching to GPT3.5-Turbo is easy via a config flag
+(e.g., `cfg = OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT3_5_TURBO)`),
+and may suffice for some applications, but in general you may see inferior results.
+
 
 :book: Also see the
 [`Getting Started Guide`](https://langroid.github.io/langroid/quick-start/)
