@@ -44,7 +44,7 @@ This Multi-Agent paradigm is inspired by the
 Suppose you want to extract structured information about the key terms 
 of a commercial lease document. You can easily do this with Langroid using a two-agent system,
 as we show in the [langroid-examples](https://github.com/langroid/langroid-examples/blob/main/examples/docqa/chat_multi_extract.py) repo.
-The demo showcases several features of Langroid:
+The demo showcases just a few of the many features of Langroid, such as:
 - Multi-agent collaboration: `LeaseExtractor` is in charge of the task, and its LLM (GPT4) generates questions 
 to be answered by the `DocAgent`.
 - Retrieval augmented question-answering: `DocAgent` LLM (GPT4) uses retrieval from a vector-store to 
