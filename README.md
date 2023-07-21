@@ -16,7 +16,7 @@
 <h3 align="center">
   <a target="_blank" 
     href="https://langroid.github.io/langroid/" rel="dofollow">
-      <strong>Explore the docs</strong></a>
+      <strong>Documentation</strong></a>
   &middot;
   <a target="_blank" href="https://github.com/langroid/langroid-examples" rel="dofollow">
       <strong>Examples Repo</strong></a>
