@@ -23,8 +23,6 @@ def test_fake_store_and_retrieve(fake_redis_cache):
 def real_redis_cache():
     config = RedisCacheConfig(
         fake=False,
-        hostname="redis-11524.c251.east-us-mz.azure.cloud.redislabs.com",
-        port=11524,
     )
     cache = RedisCache(config=config)
     return cache

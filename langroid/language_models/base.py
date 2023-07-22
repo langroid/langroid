@@ -38,15 +38,9 @@ class LLMConfig(BaseSettings):
     @validator("cache_config", always=True)
     def validate_date(cls, value, values):
         if settings.cache_type == "redis":
-            return RedisCacheConfig(
-                hostname="redis-11524.c251.east-us-mz.azure.cloud.redislabs.com",
-                port=11524,
-            )
+            return RedisCacheConfig()
         else:
-            return MomentoCacheConfig(
-                ttl=300,
-                cachename="langroid_momento_cache",
-            )
+            return MomentoCacheConfig()
 
 
 class LLMFunctionCall(BaseModel):
