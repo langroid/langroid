@@ -6,10 +6,10 @@ from typing import Any, Dict, Optional
 
 import momento
 from dotenv import load_dotenv
+from momento.responses import CacheGet
 from pydantic import BaseModel
 
 from langroid.cachedb.base import CacheDB
-from momento.responses import CacheGet
 
 logger = logging.getLogger(__name__)
 
