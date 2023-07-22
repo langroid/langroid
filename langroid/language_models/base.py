@@ -5,7 +5,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple, Type, Union
 
 import aiohttp
-from pydantic import BaseModel, BaseSettings, validator
+from pydantic import BaseModel, BaseSettings
 
 from langroid.cachedb.momento_cachedb import MomentoCacheConfig
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
@@ -34,13 +34,6 @@ class LLMConfig(BaseSettings):
     use_chat_for_completion: bool = True  # use chat model for completion?
     stream: bool = False  # stream output from API?
     cache_config: Union[RedisCacheConfig, MomentoCacheConfig] = None  # cache config
-
-    @validator("cache_config", always=True)
-    def validate_date(cls, value, values):
-        if settings.cache_type == "redis":
-            return RedisCacheConfig()
-        else:
-            return MomentoCacheConfig()
 
 
 class LLMFunctionCall(BaseModel):
