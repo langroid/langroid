@@ -35,7 +35,10 @@ insert these secrets:
 - OpenAI API key,
 - GitHub Personal Access Token (needed by  PyGithub to analyze git repos;
   token-based API calls are less rate-limited).
-- Redis Password for the redis cache.
+- Cache Configs
+  - Redis : Password, Host, Port <br>
+    OR
+  - Momento : Auth_token
 - Qdrant API key for the vector database.
 
 ```bash

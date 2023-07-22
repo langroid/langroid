@@ -8,6 +8,7 @@ class Settings(BaseSettings):
     progress: bool = False  # show progress spinners/bars?
     stream: bool = True  # stream output?
     cache: bool = True  # use cache?
+    cache_type: str = "redis"  # cache type: "redis" or "momento"
     interactive: bool = True  # interactive mode?
     gpt3_5: bool = True  # use GPT-3.5?
     nofunc: bool = False  # use model without function_call? (i.e. gpt-4)
