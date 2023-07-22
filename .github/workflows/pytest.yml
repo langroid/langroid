@@ -46,12 +46,16 @@ jobs:
       run: |
         poetry run coverage run --source=langroid -m pytest tests/main
         poetry run coverage report
-    - name: Generate HTML coverage report
+    - name: Generate XML coverage report
       run: |
-        poetry run coverage html
-    - name: Upload coverage report as artifact
-      uses: actions/upload-artifact@v2
+        poetry run coverage xml
+    - name: Upload coverage to Codecov
+      uses: codecov/codecov-action@v2
       with:
-        name: htmlcov
-        path: htmlcov/
+        file: ./coverage.xml
+        flags: unittests
+        name: codecov-umbrella
+        fail_ci_if_error: false
+      env:
+        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
