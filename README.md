@@ -16,7 +16,7 @@
 <h3 align="center">
   <a target="_blank" 
     href="https://langroid.github.io/langroid/" rel="dofollow">
-      <strong>Explore the docs</strong></a>
+      <strong>Documentation</strong></a>
   &middot;
   <a target="_blank" href="https://github.com/langroid/langroid-examples" rel="dofollow">
       <strong>Examples Repo</strong></a>
@@ -44,8 +44,8 @@ This Multi-Agent paradigm is inspired by the
 Suppose you want to extract structured information about the key terms 
 of a commercial lease document. You can easily do this with Langroid using a two-agent system,
 as we show in the [langroid-examples](https://github.com/langroid/langroid-examples/blob/main/examples/docqa/chat_multi_extract.py) repo.
-The demo showcases several features of Langroid:
-- Mult-agent collaboration: `LeaseExtractor` is in charge of the task, and its LLM (GPT4) generates questions 
+The demo showcases just a few of the many features of Langroid, such as:
+- Multi-agent collaboration: `LeaseExtractor` is in charge of the task, and its LLM (GPT4) generates questions 
 to be answered by the `DocAgent`.
 - Retrieval augmented question-answering: `DocAgent` LLM (GPT4) uses retrieval from a vector-store to 
 answer the `LeaseExtractor`'s questions.
@@ -60,10 +60,10 @@ Here is what it looks like in action:
 
 # :zap: Highlights
 
-- **Agents as first-class citizens:** The `Agent` class encapsulates LLM conversation state,
+- **Agents as first-class citizens:** The [Agent](https://langroid.github.io/langroid/reference/agent/base/#langroid.agent.base.Agent) class encapsulates LLM conversation state,
   and optionally a vector-store and tools. Agents are a core abstraction in Langroid;
   Agents act as _message transformers_, and by default provide 3 _responder_ methods, one corresponding to each entity: LLM, Agent, User.
-- **Tasks:** A Task class wraps an Agent, and gives the agent instructions (or roles, or goals), 
+- **Tasks:** A [Task](https://langroid.github.io/langroid/reference/agent/task/) class wraps an Agent, and gives the agent instructions (or roles, or goals), 
   manages iteration over an Agent's responder methods, 
   and orchestrates multi-agent interactions via hierarchical, recursive
   task-delegation. The `Task.run()` method has the same 
@@ -114,34 +114,47 @@ Note that this will install `torch` and `sentence-transformers` libraries.
 
 ### Set up environment variables (API keys, etc)
 
-Copy the `.env-template` file to a new file `.env` and 
-insert these secrets:
-- **OpenAI API** key (required): If you don't have one, see [this OpenAI Page](https://help.openai.com/en/collections/3675940-getting-started-with-openai-api).
-- **Qdrant** Vector Store API Key (required for apps that need retrieval from
-  documents): Sign up for a free 1GB account at [Qdrant cloud](https://cloud.qdrant.io).
-  Alternatively [Chroma](https://docs.trychroma.com/) is also currently supported. 
-  We use the local-storage version of Chroma, so there is no need for an API key.
-- **GitHub** Personal Access Token (required for apps that need to analyze git
-  repos; token-based API calls are less rate-limited). See this
-  [GitHub page](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens).
-- **Redis** Password (optional, only needed to cache LLM API responses):
-  Redis [offers](https://redis.com/try-free/) a free 30MB Redis account
-  which is more than sufficient to try out Langroid and even beyond.
-  
+In the root of the repo, copy the `.env-template` file to a new file `.env`: 
 ```bash
 cp .env-template .env
-# now edit the .env file, insert your secrets as above
-``` 
-Your `.env` file should look like this:
-```bash
-OPENAI_API_KEY=<your key>
-GITHUB_ACCESS_TOKEN=<your token>
-REDIS_PASSWORD=<your password>
-QDRANT_API_KEY=<your key>
 ```
+Then insert your OpenAI API Key. If you don't have one, see [this OpenAI Page](https://help.openai.com/en/collections/3675940-getting-started-with-openai-api).
+Your `.env` file should look like this:
+
+```bash
+OPENAI_API_KEY=your-key-here-without-quotes
+````
 
 Currently only OpenAI models are supported. Others will be added later
 (Pull Requests welcome!).
+
+All of the below are optional and not strictly needed to run any of the examples.
+
+- **Qdrant** Vector Store API Key, URL. This is only required if you want to use Qdrant cloud.
+  You can sign up for a free 1GB account at [Qdrant cloud](https://cloud.qdrant.io).
+  If you skip setting up these, Langroid will use Qdrant in local-storage mode.
+  Alternatively [Chroma](https://docs.trychroma.com/) is also currently supported. 
+  We use the local-storage version of Chroma, so there is no need for an API key.
+- **Redis** Password, host, port: This is optional, and only needed to cache LLM API responses
+  using Redis Cloud. Redis [offers](https://redis.com/try-free/) a free 30MB Redis account
+  which is more than sufficient to try out Langroid and even beyond.
+  If you don't set up these, Langroid will use a pure-python 
+  Redis in-memory cache via the [Fakeredis](https://fakeredis.readthedocs.io/en/latest/) library.
+- **GitHub** Personal Access Token (required for apps that need to analyze git
+  repos; token-based API calls are less rate-limited). See this
+  [GitHub page](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens).
+
+If you add all of these optional variables, your `.env` file should look like this:
+```bash
+OPENAI_API_KEY=your-key-here-without-quotes
+GITHUB_ACCESS_TOKEN=your-personal-access-token-no-quotes
+REDIS_PASSWORD=your-redis-password-no-quotes
+REDIS_HOST=your-redis-hostname-no-quotes
+REDIS_PORT=your-redis-port-no-quotes
+QDRANT_API_KEY=your-key
+QDRANT_API_URL=https://your.url.here:6333 # note port number must be included
+```
+
 
 ---
 
@@ -155,9 +168,12 @@ and they are **not** complete runnable examples! For that we encourage you to
 consult the [`langroid-examples`](https://github.com/langroid/langroid-examples) 
 repository.
 
-:information_source: The examples below will only work with OpenAI GPT4 model,
-which is the default in Langroid. Switching to GPT3.5-Turbo is easy via a config 
-flag, but results may be inferior.
+:information_source: The various LLM prompts and instructions in Langroid
+have been tested to work well with GPT4.
+Switching to GPT3.5-Turbo is easy via a config flag
+(e.g., `cfg = OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT3_5_TURBO)`),
+and may suffice for some applications, but in general you may see inferior results.
+
 
 :book: Also see the
 [`Getting Started Guide`](https://langroid.github.io/langroid/quick-start/)

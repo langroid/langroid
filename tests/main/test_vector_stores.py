@@ -18,7 +18,7 @@ openai_cfg = OpenAIEmbeddingsConfig(
 
 
 def generate_vecdbs(embed_cfg: EmbeddingModelsConfig) -> VectorStore:
-    qd_dir = ".qdrant-" + embed_cfg.model_type
+    qd_dir = ".qdrant/" + embed_cfg.model_type
     rmdir(qd_dir)
     qd_cfg = QdrantDBConfig(
         type="qdrant",
@@ -28,6 +28,7 @@ def generate_vecdbs(embed_cfg: EmbeddingModelsConfig) -> VectorStore:
         embedding=embed_cfg,
     )
 
+    qd_dir = ".qdrant/cloud/" + embed_cfg.model_type
     qd_cfg_cloud = QdrantDBConfig(
         type="qdrant",
         cloud=True,
@@ -36,7 +37,7 @@ def generate_vecdbs(embed_cfg: EmbeddingModelsConfig) -> VectorStore:
         embedding=embed_cfg,
     )
 
-    cd_dir = ".chroma-" + embed_cfg.model_type
+    cd_dir = ".chroma/" + embed_cfg.model_type
     rmdir(cd_dir)
     cd_cfg = ChromaDBConfig(
         type="chroma",
