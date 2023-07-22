@@ -100,7 +100,8 @@ Here is what it looks like in action:
 
 # :gear: Installation and Setup
 
-### Install `langroid` 
+### Install `langroid`
+Langroid requires Python 3.11+. We recommend using a virtual environment.
 Use `pip` to install `langroid` (from PyPi) to your virtual environment:
 ```bash
 pip install langroid
@@ -115,20 +116,24 @@ Note that this will install `torch` and `sentence-transformers` libraries.
 
 ### Set up environment variables (API keys, etc)
 
+To get started, all you need is an OpenAI API Key.
+If you don't have one, see [this OpenAI Page](https://help.openai.com/en/collections/3675940-getting-started-with-openai-api).
+Currently only OpenAI models are supported. Others will be added later
+(Pull Requests welcome!).
+
 In the root of the repo, copy the `.env-template` file to a new file `.env`: 
 ```bash
 cp .env-template .env
 ```
-Then insert your OpenAI API Key. If you don't have one, see [this OpenAI Page](https://help.openai.com/en/collections/3675940-getting-started-with-openai-api).
+Then insert your OpenAI API Key. 
 Your `.env` file should look like this:
-
 ```bash
 OPENAI_API_KEY=your-key-here-without-quotes
 ````
 
-Currently only OpenAI models are supported. Others will be added later
-(Pull Requests welcome!).
 
+<details>
+<summary>Optional Setup Instructions (click to expand) </summary>
 All of the below are optional and not strictly needed to run any of the examples.
 
 - **Qdrant** Vector Store API Key, URL. This is only required if you want to use Qdrant cloud.
@@ -155,7 +160,7 @@ REDIS_PORT=your-redis-port-no-quotes
 QDRANT_API_KEY=your-key
 QDRANT_API_URL=https://your.url.here:6333 # note port number must be included
 ```
-
+</details>
 
 ---
 
