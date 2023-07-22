@@ -56,11 +56,14 @@ jobs:
         path: htmlcov/
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3
-      with:
-        token: ${{ secrets.CODECOV_TOKEN }} # not required for public repos
-        file: ./coverage.xml # optional
-        flags: unittests # optional
-        name: codecov-umbrella # optional
-        yml: ./codecov.yml # optional
-        fail_ci_if_error: false # optional (default = false)
+      env:
+        CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+#
+#      with:
+#        token: ${{ secrets.CODECOV_TOKEN }} # not required for public repos
+#        file: ./coverage.xml # optional
+#        flags: unittests # optional
+#        name: codecov-umbrella # optional
+#        yml: ./codecov.yml # optional
+#        fail_ci_if_error: false # optional (default = false)
 
