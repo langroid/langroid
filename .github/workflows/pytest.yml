@@ -54,7 +54,7 @@ jobs:
       with:
         name: htmlcov
         path: htmlcov/
-    - name: Upload coverage to Codecov 
+    - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3
       with:
         token: ${{ secrets.CODECOV_TOKEN }} # not required for public repos
