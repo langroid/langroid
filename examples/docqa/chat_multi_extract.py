@@ -162,6 +162,9 @@ def main(
     debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
     nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
     fn_api: bool = typer.Option(False, "--fn_api", "-f", help="use functions api"),
+    cache_type: str = typer.Option(
+        "redis", "--cachetype", "-ct", help="redis or momento"
+    ),
 ) -> None:
     cli_opts = CLIOptions(
         fn_api=fn_api,
@@ -170,6 +173,7 @@ def main(
         Settings(
             debug=debug,
             cache=not nocache,
+            cache_type=cache_type,
         )
     )
     chat(cli_opts)

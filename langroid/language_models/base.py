@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Optional, Tuple, Type, Union
 import aiohttp
 from pydantic import BaseModel, BaseSettings
 
+from langroid.cachedb.momento_cachedb import MomentoCacheConfig
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
 from langroid.mytypes import Document
 from langroid.parsing.agent_chats import parse_message
@@ -32,10 +33,7 @@ class LLMConfig(BaseSettings):
     min_output_tokens: int = 64
     use_chat_for_completion: bool = True  # use chat model for completion?
     stream: bool = False  # stream output from API?
-    cache_config: RedisCacheConfig = RedisCacheConfig(
-        hostname="redis-11524.c251.east-us-mz.azure.cloud.redislabs.com",
-        port=11524,
-    )
+    cache_config: None | RedisCacheConfig | MomentoCacheConfig = None
 
 
 class LLMFunctionCall(BaseModel):
