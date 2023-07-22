@@ -49,7 +49,7 @@ jobs:
       run: |
         poetry run coverage xml
     - name: Upload coverage to Codecov
-      uses: actions/codecov-action@v2
+      uses: codecov/codecov-action@v2
       with:
         file: ./coverage.xml
         flags: unittests
