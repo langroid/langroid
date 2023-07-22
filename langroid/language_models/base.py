@@ -33,7 +33,7 @@ class LLMConfig(BaseSettings):
     min_output_tokens: int = 64
     use_chat_for_completion: bool = True  # use chat model for completion?
     stream: bool = False  # stream output from API?
-    cache_config: Union[RedisCacheConfig, MomentoCacheConfig] = None  # cache config
+    cache_config: Union[RedisCacheConfig, MomentoCacheConfig] = None  # type: ignore
 
 
 class LLMFunctionCall(BaseModel):

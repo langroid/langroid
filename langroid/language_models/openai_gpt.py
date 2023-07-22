@@ -98,7 +98,7 @@ class OpenAIGPT(LanguageModel):
             self.cache = MomentoCache(config.cache_config)
         else:
             config.cache_config = RedisCacheConfig()
-            self.cache = RedisCache(config.cache_config)
+            self.cache = RedisCache(config.cache_config)  # type: ignore
 
     def set_stream(self, stream: bool) -> bool:
         """Enable or disable streaming output from API.

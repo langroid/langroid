@@ -9,6 +9,7 @@ from dotenv import load_dotenv
 from pydantic import BaseModel
 
 from langroid.cachedb.base import CacheDB
+from momento.responses import CacheGet
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +72,7 @@ class MomentoCache(CacheDB):
             dict: The value associated with the key.
         """
         value = self.client.get(self.config.cachename, key)
-        match value:
-            case momento.responses.CacheGet.Hit() as hit:
-                return json.loads(hit.value_string)
-        return None
+        if isinstance(value, CacheGet.Hit):
+            return json.loads(value.value_string)  # type: ignore
+        else:
+            return None
