@@ -10,6 +10,7 @@
 [![Docs](https://github.com/langroid/langroid/actions/workflows/mkdocs-deploy.yml/badge.svg)](https://github.com/langroid/langroid/actions/workflows/mkdocs-deploy.yml)
 [![Static Badge](https://img.shields.io/badge/Documentation-blue?link=https%3A%2F%2Flangroid.github.io%2Flangroid%2F&link=https%3A%2F%2Flangroid.github.io%2Flangroid%2F)](https://langroid.github.io/langroid)
 [![Static Badge](https://img.shields.io/badge/Discord-Orange?link=https%3A%2F%2Fdiscord.gg%2Fg3nAXCbZ&link=https%3A%2F%2Fdiscord.gg%2Fg3nAXCbZ)](https://discord.gg/g3nAXCbZ)
+![Codecov](https://codecov.io/gh/langroid/langroid/branch/master/graph/badge.svg)
 
 </div>
 
@@ -47,8 +48,8 @@ as we show in the [langroid-examples](https://github.com/langroid/langroid-examp
 The demo showcases just a few of the many features of Langroid, such as:
 - Multi-agent collaboration: `LeaseExtractor` is in charge of the task, and its LLM (GPT4) generates questions 
 to be answered by the `DocAgent`.
-- Retrieval augmented question-answering: `DocAgent` LLM (GPT4) uses retrieval from a vector-store to 
-answer the `LeaseExtractor`'s questions.
+- Retrieval augmented question-answering, with grounding and source-citation: `DocAgent` LLM (GPT4) uses retrieval from a vector-store to 
+answer the `LeaseExtractor`'s questions, cites the specific excerpt supporting the answer. 
 - Function-calling (also known as tool/plugin): When it has all the information it 
 needs, the `LeaseExtractor` LLM presents the information in a structured 
 format using a Function-call. 
