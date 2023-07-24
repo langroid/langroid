@@ -131,9 +131,16 @@ Your `.env` file should look like this:
 OPENAI_API_KEY=your-key-here-without-quotes
 ````
 
+Alternatively, you can set this as an environment variable in your shell
+(you will need to do this every time you open a new shell):
+```bash
+export OPENAI_API_KEY=your-key-here-without-quotes
+```
+
 
 <details>
-<summary>Optional Setup Instructions (click to expand) </summary>
+<summary><b>Optional Setup Instructions (click to expand) </b></summary>
+
 All of the below are optional and not strictly needed to run any of the examples.
 
 - **Qdrant** Vector Store API Key, URL. This is only required if you want to use Qdrant cloud.

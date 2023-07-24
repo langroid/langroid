@@ -34,23 +34,26 @@ pip install langroid
 
 ## Set up tokens/keys 
 
-Langroid uses a few APIs, and you need to set up tokens/keys for these APIs.
-At the very least you need an OpenAI API key. 
-The need for other keys is indicated below.
+To get started, all you need is an OpenAI API Key.
+If you don't have one, see [this OpenAI Page](https://help.openai.com/en/collections/3675940-getting-started-with-openai-api).
+Currently only OpenAI models are supported. Others will be added later
+(Pull Requests welcome!).
 
 In the root of the repo, copy the `.env-template` file to a new file `.env`:
 ```bash
 cp .env-template .env
 ```
-Then insert your OpenAI API Key. If you don't have one, see [this OpenAI Page](https://help.openai.com/en/collections/3675940-getting-started-with-openai-api).
+Then insert your OpenAI API Key.
 Your `.env` file should look like this:
-
 ```bash
 OPENAI_API_KEY=your-key-here-without-quotes
 ````
+Alternatively, you can set this as an environment variable in your shell
+(you will need to do this every time you open a new shell):
+```bash
+export OPENAI_API_KEY=your-key-here-without-quotes
+```
 
-Currently only OpenAI models are supported. Others will be added later
-(Pull Requests welcome!).
 
 All of the below are optional and not strictly needed to run any of the examples.
 
@@ -64,6 +67,9 @@ All of the below are optional and not strictly needed to run any of the examples
   which is more than sufficient to try out Langroid and even beyond.
   If you don't set up these, Langroid will use a pure-python
   Redis in-memory cache via the [Fakeredis](https://fakeredis.readthedocs.io/en/latest/) library.
+- **Momento** Serverless Caching of LLM API responses (as an alternative to Redis).
+  To use Momento instead of Redis, simply enter your Momento Token in the `.env` file,
+  as the value of `MOMENTO_AUTH_TOKEN` (see example file below).
 - **GitHub** Personal Access Token (required for apps that need to analyze git
   repos; token-based API calls are less rate-limited). See this
   [GitHub page](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens).
