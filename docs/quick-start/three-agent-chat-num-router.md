@@ -77,7 +77,7 @@ However, this will _not_ work in general, at least with the current LLM champion
 > Welcome to LLM Brittleness!
 
 So how do we deal with this? Fortunately, Langroid provides a "special agent"
-(no pun intended) called [`RecipientValidator`](/reference/agent/special/recipient_validator_agent)
+(no pun intended) called [`RecipientValidator`](../../reference/agent/special/recipient_validator_agent)
 whose job is to check if a recipient has been specified,
 and if not, ask the sending LLM to clarify who it is for.
 There can be two outcomes: the LLM either resends its entire message

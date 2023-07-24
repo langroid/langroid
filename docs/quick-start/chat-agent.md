@@ -7,7 +7,7 @@
 
 ## Agents 
 
-A [`ChatAgent`](/reference/agent/chat_agent) is an abstraction that 
+A [`ChatAgent`](../../reference/agent/chat_agent) is an abstraction that 
 wraps a few components, including:
 
 - an LLM (`ChatAgent.llm`), possibly equipped with tools/function-calling. 
@@ -24,7 +24,7 @@ str | ChatDocument -> ChatDocument
 ```
 where `ChatDocument` is a class that wraps a message content (text) and its metadata.
 There are three responder methods in `ChatAgent`, one corresponding to each 
-[responding entity](/reference/mytypes) (`LLM`, `USER`, or `AGENT`):
+[responding entity](../../langroid/reference/mytypes) (`LLM`, `USER`, or `AGENT`):
 
 - `llm_response`: returns the LLM response to the input message.
   (The input message is added to the LLM history, and so is the subsequent response.)
@@ -72,7 +72,7 @@ script, we had a loop that alternated between getting a human input and an LLM r
 This is one of the simplest possible loops, but in more complex applications, 
 we need a general way to orchestrate the agent's responder methods.
 
-The [`Task`](/reference/agent/task) class is an abstraction around a 
+The [`Task`](../../reference/agent/task) class is an abstraction around a 
 `ChatAgent`, responsible for iterating over the agent's responder methods,
 as well as orchestrating delegation and hand-offs among multiple tasks.
 A `Task` is initialized with a specific `ChatAgent` instance, and some 
