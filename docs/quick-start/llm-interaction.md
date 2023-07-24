@@ -41,7 +41,7 @@ This API takes a list of "messages" as input -- this is typically the conversati
 history so far, consisting of an initial system message, followed by a sequence
 of alternating messages from the LLM ("Assistant") and the user.
 Langroid provides an abstraction 
-[`LLMMessage`](/reference/language_models/base/#langroid.language_models.base.LLMMessage) to construct messages, e.g.
+[`LLMMessage`](../../reference/language_models/base/#langroid.language_models.base.LLMMessage) to construct messages, e.g.
 ```py
 from langroid.language_models.base import LLMMessage, Role
 msg = LLMMessage(
@@ -67,9 +67,9 @@ response = mdl.chat(messages, max_tokens=200)
 2. :man_raising_hand: Responses from the LLM will have role `Role.ASSISTANT`;
    this is done behind the scenes by the `response.to_LLMMessage()` call below.
 
-The response is an object of class [`LLMResponse`](/reference/language_models/base), 
+The response is an object of class [`LLMResponse`](../../reference/language_models/base), 
 which we can convert to an
-[`LLMMessage`](/reference/language_models/base/#langroid.language_models.base.LLMMessage) to append to the conversation history:
+[`LLMMessage`](../../reference/language_models/base/#langroid.language_models.base.LLMMessage) to append to the conversation history:
 ```py
 messages.append(response.to_LLMMessage())
 ```

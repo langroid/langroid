@@ -40,7 +40,7 @@ is maintained, and responses based on documents are always accompanied by
 ## `DocChatAgent` for Retrieval-Augmented Generation
 
 Langroid provides a special type of agent called 
-[`DocChatAgent`](/reference/agent/special/doc_chat_agent), which is a `ChatAgent`
+[`DocChatAgent`](../../reference/agent/special/doc_chat_agent), which is a `ChatAgent`
 augmented with a vector-store, and some special methods that enable the agent
 to ingest documents into the vector-store, and answer queries based on these documents.
 
