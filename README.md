@@ -492,9 +492,7 @@ folder of the `langroid-examples` repo.
 
 ---
 
-# :heart: Thank you to our supporters!
-
-[![Stargazers repo roster for @langroid/langroid](https://reporoster.com/stars/langroid/langroid)](https://github.com/langroid/langroid/stargazers)
+# :heart: Thank you to our [supporters](https://github.com/langroid/langroid/stargazers)
 
 # Contributors
 
