@@ -39,6 +39,7 @@ collaboratively solve a problem by exchanging messages.
 This Multi-Agent paradigm is inspired by the
 [Actor Framework](https://en.wikipedia.org/wiki/Actor_model)
 (but you do not need to know anything about this!).
+We welcome [contributions](./CONTRIBUTING.md)!
 
 
 # :rocket: Demo

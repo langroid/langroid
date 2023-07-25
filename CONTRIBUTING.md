@@ -1,7 +1,56 @@
 # Contributing to Langroid
 
-We designed Langroid with a transparent, flexible architecture, and
-we welcome contributions from the community. Here are some guidelines.
+Thank you for your interest in contributing to our Langroid!
+We want to fundamentally change how LLM applications are built, 
+using Langroid's principled multi-agent framework. 
+Together, let us build the future of LLM-apps!
+We welcome contributions from everyone.
+
+Below you will find guidelines and suggestions for contributing.
+We explicitly designed Langroid with a transparent, flexible architecture to 
+make it easier use in LLM-powered applications, as well as 
+to make it easier to contribute to Langroid itself.
+
+# How can I Contribute?
+
+There are many ways to contribute to Langroid. Here are some areas where you can help:
+
+- Bug Reports
+- Code Fixes
+- Feature Requests
+- [Feature Implementations](#feature-implementation-ideas)
+- Documentation
+- Testing
+- UI/UX Improvements
+- Translations
+- Outreach
+
+You are welcome to take on un-assigned open [issues](https://github.com/langroid/langroid/issues).
+
+### Feature Implementation Ideas
+
+**INTEGRATIONS**
+
+- Vector databases, e.g.: Pinecone, Milvus, Weaviate, PostgresML, ...
+- Other LLM APIs, e.g.: Claude, Cohere, ...
+- Local LLMs, e.g.: llama2
+
+
+**SPECIALIZED AGENTS**
+- `SQLChatAgent`, analogous to `DocChatAgent`: adds ability to chat with SQL databases
+- `TableChatAgent`: adds ability to chat with a tabular dataset in a file. 
+   This can derive from `RetrieverAgent`
+
+**CORE LANGROID**
+- Implement a way to **backtrack** 1 step in a multi-agent task. 
+For instance during a long multi-agent conversation, if we receive a bad response from the LLM,
+when the user gets a chance to respond, they may insert a special code (e.g. `b`) so that 
+the previous step is re-done and the LLM gets another chance to respond.
+
+
+---
+
+# Contribution Guidelines
 
 ## Set up dev env
 
