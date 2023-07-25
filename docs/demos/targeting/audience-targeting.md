@@ -26,6 +26,7 @@ various components of this task:
 Langroid makes it intuitive and simple to build an LLM-powered system organized
 around agents, each responsible for a different task.
 In less than a day we built a 3-agent system to automate this task:
+
 - The `Marketer` Agent is given the Planning role
 - The `Researcher` Agent is given the Research role
 - The `Segmentor` Agent is given the Segmentation role
