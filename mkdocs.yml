@@ -78,6 +78,8 @@ nav:
     - Agent with Tools/Functions: quick-start/chat-agent-tool.md
     - Agent with Retrieval: quick-start/chat-agent-docs.md
   # defer to gen-files + literate-nav
+  - Demos:
+    - Audience Targeting: demos/targeting/audience-targeting.md
   - API Documentation: reference/  #
 #  - API Documentation:
 #    - language_models: api/language_models_base.md
