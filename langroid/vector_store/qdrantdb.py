@@ -19,6 +19,7 @@ from langroid.embedding_models.base import (
     EmbeddingModel,
     EmbeddingModelsConfig,
 )
+from langroid.embedding_models.models import OpenAIEmbeddingsConfig
 from langroid.mytypes import Document
 from langroid.utils.configuration import settings
 from langroid.vector_store.base import VectorStore, VectorStoreConfig
@@ -32,9 +33,7 @@ class QdrantDBConfig(VectorStoreConfig):
 
     collection_name: str | None = None
     storage_path: str = ".qdrant/data"
-    embedding: EmbeddingModelsConfig = EmbeddingModelsConfig(
-        model_type="openai",
-    )
+    embedding: EmbeddingModelsConfig = OpenAIEmbeddingsConfig()
     distance: str = Distance.COSINE
 
 

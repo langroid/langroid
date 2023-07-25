@@ -7,6 +7,7 @@ from langroid.embedding_models.base import (
     EmbeddingModel,
     EmbeddingModelsConfig,
 )
+from langroid.embedding_models.models import OpenAIEmbeddingsConfig
 from langroid.mytypes import DocMetaData, Document
 from langroid.utils.configuration import settings
 from langroid.utils.output.printing import print_long_text
@@ -19,9 +20,7 @@ class ChromaDBConfig(VectorStoreConfig):
     type: str = "chroma"
     collection_name: str = "chroma-langroid"
     storage_path: str = ".chroma/data"
-    embedding: EmbeddingModelsConfig = EmbeddingModelsConfig(
-        model_type="openai",
-    )
+    embedding: EmbeddingModelsConfig = OpenAIEmbeddingsConfig()
     host: str = "127.0.0.1"
     port: int = 6333
 
