@@ -1,7 +1,84 @@
 # Contributing to Langroid
 
-We designed Langroid with a transparent, flexible architecture, and
-we welcome contributions from the community. Here are some guidelines.
+Thank you for your interest in contributing to Langroid!
+We want to fundamentally change how LLM applications are built, 
+using Langroid's principled multi-agent framework. 
+Together, let us build the future of LLM-apps!
+We welcome contributions from everyone.
+
+Below you will find guidelines and suggestions for contributing.
+We explicitly designed Langroid with a transparent, flexible architecture to 
+make it easier to build LLM-powered applications, as well as 
+to make it easier to contribute to Langroid itself.
+
+# How can I Contribute?
+
+There are many ways to contribute to Langroid. Here are some areas where you can help:
+
+- Bug Reports
+- Code Fixes
+- Feature Requests
+- [Feature Implementations](#feature-implementation-ideas)
+- Documentation
+- Testing
+- UI/UX Improvements
+- Translations
+- Outreach
+
+You are welcome to take on un-assigned open [issues](https://github.com/langroid/langroid/issues).
+
+### Feature Implementation Ideas
+
+**INTEGRATIONS**
+
+- Vector databases, e.g.: Pinecone, Milvus, Weaviate, PostgresML, ...
+- Other LLM APIs, e.g.: Claude, Cohere, ...
+- Local LLMs, e.g.: llama2
+
+
+**SPECIALIZED AGENTS**
+- `SQLChatAgent`, analogous to `DocChatAgent`: adds ability to chat with SQL databases
+- `TableChatAgent`: adds ability to chat with a tabular dataset in a file. 
+   This can derive from `RetrieverAgent`
+
+**CORE LANGROID**
+- Implement a way to **backtrack** 1 step in a multi-agent task. 
+For instance during a long multi-agent conversation, if we receive a bad response from the LLM,
+when the user gets a chance to respond, they may insert a special code (e.g. `b`) so that 
+the previous step is re-done and the LLM gets another chance to respond.
+
+– Implement Agents that communicate via REST APIs: Currently, all agents within the multi-agent system are created in a single script. We can remove this limitation, and add the ability to have agents running and listening to an end-point (e.g. a flask server). For example the LLM may generate a function-call or Langroid-tool-message, which the agent’s tool-handling method interprets and makes a corresponding request to an API endpoint. This request can be handled by an agent listening to requests at this endpoint, and the tool-handling method gets the result and returns it as the result of the handling method. This is roughly the mechanism behind OpenAI plugins, e.g. https://github.com/openai/chatgpt-retrieval-plugin
+
+**DEMOS, POC, Use-cases**
+
+– Data Analyst Demo: A multi-agent system that automates a data analysis workflow, e.g. 
+feature-exploration, visualization, ML model training. 
+
+– Document classification based on rules in an unstructured “policy” document. 
+    This is an actual use-case from a large US bank. The task is to classify 
+    documents into categories “Public” or “Sensitive”. The classification must be 
+    informed by a “policy” document which has various criteria. 
+    Normally, someone would have to read the policy doc, and apply that to 
+    classify the documents, and maybe go back and forth and look up the policy repeatedly. 
+    This would be a perfect use-case for Langroid’s multi-agent system. 
+    One agent would read the policy, perhaps extract the info into some structured form. 
+    Another agent would apply the various criteria from the policy to the document in question, 
+    and (possibly with other helper agents) classify the document, along with a detailed justification.
+
+– Document classification and tagging: Given a collection of already labeled/tagged docs, 
+which have been ingested into a vecdb (to allow semantic search), 
+when given a new document to label/tag, we retrieve the most similar docs 
+from multiple categories/tags from the vecdb and present these (with the labels/tags) 
+as few-shot examples to the LLM, and have the LLM classify/tag the retrieved document.
+
+– implement the CAMEL multi-agent debate system : https://lablab.ai/t/camel-tutorial-building-communicative-agents-for-large-scale-language-model-exploration
+
+– Implement Stanford’s Simulacra paper with Langroid.
+Generative Agents: Interactive Simulacra of Human Behavior https://arxiv.org/abs/2304.03442
+
+---
+
+# Contribution Guidelines
 
 ## Set up dev env
 
