@@ -35,8 +35,8 @@ or provides the URL of the business's website.
 The `Marketer` Agent sends
 customer profile queries to the `Researcher`, who answers in plain English, and
 the Marketer takes this description and sends it to the Segmentor (who has
-access to IAB Audience Segments), who maps it to standardized segments. The task
-is done when the Marketer finds 4 standardized segments. 
+access to IAB Audience Segments, embedded into a vector-database), 
+who maps it to standardized segments. The task is done when the Marketer finds 4 standardized segments. 
 The agents are depicted in the diagram below:
 
 ![targeting.png](targeting.png)
