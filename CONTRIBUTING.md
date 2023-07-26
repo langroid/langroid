@@ -84,6 +84,9 @@ as few-shot examples to the LLM, and have the LLM classify/tag the retrieved doc
 - Implement Stanford’s Simulacra paper with Langroid.
 Generative Agents: Interactive Simulacra of Human Behavior https://arxiv.org/abs/2304.03442
 
+- Implement CMU's paper with Langroid.
+Emergent autonomous scientific research capabilities of large language models https://arxiv.org/pdf/2304.05332.pdf
+
 ---
 
 # Contribution Guidelines
