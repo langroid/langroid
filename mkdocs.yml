@@ -80,7 +80,7 @@ nav:
   # defer to gen-files + literate-nav
   - Demos:
     - Audience Targeting: demos/targeting/audience-targeting.md
-  - API Documentation: reference/  #
+  - Code/API Docs: reference/  #
 #  - API Documentation:
 #    - language_models: api/language_models_base.md
 
