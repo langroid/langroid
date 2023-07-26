@@ -8,7 +8,7 @@
 ## Why is this important?
 
 Until now in this guide, agents have not used external data.
-Although LLMs already have enourmous amounts of knowledge "hard-wired"
+Although LLMs already have enormous amounts of knowledge "hard-wired"
 into their weights during training (and this is after all why ChatGPT
 has exploded in popularity), for practical enterprise applications
 there are a few reasons it is critical to augment LLMs with access to
@@ -40,11 +40,11 @@ is maintained, and responses based on documents are always accompanied by
 ## `DocChatAgent` for Retrieval-Augmented Generation
 
 Langroid provides a special type of agent called 
-[`DocChatAgent`](../../reference/agent/special/doc_chat_agent), which is a `ChatAgent`
+[`DocChatAgent`][langroid.agent.special.doc_chat_agent.DocChatAgent], which is a [`ChatAgent`][langroid.agent.chat_agent.ChatAgent]
 augmented with a vector-store, and some special methods that enable the agent
 to ingest documents into the vector-store, and answer queries based on these documents.
 
-The `DocChatAgent` provides many ways to ingest documents into the vector-store,
+The [`DocChatAgent`][langroid.agent.special.doc_chat_agent.DocChatAgent] provides many ways to ingest documents into the vector-store,
 including from URLs and local file-paths and URLs. Given a collection of document paths,
 ingesting their content into the vector-store involves the following steps:
 
@@ -60,16 +60,16 @@ ingesting their content into the vector-store involves the following steps:
 Note that this will install `torch` and `sentence-transfoemers` libraries.
 
 
-`DocChatAgent`'s `llm_response` overrides the default `ChatAgent` method, 
+[`DocChatAgent`][langroid.agent.special.doc_chat_agent.DocChatAgent]'s `llm_response` overrides the default [`ChatAgent`][langroid.agent.chat_agent.ChatAgent] method, 
 by augmenting the input message with relevant shards from the vector-store,
 along with instructions to the LLM to respond based on the shards.
 
 ## Define some documents
 
-Let us see how `DocChatAgent` helps with retrieval-agumented generation (RAG).
+Let us see how [`DocChatAgent`][langroid.agent.special.doc_chat_agent.DocChatAgent] helps with retrieval-agumented generation (RAG).
 For clarity, rather than ingest documents from paths or URLs,
 let us just set up some simple documents in the code itself, 
-using Langroid's `Document` class:
+using Langroid's [`Document`][langroid.mytypes.Document] class:
 
 ```py
 from langroid.mytypes import Document, DocMetaData
@@ -109,8 +109,8 @@ as we see below.
 
 ## Configure the DocChatAgent and ingest documents
 
-Following the pattern in Langroid, we first set up a `DocChatAgentConfig` object
-and then instantiate a `DocChatAgent` from it.
+Following the pattern in Langroid, we first set up a [`DocChatAgentConfig`][langroid.agent.special.doc_chat_agent.DocChatAgentConfig] object
+and then instantiate a [`DocChatAgent`][langroid.agent.special.doc_chat_agent.DocChatAgent] from it.
 
 ```py
 from langroid.agent.special.doc_chat_agent import DocChatAgent, DocChatAgentConfig
@@ -142,7 +142,7 @@ rather than re-use the existing one with the same name.
 3. Specifies that, for a query,
    we want to retrieve at most 2 similar shards from the vector-store
 
-Now that the `DocChatAgent` is configured, we can ingest the documents 
+Now that the [`DocChatAgent`][langroid.agent.special.doc_chat_agent.DocChatAgent] is configured, we can ingest the documents 
 into the vector-store:
 
 ```py
@@ -179,8 +179,8 @@ Instead of having in-code documents as above, what if you had a set of URLs
 instead -- how do you use Langroid to answer questions based on the content 
 of those URLS?
 
-`DocChatAgent` makes it very simple to do this. 
-First include the URLs in the `DocChatAgentConfig` object:
+[`DocChatAgent`][langroid.agent.special.doc_chat_agent.DocChatAgent] makes it very simple to do this. 
+First include the URLs in the [`DocChatAgentConfig`][langroid.agent.special.doc_chat_agent.DocChatAgentConfig] object:
 
 ```py
 config = DocChatAgentConfig(
@@ -191,7 +191,7 @@ config = DocChatAgentConfig(
 )
 ```
 
-Then, call the `ingest()` method of the `DocChatAgent` object:
+Then, call the `ingest()` method of the [`DocChatAgent`][langroid.agent.special.doc_chat_agent.DocChatAgent] object:
 
 ```py
 agent.ingest()
