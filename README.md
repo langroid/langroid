@@ -42,6 +42,7 @@ This Multi-Agent paradigm is inspired by the
 We welcome contributions -- See the [contributions](./CONTRIBUTING.md) document
 for ideas on what to contribute.
 
+**Questions, Feedback, Ideas? Join us on [Discord](https://discord.gg/g3nAXCbZ)!**
 
 # :rocket: Demo
 Suppose you want to extract structured information about the key terms 

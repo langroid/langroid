@@ -34,8 +34,8 @@ In less than a day we built a 3-agent system to automate this task:
 To kick off the system, the human user describes a business in English,
 or provides the URL of the business's website. 
 The `Marketer` Agent sends
-customer profile queries to the `Researcher`, who answers in plain English, and
-the Marketer takes this description and sends it to the Segmentor (who has
+customer profile queries to the `Researcher`, who answers in plain English based on 
+the business description, and the Marketer takes this description and sends it to the Segmentor (who has
 access to IAB Audience Segments, embedded into a vector-database), 
 who maps it to standardized segments. The task is done when the Marketer finds 4 standardized segments. 
 The agents are depicted in the diagram below:

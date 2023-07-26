@@ -10,6 +10,8 @@ Below you will find guidelines and suggestions for contributing.
 We explicitly designed Langroid with a transparent, flexible architecture to 
 make it easier to build LLM-powered applications, as well as 
 to make it easier to contribute to Langroid itself.
+Feel free to join us on [Discord](https://discord.gg/2YjJ2yYQ) 
+for any questions or discussions.
 
 # How can I Contribute?
 

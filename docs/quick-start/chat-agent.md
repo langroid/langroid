@@ -24,7 +24,7 @@ str | ChatDocument -> ChatDocument
 ```
 where `ChatDocument` is a class that wraps a message content (text) and its metadata.
 There are three responder methods in `ChatAgent`, one corresponding to each 
-[responding entity](../../langroid/reference/mytypes) (`LLM`, `USER`, or `AGENT`):
+[responding entity](../../reference/mytypes) (`LLM`, `USER`, or `AGENT`):
 
 - `llm_response`: returns the LLM response to the input message.
   (The input message is added to the LLM history, and so is the subsequent response.)
