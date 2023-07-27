@@ -63,7 +63,6 @@ class Task:
         default_human_response: Optional[str] = None,
         only_user_quits_root: bool = True,
         erase_substeps: bool = False,
-        rich_log: bool = True,
     ):
         """
         A task to be performed by an agent.
@@ -92,7 +91,11 @@ class Task:
                 Note: erasing can reduce prompt sizes, but results in repetitive
                 sub-task delegation.
         """
-        if isinstance(agent, ChatAgent) and len(agent.message_history) == 0 or restart:
+        if (
+            isinstance(agent, ChatAgent)
+            and len(agent.message_history) == 0
+            or restart
+        ):
             agent = cast(ChatAgent, agent)
             agent.message_history = []
             # possibly change the task messages
@@ -108,7 +111,7 @@ class Task:
                 )
         self.logger: None | RichFileLogger = None
         self.tsv_logger: None | logging.Logger = None
-        self.rich_log = rich_log
+        self.color_log: bool = True
         self.agent = agent
         self.name = name or agent.config.name
         self.default_human_response = default_human_response
@@ -118,11 +121,15 @@ class Task:
         self.erase_substeps = erase_substeps
 
         agent_entity_responders = agent.entity_responders()
-        self.responders: List[Responder] = [e for e, _ in agent_entity_responders]
+        self.responders: List[Responder] = [
+            e for e, _ in agent_entity_responders
+        ]
         self.non_human_responders: List[Responder] = [
             r for r in self.responders if r != Entity.USER
         ]
-        self.human_tried = False  # did human get a chance to respond in last step?
+        self.human_tried = (
+            False  # did human get a chance to respond in last step?
+        )
         self._entity_responder_map: Dict[
             Entity, Callable[..., Optional[ChatDocument]]
         ] = dict(agent_entity_responders)
@@ -189,7 +196,9 @@ class Task:
             for t in task:
                 self.add_sub_task(t)
             return
-        assert isinstance(task, Task), f"added task must be a Task, not {type(task)}"
+        assert isinstance(
+            task, Task
+        ), f"added task must be a Task, not {type(task)}"
 
         task.parent_task = self
         self.sub_tasks.append(task)
@@ -197,7 +206,9 @@ class Task:
         self.responders.append(cast(Responder, task))
         self.non_human_responders.append(cast(Responder, task))
 
-    def init(self, msg: None | str | ChatDocument = None) -> ChatDocument | None:
+    def init(
+        self, msg: None | str | ChatDocument = None
+    ) -> ChatDocument | None:
         """
         Initialize the task, with an optional message to start the conversation.
         Initializes `self.pending_message` and `self.pending_sender`.
@@ -218,7 +229,10 @@ class Task:
             )
         else:
             self.pending_message = msg
-            if self.pending_message is not None and self.parent_task is not None:
+            if (
+                self.pending_message is not None
+                and self.parent_task is not None
+            ):
                 # msg may have come from parent_task, so we pretend this is from
                 # the CURRENT task's USER entity
                 self.pending_message.metadata.sender = Entity.USER
@@ -226,12 +240,19 @@ class Task:
         if self.parent_task is not None and self.parent_task.logger is not None:
             self.logger = self.parent_task.logger
         else:
-            self.logger = RichFileLogger(f"logs/{self.name}.log", color=self.rich_log)
+            self.logger = RichFileLogger(
+                f"logs/{self.name}.log", color=self.color_log
+            )
 
-        if self.parent_task is not None and self.parent_task.tsv_logger is not None:
+        if (
+            self.parent_task is not None
+            and self.parent_task.tsv_logger is not None
+        ):
             self.tsv_logger = self.parent_task.tsv_logger
         else:
-            self.tsv_logger = setup_file_logger("tsv_logger", f"logs/{self.name}.tsv")
+            self.tsv_logger = setup_file_logger(
+                "tsv_logger", f"logs/{self.name}.tsv"
+            )
             header = ChatDocLoggerFields().tsv_header()
             self.tsv_logger.info(f" \tTask\tResponder\t{header}")
 
@@ -312,7 +333,9 @@ class Task:
         n_messages = 0
         if isinstance(self.agent, ChatAgent):
             if self.erase_substeps:
-                del self.agent.message_history[message_history_idx + 2 : n_messages - 1]
+                del self.agent.message_history[
+                    message_history_idx + 2 : n_messages - 1
+                ]
             n_messages = len(self.agent.message_history)
         if self.erase_substeps:
             for t in self.sub_tasks:
@@ -381,8 +404,9 @@ class Task:
             if self.valid(result):
                 assert result is not None
                 self.pending_sender = r
-                if result.metadata.parent_responder is not None and not isinstance(
-                    r, Entity
+                if (
+                    result.metadata.parent_responder is not None
+                    and not isinstance(r, Entity)
                 ):
                     # When result is from a sub-task, and `result.metadata` contains
                     # a non-null `parent_responder`, pretend this result was
@@ -394,7 +418,9 @@ class Task:
                     result.metadata.parent_responder = None
                 result.metadata.parent = parent
                 old_attachment = (
-                    self.pending_message.attachment if self.pending_message else None
+                    self.pending_message.attachment
+                    if self.pending_message
+                    else None
                 )
                 self.pending_message = result
                 # if result has no attachment, preserve the old attachment
@@ -407,14 +433,18 @@ class Task:
 
         if not self.valid(result):
             responder = (
-                Entity.LLM if self.pending_sender == Entity.USER else Entity.USER
+                Entity.LLM
+                if self.pending_sender == Entity.USER
+                else Entity.USER
             )
             self.pending_message = ChatDocument(
                 content=NO_ANSWER,
                 metadata=ChatDocMetaData(sender=responder, parent=parent),
             )
             self.pending_sender = responder
-            self.log_message(self.pending_sender, self.pending_message, mark=True)
+            self.log_message(
+                self.pending_sender, self.pending_message, mark=True
+            )
 
         if settings.debug:
             sender_str = str(self.pending_sender)
@@ -439,7 +469,9 @@ class Task:
             actual_turns = e.turns if e.turns > 0 else turns
             return e.run(self.pending_message, turns=actual_turns)
         else:
-            return self._entity_responder_map[cast(Entity, e)](self.pending_message)
+            return self._entity_responder_map[cast(Entity, e)](
+                self.pending_message
+            )
 
     def result(self) -> ChatDocument:
         """
@@ -501,7 +533,8 @@ class Task:
             or (  # current task is addressing message to parent task
                 self.parent_task is not None
                 and self.parent_task.name != ""
-                and self.pending_message.metadata.recipient == self.parent_task.name
+                and self.pending_message.metadata.recipient
+                == self.parent_task.name
             )
             or (
                 # Task controller is "stuck", has nothing to say
@@ -567,7 +600,9 @@ class Task:
             tool_type = f.tool_type.rjust(6)
             tool_name = f.tool.rjust(10)
             tool_str = f"{tool_type}({tool_name})" if tool_name != "" else ""
-            sender = f"[{color}]" + str(f.sender_entity).rjust(10) + f"[/{color}]"
+            sender = (
+                f"[{color}]" + str(f.sender_entity).rjust(10) + f"[/{color}]"
+            )
             sender_name = f.sender_name.rjust(10)
             recipient = "=>" + str(f.recipient).rjust(10)
             block = "X " + str(f.block or "").rjust(10)
@@ -582,7 +617,9 @@ class Task:
             self.logger.log(msg_str)
         if self.tsv_logger is not None:
             resp_str = str(resp)
-            self.tsv_logger.info(f"{mark_str}\t{task_name}\t{resp_str}\t{msg_str_tsv}")
+            self.tsv_logger.info(
+                f"{mark_str}\t{task_name}\t{resp_str}\t{msg_str_tsv}"
+            )
 
     def _can_respond(self, e: Responder) -> bool:
         if self.pending_sender == e:
@@ -594,4 +631,16 @@ class Task:
             # Remove the block so it does not block the entity forever
             self.pending_message.metadata.block = None
             return False
-        return self.pending_message is None or self.pending_message.metadata.block != e
+        return (
+            self.pending_message is None
+            or self.pending_message.metadata.block != e
+        )
+
+    def rich_log(self, enable: bool = True) -> None:
+        """
+        Flag to enable/disable rich logging using console
+        Args:
+            enable (bool): the flag that will change the value of the instance
+            variable `color_log`, which wil enable/diable rich logging
+        """
+        self.color_log = enable
