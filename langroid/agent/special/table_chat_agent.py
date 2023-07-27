@@ -75,6 +75,13 @@ class TableChatAgent(ChatAgent):
             self.df = config.data
         else:
             self.df = read_tabular_data(config.data, config.separator)
+
+        logger.info(
+            f"""TableChatAgent initialized with dataframe of shape {self.df.shape}
+            and columns: 
+            {self.df.columns}
+            """
+        )
         self.config.system_message = self.config.system_message.format(
             columns=", ".join(self.df.columns)
         )
