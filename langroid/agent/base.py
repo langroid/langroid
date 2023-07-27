@@ -524,7 +524,7 @@ class Agent(ABC):
         try:
             result = handler_method(tool)
         except Exception as e:
-            logger.warning(f"Error handling tool-message {tool_name}: {e}")
+            logger.warning(f"Error handling tool-message {tool_name}: {type(e)}: {e}")
             return None
         return result  # type: ignore
 
