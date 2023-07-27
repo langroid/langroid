@@ -22,7 +22,7 @@
   <a target="_blank" href="https://github.com/langroid/langroid-examples" rel="dofollow">
       <strong>Examples Repo</strong></a>
   &middot;
-  <a target="_blank" href="https://discord.gg/g3nAXCbZ" rel="dofollow">
+  <a target="_blank" href="https://discord.gg/ZU36McDgDs" rel="dofollow">
       <strong>Discord</strong></a>
   &middot;
   <a target="_blank" href="./CONTRIBUTING.md" rel="dofollow">
