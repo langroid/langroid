@@ -117,8 +117,6 @@ def test_table_chat_agent_url(test_settings: Settings, fn_api: bool) -> None:
         agent,
         name="TableChatAgent",
         default_human_response="",  # avoid waiting for human response
-        llm_delegate=False,
-        single_round=False,
     )
 
     # run for 3 turns:

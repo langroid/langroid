@@ -494,6 +494,59 @@ See full working scripts in the
 folder of the `langroid-examples` repo.
 </details>
 
+<details>
+<summary><b> Chat with tabular data (file paths, URLs, dataframes) </b></summary>
+Import some modules:
+
+```python
+from langroid.agent.special.table_chat_agent import TableChatAgent, TableChatAgentConfig
+from langroid.agent.task import Task
+from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
+```
+
+Set up a `TableChatAgent` for a data file, URL or dataframe
+(Ensure the data table has a header row; the delimiter/separator is auto-detected):
+```python
+dataset =  "https://archive.ics.uci.edu/ml/machine-learning-databases/wine-quality/winequality-red.csv"
+# or dataset = "/path/to/my/data.csv"
+# or dataset = pd.read_csv("/path/to/my/data.csv")
+agent = TableChatAgent(
+    config=TableChatAgentConfig(
+        data=dataset,  
+        llm=OpenAIGPTConfig(
+            chat_model=OpenAIChatModel.GPT4,
+        ),
+    )
+)
+```
+Set up a task, and ask one-off questions like this: 
+
+```python
+task = Task(
+  agent, 
+  name = "DataAssistant",
+  default_human_response="", # to avoid waiting for user input
+)
+result = task.run(
+  "What is the average alcohol content of wines with a quality rating above 7?",
+  turns=2 # return after user question, LLM fun-call/tool response, Agent code-exec result
+) 
+print(result.content)
+```
+Or alternatively, set up a task and run it in an interactive loop with the user:
+
+```python
+task = Task(agent, name="DataAssistant")
+task.run()
+``` 
+
+For a full working example see the 
+[`data_chat.py`](https://github.com/langroid/langroid-examples/tree/main/examples/data-qa/table_chat.py)
+script in the `langroid-examples` repo.
+
+
+</details>
+
 ---
 
 # :heart: Thank you to our [supporters](https://github.com/langroid/langroid/stargazers)
