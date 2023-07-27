@@ -7,7 +7,10 @@ import typer
 from rich import print
 from rich.prompt import Prompt
 
-from langroid.agent.special.doc_chat_agent import DocChatAgent, DocChatAgentConfig
+from langroid.agent.special.doc_chat_agent import (
+    DocChatAgent,
+    DocChatAgentConfig,
+)
 from langroid.agent.task import Task
 from langroid.parsing.urls import get_list_from_user
 from langroid.utils.configuration import set_global, Settings
@@ -53,7 +56,8 @@ def chat(config: DocChatAgentConfig) -> None:
     if collection_name == "NEW":
         is_new_collection = True
         collection_name = Prompt.ask(
-            "What would you like to name the NEW collection?", default="urlqa-chat"
+            "What would you like to name the NEW collection?",
+            default="urlqa-chat",
         )
 
     agent.vecdb.set_collection(collection_name, replace=replace_collection)
@@ -61,7 +65,7 @@ def chat(config: DocChatAgentConfig) -> None:
     print("[blue]Welcome to the document chatbot!")
     print("[cyan]Enter x or q to quit, or ? for evidence")
     default_urls_str = " (or leave empty for default URLs)" if is_new_collection else ""
-    print("[blue]Enter some URLs or file/dir paths below " f"{default_urls_str}")
+    print(f"[blue]Enter some URLs or file/dir paths below {default_urls_str}")
     inputs = get_list_from_user()
     if len(inputs) == 0:
         if is_new_collection:

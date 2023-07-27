@@ -63,6 +63,7 @@ class Task:
         default_human_response: Optional[str] = None,
         only_user_quits_root: bool = True,
         erase_substeps: bool = False,
+        rich_log: bool = True,
     ):
         """
         A task to be performed by an agent.
@@ -107,6 +108,7 @@ class Task:
                 )
         self.logger: None | RichFileLogger = None
         self.tsv_logger: None | logging.Logger = None
+        self.rich_log = rich_log
         self.agent = agent
         self.name = name or agent.config.name
         self.default_human_response = default_human_response
@@ -224,7 +226,7 @@ class Task:
         if self.parent_task is not None and self.parent_task.logger is not None:
             self.logger = self.parent_task.logger
         else:
-            self.logger = RichFileLogger(f"logs/{self.name}.log")
+            self.logger = RichFileLogger(f"logs/{self.name}.log", color=self.rich_log)
 
         if self.parent_task is not None and self.parent_task.tsv_logger is not None:
             self.tsv_logger = self.parent_task.tsv_logger
@@ -283,7 +285,11 @@ class Task:
             # mark where we are in the message history, so we can reset to this when
             # we are done with the task
             message_history_idx = (
-                max(len(self.agent.message_history), len(self.agent.task_messages)) - 1
+                max(
+                    len(self.agent.message_history),
+                    len(self.agent.task_messages),
+                )
+                - 1
             )
 
         i = 0
