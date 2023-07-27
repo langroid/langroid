@@ -65,9 +65,22 @@ class QdrantDB(VectorStore):
                 timeout=config.timeout,
             )
         else:
-            self.client = QdrantClient(
-                path=config.storage_path,
-            )
+            try:
+                self.client = QdrantClient(
+                    path=config.storage_path,
+                )
+            except Exception as e:
+                new_storage_path = config.storage_path + ".new"
+                logger.warning(
+                    f"""
+                    Error connecting to local QdrantDB at {config.storage_path}:
+                    {e}
+                    Switching to {new_storage_path}
+                    """
+                )
+                self.client = QdrantClient(
+                    path=new_storage_path,
+                )
 
         # Note: Only create collection if a non-null collection name is provided.
         # This is useful to delay creation of vecdb until we have a suitable
