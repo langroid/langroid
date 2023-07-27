@@ -1,6 +1,7 @@
 """
 Agent to retrieve relevant verbatim whole docs/records from a vector store.
 """
+import ast
 import logging
 from abc import ABC, abstractmethod
 from typing import List, Optional, Sequence
@@ -9,7 +10,10 @@ from rich import print
 from rich.console import Console
 
 from langroid.agent.chat_document import ChatDocMetaData, ChatDocument
-from langroid.agent.special.doc_chat_agent import DocChatAgent, DocChatAgentConfig
+from langroid.agent.special.doc_chat_agent import (
+    DocChatAgent,
+    DocChatAgentConfig,
+)
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
 from langroid.mytypes import DocMetaData, Document, Entity
@@ -124,7 +128,9 @@ class RetrieverAgent(DocChatAgent, ABC):
         if self.vecdb is None:
             logger.warning("No vector store specified")
             return []
-        with console.status("[cyan]Searching VecDB for similar docs/records..."):
+        with console.status(
+            "[cyan]Searching VecDB for similar docs/records..."
+        ):
             docs_and_scores = self.vecdb.similar_texts_with_scores(
                 query,
                 k=self.config.parsing.n_similar_docs,
@@ -158,7 +164,9 @@ class RetrieverAgent(DocChatAgent, ABC):
         if self.llm is None:
             logger.warning("No LLM specified")
             return nearest_docs
-        with console.status("LLM selecting relevant docs from retrieved ones..."):
+        with console.status(
+            "LLM selecting relevant docs from retrieved ones..."
+        ):
             doc_list = self.llm_select_relevant_docs(query, nearest_docs)
 
         return doc_list
@@ -187,10 +195,18 @@ class RetrieverAgent(DocChatAgent, ABC):
         
         Find at most {self.config.n_matches} DOCs that are most relevant to the QUERY.
         Return your as a sequence of DOC IDS ONLY, for example: 
-        "id1 id2 id3..."
+        "[id1, id2, id3...]"
+        Othwerwise return NO MATCHING
         """
         default_response = Document(
             content=NO_ANSWER,
+            metadata=DocMetaData(
+                source="None",
+            ),
+        )
+
+        no_matching = Document(
+            content="No satisfying document",
             metadata=DocMetaData(
                 source="None",
             ),
@@ -204,7 +220,10 @@ class RetrieverAgent(DocChatAgent, ABC):
         )
         if response.message == NO_ANSWER:
             return [default_response]
-        ids = response.message.split()
+        if response.message == "NO MATCHING":
+            return [no_matching]
+        ids_lst = response.message.split('"')[1]
+        ids = ast.literal_eval(ids_lst)
         if len(ids) == 0:
             return [default_response]
         if self.vecdb is None:

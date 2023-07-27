@@ -1,11 +1,12 @@
 import os
 import warnings
-from typing import List, Sequence
+from typing import List
 
 import pytest
 
 from langroid.agent.special.retriever_agent import (
     RecordDoc,
+    RecordMetadata,
     RetrieverAgent,
     RetrieverAgentConfig,
 )
@@ -13,9 +14,8 @@ from langroid.agent.task import Task
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
-from langroid.mytypes import DocMetaData, Document, Entity
+from langroid.mytypes import Entity
 from langroid.parsing.parser import ParsingConfig, Splitter
-from langroid.parsing.utils import generate_random_text
 from langroid.prompts.prompts_config import PromptsConfig
 from langroid.utils.configuration import Settings, set_global
 from langroid.utils.system import rmdir
@@ -24,6 +24,15 @@ from langroid.vector_store.qdrantdb import QdrantDBConfig
 
 storage_path = ".qdrant/testdata1"
 rmdir(storage_path)
+
+
+class PeopleMetadata(RecordMetadata):
+    source: str = None
+    id: int
+
+
+class PeoplyRecord(RecordDoc):
+    metadata: PeopleMetadata
 
 
 class _TesrRetrieverAgentConfig(RetrieverAgentConfig):
@@ -58,74 +67,43 @@ class _TesrRetrieverAgentConfig(RetrieverAgentConfig):
     )
 
 
-config = _TesrRetrieverAgentConfig()
-set_global(Settings(cache=True))  # allow cacheing
-documents: List[Document] = (
-    [
-        Document(
-            content="""
-        In the year 2050, GPT10 was released. 
-        
-        In 2057, paperclips were seen all over the world. 
-        
-        Global warming was solved in 2060. 
-        
-        In 2061, the world was taken over by paperclips. 
-        
-        In 2045, the Tour de France was still going on.
-        They were still using bicycles. 
-        
-        There was one more ice age in 2040.
-        """,
-            metadata=DocMetaData(source="wikipedia", id=11),
-        ),
-        Document(
-            content="""
-        We need to promote green coding to address the Global warming issue
+set_global(
+    Settings(
+        cache=True,
+        gpt3_5=True,
+    )
+)  # allow cacheing
 
-        Big tech companies have started working on adapting green coding 
-
-        AI is raising significant concerns, but it's expected this issue will
-        be resolved in 2060
-        """,
-            metadata=DocMetaData(source="bbc", id=12),
-        ),
-        Document(
-            content="""
-        We are living in an alternate universe where Paris is the capital of England.
-        
-        The capital of England used to be London. 
-        
-        The capital of France used to be Paris.
-        
-        Charlie Chaplin was a great comedian.
-        
-        In 2050, all countries merged into Lithuania.
-        """,
-            metadata=DocMetaData(source="almanac", id=13),
-        ),
-    ]
-    + [
-        Document(
-            content=generate_random_text(5),
-            metadata={"source": "random", "id": c},
-        )
-        for c in range(10)
-    ]
-)
-
+people = [
+    {"id": 1, "age": 35, "gender": "male", "height": "6.1ft"},
+    {"id": 2, "age": 33, "gender": "female", "height": "5.7ft"},
+    {"id": 3, "age": 42, "gender": "female", "height": "5.8ft"},
+    {"id": 4, "age": 23, "gender": "male", "height": "5.9ft"},
+    {"id": 5, "age": 31, "gender": "female", "height": "5.6ft"},
+]
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 
 class _TestRetrieverAgent(RetrieverAgent):
-    def get_records(self) -> Sequence[RecordDoc]:
-        docs = []
-        for doc in documents:
-            docs.append(RecordDoc(content=doc.content, metadata=doc.metadata))
-        return docs
+    def __init__(self, config: _TesrRetrieverAgentConfig):
+        super().__init__(config)
+        self.config = config
+
+    def get_records(self) -> List[PeoplyRecord]:
+        people_rec = []
+        row_num = 0
+        for person in people:
+            full_row = f"{person['age']}|{person['gender']}|{person['height']}"
+            row_num += 1
+            meta = PeopleMetadata(
+                id=int(person["id"]), source=f"people_{row_num}"
+            )
+            people_rec.append(PeoplyRecord(content=full_row, metadata=meta))
+        return people_rec
 
 
+config = _TesrRetrieverAgentConfig()
 agent = _TestRetrieverAgent(config)
 
 agent.ingest()
@@ -139,18 +117,28 @@ warnings.filterwarnings(
 )
 
 QUERY_EXPECTED_PAIRS = [
-    ("what happened in the year 2050?", "2050, GPT10"),
-    ("Who was Charlie Chaplin?", "comedian"),
-    ("What was the old capital of France?", "Paris"),
-    ("When was global warming solved?", "2060"),
-    ("what is the capital of England?", "Paris"),
-    ("What do we know about paperclips?", "2057, 2061"),
-    ("What is the purpose of green coding?", "address the Global warming"),
+    (
+        "Can you give me list of males over 20, under 5.5 feet tall",
+        "No satisfying document",
+    ),
+    (
+        "Can you give me list of males over 30, more 6 feet tall",
+        "6.1ft",
+    ),
+    (
+        (
+            "Can you give me list of females over 30 but less than 40, more 5.5"
+            " feet tall"
+        ),
+        "5.7ft,5.6ft",
+    ),
 ]
 
 
 @pytest.mark.parametrize("query, expected", QUERY_EXPECTED_PAIRS)
-def test_retriever_chat_agent(test_settings: Settings, query: str, expected: str):
+def test_retriever_chat_agent(
+    test_settings: Settings, query: str, expected: str
+):
     set_global(test_settings)
     ans = agent.llm_response(query).content
     expected = [e.strip() for e in expected.split(",")]
@@ -158,16 +146,21 @@ def test_retriever_chat_agent(test_settings: Settings, query: str, expected: str
 
 
 def test_get_nearest_docs():
-    query = "what is global warming"
+    query = (
+        "Can you give me list of males whose age less 30 and their height is"
+        " MORE 5.5ft"
+    )
     ans = agent.get_nearest_docs(query)
-    # at lease doc id 11 and 12 should be retreived
-    assert len(ans) >= 2
+    assert len(ans) == 2
 
 
 def test_get_relevant_docs():
-    query = "what is global warming"
+    query = (
+        "Can you give me list of males whose age less 30 and their height is"
+        " MORE 5.5ft"
+    )
     ans = agent.get_relevant_docs(query)
-    assert len(ans) >= 2
+    assert len(ans) == 1
 
 
 def test_retreiver_chat_process(test_settings: Settings):
