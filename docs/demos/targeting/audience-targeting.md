@@ -16,12 +16,15 @@ We know that GPT-4 has  skills that are ideally suited for this task:
 - Ability to recognize which standard segments match an English description of a customer profile
 - Ability to plan a conversation to get the information it needs to answer a question
 
+
 Once you decide to use an LLM, you still need to figure out how to organize the 
 various components of this task:
 
 - **Research:** what are some ideal customer profiles for the business
 - **Segmentation:** which standard segments match an English description of a customer profile
 - **Planning:** how to organize the task to identify a few standard segments
+
+## Using Langroid Agents 
 
 Langroid makes it intuitive and simple to build an LLM-powered system organized
 around agents, each responsible for a different task.
@@ -42,7 +45,30 @@ The agents are depicted in the diagram below:
 
 ![targeting.png](targeting.png)
 
-Here is a screencast showing the system in action:
+## An example: Glashuette Watches
+
+The human user first provides the URL of the business, in this case:
+```text
+https://www.jomashop.com/glashuette-watches.html
+```
+From this URL, the `Researcher` agent summarizes its understanding of the business.
+The `Marketer` agent starts by asking the `Researcher`:
+``` 
+Could you please describe the age groups and interests of our typical customer?
+```
+The `Researcher` responds with an English description of the customer profile:
+```text
+Our typical customer is a fashion-conscious individual between 20 and 45 years...
+```
+The `Researcher` forwards this English description to the `Segmentor` agent, who
+maps it to a standardized segment, e.g.:
+```text
+Interest|Style & Fashion|Fashion Trends
+...
+```
+This conversation continues until the `Marketer` agent has identified 4 standardized segments.
+
+Here is what the conversation looks like:
 
 ![targeting.gif](targeting.gif)
 
