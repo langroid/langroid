@@ -128,9 +128,7 @@ class RetrieverAgent(DocChatAgent, ABC):
         if self.vecdb is None:
             logger.warning("No vector store specified")
             return []
-        with console.status(
-            "[cyan]Searching VecDB for similar docs/records..."
-        ):
+        with console.status("[cyan]Searching VecDB for similar docs/records..."):
             docs_and_scores = self.vecdb.similar_texts_with_scores(
                 query,
                 k=self.config.parsing.n_similar_docs,
@@ -164,9 +162,7 @@ class RetrieverAgent(DocChatAgent, ABC):
         if self.llm is None:
             logger.warning("No LLM specified")
             return nearest_docs
-        with console.status(
-            "LLM selecting relevant docs from retrieved ones..."
-        ):
+        with console.status("LLM selecting relevant docs from retrieved ones..."):
             doc_list = self.llm_select_relevant_docs(query, nearest_docs)
 
         return doc_list

@@ -96,9 +96,7 @@ class _TestRetrieverAgent(RetrieverAgent):
         for person in people:
             full_row = f"{person['age']}|{person['gender']}|{person['height']}"
             row_num += 1
-            meta = PeopleMetadata(
-                id=int(person["id"]), source=f"people_{row_num}"
-            )
+            meta = PeopleMetadata(id=int(person["id"]), source=f"people_{row_num}")
             people_rec.append(PeoplyRecord(content=full_row, metadata=meta))
         return people_rec
 
@@ -136,9 +134,7 @@ QUERY_EXPECTED_PAIRS = [
 
 
 @pytest.mark.parametrize("query, expected", QUERY_EXPECTED_PAIRS)
-def test_retriever_chat_agent(
-    test_settings: Settings, query: str, expected: str
-):
+def test_retriever_chat_agent(test_settings: Settings, query: str, expected: str):
     set_global(test_settings)
     ans = agent.llm_response(query).content
     expected = [e.strip() for e in expected.split(",")]
