@@ -45,6 +45,20 @@ for ideas on what to contribute.
 
 **Questions, Feedback, Ideas? Join us on [Discord](https://discord.gg/ZU36McDgDs)!**
 
+<details>
+<summary> <b>:fire: Updates/Releases</b></summary>
+
+- **0.1.30 (July 2023)**: Added [`TableChatAgent`](langroid/agent/special/table_chat_agent.py) to 
+    [chat](examples/data-qa/table_chat.py) with tabular datasets (dataframes, files, URLs): LLM generates Pandas code,
+    and code is executed via using Langroid tool/function-call mechanism. 
+- **(July 2023)** Demo: 3-agent system for Audience [Targeting](https://langroid.github.io/langroid/demos/targeting/audience-targeting/).
+- **0.1.27 (July 2023)**: Added [support](langroid/cachedb/momento_cachedb.py) 
+    for [Momento Serverless Cache](https://www.gomomento.com/) as an alternative to Redis.
+- **0.1.24 (July 2023)**: [`DocChatAgent`](langroid/agent/special/doc_chat_agent.py) 
+    now [accepts](langroid/parsing/pdf_parser.py) PDF files or URLs.
+
+</details>
+
 # :rocket: Demo
 Suppose you want to extract structured information about the key terms 
 of a commercial lease document. You can easily do this with Langroid using a two-agent system,
@@ -495,8 +509,14 @@ folder of the `langroid-examples` repo.
 </details>
 
 <details>
-<summary><b> Chat with tabular data (file paths, URLs, dataframes) </b></summary>
-Import some modules:
+<summary><b> :fire: Chat with tabular data (file paths, URLs, dataframes) </b></summary>
+
+Using Langroid you can set up a `TableChatAgent` with a dataset (file path, URL or dataframe),
+and query it. The Agent's LLM generates Pandas code to answer the query, 
+via function-calling (or tool/plugin), and the Agent's function-handling method
+executes the code and returns the answer.
+
+Here is how you can do this:
 
 ```python
 from langroid.agent.special.table_chat_agent import TableChatAgent, TableChatAgentConfig
@@ -541,7 +561,7 @@ task.run()
 ``` 
 
 For a full working example see the 
-[`data_chat.py`](https://github.com/langroid/langroid-examples/tree/main/examples/data-qa/table_chat.py)
+[`table_chat.py`](https://github.com/langroid/langroid-examples/tree/main/examples/data-qa/table_chat.py)
 script in the `langroid-examples` repo.
 
 

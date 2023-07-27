@@ -45,11 +45,11 @@ The agents are depicted in the diagram below:
 
 ![targeting.png](targeting.png)
 
-## An example: Glashuette Watches
+## An example: Glashutte Watches
 
 The human user first provides the URL of the business, in this case:
 ```text
-https://www.jomashop.com/glashuette-watches.html
+https://www.jomashop.com/glashutte-watches.html
 ```
 From this URL, the `Researcher` agent summarizes its understanding of the business.
 The `Marketer` agent starts by asking the `Researcher`:
