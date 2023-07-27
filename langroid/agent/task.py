@@ -107,6 +107,7 @@ class Task:
                 )
         self.logger: None | RichFileLogger = None
         self.tsv_logger: None | logging.Logger = None
+        self.color_log: bool = True
         self.agent = agent
         self.name = name or agent.config.name
         self.default_human_response = default_human_response
@@ -224,7 +225,7 @@ class Task:
         if self.parent_task is not None and self.parent_task.logger is not None:
             self.logger = self.parent_task.logger
         else:
-            self.logger = RichFileLogger(f"logs/{self.name}.log")
+            self.logger = RichFileLogger(f"logs/{self.name}.log", color=self.color_log)
 
         if self.parent_task is not None and self.parent_task.tsv_logger is not None:
             self.tsv_logger = self.parent_task.tsv_logger
@@ -283,7 +284,11 @@ class Task:
             # mark where we are in the message history, so we can reset to this when
             # we are done with the task
             message_history_idx = (
-                max(len(self.agent.message_history), len(self.agent.task_messages)) - 1
+                max(
+                    len(self.agent.message_history),
+                    len(self.agent.task_messages),
+                )
+                - 1
             )
 
         i = 0
@@ -589,3 +594,17 @@ class Task:
             self.pending_message.metadata.block = None
             return False
         return self.pending_message is None or self.pending_message.metadata.block != e
+
+    def set_color_log(self, enable: bool = True) -> None:
+        """
+        Flag to enable/disable color logging using rich.console.
+        In some contexts, such as Colab notebooks, we may want to disable color logging
+        using rich.console, since those logs show up in the cell output rather than
+        in the log file. Turning off this feature will still create logs, but without
+        the color formatting from rich.console
+        Args:
+            enable (bool): value of `self.color_log` to set to,
+                which will enable/diable rich logging
+
+        """
+        self.color_log = enable
