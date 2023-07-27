@@ -53,7 +53,7 @@ class OpenAIGPTConfig(LLMConfig):
     max_output_tokens: int = 1024
     min_output_tokens: int = 64
     timeout: int = 20
-    temperature: float = 0.0
+    temperature: float = 0.2
     chat_model: OpenAIChatModel = OpenAIChatModel.GPT4
     completion_model: OpenAICompletionModel = OpenAICompletionModel.GPT4
     context_length: Dict[str, int] = {
@@ -303,7 +303,7 @@ class OpenAIGPT(LanguageModel):
                 messages=[m.api_dict() for m in messages],
                 max_tokens=max_tokens,
                 request_timeout=self.config.timeout,
-                temperature=0,
+                temperature=self.config.temperature,
                 stream=self.config.stream,
             )
             usage = response["usage"]["total_tokens"]
@@ -327,7 +327,7 @@ class OpenAIGPT(LanguageModel):
                 prompt=prompt,
                 max_tokens=max_tokens,
                 request_timeout=self.config.timeout,
-                temperature=0,
+                temperature=self.config.temperature,
                 echo=False,
                 stream=self.config.stream,
             )
@@ -394,7 +394,7 @@ class OpenAIGPT(LanguageModel):
             max_tokens=max_tokens,
             n=1,
             stop=None,
-            temperature=0.5,
+            temperature=self.config.temperature,
             request_timeout=self.config.timeout,
             stream=self.config.stream,
         )

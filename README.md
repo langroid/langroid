@@ -10,7 +10,7 @@
 [![Lint](https://github.com/langroid/langroid/actions/workflows/validate.yml/badge.svg)](https://github.com/langroid/langroid/actions/workflows/validate.yml)
 [![Docs](https://github.com/langroid/langroid/actions/workflows/mkdocs-deploy.yml/badge.svg)](https://github.com/langroid/langroid/actions/workflows/mkdocs-deploy.yml)
 [![Static Badge](https://img.shields.io/badge/Documentation-blue?link=https%3A%2F%2Flangroid.github.io%2Flangroid%2F&link=https%3A%2F%2Flangroid.github.io%2Flangroid%2F)](https://langroid.github.io/langroid)
-[![Static Badge](https://img.shields.io/badge/Discord-Orange?link=https%3A%2F%2Fdiscord.gg%2Fg3nAXCbZ&link=https%3A%2F%2Fdiscord.gg%2Fg3nAXCbZ)](https://discord.gg/g3nAXCbZ)
+[![Static Badge](https://img.shields.io/badge/Discord-Orange?link=https%3A%2F%2Fdiscord.gg%2Fg3nAXCbZ&link=https%3A%2F%2Fdiscord.gg%2Fg3nAXCbZ)](https://discord.gg/ZU36McDgDs)
 
 </div>
 
@@ -42,7 +42,7 @@ This Multi-Agent paradigm is inspired by the
 We welcome contributions -- See the [contributions](./CONTRIBUTING.md) document
 for ideas on what to contribute.
 
-**Questions, Feedback, Ideas? Join us on [Discord](https://discord.gg/g3nAXCbZ)!**
+**Questions, Feedback, Ideas? Join us on [Discord](https://discord.gg/ZU36McDgDs)!**
 
 # :rocket: Demo
 Suppose you want to extract structured information about the key terms 
