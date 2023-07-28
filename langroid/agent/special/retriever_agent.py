@@ -177,7 +177,7 @@ class RetrieverAgent(DocChatAgent, ABC):
             list of Document objects
         """
         doc_contents = "\n\n".join(
-            [f"DOC: ID={d.id()}, content={d.content}" for d in docs]
+            [f"DOC: ID={d.id()}, CONTENT: {d.content}" for d in docs]
         )
         prompt = f"""
         Given the following QUERY: 
@@ -186,8 +186,11 @@ class RetrieverAgent(DocChatAgent, ABC):
         {doc_contents}
         
         Find at most {self.config.n_matches} DOCs that are most relevant to the QUERY.
-        Return your as a sequence of DOC IDS ONLY, for example: 
+        Return your answer as a sequence of DOC IDS ONLY, for example: 
         "id1 id2 id3..."
+        If there are no relevant docs, simply say {NO_ANSWER}.
+        Even if there is only one relevant doc, return it as a single ID.
+        Do not give any explanations or justifications.
         """
         default_response = Document(
             content=NO_ANSWER,
