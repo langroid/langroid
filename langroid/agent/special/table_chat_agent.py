@@ -1,9 +1,11 @@
 """
-Agent that supports asking queries about a set of documents, using
-retrieval-augmented queries.
-Functionality includes:
-- summarizing a document, with a custom instruction; see `summarize_docs`
-- asking a question about a document; see `answer_from_docs`
+Agent that supports asking queries about a tabular dataset, internally
+represented as a Pandas dataframe. The `TableChatAgent` is configured with a
+dataset, which can be a Pandas df, file or URL. The delimiter/separator
+is auto-detected. In response to a user query, the Agent's LLM generates Pandas
+code to answer the query. The code is passed via the `run_code` tool/function-call,
+which is handled by the Agent's `run_code` method. This method executes/evaluates
+the code and returns the result as a string.
 """
 import io
 import logging

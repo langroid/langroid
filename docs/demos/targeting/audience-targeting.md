@@ -30,17 +30,24 @@ Langroid makes it intuitive and simple to build an LLM-powered system organized
 around agents, each responsible for a different task.
 In less than a day we built a 3-agent system to automate this task:
 
-- The `Marketer` Agent is given the Planning role
-- The `Researcher` Agent is given the Research role
-- The `Segmentor` Agent is given the Segmentation role
+- The `Marketer` Agent is given the Planning role.
+- The `Researcher` Agent is given the Research role, 
+  and it has access to the business description. 
+- The `Segmentor` Agent is given the Segmentation role. It has access to the 
+  IAB Audience Taxonomy via a vector database, i.e. its rows have been mapped to
+  vectors via an embedding model, and these vectors are stored in a vector-database. 
+  Thus given an English description of a customer profile,
+  the `Segmentor` Agent maps it to a vector using the embedding model,
+  and retrieves the nearest (in vector terms, e.g. cosine similarity) 
+  IAB Standard Segments from the vector-database. The Segmentor's LLM 
+  further refines this by selecting the best-matching segments from the retrieved list.
 
 To kick off the system, the human user describes a business in English,
 or provides the URL of the business's website. 
 The `Marketer` Agent sends
 customer profile queries to the `Researcher`, who answers in plain English based on 
-the business description, and the Marketer takes this description and sends it to the Segmentor (who has
-access to IAB Audience Segments, embedded into a vector-database), 
-who maps it to standardized segments. The task is done when the Marketer finds 4 standardized segments. 
+the business description, and the Marketer takes this description and sends it to the Segmentor,
+who maps it to Standard IAB Segments. The task is done when the Marketer finds 4 Standard segments. 
 The agents are depicted in the diagram below:
 
 ![targeting.png](targeting.png)
