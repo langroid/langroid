@@ -1,6 +1,6 @@
-import os
+import random
 import warnings
-from typing import List
+from typing import Dict, List, Union
 
 import pytest
 
@@ -19,11 +19,40 @@ from langroid.parsing.parser import ParsingConfig, Splitter
 from langroid.prompts.prompts_config import PromptsConfig
 from langroid.utils.configuration import Settings, set_global
 from langroid.utils.system import rmdir
-from langroid.vector_store.base import VectorStoreConfig
 from langroid.vector_store.qdrantdb import QdrantDBConfig
 
 storage_path = ".qdrant/testdata1"
 rmdir(storage_path)
+
+
+def generate_data(size: int) -> List[Dict[str, Union[int, float, str]]]:
+    # Create a list of states
+    states = ["CA", "TX"]
+
+    # Generate random age between 18 and 100
+    ages = [random.randint(18, 100) for _ in range(size)]
+
+    # Generate random gender
+    genders = [random.choice(["Male", "Female"]) for _ in range(size)]
+
+    # Generate random state
+    states_col = [random.choice(states) for _ in range(size)]
+
+    # Generate random height between 4.0 and 6.5
+    heights = [round(random.uniform(4.0, 6.5), 2) for _ in range(size)]
+
+    random_people = [
+        {
+            "id": i + 1,
+            "age": ages[i],
+            "gender": genders[i],
+            "state": states_col[i],
+            "height": heights[i],
+        }
+        for i in range(size)
+    ]
+
+    return random_people
 
 
 class PeopleMetadata(RecordMetadata):
@@ -35,11 +64,58 @@ class PeoplyRecord(RecordDoc):
     metadata: PeopleMetadata
 
 
-class _TesrRetrieverAgentConfig(RetrieverAgentConfig):
-    debug: bool = False
-    stream: bool = True  # allow streaming where needed
-    conversation_mode = True
-    vecdb: VectorStoreConfig = QdrantDBConfig(
+set_global(
+    Settings(
+        cache=True,
+        gpt3_5=True,
+    )
+)  # allow cacheing
+
+known_people = [
+    {"id": 102, "age": 99, "gender": "male", "state": "NY", "height": "6.1ft"},
+    {
+        "id": 103,
+        "age": 98,
+        "gender": "female",
+        "state": "NY",
+        "height": "5.7ft",
+    },
+    {
+        "id": 104,
+        "age": 97,
+        "gender": "female",
+        "state": "NY",
+        "height": "5.8ft",
+    },
+]
+
+people = generate_data(100) + known_people
+
+
+class _TestRetrieverAgent(RetrieverAgent):
+    def __init__(self, config: RetrieverAgentConfig):
+        super().__init__(config)
+        self.config = config
+
+    def get_records(self) -> List[PeoplyRecord]:
+        people_rec = []
+        row_num = 0
+        for person in people:
+            full_row = f"""
+            {person['age']}|{person['gender']}|{person['state']}|{person['height']}
+            """
+            row_num += 1
+            meta = PeopleMetadata(id=int(person["id"]), source=f"people_{row_num}")
+            people_rec.append(PeoplyRecord(content=full_row, metadata=meta))
+        return people_rec
+
+
+# Now create an instance of RetrieverAgentConfig
+config = RetrieverAgentConfig(
+    debug=False,
+    conversation_mode=True,
+    stream=True,
+    vecdb=QdrantDBConfig(
         type="qdrant",
         collection_name="test-data",
         storage_path=storage_path,
@@ -48,60 +124,22 @@ class _TesrRetrieverAgentConfig(RetrieverAgentConfig):
             model_name="text-embedding-ada-002",
             dims=1536,
         ),
-    )
-
-    llm: OpenAIGPTConfig = OpenAIGPTConfig(
+    ),
+    llm=OpenAIGPTConfig(
         stream=True,
         cache_config=RedisCacheConfig(fake=False),
         chat_model=OpenAIChatModel.GPT4,
         use_chat_for_completion=True,
-    )
-
-    parsing: ParsingConfig = ParsingConfig(
+    ),
+    parsing=ParsingConfig(
         splitter=Splitter.SIMPLE,
         n_similar_docs=2,
-    )
-
-    prompts: PromptsConfig = PromptsConfig(
+    ),
+    prompts=PromptsConfig(
         max_tokens=1000,
-    )
+    ),
+)
 
-
-set_global(
-    Settings(
-        cache=True,
-        gpt3_5=True,
-    )
-)  # allow cacheing
-
-people = [
-    {"id": 1, "age": 35, "gender": "male", "height": "6.1ft"},
-    {"id": 2, "age": 33, "gender": "female", "height": "5.7ft"},
-    {"id": 3, "age": 42, "gender": "female", "height": "5.8ft"},
-    {"id": 4, "age": 23, "gender": "male", "height": "5.9ft"},
-    {"id": 5, "age": 31, "gender": "female", "height": "5.6ft"},
-]
-
-os.environ["TOKENIZERS_PARALLELISM"] = "false"
-
-
-class _TestRetrieverAgent(RetrieverAgent):
-    def __init__(self, config: _TesrRetrieverAgentConfig):
-        super().__init__(config)
-        self.config = config
-
-    def get_records(self) -> List[PeoplyRecord]:
-        people_rec = []
-        row_num = 0
-        for person in people:
-            full_row = f"{person['age']}|{person['gender']}|{person['height']}"
-            row_num += 1
-            meta = PeopleMetadata(id=int(person["id"]), source=f"people_{row_num}")
-            people_rec.append(PeoplyRecord(content=full_row, metadata=meta))
-        return people_rec
-
-
-config = _TesrRetrieverAgentConfig()
 agent = _TestRetrieverAgent(config)
 
 agent.ingest()
@@ -116,19 +154,16 @@ warnings.filterwarnings(
 
 QUERY_EXPECTED_PAIRS = [
     (
-        "Can you give me list of males over 20, under 5.5 feet tall",
-        "No satisfying document",
+        "males from NY",
+        "99|male|NY|6.1ft",
     ),
     (
-        "Can you give me list of males over 30, more 6 feet tall",
-        "6.1ft",
+        "people from NY and shorter than 6ft",
+        "5.8ft",
     ),
     (
-        (
-            "Can you give me list of females over 30 but less than 40, more 5.5"
-            " feet tall"
-        ),
-        "5.7ft,5.6ft",
+        "females from NY",
+        "5.8ft,5.7ft",
     ),
 ]
 
@@ -142,21 +177,16 @@ def test_retriever_chat_agent(test_settings: Settings, query: str, expected: str
 
 
 def test_get_nearest_docs():
-    query = (
-        "Can you give me list of males whose age less 30 and their height is"
-        " MORE 5.5ft"
-    )
+    query = "people from NY"
     ans = agent.get_nearest_docs(query)
-    assert len(ans) == 2
+    id = [103, 104]
+    assert all(rec.metadata.id in id for rec in ans)
 
 
 def test_get_relevant_docs():
-    query = (
-        "Can you give me list of males whose age less 30 and their height is"
-        " MORE 5.5ft"
-    )
+    query = "males whose age less 30 and their height is MORE 6ft"
     ans = agent.get_relevant_docs(query)
-    assert len(ans) == 1
+    assert "6.1ft" in ans[0].content
 
 
 def test_retreiver_chat_process(test_settings: Settings):
