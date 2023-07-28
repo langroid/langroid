@@ -6,36 +6,80 @@ from rich.prompt import Prompt
 from rich import print
 
 from sqlalchemy import create_engine, inspect
+from sqlalchemy.engine import Engine
 from prettytable import PrettyTable
+
 from langroid.agent.special.sql_chat_agent import SQLChatAgent, SQLChatAgentConfig
 from langroid.agent.task import Task
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
 from langroid.utils.configuration import set_global, Settings
 from langroid.utils.logging import setup_colored_logging
 
+from typing import Dict, Any
+import json
+import os
+
 app = typer.Typer()
 
 setup_colored_logging()
 
 
-def load_context_descriptions() -> dict:
+def create_descriptions_file(filepath: str, engine: Engine) -> None:
+    """
+    Create an empty descriptions JSON file for SQLAlchemy tables.
+
+    This function inspects the database, generates a template for table and
+    column descriptions, and writes that template to a new JSON file.
+
+    Args:
+        filepath: The path to the file where the descriptions should be written.
+        engine: The SQLAlchemy Engine connected to the database to describe.
+
+    Raises:
+        FileExistsError: If the file at `filepath` already exists.
+
+    Returns:
+        None
+    """
+    if os.path.exists(filepath):
+        raise FileExistsError(f"File {filepath} already exists.")
+
+    inspector = inspect(engine)
+    descriptions: Dict[str, Dict[str, Any]] = {}
+
+    for table_name in inspector.get_table_names():
+        descriptions[table_name] = {
+            "description": "",
+            "columns": {col["name"]: "" for col in inspector.get_columns(table_name)},
+        }
+
+    with open(filepath, "w") as f:
+        json.dump(descriptions, f, indent=4)
+
+
+def load_context_descriptions(engine: Engine) -> dict:
     """
     Ask the user for a path to a JSON file and load context descriptions from it.
 
     Returns:
         dict: The context descriptions, or an empty dictionary if the user decides to skip this step.
     """
-    import os
-    import json
 
     while True:
         filepath = Prompt.ask(
-            "[blue]Enter the path to your context descriptions file. If you don't have one, press enter."
+            "[blue]Enter the path to your context descriptions file. If you don't have one, press enter"
         )
 
         # Skip context descriptions if user pressed enter
         if filepath.strip() == "":
-            return {}
+            filepath = Prompt.ask(
+                "[blue]Would you like to create a context description? If yes, please enter a filepath (json). If no, simply press enter"
+            )
+
+            if filepath.strip() == "":
+                return {}
+
+            create_descriptions_file(filepath, engine)
 
         # Try to load the file
         if not os.path.exists(filepath):
@@ -55,11 +99,11 @@ def chat() -> None:
     print("[blue]Welcome to the SQL database chatbot!\n")
     database_uri = Prompt.ask("[blue]Enter the URI for your SQL database")
 
-    context_descriptions = load_context_descriptions()
-
     # Create engine and inspector
     engine = create_engine(database_uri)
     inspector = inspect(engine)
+
+    context_descriptions = load_context_descriptions(engine)
 
     # Get table names
     table_names = inspector.get_table_names()
