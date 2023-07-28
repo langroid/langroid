@@ -61,6 +61,7 @@ class Task:
         user_message: str = "",
         restart: bool = False,
         default_human_response: Optional[str] = None,
+        interactive: bool = True,
         only_user_quits_root: bool = True,
         erase_substeps: bool = False,
     ):
@@ -84,6 +85,9 @@ class Task:
             restart (bool): if true, resets the agent's message history
             default_human_response (str): default response from user; useful for
                 testing, to avoid interactive input from user.
+            interactive (bool): if true, wait for human input after each non-human
+                response (prevents infinite loop of non-human responses).
+                Default is true. If false, then `default_human_response` is set to ""
             only_user_quits_root (bool): if true, only user can quit the root task.
             erase_substeps (bool): if true, when task completes, erase intermediate
                 conversation with subtasks from this agent's `message_history`, and also
@@ -111,6 +115,9 @@ class Task:
         self.agent = agent
         self.name = name or agent.config.name
         self.default_human_response = default_human_response
+        self.interactive = interactive
+        if not interactive:
+            self.default_human_response = ""
         if default_human_response is not None:
             self.agent.default_human_response = default_human_response
         self.only_user_quits_root = only_user_quits_root
