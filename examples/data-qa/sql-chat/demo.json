@@ -1,0 +1,35 @@
+{
+    "departments": {
+        "description": "The 'departments' table holds details about the various departments.",
+        "relationships": {
+            "employees": "The 'employees' table has a foreign key to the 'departments' table."
+        },
+        "columns": {
+            "id": "A unique identifier for a department.",
+            "name": "The name of the department."
+        }
+    },
+    "employees": {
+        "description": "The 'employees' table contains information about the employees.",
+        "relationships": {
+            "departments": "The 'departments' table has a foreign key to the 'employees' table.",
+            "sales": "The 'sales' table has a foreign key to the 'employees' table."
+        },
+        "columns": {
+            "id": "A unique identifier for an employee.",
+            "name": "The name of the employee.",
+            "department_id": "The ID of the department the employee belongs to."
+        }
+    },
+    "sales": {
+        "description": "The 'sales' table keeps a record of all sales made by employees.",
+        "relationships": {
+            "employees": "The 'employees' table has a foreign key to the 'sales' table."
+        },
+        "columns": {
+            "id": "A unique identifier for a sale.",
+            "amount": "The amount of the sale.",
+            "employee_id": "The ID of the employee who made the sale."
+        }
+    }
+}
