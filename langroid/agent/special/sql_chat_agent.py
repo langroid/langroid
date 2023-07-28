@@ -50,30 +50,40 @@ class SQLChatAgentConfig(ChatAgentConfig):
     ] = None
 
     """
-    Optional, but strongly reccomended context descriptions for tables and columns.
-    It should be a dictionary where each key is a table name and its value is 
-    another dictionary. In this inner dictionary, each key is a column name 
-    and its value is a string description of that column. The inner dictionary
-    can also contain a '_relationships' key, which should have a dictionary value
-    where each key is another table name and the value is a description of the 
-    relationship to that table.
+    Optional, but strongly recommended, context descriptions for tables, columns, 
+    and relationships. It should be a dictionary where each key is a table name 
+    and its value is another dictionary. 
+
+    In this inner dictionary:
+    - The 'description' key corresponds to a string description of the table.
+    - The 'columns' key corresponds to another dictionary where each key is a 
+    column name and its value is a string description of that column.
+    - The 'relationships' key corresponds to another dictionary where each key 
+    is another table name and the value is a description of the relationship to 
+    that table.
+
     For example:
     {
         'table1': {
-            '_description': 'description of table1',
-            '_relationships': {
+            'description': 'description of table1',
+            'relationships': {
                 'table2': 'description of relationship to table2'
             },
-            'column1': 'description1',
-            'column2': 'description2'
+            'columns': {
+                'column1': 'description of column1 in table1',
+                'column2': 'description of column2 in table1'
+            }
         },
         'table2': {
-            '_description': 'description of table2',
-            'column3': 'description3',
-            'column4': 'description4'
+            'description': 'description of table2',
+            'columns': {
+                'column3': 'description of column3 in table2',
+                'column4': 'description of column4 in table2'
+            }
         }
     }
     """
+
     llm: OpenAIGPTConfig = OpenAIGPTConfig(
         type="openai",
         chat_model=OpenAIChatModel.GPT4,
