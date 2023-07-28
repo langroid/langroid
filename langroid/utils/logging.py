@@ -112,7 +112,7 @@ def setup_loggers_for_package(package_name: str, level: int) -> None:
 
 
 class RichFileLogger:
-    def __init__(self, log_file: str, append: bool = False):
+    def __init__(self, log_file: str, append: bool = False, color: bool = True):
         os.makedirs(os.path.dirname(log_file), exist_ok=True)
         self.log_file = log_file
         if not append:
@@ -121,9 +121,13 @@ class RichFileLogger:
         self.file = None
         self.console = None
         self.append = append
+        self.color = color
 
     @no_type_check
     def log(self, message: str) -> None:
         with open(self.log_file, "a") as f:
-            console = Console(file=f, force_terminal=True, width=200)
-            console.print(message)
+            if self.color:
+                console = Console(file=f, force_terminal=True, width=200)
+                console.print(message)
+            else:
+                print(message, file=f)
