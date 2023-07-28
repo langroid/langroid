@@ -55,7 +55,15 @@ SUMMARY_ANSWER_PROMPT_GPT4 = f"""
         and even if the answer contradicts other parts of the document. The only 
         important thing is that your answer is consistent with and supported by the 
         extracts. Compose your complete answer and cite all supporting sources on a 
-        separate separate line as "SOURCE:". 
+        separate separate line as follows. For each SOURCE, (a) show the source name,
+        and (b) the exact EXTRACT from the source that supports your answer.
+        DO NOT SHOW THE FULL EXTRACT; only show the FIRST 3 words and LAST 3 words.  
+        For example:
+        SOURCE:  https://en.wikipedia.org/wiki/Tree
+        EXTRACTS: "The tree species ... oak, maple, and birch."
+        
+        SOURCE: https://en.wikipedia.org/wiki/Oak
+        EXTRACTS: "The oak trees ... longevity and strength."
         
         {{extracts}}
         

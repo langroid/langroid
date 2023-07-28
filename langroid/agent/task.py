@@ -61,6 +61,7 @@ class Task:
         user_message: str = "",
         restart: bool = False,
         default_human_response: Optional[str] = None,
+        interactive: bool = True,
         only_user_quits_root: bool = True,
         erase_substeps: bool = False,
     ):
@@ -84,6 +85,9 @@ class Task:
             restart (bool): if true, resets the agent's message history
             default_human_response (str): default response from user; useful for
                 testing, to avoid interactive input from user.
+            interactive (bool): if true, wait for human input after each non-human
+                response (prevents infinite loop of non-human responses).
+                Default is true. If false, then `default_human_response` is set to ""
             only_user_quits_root (bool): if true, only user can quit the root task.
             erase_substeps (bool): if true, when task completes, erase intermediate
                 conversation with subtasks from this agent's `message_history`, and also
@@ -107,9 +111,13 @@ class Task:
                 )
         self.logger: None | RichFileLogger = None
         self.tsv_logger: None | logging.Logger = None
+        self.color_log: bool = True
         self.agent = agent
         self.name = name or agent.config.name
         self.default_human_response = default_human_response
+        self.interactive = interactive
+        if not interactive:
+            self.default_human_response = ""
         if default_human_response is not None:
             self.agent.default_human_response = default_human_response
         self.only_user_quits_root = only_user_quits_root
@@ -224,7 +232,7 @@ class Task:
         if self.parent_task is not None and self.parent_task.logger is not None:
             self.logger = self.parent_task.logger
         else:
-            self.logger = RichFileLogger(f"logs/{self.name}.log")
+            self.logger = RichFileLogger(f"logs/{self.name}.log", color=self.color_log)
 
         if self.parent_task is not None and self.parent_task.tsv_logger is not None:
             self.tsv_logger = self.parent_task.tsv_logger
@@ -283,7 +291,11 @@ class Task:
             # mark where we are in the message history, so we can reset to this when
             # we are done with the task
             message_history_idx = (
-                max(len(self.agent.message_history), len(self.agent.task_messages)) - 1
+                max(
+                    len(self.agent.message_history),
+                    len(self.agent.task_messages),
+                )
+                - 1
             )
 
         i = 0
@@ -589,3 +601,17 @@ class Task:
             self.pending_message.metadata.block = None
             return False
         return self.pending_message is None or self.pending_message.metadata.block != e
+
+    def set_color_log(self, enable: bool = True) -> None:
+        """
+        Flag to enable/disable color logging using rich.console.
+        In some contexts, such as Colab notebooks, we may want to disable color logging
+        using rich.console, since those logs show up in the cell output rather than
+        in the log file. Turning off this feature will still create logs, but without
+        the color formatting from rich.console
+        Args:
+            enable (bool): value of `self.color_log` to set to,
+                which will enable/diable rich logging
+
+        """
+        self.color_log = enable

@@ -8,7 +8,10 @@ Repeat: WriterAgent --Question--> DocAgent --> Answer
 import typer
 from rich import print
 
-from langroid.agent.special.doc_chat_agent import DocChatAgent, DocChatAgentConfig
+from langroid.agent.special.doc_chat_agent import (
+    DocChatAgent,
+    DocChatAgentConfig,
+)
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
 from langroid.parsing.urls import get_list_from_user

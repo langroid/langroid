@@ -10,7 +10,8 @@
 [![Lint](https://github.com/langroid/langroid/actions/workflows/validate.yml/badge.svg)](https://github.com/langroid/langroid/actions/workflows/validate.yml)
 [![Docs](https://github.com/langroid/langroid/actions/workflows/mkdocs-deploy.yml/badge.svg)](https://github.com/langroid/langroid/actions/workflows/mkdocs-deploy.yml)
 [![Static Badge](https://img.shields.io/badge/Documentation-blue?link=https%3A%2F%2Flangroid.github.io%2Flangroid%2F&link=https%3A%2F%2Flangroid.github.io%2Flangroid%2F)](https://langroid.github.io/langroid)
-[![Static Badge](https://img.shields.io/badge/Discord-Orange?link=https%3A%2F%2Fdiscord.gg%2Fg3nAXCbZ&link=https%3A%2F%2Fdiscord.gg%2Fg3nAXCbZ)](https://discord.gg/ZU36McDgDs)
+[![Static Badge](https://img.shields.io/badge/Discord-orange?logoColor=orange&link=https%3A%2F%2Fdiscord.gg%2FZU36McDgDs)](https://discord.gg/ZU36McDgDs)
+
 
 </div>
 
@@ -22,7 +23,7 @@
   <a target="_blank" href="https://github.com/langroid/langroid-examples" rel="dofollow">
       <strong>Examples Repo</strong></a>
   &middot;
-  <a target="_blank" href="https://discord.gg/g3nAXCbZ" rel="dofollow">
+  <a target="_blank" href="https://discord.gg/ZU36McDgDs" rel="dofollow">
       <strong>Discord</strong></a>
   &middot;
   <a target="_blank" href="./CONTRIBUTING.md" rel="dofollow">
@@ -43,6 +44,20 @@ We welcome contributions -- See the [contributions](./CONTRIBUTING.md) document
 for ideas on what to contribute.
 
 **Questions, Feedback, Ideas? Join us on [Discord](https://discord.gg/ZU36McDgDs)!**
+
+<details>
+<summary> <b>:fire: Updates/Releases</b></summary>
+
+- **0.1.30 (July 2023)**: Added [`TableChatAgent`](langroid/agent/special/table_chat_agent.py) to 
+    [chat](examples/data-qa/table_chat.py) with tabular datasets (dataframes, files, URLs): LLM generates Pandas code,
+    and code is executed via using Langroid tool/function-call mechanism. 
+- **(July 2023)** Demo: 3-agent system for Audience [Targeting](https://langroid.github.io/langroid/demos/targeting/audience-targeting/).
+- **0.1.27 (July 2023)**: Added [support](langroid/cachedb/momento_cachedb.py) 
+    for [Momento Serverless Cache](https://www.gomomento.com/) as an alternative to Redis.
+- **0.1.24 (July 2023)**: [`DocChatAgent`](langroid/agent/special/doc_chat_agent.py) 
+    now [accepts](langroid/parsing/pdf_parser.py) PDF files or URLs.
+
+</details>
 
 # :rocket: Demo
 Suppose you want to extract structured information about the key terms 
@@ -79,7 +94,8 @@ Here is what it looks like in action:
   Agents with specific skills, wrap them in Tasks, and combine tasks in a flexible way.
 - **LLM Support**: Langroid supports OpenAI LLMs including GPT-3.5-Turbo,
   GPT-4-0613
-- **Caching of LLM prompts, responses:** Langroid uses [Redis](https://redis.com/try-free/) for caching.
+- **Caching of LLM responses:** Langroid supports [Redis](https://redis.com/try-free/) and 
+  [Momento](https://www.gomomento.com/) to cache LLM responses.
 - **Vector-stores**: [Qdrant](https://qdrant.tech/) and [Chroma](https://www.trychroma.com/) are currently supported.
   Vector stores allow for Retrieval-Augmented-Generation (RAG).
 - **Grounding and source-citation:** Access to external documents via vector-stores 
@@ -493,9 +509,70 @@ See full working scripts in the
 folder of the `langroid-examples` repo.
 </details>
 
+<details>
+<summary><b> :fire: Chat with tabular data (file paths, URLs, dataframes) </b></summary>
+
+Using Langroid you can set up a `TableChatAgent` with a dataset (file path, URL or dataframe),
+and query it. The Agent's LLM generates Pandas code to answer the query, 
+via function-calling (or tool/plugin), and the Agent's function-handling method
+executes the code and returns the answer.
+
+Here is how you can do this:
+
+```python
+from langroid.agent.special.table_chat_agent import TableChatAgent, TableChatAgentConfig
+from langroid.agent.task import Task
+from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
+```
+
+Set up a `TableChatAgent` for a data file, URL or dataframe
+(Ensure the data table has a header row; the delimiter/separator is auto-detected):
+```python
+dataset =  "https://archive.ics.uci.edu/ml/machine-learning-databases/wine-quality/winequality-red.csv"
+# or dataset = "/path/to/my/data.csv"
+# or dataset = pd.read_csv("/path/to/my/data.csv")
+agent = TableChatAgent(
+    config=TableChatAgentConfig(
+        data=dataset,  
+        llm=OpenAIGPTConfig(
+            chat_model=OpenAIChatModel.GPT4,
+        ),
+    )
+)
+```
+Set up a task, and ask one-off questions like this: 
+
+```python
+task = Task(
+  agent, 
+  name = "DataAssistant",
+  default_human_response="", # to avoid waiting for user input
+)
+result = task.run(
+  "What is the average alcohol content of wines with a quality rating above 7?",
+  turns=2 # return after user question, LLM fun-call/tool response, Agent code-exec result
+) 
+print(result.content)
+```
+Or alternatively, set up a task and run it in an interactive loop with the user:
+
+```python
+task = Task(agent, name="DataAssistant")
+task.run()
+``` 
+
+For a full working example see the 
+[`table_chat.py`](https://github.com/langroid/langroid-examples/tree/main/examples/data-qa/table_chat.py)
+script in the `langroid-examples` repo.
+
+
+</details>
+
 ---
 
 # :heart: Thank you to our [supporters](https://github.com/langroid/langroid/stargazers)
+
+If you like this repo, don't forget to leave a star :star: !
 
 # Contributors
 
