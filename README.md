@@ -11,6 +11,7 @@
 [![Docs](https://github.com/langroid/langroid/actions/workflows/mkdocs-deploy.yml/badge.svg)](https://github.com/langroid/langroid/actions/workflows/mkdocs-deploy.yml)
 [![Static Badge](https://img.shields.io/badge/Documentation-blue?link=https%3A%2F%2Flangroid.github.io%2Flangroid%2F&link=https%3A%2F%2Flangroid.github.io%2Flangroid%2F)](https://langroid.github.io/langroid)
 [![Static Badge](https://img.shields.io/badge/Discord-orange?logoColor=orange&link=https%3A%2F%2Fdiscord.gg%2FZU36McDgDs)](https://discord.gg/ZU36McDgDs)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg))](https://colab.research.google.com/gist/Mohannadcse/45607bfc203bc5ccd40c4acbb90f093c/langroid_quick_examples.ipynb)
 
 
 </div>
