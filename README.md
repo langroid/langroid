@@ -11,7 +11,7 @@
 [![Docs](https://github.com/langroid/langroid/actions/workflows/mkdocs-deploy.yml/badge.svg)](https://github.com/langroid/langroid/actions/workflows/mkdocs-deploy.yml)
 [![Static Badge](https://img.shields.io/badge/Documentation-blue?link=https%3A%2F%2Flangroid.github.io%2Flangroid%2F&link=https%3A%2F%2Flangroid.github.io%2Flangroid%2F)](https://langroid.github.io/langroid)
 [![Static Badge](https://img.shields.io/badge/Discord-orange?logoColor=orange&link=https%3A%2F%2Fdiscord.gg%2FZU36McDgDs)](https://discord.gg/ZU36McDgDs)
-[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg))](https://colab.research.google.com/gist/Mohannadcse/45607bfc203bc5ccd40c4acbb90f093c/langroid_quick_examples.ipynb)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/gist/Mohannadcse/b961562735373b3f1fd0c9772eb1b62d/langroid_quick_examples.ipynb)
 
 
 </div>
@@ -203,7 +203,7 @@ and how your code would look.
 :warning: The code snippets below are intended to give a flavor of the code
 and they are **not** complete runnable examples! For that we encourage you to 
 consult the [`langroid-examples`](https://github.com/langroid/langroid-examples) 
-repository.
+repository. We also setup these example to run in [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/gist/Mohannadcse/b961562735373b3f1fd0c9772eb1b62d/langroid_quick_examples.ipynb)
 
 :information_source: The various LLM prompts and instructions in Langroid
 have been tested to work well with GPT4.
