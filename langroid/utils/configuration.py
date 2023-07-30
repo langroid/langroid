@@ -4,6 +4,8 @@ from pydantic import BaseSettings
 
 
 class Settings(BaseSettings):
+    # NOTE all of these can be overridden in your .env file with upper-case names,
+    # for example CACHE_TYPE=momento
     debug: bool = False  # show debug messages?
     progress: bool = False  # show progress spinners/bars?
     stream: bool = True  # stream output?

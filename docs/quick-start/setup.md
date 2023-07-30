@@ -54,7 +54,6 @@ Alternatively, you can set this as an environment variable in your shell
 export OPENAI_API_KEY=your-key-here-without-quotes
 ```
 
-
 All of the below are optional and not strictly needed to run any of the examples.
 
 - **Qdrant** Vector Store API Key, URL. This is only required if you want to use Qdrant cloud.
@@ -62,14 +61,16 @@ All of the below are optional and not strictly needed to run any of the examples
   If you skip setting up these, Langroid will use Qdrant in local-storage mode.
   Alternatively [Chroma](https://docs.trychroma.com/) is also currently supported.
   We use the local-storage version of Chroma, so there is no need for an API key.
+  Langroid uses Qdrant by default.
 - **Redis** Password, host, port: This is optional, and only needed to cache LLM API responses
   using Redis Cloud. Redis [offers](https://redis.com/try-free/) a free 30MB Redis account
   which is more than sufficient to try out Langroid and even beyond.
   If you don't set up these, Langroid will use a pure-python
   Redis in-memory cache via the [Fakeredis](https://fakeredis.readthedocs.io/en/latest/) library.
 - **Momento** Serverless Caching of LLM API responses (as an alternative to Redis).
-  To use Momento instead of Redis, simply enter your Momento Token in the `.env` file,
-  as the value of `MOMENTO_AUTH_TOKEN` (see example file below).
+  To use Momento instead of Redis:
+    - enter your Momento Token in the `.env` file, as the value of `MOMENTO_AUTH_TOKEN` (see example file below),
+    - in the `.env` file set `CACHE_TYPE=momento` (instead of `CACHE_TYPE=redis` which is the default).
 - **GitHub** Personal Access Token (required for apps that need to analyze git
   repos; token-based API calls are less rate-limited). See this
   [GitHub page](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens).
@@ -78,9 +79,11 @@ If you add all of these optional variables, your `.env` file should look like th
 ```bash
 OPENAI_API_KEY=your-key-here-without-quotes
 GITHUB_ACCESS_TOKEN=your-personal-access-token-no-quotes
+CACHE_TYPE=redis # or momento
 REDIS_PASSWORD=your-redis-password-no-quotes
 REDIS_HOST=your-redis-hostname-no-quotes
 REDIS_PORT=your-redis-port-no-quotes
+MOMENTO_AUTH_TOKEN=your-momento-token-no-quotes # instead of REDIS* variables
 QDRANT_API_KEY=your-key
 QDRANT_API_URL=https://your.url.here:6333 # note port number must be included
 ```
