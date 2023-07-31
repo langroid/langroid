@@ -525,8 +525,8 @@ class Agent(ABC):
         try:
             result = handler_method(tool)
         except Exception as e:
-            logger.warning(f"Error handling tool-message {tool_name}: {type(e)}: {e}")
-            return None
+            # return the error message to the LLM so it can try to fix the error
+            result = f"Error in tool/function-call {tool_name} usage: {type(e)}: {e}"
         return result  # type: ignore
 
     def num_tokens(self, prompt: str) -> int:
