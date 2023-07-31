@@ -77,8 +77,9 @@ class TableChatAgent(ChatAgent):
             df = read_tabular_data(config.data, config.separator)
 
         self.df = df
+        columns_with_quotes = [f"'{c}'" for c in df.columns]
         config.system_message = config.system_message.format(
-            columns=", ".join(df.columns)
+            columns=", ".join(columns_with_quotes)
         )
 
         super().__init__(config)
