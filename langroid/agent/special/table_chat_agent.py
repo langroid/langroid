@@ -71,21 +71,24 @@ class TableChatAgent(ChatAgent):
     """
 
     def __init__(self, config: TableChatAgentConfig):
+        if isinstance(config.data, pd.DataFrame):
+            df = config.data
+        else:
+            df = read_tabular_data(config.data, config.separator)
+
+        self.df = df
+        config.system_message = config.system_message.format(
+            columns=", ".join(df.columns)
+        )
+
         super().__init__(config)
         self.config: TableChatAgentConfig = config
-        if isinstance(config.data, pd.DataFrame):
-            self.df = config.data
-        else:
-            self.df = read_tabular_data(config.data, config.separator)
 
         logger.info(
             f"""TableChatAgent initialized with dataframe of shape {self.df.shape}
             and columns: 
             {self.df.columns}
             """
-        )
-        self.config.system_message = self.config.system_message.format(
-            columns=", ".join(self.df.columns)
         )
         # enable the agent to use and handle the RunCodeTool
         self.enable_message(RunCodeTool)
@@ -117,7 +120,13 @@ class TableChatAgent(ChatAgent):
             exec(line, {}, local_vars)
 
         # Evaluate the last line and get the result
-        eval_result = eval(lines[-1], {}, local_vars) or ""
+        try:
+            eval_result = eval(lines[-1], {}, local_vars)
+        except Exception as e:
+            eval_result = f"ERROR: {type(e)}: {e}"
+
+        if eval_result is None:
+            eval_result = ""
 
         # Always restore the original standard output
         sys.stdout = sys.__stdout__
@@ -130,6 +139,7 @@ class TableChatAgent(ChatAgent):
         sep = "\n" if print_result else ""
         # Combine the print and eval results
         result = f"{print_result}{sep}{eval_result}"
-
+        if result == "":
+            result = "No result"
         # Return the result
         return result

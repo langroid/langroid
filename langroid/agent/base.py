@@ -469,11 +469,12 @@ class Agent(ABC):
             return self.handle_message_fallback(msg)
         # there was a non-None result
         final = "\n".join(results_list)
-        assert (
-            final != ""
-        ), """final result from a handler should not be empty str, since that would be 
-            considered an invalid result and other responders will be tried, 
-            and we may not necessarily want that"""
+        if final == "":
+            logger.warning(
+                """final result from a tool handler should not be empty str, since  
+             it would be considered an invalid result and other responders 
+             will be tried, and we may not necessarily want that"""
+            )
         return final
 
     def handle_message_fallback(self, msg: str | ChatDocument) -> Optional[str]:
