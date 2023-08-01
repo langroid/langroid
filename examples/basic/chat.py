@@ -1,5 +1,6 @@
 import typer
 from rich import print
+from rich.prompt import Prompt
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
@@ -17,10 +18,16 @@ def chat() -> None:
     print(
         """
         [blue]Welcome to the basic chatbot!
-        Enter x or q to quit
+        Enter x or q to quit at any point.
         """
     )
+    sys_msg = Prompt.ask(
+        "[blue]Tell me who I am. Hit Enter for default, or type your own\n",
+        default="Default: 'You are a helpful assistant'",
+    )
+
     config = ChatAgentConfig(
+        system_message=sys_msg,
         llm=OpenAIGPTConfig(
             chat_model=OpenAIChatModel.GPT4,
         )
