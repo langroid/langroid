@@ -79,17 +79,17 @@ clean:
 	-rm -rf dist/*
 
 .PHONY: release
-release: clean
+release:
 	@VERSION=$$(poetry version | cut -d' ' -f2) && gh release create $${VERSION} dist/*
 
 .PHONY: all-patch
-all-patch: bump-patch build push release
+all-patch: bump-patch build push clean release
 
 .PHONY: all-minor
-all-minor: bump-minor build push release
+all-minor: bump-minor build push clean release
 
 .PHONY: all-major
-all-major: bump-major build push release
+all-major: bump-major build push clean release
 
 .PHONY: publish
 publish:
