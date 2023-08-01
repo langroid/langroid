@@ -76,7 +76,7 @@ push:
 
 .PHONY: clean
 clean:
-	rm -rf dist/*
+	-rm -rf dist/*
 
 .PHONY: release
 release: clean
