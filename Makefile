@@ -74,8 +74,12 @@ build:
 push:
 	@git push origin main
 
+.PHONY: clean
+clean:
+	rm -rf dist/*
+
 .PHONY: release
-release:
+release: clean
 	@VERSION=$$(poetry version | cut -d' ' -f2) && gh release create $${VERSION} dist/*
 
 .PHONY: all-patch
