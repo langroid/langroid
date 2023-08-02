@@ -497,7 +497,6 @@ Then instantiate the `DocChatAgent`, ingest the docs into the vector-store:
 
 ```python
 agent = DocChatAgent(config)
-agent.ingest()
 ```
 Then we can either ask the agent one-off questions,
 ```python
