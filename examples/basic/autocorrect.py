@@ -1,12 +1,11 @@
 """
 A two agent chat system where
-- Corrector agent corrects the user's possibly mistyped input,
+- AutoCorrect agent corrects the user's possibly mistyped input,
 - Chatter agent responds to the corrected user's input.
 """
 
 import typer
 from rich import print
-from rich.prompt import Prompt
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
@@ -23,34 +22,61 @@ setup_colored_logging()
 def chat() -> None:
     print(
         """
-        [blue]Welcome to the basic chatbot!
-        Enter x or q to quit at any point.
+        [blue]Welcome to the Autocorrecting Chatbot!
+        You can quickly type your message, don't even look at your keyboard. 
+        Feel free to type and I will try my best to understand it,
+        and I will type out what I think you meant.
+        If you agree with my suggestion, just hit enter so I can respond to it.
+        If you disagree with my suggestion, say "try again" or say "no" or something 
+        similar, and I will try again.
+        When I am confused, I will offer some numbered choices to pick from.
+        
+        Let's go! Enter x or q to quit at any point.
         """
-    )
-    sys_msg = Prompt.ask(
-        "[blue]Tell me who I am. Hit Enter for default, or type your own\n",
-        default="Default: 'You are a helpful assistant'",
     )
 
     config = ChatAgentConfig(
-        system_message=sys_msg,
         llm=OpenAIGPTConfig(
             chat_model=OpenAIChatModel.GPT4,
         ),
+        vecdb=None,
     )
-    agent = ChatAgent(config)
-    task = Task(agent)
-    task.run()
+    autocorrect_agent = ChatAgent(config)
+    autocorrect_task = Task(
+        autocorrect_agent,
+        name="AutoCorrect",
+        system_message="""
+        You are an expert at understanding mistyped text. You are also an expert in 
+        the English language, and you have common sense, so you will only use the most 
+        sensible version of the text you receive. For any text you receive,
+        your job is to write the correct version of it, and not say anything else. 
+        If you are unsure, offer up to 3 numbered suggestions, and the user will pick 
+        one. Once the user selects a suggestion, simply write out that version.
+        Start by asking me to writing something.
+        """,
+        llm_delegate=True,
+        single_round=False,
+    )
+
+    chat_agent = ChatAgent(config)
+    chat_task = Task(
+        chat_agent,
+        name="Chat",
+        llm_delegate=False,
+        single_round=True,
+    )
+    autocorrect_task.add_sub_task(chat_task)
+    autocorrect_task.run()
 
 
 @app.command()
 def main(
-        debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
-        no_stream: bool = typer.Option(False, "--nostream", "-ns", help="no streaming"),
-        nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
-        cache_type: str = typer.Option(
-            "redis", "--cachetype", "-ct", help="redis or momento"
-        ),
+    debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
+    no_stream: bool = typer.Option(False, "--nostream", "-ns", help="no streaming"),
+    nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
+    cache_type: str = typer.Option(
+        "redis", "--cachetype", "-ct", help="redis or momento"
+    ),
 ) -> None:
     set_global(
         Settings(
