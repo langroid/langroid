@@ -110,6 +110,17 @@ class Agent(ABC):
                 raise ValueError("message_class must be a subclass of ToolMessage")
             tool = message_class.default_value("request")
             self.llm_tools_map[tool] = message_class
+            if hasattr(message_class, "handle"):
+                """
+                If the message class has a `handle` method,
+                then we create a method for the agent whose name
+                is the value of `tool`, and whose body is the `handle` method.
+                This removes a separate step of having to define this method
+                for the agent, and also keeps the tool definition AND handling
+                in one place, i.e. in the message class.
+                See `tests/main/test_special_tool_messages.py` for an example.
+                """
+                setattr(self, tool, lambda obj: obj.handle())
             return [tool]
 
     def enable_message_handling(
