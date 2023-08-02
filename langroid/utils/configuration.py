@@ -49,5 +49,5 @@ def update_global_settings(cfg: BaseSettings, keys: List[str]) -> None:
 
 
 def set_global(key_vals: Settings) -> None:
-    # Update the unique global settings object
+    """Update the unique global settings object"""
     settings.__dict__.update(key_vals.__dict__)
