@@ -28,7 +28,12 @@ class SquareTool(ToolMessage):
         rather than in the agent, since the tool does not require any
         member variables from the agent.
         We can think of these tools as "stateless" tools or Static tools,
-        similar to static methods.
+        similar to static methods. Since the SquareTool is stateless,
+        the corresponding agent method `square` can be automatically
+        defined, using the body of the `handle` method.
+        Thus there is no need to manually define a `square` method in the
+        agent, as we normally would have to do for a (stateful) tool that has no
+        `handle` method.
         See the `_get_tool_list` method in `agent/base.py` for how such
         tools are set up.
         """

@@ -493,7 +493,7 @@ config = DocChatAgentConfig(
 )
 ```
 
-Then instantiate the `DocChatAgent`, ingest the docs into the vector-store:
+Then instantiate the `DocChatAgent` (this ingests the docs into the vector-store):
 
 ```python
 agent = DocChatAgent(config)
