@@ -2,6 +2,11 @@
 A two agent chat system where
 - AutoCorrect agent corrects the user's possibly mistyped input,
 - Chatter agent responds to the corrected user's input.
+
+Run it like this:
+
+python3 examples/basic/autocorrect.py
+
 """
 
 import typer
@@ -46,12 +51,17 @@ def chat() -> None:
         autocorrect_agent,
         name="AutoCorrect",
         system_message="""
-        You are an expert at understanding mistyped text. You are also an expert in 
-        the English language, and you have common sense, so you will only use the most 
-        sensible version of the text you receive. For any text you receive,
-        your job is to write the correct version of it, and not say anything else. 
+        You are an expert at understanding mistyped text. You are extremely 
+        intelligent, an expert in the English language, and you have common sense, 
+        so no matter how badly mistyped the text is, you will know the MOST LIKELY 
+        AND SENSIBLE correct version of it.
+        For any text you receive, your job is to write the correct version of it, 
+        and not say anything else. 
         If you are unsure, offer up to 3 numbered suggestions, and the user will pick 
         one. Once the user selects a suggestion, simply write out that version.
+        Remember to ONLY suggest sensible interpretations. For example
+        "Which month is the tallest in the world" is meaningless, so you should not
+        ever include such a suggestion in your list.
         Start by asking me to writing something.
         """,
         llm_delegate=True,
@@ -62,6 +72,7 @@ def chat() -> None:
     chat_task = Task(
         chat_agent,
         name="Chat",
+        system_message="Answer or respond very concisely, no more than 1-2 sentences!",
         llm_delegate=False,
         single_round=True,
     )

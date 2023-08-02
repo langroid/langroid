@@ -33,7 +33,13 @@ def chat() -> None:
         ),
     )
     agent = ChatAgent(config)
-    task = Task(agent)
+    task = Task(
+        agent,
+        system_message="""
+        You are a helpful assistant. Be very concise in your responses, use no more
+        than 1-2 sentences.
+        """,
+    )
     task.run()
 
 

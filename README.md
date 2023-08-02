@@ -48,7 +48,9 @@ for ideas on what to contribute.
 <details>
 <summary> <b>:fire: Updates/Releases</b></summary>
 
-- **July 2023**: 
+- **Aug 2023:**
+  - Multi-agent Example: [Autocorrect chat](examples/basic/autocorrect.py)
+- **July 2023:** 
   - **0.1.30:** Added [`TableChatAgent`](langroid/agent/special/table_chat_agent.py) to 
     [chat](examples/data-qa/table_chat.py) with tabular datasets (dataframes, files, URLs): LLM generates Pandas code,
     and code is executed using Langroid's tool/function-call mechanism. 
