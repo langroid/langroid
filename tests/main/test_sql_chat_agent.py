@@ -12,46 +12,41 @@ def mock_db() -> str:
 
 @pytest.fixture
 def mock_context() -> dict:
-    return
-
-
-{
-    "departments": {
-        "description": "The 'departments' table holds details about"
-        + " the various departments. It relates to the 'employees' table"
-        + " via a foreign key in the 'employees' table.",
-        "columns": {
-            "id": "A unique identifier for a department. This ID is used"
-            + " as a foreign key in the 'employees' table.",
-            "name": "The name of the department.",
+    return {
+        "departments": {
+            "description": "The 'departments' table holds details about the various "
+            + "departments. It relates to the 'employees' table via a foreign key "
+            + "in the 'employees' table.",
+            "columns": {
+                "id": "A unique identifier for a department. This ID is used as a "
+                + "foreign key in the 'employees' table.",
+                "name": "The name of the department.",
+            },
         },
-    },
-    "employees": {
-        "description": "The 'employees' table contains information about"
-        + " the employees. It relates to the 'departments' and 'sales' "
-        + "tables via foreign keys.",
-        "columns": {
-            "id": "A unique identifier for an employee. This ID is used"
-            + " as a foreign key in the 'sales' table.",
-            "name": "The name of the employee.",
-            "department_id": "The ID of the department the employee"
-            + " belongs to. This is a foreign key referencing the 'id' "
-            + "in the 'departments' table.",
+        "employees": {
+            "description": "The 'employees' table contains information about the "
+            + "employees. It relates to the 'departments' and 'sales' tables via "
+            + "foreign keys.",
+            "columns": {
+                "id": "A unique identifier for an employee. This ID is used as a"
+                + " foreign key in the 'sales' table.",
+                "name": "The name of the employee.",
+                "department_id": "The ID of the department the employee belongs to. "
+                + "This is a foreign key referencing the 'id' in the 'departments'"
+                + " table.",
+            },
         },
-    },
-    "sales": {
-        "description": "The 'sales' table keeps a record of all sales"
-        + " made by employees. It relates to the 'employees' table via "
-        + "a foreign key.",
-        "columns": {
-            "id": "A unique identifier for a sale.",
-            "amount": "The amount of the sale.",
-            "employee_id": "The ID of the employee who made the sale."
-            + " This is a foreign key referencing the 'id' in the "
-            + "'employees' table.",
+        "sales": {
+            "description": "The 'sales' table keeps a record of all sales made by "
+            + "employees. It relates to the 'employees' table via a foreign key.",
+            "columns": {
+                "id": "A unique identifier for a sale.",
+                "amount": "The amount of the sale.",
+                "employee_id": "The ID of the employee who made the sale. This is a "
+                + "foreign key referencing the 'id' in the 'employees' table.",
+            },
         },
-    },
-}
+    }
 
 
 def _test_sql_chat_agent(
@@ -100,19 +95,18 @@ def test_sql_chat_agent_simple_query(fn_api, mock_db, mock_context):
         fn_api=fn_api,
         mock_db=mock_db,
         mock_context=mock_context,
-        prompt="How many employees are there?",
-        answer="5",
+        prompt="How many departments are there?",
+        answer="2",
     )
 
 
 @pytest.mark.parametrize("fn_api", [True, False])
-def test_sql_chat_agent_error_query(fn_api, mock_db, mock_context):
+def test_sql_chat_agent_complex_query(fn_api, mock_db, mock_context):
     _test_sql_chat_agent(
         test_settings=Settings(),
         fn_api=fn_api,
         mock_db=mock_db,
         mock_context=mock_context,
-        prompt="How many users are there?",
-        answer="5",
-        turns=4,
+        prompt="What is the total amount of sales?",
+        answer="27604",
     )

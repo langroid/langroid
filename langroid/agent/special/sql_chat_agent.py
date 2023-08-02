@@ -7,13 +7,11 @@ Functionality includes:
 - asking a question about a SQL schema
 """
 import logging
-from typing import Any, Dict, Optional, Union
+from typing import Dict, Optional, Union
 
-from prettytable import PrettyTable
 from rich import print
 from rich.console import Console
-from sqlalchemy import MetaData, create_engine, inspect, text
-from sqlalchemy.engine import Inspector
+from sqlalchemy import MetaData, create_engine, text
 from sqlalchemy.orm import sessionmaker
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
@@ -29,15 +27,22 @@ logger = logging.getLogger(__name__)
 console = Console()
 
 DEFAULT_SQL_CHAT_SYSTEM_MESSAGE = """
-You are a savvy data scientist, with expertise in analyzing SQL database,
-using Python and the SQLAlchemy library for data manipulation.
+You are a savvy data scientist/database administrator, with expertise in analyzing 
+SQL database, using Python and the SQLAlchemy library for data manipulation.
 You do not have access to the database 'db' directly, so you will need to use the 
 `run_query` tool/function-call to answer the question.
-Here is information about the tables, columns and their relationships:
-{tables}
-Please note that ONLY the column names specified above should be used in the queries.
+
+This JSON schema maps SQL database structure. It outlines tables, each 
+with a description and columns. Each table is identified by a key, 
+and holds a description and a dictionary of columns, 
+with column names as keys and their descriptions as values. 
+{schema_dict}
+
+ONLY the column names specified above should be used in the queries.
 Avoid assuming any tables or columns other than those above.
 """
+
+SQL_ERROR_MSG = "There was an error in your SQL Query"
 
 
 class SQLChatAgentConfig(ChatAgentConfig):
@@ -48,7 +53,6 @@ class SQLChatAgentConfig(ChatAgentConfig):
     debug: bool = False
     stream: bool = True  # allow streaming where needed
     database_uri: str  # Database URI
-    retry_query: int = 3  # Number of times to retry query
     vecdb: None | VectorStoreConfig = None
     context_descriptions: Optional[
         Dict[str, Dict[str, Union[str, Dict[str, str]]]]
@@ -111,16 +115,12 @@ class SQLChatAgent(ChatAgent):
     """
 
     def __init__(self, config: SQLChatAgentConfig):
-        super().__init__(config)
         self.config: SQLChatAgentConfig = config
         self.engine = create_engine(config.database_uri)
         self.Session = sessionmaker(bind=self.engine)
         self.metadata = MetaData()
-        self.metadata.reflect(self.engine)
-        self.tables_info = ""
 
-        # User-provided context descriptions
-        context_descriptions = config.context_descriptions
+        self.metadata.reflect(self.engine)
 
         logger.info(
             f"""SQLChatAgent initialized with database: 
@@ -129,16 +129,19 @@ class SQLChatAgent(ChatAgent):
             """
         )
 
-        # Create inspector
-        inspector = inspect(self.engine)
-
-        # Gather table and column information
-        self.tables_info = self.gather_table_info(context_descriptions, inspector)
+        # Combine database information with context descriptions
+        schema_dict = (
+            extract_and_combine_db_info(self.metadata, config.context_descriptions)
+            if config.context_descriptions
+            else self.metadata
+        )
 
         # Update the system message with the table information
         self.config.system_message = self.config.system_message.format(
-            tables=self.tables_info
+            schema_dict=schema_dict
         )
+
+        super().__init__(config)
 
         # Enable the agent to use and handle the RunQueryTool
         self.enable_message(RunQueryTool)
@@ -156,7 +159,7 @@ class SQLChatAgent(ChatAgent):
             return None
 
         output = results
-        if "There was an error in your SQL Query" in output:
+        if SQL_ERROR_MSG in output:
             output = "There was an error in the SQL Query. Press enter to retry."
 
         console.print(f"[red]{self.indent}", end="")
@@ -174,79 +177,18 @@ class SQLChatAgent(ChatAgent):
             ),
         )
 
-    def gather_table_info(
-        self,
-        context_descriptions: Optional[
-            Dict[str, Dict[str, Union[str, Dict[str, str]]]]
-        ],
-        inspector: Inspector,
-    ) -> str:
-        """
-        Gather information about the tables in the database.
-
-        Args:
-            context_descriptions (Optional[Dict[str, Dict[str, str]]]):
-                User-provided context descriptions.
-            inspector (inspect): SQL alchemy inspector object.
-
-        Returns:
-            str: The formatted string containing the details of all tables.
-        """
-        tables_info = ""
-        # Iterate over all tables present in the metadata
-        for table_name in self.metadata.tables.keys():
-            table_description: str = ""
-
-            # Check if context_descriptions are provided
-            if context_descriptions is not None:
-                # Fetch the table_info from context_descriptions
-                table_info = context_descriptions.get(table_name, {})
-                if isinstance(table_info, dict):
-                    # Get description of the table
-                    description = table_info.get("description", "")
-                    assert isinstance(description, str)
-                    table_description = description
-
-            # Append table_name and table_description to tables_info
-            if table_description:
-                tables_info += (
-                    f"\nTable: {table_name}\nDescription: {table_description}\n"
-                )
-            else:
-                tables_info += f"\nTable: {table_name}\n"
-
-            # Get column details for the table
-            columns = inspector.get_columns(table_name)
-            table = PrettyTable()
-            table.field_names = ["Column Name", "Type", "Description"]
-            columns_info: Dict[str, Any] = {}
-            # Loop over all columns to populate the table
-            for column in columns:
-                description = ""  # Initialize description as empty string
-                if context_descriptions is not None:
-                    table_info = context_descriptions.get(table_name, {})
-                    if isinstance(table_info, dict):
-                        # Check if 'columns' key is in the table_info dict
-                        if "columns" in table_info and isinstance(
-                            table_info["columns"], dict
-                        ):
-                            columns_info = table_info["columns"]
-                            # Fetch column description from context_descriptions
-                            description = columns_info.get(column["name"], "")
-                # Add a new row in the table for each column
-                table.add_row([column["name"], column["type"], description])
-
-            # Append the generated table to tables_info
-            tables_info += f"{table}\n"
-
-        return tables_info
-
     def retry_query(self, e: Exception, query: str) -> str:
-        result = f"""There was an error in your SQL Query: '{query}'
+        result = f"""{SQL_ERROR_MSG}: '{query}'
 {str(e)} 
 Run a new query, correcting the errors. 
-Refer to the table description for information about the tables and columns.
-{self.tables_info}"""
+This JSON schema maps SQL database structure. It outlines tables, each 
+with a description and columns. Each table is identified by a key, 
+and holds a description and a dictionary of columns, 
+with column names as keys and their descriptions as values.
+
+```json
+{self.config.context_descriptions}
+```"""
 
         return result
 
@@ -291,3 +233,48 @@ Refer to the table description for information about the tables and columns.
             session.close()
 
         return result
+
+
+def extract_and_combine_db_info(
+    metadata: MetaData, to_add: Dict[str, Dict[str, Union[str, Dict[str, str]]]]
+) -> Dict[str, Dict[str, Union[str, Dict[str, str]]]]:
+    """
+    Extracts information from an SQLAlchemy database's metadata and combines it
+    with another dictionary with context descriptions.
+
+    Args:
+        metadata (MetaData): SQLAlchemy metadata object of the database.
+        to_add (Dict[str, Dict[str, Any]]): A dictionary with table and column
+                                             descriptions.
+
+    Returns:
+        Dict[str, Dict[str, Any]]: A dictionary with table and context information.
+    """
+
+    db_info: Dict[str, Dict[str, Union[str, Dict[str, str]]]] = {}
+
+    # Create empty metadata dictionary with column datatypes
+    for table_name, table in metadata.tables.items():
+        # Populate tables with empty descriptions
+        db_info[str(table_name)] = {"description": "", "columns": {}}
+
+        for column in table.columns:
+            # Populate columns with datatype
+            db_info[str(table_name)]["columns"][str(column.name)] = str(column.type)
+
+    # Update the metadata dictionary with the context descriptions
+    for table_name in db_info.keys():
+        if table_name in to_add:
+            # Populate table descriptions
+            db_info[table_name]["description"] = to_add[table_name]["description"]
+
+            for column_name in db_info[table_name]["columns"]:
+                # Populate column descriptions
+                if column_name in to_add[table_name]["columns"]:
+                    db_info[table_name]["columns"][column_name] = (
+                        db_info[table_name]["columns"][column_name]
+                        + "; "
+                        + to_add[table_name]["columns"][column_name]
+                    )
+
+    return db_info
