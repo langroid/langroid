@@ -48,13 +48,14 @@ for ideas on what to contribute.
 <details>
 <summary> <b>:fire: Updates/Releases</b></summary>
 
-- **0.1.30 (July 2023)**: Added [`TableChatAgent`](langroid/agent/special/table_chat_agent.py) to 
+- **July 2023**: 
+  - **0.1.30:** Added [`TableChatAgent`](langroid/agent/special/table_chat_agent.py) to 
     [chat](examples/data-qa/table_chat.py) with tabular datasets (dataframes, files, URLs): LLM generates Pandas code,
-    and code is executed via using Langroid tool/function-call mechanism. 
-- **(July 2023)** Demo: 3-agent system for Audience [Targeting](https://langroid.github.io/langroid/demos/targeting/audience-targeting/).
-- **0.1.27 (July 2023)**: Added [support](langroid/cachedb/momento_cachedb.py) 
+    and code is executed using Langroid's tool/function-call mechanism. 
+  - **Demo:** 3-agent system for Audience [Targeting](https://langroid.github.io/langroid/demos/targeting/audience-targeting/).
+  - **0.1.27**: Added [support](langroid/cachedb/momento_cachedb.py) 
     for [Momento Serverless Cache](https://www.gomomento.com/) as an alternative to Redis.
-- **0.1.24 (July 2023)**: [`DocChatAgent`](langroid/agent/special/doc_chat_agent.py) 
+  - **0.1.24**: [`DocChatAgent`](langroid/agent/special/doc_chat_agent.py) 
     now [accepts](langroid/parsing/pdf_parser.py) PDF files or URLs.
 
 </details>

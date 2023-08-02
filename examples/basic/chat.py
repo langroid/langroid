@@ -30,7 +30,7 @@ def chat() -> None:
         system_message=sys_msg,
         llm=OpenAIGPTConfig(
             chat_model=OpenAIChatModel.GPT4,
-        )
+        ),
     )
     agent = ChatAgent(config)
     task = Task(agent)
