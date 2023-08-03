@@ -11,6 +11,7 @@
 [![Docs](https://github.com/langroid/langroid/actions/workflows/mkdocs-deploy.yml/badge.svg)](https://github.com/langroid/langroid/actions/workflows/mkdocs-deploy.yml)
 [![Static Badge](https://img.shields.io/badge/Documentation-blue?link=https%3A%2F%2Flangroid.github.io%2Flangroid%2F&link=https%3A%2F%2Flangroid.github.io%2Flangroid%2F)](https://langroid.github.io/langroid)
 [![Static Badge](https://img.shields.io/badge/Discord-orange?logoColor=orange&link=https%3A%2F%2Fdiscord.gg%2FZU36McDgDs)](https://discord.gg/ZU36McDgDs)
+[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1l8jAP9MAt1caYdC-u8OaOVVOl08hACNE#scrollTo=hoTp_cNcriIg)
 
 
 </div>
@@ -222,7 +223,9 @@ and may suffice for some applications, but in general you may see inferior resul
 [`Getting Started Guide`](https://langroid.github.io/langroid/quick-start/)
 for a detailed tutorial.
 
-Click to expand any of the code examples below:
+Click to expand any of the code examples below.
+All of these can be run in a Colab notebook:
+[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/drive/1l8jAP9MAt1caYdC-u8OaOVVOl08hACNE#scrollTo=hoTp_cNcriIg)
 
 <details>
 <summary> <b> Direct interaction with OpenAI LLM </b> </summary>

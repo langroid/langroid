@@ -150,7 +150,7 @@ or by Langroid's native tools mechanism (when we set the `use_tools` flag to `Tr
 
 
 
-See the [`chat-agent-tool.py](https://github.com/langroid/langroid-examples/blob/main/examples/quick-start/chat-agent-tool.py)
+See the [`chat-agent-tool.py`](https://github.com/langroid/langroid-examples/blob/main/examples/quick-start/chat-agent-tool.py)
 in the `langroid-examples` repo, for a working example that you can run as follows:
 ```sh
 python3 examples/quick-start/chat-agent-tool.py
