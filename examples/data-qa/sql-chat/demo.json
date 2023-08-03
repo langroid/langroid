@@ -1,0 +1,25 @@
+{
+    "departments": {
+        "description": "The 'departments' table holds details about the various departments. It relates to the 'employees' table via a foreign key in the 'employees' table.",
+        "columns": {
+            "id": "A unique identifier for a department. This ID is used as a foreign key in the 'employees' table.",
+            "name": "The name of the department."
+        }
+    },
+    "employees": {
+        "description": "The 'employees' table contains information about the employees. It relates to the 'departments' and 'sales' tables via foreign keys.",
+        "columns": {
+            "id": "A unique identifier for an employee. This ID is used as a foreign key in the 'sales' table.",
+            "name": "The name of the employee.",
+            "department_id": "The ID of the department the employee belongs to. This is a foreign key referencing the 'id' in the 'departments' table."
+        }
+    },
+    "sales": {
+        "description": "The 'sales' table keeps a record of all sales made by employees. It relates to the 'employees' table via a foreign key.",
+        "columns": {
+            "id": "A unique identifier for a sale.",
+            "amount": "The amount of the sale.",
+            "employee_id": "The ID of the employee who made the sale. This is a foreign key referencing the 'id' in the 'employees' table."
+        }
+    }
+}
