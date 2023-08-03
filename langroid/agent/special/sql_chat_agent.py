@@ -12,7 +12,7 @@ from typing import Dict, Optional, Union
 from rich import print
 from rich.console import Console
 from sqlalchemy import MetaData, create_engine, text
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm import Session, sessionmaker
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.chat_document import ChatDocMetaData, ChatDocument
@@ -27,19 +27,24 @@ logger = logging.getLogger(__name__)
 console = Console()
 
 DEFAULT_SQL_CHAT_SYSTEM_MESSAGE = """
-You are a savvy data scientist/database administrator, with expertise in analyzing 
-SQL database, using Python and the SQLAlchemy library for data manipulation.
+You are a savvy data scientist/database administrator, with expertise in 
+answering questions by querying a SQL database.
 You do not have access to the database 'db' directly, so you will need to use the 
 `run_query` tool/function-call to answer the question.
 
-This JSON schema maps SQL database structure. It outlines tables, each 
+The below JSON schema maps the SQL database structure. It outlines tables, each 
 with a description and columns. Each table is identified by a key, 
 and holds a description and a dictionary of columns, 
 with column names as keys and their descriptions as values. 
 {schema_dict}
 
-ONLY the column names specified above should be used in the queries.
-Avoid assuming any tables or columns other than those above.
+ONLY the tables and column names and tables specified above should be used in
+the generated queries. 
+You must be smart about using the right tables and columns based on the 
+english description. If you are thinking of using a table or column that 
+does not exist, you are probably on the wrong track, so you should try
+your best to answer based on an existing table or column.
+DO NOT assume any tables or columns other than those above.
 """
 
 SQL_ERROR_MSG = "There was an error in your SQL Query"
@@ -52,11 +57,10 @@ class SQLChatAgentConfig(ChatAgentConfig):
     cache: bool = True  # cache results
     debug: bool = False
     stream: bool = True  # allow streaming where needed
-    database_uri: str  # Database URI
+    database_uri: str = ""  # Database URI
+    database_session: None | Session = None  # Database session
     vecdb: None | VectorStoreConfig = None
-    context_descriptions: Optional[
-        Dict[str, Dict[str, Union[str, Dict[str, str]]]]
-    ] = None
+    context_descriptions: Dict[str, Dict[str, Union[str, Dict[str, str]]]] = {}
 
     """
     Optional, but strongly recommended, context descriptions for tables, columns, 
@@ -116,10 +120,16 @@ class SQLChatAgent(ChatAgent):
 
     def __init__(self, config: SQLChatAgentConfig):
         self.config: SQLChatAgentConfig = config
-        self.engine = create_engine(config.database_uri)
-        self.Session = sessionmaker(bind=self.engine)
+        if config.database_session is not None:
+            self.Session = config.database_session
+            self.engine = self.Session.bind
+        else:
+            self.engine = create_engine(config.database_uri)
+            self.Session = sessionmaker(bind=self.engine)()
         self.metadata = MetaData()
 
+        if self.engine is None:
+            raise ValueError("Database engine is None")
         self.metadata.reflect(self.engine)
 
         logger.info(
@@ -130,10 +140,8 @@ class SQLChatAgent(ChatAgent):
         )
 
         # Combine database information with context descriptions
-        schema_dict = (
-            extract_and_combine_db_info(self.metadata, config.context_descriptions)
-            if config.context_descriptions
-            else self.metadata
+        schema_dict = extract_and_combine_db_info(
+            self.metadata, config.context_descriptions
         )
 
         # Update the system message with the table information
@@ -203,7 +211,7 @@ with column names as keys and their descriptions as values.
             str: The result of executing the SQL query.
         """
         query = msg.query
-        session = self.Session()
+        session = self.Session
         result = ""
 
         try:
@@ -236,7 +244,7 @@ with column names as keys and their descriptions as values.
 
 
 def extract_and_combine_db_info(
-    metadata: MetaData, to_add: Dict[str, Dict[str, Union[str, Dict[str, str]]]]
+    metadata: MetaData, info: Dict[str, Dict[str, Union[str, Dict[str, str]]]]
 ) -> Dict[str, Dict[str, Union[str, Dict[str, str]]]]:
     """
     Extracts information from an SQLAlchemy database's metadata and combines it
@@ -244,7 +252,7 @@ def extract_and_combine_db_info(
 
     Args:
         metadata (MetaData): SQLAlchemy metadata object of the database.
-        to_add (Dict[str, Dict[str, Any]]): A dictionary with table and column
+        info (Dict[str, Dict[str, Any]]): A dictionary with table and column
                                              descriptions.
 
     Returns:
@@ -260,21 +268,23 @@ def extract_and_combine_db_info(
 
         for column in table.columns:
             # Populate columns with datatype
-            db_info[str(table_name)]["columns"][str(column.name)] = str(column.type)
+            db_info[str(table_name)]["columns"][str(column.name)] = (  # type: ignore
+                str(column.type)
+            )
 
     # Update the metadata dictionary with the context descriptions
     for table_name in db_info.keys():
-        if table_name in to_add:
+        if table_name in info:
             # Populate table descriptions
-            db_info[table_name]["description"] = to_add[table_name]["description"]
+            db_info[table_name]["description"] = info[table_name]["description"]
 
             for column_name in db_info[table_name]["columns"]:
                 # Populate column descriptions
-                if column_name in to_add[table_name]["columns"]:
-                    db_info[table_name]["columns"][column_name] = (
-                        db_info[table_name]["columns"][column_name]
+                if column_name in info[table_name]["columns"]:
+                    db_info[table_name]["columns"][column_name] = (  # type: ignore
+                        db_info[table_name]["columns"][column_name]  # type: ignore
                         + "; "
-                        + to_add[table_name]["columns"][column_name]
+                        + info[table_name]["columns"][column_name]  # type: ignore
                     )
 
     return db_info

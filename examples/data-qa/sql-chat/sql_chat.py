@@ -67,19 +67,25 @@ def load_context_descriptions(engine: Engine) -> dict:
 
     while True:
         filepath = Prompt.ask(
-            "[blue]Enter the path to your context descriptions file. If you don't have one, press enter"
+            "[blue]Enter the path to your context descriptions file. \n"
+            "('n' to create a NEW file, 's' to SKIP, or Hit enter to use DEFAULT) ",
+            default="examples/data-qa/sql-chat/demo.json",
         )
 
-        # Skip context descriptions if user pressed enter
-        if filepath.strip() == "":
+        if filepath.strip() == "s":
+            return {}
+
+        if filepath.strip() == "n":
             filepath = Prompt.ask(
-                "[blue]Would you like to create a context description? If yes, please enter a filepath (json). If no, simply press enter"
+                "[blue]To create a new context description file, enter the path",
+                default="examples/data-qa/sql-chat/description.json",
             )
-
-            if filepath.strip() == "":
-                return {}
-
+            print(f"[blue]Creating new context description file at {filepath}...")
             create_descriptions_file(filepath, engine)
+            print(
+                f"[blue] Please fill in the descriptions in {filepath}, "
+                f"then try again."
+            )
 
         # Try to load the file
         if not os.path.exists(filepath):
@@ -97,7 +103,10 @@ def load_context_descriptions(engine: Engine) -> dict:
 
 def chat() -> None:
     print("[blue]Welcome to the SQL database chatbot!\n")
-    database_uri = Prompt.ask("[blue]Enter the URI for your SQL database")
+    database_uri = Prompt.ask(
+        "[blue]Enter the URI for your SQL database (hit enter for default)",
+        default="sqlite:///examples/data-qa/sql-chat/demo.db",
+    )
 
     # Create engine and inspector
     engine = create_engine(database_uri)

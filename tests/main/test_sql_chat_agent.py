@@ -1,13 +1,77 @@
 import pytest
+from sqlalchemy import Column, ForeignKey, Integer, String, create_engine
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import Session, relationship, sessionmaker
 
 from langroid.agent.special.sql_chat_agent import SQLChatAgent, SQLChatAgentConfig
 from langroid.agent.task import Task
 from langroid.utils.configuration import Settings, set_global
 
+Base = declarative_base()
+
+
+# Define your classes
+class Department(Base):
+    __tablename__ = "departments"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False)
+
+    employees = relationship("Employee", back_populates="department")
+
+
+class Employee(Base):
+    __tablename__ = "employees"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String, nullable=False)
+    department_id = Column(Integer, ForeignKey("departments.id"), nullable=False)
+
+    department = relationship("Department", back_populates="employees")
+    sales = relationship("Sale", back_populates="employee")
+
+
+class Sale(Base):
+    __tablename__ = "sales"
+
+    id = Column(Integer, primary_key=True)
+    amount = Column(Integer, nullable=False)
+    employee_id = Column(Integer, ForeignKey("employees.id"), nullable=False)
+
+    employee = relationship("Employee", back_populates="sales")
+
 
 @pytest.fixture
-def mock_db() -> str:
-    return "sqlite:///tests/main/sql_test.db"
+def mock_db_session() -> Session:
+    # Create an in-memory SQLite database
+    engine = create_engine("sqlite:///:memory:", echo=True)
+    Base.metadata.create_all(engine)
+
+    Session = sessionmaker(bind=engine)
+    session = Session()
+
+    # Insert data
+    sales_dept = Department(id=1, name="Sales")
+    marketing_dept = Department(id=2, name="Marketing")
+
+    alice = Employee(id=1, name="Alice", department=sales_dept)
+    bob = Employee(id=2, name="Bob", department=marketing_dept)
+
+    sale1 = Sale(id=1, amount=100, employee=alice)
+    sale2 = Sale(id=2, amount=500, employee=bob)
+
+    session.add(sales_dept)
+    session.add(marketing_dept)
+    session.add(alice)
+    session.add(bob)
+    session.add(sale1)
+    session.add(sale2)
+
+    session.commit()
+
+    yield session  # this is where the fixture's value comes from
+
+    session.close()
 
 
 @pytest.fixture
@@ -52,8 +116,8 @@ def mock_context() -> dict:
 def _test_sql_chat_agent(
     test_settings: Settings,
     fn_api: bool,
-    mock_db: str,
-    mock_context: dict,
+    db_session: Session,
+    context: dict,
     prompt: str,
     answer: str,
     turns: int = 2,
@@ -64,8 +128,8 @@ def _test_sql_chat_agent(
     set_global(test_settings)
     agent = SQLChatAgent(
         config=SQLChatAgentConfig(
-            database_uri=mock_db,
-            context_descriptions=mock_context,
+            database_session=db_session,
+            context_descriptions=context,
             use_tools=not fn_api,
             use_functions_api=fn_api,
         )
@@ -88,25 +152,34 @@ def _test_sql_chat_agent(
     assert answer in result.content
 
 
-@pytest.mark.parametrize("fn_api", [True, False])
-def test_sql_chat_agent_simple_query(fn_api, mock_db, mock_context):
+@pytest.mark.parametrize(
+    "fn_api,query,answer",
+    [
+        (True, "How many departments are there?", "2"),
+        (False, "How many departments are there?", "2"),
+        (True, "What is the total amount of sales?", "600"),
+        (False, "What is the total amount of sales?", "600"),
+        (True, "How many employees are in Sales?", "1"),
+        (False, "How many employees are in Sales?", "1"),
+    ],
+)
+def test_sql_chat_agent_query(fn_api, mock_db_session, mock_context, query, answer):
+    # with context descriptions:
     _test_sql_chat_agent(
         test_settings=Settings(),
         fn_api=fn_api,
-        mock_db=mock_db,
-        mock_context=mock_context,
-        prompt="How many departments are there?",
-        answer="2",
+        db_session=mock_db_session,
+        context=mock_context,
+        prompt=query,
+        answer=answer,
     )
 
-
-@pytest.mark.parametrize("fn_api", [True, False])
-def test_sql_chat_agent_complex_query(fn_api, mock_db, mock_context):
+    # without context descriptions:
     _test_sql_chat_agent(
         test_settings=Settings(),
         fn_api=fn_api,
-        mock_db=mock_db,
-        mock_context=mock_context,
-        prompt="What is the total amount of sales?",
-        answer="27604",
+        db_session=mock_db_session,
+        context={},
+        prompt=query,
+        answer=answer,
     )
