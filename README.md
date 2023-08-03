@@ -49,7 +49,7 @@ for ideas on what to contribute.
 <summary> <b>:fire: Updates/Releases</b></summary>
 
 - **Aug 2023:**
-  - Added [`SQLChatAgent`](langroid/agent/special/sql_chat_agent.py) -- thanks to our latest contributor [Rithwik Babu](https://github.com/rithwikbabu)!
+  - **0.1.37:** Added [`SQLChatAgent`](langroid/agent/special/sql_chat_agent.py) -- thanks to our latest contributor [Rithwik Babu](https://github.com/rithwikbabu)!
   - Multi-agent Example: [Autocorrect chat](examples/basic/autocorrect.py)
 - **July 2023:** 
   - **0.1.30:** Added [`TableChatAgent`](langroid/agent/special/table_chat_agent.py) to 
