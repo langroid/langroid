@@ -48,13 +48,16 @@ for ideas on what to contribute.
 <details>
 <summary> <b>:fire: Updates/Releases</b></summary>
 
-- **0.1.30 (July 2023)**: Added [`TableChatAgent`](langroid/agent/special/table_chat_agent.py) to 
+- **Aug 2023:**
+  - Multi-agent Example: [Autocorrect chat](examples/basic/autocorrect.py)
+- **July 2023:** 
+  - **0.1.30:** Added [`TableChatAgent`](langroid/agent/special/table_chat_agent.py) to 
     [chat](examples/data-qa/table_chat.py) with tabular datasets (dataframes, files, URLs): LLM generates Pandas code,
-    and code is executed via using Langroid tool/function-call mechanism. 
-- **(July 2023)** Demo: 3-agent system for Audience [Targeting](https://langroid.github.io/langroid/demos/targeting/audience-targeting/).
-- **0.1.27 (July 2023)**: Added [support](langroid/cachedb/momento_cachedb.py) 
+    and code is executed using Langroid's tool/function-call mechanism. 
+  - **Demo:** 3-agent system for Audience [Targeting](https://langroid.github.io/langroid/demos/targeting/audience-targeting/).
+  - **0.1.27**: Added [support](langroid/cachedb/momento_cachedb.py) 
     for [Momento Serverless Cache](https://www.gomomento.com/) as an alternative to Redis.
-- **0.1.24 (July 2023)**: [`DocChatAgent`](langroid/agent/special/doc_chat_agent.py) 
+  - **0.1.24**: [`DocChatAgent`](langroid/agent/special/doc_chat_agent.py) 
     now [accepts](langroid/parsing/pdf_parser.py) PDF files or URLs.
 
 </details>
@@ -167,14 +170,16 @@ All of the below are optional and not strictly needed to run any of the examples
   If you skip setting up these, Langroid will use Qdrant in local-storage mode.
   Alternatively [Chroma](https://docs.trychroma.com/) is also currently supported. 
   We use the local-storage version of Chroma, so there is no need for an API key.
+  Langroid uses Qdrant by default.
 - **Redis** Password, host, port: This is optional, and only needed to cache LLM API responses
   using Redis Cloud. Redis [offers](https://redis.com/try-free/) a free 30MB Redis account
   which is more than sufficient to try out Langroid and even beyond.
   If you don't set up these, Langroid will use a pure-python 
   Redis in-memory cache via the [Fakeredis](https://fakeredis.readthedocs.io/en/latest/) library.
 - **Momento** Serverless Caching of LLM API responses (as an alternative to Redis). 
-   To use Momento instead of Redis, simply enter your Momento Token in the `.env` file,
-   as the value of `MOMENTO_AUTH_TOKEN` (see example file below).
+   To use Momento instead of Redis:
+  - enter your Momento Token in the `.env` file, as the value of `MOMENTO_AUTH_TOKEN` (see example file below),
+  - in the `.env` file set `CACHE_TYPE=momento` (instead of `CACHE_TYPE=redis` which is the default).
 - **GitHub** Personal Access Token (required for apps that need to analyze git
   repos; token-based API calls are less rate-limited). See this
   [GitHub page](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens).
@@ -183,6 +188,7 @@ If you add all of these optional variables, your `.env` file should look like th
 ```bash
 OPENAI_API_KEY=your-key-here-without-quotes
 GITHUB_ACCESS_TOKEN=your-personal-access-token-no-quotes
+CACHE_TYPE=redis # or momento
 REDIS_PASSWORD=your-redis-password-no-quotes
 REDIS_HOST=your-redis-hostname-no-quotes
 REDIS_PORT=your-redis-port-no-quotes
@@ -487,11 +493,10 @@ config = DocChatAgentConfig(
 )
 ```
 
-Then instantiate the `DocChatAgent`, ingest the docs into the vector-store:
+Then instantiate the `DocChatAgent` (this ingests the docs into the vector-store):
 
 ```python
 agent = DocChatAgent(config)
-agent.ingest()
 ```
 Then we can either ask the agent one-off questions,
 ```python

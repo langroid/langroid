@@ -96,7 +96,7 @@ class RepoLoader:
                 json.dump({"junk": "ignore"}, f)
         with open(self.log_file, "r") as f:
             log = json.load(f)
-        if self.url in log:
+        if self.url in log and os.path.exists(log[self.url]):
             logger.info(f"Repo Already downloaded in {log[self.url]}")
             self.clone_path = log[self.url]
 

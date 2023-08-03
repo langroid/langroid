@@ -15,7 +15,7 @@ logger = logging.getLogger(__name__)
 
 
 class MomentoCacheConfig(BaseModel):
-    """Configuration model for RedisCache."""
+    """Configuration model for Momento Cache."""
 
     ttl: int = 60 * 60 * 24 * 7  # 1 week
     cachename: str = "langroid_momento_cache"

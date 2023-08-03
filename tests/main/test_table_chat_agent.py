@@ -6,6 +6,7 @@ import pytest
 
 from langroid.agent.special.table_chat_agent import TableChatAgent, TableChatAgentConfig
 from langroid.agent.task import Task
+from langroid.parsing.utils import closest_string
 from langroid.utils.configuration import Settings, set_global
 
 
@@ -25,7 +26,8 @@ def generate_data(size: int) -> str:
     # Generate random income between 30000 and 150000
     incomes = np.random.randint(30000, 150001, size)
 
-    data = {"age": ages, "gender": genders, "state": states_col, "income": incomes}
+    # use spaces, mixed cases to make it tricker
+    data = {"age ": ages, "GenDer": genders, "State ": states_col, "income": incomes}
 
     return pd.DataFrame(data)
 
@@ -73,8 +75,16 @@ def _test_table_chat_agent(
     # 0: user question
     # 1: LLM response via fun-call/tool
     # 2: agent response, handling the fun-call/tool
-    result = task.run("What is the average income of people under 40 in CA?", turns=2)
-    answer = agent.df.query("age < 40 and state == 'CA'")["income"].mean()
+    result = task.run("What is the average income of men under 40 in CA?", turns=2)
+    age_col = closest_string("age", agent.df.columns)
+    state_col = closest_string("state", agent.df.columns)
+    gender_col = closest_string("gender", agent.df.columns)
+    income_col = closest_string("income", agent.df.columns)
+    answer = agent.df[
+        (agent.df[age_col] < 40)
+        & (agent.df[state_col] == "CA")
+        & (agent.df[gender_col] == "Male")
+    ][income_col].mean()
 
     assert np.round(float(result.content)) == np.round(answer)
 

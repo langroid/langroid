@@ -1,9 +1,12 @@
 from typing import List
 
+from dotenv import load_dotenv
 from pydantic import BaseSettings
 
 
 class Settings(BaseSettings):
+    # NOTE all of these can be overridden in your .env file with upper-case names,
+    # for example CACHE_TYPE=momento
     debug: bool = False  # show debug messages?
     progress: bool = False  # show progress spinners/bars?
     stream: bool = True  # stream output?
@@ -17,6 +20,7 @@ class Settings(BaseSettings):
         extra = "forbid"
 
 
+load_dotenv()  # get settings from .env file
 settings = Settings()
 
 
@@ -45,5 +49,5 @@ def update_global_settings(cfg: BaseSettings, keys: List[str]) -> None:
 
 
 def set_global(key_vals: Settings) -> None:
-    # Update the unique global settings object
+    """Update the unique global settings object"""
     settings.__dict__.update(key_vals.__dict__)

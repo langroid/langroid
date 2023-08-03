@@ -25,6 +25,7 @@ def read_tabular_data(path_or_url: str, sep: None | str = None) -> pd.DataFrame:
                 sep = Sniffer().sniff(first_lines).delimiter
             # Read the data
         data = pd.read_csv(path_or_url, sep=sep)
+        data.columns = data.columns.str.strip()  # e.g. "  column 1  " -> "column 1"
 
         return data
 

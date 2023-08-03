@@ -224,7 +224,7 @@ class OpenAIGPT(LanguageModel):
         hashed_key = hashlib.sha256(raw_key.encode()).hexdigest()
 
         if not settings.cache:
-            # when cacheing disabled, return the hashed_key and none result
+            # when caching disabled, return the hashed_key and none result
             return hashed_key, None
         # Try to get the result from the cache
         return hashed_key, self.cache.retrieve(hashed_key)

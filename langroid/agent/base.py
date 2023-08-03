@@ -110,6 +110,17 @@ class Agent(ABC):
                 raise ValueError("message_class must be a subclass of ToolMessage")
             tool = message_class.default_value("request")
             self.llm_tools_map[tool] = message_class
+            if hasattr(message_class, "handle"):
+                """
+                If the message class has a `handle` method,
+                then we create a method for the agent whose name
+                is the value of `tool`, and whose body is the `handle` method.
+                This removes a separate step of having to define this method
+                for the agent, and also keeps the tool definition AND handling
+                in one place, i.e. in the message class.
+                See `tests/main/test_special_tool_messages.py` for an example.
+                """
+                setattr(self, tool, lambda obj: obj.handle())
             return [tool]
 
     def enable_message_handling(
@@ -469,11 +480,12 @@ class Agent(ABC):
             return self.handle_message_fallback(msg)
         # there was a non-None result
         final = "\n".join(results_list)
-        assert (
-            final != ""
-        ), """final result from a handler should not be empty str, since that would be 
-            considered an invalid result and other responders will be tried, 
-            and we may not necessarily want that"""
+        if final == "":
+            logger.warning(
+                """final result from a tool handler should not be empty str, since  
+             it would be considered an invalid result and other responders 
+             will be tried, and we may not necessarily want that"""
+            )
         return final
 
     def handle_message_fallback(self, msg: str | ChatDocument) -> Optional[str]:
@@ -524,8 +536,8 @@ class Agent(ABC):
         try:
             result = handler_method(tool)
         except Exception as e:
-            logger.warning(f"Error handling tool-message {tool_name}: {type(e)}: {e}")
-            return None
+            # return the error message to the LLM so it can try to fix the error
+            result = f"Error in tool/function-call {tool_name} usage: {type(e)}: {e}"
         return result  # type: ignore
 
     def num_tokens(self, prompt: str) -> int:
