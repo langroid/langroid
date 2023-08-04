@@ -21,6 +21,8 @@ jobs:
       QDRANT_API_KEY: ${{ secrets.QDRANT_API_KEY }}
       QDRANT_API_URL: ${{ secrets.QDRANT_API_URL }}
       CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+      GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
+      GOOGLE_CSE_ID: ${{ secrets.GOOGLE_CSE_ID }}
 
     steps:
     - name: Check out repository
