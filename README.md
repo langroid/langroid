@@ -51,6 +51,7 @@ for ideas on what to contribute.
 
 - **Aug 2023:**
   - **0.1.38:** [`GoogleSearchTool`](langroid/agent/stateless_tools/google_search_tool.py) to enable Agents (their LLM) to do Google searches via function-calling/tools.
+    See [this chat example](examples/basic/chat-search.py) for how easy it is to add this tool to an agent.
   - **Colab notebook** to try the quick-start examples: [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/langroid/langroid/blob/main/examples/langroid_quick_examples.ipynb) 
   - **0.1.37:** Added [`SQLChatAgent`](langroid/agent/special/sql_chat_agent.py) -- thanks to our latest contributor [Rithwik Babu](https://github.com/rithwikbabu)!
   - Multi-agent Example: [Autocorrect chat](examples/basic/autocorrect.py)
@@ -196,8 +197,9 @@ All of the below are optional and not strictly needed to run any of the examples
   After obtaining these credentials, store them as values of 
   `GOOGLE_API_KEY` and `GOOGLE_CSE_ID` in your `.env` file. 
   Full documentation on using this (and other such "stateless" tools) is coming soon, but 
-  in the meantime take a peek at the test 
-  [`tests/main/test_google_search_tool.py`](tests/main/test_google_search_tool.py) to see how to use it.
+  in the meantime take a peek at this [chat example](examples/basic/chat-search.py), which 
+  shows how you can easily equip an Agent with a `GoogleSearchtool`.
+  
 
 
 If you add all of these optional variables, your `.env` file should look like this:
