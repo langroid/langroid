@@ -1,3 +1,9 @@
+"""
+This is a basic example of a chatbot that uses the GoogleSearchTool:
+when the LLM doesn't know the answer to a question, it will use the tool to
+search the web for relevant results, and then use the results to answer the
+question.
+"""
 import typer
 from rich import print
 from rich.prompt import Prompt
@@ -39,9 +45,16 @@ def chat() -> None:
         agent,
         system_message="""
         You are a helpful assistant. You will try your best to answer my questions.
-        If you don't know you can use up to 2 results from the `web search` 
+        If you don't know you can use up to 5 results from the `web_search` 
         tool/function-call to help you with answering the question.
         Be very concise in your responses, use no more than 1-2 sentences.
+        When you answer based on a web search, show me the SOURCE(s) and EXTRACT(s), 
+        for example:
+        
+        SOURCE: https://www.wikihow.com/Be-a-Good-Assistant-Manager
+        EXTRACT: Be a Good Assistant ... requires good leadership skills.
+        
+        For the EXTRACT, ONLY show up to first 3 words, and last 3 words.
         """,
     )
     task.run()

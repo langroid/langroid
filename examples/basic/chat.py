@@ -1,3 +1,7 @@
+"""
+The most basic chatbot example, using the default settings.
+A single Agent allows you to chat with a pre-trained Language Model.
+"""
 import typer
 from rich import print
 from rich.prompt import Prompt
