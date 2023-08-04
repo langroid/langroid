@@ -3,7 +3,7 @@ import itertools
 import pytest
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
-from langroid.agent.stateless_tools.web_search_tool import WebSearchTool
+from langroid.agent.stateless_tools.google_search_tool import GoogleSearchTool
 from langroid.agent.tool_message import ToolMessage
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
 from langroid.language_models.openai_gpt import (
@@ -33,14 +33,14 @@ agent = ChatAgent(cfg)
 use_vals = [True, False]
 handle_vals = [True, False]
 force_vals = [True, False]
-message_classes = [None, WebSearchTool]
+message_classes = [None, GoogleSearchTool]
 
 # Get the cartesian product
 cartesian_product = list(
     itertools.product(message_classes, use_vals, handle_vals, force_vals)
 )
 
-agent.enable_message(WebSearchTool)
+agent.enable_message(GoogleSearchTool)
 
 
 NONE_MSG = "nothing to see here"
@@ -58,10 +58,10 @@ Hope you can tell me!
 
 def test_agent_handle_message():
     """
-    Test whether messages are handled correctly, and that
-    message enabling/disabling works as expected.
+    Test whether the agent handles tool messages correctly,
+    when these are manually generated.
     """
-    agent.enable_message(WebSearchTool)
+    agent.enable_message(GoogleSearchTool)
     assert agent.handle_message(NONE_MSG) is None
     assert len(agent.handle_message(SEARCH_MSG).split("\n\n")) == 3
 
@@ -81,7 +81,7 @@ def test_handle_bad_tool_message():
             handled correctly, i.e. the agent returns a clear
             error message to the LLM so it can try to fix it.
     """
-    agent.enable_message(WebSearchTool)
+    agent.enable_message(GoogleSearchTool)
     assert agent.handle_message(NONE_MSG) is None
     result = agent.handle_message(BAD_SEARCH_MSG)
     assert all(
@@ -94,13 +94,13 @@ def test_handle_bad_tool_message():
     [
         (
             False,
-            WebSearchTool,
-            "Find 3 results on the internet about the american civl war",
+            GoogleSearchTool,
+            "Find 3 results on the internet about the LK-99 superconductor",
         ),
         (
             True,
-            WebSearchTool,
-            "Find 3 results on the internet about the american civl war",
+            GoogleSearchTool,
+            "Find 3 results on the internet about the LK-99 superconductor",
         ),
     ],
 )
@@ -111,7 +111,7 @@ def test_llm_tool_message(
     prompt: str,
 ):
     """
-    Test whether LLM is able to GENERATE message (tool) in required format, and the
+    Test whether LLM is able to GENERATE message (tool) in required format, AND the
     agent handles the message correctly.
     Args:
         test_settings: test settings from conftest.py
@@ -125,7 +125,7 @@ def test_llm_tool_message(
     agent = ChatAgent(cfg)
     agent.config.use_functions_api = use_functions_api
     agent.config.use_tools = not use_functions_api
-    agent.enable_message(WebSearchTool)
+    agent.enable_message(GoogleSearchTool)
 
     llm_msg = agent.llm_response_forget(prompt)
     tool_name = message_class.default_value("request")
@@ -138,3 +138,4 @@ def test_llm_tool_message(
 
     agent_result = agent.handle_message(llm_msg)
     assert len(agent_result.split("\n\n")) == 3
+    assert all("LK-99" in x for x in agent_result.split("\n\n"))

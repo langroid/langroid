@@ -58,6 +58,7 @@ pandas = "^2.0.3"
 sqlalchemy = "^2.0.19"
 prettytable = "^3.8.0"
 google-api-python-client = "^2.95.0"
+lxml = "^4.9.3"
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.3.1"
