@@ -186,6 +186,18 @@ All of the below are optional and not strictly needed to run any of the examples
 - **GitHub** Personal Access Token (required for apps that need to analyze git
   repos; token-based API calls are less rate-limited). See this
   [GitHub page](https://docs.github.com/en/authentication/keeping-your-account-and-data-secure/managing-your-personal-access-tokens).
+- **Google Custom Search API Credentials:** Only needed to enable an Agent to use the `GoogleSearchTool`.
+  To use Google Search as an LLM Tool/Plugin/function-call, 
+  you'll need to set up 
+  [a Google API key](https://developers.google.com/custom-search/v1/introduction#identify_your_application_to_google_with_api_key),
+  then [setup a Google Custom Search Engine (CSE) and get the CSE ID](https://developers.google.com/custom-search/docs/tutorial/creatingcse).
+  (Documentation for these can be challenging, we suggest asking GPT4 for a step-by-step guide.)
+  After obtaining these credentials, store them as values of 
+  `GOOGLE_API_KEY` and `GOOGLE_CSE_ID` in your `.env` file. 
+  Full documentation on using this (and other such "stateless" tools) is coming soon, but 
+  in the meantime take a peek at the test 
+  [`tests/main/test_google_search_tool.py`](tests/main/test_google_search_tool.py) to see how to use it.
+
 
 If you add all of these optional variables, your `.env` file should look like this:
 ```bash
@@ -198,6 +210,8 @@ REDIS_PORT=your-redis-port-no-quotes
 MOMENTO_AUTH_TOKEN=your-momento-token-no-quotes # instead of REDIS* variables
 QDRANT_API_KEY=your-key
 QDRANT_API_URL=https://your.url.here:6333 # note port number must be included
+GOOGLE_API_KEY=your-key
+GOOGLE_CSE_ID=your-cse-id
 ```
 </details>
 
