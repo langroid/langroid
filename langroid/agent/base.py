@@ -103,6 +103,24 @@ class Agent(ABC):
     def _get_tool_list(
         self, message_class: Optional[Type[ToolMessage]] = None
     ) -> List[str]:
+        """
+        If `message_class` is None, return a list of all known tool names.
+        Otherwise, first add the tool name corresponding to the message class
+        (which is the value of the `request` field of the message class),
+        to the `self.llm_tools_map` dict, and then return a list
+        containing this tool name.
+
+        Args:
+            message_class (Optional[Type[ToolMessage]]): The message class whose tool
+                name is to be returned; Optional, default is None.
+                if None, return a list of all known tool names.
+
+        Returns:
+            List[str]: List of tool names: either just the tool name corresponding
+                to the message class, or all known tool names
+                (when `message_class` is None).
+
+        """
         if message_class is None:
             return list(self.llm_tools_map.keys())
         else:
