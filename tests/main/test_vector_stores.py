@@ -1,9 +1,9 @@
-from typing import List, Union
+from types import SimpleNamespace
+from typing import List
 
 import pytest
 from dotenv import load_dotenv
 
-from langroid.embedding_models.base import EmbeddingModelsConfig
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
 from langroid.mytypes import DocMetaData, Document
 from langroid.utils.system import rmdir
@@ -12,12 +12,41 @@ from langroid.vector_store.chromadb import ChromaDB, ChromaDBConfig
 from langroid.vector_store.qdrantdb import QdrantDB, QdrantDBConfig
 
 load_dotenv()
-openai_cfg = OpenAIEmbeddingsConfig(
+embed_cfg = OpenAIEmbeddingsConfig(
     model_type="openai",
 )
 
+phrases = SimpleNamespace(
+    HELLO="hello",
+    HI_THERE="hi there",
+    CANADA="people living in Canada",
+    NOT_CANADA="people not living in Canada",
+    OVER_40="people over 40",
+    UNDER_40="people under 40",
+    FRANCE="what is the capital of France?",
+    BELGIUM="which city is Belgium's capital?",
+)
 
-def generate_vecdbs(embed_cfg: EmbeddingModelsConfig) -> VectorStore:
+stored_docs = [
+    Document(content=d, metadata=DocMetaData(id=i))
+    for i, d in enumerate(vars(phrases).values())
+]
+
+
+@pytest.fixture(scope="module")
+def vecdb(request) -> VectorStore:
+    qd_dir = ".qdrant/data/" + embed_cfg.model_type
+    rmdir(qd_dir)
+    qd_cfg = QdrantDBConfig(
+        type="qdrant",
+        cloud=False,
+        collection_name="test-" + embed_cfg.model_type,
+        storage_path=qd_dir,
+        embedding=embed_cfg,
+    )
+    qd = QdrantDB(qd_cfg)
+    qd.add_documents(stored_docs)
+
     qd_dir = ".qdrant/cloud/" + embed_cfg.model_type
     qd_cfg_cloud = QdrantDBConfig(
         type="qdrant",
@@ -26,6 +55,8 @@ def generate_vecdbs(embed_cfg: EmbeddingModelsConfig) -> VectorStore:
         storage_path=qd_dir,
         embedding=embed_cfg,
     )
+    qd_cloud = QdrantDB(qd_cfg_cloud)
+    qd_cloud.add_documents(stored_docs)
 
     cd_dir = ".chroma/" + embed_cfg.model_type
     rmdir(cd_dir)
@@ -35,42 +66,41 @@ def generate_vecdbs(embed_cfg: EmbeddingModelsConfig) -> VectorStore:
         storage_path=cd_dir,
         embedding=embed_cfg,
     )
-
-    qd_cloud = QdrantDB(qd_cfg_cloud)
     cd = ChromaDB(cd_cfg)
+    cd.add_documents(stored_docs)
 
-    return [qd_cloud, cd]
+    vecdbs = dict(
+        qdrant_local=qd,
+        qdrant_cloud=qd_cloud,
+        chroma=cd,
+    )
+
+    yield vecdbs[request.param]
+
+    # teardown
+    rmdir(qd_dir)
+    rmdir(cd_dir)
+    qd_cloud.delete_collection(collection_name=qd_cfg_cloud.collection_name)
 
 
 @pytest.mark.parametrize(
     "query,results",
     [
-        ("what is the capital of Belgium?", ["which city is Belgium's capital?"]),
-        ("hello", ["hello"]),
-        ("men and women over 40", ["people over 40"]),
-        ("people under 40", ["people under 40"]),
-        ("Canadian residents", ["people living in Canada"]),
-        ("People living outside Canada", ["people not living in Canada"]),
+        ("which city is Belgium's capital?", [phrases.BELGIUM]),
+        ("capital of France", [phrases.FRANCE]),
+        ("hello", [phrases.HELLO]),
+        ("hi there", [phrases.HI_THERE]),
+        ("men and women over 40", [phrases.OVER_40]),
+        ("people aged less than 40", [phrases.UNDER_40]),
+        ("Canadian residents", [phrases.CANADA]),
+        ("people outside Canada", [phrases.NOT_CANADA]),
     ],
 )
-@pytest.mark.parametrize("vecdb", generate_vecdbs(openai_cfg))
-def test_vector_stores(
-    vecdb: Union[ChromaDB, QdrantDB], query: str, results: List[str]
-):
-    docs = [
-        Document(content="hello", metadata=DocMetaData(id=1)),
-        Document(content="hi there", metadata=DocMetaData(id=2)),
-        Document(content="people living in Canada", metadata=DocMetaData(id=3)),
-        Document(content="people not living in Canada", metadata=DocMetaData(id=4)),
-        Document(content="people over 40", metadata=DocMetaData(id=5)),
-        Document(content="people under 40", metadata=DocMetaData(id=6)),
-        Document(content="what is the capital of France?", metadata=DocMetaData(id=7)),
-        Document(
-            content="which city is Belgium's capital?", metadata=DocMetaData(id=8)
-        ),
-    ]
-    vecdb.add_documents(docs)
-    docs_and_scores = vecdb.similar_texts_with_scores(query, k=8)
+@pytest.mark.parametrize(
+    "vecdb", ["qdrant_local", "qdrant_cloud", "chroma"], indirect=True
+)
+def test_vector_stores(vecdb, query: str, results: List[str]):
+    docs_and_scores = vecdb.similar_texts_with_scores(query, k=len(vars(phrases)))
     # first doc should be best match
     if isinstance(vecdb, ChromaDB):
         # scores are (apparently) l2 distances (docs unclear), so low means close
@@ -79,7 +109,3 @@ def test_vector_stores(
         # scores are cosine similarities, so high means close
         matching_docs = [doc.content for doc, score in docs_and_scores if score > 0.8]
     assert set(results).issubset(set(matching_docs))
-    if vecdb.config.cloud:
-        vecdb.delete_collection(collection_name=vecdb.config.collection_name)
-    else:
-        rmdir(vecdb.config.storage_path)

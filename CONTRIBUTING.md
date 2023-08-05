@@ -139,7 +139,7 @@ cp .env-template .env
 ``` 
 
 Currently only OpenAI models are supported. 
-You are welcome to submit a PR to submit other API-based or local models. 
+You are welcome to submit a PR to support other API-based or local models. 
 
 ## Run tests
 To verify your env is correctly setup, run all tests using `make tests`.

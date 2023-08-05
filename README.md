@@ -293,8 +293,6 @@ task.run() # ... a loop seeking response from LLM or User at each turn
 <details>
 <summary><b> Three communicating agents </b></summary>
 
-```python
-
 A toy numbers game, where when given a number `n`:
 - `repeater_agent`'s LLM simply returns `n`,
 - `even_agent`'s LLM returns `n/2` if `n` is even, else says "DO-NOT-KNOW"
