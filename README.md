@@ -600,10 +600,10 @@ script in the `langroid-examples` repo.
 
 If you like this repo, don't forget to leave a star :star: !
 
-# Contributors
+# Langroid Co-Founders
 
-- Prasad Chalasani (IIT BTech/CS, CMU PhD/ML; Independent ML Consultant)
-- Somesh Jha (IIT BTech/CS, CMU PhD/CS; Professor of CS, U Wisc at Madison)
-- Mohannad Alhanahnah (Research Associate, U Wisc at Madison)
-- Ashish Hooda (IIT BTech/CS; PhD Candidate, U Wisc at Madison)
+- [Prasad Chalasani](https://www.linkedin.com/in/pchalasani/) (IIT BTech/CS, CMU PhD/ML; Independent ML Consultant)
+- [Somesh Jha](https://www.linkedin.com/in/somesh-jha-80208015/) (IIT BTech/CS, CMU PhD/CS; Professor of CS, U Wisc at Madison)
+
+
 
