@@ -3,7 +3,12 @@ This is a basic example of a chatbot that uses the GoogleSearchTool:
 when the LLM doesn't know the answer to a question, it will use the tool to
 search the web for relevant results, and then use the results to answer the
 question.
+
+NOTE: running this example requires setting the GOOGLE_API_KEY and GOOGLE_SEI_ID
+environment variables in your `.env` file, as explained in the
+[README](https://github.com/langroid/langroid#gear-installation-and-setup).
 """
+
 import typer
 from rich import print
 from rich.prompt import Prompt

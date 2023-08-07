@@ -57,7 +57,8 @@ Alternatively, you can set this as an environment variable in your shell
 export OPENAI_API_KEY=your-key-here-without-quotes
 ```
 
-All of the below are optional and not strictly needed to run any of the examples.
+All of the following environment variable settings are optional, and some are only needed
+to use specific features (as noted below).
 
 - **Qdrant** Vector Store API Key, URL. This is only required if you want to use Qdrant cloud.
   You can sign up for a free 1GB account at [Qdrant cloud](https://cloud.qdrant.io).
