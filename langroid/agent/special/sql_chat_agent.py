@@ -28,9 +28,9 @@ console = Console()
 
 DEFAULT_SQL_CHAT_SYSTEM_MESSAGE = """
 You are a savvy data scientist/database administrator, with expertise in 
-answering questions by querying a SQL database.
+answering questions by querying a {dialect} database.
 You do not have access to the database 'db' directly, so you will need to use the 
-`run_query` tool/function-call to answer the question.
+`run_query` tool/function-call to answer questions.
 
 The below JSON schema maps the SQL database structure. It outlines tables, each 
 with a description and columns. Each table is identified by a key, 
@@ -146,7 +146,7 @@ class SQLChatAgent(ChatAgent):
 
         # Update the system message with the table information
         self.config.system_message = self.config.system_message.format(
-            schema_dict=schema_dict
+            schema_dict=schema_dict, dialect=self.engine.dialect.name
         )
 
         super().__init__(config)
