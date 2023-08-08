@@ -247,6 +247,15 @@ Click to expand any of the code examples below.
 All of these can be run in a Colab notebook:
 [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/langroid/langroid/blob/main/examples/langroid_quick_examples.ipynb)
 
+We also provide a containerized version of the [`langroid-examples`](https://github.com/langroid/langroid-examples) 
+repository via this [Dockerfile](./Dockerfile). All what you need is just setting up environment variables. Please follow these steps to setup the container. 
+```bash
+docker build -t langroid .
+docker run -it langroidimg /bin/bash
+# Use this command to run any of the examples
+python langroid-examples/examples/quick-start/<ExampleName.py> 
+``` 
+
 <details>
 <summary> <b> Direct interaction with OpenAI LLM </b> </summary>
 
