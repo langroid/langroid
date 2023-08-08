@@ -97,7 +97,7 @@ class RetrieverAgent(DocChatAgent, ABC):
             query_str = query.content
         else:
             query_str = query
-        docs = self.get_relevant_docs(query_str)
+        docs = self.get_relevant_extracts(query_str)
         if len(docs) == 0:
             return None
         content = "\n\n".join([d.content for d in docs])
@@ -135,7 +135,7 @@ class RetrieverAgent(DocChatAgent, ABC):
         ]
         return docs
 
-    def get_relevant_docs(self, query: str) -> List[Document]:
+    def get_relevant_extracts(self, query: str) -> List[Document]:
         """
         Given a query, get the records/docs whose contents are most relevant to the
             query. First get nearest docs from vector store, then select the best
