@@ -609,6 +609,7 @@ script in the `langroid-examples` repo.
 # :heart: Thank you to our [supporters](https://github.com/langroid/langroid/stargazers)
 
 If you like this repo, don't forget to leave a star :star: !
+Your support will help build Langroid's momentum and community. 
 
 # Langroid Co-Founders
 
