@@ -23,7 +23,7 @@ def fix_uri(uri: str) -> str:
     """Fixes a URI by percent-encoding the username and password."""
 
     if "%" in uri:
-        return uri # already %-encoded, so don't do anything
+        return uri  # already %-encoded, so don't do anything
     # Split by '://'
     scheme_part, rest_of_uri = uri.split("://", 1)
 
@@ -59,17 +59,24 @@ def _create_database_uri(
     username = urllib.parse.quote_plus(username)
     password = urllib.parse.quote_plus(password)
     port_str = f":{port}" if port else ""
-    return f"{scheme}://{username}:{password}@{hostname}{port_str}/{databasename}"
+    return (
+        f"{scheme}://{username}:{password}@{hostname}{port_str}/{databasename}"
+    )
 
 
 def get_database_uri() -> str:
     """Main function to gather input and print the database URI."""
-    scheme_input = Prompt.ask("Enter the database type (e.g., postgresql, mysql)")
+    scheme_input = Prompt.ask(
+        "Enter the database type (e.g., postgresql, mysql)"
+    )
     scheme = closest_string(scheme_input, list(DEFAULT_PORTS.keys()))
 
     # Handle if no close match is found.
     if scheme == "No match found":
-        print(f"No close match found for '{scheme_input}'. Please verify your input.")
+        print(
+            f"No close match found for '{scheme_input}'. Please verify your"
+            " input."
+        )
         return
 
     username = Prompt.ask("Enter the database username")
@@ -79,7 +86,7 @@ def get_database_uri() -> str:
     # Inform user of default port, and let them choose to override or leave blank
     default_port = DEFAULT_PORTS.get(scheme, "")
     port_msg = (
-        f"Enter the database port "
+        "Enter the database port "
         f"(hit enter to use default: {default_port} or specify another value)"
     )
 
@@ -90,6 +97,8 @@ def get_database_uri() -> str:
 
     databasename = Prompt.ask("Enter the database name")
 
-    uri = _create_database_uri(scheme, username, password, hostname, port, databasename)
+    uri = _create_database_uri(
+        scheme, username, password, hostname, port, databasename
+    )
     print(f"Your {scheme.upper()} URI is:\n{uri}")
     return uri
