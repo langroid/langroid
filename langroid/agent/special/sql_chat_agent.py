@@ -7,11 +7,12 @@ Functionality includes:
 - asking a question about a SQL schema
 """
 import logging
-from typing import Dict, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 from rich import print
 from rich.console import Console
-from sqlalchemy import MetaData, create_engine, text
+from sqlalchemy import MetaData, create_engine, inspect, text
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
@@ -27,7 +28,7 @@ logger = logging.getLogger(__name__)
 console = Console()
 
 DEFAULT_SQL_CHAT_SYSTEM_MESSAGE = """
-You are a savvy data scientist/database administrator, with expertise in 
+EYE You are a savvy data scientist/database administrator, with expertise in 
 answering questions by querying a {dialect} database.
 You do not have access to the database 'db' directly, so you will need to use the 
 `run_query` tool/function-call to answer questions.
@@ -138,6 +139,9 @@ class SQLChatAgent(ChatAgent):
             {self.metadata.tables}
             """
         )
+
+        if not config.context_descriptions:
+            config.context_descriptions = extract_schema_descriptions(self.engine)
 
         # Combine database information with context descriptions
         schema_dict = extract_and_combine_db_info(
@@ -288,3 +292,75 @@ def extract_and_combine_db_info(
                     )
 
     return db_info
+
+
+def extract_schema_descriptions(engine: Engine) -> Dict[str, Dict[str, Any]]:
+    """
+    Extracts the schema descriptions from the database connected to by the engine.
+
+    Args:
+        engine (Engine): SQLAlchemy engine instance.
+
+    Returns:
+        Dict[str, Dict[str, Any]]: A dictionary representation of table and column
+        descriptions.
+    """
+    dialect_name = engine.dialect.name
+    inspector = inspect(engine)
+    table_names: List[str] = inspector.get_table_names()
+
+    result: Dict[str, Dict[str, Any]] = {}
+
+    # PostgreSQL
+    if dialect_name == "postgresql":
+        with engine.connect() as conn:
+            for table in table_names:
+                table_comment = (
+                    conn.execute(
+                        text(f"SELECT obj_description('{table}'::regclass)")
+                    ).scalar()
+                    or ""
+                )
+
+                columns = {}
+                col_data = inspector.get_columns(table)
+                for idx, col in enumerate(col_data, start=1):
+                    col_comment = (
+                        conn.execute(
+                            text(f"SELECT col_description('{table}'::regclass, {idx})")
+                        ).scalar()
+                        or ""
+                    )
+                    columns[col["name"]] = col_comment
+
+                result[table] = {"description": table_comment, "columns": columns}
+
+    # MySQL
+    elif dialect_name == "mysql":
+        with engine.connect() as conn:
+            for table in table_names:
+                query = text(
+                    "SELECT table_comment FROM information_schema.tables WHERE"
+                    + " table_schema = :schema AND table_name = :table"
+                )
+                table_result = conn.execute(
+                    query, {"schema": engine.url.database, "table": table}
+                )
+                table_comment = table_result.scalar() or ""
+
+                columns = {}
+                for col in inspector.get_columns(table):
+                    columns[col["name"]] = col.get("comment", "")
+
+                result[table] = {"description": table_comment, "columns": columns}
+
+    # Other dialects
+    else:
+        for table in table_names:
+            columns = {}
+            for col in inspector.get_columns(table):
+                columns[col["name"]] = ""
+
+            result[table] = {"description": "", "columns": columns}
+
+    return result
