@@ -30,6 +30,8 @@ def fix_uri(uri: str) -> str:
     userinfo_part = rest_of_uri[:last_at_index]
     rest_of_uri_after_at = rest_of_uri[last_at_index + 1 :]
 
+    if ":" not in userinfo_part:
+        return uri
     # Split userinfo by ':' to get username and password
     username, password = userinfo_part.split(":", 1)
 
