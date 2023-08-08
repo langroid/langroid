@@ -1,7 +1,7 @@
 """
-Two-agent question-answering system that has access to Google Search when needed,
-and in case a Google Search is needed, uses a DocChatAgent to ingest link contents
-into a vector-DB and answers using Retrieval Augmentation.
+Single-agent question-answering system that has access to Google Search when needed,
+and in case a Google Search is used, ingests contents into a vector-db,
+and uses Retrieval Augmentation to answer the question.
 
 Run like this:
 
