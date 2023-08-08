@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 console = Console()
 
 DEFAULT_SQL_CHAT_SYSTEM_MESSAGE = """
-EYE You are a savvy data scientist/database administrator, with expertise in 
+You are a savvy data scientist/database administrator, with expertise in 
 answering questions by querying a {dialect} database.
 You do not have access to the database 'db' directly, so you will need to use the 
 `run_query` tool/function-call to answer questions.
