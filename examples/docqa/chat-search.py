@@ -17,6 +17,7 @@ import typer
 from rich import print
 from rich.prompt import Prompt
 
+from pydantic import BaseSettings
 from langroid.agent.tool_message import ToolMessage
 from langroid.agent.chat_agent import ChatAgent, ChatDocument
 from langroid.agent.special.doc_chat_agent import (
@@ -80,7 +81,11 @@ class GoogleSearchDocChatAgent(DocChatAgent):
         return "\n".join(str(e) for e in extracts)
 
 
-def chat() -> None:
+class CLIOptions(BaseSettings):
+    fn_api: bool = False
+
+
+def chat(opts: CLIOptions) -> None:
     print(
         """
         [blue]Welcome to the Google Search chatbot!
@@ -102,6 +107,8 @@ def chat() -> None:
     system_msg = re.sub("you are", "", system_msg, flags=re.IGNORECASE)
 
     config = DocChatAgentConfig(
+        use_functions_api=opts.fn_api,
+        use_tools=not opts.fn_api,
         system_message=f"""
         {system_msg} You will try your best to answer my questions,
         in this order of preference:
@@ -150,10 +157,15 @@ def chat() -> None:
 def main(
     debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
     nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
+    fn_api: bool = typer.Option(False, "--fn_api", "-f", help="use functions api"),
     cache_type: str = typer.Option(
         "redis", "--cachetype", "-ct", help="redis or momento"
     ),
 ) -> None:
+    cli_opts = CLIOptions(
+        fn_api=fn_api,
+    )
+
     set_global(
         Settings(
             debug=debug,
@@ -161,7 +173,7 @@ def main(
             cache_type=cache_type,
         )
     )
-    chat()
+    chat(cli_opts)
 
 
 if __name__ == "__main__":
