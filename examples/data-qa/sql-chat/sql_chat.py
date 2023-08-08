@@ -4,6 +4,9 @@ Example showing how to chat with a SQL database
 import typer
 from rich import print
 from rich.prompt import Prompt
+from typing import Dict, Any
+import json
+import os
 
 from sqlalchemy import create_engine, inspect
 from sqlalchemy.engine import Engine
@@ -19,9 +22,6 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-from typing import Dict, Any
-import json
-import os
 
 app = typer.Typer()
 
