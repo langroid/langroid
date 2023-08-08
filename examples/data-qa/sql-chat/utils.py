@@ -22,6 +22,8 @@ DEFAULT_PORTS = dict(
 def fix_uri(uri: str) -> str:
     """Fixes a URI by percent-encoding the username and password."""
 
+    if "%" in uri:
+        return uri # already %-encoded, so don't do anything
     # Split by '://'
     scheme_part, rest_of_uri = uri.split("://", 1)
 
