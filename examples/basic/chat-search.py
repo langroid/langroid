@@ -4,7 +4,7 @@ when the LLM doesn't know the answer to a question, it will use the tool to
 search the web for relevant results, and then use the results to answer the
 question.
 
-NOTE: running this example requires setting the GOOGLE_API_KEY and GOOGLE_SEI_ID
+NOTE: running this example requires setting the GOOGLE_API_KEY and GOOGLE_CSE_ID
 environment variables in your `.env` file, as explained in the
 [README](https://github.com/langroid/langroid#gear-installation-and-setup).
 """
@@ -29,7 +29,10 @@ setup_colored_logging()
 def chat() -> None:
     print(
         """
-        [blue]Welcome to the basic chatbot!
+        [blue]Welcome to the Google Search chatbot!
+        I will try to answer your questions, relying on (summaries of links from) 
+        Google Search when needed.
+        
         Enter x or q to quit at any point.
         """
     )
@@ -50,8 +53,9 @@ def chat() -> None:
         agent,
         system_message="""
         You are a helpful assistant. You will try your best to answer my questions.
-        If you don't know you can use up to 5 results from the `web_search` 
-        tool/function-call to help you with answering the question.
+        If you cannot answer from your own knowledge, you can use up to 5 
+        results from the `web_search` tool/function-call to help you with 
+        answering the question.
         Be very concise in your responses, use no more than 1-2 sentences.
         When you answer based on a web search, show me the SOURCE(s) and EXTRACT(s), 
         for example:

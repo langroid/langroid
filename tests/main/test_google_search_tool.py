@@ -1,5 +1,5 @@
 """
-NOTE: running this example requires setting the GOOGLE_API_KEY and GOOGLE_SEI_ID
+NOTE: running this example requires setting the GOOGLE_API_KEY and GOOGLE_CSE_ID
 environment variables in your `.env` file, as explained in the
 [README](https://github.com/langroid/langroid#gear-installation-and-setup).
 
