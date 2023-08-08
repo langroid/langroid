@@ -2,18 +2,22 @@
 Example showing how to chat with a SQL database
 """
 import typer
-from rich.prompt import Prompt
 from rich import print
+from rich.prompt import Prompt
 
 from sqlalchemy import create_engine, inspect
 from sqlalchemy.engine import Engine
 from prettytable import PrettyTable
 
+from utils import get_database_uri, fix_uri
 from langroid.agent.special.sql_chat_agent import SQLChatAgent, SQLChatAgentConfig
 from langroid.agent.task import Task
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
 from langroid.utils.configuration import set_global, Settings
 from langroid.utils.logging import setup_colored_logging
+import logging
+
+logger = logging.getLogger(__name__)
 
 from typing import Dict, Any
 import json
@@ -104,9 +108,18 @@ def load_context_descriptions(engine: Engine) -> dict:
 def chat() -> None:
     print("[blue]Welcome to the SQL database chatbot!\n")
     database_uri = Prompt.ask(
-        "[blue]Enter the URI for your SQL database (hit enter for default)",
+        """
+        [blue]Enter the URI for your SQL database 
+        (type 'i' for interactive, or hit enter for default)
+        """,
         default="sqlite:///examples/data-qa/sql-chat/demo.db",
     )
+
+    if database_uri == "i":
+        database_uri = get_database_uri()
+
+    database_uri = fix_uri(database_uri)
+    logger.warning(f"Using database URI: {database_uri}")
 
     # Create engine and inspector
     engine = create_engine(database_uri)
