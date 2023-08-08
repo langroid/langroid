@@ -4,7 +4,7 @@ import logging
 import os
 import sys
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple, Union, cast
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import openai
 from dotenv import load_dotenv
@@ -361,13 +361,13 @@ class OpenAIGPT(LanguageModel):
             LLMResponse object
         """
         openai.api_key = self.api_key
-        if type(messages) == str:
+        if isinstance(messages, str):
             llm_messages = [
                 LLMMessage(role=Role.SYSTEM, content="You are a helpful assistant."),
                 LLMMessage(role=Role.USER, content=messages),
             ]
         else:
-            llm_messages = cast(List[LLMMessage], messages)
+            llm_messages = messages
 
         @retry_with_exponential_backoff
         def completions_with_backoff(**kwargs):  # type: ignore
