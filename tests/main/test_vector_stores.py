@@ -35,52 +35,51 @@ stored_docs = [
 
 @pytest.fixture(scope="module")
 def vecdb(request) -> VectorStore:
-    qd_dir = ".qdrant/data/" + embed_cfg.model_type
-    rmdir(qd_dir)
-    qd_cfg = QdrantDBConfig(
-        type="qdrant",
-        cloud=False,
-        collection_name="test-" + embed_cfg.model_type,
-        storage_path=qd_dir,
-        embedding=embed_cfg,
-    )
-    qd = QdrantDB(qd_cfg)
-    qd.add_documents(stored_docs)
+    if request.param == "qdrant_local":
+        qd_dir = ".qdrant/data/" + embed_cfg.model_type
+        rmdir(qd_dir)
+        qd_cfg = QdrantDBConfig(
+            type="qdrant",
+            cloud=False,
+            collection_name="test-" + embed_cfg.model_type,
+            storage_path=qd_dir,
+            embedding=embed_cfg,
+        )
+        qd = QdrantDB(qd_cfg)
+        qd.add_documents(stored_docs)
+        yield qd
+        rmdir(qd_dir)
+        return
 
-    qd_dir = ".qdrant/cloud/" + embed_cfg.model_type
-    qd_cfg_cloud = QdrantDBConfig(
-        type="qdrant",
-        cloud=True,
-        collection_name="test-" + embed_cfg.model_type,
-        storage_path=qd_dir,
-        embedding=embed_cfg,
-    )
-    qd_cloud = QdrantDB(qd_cfg_cloud)
-    qd_cloud.add_documents(stored_docs)
+    if request.param == "qdrant_cloud":
+        qd_dir = ".qdrant/cloud/" + embed_cfg.model_type
+        qd_cfg_cloud = QdrantDBConfig(
+            type="qdrant",
+            cloud=True,
+            collection_name="test-" + embed_cfg.model_type,
+            storage_path=qd_dir,
+            embedding=embed_cfg,
+        )
+        qd_cloud = QdrantDB(qd_cfg_cloud)
+        qd_cloud.add_documents(stored_docs)
+        yield qd_cloud
+        qd_cloud.delete_collection(collection_name=qd_cfg_cloud.collection_name)
+        return
 
-    cd_dir = ".chroma/" + embed_cfg.model_type
-    rmdir(cd_dir)
-    cd_cfg = ChromaDBConfig(
-        type="chroma",
-        collection_name="test-" + embed_cfg.model_type,
-        storage_path=cd_dir,
-        embedding=embed_cfg,
-    )
-    cd = ChromaDB(cd_cfg)
-    cd.add_documents(stored_docs)
-
-    vecdbs = dict(
-        qdrant_local=qd,
-        qdrant_cloud=qd_cloud,
-        chroma=cd,
-    )
-
-    yield vecdbs[request.param]
-
-    # teardown
-    rmdir(qd_dir)
-    rmdir(cd_dir)
-    qd_cloud.delete_collection(collection_name=qd_cfg_cloud.collection_name)
+    if request.param == "chroma":
+        cd_dir = ".chroma/" + embed_cfg.model_type
+        rmdir(cd_dir)
+        cd_cfg = ChromaDBConfig(
+            type="chroma",
+            collection_name="test-" + embed_cfg.model_type,
+            storage_path=cd_dir,
+            embedding=embed_cfg,
+        )
+        cd = ChromaDB(cd_cfg)
+        cd.add_documents(stored_docs)
+        yield cd
+        rmdir(cd_dir)
+        return
 
 
 @pytest.mark.parametrize(
