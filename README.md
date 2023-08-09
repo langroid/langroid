@@ -12,7 +12,7 @@
 [![Static Badge](https://img.shields.io/badge/Documentation-blue?link=https%3A%2F%2Flangroid.github.io%2Flangroid%2F&link=https%3A%2F%2Flangroid.github.io%2Flangroid%2F)](https://langroid.github.io/langroid)
 [![Static Badge](https://img.shields.io/badge/Discord-orange?logoColor=orange&link=https%3A%2F%2Fdiscord.gg%2FZU36McDgDs)](https://discord.gg/ZU36McDgDs)
 [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/langroid/langroid/blob/main/examples/langroid_quick_examples.ipynb)
-
+[![Share on Twitter](https://img.shields.io/twitter/url?style=social&url=https://github.com/langroid/langroid)](https://twitter.com/intent/tweet?text=Langroid%20is%20an%20exciting%20new%20framework%20to%20easily%20build%20%23LLM%20applications.%20You%20set%20up%20LLM-powered%20Agents%20with%20vector-stores,%20assign%20tasks,%20and%20have%20them%20collaboratively%20solve%20problems%20via%20message-transformations.%20https://github.com/langroid/langroid)
 
 </div>
 
@@ -599,8 +599,13 @@ script in the `langroid-examples` repo.
 
 # :heart: Thank you to our [supporters](https://github.com/langroid/langroid/stargazers)
 
-If you like this repo, don't forget to leave a star :star: !
-Your support will help build Langroid's momentum and community. 
+If you like this project, please give it a star ⭐ and 📢 spread the word in your network:
+[![Share on Twitter](https://img.shields.io/twitter/url?style=social&url=https://github.com/langroid/langroid)](https://twitter.com/intent/tweet?text=Sharing%20an%20interesting%20new%20framework%20to%20easily%20build%20%23LLM%20applications!%20Langroid%20lets%20you%20set%20up%20LLM-powered%20Agents%20with%20vector-stores,%20assign%20tasks,%20and%20have%20them%20collaboratively%20solve%20problems%20via%20message-transformations.%20https://github.com/langroid/langroid)
+
+Your support will help build Langroid's momentum and community.
+
+
+
 
 # Langroid Co-Founders
 
