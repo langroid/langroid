@@ -10,7 +10,9 @@ the code and returns the result as a string.
 import io
 import logging
 import sys
+from typing import no_type_check
 
+import numpy as np
 import pandas as pd
 from rich.console import Console
 
@@ -26,14 +28,70 @@ logger = logging.getLogger(__name__)
 console = Console()
 
 DEFAULT_TABLE_CHAT_SYSTEM_MESSAGE = """
-You are a savvy data scientist, with expertise in analyzing tabular dataset,
+You are a savvy data scientist, with expertise in analyzing tabular datasets,
 using Python and the Pandas library for dataframe manipulation.
 Since you do not have access to the dataframe 'df', you
 will need to use the `run_code` tool/function-call to answer the question.
-The columns in the dataframe are:
-{columns}
+Here is a summary of the dataframe:
+{summary}
 Do not assume any columns other than those shown.
+In the code you submit to the `run_code` tool/function, 
+do not forget to include any necessary imports, such as `import pandas as pd`.
+Sometimes you may not be able to answer the question in a single call to `run_code`,
+so you can use a series of calls to `run_code` to build up the answer. 
+For example you may first want to know something about the possible values in a column.
+
+If you receive a null or other unexpected result, see if you have made an assumption
+in your code, and try another way, or use `run_code` to explore the dataframe 
+before submitting your final code. 
+
+Start by asking me what I want to know about the data.
 """
+
+
+@no_type_check
+def dataframe_summary(df: pd.DataFrame) -> str:
+    """
+    Generate a structured summary for a pandas DataFrame containing numerical
+    and categorical values.
+
+    Args:
+        df (pd.DataFrame): The input DataFrame to summarize.
+
+    Returns:
+        str: A nicely structured and formatted summary string.
+    """
+
+    # Column names display
+    col_names_str = (
+        "COLUMN NAMES:\n" + " ".join([f"'{col}'" for col in df.columns]) + "\n\n"
+    )
+
+    # Numerical data summary
+    num_summary = df.describe().applymap(lambda x: "{:.2f}".format(x))
+    num_str = "Numerical Column Summary:\n" + num_summary.to_string() + "\n\n"
+
+    # Categorical data summary
+    cat_columns = df.select_dtypes(include=[np.object_]).columns
+    cat_summary_list = []
+
+    for col in cat_columns:
+        unique_values = df[col].unique()
+        if len(unique_values) < 10:
+            cat_summary_list.append(f"'{col}': {', '.join(map(str, unique_values))}")
+        else:
+            cat_summary_list.append(f"'{col}': {df[col].nunique()} unique values")
+
+    cat_str = "Categorical Column Summary:\n" + "\n".join(cat_summary_list) + "\n\n"
+
+    # Missing values summary
+    nan_summary = df.isnull().sum().rename("missing_values").to_frame()
+    nan_str = "Missing Values Column Summary:\n" + nan_summary.to_string() + "\n"
+
+    # Combine the summaries into one structured string
+    summary_str = col_names_str + num_str + cat_str + nan_str
+
+    return summary_str
 
 
 class TableChatAgentConfig(ChatAgentConfig):
@@ -77,10 +135,8 @@ class TableChatAgent(ChatAgent):
             df = read_tabular_data(config.data, config.separator)
 
         self.df = df
-        columns_with_quotes = [f"'{c}'" for c in df.columns]
-        config.system_message = config.system_message.format(
-            columns=", ".join(columns_with_quotes)
-        )
+        summary = dataframe_summary(df)
+        config.system_message = config.system_message.format(summary=summary)
 
         super().__init__(config)
         self.config: TableChatAgentConfig = config
