@@ -14,6 +14,11 @@
 [![Static Badge](https://img.shields.io/badge/Discord-orange?logoColor=orange&link=https%3A%2F%2Fdiscord.gg%2FZU36McDgDs)](https://discord.gg/ZU36McDgDs)
 [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/langroid/langroid/blob/main/examples/langroid_quick_examples.ipynb)
 
+[![Docker Pulls](https://img.shields.io/docker/pulls/mohannadcse/langroid.svg)](https://hub.docker.com/r/mohannadcse/langroid)
+![Docker Image Size (tag)](https://img.shields.io/docker/image-size/mohannadcse/langroid/latest)
+
+
+
 [![Share on Twitter](https://img.shields.io/twitter/url?style=social&url=https://github.com/langroid/langroid)](https://twitter.com/intent/tweet?text=Langroid%20is%20a%20powerful,%20elegant%20new%20framework%20to%20easily%20build%20%23LLM%20applications.%20You%20set%20up%20LLM-powered%20Agents%20with%20vector-stores,%20assign%20tasks,%20and%20have%20them%20collaboratively%20solve%20problems%20via%20message-transformations.%20https://github.com/langroid/langroid)
 [![Share on LinkedIn](https://img.shields.io/badge/Share%20on-LinkedIn-blue)](https://www.linkedin.com/shareArticle?mini=true&url=https://github.com/langroid/langroid&title=Langroid:%20A%20Powerful,%20Elegant%20Framework&summary=Langroid%20is%20a%20powerful,%20elegant%20new%20framework%20to%20easily%20build%20%23LLM%20applications.%20You%20set%20up%20LLM-powered%20Agents%20with%20vector-stores,%20assign%20tasks,%20and%20have%20them%20collaboratively%20solve%20problems%20via%20message-transformations.)
 
@@ -250,13 +255,11 @@ Click to expand any of the code examples below.
 All of these can be run in a Colab notebook:
 [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/langroid/langroid/blob/main/examples/langroid_quick_examples.ipynb)
 
-We also provide a containerized version of the [`langroid-examples`](https://github.com/langroid/langroid-examples) 
-repository via this [Dockerfile](./Dockerfile). All what you need is just setting up environment variables. Please follow these steps to setup the container. 
+We also provide a containerized version of `Langroid` repository via this [Docker Image](https://hub.docker.com/r/mohannadcse/langroid). All what you need is just setting up environment variables under `.env`. Please follow these steps to setup the container. 
 ```bash
-docker build -t langroid .
-docker run -it langroidimg /bin/bash
+docker run -it mohannadcse/langroid /bin/bash
 # Use this command to run any of the examples
-python langroid-examples/examples/quick-start/<ExampleName.py> 
+python examples/<Path/To/Example.py> 
 ``` 
 
 <details>
