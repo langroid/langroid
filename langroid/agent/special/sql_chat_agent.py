@@ -45,6 +45,16 @@ english description. If you are thinking of using a table or column that
 does not exist, you are probably on the wrong track, so you should try
 your best to answer based on an existing table or column.
 DO NOT assume any tables or columns other than those above.
+
+You do not need to attempt answering a question with just one query. 
+You could make a sequence of SQL queries to help you write the final query.
+Also if you receive a null or other unexpected result, 
+see if you have made an assumption in your SQL query, and try another way, 
+or use `run_query` to explore the database table contents before submitting your 
+final query. For example when searching for "males" you may have used "gender= 'M'",
+in your query, because you did not know that the possible genders in the table
+are "Male" and "Female". 
+
 """
 
 SQL_ERROR_MSG = "There was an error in your SQL Query"
