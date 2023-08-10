@@ -145,6 +145,21 @@ pip install langroid[hf-embeddings]
 ```
 Note that this will install `torch` and `sentence-transformers` libraries.
 
+<details>
+<summary><b>Optional Installs for using SQL Chat with a PostgreSQL DB </b></summary>
+
+If you are using `SQLChatAgent` 
+(e.g. the script [`examples/data-qa/sql-chat/sql_chat.py`](examples/data-qa/sql-chat/sql_chat.py)),
+with a postgres db, you will need to:
+
+- Install PostgreSQL dev libraries for your platform, e.g.
+  - `sudo apt-get install libpq-dev` on Ubuntu,
+  - `brew install postgresql` on Mac, etc.
+- Install langroid with the postgres extra, e.g. `pip install langroid[postgres]`
+  or `poetry add langroid[postgres]` or `poetry install -E postgres`.
+  If this gives you an error, try `pip install psycopg2-binary` in your virtualenv.
+</details>
+
 ### Set up environment variables (API keys, etc)
 
 To get started, all you need is an OpenAI API Key.
