@@ -272,7 +272,10 @@ All of these can be run in a Colab notebook:
 
 We also provide a containerized version of `Langroid` repository via this [Docker Image](https://hub.docker.com/r/mohannadcse/langroid). All what you need is just setting up environment variables under `.env`. Please follow these steps to setup the container. 
 ```bash
-docker run -it mohannadcse/langroid /bin/bash
+wget https://github.com/langroid/langroid/blob/main/.env-template .env
+# add API keys as explained in https://github.com/langroid/langroid#set-up-environment-variables-api-keys-etc
+nano .env
+docker run -it  -v ./.env:/langroid/.env mohannadcse/langroid /bin/bash
 # Use this command to run any of the examples
 python examples/<Path/To/Example.py> 
 ``` 
