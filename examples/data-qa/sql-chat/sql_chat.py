@@ -1,5 +1,14 @@
 """
-Example showing how to chat with a SQL database
+Example showing how to chat with a SQL database.
+
+Note if you are using this with a postgres db, you will need to:
+
+(a) Install PostgreSQL dev libraries for your platform, e.g.
+    - `sudo apt-get install libpq-dev` on Ubuntu,
+    - `brew install postgresql` on Mac, etc.
+(b) langroid with the postgres extra, e.g. `pip install langroid[postgres]`
+    or `poetry add langroid[postgres]` or `poetry install -E postgres`.
+    If this gives you an error, try `pip install psycopg2-binary` in your virtualenv.
 """
 import typer
 from rich import print
