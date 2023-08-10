@@ -134,7 +134,7 @@ class TableChatAgent(ChatAgent):
         else:
             df = read_tabular_data(config.data, config.separator)
 
-        df.columns = df.columns.str.strip().str.replace(' +', '_', regex=True)
+        df.columns = df.columns.str.strip().str.replace(" +", "_", regex=True)
 
         self.df = df
         summary = dataframe_summary(df)
