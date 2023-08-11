@@ -433,10 +433,7 @@ class Agent(ABC):
             raise ValueError(f"{tool_name} is not a valid function_call!")
         tool_class = self.llm_tools_map[tool_name]
         tool_msg.update(dict(request=tool_name))
-        try:
-            tool = tool_class.parse_obj(tool_msg)
-        except ValidationError as ve:
-            raise ValueError("Error parsing tool_msg as message class") from ve
+        tool = tool_class.parse_obj(tool_msg)
         return tool
 
     def tool_validation_error(self, ve: ValidationError) -> str:

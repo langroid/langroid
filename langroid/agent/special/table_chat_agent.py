@@ -174,6 +174,11 @@ class TableChatAgent(ChatAgent):
         # Split the code into lines
         lines = code.strip().split("\n")
 
+        lines = [
+            "import pandas as pd",
+            "import numpy as np",
+        ] + lines
+
         # Run all lines as statements except for the last one
         for line in lines[:-1]:
             exec(line, {}, local_vars)
