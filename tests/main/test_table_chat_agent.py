@@ -1,3 +1,4 @@
+from io import StringIO
 from pathlib import Path
 
 import numpy as np
@@ -6,8 +7,28 @@ import pytest
 
 from langroid.agent.special.table_chat_agent import TableChatAgent, TableChatAgentConfig
 from langroid.agent.task import Task
+from langroid.parsing.table_loader import read_tabular_data
 from langroid.parsing.utils import closest_string
 from langroid.utils.configuration import Settings, set_global
+
+DATA_STRING = """age,gender,income,state,,,,
+20,Male,50000,CA,,,
+22,Female,55000,TX,,,
+25,Male,60000,CA,,,
+19,Female,48000,TX,,,
+"""
+
+
+@pytest.fixture
+def mock_data_frame_blanks():
+    return read_tabular_data(StringIO(DATA_STRING))
+
+
+@pytest.fixture
+def mock_data_file_blanks(tmpdir):
+    file_path = tmpdir.join("mock_data.csv")
+    file_path.write(DATA_STRING)
+    return str(file_path)
 
 
 def generate_data(size: int) -> str:
@@ -104,6 +125,24 @@ def test_table_chat_agent_file(fn_api, mock_data_file):
         test_settings=Settings(),
         fn_api=fn_api,
         tabular_data=mock_data_file,
+    )
+
+
+@pytest.mark.parametrize("fn_api", [True, False])
+def test_table_chat_agent_dataframe_blanks(fn_api, mock_data_frame_blanks):
+    _test_table_chat_agent(
+        test_settings=Settings(),
+        fn_api=fn_api,
+        tabular_data=mock_data_frame_blanks,
+    )
+
+
+@pytest.mark.parametrize("fn_api", [True, False])
+def test_table_chat_agent_file_blanks(fn_api, mock_data_file_blanks):
+    _test_table_chat_agent(
+        test_settings=Settings(),
+        fn_api=fn_api,
+        tabular_data=mock_data_file_blanks,
     )
 
 
