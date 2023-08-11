@@ -275,7 +275,7 @@ We also provide a containerized version of `Langroid` repository via this [Docke
 wget https://github.com/langroid/langroid/blob/main/.env-template .env
 # add API keys as explained in https://github.com/langroid/langroid#set-up-environment-variables-api-keys-etc
 nano .env
-docker run -it  -v ./.env:/langroid/.env mohannadcse/langroid /bin/bash
+docker run -it  -v ./.env:/.env mohannadcse/langroid
 # Use this command to run any of the examples
 python examples/<Path/To/Example.py> 
 ``` 
