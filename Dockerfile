@@ -35,7 +35,6 @@ RUN pip install langroid
 RUN sh -c "$(wget https://raw.githubusercontent.com/robbyrussell/oh-my-zsh/master/tools/install.sh -O -)" || true
 
 # Set theme to "agnoster" and enable some plugins
-RUN sed -i -e 's/ZSH_THEME="robbyrussell"/ZSH_THEME="agnoster"/' /root/.zshrc && \
-    sed -i -e 's/plugins=(git)/plugins=(git python)/' /root/.zshrc
+RUN sed -i -e 's/plugins=(git)/plugins=(git python)/' /root/.zshrc
 
 CMD ["zsh"]
