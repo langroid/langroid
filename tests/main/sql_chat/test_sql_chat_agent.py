@@ -3,7 +3,7 @@ from sqlalchemy import Column, ForeignKey, Integer, String, create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Session, relationship, sessionmaker
 
-from langroid.agent.special.sql_chat_agent import SQLChatAgent, SQLChatAgentConfig
+from langroid.agent.special.sql.sql_chat_agent import SQLChatAgent, SQLChatAgentConfig
 from langroid.agent.task import Task
 from langroid.utils.configuration import Settings, set_global
 
