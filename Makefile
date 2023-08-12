@@ -28,8 +28,7 @@ lint:
 	poetry run ruff . --fix
 
 tests:
-	pytest tests/main
-
+	pytest tests/main --basetemp=/tmp/pytest
 
 docs:
 	@# Kill any existing 'mkdocs serve' processes.
