@@ -1,14 +1,28 @@
 """
-Example showing how to chat with a SQL database
+Example showing how to chat with a SQL database.
+
+Note if you are using this with a postgres db, you will need to:
+
+(a) Install PostgreSQL dev libraries for your platform, e.g.
+    - `sudo apt-get install libpq-dev` on Ubuntu,
+    - `brew install postgresql` on Mac, etc.
+(b) langroid with the postgres extra, e.g. `pip install langroid[postgres]`
+    or `poetry add langroid[postgres]` or `poetry install -E postgres`.
+    If this gives you an error, try `pip install psycopg2-binary` in your virtualenv.
 """
 import typer
-from rich.prompt import Prompt
 from rich import print
+from rich.prompt import Prompt
+from typing import Dict, Any
+import json
+import os
+from pydantic import BaseSettings
 
 from sqlalchemy import create_engine, inspect
 from sqlalchemy.engine import Engine
 from prettytable import PrettyTable
 
+from utils import get_database_uri, fix_uri
 from langroid.agent.special.sql.sql_chat_agent import (
     SQLChatAgent,
     SQLChatAgentConfig,
@@ -17,10 +31,10 @@ from langroid.agent.task import Task
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
 from langroid.utils.configuration import set_global, Settings
 from langroid.utils.logging import setup_colored_logging
+import logging
 
-from typing import Dict, Any
-import json
-import os
+logger = logging.getLogger(__name__)
+
 
 app = typer.Typer()
 
@@ -104,12 +118,25 @@ def load_context_descriptions(engine: Engine) -> dict:
             )
 
 
-def chat() -> None:
+class CLIOptions(BaseSettings):
+    fn_api: bool = True  # whether to use function-calling instead of langroid Tools
+
+
+def chat(opts: CLIOptions) -> None:
     print("[blue]Welcome to the SQL database chatbot!\n")
     database_uri = Prompt.ask(
-        "[blue]Enter the URI for your SQL database (hit enter for default)",
+        """
+        [blue]Enter the URI for your SQL database 
+        (type 'i' for interactive, or hit enter for default)
+        """,
         default="sqlite:///examples/data-qa/sql-chat/demo.db",
     )
+
+    if database_uri == "i":
+        database_uri = get_database_uri()
+
+    database_uri = fix_uri(database_uri)
+    logger.warning(f"Using database URI: {database_uri}")
 
     # Create engine and inspector
     engine = create_engine(database_uri)
@@ -137,8 +164,8 @@ def chat() -> None:
     agent = SQLChatAgent(
         config=SQLChatAgentConfig(
             database_uri=database_uri,
-            use_tools=True,
-            use_functions_api=False,
+            use_tools=not opts.fn_api,
+            use_functions_api=opts.fn_api,
             context_descriptions=context_descriptions,  # Add context descriptions to the config
             llm=OpenAIGPTConfig(
                 chat_model=OpenAIChatModel.GPT4,
@@ -154,6 +181,9 @@ def main(
     debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
     no_stream: bool = typer.Option(False, "--nostream", "-ns", help="no streaming"),
     nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
+    tools: bool = typer.Option(
+        False, "--tools", "-t", help="use langroid tools instead of function-calling"
+    ),
     cache_type: str = typer.Option(
         "redis", "--cachetype", "-ct", help="redis or momento"
     ),
@@ -166,7 +196,7 @@ def main(
             cache_type=cache_type,
         )
     )
-    chat()
+    chat(CLIOptions(fn_api=not tools))
 
 
 if __name__ == "__main__":

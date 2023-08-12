@@ -9,10 +9,13 @@
 [![codecov](https://codecov.io/gh/langroid/langroid/branch/main/graph/badge.svg?token=H94BX5F0TE)](https://codecov.io/gh/langroid/langroid)
 [![Lint](https://github.com/langroid/langroid/actions/workflows/validate.yml/badge.svg)](https://github.com/langroid/langroid/actions/workflows/validate.yml)
 [![Docs](https://github.com/langroid/langroid/actions/workflows/mkdocs-deploy.yml/badge.svg)](https://github.com/langroid/langroid/actions/workflows/mkdocs-deploy.yml)
+
 [![Static Badge](https://img.shields.io/badge/Documentation-blue?link=https%3A%2F%2Flangroid.github.io%2Flangroid%2F&link=https%3A%2F%2Flangroid.github.io%2Flangroid%2F)](https://langroid.github.io/langroid)
 [![Static Badge](https://img.shields.io/badge/Discord-orange?logoColor=orange&link=https%3A%2F%2Fdiscord.gg%2FZU36McDgDs)](https://discord.gg/ZU36McDgDs)
 [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/langroid/langroid/blob/main/examples/langroid_quick_examples.ipynb)
 
+[![Share on Twitter](https://img.shields.io/twitter/url?style=social&url=https://github.com/langroid/langroid)](https://twitter.com/intent/tweet?text=Langroid%20is%20a%20powerful,%20elegant%20new%20framework%20to%20easily%20build%20%23LLM%20applications.%20You%20set%20up%20LLM-powered%20Agents%20with%20vector-stores,%20assign%20tasks,%20and%20have%20them%20collaboratively%20solve%20problems%20via%20message-transformations.%20https://github.com/langroid/langroid)
+[![Share on LinkedIn](https://img.shields.io/badge/Share%20on-LinkedIn-blue)](https://www.linkedin.com/shareArticle?mini=true&url=https://github.com/langroid/langroid&title=Langroid:%20A%20Powerful,%20Elegant%20Framework&summary=Langroid%20is%20a%20powerful,%20elegant%20new%20framework%20to%20easily%20build%20%23LLM%20applications.%20You%20set%20up%20LLM-powered%20Agents%20with%20vector-stores,%20assign%20tasks,%20and%20have%20them%20collaboratively%20solve%20problems%20via%20message-transformations.)
 
 </div>
 
@@ -50,6 +53,7 @@ for ideas on what to contribute.
 <summary> <b>:fire: Updates/Releases</b></summary>
 
 - **Aug 2023:**
+  - **Example:** [Answer questions](examples/docqa/chat-search.py) using Google Search + vecdb-retrieval from URL contents. 
   - **0.1.39:** [`GoogleSearchTool`](langroid/agent/stateless_tools/google_search_tool.py) to enable Agents (their LLM) to do Google searches via function-calling/tools.
     See [this chat example](examples/basic/chat-search.py) for how easy it is to add this tool to an agent.
   - **Colab notebook** to try the quick-start examples: [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/langroid/langroid/blob/main/examples/langroid_quick_examples.ipynb) 
@@ -140,6 +144,21 @@ from from HuggingFace, install Langroid like this:
 pip install langroid[hf-embeddings]
 ```
 Note that this will install `torch` and `sentence-transformers` libraries.
+
+<details>
+<summary><b>Optional Installs for using SQL Chat with a PostgreSQL DB </b></summary>
+
+If you are using `SQLChatAgent` 
+(e.g. the script [`examples/data-qa/sql-chat/sql_chat.py`](examples/data-qa/sql-chat/sql_chat.py)),
+with a postgres db, you will need to:
+
+- Install PostgreSQL dev libraries for your platform, e.g.
+  - `sudo apt-get install libpq-dev` on Ubuntu,
+  - `brew install postgresql` on Mac, etc.
+- Install langroid with the postgres extra, e.g. `pip install langroid[postgres]`
+  or `poetry add langroid[postgres]` or `poetry install -E postgres`.
+  If this gives you an error, try `pip install psycopg2-binary` in your virtualenv.
+</details>
 
 ### Set up environment variables (API keys, etc)
 
@@ -598,7 +617,18 @@ script in the `langroid-examples` repo.
 
 # :heart: Thank you to our [supporters](https://github.com/langroid/langroid/stargazers)
 
-If you like this repo, don't forget to leave a star :star: !
+If you like this project, please give it a star ⭐ and 📢 spread the word in your network:
+
+[![Share on Twitter](https://img.shields.io/twitter/url?style=social&url=https://github.com/langroid/langroid)](https://twitter.com/intent/tweet?text=Langroid%20is%20a%20powerful,%20elegant%20new%20framework%20to%20easily%20build%20%23LLM%20applications.%20You%20set%20up%20LLM-powered%20Agents%20with%20vector-stores,%20assign%20tasks,%20and%20have%20them%20collaboratively%20solve%20problems%20via%20message-transformations.%20https://github.com/langroid/langroid)
+[![Share on LinkedIn](https://img.shields.io/badge/Share%20on-LinkedIn-blue)](https://www.linkedin.com/shareArticle?mini=true&url=https://github.com/langroid/langroid&title=Langroid:%20A%20Powerful,%20Elegant%20Framework&summary=Langroid%20is%20a%20powerful,%20elegant%20new%20framework%20to%20easily%20build%20%23LLM%20applications.%20You%20set%20up%20LLM-powered%20Agents%20with%20vector-stores,%20assign%20tasks,%20and%20have%20them%20collaboratively%20solve%20problems%20via%20message-transformations.)
+
+
+
+
+Your support will help build Langroid's momentum and community.
+
+
+
 
 # Langroid Co-Founders
 

@@ -304,14 +304,21 @@ class DocChatAgent(ChatAgent):
         )
 
     @no_type_check
-    def answer_from_docs(self, query: str) -> Document:
-        """Answer query based on docs in vecdb, and conv history"""
-        response = Document(
-            content=NO_ANSWER,
-            metadata=DocMetaData(
-                source="None",
-            ),
-        )
+    def get_relevant_extracts(self, query: str) -> List[Document]:
+        """
+        Get list of docs or extracts relevant to a query. These could be:
+        - the original docs, if they exist and are not too long, or
+        - a list of doc-chunks retrieved from the VecDB
+            that are "relevant" to the query, if these are not too long, or
+        - a list of relevant extracts from these doc-chunks
+
+        Args:
+            query (str): query to search for
+
+        Returns:
+            List[Document]: list of relevant docs
+
+        """
         if len(self.dialog) > 0 and not self.config.conversation_mode:
             # In conversation mode, we let self.message_history accumulate
             # and do not need to convert to standalone query
@@ -324,7 +331,7 @@ class DocChatAgent(ChatAgent):
 
         passages = self.original_docs
 
-        # if original docs too long, no need to look for relevant parts.
+        # if original docs not too long, no need to look for relevant parts.
         if (
             passages is None
             or self.original_docs_length > self.config.max_context_tokens
@@ -335,7 +342,7 @@ class DocChatAgent(ChatAgent):
                     k=self.config.parsing.n_similar_docs,
                 )
             if len(docs_and_scores) == 0:
-                return response
+                return []
             passages = [
                 Document(content=d.content, metadata=d.metadata)
                 for (d, _) in docs_and_scores
@@ -347,6 +354,29 @@ class DocChatAgent(ChatAgent):
             with console.status("[cyan]LLM Extracting verbatim passages..."):
                 with StreamingIfAllowed(self.llm, False):
                     extracts = self.llm.get_verbatim_extracts(query, passages)
+
+        return extracts
+
+    @no_type_check
+    def answer_from_docs(self, query: str) -> Document:
+        """
+        Answer query based on relevant docs from the VecDB
+
+        Args:
+            query (str): query to answer
+
+        Returns:
+            Document: answer
+        """
+        response = Document(
+            content=NO_ANSWER,
+            metadata=DocMetaData(
+                source="None",
+            ),
+        )
+        extracts = self.get_relevant_extracts(query)
+        if len(extracts) == 0:
+            return response
         with ExitStack() as stack:
             # conditionally use Streaming or rich console context
             cm = (

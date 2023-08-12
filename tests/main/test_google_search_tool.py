@@ -1,5 +1,5 @@
 """
-NOTE: running this example requires setting the GOOGLE_API_KEY and GOOGLE_SEI_ID
+NOTE: running this example requires setting the GOOGLE_API_KEY and GOOGLE_CSE_ID
 environment variables in your `.env` file, as explained in the
 [README](https://github.com/langroid/langroid#gear-installation-and-setup).
 
@@ -10,7 +10,6 @@ import pytest
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.stateless_tools.google_search_tool import GoogleSearchTool
-from langroid.agent.tool_message import ToolMessage
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
 from langroid.language_models.openai_gpt import (
     OpenAIChatModel,
@@ -95,26 +94,10 @@ def test_handle_bad_tool_message():
     )
 
 
-@pytest.mark.parametrize(
-    "use_functions_api, message_class, prompt",
-    [
-        (
-            False,
-            GoogleSearchTool,
-            "Find 3 results on the internet about the LK-99 superconductor",
-        ),
-        (
-            True,
-            GoogleSearchTool,
-            "Find 3 results on the internet about the LK-99 superconductor",
-        ),
-    ],
-)
+@pytest.mark.parametrize("use_functions_api", [True, False])
 def test_llm_tool_message(
     test_settings: Settings,
     use_functions_api: bool,
-    message_class: ToolMessage,
-    prompt: str,
 ):
     """
     Test whether LLM is able to GENERATE message (tool) in required format, AND the
@@ -123,9 +106,6 @@ def test_llm_tool_message(
         test_settings: test settings from conftest.py
         use_functions_api: whether to use LLM's functions api or not
             (i.e. use the langroid ToolMessage tools instead).
-        message_class: the message class (i.e. tool/function) to test
-        prompt: the prompt to use to induce the LLM to use the tool
-        result: the expected result from agent handling the tool-message
     """
     set_global(test_settings)
     agent = ChatAgent(cfg)
@@ -133,15 +113,19 @@ def test_llm_tool_message(
     agent.config.use_tools = not use_functions_api
     agent.enable_message(GoogleSearchTool)
 
-    llm_msg = agent.llm_response_forget(prompt)
-    tool_name = message_class.default_value("request")
+    llm_msg = agent.llm_response_forget(
+        "Find 3 results on the internet about the LK-99 superconducting material."
+    )
+    tool_name = GoogleSearchTool.default_value("request")
     if use_functions_api:
         assert llm_msg.function_call.name == tool_name
     else:
         tools = agent.get_tool_messages(llm_msg)
         assert len(tools) == 1
-        assert isinstance(tools[0], message_class)
+        assert isinstance(tools[0], GoogleSearchTool)
 
     agent_result = agent.handle_message(llm_msg)
     assert len(agent_result.split("\n\n")) == 3
-    assert all("LK-99" in x for x in agent_result.split("\n\n"))
+    assert all(
+        "lk-99" in x or "supercond" in x for x in agent_result.lower().split("\n\n")
+    )

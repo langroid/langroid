@@ -4,7 +4,7 @@ import logging
 import os
 import sys
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple, Union, cast
+from typing import Any, Dict, List, Optional, Tuple, Union
 
 import openai
 from dotenv import load_dotenv
@@ -27,7 +27,7 @@ from langroid.language_models.utils import (
     retry_with_exponential_backoff,
 )
 from langroid.utils.configuration import settings
-from langroid.utils.constants import Colors
+from langroid.utils.constants import NO_ANSWER, Colors
 
 logging.getLogger("openai").setLevel(logging.ERROR)
 
@@ -230,6 +230,15 @@ class OpenAIGPT(LanguageModel):
         return hashed_key, self.cache.retrieve(hashed_key)
 
     def generate(self, prompt: str, max_tokens: int) -> LLMResponse:
+        try:
+            return self._generate(prompt, max_tokens)
+        except Exception as e:
+            # capture exceptions not handled by retry, so we don't crash
+            err_msg = str(e)[:500]
+            logging.error(f"OpenAI API error: {err_msg}")
+            return LLMResponse(message=NO_ANSWER, usage=0, cached=False)
+
+    def _generate(self, prompt: str, max_tokens: int) -> LLMResponse:
         if self.config.use_chat_for_completion:
             return self.chat(messages=prompt, max_tokens=max_tokens)
         openai.api_key = self.api_key
@@ -271,6 +280,15 @@ class OpenAIGPT(LanguageModel):
         return LLMResponse(message=msg, usage=usage, cached=cached)
 
     async def agenerate(self, prompt: str, max_tokens: int) -> LLMResponse:
+        try:
+            return await self._agenerate(prompt, max_tokens)
+        except Exception as e:
+            # capture exceptions not handled by retry, so we don't crash
+            err_msg = str(e)[:500]
+            logging.error(f"OpenAI API error: {err_msg}")
+            return LLMResponse(message=NO_ANSWER, usage=0, cached=False)
+
+    async def _agenerate(self, prompt: str, max_tokens: int) -> LLMResponse:
         openai.api_key = self.api_key
         # note we typically will not have self.config.stream = True
         # when issuing several api calls concurrently/asynchronously.
@@ -342,6 +360,21 @@ class OpenAIGPT(LanguageModel):
         functions: Optional[List[LLMFunctionSpec]] = None,
         function_call: str | Dict[str, str] = "auto",
     ) -> LLMResponse:
+        try:
+            return self._chat(messages, max_tokens, functions, function_call)
+        except Exception as e:
+            # capture exceptions not handled by retry, so we don't crash
+            err_msg = str(e)[:500]
+            logging.error(f"OpenAI API error: {err_msg}")
+            return LLMResponse(message=NO_ANSWER, usage=0, cached=False)
+
+    def _chat(
+        self,
+        messages: Union[str, List[LLMMessage]],
+        max_tokens: int,
+        functions: Optional[List[LLMFunctionSpec]] = None,
+        function_call: str | Dict[str, str] = "auto",
+    ) -> LLMResponse:
         """
         ChatCompletion API call to OpenAI.
         Args:
@@ -361,13 +394,13 @@ class OpenAIGPT(LanguageModel):
             LLMResponse object
         """
         openai.api_key = self.api_key
-        if type(messages) == str:
+        if isinstance(messages, str):
             llm_messages = [
                 LLMMessage(role=Role.SYSTEM, content="You are a helpful assistant."),
                 LLMMessage(role=Role.USER, content=messages),
             ]
         else:
-            llm_messages = cast(List[LLMMessage], messages)
+            llm_messages = messages
 
         @retry_with_exponential_backoff
         def completions_with_backoff(**kwargs):  # type: ignore

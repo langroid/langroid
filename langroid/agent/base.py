@@ -128,9 +128,10 @@ class Agent(ABC):
                 raise ValueError("message_class must be a subclass of ToolMessage")
             tool = message_class.default_value("request")
             self.llm_tools_map[tool] = message_class
-            if hasattr(message_class, "handle"):
+            if hasattr(message_class, "handle") and not hasattr(self, tool):
                 """
                 If the message class has a `handle` method,
+                and does NOT have a method with the same name as the tool,
                 then we create a method for the agent whose name
                 is the value of `tool`, and whose body is the `handle` method.
                 This removes a separate step of having to define this method
@@ -432,10 +433,7 @@ class Agent(ABC):
             raise ValueError(f"{tool_name} is not a valid function_call!")
         tool_class = self.llm_tools_map[tool_name]
         tool_msg.update(dict(request=tool_name))
-        try:
-            tool = tool_class.parse_obj(tool_msg)
-        except ValidationError as ve:
-            raise ValueError("Error parsing tool_msg as message class") from ve
+        tool = tool_class.parse_obj(tool_msg)
         return tool
 
     def tool_validation_error(self, ve: ValidationError) -> str:
