@@ -9,7 +9,10 @@ from sqlalchemy import create_engine, inspect
 from sqlalchemy.engine import Engine
 from prettytable import PrettyTable
 
-from langroid.agent.special.sql_chat_agent import SQLChatAgent, SQLChatAgentConfig
+from langroid.agent.special.sql.sql_chat_agent import (
+    SQLChatAgent,
+    SQLChatAgentConfig,
+)
 from langroid.agent.task import Task
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
 from langroid.utils.configuration import set_global, Settings
