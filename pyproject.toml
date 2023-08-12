@@ -59,6 +59,10 @@ sqlalchemy = "^2.0.19"
 prettytable = "^3.8.0"
 google-api-python-client = "^2.95.0"
 lxml = "^4.9.3"
+psycopg2 = {version = "^2.9.7", optional = true}
+pymysql = {version = "^1.1.0", optional = true}
+pytest-postgresql = {version = "^5.0.0", optional = true}
+pytest-mysql = {version = "^2.4.2", optional = true}
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.3.1"
@@ -67,7 +71,8 @@ coverage = "^7.2.5"
 [tool.poetry.extras]
 # install these using `poetry install -E hf-embeddings`
 hf-embeddings = ["sentence-transformers", "torch"]
-
+postgres = ["psycopg2", "pytest-postgresql"]
+mysql = ["pymysql", "pytest-mysql"]
 
 [build-system]
 requires = ["poetry-core"]
