@@ -7,11 +7,12 @@ Functionality includes:
 - asking a question about a SQL schema
 """
 import logging
-from typing import Dict, Optional, Union
+from typing import Any, Dict, Optional, Union
 
 from rich import print
 from rich.console import Console
 from sqlalchemy import MetaData, create_engine, text
+from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session, sessionmaker
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
@@ -54,6 +55,8 @@ or use `run_query` to explore the database table contents before submitting your
 final query. For example when searching for "males" you may have used "gender= 'M'",
 in your query, because you did not know that the possible genders in the table
 are "Male" and "Female". 
+
+Start by asking what I would like to know about the data.
 
 """
 
@@ -149,10 +152,11 @@ class SQLChatAgent(ChatAgent):
             """
         )
 
+        if not config.context_descriptions and isinstance(self.engine, Engine):
+            config.context_descriptions = extract_schema_descriptions(self.engine)
+
         # Combine database information with context descriptions
-        schema_dict = extract_and_combine_db_info(
-            self.metadata, config.context_descriptions
-        )
+        schema_dict = combine_metadata(self.metadata, config.context_descriptions)
 
         # Update the system message with the table information
         self.config.system_message = self.config.system_message.format(
@@ -253,7 +257,7 @@ with column names as keys and their descriptions as values.
         return result
 
 
-def extract_and_combine_db_info(
+def combine_metadata(
     metadata: MetaData, info: Dict[str, Dict[str, Union[str, Dict[str, str]]]]
 ) -> Dict[str, Dict[str, Union[str, Dict[str, str]]]]:
     """
@@ -298,3 +302,23 @@ def extract_and_combine_db_info(
                     )
 
     return db_info
+
+
+def extract_schema_descriptions(engine: Engine) -> Dict[str, Dict[str, Any]]:
+    """
+    Extracts the schema descriptions from the database connected to by the engine.
+
+    Args:
+        engine (Engine): SQLAlchemy engine instance.
+
+    Returns:
+        Dict[str, Dict[str, Any]]: A dictionary representation of table and column
+        descriptions.
+    """
+    import langroid.agent.special.sql.utils.description_extractors as x
+
+    extractors = {
+        "postgresql": x.extract_postgresql_descriptions,
+        "mysql": x.extract_mysql_descriptions,
+    }
+    return extractors.get(engine.dialect.name, x.extract_default_descriptions)(engine)
