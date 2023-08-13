@@ -1,3 +1,15 @@
+"""
+Test automatic context description extraction from mysql and postgres databases.
+
+Pre-requisites:
+(a) Install mysql and postgresql on your system, e.g. on MacOS:
+    brew install mysql pkg-config
+    brew install postgresql
+
+(b) Install extras
+    poetry install -E "mysql postgres"
+"""
+
 import pytest
 from pytest_mysql import factories as mysql_factories
 from pytest_postgresql import factories as postgresql_factories
