@@ -28,17 +28,9 @@ recipient specifiction, but the preferred method is to use the
 from rich import print
 
 from langroid.agent.chat_agent import ChatAgent
-from langroid.agent.chat_document import (
-    ChatDocAttachment,
-    ChatDocMetaData,
-    ChatDocument,
-)
+from langroid.agent.chat_document import ChatDocMetaData, ChatDocument
 from langroid.agent.tool_message import ToolMessage
 from langroid.mytypes import Entity
-
-
-class RecipientValidatorAttachment(ChatDocAttachment):
-    content: str = ""
 
 
 class AddRecipientTool(ToolMessage):
@@ -54,12 +46,12 @@ class AddRecipientTool(ToolMessage):
         "to clarify who the message is intended for."
     )
     recipient: str
-    attachment: None | RecipientValidatorAttachment = None
+    saved_content: str = ""
 
     class Config:
         # do not include these fields in the generated schema
         # since we don't require the LLM to specify them
-        schema_extra = {"exclude": {"attachment", "purpose"}}
+        schema_extra = {"exclude": {"saved_content", "purpose"}}
 
     def response(self, agent: ChatAgent) -> ChatDocument:
         """
@@ -68,10 +60,10 @@ class AddRecipientTool(ToolMessage):
                 metadata.recipient set to self.recipient.
         """
         print(f"[red]RecipientTool: Added recipient {self.recipient} to message.")
-        if self.__class__.attachment is None:
-            raise ValueError("AddRecipientTool: attachment is None")
+        if self.__class__.saved_content == "":
+            raise ValueError("AddRecipientTool: saved_content is empty")
         return ChatDocument(
-            content=self.__class__.attachment.content,  # use class-level attrib value
+            content=self.__class__.saved_content,  # use class-level attrib value
             metadata=ChatDocMetaData(
                 recipient=self.recipient,
                 # we are constructing this so it looks as it msg is from LLM
@@ -115,12 +107,10 @@ class RecipientTool(ToolMessage):
         """
 
         if self.recipient == "":
-            # save the content in the attachment, so that
+            # save the content as a class-variable, so that
             # we can construct the ChatDocument once the LLM specifies a recipient.
             # This avoids having to re-generate the entire message, saving time + cost.
-            AddRecipientTool.attachment = RecipientValidatorAttachment(
-                content=self.content
-            )
+            AddRecipientTool.saved_content = self.content
             agent.enable_message(AddRecipientTool)
             return ChatDocument(
                 content="""
@@ -130,7 +120,6 @@ class RecipientTool(ToolMessage):
                 DO NOT REPEAT your original message; ONLY specify the recipient via this
                 tool/function-call.
                 """,
-                attachment=RecipientValidatorAttachment(content=self.content),
                 metadata=ChatDocMetaData(
                     sender=Entity.AGENT,
                     recipient=Entity.LLM,
@@ -178,10 +167,10 @@ class RecipientTool(ToolMessage):
         if msg.metadata.sender != Entity.LLM:
             return None
         content = msg if isinstance(msg, str) else msg.content
-        # save the content in the attachment, so that
+        # save the content as a class-variable, so that
         # we can construct the ChatDocument once the LLM specifies a recipient.
         # This avoids having to re-generate the entire message, saving time + cost.
-        AddRecipientTool.attachment = RecipientValidatorAttachment(content=content)
+        AddRecipientTool.saved_content = content
         agent.enable_message(AddRecipientTool)
         print("[red]RecipientTool: Recipient not specified, asking LLM to clarify.")
         return ChatDocument(
@@ -191,7 +180,6 @@ class RecipientTool(ToolMessage):
             DO NOT REPEAT your original message; ONLY specify the recipient via this
             tool/function-call.
             """,
-            attachment=RecipientValidatorAttachment(content=content),
             metadata=ChatDocMetaData(
                 sender=Entity.AGENT,
                 recipient=Entity.LLM,
