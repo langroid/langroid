@@ -89,12 +89,16 @@ Feel free to try the working example script
 python3 examples/quick-start/three-agent-chat-num-router.py
 ```
 
-Below is screenshot of what this might look like. 
-Notice how the `Processor` agent forgets to specify the recipient,
-and how the `RecipientValidator` asks it to clarify who it is for.
+Below is screenshot of what this might look like, using the OpenAI function-calling 
+mechanism with the `recipient_message` tool:
+
+![three-agent-router-func.png](three-agent-router-func.png)
+
+And here is what it looks like using Langroid's built-in tools mechanism (use the `-t` option when running the script):
 
 ![three-agent-router.png](three-agent-router.png)
 
+And here is what it looks like using 
 ## Next steps
 
 In the [next section](chat-agent-docs.md) you will learn
