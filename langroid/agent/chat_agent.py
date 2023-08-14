@@ -174,7 +174,7 @@ class ChatAgent(Agent):
             llm_function = message_class.llm_function_schema()
             self.llm_functions_map[request] = llm_function
             if force:
-                self.llm_function_force = dict(name=llm_function.name)
+                self.llm_function_force = dict(name=request)
             else:
                 self.llm_function_force = None
         n_usable_tools = len(self.llm_tools_usable)

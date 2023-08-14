@@ -1,3 +1,4 @@
+import inspect
 import json
 import logging
 from abc import ABC
@@ -123,24 +124,44 @@ class Agent(ABC):
         """
         if message_class is None:
             return list(self.llm_tools_map.keys())
-        else:
-            if not issubclass(message_class, ToolMessage):
-                raise ValueError("message_class must be a subclass of ToolMessage")
-            tool = message_class.default_value("request")
-            self.llm_tools_map[tool] = message_class
-            if hasattr(message_class, "handle") and not hasattr(self, tool):
-                """
-                If the message class has a `handle` method,
-                and does NOT have a method with the same name as the tool,
-                then we create a method for the agent whose name
-                is the value of `tool`, and whose body is the `handle` method.
-                This removes a separate step of having to define this method
-                for the agent, and also keeps the tool definition AND handling
-                in one place, i.e. in the message class.
-                See `tests/main/test_special_tool_messages.py` for an example.
-                """
-                setattr(self, tool, lambda obj: obj.handle())
-            return [tool]
+
+        if not issubclass(message_class, ToolMessage):
+            raise ValueError("message_class must be a subclass of ToolMessage")
+        tool = message_class.default_value("request")
+        self.llm_tools_map[tool] = message_class
+        if (
+            hasattr(message_class, "handle")
+            and inspect.isfunction(message_class.handle)
+            and not hasattr(self, tool)
+        ):
+            """
+            If the message class has a `handle` method,
+            and does NOT have a method with the same name as the tool,
+            then we create a method for the agent whose name
+            is the value of `tool`, and whose body is the `handle` method.
+            This removes a separate step of having to define this method
+            for the agent, and also keeps the tool definition AND handling
+            in one place, i.e. in the message class.
+            See `tests/main/test_stateless_tool_messages.py` for an example.
+            """
+            setattr(self, tool, lambda obj: obj.handle())
+        elif (
+            hasattr(message_class, "response")
+            and inspect.isfunction(message_class.response)
+            and not hasattr(self, tool)
+        ):
+            setattr(self, tool, lambda obj: obj.response(self))
+
+        if hasattr(message_class, "handle_message_fallback") and inspect.isfunction(
+            message_class.handle_message_fallback
+        ):
+            setattr(
+                self,
+                "handle_message_fallback",
+                lambda msg: message_class.handle_message_fallback(self, msg),
+            )
+
+        return [tool]
 
     def enable_message_handling(
         self, message_class: Optional[Type[ToolMessage]] = None
@@ -235,8 +256,9 @@ class Agent(ABC):
         msg: Optional[str | ChatDocument] = None,
     ) -> Optional[ChatDocument]:
         """
-        Response from the "agent itself" handling a "tool message"
-        or LLM's `function_call` (e.g. OpenAI `function_call`)
+        Response from the "agent itself", typically (but not only)
+        used to handle LLM's "tool message" or `function_call`
+        (e.g. OpenAI `function_call`).
         Args:
             msg (str|ChatDocument): the input to respond to: if msg is a string,
                 and it contains a valid JSON-structured "tool message", or
@@ -251,6 +273,8 @@ class Agent(ABC):
         results = self.handle_message(msg)
         if results is None:
             return None
+        if isinstance(results, ChatDocument):
+            return results
         console.print(f"[red]{self.indent}", end="")
         print(f"[red]Agent: {results}")
         sender_name = self.config.name
@@ -458,10 +482,10 @@ class Agent(ABC):
         Please write your message again, correcting the errors.
         """
 
-    def handle_message(self, msg: str | ChatDocument) -> Optional[str]:
+    def handle_message(self, msg: str | ChatDocument) -> None | str | ChatDocument:
         """
         Handle a "tool" message either a string containing one or more
-        valie "tool" JSON substrings,  or a
+        valid "tool" JSON substrings,  or a
         ChatDocument containing a `function_call` attribute.
         Handle with the corresponding handler method, and return
         the results as a combined string.
@@ -495,7 +519,19 @@ class Agent(ABC):
         if len(results_list) == 0:
             return self.handle_message_fallback(msg)
         # there was a non-None result
-        final = "\n".join(results_list)
+        chat_doc_results = [r for r in results_list if isinstance(r, ChatDocument)]
+        if len(chat_doc_results) > 1:
+            logger.warning(
+                """There were multiple ChatDocument results from tools,
+                which is unexpected. The first one will be returned, and the others
+                will be ignored.
+                """
+            )
+        if len(chat_doc_results) > 0:
+            return chat_doc_results[0]
+
+        str_doc_results = [r for r in results_list if isinstance(r, str)]
+        final = "\n".join(str_doc_results)
         if final == "":
             logger.warning(
                 """final result from a tool handler should not be empty str, since  
@@ -504,7 +540,9 @@ class Agent(ABC):
             )
         return final
 
-    def handle_message_fallback(self, msg: str | ChatDocument) -> Optional[str]:
+    def handle_message_fallback(
+        self, msg: str | ChatDocument
+    ) -> str | ChatDocument | None:
         """
         Fallback method to handle possible "tool" msg if not other method applies
         or if an error is thrown.
@@ -535,7 +573,7 @@ class Agent(ABC):
             raise ve
         return message
 
-    def handle_tool_message(self, tool: ToolMessage) -> Optional[str]:
+    def handle_tool_message(self, tool: ToolMessage) -> None | str | ChatDocument:
         """
         Respond to a tool request from the LLM, in the form of an ToolMessage object.
         Args:

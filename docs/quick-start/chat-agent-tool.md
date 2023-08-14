@@ -176,8 +176,10 @@ a document. In the `langroid-examples` repo, there are two examples of this:
 
 ## Next steps
 
-In the [next section](chat-agent-docs.md) you will learn
-how to use Langroid with external documents.
+In the [3-agent chat example](three-agent-chat-num.md), recall that the `processor_agent` did not have to
+bother with specifying who should handle the current number. In the [next section](three-agent-chat-num-router.md) we add a twist to this game,
+so that the `processor_agent` has to decide who should handle the current number.
+
 
 
 

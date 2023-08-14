@@ -590,6 +590,18 @@ class Task:
             resp_str = str(resp)
             self.tsv_logger.info(f"{mark_str}\t{task_name}\t{resp_str}\t{msg_str_tsv}")
 
+    def _invalid_recipient(self, e: Responder) -> bool:
+        if self.pending_message is None:
+            return False
+        recipient = self.pending_message.metadata.recipient
+        if recipient == "":
+            return False
+        if isinstance(e, Task):
+            return e.name != recipient
+        # LLM-specified recipient could be an entity such as USER or AGENT,
+        # or the name of another task.
+        return recipient not in (e, self.name)
+
     def _can_respond(self, e: Responder) -> bool:
         if self.pending_sender == e:
             return False
@@ -599,6 +611,8 @@ class Task:
             # the entity should only be blocked at the first try;
             # Remove the block so it does not block the entity forever
             self.pending_message.metadata.block = None
+            return False
+        if self._invalid_recipient(e):
             return False
         return self.pending_message is None or self.pending_message.metadata.block != e
 

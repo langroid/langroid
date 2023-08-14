@@ -1,12 +1,11 @@
 from typing import List, Optional
 
+import pytest
+
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
-from langroid.agent.special.recipient_validator_agent import (
-    RecipientValidator,
-    RecipientValidatorConfig,
-)
 from langroid.agent.task import Task
 from langroid.agent.tool_message import ToolMessage
+from langroid.agent.tools.recipient_tool import RecipientTool
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
 from langroid.language_models.base import Role
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
@@ -94,21 +93,18 @@ class _MultiplierAgent(ChatAgent):
 EXPONENTIALS = "3**5 8**3 9**3"
 
 
-def test_agents_with_validator(test_settings: Settings):
+@pytest.mark.parametrize("fn_api", [True, False])
+def test_agents_with_validator(test_settings: Settings, fn_api: bool):
     set_global(test_settings)
     master_cfg = _TestChatAgentConfig(name="Master")
 
-    planner_cfg = _TestChatAgentConfig(name="Planner")
+    planner_cfg = _TestChatAgentConfig(
+        name="Planner",
+        use_tools=not fn_api,
+        use_functions_api=fn_api,
+    )
 
     multiplier_cfg = _TestChatAgentConfig(name="Multiplier")
-
-    val_cfg = RecipientValidatorConfig(
-        llm=None,
-        vecdb=None,
-        name="Validator",
-        recipients=["Master", "Multiplier"],
-        tool_recipient="Multiplier",
-    )
 
     # master asks a series of expenenential questions, e.g. 3^6, 8^5, etc.
     master = _MasterAgent(master_cfg)
@@ -135,6 +131,7 @@ def test_agents_with_validator(test_settings: Settings):
 
     # For a given exponential computation, plans a sequence of multiplications.
     planner = _PlannerAgent(planner_cfg)
+    planner.enable_message(RecipientTool)
     task_planner = Task(
         planner,
         llm_delegate=True,
@@ -146,10 +143,18 @@ def test_agents_with_validator(test_settings: Settings):
                 "Multiplier" who can compute multiplications. So to calculate the
                 exponential you receive from "Master", you have to ask a sequence of
                 multiplication questions to "Multiplier", to figure out the 
-                exponential. You must ask the Multiplier in the format
-                "TO[Multiplier]: 3 * 5", and it should only involve a SINGLE 
+                exponential.
+                Since you are talking to both Master and Multipler, 
+                you must use the `recipient_message` tool/function-call to 
+                clarify who your message is for, by setting the `recipient` field
+                to either "Master" or "Multiplier", and the `content` field to
+                the message you want to send to the recipient. 
                 multiplication. When you have your final answer, report your answer
-                back to "Master" in the format "TO[Master]: 243". 
+                back to "Master" using the same `recipient_message` tool/function-call.
+                
+                When asking the Multipler, remember to only present your 
+                request in arithmetic notation, e.g. "3*5"; do not add 
+                un-necessary phrases.
                 """,
     )
 
@@ -166,18 +171,12 @@ def test_agents_with_validator(test_settings: Settings):
                 """,
     )
 
-    validator = RecipientValidator(val_cfg)
-    task_validator = Task(
-        validator,
-        name="Validator",
-        single_round=True,
-    )
     # planner helps master...
     task_master.add_sub_task(task_planner)
     # multiplier helps planner, but use Validator to ensure
     # recipient is specified via TO[recipient], and if not
     # then the validator will ask for clarification
-    task_planner.add_sub_task([task_validator, task_multiplier])
+    task_planner.add_sub_task(task_multiplier)
 
     # ... since human has nothing to say
     master.default_human_response = ""
