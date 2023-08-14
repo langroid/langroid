@@ -5,7 +5,7 @@
         in the `three-agent-chat-num-router.py` script in the `langroid-examples` repo:
         [`examples/quick-start/three-agent-chat-num-router.py`](https://github.com/langroid/langroid-examples/tree/main/examples/quick-start/three-agent-chat-num-router.py).
 
-Let's change the number game from the [previous section](three-agent-chat-num.md) slightly.
+Let's change the number game from the [three agent chat example](three-agent-chat-num.md) slightly.
 In that example, when the `even_agent`'s LLM receives an odd number,
 it responds with `DO-NOT-KNOW`, and similarly for the `odd_agent` when it
 receives an even number. The `step()` method of the `repeater_task`
@@ -89,12 +89,16 @@ Feel free to try the working example script
 python3 examples/quick-start/three-agent-chat-num-router.py
 ```
 
-Below is screenshot of what this might look like. 
-Notice how the `Processor` agent forgets to specify the recipient,
-and how the `RecipientValidator` asks it to clarify who it is for.
+Below is screenshot of what this might look like, using the OpenAI function-calling 
+mechanism with the `recipient_message` tool:
+
+![three-agent-router-func.png](three-agent-router-func.png)
+
+And here is what it looks like using Langroid's built-in tools mechanism (use the `-t` option when running the script):
 
 ![three-agent-router.png](three-agent-router.png)
 
+And here is what it looks like using 
 ## Next steps
 
 In the [next section](chat-agent-docs.md) you will learn

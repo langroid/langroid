@@ -53,6 +53,9 @@ for ideas on what to contribute.
 <summary> <b>:fire: Updates/Releases</b></summary>
 
 - **Aug 2023:**
+  - [**RecipientTool**](langroid/agent/tools/recipient_tool.py) enables (+ enforces) LLM to 
+specify an intended recipient when talking to 2 or more agents. 
+See [this test](tests/main/test_recipient_tool.py) for example usage.
   - **Example:** [Answer questions](examples/docqa/chat-search.py) using Google Search + vecdb-retrieval from URL contents. 
   - **0.1.39:** [`GoogleSearchTool`](langroid/agent/tools/google_search_tool.py) to enable Agents (their LLM) to do Google searches via function-calling/tools.
     See [this chat example](examples/basic/chat-search.py) for how easy it is to add this tool to an agent.
