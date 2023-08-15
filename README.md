@@ -58,6 +58,7 @@ for ideas on what to contribute.
 <summary> <b>:fire: Updates/Releases</b></summary>
 
 - **Aug 2023:**
+  - **:whale: Langroid Docker image**, available, see instructions below.
   - [**RecipientTool**](langroid/agent/tools/recipient_tool.py) enables (+ enforces) LLM to 
 specify an intended recipient when talking to 2 or more agents. 
 See [this test](tests/main/test_recipient_tool.py) for example usage.
