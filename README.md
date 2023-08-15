@@ -269,19 +269,33 @@ and may suffice for some applications, but in general you may see inferior resul
 [`Getting Started Guide`](https://langroid.github.io/langroid/quick-start/)
 for a detailed tutorial.
 
-Click to expand any of the code examples below.
-All of these can be run in a Colab notebook:
-[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/langroid/langroid/blob/main/examples/langroid_quick_examples.ipynb)
 
-We also provide a containerized version of `Langroid` repository via this [Docker Image](https://hub.docker.com/r/langroid/langroid). All what you need is just setting up environment variables under `.env`. Please follow these steps to setup the container. 
+<details>
+<summary> <b> :whale: Docker Instructions </b> </summary>
+
+We provide a containerized version of the `langroid-examples` repository via this [Docker Image](https://hub.docker.com/r/langroid/langroid). 
+All you need to do is set up environment variables in the `.env` file. 
+Please follow these steps to setup the container:
+
 ```bash
+# get the .env file template from `langroid` repo
 wget https://github.com/langroid/langroid/blob/main/.env-template .env
+
+# Edit the .env file with your favorite editor (here nano):
 # add API keys as explained in https://github.com/langroid/langroid#set-up-environment-variables-api-keys-etc
 nano .env
+
+# launch the container
 docker run -it  -v ./.env:/.env langroid/langroid
+
 # Use this command to run any of the examples
 python examples/<Path/To/Example.py> 
 ``` 
+</details>
+
+Click to expand any of the code examples below.
+All of these can be run in a Colab notebook:
+[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/langroid/langroid/blob/main/examples/langroid_quick_examples.ipynb)
 
 <details>
 <summary> <b> Direct interaction with OpenAI LLM </b> </summary>
