@@ -231,7 +231,7 @@ class Agent(ABC):
         ]
         return "\n\n".join(sample_convo)
 
-    def message_format_instructions(self) -> str:
+    def json_tool_format_instructions(self) -> str:
         """
         Generate a string containing instructions to the LLM on when to format
         requests/questions as JSON, based on the currently enabled message classes.
@@ -428,7 +428,7 @@ class Agent(ABC):
         if msg.content != "":
             return self.get_json_tool_messages(msg.content)
 
-        # otherwise, we check look for a `function_call`
+        # otherwise, we look for a `function_call`
         fun_call_cls = self.get_function_call_class(msg)
         return [fun_call_cls] if fun_call_cls is not None else []
 
@@ -608,9 +608,9 @@ class Agent(ABC):
     ) -> Optional[str]:
         """
         Send a request to another agent, possibly after confirming with the user.
-        This is not currently used, since we rely on the task loop and "TO:" syntax
-        to send requests to other agents. It is generally best to avoid using this
-        method.
+        This is not currently used, since we rely on the task loop and
+        `RecipientTool` to address requests to other agents. It is generally best to
+        avoid using this method.
 
         Args:
             agent (Agent): agent to ask
