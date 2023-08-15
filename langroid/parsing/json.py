@@ -1,5 +1,5 @@
 import json
-from typing import List
+from typing import Any, List
 
 import regex
 
@@ -37,3 +37,28 @@ def extract_top_level_json(s: str) -> List[str]:
     ]
 
     return top_level_jsons
+
+
+def top_level_json_field(s: str, f: str) -> Any:
+    """
+    Extract the value of a field f from a top-level JSON object.
+    If there are multiple, just return the first.
+
+    Args:
+        s (str): The input string to search for JSON substrings.
+        f (str): The field to extract from the JSON object.
+
+    Returns:
+        str: The value of the field f in the top-level JSON object, if any.
+            Otherwise, return an empty string.
+    """
+
+    jsons = extract_top_level_json(s)
+    if len(jsons) == 0:
+        return ""
+    for j in jsons:
+        json_data = json.loads(j)
+        if f in json_data:
+            return json_data[f]
+
+    return ""
