@@ -14,6 +14,11 @@
 [![Static Badge](https://img.shields.io/badge/Discord-orange?logoColor=orange&link=https%3A%2F%2Fdiscord.gg%2FZU36McDgDs)](https://discord.gg/ZU36McDgDs)
 [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/langroid/langroid/blob/main/examples/langroid_quick_examples.ipynb)
 
+[![Docker Pulls](https://img.shields.io/docker/pulls/langroid/langroid.svg)](https://hub.docker.com/r/langroid/langroid)
+![Docker Image Size (tag)](https://img.shields.io/docker/image-size/langroid/langroid/latest)
+
+
+
 [![Share on Twitter](https://img.shields.io/twitter/url?style=social&url=https://github.com/langroid/langroid)](https://twitter.com/intent/tweet?text=Langroid%20is%20a%20powerful,%20elegant%20new%20framework%20to%20easily%20build%20%23LLM%20applications.%20You%20set%20up%20LLM-powered%20Agents%20with%20vector-stores,%20assign%20tasks,%20and%20have%20them%20collaboratively%20solve%20problems%20via%20message-transformations.%20https://github.com/langroid/langroid)
 [![Share on LinkedIn](https://img.shields.io/badge/Share%20on-LinkedIn-blue)](https://www.linkedin.com/shareArticle?mini=true&url=https://github.com/langroid/langroid&title=Langroid:%20A%20Powerful,%20Elegant%20Framework&summary=Langroid%20is%20a%20powerful,%20elegant%20new%20framework%20to%20easily%20build%20%23LLM%20applications.%20You%20set%20up%20LLM-powered%20Agents%20with%20vector-stores,%20assign%20tasks,%20and%20have%20them%20collaboratively%20solve%20problems%20via%20message-transformations.)
 
@@ -263,6 +268,30 @@ and may suffice for some applications, but in general you may see inferior resul
 :book: Also see the
 [`Getting Started Guide`](https://langroid.github.io/langroid/quick-start/)
 for a detailed tutorial.
+
+
+<details>
+<summary> <b> :whale: Docker Instructions </b> </summary>
+
+We provide a containerized version of the `langroid-examples` repository via this [Docker Image](https://hub.docker.com/r/langroid/langroid). 
+All you need to do is set up environment variables in the `.env` file. 
+Please follow these steps to setup the container:
+
+```bash
+# get the .env file template from `langroid` repo
+wget https://github.com/langroid/langroid/blob/main/.env-template .env
+
+# Edit the .env file with your favorite editor (here nano):
+# add API keys as explained in https://github.com/langroid/langroid#set-up-environment-variables-api-keys-etc
+nano .env
+
+# launch the container
+docker run -it  -v ./.env:/.env langroid/langroid
+
+# Use this command to run any of the examples
+python examples/<Path/To/Example.py> 
+``` 
+</details>
 
 Click to expand any of the code examples below.
 All of these can be run in a Colab notebook:
