@@ -630,6 +630,11 @@ If you like this project, please give it a star ⭐ and 📢 spread the word in 
 
 Your support will help build Langroid's momentum and community.
 
+## Star History
+
+[![Star History Chart](https://api.star-history.com/svg?repos=langroid/langroid&type=Timeline)](https://star-history.com/#langroid/langroid&Timeline)
+
+
 
 
 
