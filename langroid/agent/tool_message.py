@@ -8,7 +8,7 @@ an agent. The messages could represent, for example:
 
 from abc import ABC
 from random import choice
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Type
 
 from pydantic import BaseModel
 
@@ -81,11 +81,22 @@ class ToolMessage(ABC, BaseModel):
     request: str
     purpose: str
     result: str = ""
+    recipient: str = ""  # default is empty string, so it is optional
 
     class Config:
         arbitrary_types_allowed = False
         validate_all = True
         validate_assignment = True
+        # do not include these fields in the generated schema
+        # since we don't require the LLM to specify them
+        schema_extra = {"exclude": {"purpose", "result"}}
+
+    @classmethod
+    def require_recipient(cls) -> Type["ToolMessage"]:
+        class ToolMessageWithRecipient(cls):  # type: ignore
+            recipient: str  # no default, so it is required
+
+        return ToolMessageWithRecipient
 
     @classmethod
     def examples(cls) -> List["ToolMessage"]:
@@ -120,7 +131,8 @@ class ToolMessage(ABC, BaseModel):
             f (str): field name
 
         Returns:
-            str: default value of the field
+            Any: default value of the field, or None if not set or if the
+                field does not exist.
         """
         schema = cls.schema()
         properties = schema["properties"]

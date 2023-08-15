@@ -11,7 +11,7 @@ from langroid.language_models.base import (
 )
 from langroid.mytypes import DocMetaData, Document, Entity
 from langroid.parsing.agent_chats import parse_message
-from langroid.parsing.json import extract_top_level_json
+from langroid.parsing.json import extract_top_level_json, top_level_json_field
 from langroid.utils.output.printing import shorten_text
 
 
@@ -121,7 +121,7 @@ class ChatDocument(Document):
     def from_LLMResponse(
         response: LLMResponse, displayed: bool = False
     ) -> "ChatDocument":
-        recipient, message = response.recipient_message()
+        recipient, message = response.get_recipient_and_message()
         return ChatDocument(
             content=message,
             function_call=response.function_call,
@@ -137,7 +137,12 @@ class ChatDocument(Document):
 
     @staticmethod
     def from_str(msg: str) -> "ChatDocument":
+        # first check whether msg is structured as TO <recipient>: <message>
         recipient, message = parse_message(msg)
+        if recipient == "":
+            # check if any top level json specifies a 'recipient'
+            recipient = top_level_json_field(msg, "recipient")
+            message = msg  # retain the whole msg in this case
         return ChatDocument(
             content=message,
             metadata=ChatDocMetaData(

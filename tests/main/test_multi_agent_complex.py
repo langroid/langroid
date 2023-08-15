@@ -94,7 +94,12 @@ EXPONENTIALS = "3**5 8**3 9**3"
 
 
 @pytest.mark.parametrize("fn_api", [True, False])
-def test_agents_with_validator(test_settings: Settings, fn_api: bool):
+@pytest.mark.parametrize("constrain_recipients", [True, False])
+def test_agents_with_validator(
+    test_settings: Settings,
+    fn_api: bool,
+    constrain_recipients: bool,
+):
     set_global(test_settings)
     master_cfg = _TestChatAgentConfig(name="Master")
 
@@ -131,7 +136,14 @@ def test_agents_with_validator(test_settings: Settings, fn_api: bool):
 
     # For a given exponential computation, plans a sequence of multiplications.
     planner = _PlannerAgent(planner_cfg)
-    planner.enable_message(RecipientTool)
+
+    if constrain_recipients:
+        planner.enable_message(
+            RecipientTool.create(recipients=["Master", "Multiplier"])
+        )
+    else:
+        planner.enable_message(RecipientTool)
+
     task_planner = Task(
         planner,
         llm_delegate=True,
@@ -144,12 +156,8 @@ def test_agents_with_validator(test_settings: Settings, fn_api: bool):
                 exponential you receive from "Master", you have to ask a sequence of
                 multiplication questions to "Multiplier", to figure out the 
                 exponential.
-                Since you are talking to both Master and Multipler, 
-                you must use the `recipient_message` tool/function-call to 
-                clarify who your message is for, by setting the `recipient` field
-                to either "Master" or "Multiplier", and the `content` field to
-                the message you want to send to the recipient. 
-                multiplication. When you have your final answer, report your answer
+                
+                When you have your final answer, report your answer
                 back to "Master" using the same `recipient_message` tool/function-call.
                 
                 When asking the Multipler, remember to only present your 

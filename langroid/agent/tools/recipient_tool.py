@@ -25,12 +25,15 @@ recipient specifiction, but the preferred method is to use the
 - For a developer who needs to enforce recipient specification for an agent, they only
   need to do `agent.enable_message(RecipientTool)`, and the rest is taken care of.
 """
+from typing import List, Type
+
 from rich import print
 
 from langroid.agent.chat_agent import ChatAgent
 from langroid.agent.chat_document import ChatDocMetaData, ChatDocument
 from langroid.agent.tool_message import ToolMessage
 from langroid.mytypes import Entity
+from langroid.utils.pydantic_utils import has_field
 
 
 class AddRecipientTool(ToolMessage):
@@ -42,10 +45,10 @@ class AddRecipientTool(ToolMessage):
 
     request: str = "add_recipient"
     purpose: str = (
-        "To add a <recipient> when I forgot to specify it, "
+        "To clarify that the <intended_recipient> when I forgot to specify it, "
         "to clarify who the message is intended for."
     )
-    recipient: str
+    intended_recipient: str
     saved_content: str = ""
 
     class Config:
@@ -61,11 +64,22 @@ class AddRecipientTool(ToolMessage):
         """
         print(f"[red]RecipientTool: Added recipient {self.recipient} to message.")
         if self.__class__.saved_content == "":
-            raise ValueError("AddRecipientTool: saved_content is empty")
+            recipient_request_name = RecipientTool.default_value("request")
+            raise ValueError(
+                f"""
+                Recipient specified but content is empty!
+                This could be because the `{self.request}` tool/function was used 
+                before using `{recipient_request_name}` tool/function.
+                Resend the message using `{recipient_request_name}` tool/function.
+                """
+            )
+        content = self.__class__.saved_content  # use class-level attrib value
+        # erase content since we just used it.
+        self.__class__.saved_content = ""
         return ChatDocument(
-            content=self.__class__.saved_content,  # use class-level attrib value
+            content=content,
             metadata=ChatDocMetaData(
-                recipient=self.recipient,
+                recipient=self.intended_recipient,
                 # we are constructing this so it looks as it msg is from LLM
                 sender=Entity.LLM,
             ),
@@ -84,16 +98,51 @@ class RecipientTool(ToolMessage):
     To use this tool/function-call, LLM must generate a JSON structure
     with these fields:
     {
-        "request": "recipient_tool", # this is the function name when using fn-calling
-        "recipient": <name_of_recipient_task>,
+        "request": "recipient_message", # also the function name when using fn-calling
+        "intended_recipient": <name_of_recipient_task_or_entity>,
         "content": <content>
     }
     """
 
     request: str = "recipient_message"
-    purpose: str = "To address a message <content> to a specific <recipient>."
-    recipient: str
+    purpose: str = "To send message <content> to a specific <intended_recipient>."
+    intended_recipient: str
     content: str
+
+    @classmethod
+    def create(cls, recipients: List[str]) -> Type["RecipientTool"]:
+        class RecipientToolRestricted(cls):  # type: ignore
+            allowed_recipients = recipients
+
+        return RecipientToolRestricted
+
+    @classmethod
+    def instructions(cls) -> str:
+        """
+        Generate instructions for using this tool/function.
+        These are intended to be appended to the system message of the LLM.
+        """
+        recipients = []
+        if has_field(cls, "allowed_recipients"):
+            recipients = cls.default_value("allowed_recipients")
+        if len(recipients) > 0:
+            recipients_str = ", ".join(recipients)
+            return f"""
+            Since you will be talking to multiple recipients, 
+            you must clarify who your intended recipient is, using 
+            the `{cls.default_value("request")}` tool/function-call, by setting the 
+            'intended_recipient' field to one of the following:
+            {recipients_str},
+            and setting the 'content' field to your message.
+            """
+        else:
+            return f"""
+            Since you will be talking to multiple recipients, 
+            you must clarify who your intended recipient is, using 
+            the `{cls.default_value("request")}` tool/function-call, by setting the 
+            'intended_recipient' field to the name of the recipient, 
+            and setting the 'content' field to your message.
+            """
 
     def response(self, agent: ChatAgent) -> str | ChatDocument:
         """
@@ -106,7 +155,7 @@ class RecipientTool(ToolMessage):
                 metadata.recipient set to self.recipient.
         """
 
-        if self.recipient == "":
+        if self.intended_recipient == "":
             # save the content as a class-variable, so that
             # we can construct the ChatDocument once the LLM specifies a recipient.
             # This avoids having to re-generate the entire message, saving time + cost.
@@ -131,7 +180,7 @@ class RecipientTool(ToolMessage):
         return ChatDocument(
             content=self.content,
             metadata=ChatDocMetaData(
-                recipient=self.recipient,
+                recipient=self.intended_recipient,
                 # we are constructing this so it looks as it msg is from LLM
                 sender=Entity.LLM,
             ),
@@ -176,9 +225,9 @@ class RecipientTool(ToolMessage):
         return ChatDocument(
             content="""
             Please use the 'add_recipient' tool/function-call to specify who your 
-            message is intended for.
-            DO NOT REPEAT your original message; ONLY specify the recipient via this
-            tool/function-call.
+            `intended_recipient` is.
+            DO NOT REPEAT your original message; ONLY specify the 
+            `intended_recipient` via this tool/function-call.
             """,
             metadata=ChatDocMetaData(
                 sender=Entity.AGENT,
