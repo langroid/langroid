@@ -114,7 +114,7 @@ Here's a screenshot of what it looks like:
 
 ## Next steps
 
-You will notice that the `processor_agent` did not have to 
-bother with specifying who should handle the current number.
-In the [next section](three-agent-chat-num-router.md) we add a twist to this game,
-so that the `processor_agent` has to decide who should handle the current number.
+
+In the [next section](chat-agent-tool.md) you will learn how to use Langroid
+to equip a `ChatAgent` with tools or function-calling.
+

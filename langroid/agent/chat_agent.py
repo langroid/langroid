@@ -1,3 +1,4 @@
+import inspect
 import logging
 from contextlib import ExitStack
 from typing import Dict, List, Optional, Set, Type, cast, no_type_check
@@ -68,7 +69,9 @@ class ChatAgent(Agent):
         super().__init__(config)
         self.config: ChatAgentConfig = config
         self.message_history: List[LLMMessage] = []
-        self.json_instructions_idx: int = -1
+        self.tool_instructions_added: bool = False
+        # system-level instructions for using tools/functions
+        self.system_tool_instructions: str = ""
         self.llm_functions_map: Dict[str, LLMFunctionSpec] = {}
         self.llm_functions_handled: Set[str] = set()
         self.llm_functions_usable: Set[str] = set()
@@ -113,6 +116,23 @@ class ChatAgent(Agent):
             ]
         )
 
+    def augment_system_message(self, message: str) -> None:
+        """
+        Augment the system message with the given message.
+        Args:
+            message (str): system message
+        """
+        if len(self.message_history) > 0:
+            if self.message_history[0].role == Role.SYSTEM:
+                self.message_history[0].content = (
+                    self.message_history[0].content + "\n\n" + message
+                )
+        else:
+            if self.task_messages[0].role == Role.SYSTEM:
+                self.task_messages[0].content = (
+                    self.task_messages[0].content + "\n\n" + message
+                )
+
     def add_user_message(self, message: str) -> None:
         """
         Add a user message to the message history.
@@ -147,6 +167,7 @@ class ChatAgent(Agent):
         use: bool = True,
         handle: bool = True,
         force: bool = False,
+        require_recipient: bool = False,
     ) -> None:
         """
         Add the tool (message class) to the agent, and enable either
@@ -165,18 +186,30 @@ class ChatAgent(Agent):
             force: whether to FORCE the agent (LLM) to USE the specific
                  tool represented by `message_class`.
                  `force` is ignored if `message_class` is None.
+            require_recipient: whether to require that recipient be specified
+                when using the tool message (only applies if `use` is True).
 
         """
         super().enable_message_handling(message_class)  # enables handling only
         tools = self._get_tool_list(message_class)
         if message_class is not None:
+            if require_recipient:
+                message_class = message_class.require_recipient()
             request = message_class.default_value("request")
             llm_function = message_class.llm_function_schema()
             self.llm_functions_map[request] = llm_function
             if force:
-                self.llm_function_force = dict(name=llm_function.name)
+                self.llm_function_force = dict(name=request)
             else:
                 self.llm_function_force = None
+            if hasattr(message_class, "instructions") and inspect.ismethod(
+                message_class.instructions
+            ):
+                # save tool instructions so that when LLM is ready
+                # to respond (i.e. either when a wrapping Task is started,
+                # or when the LLM is directly queried),
+                # we can append to system msg.
+                self.system_tool_instructions += "\n\n" + message_class.instructions()
         n_usable_tools = len(self.llm_tools_usable)
         for t in tools:
             if handle:
@@ -198,7 +231,7 @@ class ChatAgent(Agent):
         # But for now leave as is.
         if len(self.llm_tools_usable) != n_usable_tools and self.config.use_tools:
             # Update JSON format instructions if the set of usable tools has changed
-            self.update_message_instructions()
+            self.update_json_tool_instructions()
 
     def disable_message_handling(
         self,
@@ -242,23 +275,27 @@ class ChatAgent(Agent):
                 self.llm_tools_usable.discard(r)
                 self.llm_functions_usable.discard(r)
 
-    def update_message_instructions(self) -> None:
+    def update_json_tool_instructions(self) -> None:
         """
         Add special instructions on situations when the LLM should send JSON-formatted
         messages, and save the index position of these instructions in the
-        message history.
+        message history. Note this specifically only relates to the
+        Langroid JSON tools mechanism, not the LLM-native function-calling.
         """
-        # note according to the openai-cookbook, GPT-3.5 pays less attention to the
-        # system messages, so we add the instructions as a user message
-        # TODO need to adapt this based on model type.
-        json_instructions = super().message_format_instructions()
-        if self.json_instructions_idx < 0:
+        # Add the instructions as a user message...
+        # TODO need to adapt this based on model type, as some models may
+        # pay more attention to system message.
+        json_instructions = super().json_tool_format_instructions()
+        if not self.tool_instructions_added:
             self.task_messages.append(
                 LLMMessage(role=Role.USER, content=json_instructions)
             )
-            self.json_instructions_idx = len(self.task_messages) - 1
+            self.tool_instructions_added = True
         else:
-            self.task_messages[self.json_instructions_idx].content = json_instructions
+            # json_instructions will contain instructions on ALL tools,
+            # so it is ok to overwrite the last message in the task_messages,
+            # since we know it is a tool-instruction msg.
+            self.task_messages[-1].content = json_instructions
 
         # Note that task_messages is the initial set of messages created to set up
         # the task, and they may not yet have been sent to the LLM at this point.
@@ -267,7 +304,7 @@ class ChatAgent(Agent):
         # update the self.message_history as well, since this history will be sent to
         # the LLM on each round, after appending the latest assistant, user msgs.
         if len(self.message_history) > 0:
-            self.message_history[self.json_instructions_idx].content = json_instructions
+            self.message_history[-1].content = json_instructions
 
     @no_type_check
     def llm_response(
@@ -292,6 +329,11 @@ class ChatAgent(Agent):
         if len(self.message_history) == 0:
             # task_messages have not yet been loaded, so load them
             self.message_history = self.task_messages.copy()
+            # first message is system msg, augment if needed
+            if self.system_tool_instructions != "":
+                self.message_history[0].content += (
+                    "\n\n" + self.system_tool_instructions
+                )
             # for debugging, show the initial message history
             if settings.debug:
                 print(

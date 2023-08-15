@@ -74,8 +74,8 @@ nav:
     - Task Delegation: quick-start/multi-agent-task-delegation.md
     - Two Agent Chat: quick-start/two-agent-chat-num.md
     - Three Agent Chat: quick-start/three-agent-chat-num.md
-    - Three Agents, with Routing: quick-start/three-agent-chat-num-router.md
     - Agent with Tools/Functions: quick-start/chat-agent-tool.md
+    - Three Agents, with Routing: quick-start/three-agent-chat-num-router.md
     - Agent with Retrieval: quick-start/chat-agent-docs.md
   # defer to gen-files + literate-nav
   - Demos:

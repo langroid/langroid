@@ -9,7 +9,7 @@ import itertools
 import pytest
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
-from langroid.agent.stateless_tools.google_search_tool import GoogleSearchTool
+from langroid.agent.tools.google_search_tool import GoogleSearchTool
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
 from langroid.language_models.openai_gpt import (
     OpenAIChatModel,

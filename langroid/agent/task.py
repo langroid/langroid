@@ -18,6 +18,8 @@ from langroid.utils.configuration import settings
 from langroid.utils.constants import DONE, NO_ANSWER, USER_QUIT
 from langroid.utils.logging import RichFileLogger, setup_file_logger
 
+logger = logging.getLogger(__name__)
+
 Responder = Entity | Type["Task"]
 
 
@@ -362,6 +364,18 @@ class Task:
             if self.pending_message is None
             else self.pending_message.metadata.recipient
         )
+        if not self._valid_recipient(recipient):
+            logger.warning(f"Invalid recipient: {recipient}")
+            error_doc = ChatDocument(
+                content=f"Invalid recipient: {recipient}",
+                metadata=ChatDocMetaData(
+                    sender=Entity.AGENT,
+                    sender_name=Entity.AGENT,
+                ),
+            )
+            self.pending_message = error_doc
+            return error_doc
+
         responders: List[Responder] = self.non_human_responders.copy()
         if Entity.USER in self.responders and not self.human_tried:
             # give human first chance if they haven't been tried in last step:
@@ -590,6 +604,30 @@ class Task:
             resp_str = str(resp)
             self.tsv_logger.info(f"{mark_str}\t{task_name}\t{resp_str}\t{msg_str_tsv}")
 
+    def _valid_recipient(self, recipient: str) -> bool:
+        """
+        Is the recipient among the list of responders?
+        Args:
+            recipient (str): Name of recipient
+        """
+        if recipient == "":
+            return True
+        responder_names = [self.name] + [r.name for r in self.responders]
+        return recipient in responder_names
+
+    def _recipient_mismatch(self, e: Responder) -> bool:
+        """
+        Is the recipient explicitly specified and does not match responder "e" ?
+        """
+        if self.pending_message is None:
+            return False
+        recipient = self.pending_message.metadata.recipient
+        if recipient == "":
+            return False
+        # LLM-specified recipient could be an entity such as USER or AGENT,
+        # or the name of another task.
+        return recipient not in (e.name, self.name)
+
     def _can_respond(self, e: Responder) -> bool:
         if self.pending_sender == e:
             return False
@@ -599,6 +637,8 @@ class Task:
             # the entity should only be blocked at the first try;
             # Remove the block so it does not block the entity forever
             self.pending_message.metadata.block = None
+            return False
+        if self._recipient_mismatch(e):
             return False
         return self.pending_message is None or self.pending_message.metadata.block != e
 

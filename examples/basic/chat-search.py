@@ -15,7 +15,7 @@ from rich.prompt import Prompt
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
-from langroid.agent.stateless_tools.google_search_tool import GoogleSearchTool
+from langroid.agent.tools.google_search_tool import GoogleSearchTool
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
 from langroid.utils.configuration import set_global, Settings
 from langroid.utils.logging import setup_colored_logging

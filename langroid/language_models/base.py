@@ -11,6 +11,7 @@ from langroid.cachedb.momento_cachedb import MomentoCacheConfig
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
 from langroid.mytypes import Document
 from langroid.parsing.agent_chats import parse_message
+from langroid.parsing.json import top_level_json_field
 from langroid.prompts.dialog import collate_chat_history
 from langroid.prompts.templates import (
     EXTRACTION_PROMPT_GPT4,
@@ -129,7 +130,7 @@ class LLMResponse(BaseModel):
             function_call=self.function_call,
         )
 
-    def recipient_message(
+    def get_recipient_and_message(
         self,
     ) -> Tuple[str, str]:
         """
@@ -148,11 +149,30 @@ class LLMResponse(BaseModel):
         """
 
         if self.function_call is not None:
-            return self.function_call.to, ""
+            # in this case we ignore message, since all information is in function_call
+            msg = ""
+            # recipient may either have been specified as a special field "to" in
+            # function_call, or as a parameter "recipient" in the arguments
+            # (the latter can happen when using a Tool that has a 'recipient' parameter)
+            recipient = self.function_call.to
+            if recipient == "":
+                args = self.function_call.arguments
+                if isinstance(args, dict):
+                    recipient = args.get("recipient", "")
+            return recipient, msg
         else:
             msg = self.message
 
+        # It's not a function call, so continue looking to see
+        # if a recipient is specified in the message.
+
+        # First check if message contains "TO: <recipient> <content>"
         recipient_name, content = parse_message(msg) if msg is not None else ("", "")
+        # check if there is a top level json that specifies 'recipient',
+        # and retain the entire message as content.
+        if recipient_name == "":
+            recipient_name = top_level_json_field(msg, "recipient") if msg else ""
+            content = msg
         return recipient_name, content
 
 

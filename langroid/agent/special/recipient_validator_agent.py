@@ -1,3 +1,31 @@
+"""
+Agent to detect un-specified recipient and ask for clarification,
+and when received, modify the pending message so that it looks as if
+the parent task's LLM generated the right message in the first place.
+
+Note that this is deprecated in favor of using the `RecipientTool`, defined in
+`langroid.agent.tools.recipient_tool.py`.
+See usage examples in `tests/main/test_multi_agent_complex.py` and
+`tests/main/test_recipient_tool.py`.
+
+The advantages of using the `RecipientTool` are:
+- it uses the tool/function-call mechanism to specify a recipient in a JSON-structured
+    string, which is more consistent with the rest of the system, and does not require
+    inventing a new syntax like `TO:<recipient>` (which the RecipientValidatorAgent
+    uses).
+- it removes the need for any special parsing of the message content, since we leverage
+    the built-in JSON tool-matching in `Agent.handle_message()` and downstream code.
+- it does not require setting the `parent_responder` field in the `ChatDocument`
+    metadata, which is somewhat hacky.
+- it appears to be less brittle than requiring the LLM to use TO:<recipient> syntax:
+  The LLM almost never forgets to use the RecipientTool as instructed.
+- The RecipientTool class acts as a specification of the required syntax, and also
+  contains mechanisms to enforce this syntax.
+- For a developer who needs to enforce recipient specification for an agent, they only
+  need to do `agent.enable_message(RecipientTool)`, and the rest is taken care of.
+
+"""
+
 import logging
 from typing import List, Optional
 
