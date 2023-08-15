@@ -209,7 +209,7 @@ class ChatAgent(Agent):
                 # to respond (i.e. either when a wrapping Task is started,
                 # or when the LLM is directly queried),
                 # we can append to system msg.
-                self.system_tool_instructions = message_class.instructions()
+                self.system_tool_instructions += "\n\n" + message_class.instructions()
         n_usable_tools = len(self.llm_tools_usable)
         for t in tools:
             if handle:
