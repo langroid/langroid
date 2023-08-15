@@ -14,8 +14,8 @@
 [![Static Badge](https://img.shields.io/badge/Discord-orange?logoColor=orange&link=https%3A%2F%2Fdiscord.gg%2FZU36McDgDs)](https://discord.gg/ZU36McDgDs)
 [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/langroid/langroid/blob/main/examples/langroid_quick_examples.ipynb)
 
-[![Docker Pulls](https://img.shields.io/docker/pulls/mohannadcse/langroid.svg)](https://hub.docker.com/r/mohannadcse/langroid)
-![Docker Image Size (tag)](https://img.shields.io/docker/image-size/mohannadcse/langroid/latest)
+[![Docker Pulls](https://img.shields.io/docker/pulls/langroid/langroid.svg)](https://hub.docker.com/r/langroid/langroid)
+![Docker Image Size (tag)](https://img.shields.io/docker/image-size/langroid/langroid/latest)
 
 
 
@@ -273,12 +273,12 @@ Click to expand any of the code examples below.
 All of these can be run in a Colab notebook:
 [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/langroid/langroid/blob/main/examples/langroid_quick_examples.ipynb)
 
-We also provide a containerized version of `Langroid` repository via this [Docker Image](https://hub.docker.com/r/mohannadcse/langroid). All what you need is just setting up environment variables under `.env`. Please follow these steps to setup the container. 
+We also provide a containerized version of `Langroid` repository via this [Docker Image](https://hub.docker.com/r/langroid/langroid). All what you need is just setting up environment variables under `.env`. Please follow these steps to setup the container. 
 ```bash
 wget https://github.com/langroid/langroid/blob/main/.env-template .env
 # add API keys as explained in https://github.com/langroid/langroid#set-up-environment-variables-api-keys-etc
 nano .env
-docker run -it  -v ./.env:/.env mohannadcse/langroid
+docker run -it  -v ./.env:/.env langroid/langroid
 # Use this command to run any of the examples
 python examples/<Path/To/Example.py> 
 ``` 
