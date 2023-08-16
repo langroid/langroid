@@ -37,7 +37,7 @@ class OpenAIChatModel(str, Enum):
 
     GPT3_5_TURBO = "gpt-3.5-turbo-0613"
     GPT4_NOFUNC = "gpt-4"  # before function_call API
-    GPT4 = "gpt-4-0613"
+    GPT4 = "gpt-4"
 
 
 class OpenAICompletionModel(str, Enum):
@@ -45,7 +45,7 @@ class OpenAICompletionModel(str, Enum):
 
     TEXT_DA_VINCI_003 = "text-davinci-003"
     TEXT_ADA_001 = "text-ada-001"
-    GPT4 = "gpt-4-0613"
+    GPT4 = "gpt-4"
 
 
 class OpenAIGPTConfig(LLMConfig):

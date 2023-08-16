@@ -114,7 +114,7 @@ Here is what it looks like in action:
 - **Modularity, Reusabilily, Loose coupling:** The `Agent` and `Task` abstractions allow users to design
   Agents with specific skills, wrap them in Tasks, and combine tasks in a flexible way.
 - **LLM Support**: Langroid supports OpenAI LLMs including GPT-3.5-Turbo,
-  GPT-4-0613
+  GPT-4.
 - **Caching of LLM responses:** Langroid supports [Redis](https://redis.com/try-free/) and 
   [Momento](https://www.gomomento.com/) to cache LLM responses.
 - **Vector-stores**: [Qdrant](https://qdrant.tech/) and [Chroma](https://www.trychroma.com/) are currently supported.
@@ -139,6 +139,9 @@ Here is what it looks like in action:
 --- 
 
 # :gear: Installation and Setup
+
+:whale: For a simpler setup, see the Docker section below, which lets you get started just
+by setting up environment variables in a `.env` file.
 
 ### Install `langroid`
 Langroid requires Python 3.11+. We recommend using a virtual environment.
@@ -249,6 +252,30 @@ GOOGLE_CSE_ID=your-cse-id
 
 ---
 
+# :whale: Docker Instructions
+
+We provide a containerized version of the [`langroid-examples`](https://github.com/langroid/langroid-examples) 
+repository via this [Docker Image](https://hub.docker.com/r/langroid/langroid).
+All you need to do is set up environment variables in the `.env` file.
+Please follow these steps to setup the container:
+
+```bash
+# get the .env file template from `langroid` repo
+wget https://github.com/langroid/langroid/blob/main/.env-template .env
+
+# Edit the .env file with your favorite editor (here nano), 
+# and add API keys as explained above
+nano .env
+
+# launch the container
+docker run -it  -v ./.env:/.env langroid/langroid
+
+# Use this command to run any of the scripts in the `examples` directory
+python examples/<Path/To/Example.py> 
+``` 
+
+
+
 # :tada: Usage Examples
 
 These are quick teasers to give a glimpse of what you can do with Langroid
@@ -271,28 +298,6 @@ and may suffice for some applications, but in general you may see inferior resul
 for a detailed tutorial.
 
 
-<details>
-<summary> <b> :whale: Docker Instructions </b> </summary>
-
-We provide a containerized version of the `langroid-examples` repository via this [Docker Image](https://hub.docker.com/r/langroid/langroid). 
-All you need to do is set up environment variables in the `.env` file. 
-Please follow these steps to setup the container:
-
-```bash
-# get the .env file template from `langroid` repo
-wget https://github.com/langroid/langroid/blob/main/.env-template .env
-
-# Edit the .env file with your favorite editor (here nano):
-# add API keys as explained in https://github.com/langroid/langroid#set-up-environment-variables-api-keys-etc
-nano .env
-
-# launch the container
-docker run -it  -v ./.env:/.env langroid/langroid
-
-# Use this command to run any of the examples
-python examples/<Path/To/Example.py> 
-``` 
-</details>
 
 Click to expand any of the code examples below.
 All of these can be run in a Colab notebook:
