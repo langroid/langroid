@@ -50,7 +50,11 @@ vector-store and methods), assign them tasks, and have them
 collaboratively solve a problem by exchanging messages. 
 This Multi-Agent paradigm is inspired by the
 [Actor Framework](https://en.wikipedia.org/wiki/Actor_model)
-(but you do not need to know anything about this!).
+(but you do not need to know anything about this!). 
+
+Langroid is a fresh take on LLM app-development, where considerable thought has gone 
+into simplifying the developer experience. It does not use `Langchain` or `Llama-Index`.
+
 We welcome contributions -- See the [contributions](./CONTRIBUTING.md) document
 for ideas on what to contribute.
 
