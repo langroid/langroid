@@ -16,6 +16,7 @@
 
 [![Docker Pulls](https://img.shields.io/docker/pulls/langroid/langroid.svg)](https://hub.docker.com/r/langroid/langroid)
 ![Docker Image Size (tag)](https://img.shields.io/docker/image-size/langroid/langroid/latest)
+[![Multi-Architecture DockerHub](https://github.com/langroid/langroid/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/langroid/langroid/actions/workflows/docker-publish.yml)
 
 
 
