@@ -171,15 +171,11 @@ class LLMResponse(BaseModel):
         # if a recipient is specified in the message.
 
         # First check if message contains "TO: <recipient> <content>"
-        recipient_name, content = (
-            parse_message(msg) if msg is not None else ("", "")
-        )
+        recipient_name, content = parse_message(msg) if msg is not None else ("", "")
         # check if there is a top level json that specifies 'recipient',
         # and retain the entire message as content.
         if recipient_name == "":
-            recipient_name = (
-                top_level_json_field(msg, "recipient") if msg else ""
-            )
+            recipient_name = top_level_json_field(msg, "recipient") if msg else ""
             content = msg
         return recipient_name, content
 
@@ -277,15 +273,11 @@ class LanguageModel(ABC):
         Follow-up question: {question} 
         """.strip()
         show_if_debug(prompt, "FOLLOWUP->STANDALONE-PROMPT= ")
-        standalone = self.generate(
-            prompt=prompt, max_tokens=1024
-        ).message.strip()
+        standalone = self.generate(prompt=prompt, max_tokens=1024).message.strip()
         show_if_debug(prompt, "FOLLOWUP->STANDALONE-RESPONSE= ")
         return standalone
 
-    async def get_verbatim_extract_async(
-        self, question: str, passage: Document
-    ) -> str:
+    async def get_verbatim_extract_async(self, question: str, passage: Document) -> str:
         """
         Asynchronously, get verbatim extract from passage
         that is relevant to a question.
@@ -297,9 +289,7 @@ class LanguageModel(ABC):
                 question=question, content=passage.content
             )
             show_if_debug(final_prompt, "EXTRACT-PROMPT= ")
-            final_extract = await self.agenerate(
-                prompt=final_prompt, max_tokens=1024
-            )
+            final_extract = await self.agenerate(prompt=final_prompt, max_tokens=1024)
             show_if_debug(final_extract.message.strip(), "EXTRACT-RESPONSE= ")
         return final_extract.message.strip()
 
@@ -310,10 +300,7 @@ class LanguageModel(ABC):
     ) -> List[Document]:
         async with aiohttp.ClientSession():
             verbatim_extracts = await asyncio.gather(
-                *(
-                    self.get_verbatim_extract_async(question, P)
-                    for P in passages
-                )
+                *(self.get_verbatim_extract_async(question, P) for P in passages)
             )
         metadatas = [P.metadata for P in passages]
         # return with metadata so we can use it downstream, e.g. to cite sources
@@ -338,9 +325,7 @@ class LanguageModel(ABC):
         docs = asyncio.run(self._get_verbatim_extracts(question, passages))
         return docs
 
-    def get_summary_answer(
-        self, question: str, passages: List[Document]
-    ) -> Document:
+    def get_summary_answer(self, question: str, passages: List[Document]) -> Document:
         """
         Given a question and a list of (possibly) doc snippets,
         generate an answer if possible

@@ -156,9 +156,7 @@ class OpenAIGPT(LanguageModel):
             if event_fn_name:
                 function_name = event_fn_name
                 has_function = True
-                sys.stdout.write(
-                    Colors().GREEN + "FUNC: " + event_fn_name + ": "
-                )
+                sys.stdout.write(Colors().GREEN + "FUNC: " + event_fn_name + ": ")
                 sys.stdout.flush()
             if event_args:
                 function_args += event_args
@@ -197,9 +195,7 @@ class OpenAIGPT(LanguageModel):
                     function_call.arguments = None
                 else:
                     function_call.arguments = args
-                    function_call_dict.update(
-                        {"arguments": function_args.strip()}
-                    )
+                    function_call_dict.update({"arguments": function_args.strip()})
                 msg["message"]["function_call"] = function_call_dict
         else:
             # non-chat mode has no function_call
@@ -218,9 +214,7 @@ class OpenAIGPT(LanguageModel):
             openai_response.dict(),
         )
 
-    def _cache_lookup(
-        self, fn_name: str, **kwargs: Dict[str, Any]
-    ) -> Tuple[str, Any]:
+    def _cache_lookup(self, fn_name: str, **kwargs: Dict[str, Any]) -> Tuple[str, Any]:
         # Use the kwargs as the cache key
         sorted_kwargs_str = str(sorted(kwargs.items()))
         raw_key = f"{fn_name}:{sorted_kwargs_str}"
@@ -263,9 +257,7 @@ class OpenAIGPT(LanguageModel):
                 # If it's not in the cache, call the API
                 result = openai.Completion.create(**kwargs)  # type: ignore
                 if self.config.stream:
-                    llm_response, openai_response = self._stream_response(
-                        result
-                    )
+                    llm_response, openai_response = self._stream_response(result)
                     self.cache.store(hashed_key, openai_response)
                     return cached, hashed_key, openai_response
                 else:
@@ -302,9 +294,7 @@ class OpenAIGPT(LanguageModel):
         # disable streaming.
         if self.config.use_chat_for_completion:
             messages = [
-                LLMMessage(
-                    role=Role.SYSTEM, content="You are a helpful assistant."
-                ),
+                LLMMessage(role=Role.SYSTEM, content="You are a helpful assistant."),
                 LLMMessage(role=Role.USER, content=prompt),
             ]
 
@@ -313,9 +303,7 @@ class OpenAIGPT(LanguageModel):
                 **kwargs: Dict[str, Any]
             ) -> Tuple[bool, str, Any]:
                 cached = False
-                hashed_key, result = self._cache_lookup(
-                    "AsyncChatCompletion", **kwargs
-                )
+                hashed_key, result = self._cache_lookup("AsyncChatCompletion", **kwargs)
                 if result is not None:
                     cached = True
                 else:
@@ -340,9 +328,7 @@ class OpenAIGPT(LanguageModel):
             @retry_with_exponential_backoff
             async def completions_with_backoff(**kwargs):  # type: ignore
                 cached = False
-                hashed_key, result = self._cache_lookup(
-                    "AsyncCompletion", **kwargs
-                )
+                hashed_key, result = self._cache_lookup("AsyncCompletion", **kwargs)
                 if result is not None:
                     cached = True
                 else:
@@ -406,9 +392,7 @@ class OpenAIGPT(LanguageModel):
         openai.api_key = self.api_key
         if isinstance(messages, str):
             llm_messages = [
-                LLMMessage(
-                    role=Role.SYSTEM, content="You are a helpful assistant."
-                ),
+                LLMMessage(role=Role.SYSTEM, content="You are a helpful assistant."),
                 LLMMessage(role=Role.USER, content=messages),
             ]
         else:
@@ -455,9 +439,7 @@ class OpenAIGPT(LanguageModel):
         cached, hashed_key, response = completions_with_backoff(**args)
 
         if self.config.stream and not cached:
-            llm_response, openai_response = self._stream_response(
-                response, chat=True
-            )
+            llm_response, openai_response = self._stream_response(response, chat=True)
             self.cache.store(hashed_key, openai_response)
             return llm_response
 
@@ -498,9 +480,7 @@ class OpenAIGPT(LanguageModel):
         else:
             fun_call = LLMFunctionCall(name=message["function_call"]["name"])
             try:
-                fun_args = ast.literal_eval(
-                    message["function_call"]["arguments"]
-                )
+                fun_args = ast.literal_eval(message["function_call"]["arguments"])
                 fun_call.arguments = fun_args
             except (ValueError, SyntaxError):
                 logging.warning(
