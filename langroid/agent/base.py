@@ -22,7 +22,12 @@ from rich.prompt import Prompt
 
 from langroid.agent.chat_document import ChatDocMetaData, ChatDocument
 from langroid.agent.tool_message import INSTRUCTION, ToolMessage
-from langroid.language_models.base import LanguageModel, LLMConfig
+from langroid.language_models.base import (
+    LanguageModel,
+    LLMConfig,
+    LLMMessage,
+    LLMResponse,
+)
 from langroid.mytypes import DocMetaData, Entity
 from langroid.parsing.json import extract_top_level_json
 from langroid.parsing.parser import Parser, ParsingConfig
@@ -67,7 +72,7 @@ class Agent(ABC):
             Tuple[str, str]
         ] = []  # seq of LLM (prompt, response) tuples
         self.llm_tools_map: Dict[str, Type[ToolMessage]] = {}
-        self.llm_responses: List[ChatDocument] = []
+        self.llm_responses: List[LLMResponse] = []
         self.llm_tools_handled: Set[str] = set()
         self.llm_tools_usable: Set[str] = set()
         self.default_human_response: Optional[str] = None
@@ -432,12 +437,7 @@ class Agent(ABC):
             if self.llm.get_stream():
                 console.print(f"[green]{self.indent}", end="")
             response = self.llm.generate(prompt, output_len)
-            if response.cached:
-                response.usage = 0
-            else:
-                response.usage = self.num_tokens(
-                    response.message
-                ) + self.num_tokens(prompt)
+
         displayed = False
         if not self.llm.get_stream() or response.cached:
             # we would have already displayed the msg "live" ONLY if
@@ -445,9 +445,9 @@ class Agent(ABC):
             console.print(f"[green]{self.indent}", end="")
             print("[green]" + response.message)
             displayed = True
-        response_to_chatdoc = ChatDocument.from_LLMResponse(response, displayed)
-        self.llm_responses.append(response_to_chatdoc)
-        return response_to_chatdoc
+        if not response.cached:
+            self.update_usage_dict(response, prompt)
+        return ChatDocument.from_LLMResponse(response, displayed)
 
     def get_tool_messages(self, msg: str | ChatDocument) -> List[ToolMessage]:
         if isinstance(msg, str):
@@ -633,10 +633,13 @@ class Agent(ABC):
             )
         return result  # type: ignore
 
-    def num_tokens(self, prompt: str) -> int:
+    def num_tokens(self, prompt: str | List[LLMMessage]) -> int:
         if self.parser is None:
             raise ValueError("Parser must be set, to count tokens")
-        return self.parser.num_tokens(prompt)
+        if isinstance(prompt, str):
+            return self.parser.num_tokens(prompt)
+        else:
+            return sum([self.parser.num_tokens(m.content) for m in prompt])
 
     def get_total_tokens(self) -> int:
         """
@@ -644,8 +647,21 @@ class Agent(ABC):
         """
         total_tokens = 0
         for msg in self.llm_responses:
-            total_tokens += msg.metadata.usage
+            total_tokens += msg.usage["total_tokens"]
         return total_tokens
+
+    def update_usage_dict(
+        self, response: LLMResponse, prompt: str | List[LLMMessage]
+    ) -> None:
+        response.usage = dict(
+            prompt_tokens=self.num_tokens(prompt),
+            completion_tokens=self.num_tokens(response.message),
+        )
+        response.usage["total_tokens"] = (
+            response.usage["prompt_tokens"]
+            + response.usage["completion_tokens"]
+        )
+        self.llm_responses.append(response)
 
     def ask_agent(
         self,

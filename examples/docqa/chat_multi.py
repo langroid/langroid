@@ -15,7 +15,7 @@ from langroid.agent.special.doc_chat_agent import (
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
 from langroid.parsing.urls import get_list_from_user
-from langroid.language_models.openai_gpt import OpenAIGPTConfig
+from langroid.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
 from langroid.utils.configuration import set_global, Settings
 from langroid.utils.logging import setup_colored_logging
 
@@ -56,7 +56,13 @@ def chat(config: DocChatAgentConfig) -> None:
         """,
     )
 
-    writer_agent = ChatAgent(ChatAgentConfig(llm=OpenAIGPTConfig()))
+    writer_agent = ChatAgent(
+        ChatAgentConfig(
+            llm=OpenAIGPTConfig(
+                chat_model=OpenAIChatModel.GPT3_5_TURBO,
+            )
+        )
+    )
     writer_task = Task(
         writer_agent,
         name="WriterAgent",
@@ -75,11 +81,16 @@ def chat(config: DocChatAgentConfig) -> None:
     writer_task.add_sub_task(doc_task)
     writer_task.run()
 
+    print("total tokens doc agent: ", doc_agent.get_total_tokens())
+    print("total tokens writer agent: ", writer_agent.get_total_tokens())
+
 
 @app.command()
 def main(
     debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
-    nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
+    nocache: bool = typer.Option(
+        True, "--nocache", "-nc", help="don't use cache"
+    ),
     cache_type: str = typer.Option(
         "redis", "--cachetype", "-ct", help="redis or momento"
     ),
