@@ -140,9 +140,13 @@ class ChatAgent(Agent):
             message (str): user message
         """
         if len(self.message_history) > 0:
-            self.message_history.append(LLMMessage(role=Role.USER, content=message))
+            self.message_history.append(
+                LLMMessage(role=Role.USER, content=message)
+            )
         else:
-            self.task_messages.append(LLMMessage(role=Role.USER, content=message))
+            self.task_messages.append(
+                LLMMessage(role=Role.USER, content=message)
+            )
 
     def update_last_message(self, message: str, role: str = Role.USER) -> None:
         """
@@ -209,7 +213,9 @@ class ChatAgent(Agent):
                 # to respond (i.e. either when a wrapping Task is started,
                 # or when the LLM is directly queried),
                 # we can append to system msg.
-                self.system_tool_instructions += "\n\n" + message_class.instructions()
+                self.system_tool_instructions += (
+                    "\n\n" + message_class.instructions()
+                )
         n_usable_tools = len(self.llm_tools_usable)
         for t in tools:
             if handle:
@@ -229,7 +235,10 @@ class ChatAgent(Agent):
         # TODO we should do this only on demand when we actually are
         # ready to send the instructions.
         # But for now leave as is.
-        if len(self.llm_tools_usable) != n_usable_tools and self.config.use_tools:
+        if (
+            len(self.llm_tools_usable) != n_usable_tools
+            and self.config.use_tools
+        ):
             # Update JSON format instructions if the set of usable tools has changed
             self.update_json_tool_instructions()
 
@@ -263,7 +272,9 @@ class ChatAgent(Agent):
             self.llm_tools_usable.discard(t)
             self.llm_functions_usable.discard(t)
 
-    def disable_message_use_except(self, message_class: Type[ToolMessage]) -> None:
+    def disable_message_use_except(
+        self, message_class: Type[ToolMessage]
+    ) -> None:
         """
         Disable this agent from USING ALL messages EXCEPT a message class (Tool)
         Args:
@@ -323,7 +334,8 @@ class ChatAgent(Agent):
             return None
 
         assert message is not None or len(self.message_history) == 0, (
-            "message can be None only if message_history is empty, i.e. at" " start."
+            "message can be None only if message_history is empty, i.e. at"
+            " start."
         )
 
         if len(self.message_history) == 0:
@@ -355,7 +367,9 @@ class ChatAgent(Agent):
         ):
             # chat + output > max context length,
             # so first try to shorten requested output len to fit.
-            output_len = self.llm.chat_context_length() - self.chat_num_tokens(hist)
+            output_len = self.llm.chat_context_length() - self.chat_num_tokens(
+                hist
+            )
             if output_len < self.config.llm.min_output_tokens:
                 # unacceptably small output len, so drop early parts of conv history
                 # if output_len is still too long, then drop early parts of conv history
@@ -363,7 +377,8 @@ class ChatAgent(Agent):
                 #   prompt-size reduction
                 while (
                     self.chat_num_tokens(hist)
-                    > self.llm.chat_context_length() - self.config.llm.min_output_tokens
+                    > self.llm.chat_context_length()
+                    - self.config.llm.min_output_tokens
                 ):
                     # try dropping early parts of conv history
                     # TODO we should really be doing summarization or other types of
@@ -402,16 +417,6 @@ class ChatAgent(Agent):
             )
         with StreamingIfAllowed(self.llm):
             response = self.llm_response_messages(hist, output_len)
-        #     if not response.cached:
-        #         response.usage = dict(
-        #             prompt_tokens=self.chat_num_tokens(hist),
-        #             completion_tokens=self.num_tokens(response.message),
-        #         )
-        #         response.usage["total_tokens"] = (
-        #             response.usage["prompt_tokens"]
-        #             + response.usage["completion_tokens"]
-        #         )
-        # self.llm_responses.append(response)
         # TODO - when response contains function_call we should include
         # that (and related fields) in the message_history
         self.message_history.append(ChatDocument.to_LLMMessage(response))
@@ -438,7 +443,10 @@ class ChatAgent(Agent):
                 console.print(f"[green]{self.indent}", end="")
             functions: Optional[List[LLMFunctionSpec]] = None
             fun_call: str | Dict[str, str] = "none"
-            if self.config.use_functions_api and len(self.llm_functions_usable) > 0:
+            if (
+                self.config.use_functions_api
+                and len(self.llm_functions_usable) > 0
+            ):
                 functions = [
                     self.llm_functions_map[f] for f in self.llm_functions_usable
                 ]
@@ -457,7 +465,9 @@ class ChatAgent(Agent):
         displayed = False
         if not self.llm.get_stream() or response.cached:  # type: ignore
             displayed = True
-            cached = f"[red]{self.indent}(cached)[/red]" if response.cached else ""
+            cached = (
+                f"[red]{self.indent}(cached)[/red]" if response.cached else ""
+            )
             if response.function_call is not None:
                 response_str = str(response.function_call)
             else:
@@ -467,7 +477,9 @@ class ChatAgent(Agent):
             self.update_usage_dict(response, messages)
         return ChatDocument.from_LLMResponse(response, displayed)
 
-    def _llm_response_temp_context(self, message: str, prompt: str) -> ChatDocument:
+    def _llm_response_temp_context(
+        self, message: str, prompt: str
+    ) -> ChatDocument:
         """
         Get LLM response to `prompt` (which presumably includes the `message`
         somewhere, along with possible large "context" passages),
@@ -508,7 +520,9 @@ class ChatAgent(Agent):
         self.message_history.pop()
         return response
 
-    def chat_num_tokens(self, messages: Optional[List[LLMMessage]] = None) -> int:
+    def chat_num_tokens(
+        self, messages: Optional[List[LLMMessage]] = None
+    ) -> int:
         """
         Total number of tokens in the message history so far.
 
