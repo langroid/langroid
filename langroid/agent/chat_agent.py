@@ -322,9 +322,9 @@ class ChatAgent(Agent):
         if not self.llm_can_respond(message):
             return None
 
-        assert (
-            message is not None or len(self.message_history) == 0
-        ), "message can be None only if message_history is empty, i.e. at start."
+        assert message is not None or len(self.message_history) == 0, (
+            "message can be None only if message_history is empty, i.e. at" " start."
+        )
 
         if len(self.message_history) == 0:
             # task_messages have not yet been loaded, so load them
@@ -402,8 +402,15 @@ class ChatAgent(Agent):
             )
         with StreamingIfAllowed(self.llm):
             response = self.llm_response_messages(hist, output_len)
+            if response.metadata.cached:
+                response.metadata.usage = 0
+            else:
+                response.metadata.usage = self.num_tokens(
+                    response.content
+                ) + self.chat_num_tokens(hist)
         # TODO - when response contains function_call we should include
         # that (and related fields) in the message_history
+        self.llm_responses.append(response)
         self.message_history.append(ChatDocument.to_LLMMessage(response))
         return response
 

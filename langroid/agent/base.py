@@ -3,7 +3,17 @@ import json
 import logging
 from abc import ABC
 from contextlib import ExitStack
-from typing import Callable, Dict, List, Optional, Set, Tuple, Type, cast, no_type_check
+from typing import (
+    Callable,
+    Dict,
+    List,
+    Optional,
+    Set,
+    Tuple,
+    Type,
+    cast,
+    no_type_check,
+)
 
 from pydantic import BaseSettings, ValidationError
 from rich import print
@@ -12,10 +22,7 @@ from rich.prompt import Prompt
 
 from langroid.agent.chat_document import ChatDocMetaData, ChatDocument
 from langroid.agent.tool_message import INSTRUCTION, ToolMessage
-from langroid.language_models.base import (
-    LanguageModel,
-    LLMConfig,
-)
+from langroid.language_models.base import LanguageModel, LLMConfig
 from langroid.mytypes import DocMetaData, Entity
 from langroid.parsing.json import extract_top_level_json
 from langroid.parsing.parser import Parser, ParsingConfig
@@ -56,8 +63,11 @@ class Agent(ABC):
 
     def __init__(self, config: AgentConfig):
         self.config = config
-        self.dialog: List[Tuple[str, str]] = []  # seq of LLM (prompt, response) tuples
+        self.dialog: List[
+            Tuple[str, str]
+        ] = []  # seq of LLM (prompt, response) tuples
         self.llm_tools_map: Dict[str, Type[ToolMessage]] = {}
+        self.llm_responses: List[ChatDocument] = []
         self.llm_tools_handled: Set[str] = set()
         self.llm_tools_usable: Set[str] = set()
         self.default_human_response: Optional[str] = None
@@ -71,7 +81,9 @@ class Agent(ABC):
     def entity_responders(
         self,
     ) -> List[
-        Tuple[Entity, Callable[[None | str | ChatDocument], None | ChatDocument]]
+        Tuple[
+            Entity, Callable[[None | str | ChatDocument], None | ChatDocument]
+        ]
     ]:
         """
         Sequence of (entity, response_method) pairs. This sequence is used
@@ -152,9 +164,9 @@ class Agent(ABC):
         ):
             setattr(self, tool, lambda obj: obj.response(self))
 
-        if hasattr(message_class, "handle_message_fallback") and inspect.isfunction(
-            message_class.handle_message_fallback
-        ):
+        if hasattr(
+            message_class, "handle_message_fallback"
+        ) and inspect.isfunction(message_class.handle_message_fallback):
             setattr(
                 self,
                 "handle_message_fallback",
@@ -201,7 +213,9 @@ class Agent(ABC):
         Returns:
             str: formatting rules
         """
-        enabled_classes: List[Type[ToolMessage]] = list(self.llm_tools_map.values())
+        enabled_classes: List[Type[ToolMessage]] = list(
+            self.llm_tools_map.values()
+        )
         if len(enabled_classes) == 0:
             return "You can ask questions in natural language."
 
@@ -222,7 +236,9 @@ class Agent(ABC):
         Returns:
             str: The sample dialog string.
         """
-        enabled_classes: List[Type[ToolMessage]] = list(self.llm_tools_map.values())
+        enabled_classes: List[Type[ToolMessage]] = list(
+            self.llm_tools_map.values()
+        )
         # use at most 2 sample conversations, no need to be exhaustive;
         sample_convo = [
             msg_cls().usage_example()  # type: ignore
@@ -315,7 +331,7 @@ class Agent(ABC):
         else:
             user_msg = Prompt.ask(
                 f"[blue]{self.indent}Human "
-                f"(respond or q, x to exit current level, "
+                "(respond or q, x to exit current level, "
                 f"or hit enter to continue)\n{self.indent}",
             ).strip()
 
@@ -332,7 +348,9 @@ class Agent(ABC):
             )
 
     @no_type_check
-    def llm_can_respond(self, message: Optional[str | ChatDocument] = None) -> bool:
+    def llm_can_respond(
+        self, message: Optional[str | ChatDocument] = None
+    ) -> bool:
         """
         Whether the LLM can respond to a message.
         Args:
@@ -344,7 +362,10 @@ class Agent(ABC):
         if self.llm is None:
             return False
 
-        if isinstance(message, ChatDocument) and message.function_call is not None:
+        if (
+            isinstance(message, ChatDocument)
+            and message.function_call is not None
+        ):
             # LLM should not handle `function_call` messages,
             # EVEN if message.function_call is not a legit function_call
             # The OpenAI API raises error if there is a message in history
@@ -389,8 +410,9 @@ class Agent(ABC):
                 self.num_tokens(prompt) + output_len
                 > self.llm.completion_context_length()
             ):
-                output_len = self.llm.completion_context_length() - self.num_tokens(
-                    prompt
+                output_len = (
+                    self.llm.completion_context_length()
+                    - self.num_tokens(prompt)
                 )
                 if output_len < self.config.llm.min_output_tokens:
                     raise ValueError(
@@ -410,6 +432,12 @@ class Agent(ABC):
             if self.llm.get_stream():
                 console.print(f"[green]{self.indent}", end="")
             response = self.llm.generate(prompt, output_len)
+            if response.cached:
+                response.usage = 0
+            else:
+                response.usage = self.num_tokens(
+                    response.message
+                ) + self.num_tokens(prompt)
         displayed = False
         if not self.llm.get_stream() or response.cached:
             # we would have already displayed the msg "live" ONLY if
@@ -417,8 +445,9 @@ class Agent(ABC):
             console.print(f"[green]{self.indent}", end="")
             print("[green]" + response.message)
             displayed = True
-
-        return ChatDocument.from_LLMResponse(response, displayed)
+        response_to_chatdoc = ChatDocument.from_LLMResponse(response, displayed)
+        self.llm_responses.append(response_to_chatdoc)
+        return response_to_chatdoc
 
     def get_tool_messages(self, msg: str | ChatDocument) -> List[ToolMessage]:
         if isinstance(msg, str):
@@ -448,7 +477,9 @@ class Agent(ABC):
         results = [self._get_one_tool_message(j) for j in json_substrings]
         return [r for r in results if r is not None]
 
-    def get_function_call_class(self, msg: ChatDocument) -> Optional[ToolMessage]:
+    def get_function_call_class(
+        self, msg: ChatDocument
+    ) -> Optional[ToolMessage]:
         if msg.function_call is None:
             return None
         tool_name = msg.function_call.name
@@ -482,7 +513,9 @@ class Agent(ABC):
         Please write your message again, correcting the errors.
         """
 
-    def handle_message(self, msg: str | ChatDocument) -> None | str | ChatDocument:
+    def handle_message(
+        self, msg: str | ChatDocument
+    ) -> None | str | ChatDocument:
         """
         Handle a "tool" message either a string containing one or more
         valid "tool" JSON substrings,  or a
@@ -519,7 +552,9 @@ class Agent(ABC):
         if len(results_list) == 0:
             return self.handle_message_fallback(msg)
         # there was a non-None result
-        chat_doc_results = [r for r in results_list if isinstance(r, ChatDocument)]
+        chat_doc_results = [
+            r for r in results_list if isinstance(r, ChatDocument)
+        ]
         if len(chat_doc_results) > 1:
             logger.warning(
                 """There were multiple ChatDocument results from tools,
@@ -573,7 +608,9 @@ class Agent(ABC):
             raise ve
         return message
 
-    def handle_tool_message(self, tool: ToolMessage) -> None | str | ChatDocument:
+    def handle_tool_message(
+        self, tool: ToolMessage
+    ) -> None | str | ChatDocument:
         """
         Respond to a tool request from the LLM, in the form of an ToolMessage object.
         Args:
@@ -591,13 +628,24 @@ class Agent(ABC):
             result = handler_method(tool)
         except Exception as e:
             # return the error message to the LLM so it can try to fix the error
-            result = f"Error in tool/function-call {tool_name} usage: {type(e)}: {e}"
+            result = (
+                f"Error in tool/function-call {tool_name} usage: {type(e)}: {e}"
+            )
         return result  # type: ignore
 
     def num_tokens(self, prompt: str) -> int:
         if self.parser is None:
             raise ValueError("Parser must be set, to count tokens")
         return self.parser.num_tokens(prompt)
+
+    def get_total_tokens(self) -> int:
+        """
+        Return the total number of tokens in the LLM Responses.
+        """
+        total_tokens = 0
+        for msg in self.llm_responses:
+            total_tokens += msg.metadata.usage
+        return total_tokens
 
     def ask_agent(
         self,
