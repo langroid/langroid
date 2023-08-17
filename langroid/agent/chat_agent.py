@@ -463,7 +463,8 @@ class ChatAgent(Agent):
             else:
                 response_str = response.message
             print(cached + "[green]" + response_str)
-        self.update_usage_dict(response, messages)
+        if not response.cached:
+            self.update_usage_dict(response, messages)
         return ChatDocument.from_LLMResponse(response, displayed)
 
     def _llm_response_temp_context(self, message: str, prompt: str) -> ChatDocument:

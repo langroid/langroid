@@ -116,7 +116,7 @@ class LLMResponse(BaseModel):
 
     message: str
     function_call: Optional[LLMFunctionCall] = None
-    usage: Optional[dict[str, int]] = {
+    usage: dict[str, int] = {
         "prompt_tokens": 0,
         "completion_tokens": 0,
         "total_tokens": 0,
