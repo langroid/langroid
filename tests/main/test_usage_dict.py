@@ -24,7 +24,7 @@ class CustomAgentConfig(AgentConfig):
     )
 
 
-def test_usage_disct_cache_true():
+def test_usage_dict_cache_true():
     """
     If cache is True, then total tokens should be zero.
     """
@@ -42,7 +42,7 @@ def test_usage_disct_cache_true():
     )
 
 
-def test_usage_disct_cache_false():
+def test_usage_dict_cache_false():
     """
     If cache is False, then total tokens should not be zero.
     """
