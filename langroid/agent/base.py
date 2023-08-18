@@ -636,7 +636,14 @@ class Agent(ABC):
         response.usage["total_tokens"] = (
             response.usage["prompt_tokens"] + response.usage["completion_tokens"]
         )
+        response.usage["cost"] = self.compute_token_cost(
+            response.usage["prompt_tokens"], response.usage["completion_tokens"]
+        )
         self.llm_responses.append(response)
+
+    def compute_token_cost(self, prompt: int, completion: int) -> float:
+        price = self.llm.chat_cost()
+        return (price[0] * prompt + price[1] * completion) / 1000
 
     def ask_agent(
         self,

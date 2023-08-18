@@ -35,6 +35,7 @@ class LLMConfig(BaseSettings):
     use_chat_for_completion: bool = True  # use chat model for completion?
     stream: bool = False  # stream output from API?
     cache_config: None | RedisCacheConfig | MomentoCacheConfig = None
+    cost_per_1k_tokens = Optional[Dict[str, Tuple[float, float]]]
 
 
 class LLMFunctionCall(BaseModel):
@@ -116,10 +117,11 @@ class LLMResponse(BaseModel):
 
     message: str
     function_call: Optional[LLMFunctionCall] = None
-    usage: dict[str, int] = {
+    usage: dict[str, int | float] = {
         "prompt_tokens": 0,
         "completion_tokens": 0,
         "total_tokens": 0,
+        "cost": 0.0,
     }
     cached: bool = False
 
@@ -251,6 +253,13 @@ class LanguageModel(ABC):
         if self.config.context_length is None:
             raise ValueError("No context length  specified")
         return self.config.context_length[self.config.completion_model]
+
+    def chat_cost(self) -> Tuple[float, float]:
+        if self.config.chat_model is None:
+            raise ValueError("No chat model specified")
+        if self.config.cost_per_1k_tokens is None:
+            raise ValueError("No cost per 1k tokens  specified")
+        return self.config.cost_per_1k_tokens[self.config.chat_model]
 
     def followup_to_standalone(
         self, chat_history: List[Tuple[str, str]], question: str

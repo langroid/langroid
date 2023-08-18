@@ -62,6 +62,11 @@ class OpenAIGPTConfig(LLMConfig):
         OpenAIChatModel.GPT4_NOFUNC: 8192,
         OpenAICompletionModel.TEXT_DA_VINCI_003: 4096,
     }
+    cost_per_1k_tokens: Dict[str, Tuple[float, float]] = {
+        OpenAIChatModel.GPT3_5_TURBO: (0.0015, 0.002),  # 4K context
+        OpenAIChatModel.GPT4: (0.03, 0.06),  # 8K context
+        OpenAIChatModel.GPT4_NOFUNC: (0.03, 0.06),  # 8K context
+    }
 
 
 class OpenAIResponse(BaseModel):
