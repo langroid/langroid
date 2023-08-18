@@ -29,7 +29,7 @@ class ChatDocMetaData(DocMetaData):
     block: None | Entity = None
     sender_name: str = ""
     recipient: str = ""
-    usage: dict[str, int | float] = {
+    usage: dict[str, float] = {
         "prompt_tokens": 0,
         "completion_tokens": 0,
         "total_tokens": 0,

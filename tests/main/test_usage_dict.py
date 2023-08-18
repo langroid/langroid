@@ -32,14 +32,13 @@ def test_usage_dict_cache_true():
     agent_config = CustomAgentConfig()
     agent = Agent(agent_config)
     response_no_stream = agent.llm_response("what is the capital of France?")
-    assert response_no_stream.metadata.usage["total_tokens"] == 0
     with StreamingIfAllowed(agent.llm, False):
-        response_stream = agent.llm_response("what is the capital of France?")
+        response_stream = agent.llm_response("How many countries are in EU?")
+
+    assert response_no_stream.metadata.usage["total_tokens"] == 0
     assert response_stream.metadata.usage["total_tokens"] == 0
-    assert (
-        response_stream.metadata.usage["total_tokens"]
-        == response_no_stream.metadata.usage["total_tokens"]
-    )
+
+    assert agent.get_total_cost() == 0.0
 
 
 def test_usage_dict_cache_false():
@@ -50,11 +49,15 @@ def test_usage_dict_cache_false():
     agent_config = CustomAgentConfig()
     agent = Agent(agent_config)
     response_no_stream = agent.llm_response("what is the capital of France?")
-    assert response_no_stream.metadata.usage["total_tokens"] != 0
     with StreamingIfAllowed(agent.llm, False):
-        response_stream = agent.llm_response("what is the capital of France?")
+        response_stream = agent.llm_response("How many countries are in EU?")
+
+    assert response_no_stream.metadata.usage["total_tokens"] != 0
     assert response_stream.metadata.usage["total_tokens"] != 0
+
+    assert agent.get_total_cost() != 0.0
     assert (
-        response_stream.metadata.usage["total_tokens"]
-        == response_no_stream.metadata.usage["total_tokens"]
+        agent.get_total_cost()
+        == response_no_stream.metadata.usage["cost"]
+        + response_stream.metadata.usage["cost"]
     )
