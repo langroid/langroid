@@ -79,9 +79,7 @@ def chat(config: DocChatAgentConfig) -> None:
 @app.command()
 def main(
     debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
-    nocache: bool = typer.Option(
-        False, "--nocache", "-nc", help="don't use cache"
-    ),
+    nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
     cache_type: str = typer.Option(
         "redis", "--cachetype", "-ct", help="redis or momento"
     ),
