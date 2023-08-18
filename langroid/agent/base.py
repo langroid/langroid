@@ -646,6 +646,15 @@ class Agent(ABC):
         price = cast(LanguageModel, self.llm).chat_cost()
         return (price[0] * prompt + price[1] * completion) / 1000
 
+    def get_total_cost(self) -> float:
+        """
+        Return the total cost of all the LLM Responses.
+        """
+        total_cost = 0.0
+        for msg in self.llm_responses:
+            total_cost += msg.usage["cost"]
+        return total_cost
+
     def ask_agent(
         self,
         agent: "Agent",
