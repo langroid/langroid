@@ -56,13 +56,7 @@ def chat(config: DocChatAgentConfig) -> None:
         """,
     )
 
-    writer_agent = ChatAgent(
-        ChatAgentConfig(
-            llm=OpenAIGPTConfig(
-                chat_model=OpenAIChatModel.GPT3_5_TURBO,
-            )
-        )
-    )
+    writer_agent = ChatAgent(ChatAgentConfig())
     writer_task = Task(
         writer_agent,
         name="WriterAgent",
@@ -81,14 +75,13 @@ def chat(config: DocChatAgentConfig) -> None:
     writer_task.add_sub_task(doc_task)
     writer_task.run()
 
-    print("total tokens doc agent: ", doc_agent.get_total_tokens())
-    print("total tokens writer agent: ", writer_agent.get_total_tokens())
-
 
 @app.command()
 def main(
     debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
-    nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
+    nocache: bool = typer.Option(
+        False, "--nocache", "-nc", help="don't use cache"
+    ),
     cache_type: str = typer.Option(
         "redis", "--cachetype", "-ct", help="redis or momento"
     ),
