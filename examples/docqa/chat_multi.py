@@ -15,7 +15,6 @@ from langroid.agent.special.doc_chat_agent import (
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
 from langroid.parsing.urls import get_list_from_user
-from langroid.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
 from langroid.utils.configuration import set_global, Settings
 from langroid.utils.logging import setup_colored_logging
 
