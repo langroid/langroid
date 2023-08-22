@@ -265,8 +265,9 @@ class OpenAIGPT(LanguageModel):
                     self.cache.store(hashed_key, result)
             return cached, hashed_key, result
 
+        key_name = "engine" if self.config.type == "azure" else "model"
         cached, hashed_key, response = completions_with_backoff(
-            model=self.config.completion_model,
+            **{key_name: self.config.chat_model},
             prompt=prompt,
             max_tokens=max_tokens,  # for output/completion
             request_timeout=self.config.timeout,
@@ -421,8 +422,9 @@ class OpenAIGPT(LanguageModel):
                     self.cache.store(hashed_key, result)
             return cached, hashed_key, result
 
+        key_name = "engine" if self.config.type == "azure" else "model"
         args: Dict[str, Any] = dict(
-            model=self.config.chat_model,
+            **{key_name: self.config.chat_model},
             messages=[m.api_dict() for m in llm_messages],
             max_tokens=max_tokens,
             n=1,
@@ -489,10 +491,10 @@ class OpenAIGPT(LanguageModel):
                 fun_call.arguments = fun_args
             except (ValueError, SyntaxError):
                 logging.warning(
-                    f"Could not parse function arguments: "
+                    "Could not parse function arguments: "
                     f"{message['function_call']['arguments']} "
                     f"for function {message['function_call']['name']} "
-                    f"treating as normal non-function message"
+                    "treating as normal non-function message"
                 )
                 fun_call = None
                 msg = message["content"] + message["function_call"]["arguments"]
