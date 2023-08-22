@@ -5,6 +5,7 @@
 
 <div align="center">
 
+[![PyPI version](https://badge.fury.io/py/langroid.svg)](https://badge.fury.io/py/langroid)
 [![Pytest](https://github.com/langroid/langroid/actions/workflows/pytest.yml/badge.svg)](https://github.com/langroid/langroid/actions/workflows/pytest.yml)
 [![codecov](https://codecov.io/gh/langroid/langroid/branch/main/graph/badge.svg?token=H94BX5F0TE)](https://codecov.io/gh/langroid/langroid)
 [![Lint](https://github.com/langroid/langroid/actions/workflows/validate.yml/badge.svg)](https://github.com/langroid/langroid/actions/workflows/validate.yml)
