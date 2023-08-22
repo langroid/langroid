@@ -267,7 +267,7 @@ class OpenAIGPT(LanguageModel):
 
         key_name = "engine" if self.config.type == "azure" else "model"
         cached, hashed_key, response = completions_with_backoff(
-            **{key_name: self.config.chat_model},
+            **{key_name: self.config.completion_model},
             prompt=prompt,
             max_tokens=max_tokens,  # for output/completion
             request_timeout=self.config.timeout,
