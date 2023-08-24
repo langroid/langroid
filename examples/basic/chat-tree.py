@@ -26,8 +26,7 @@ Main
         - Adder
 
 For a full write-up on the design considerations, see the documentation page on
-[Hiearchical Agent Computations](https://github.com/langroid/langroid/blob/main/docs
-/examples/agent-tree.md)
+Hiearchical Agent Computations at https://langroid.github.io/langroid/examples/agent-tree/
 """
 
 import typer
