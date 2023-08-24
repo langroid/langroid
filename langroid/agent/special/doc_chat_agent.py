@@ -319,11 +319,10 @@ class DocChatAgent(ChatAgent):
             List[Document]: list of relevant docs
 
         """
-        if len(self.dialog) > 0 and not self.config.conversation_mode:
-            # In conversation mode, we let self.message_history accumulate
-            # and do not need to convert to standalone query
-            # (We rely on the LLM to interpret the new query in the context of
-            # the message history so far)
+        if len(self.dialog) > 0:
+            # Regardless of whether we are in conversation mode or not,
+            # for relevant doc/chunk extraction, we must convert the query
+            # to a standalone query to get more relevant results.
             with console.status("[cyan]Converting to stand-alone query...[/cyan]"):
                 with StreamingIfAllowed(self.llm, False):
                     query = self.llm.followup_to_standalone(self.dialog, query)

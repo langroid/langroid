@@ -305,6 +305,9 @@ class Task:
             f"[bold magenta]{self._enter} Starting Agent "
             f"{self.name} ({message_history_idx+1}) [/bold magenta]"
         )
+        # self.turns overrides if it is > 0 and turns not set (i.e. = -1)
+        turns = self.turns if turns < 0 else turns
+
         while True:
             self.step()
             if self.done():

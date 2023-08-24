@@ -7,7 +7,7 @@ import tiktoken
 from pydantic import BaseSettings
 
 from langroid.mytypes import Document
-from langroid.parsing.para_sentence_split import create_chunks
+from langroid.parsing.para_sentence_split import create_chunks, remove_extra_whitespace
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.WARNING)
@@ -46,7 +46,9 @@ class Parser:
         return [
             Document(content=chunk.strip(), metadata=d.metadata)
             for d in docs
-            for chunk in d.content.split(self.config.separators[0])
+            for chunk in remove_extra_whitespace(d.content).split(
+                self.config.separators[0]
+            )
             if chunk.strip() != ""
         ]
 
