@@ -131,8 +131,8 @@ def test_doc_chat_agent_llm(test_settings: Settings, query: str, expected: str):
     # note that the (query, ans) pairs are accumulated into the
     # internal dialog history of the agent.
     set_global(test_settings)
+    agent.config.conversation_mode = False
     ans = agent.llm_response(query).content
-    agent.clear_history(start=-2)
     expected = [e.strip() for e in expected.split(",")]
     assert all([e in ans for e in expected])
 
@@ -142,6 +142,7 @@ def test_doc_chat_agent_task(test_settings: Settings):
     Test DocChatAgent wrapped in a Task.
     """
     set_global(test_settings)
+    agent.config.conversation_mode = True
     task = Task(agent, restart=True)
     task.init()
     # LLM responds to Sys msg, initiates conv, says thank you, etc.
@@ -156,10 +157,12 @@ def test_doc_chat_agent_task(test_settings: Settings):
         assert task.pending_message.metadata.sender == Entity.LLM
 
 
-def test_doc_chat_followup(test_settings: Settings):
+@pytest.mark.parametrize("conv_mode", [True, False])
+def test_doc_chat_followup(test_settings: Settings, conv_mode: bool):
     """
     Test whether follow-up question is handled correctly.
     """
+    agent.config.conversation_mode = conv_mode
     set_global(test_settings)
     task = Task(
         agent,
