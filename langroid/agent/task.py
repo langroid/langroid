@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Callable, Dict, List, Optional, Type, cast
+from typing import Callable, Dict, List, Optional, Set, Type, cast
 
 from rich import print
 
@@ -155,7 +155,8 @@ class Task:
 
         # other sub_tasks this task can delegate to
         self.sub_tasks: List[Task] = []
-        self.parent_task: Optional[Task] = None
+        self.parent_task: Set[Task] = set()
+        self.caller: Task | None = None  # which task called this task's `run` method
 
     def __repr__(self) -> str:
         return f"{self.name}"
@@ -165,10 +166,9 @@ class Task:
 
     @property
     def _level(self) -> int:
-        if self.parent_task is None:
+        if self.caller is None:
             return 0
-        else:
-            return self.parent_task._level + 1
+        return self.caller._level + 1
 
     @property
     def _indent(self) -> str:
@@ -199,7 +199,7 @@ class Task:
             return
         assert isinstance(task, Task), f"added task must be a Task, not {type(task)}"
 
-        task.parent_task = self
+        task.parent_task.add(self)  # add myself to set of parent tasks of `task`
         self.sub_tasks.append(task)
         self.name_sub_task_map[task.name] = task
         self.responders.append(cast(Responder, task))
@@ -226,18 +226,18 @@ class Task:
             )
         else:
             self.pending_message = msg
-            if self.pending_message is not None and self.parent_task is not None:
-                # msg may have come from parent_task, so we pretend this is from
+            if self.pending_message is not None and self.caller is not None:
+                # msg may have come from `caller`, so we pretend this is from
                 # the CURRENT task's USER entity
                 self.pending_message.metadata.sender = Entity.USER
 
-        if self.parent_task is not None and self.parent_task.logger is not None:
-            self.logger = self.parent_task.logger
+        if self.caller is not None and self.caller.logger is not None:
+            self.logger = self.caller.logger
         else:
             self.logger = RichFileLogger(f"logs/{self.name}.log", color=self.color_log)
 
-        if self.parent_task is not None and self.parent_task.tsv_logger is not None:
-            self.tsv_logger = self.parent_task.tsv_logger
+        if self.caller is not None and self.caller.tsv_logger is not None:
+            self.tsv_logger = self.caller.tsv_logger
         else:
             self.tsv_logger = setup_file_logger("tsv_logger", f"logs/{self.name}.tsv")
             header = ChatDocLoggerFields().tsv_header()
@@ -250,6 +250,7 @@ class Task:
         self,
         msg: Optional[str | ChatDocument] = None,
         turns: int = -1,
+        caller: None | Task = None,
     ) -> Optional[ChatDocument]:
         """
         Loop over `step()` until task is considered done or `turns` is reached.
@@ -264,6 +265,7 @@ class Task:
                 LLM or Human (User).
             turns (int): number of turns to run the task for;
                 default is -1, which means run until task is done.
+            caller (Task|None): the calling task, if any
 
         Returns:
             Optional[ChatDocument]: valid response from the agent
@@ -281,7 +283,7 @@ class Task:
         ):
             # this task is not the intended recipient so return None
             return None
-
+        self.caller = caller
         self.init(msg)
         # sets indentation to be printed prior to any output from agent
         self.agent.indent = self._indent
@@ -447,20 +449,22 @@ class Task:
 
     def response(self, e: Responder, turns: int = -1) -> Optional[ChatDocument]:
         """
-        Get response to `self.pending_message` from an entity.
+        Get response to `self.pending_message` from a responder.
         If response is __valid__ (i.e. it ends the current turn of seeking
         responses):
             -then return the response as a ChatDocument object,
             -otherwise return None.
         Args:
-            e (Entity): entity to get response from
+            e (Responder): responder to get response from.
+            turns (int): number of turns to run the task for.
+                Default is -1, which means run until task is done.
         Returns:
             Optional[ChatDocument]: response to `self.pending_message` from entity if
             valid, None otherwise
         """
         if isinstance(e, Task):
             actual_turns = e.turns if e.turns > 0 else turns
-            return e.run(self.pending_message, turns=actual_turns)
+            return e.run(self.pending_message, turns=actual_turns, caller=self)
         else:
             return self._entity_responder_map[cast(Entity, e)](self.pending_message)
 
@@ -521,10 +525,10 @@ class Task:
             self.pending_message is None
             # LLM decided task is done
             or DONE in self.pending_message.content
-            or (  # current task is addressing message to parent task
-                self.parent_task is not None
-                and self.parent_task.name != ""
-                and self.pending_message.metadata.recipient == self.parent_task.name
+            or (  # current task is addressing message to caller task
+                self.caller is not None
+                and self.caller.name != ""
+                and self.pending_message.metadata.recipient == self.caller.name
             )
             or (
                 # Task controller is "stuck", has nothing to say
