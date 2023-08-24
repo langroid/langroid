@@ -65,6 +65,7 @@ for ideas on what to contribute.
 <summary> <b>:fire: Updates/Releases</b></summary>
 
 - **Aug 2023:**
+  - **[Hierarchical computation](https://langroid.github.io/langroid/examples/agent-tree/)** example using Langroid agents and task orchestration.
   - **0.1.51:** Support for global state, see [test_global_state.py](tests/main/test_global_state.py).
   - **:whale: Langroid Docker image**, available, see instructions below.
   - [**RecipientTool**](langroid/agent/tools/recipient_tool.py) enables (+ enforces) LLM to 
