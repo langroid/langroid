@@ -322,9 +322,9 @@ class ChatAgent(Agent):
         if not self.llm_can_respond(message):
             return None
 
-        assert (
-            message is not None or len(self.message_history) == 0
-        ), "message can be None only if message_history is empty, i.e. at start."
+        assert message is not None or len(self.message_history) == 0, (
+            "message can be None only if message_history is empty, i.e. at" " start."
+        )
 
         if len(self.message_history) == 0:
             # task_messages have not yet been loaded, so load them
@@ -453,7 +453,8 @@ class ChatAgent(Agent):
             else:
                 response_str = response.message
             print(cached + "[green]" + response_str)
-
+        if not response.cached:
+            self.update_usage_dict(response, messages)
         return ChatDocument.from_LLMResponse(response, displayed)
 
     def _llm_response_temp_context(self, message: str, prompt: str) -> ChatDocument:

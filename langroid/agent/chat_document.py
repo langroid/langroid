@@ -29,7 +29,12 @@ class ChatDocMetaData(DocMetaData):
     block: None | Entity = None
     sender_name: str = ""
     recipient: str = ""
-    usage: int = 0
+    usage: dict[str, float] = {
+        "prompt_tokens": 0,
+        "completion_tokens": 0,
+        "total_tokens": 0,
+        "cost": 0.0,
+    }
     cached: bool = False
     displayed: bool = False
 
@@ -119,7 +124,8 @@ class ChatDocument(Document):
 
     @staticmethod
     def from_LLMResponse(
-        response: LLMResponse, displayed: bool = False
+        response: LLMResponse,
+        displayed: bool = False,
     ) -> "ChatDocument":
         recipient, message = response.get_recipient_and_message()
         return ChatDocument(
@@ -183,7 +189,10 @@ class ChatDocument(Document):
             content = message
 
         return LLMMessage(
-            role=sender_role, content=content, function_call=fun_call, name=sender_name
+            role=sender_role,
+            content=content,
+            function_call=fun_call,
+            name=sender_name,
         )
 
 
