@@ -30,6 +30,7 @@ Imagine we want to do this calculation using a few auxiliary functions:
 ```python
 def Main(n):
     # return non-null value computed by Odd or Even
+    Record n as global variable # to be used by Adder below
     return Odd(n) or Even(n)
 
 def Odd(n):
@@ -110,9 +111,10 @@ or user), and how it handles a "result" number $r$ (from a child node).
 
 Let us see how we can perform this calculation using multiple Langroid agents, where
 
-- we define an agent corresponding to each of the nodes above, namely `Main, Odd, EvenZ, EvenNZ, Adder`
+- we define an agent corresponding to each of the nodes above, namely 
+`Main`, `Odd`, `Even`, `EvenZ`, `EvenNZ`, and `Adder`.
 - we wrap each Agent into a Task, and use the `Task.add_subtask()` method to connect the agents into 
-  the above tree structure.
+  the desired hierarchical structure.
 
 Below is one way to do this using Langroid. We designed this with the following
 desirable features:
@@ -134,9 +136,9 @@ One way naive solutions fail is because agents are not able to distinguish betwe
 a number that is being "sent down" the tree as input, and a number that is being
 "sent up" the tree as a result from a child node.
 
-We use a simple trick: we mark returned values using the RESULT keyword,
-and instruct the LLMs to generate and recognize these tags. In addition,
-we leverage some features of Langroid's task orchestration:
+We use a simple trick: we instruct the LLM to mark returned values using the RESULT keyword,
+and instruct the LLMs on how to handle numbers that come with RESULT keyword, and those that don't
+In addition, we leverage some features of Langroid's task orchestration:
 
 - When `llm_delegate` is `True`, if the LLM says `DONE [rest of msg]`, the task is
   considered done, and the result of the task is `[rest of msg]` (i.e the part after `DONE`).
@@ -276,7 +278,7 @@ The tasks for other agents are defined similarly. We will only note here
 that the `Adder` agent needs a special tool `AddNumTool` to be able to add the current number
 to the initial number set by the `Main` agent. 
 
-## Connect the tasks into a tree hierarchy
+## Connect the tasks into a tree structure
 
 So far, we have wrapped each agent in a task, in isolation, and there is no 
 connection between the tasks. The final step is to connect the tasks into 
@@ -296,6 +298,9 @@ And now all that remains is to run the main task:
 main_task.run()
 ```
 
+Here is what a run starting with $n=12$ looks like:
+
+![chat-tree.png](chat-tree.png)
 
 
 
