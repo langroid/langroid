@@ -18,7 +18,7 @@
         "description": "The 'sales' table keeps a record of all sales made by employees. It relates to the 'employees' table via a foreign key.",
         "columns": {
             "id": "A unique identifier for a sale.",
-            "amount": "The amount of the sale.",
+            "amount": "The amount of the sale in eastern Caribbean dollars (XCD).",
             "employee_id": "The ID of the employee who made the sale. This is a foreign key referencing the 'id' in the 'employees' table."
         }
     }

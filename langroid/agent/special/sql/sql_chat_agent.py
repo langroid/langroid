@@ -7,7 +7,7 @@ Functionality includes:
 - asking a question about a SQL schema
 """
 import logging
-from typing import Any, Dict, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 from rich import print
 from rich.console import Console
@@ -28,6 +28,34 @@ logger = logging.getLogger(__name__)
 console = Console()
 
 DEFAULT_SQL_CHAT_SYSTEM_MESSAGE = """
+You are a savvy data scientist/database administrator, with expertise in 
+answering questions by interacting with a SQL database.
+
+You will have to follow these steps to complete your job:
+1) Use the `get_table_names` tool/function-call to get a list of all possibly 
+relevant table names.
+2) Use the `get_table_schema` tool/function-call to get the schema of all 
+possibly relevant tables to identify possibly relevant columns. Only 
+call this method on potentially relevant tables.
+3) Use the `get_column_descriptions` tool/function-call to get more information 
+about any relevant columns.
+4) Write a {dialect} query and use `run_query` tool the Execute the SQL query 
+on the database to obtain the results.
+
+You do not need to attempt answering a question with just one query. 
+You could make a sequence of SQL queries to help you write the final query.
+Also if you receive a null or other unexpected result, 
+see if you have made an assumption in your SQL query, and try another way, 
+or use `run_query` to explore the database table contents before submitting your 
+final query. For example when searching for "males" you may have used "gender= 'M'",
+in your query, because you did not know that the possible genders in the table
+are "Male" and "Female". 
+
+Start by asking what I would like to know about the data.
+
+"""
+
+dxef = """
 You are a savvy data scientist/database administrator, with expertise in 
 answering questions by querying a {dialect} database.
 You do not have access to the database 'db' directly, so you will need to use the 
@@ -59,6 +87,7 @@ are "Male" and "Female".
 Start by asking what I would like to know about the data.
 
 """
+
 
 SQL_ERROR_MSG = "There was an error in your SQL Query"
 
@@ -126,6 +155,44 @@ class RunQueryTool(ToolMessage):
     query: str
 
 
+class GetTableNamesTool(ToolMessage):
+    request: str = "get_table_names"
+    purpose: str = """
+            To retrieve the names of all tables in the database 'db'.
+            """
+
+
+class GetTableSchemaTool(ToolMessage):
+    request: str = "get_table_schema"
+    purpose: str = """
+            To retrieve the schema of all provided tables in the database 'db'.
+            """
+    tables: List[str]
+
+    @classmethod
+    def example(cls) -> "GetTableSchemaTool":
+        return cls(
+            tables=List("employees", "departments", "sales"),
+        )
+
+
+class GetColumnDescriptionsTool(ToolMessage):
+    request: str = "get_column_descriptions"
+    purpose: str = """
+            To retrieve the description of columns from the requested tables/columns in 
+            the database 'db'.
+            """
+    table: str
+    columns: str
+
+    @classmethod
+    def example(cls) -> "GetColumnDescriptionsTool":
+        return cls(
+            tables="employees",
+            columns="name, department_id",
+        )
+
+
 class SQLChatAgent(ChatAgent):
     """
     Agent for chatting with a collection of documents.
@@ -156,17 +223,22 @@ class SQLChatAgent(ChatAgent):
             config.context_descriptions = extract_schema_descriptions(self.engine)
 
         # Combine database information with context descriptions
-        schema_dict = combine_metadata(self.metadata, config.context_descriptions)
+        self.table_metadata = get_table_metadata(
+            self.metadata, self.config.context_descriptions
+        )
 
         # Update the system message with the table information
         self.config.system_message = self.config.system_message.format(
-            schema_dict=schema_dict, dialect=self.engine.dialect.name
+            dialect=self.engine.dialect.name
         )
 
         super().__init__(config)
 
         # Enable the agent to use and handle the RunQueryTool
         self.enable_message(RunQueryTool)
+        self.enable_message(GetTableNamesTool)
+        self.enable_message(GetTableSchemaTool)
+        self.enable_message(GetColumnDescriptionsTool)
 
     def agent_response(
         self,
@@ -234,17 +306,15 @@ with column names as keys and their descriptions as values.
             # Commit the transaction
             session.commit()
 
-            try:
-                # Fetch all the rows from the result
-                rows = query_result.fetchall()
+            # Fetch all the rows from the result
+            rows = query_result.fetchall()
 
-                # Check if the list of rows is not empty
-                if rows:
-                    result = ", ".join(str(row) for row in rows)
-                else:
-                    result = "Query executed successfully."
-            except Exception:
-                result = "Query executed successfully but does not return any rows."
+            # Check if the list of rows is not empty
+            if rows:
+                result = ", ".join(str(row) for row in rows)
+            else:
+                result = "Query executed successfully."
+
         except Exception as e:
             # In case of exception, rollback the transaction
             session.rollback()
@@ -256,8 +326,54 @@ with column names as keys and their descriptions as values.
 
         return result
 
+    def get_table_names(self, msg: GetTableNamesTool):
+        """
+        Handle a GetTableNamesTool message by returning the names of all tables in the
+        database.
 
-def combine_metadata(
+        Returns:
+            str: The names of all tables in the database.
+        """
+        return ", ".join(self.metadata.tables.keys())
+
+    def get_table_schema(self, msg: GetTableSchemaTool):
+        """
+        Handle a GetTableSchemaTool message by returning the schema of all provided
+        tables in the database.
+
+        Returns:
+            str: The schema of all provided tables in the database.
+        """
+        tables = msg.tables
+        result = ""
+        for table_name in tables:
+            table = self.table_metadata.get(table_name)
+            if table is not None:
+                result += f"{table_name}: {table}\n"
+            else:
+                result += f"{table_name} is not a valid table name.\n"
+        return result
+
+    def get_column_descriptions(self, msg: GetColumnDescriptionsTool):
+        """
+        Handle a GetColumnDescriptionsTool message by returning the descriptions of all
+        provided columns from the database.
+
+        Returns:
+            str: The descriptions of all provided columns from the database.
+        """
+        table = msg.table
+        columns = msg.columns.split(", ")
+        result = f"\nTABLE: {table}"
+
+        for col in columns:
+            result += (
+                f"\n{col} => {self.config.context_descriptions[table]['columns'][col]}"
+            )
+        return result
+
+
+def get_table_metadata(
     metadata: MetaData, info: Dict[str, Dict[str, Union[str, Dict[str, str]]]]
 ) -> Dict[str, Dict[str, Union[str, Dict[str, str]]]]:
     """
@@ -278,7 +394,10 @@ def combine_metadata(
     # Create empty metadata dictionary with column datatypes
     for table_name, table in metadata.tables.items():
         # Populate tables with empty descriptions
-        db_info[str(table_name)] = {"description": "", "columns": {}}
+        db_info[str(table_name)] = {
+            "description": info[table_name]["description"] or "",
+            "columns": {},
+        }
 
         for column in table.columns:
             # Populate columns with datatype
@@ -286,22 +405,24 @@ def combine_metadata(
                 str(column.type)
             )
 
-    # Update the metadata dictionary with the context descriptions
-    for table_name in db_info.keys():
-        if table_name in info:
-            # Populate table descriptions
-            db_info[table_name]["description"] = info[table_name]["description"]
-
-            for column_name in db_info[table_name]["columns"]:
-                # Populate column descriptions
-                if column_name in info[table_name]["columns"]:
-                    db_info[table_name]["columns"][column_name] = (  # type: ignore
-                        db_info[table_name]["columns"][column_name]  # type: ignore
-                        + "; "
-                        + info[table_name]["columns"][column_name]  # type: ignore
-                    )
-
     return db_info
+
+    # # Update the metadata dictionary with the context descriptions
+    # for table_name in db_info.keys():
+    #     if table_name in info:
+    #         # Populate table descriptions
+    #         db_info[table_name]["description"] = info[table_name]["description"]
+
+    #         for column_name in db_info[table_name]["columns"]:
+    #             # Populate column descriptions
+    #             if column_name in info[table_name]["columns"]:
+    #                 db_info[table_name]["columns"][column_name] = (  # type: ignore
+    #                     db_info[table_name]["columns"][column_name]  # type: ignore
+    #                     + "; "
+    #                     + info[table_name]["columns"][column_name]  # type: ignore
+    #                 )
+
+    # return db_info
 
 
 def extract_schema_descriptions(engine: Engine) -> Dict[str, Dict[str, Any]]:
