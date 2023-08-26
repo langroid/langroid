@@ -7,17 +7,31 @@ Functionality includes:
 - asking a question about a SQL schema
 """
 import logging
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, Optional, Sequence, Union
 
 from rich import print
 from rich.console import Console
-from sqlalchemy import MetaData, create_engine, text
+from sqlalchemy import MetaData, Row, create_engine, text
 from sqlalchemy.engine import Engine
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.chat_document import ChatDocMetaData, ChatDocument
-from langroid.agent.tool_message import ToolMessage
+from langroid.agent.special.sql.utils.description_extractors import (
+    extract_schema_descriptions,
+)
+from langroid.agent.special.sql.utils.populate_metadata import (
+    populate_metadata,
+    populate_metadata_with_schema_tools,
+)
+from langroid.agent.special.sql.utils.system_message import DEFAULT, SCHEMA_TOOLS
+from langroid.agent.special.sql.utils.tools import (
+    GetColumnDescriptionsTool,
+    GetTableNamesTool,
+    GetTableSchemaTool,
+    RunQueryTool,
+)
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
 from langroid.mytypes import Entity
 from langroid.prompts.prompts_config import PromptsConfig
@@ -28,19 +42,7 @@ logger = logging.getLogger(__name__)
 console = Console()
 
 DEFAULT_SQL_CHAT_SYSTEM_MESSAGE = """
-You are a savvy data scientist/database administrator, with expertise in 
-answering questions by interacting with a SQL database.
-
-You will have to follow these steps to complete your job:
-1) Use the `get_table_names` tool/function-call to get a list of all possibly 
-relevant table names.
-2) Use the `get_table_schema` tool/function-call to get the schema of all 
-possibly relevant tables to identify possibly relevant columns. Only 
-call this method on potentially relevant tables.
-3) Use the `get_column_descriptions` tool/function-call to get more information 
-about any relevant columns.
-4) Write a {dialect} query and use `run_query` tool the Execute the SQL query 
-on the database to obtain the results.
+{mode}
 
 You do not need to attempt answering a question with just one query. 
 You could make a sequence of SQL queries to help you write the final query.
@@ -54,40 +56,6 @@ are "Male" and "Female".
 Start by asking what I would like to know about the data.
 
 """
-
-dxef = """
-You are a savvy data scientist/database administrator, with expertise in 
-answering questions by querying a {dialect} database.
-You do not have access to the database 'db' directly, so you will need to use the 
-`run_query` tool/function-call to answer questions.
-
-The below JSON schema maps the SQL database structure. It outlines tables, each 
-with a description and columns. Each table is identified by a key, 
-and holds a description and a dictionary of columns, 
-with column names as keys and their descriptions as values. 
-{schema_dict}
-
-ONLY the tables and column names and tables specified above should be used in
-the generated queries. 
-You must be smart about using the right tables and columns based on the 
-english description. If you are thinking of using a table or column that 
-does not exist, you are probably on the wrong track, so you should try
-your best to answer based on an existing table or column.
-DO NOT assume any tables or columns other than those above.
-
-You do not need to attempt answering a question with just one query. 
-You could make a sequence of SQL queries to help you write the final query.
-Also if you receive a null or other unexpected result, 
-see if you have made an assumption in your SQL query, and try another way, 
-or use `run_query` to explore the database table contents before submitting your 
-final query. For example when searching for "males" you may have used "gender= 'M'",
-in your query, because you did not know that the possible genders in the table
-are "Male" and "Female". 
-
-Start by asking what I would like to know about the data.
-
-"""
-
 
 SQL_ERROR_MSG = "There was an error in your SQL Query"
 
@@ -103,6 +71,7 @@ class SQLChatAgentConfig(ChatAgentConfig):
     database_session: None | Session = None  # Database session
     vecdb: None | VectorStoreConfig = None
     context_descriptions: Dict[str, Dict[str, Union[str, Dict[str, str]]]] = {}
+    use_schema_tools: bool = False
 
     """
     Optional, but strongly recommended, context descriptions for tables, columns, 
@@ -146,96 +115,89 @@ class SQLChatAgentConfig(ChatAgentConfig):
     )
 
 
-class RunQueryTool(ToolMessage):
-    request: str = "run_query"
-    purpose: str = """
-            To run <query> on the database 'db' and 
-            return the results to answer a question.
-            """
-    query: str
-
-
-class GetTableNamesTool(ToolMessage):
-    request: str = "get_table_names"
-    purpose: str = """
-            To retrieve the names of all tables in the database 'db'.
-            """
-
-
-class GetTableSchemaTool(ToolMessage):
-    request: str = "get_table_schema"
-    purpose: str = """
-            To retrieve the schema of all provided tables in the database 'db'.
-            """
-    tables: List[str]
-
-    @classmethod
-    def example(cls) -> "GetTableSchemaTool":
-        return cls(
-            tables=List("employees", "departments", "sales"),
-        )
-
-
-class GetColumnDescriptionsTool(ToolMessage):
-    request: str = "get_column_descriptions"
-    purpose: str = """
-            To retrieve the description of columns from the requested tables/columns in 
-            the database 'db'.
-            """
-    table: str
-    columns: str
-
-    @classmethod
-    def example(cls) -> "GetColumnDescriptionsTool":
-        return cls(
-            tables="employees",
-            columns="name, department_id",
-        )
-
-
 class SQLChatAgent(ChatAgent):
     """
     Agent for chatting with a collection of documents.
     """
 
-    def __init__(self, config: SQLChatAgentConfig):
+    def __init__(self, config: "SQLChatAgentConfig") -> None:
+        """Initialize the SQLChatAgent.
+
+        Raises:
+            ValueError: If database information is not provided in the config.
+        """
+        self._validate_config(config)
         self.config: SQLChatAgentConfig = config
-        if config.database_session is not None:
-            self.Session = config.database_session
+        self._init_database()
+        self._init_metadata()
+        self._init_table_metadata()
+        self._init_message_tools()
+
+    def _validate_config(self, config: "SQLChatAgentConfig") -> None:
+        """Validate the configuration to ensure all necessary fields are present."""
+        if config.database_session is None and config.database_uri is None:
+            raise ValueError("Database information must be provided")
+
+    def _init_database(self) -> None:
+        """Initialize the database engine and session."""
+        if self.config.database_session:
+            self.Session = self.config.database_session
             self.engine = self.Session.bind
         else:
-            self.engine = create_engine(config.database_uri)
+            self.engine = create_engine(self.config.database_uri)
             self.Session = sessionmaker(bind=self.engine)()
-        self.metadata = MetaData()
 
+    def _init_metadata(self) -> None:
+        """Initialize the database metadata."""
         if self.engine is None:
             raise ValueError("Database engine is None")
+
+        self.metadata = MetaData()
         self.metadata.reflect(self.engine)
-
         logger.info(
-            f"""SQLChatAgent initialized with database: 
-            {self.engine} and tables: 
-            {self.metadata.tables}
-            """
+            "SQLChatAgent initialized with database: %s and tables: %s",
+            self.engine,
+            self.metadata.tables,
         )
 
-        if not config.context_descriptions and isinstance(self.engine, Engine):
-            config.context_descriptions = extract_schema_descriptions(self.engine)
+    def _init_table_metadata(self) -> None:
+        """Initialize metadata for the tables present in the database."""
+        if not self.config.context_descriptions and isinstance(self.engine, Engine):
+            self.config.context_descriptions = extract_schema_descriptions(self.engine)
 
-        # Combine database information with context descriptions
-        self.table_metadata = get_table_metadata(
-            self.metadata, self.config.context_descriptions
-        )
+        if self.config.use_schema_tools:
+            self.table_metadata = populate_metadata_with_schema_tools(
+                self.metadata, self.config.context_descriptions
+            )
+        else:
+            self.table_metadata = populate_metadata(
+                self.metadata, self.config.context_descriptions
+            )
 
-        # Update the system message with the table information
-        self.config.system_message = self.config.system_message.format(
-            dialect=self.engine.dialect.name
-        )
-
-        super().__init__(config)
-
-        # Enable the agent to use and handle the RunQueryTool
+    def _init_message_tools(self) -> None:
+        """Initialize message tools used for chatting."""
+        message = self._format_message()
+        self.config.system_message = self.config.system_message.format(mode=message)
+        super().__init__(self.config)
         self.enable_message(RunQueryTool)
+        if self.config.use_schema_tools:
+            self._enable_schema_tools()
+
+    def _format_message(self) -> str:
+        if self.engine is None:
+            raise ValueError("Database engine is None")
+
+        """Format the system message based on the engine and table metadata."""
+        return (
+            SCHEMA_TOOLS.format(dialect=self.engine.dialect.name)
+            if self.config.use_schema_tools
+            else DEFAULT.format(
+                dialect=self.engine.dialect.name, schema_dict=self.table_metadata
+            )
+        )
+
+    def _enable_schema_tools(self) -> None:
+        """Enable tools for schema-related functionalities."""
         self.enable_message(GetTableNamesTool)
         self.enable_message(GetTableSchemaTool)
         self.enable_message(GetColumnDescriptionsTool)
@@ -272,19 +234,39 @@ class SQLChatAgent(ChatAgent):
         )
 
     def retry_query(self, e: Exception, query: str) -> str:
-        result = f"""{SQL_ERROR_MSG}: '{query}'
-{str(e)} 
-Run a new query, correcting the errors. 
-This JSON schema maps SQL database structure. It outlines tables, each 
-with a description and columns. Each table is identified by a key, 
-and holds a description and a dictionary of columns, 
-with column names as keys and their descriptions as values.
+        """
+        Generate an error message for a failed SQL query and return it.
 
-```json
-{self.config.context_descriptions}
-```"""
+        Parameters:
+        e (Exception): The exception raised during the SQL query execution.
+        query (str): The SQL query that failed.
 
-        return result
+        Returns:
+        str: The error message.
+        """
+        logger.error(f"SQL Query failed: {query}\nException: {e}")
+
+        # Optional part to be included based on `use_schema_tools`
+        optional_schema_description = ""
+        if not self.config.use_schema_tools:
+            optional_schema_description = f"""\
+            This JSON schema maps SQL database structure. It outlines tables, each 
+            with a description and columns. Each table is identified by a key, and holds
+            a description and a dictionary of columns, with column 
+            names as keys and their descriptions as values.
+            
+            ```json
+            {self.config.context_descriptions}
+            ```"""
+
+        # Construct the error message
+        error_message_template = f"""\
+        {SQL_ERROR_MSG}: '{query}'
+        {str(e)}
+        Run a new query, correcting the errors.
+        {optional_schema_description}"""
+
+        return error_message_template
 
     def run_query(self, msg: RunQueryTool) -> str:
         """
@@ -298,35 +280,44 @@ with column names as keys and their descriptions as values.
         """
         query = msg.query
         session = self.Session
-        result = ""
+        response_message = ""
 
         try:
-            # Execute the SQL query
+            logger.info(f"Executing SQL query: {query}")
+
             query_result = session.execute(text(query))
-            # Commit the transaction
             session.commit()
 
-            # Fetch all the rows from the result
             rows = query_result.fetchall()
+            response_message = self._format_rows(rows)
 
-            # Check if the list of rows is not empty
-            if rows:
-                result = ", ".join(str(row) for row in rows)
-            else:
-                result = "Query executed successfully."
-
-        except Exception as e:
-            # In case of exception, rollback the transaction
+        except SQLAlchemyError as e:
             session.rollback()
-
-            result = self.retry_query(e, query)
+            logger.error(f"Failed to execute query: {query}\n{e}")
+            response_message = self.retry_query(e, query)
         finally:
-            # Always close the session
             session.close()
 
-        return result
+        return response_message
 
-    def get_table_names(self, msg: GetTableNamesTool):
+    def _format_rows(self, rows: Sequence[Row[Any]]) -> str:
+        """
+        Format the rows fetched from the query result into a string.
+
+        Args:
+            rows (list): List of rows fetched from the query result.
+
+        Returns:
+            str: Formatted string representation of rows.
+        """
+        # TODO: UPDATE FORMATTING
+        return (
+            ", ".join(str(row) for row in rows)
+            if rows
+            else "Query executed successfully."
+        )
+
+    def get_table_names(self, msg: GetTableNamesTool) -> str:
         """
         Handle a GetTableNamesTool message by returning the names of all tables in the
         database.
@@ -336,7 +327,7 @@ with column names as keys and their descriptions as values.
         """
         return ", ".join(self.metadata.tables.keys())
 
-    def get_table_schema(self, msg: GetTableSchemaTool):
+    def get_table_schema(self, msg: GetTableSchemaTool) -> str:
         """
         Handle a GetTableSchemaTool message by returning the schema of all provided
         tables in the database.
@@ -354,7 +345,7 @@ with column names as keys and their descriptions as values.
                 result += f"{table_name} is not a valid table name.\n"
         return result
 
-    def get_column_descriptions(self, msg: GetColumnDescriptionsTool):
+    def get_column_descriptions(self, msg: GetColumnDescriptionsTool) -> str:
         """
         Handle a GetColumnDescriptionsTool message by returning the descriptions of all
         provided columns from the database.
@@ -365,81 +356,8 @@ with column names as keys and their descriptions as values.
         table = msg.table
         columns = msg.columns.split(", ")
         result = f"\nTABLE: {table}"
+        descriptions = self.config.context_descriptions.get(table)
 
         for col in columns:
-            result += (
-                f"\n{col} => {self.config.context_descriptions[table]['columns'][col]}"
-            )
+            result += f"\n{col} => {descriptions['columns'][col]}"  # type: ignore
         return result
-
-
-def get_table_metadata(
-    metadata: MetaData, info: Dict[str, Dict[str, Union[str, Dict[str, str]]]]
-) -> Dict[str, Dict[str, Union[str, Dict[str, str]]]]:
-    """
-    Extracts information from an SQLAlchemy database's metadata and combines it
-    with another dictionary with context descriptions.
-
-    Args:
-        metadata (MetaData): SQLAlchemy metadata object of the database.
-        info (Dict[str, Dict[str, Any]]): A dictionary with table and column
-                                             descriptions.
-
-    Returns:
-        Dict[str, Dict[str, Any]]: A dictionary with table and context information.
-    """
-
-    db_info: Dict[str, Dict[str, Union[str, Dict[str, str]]]] = {}
-
-    # Create empty metadata dictionary with column datatypes
-    for table_name, table in metadata.tables.items():
-        # Populate tables with empty descriptions
-        db_info[str(table_name)] = {
-            "description": info[table_name]["description"] or "",
-            "columns": {},
-        }
-
-        for column in table.columns:
-            # Populate columns with datatype
-            db_info[str(table_name)]["columns"][str(column.name)] = (  # type: ignore
-                str(column.type)
-            )
-
-    return db_info
-
-    # # Update the metadata dictionary with the context descriptions
-    # for table_name in db_info.keys():
-    #     if table_name in info:
-    #         # Populate table descriptions
-    #         db_info[table_name]["description"] = info[table_name]["description"]
-
-    #         for column_name in db_info[table_name]["columns"]:
-    #             # Populate column descriptions
-    #             if column_name in info[table_name]["columns"]:
-    #                 db_info[table_name]["columns"][column_name] = (  # type: ignore
-    #                     db_info[table_name]["columns"][column_name]  # type: ignore
-    #                     + "; "
-    #                     + info[table_name]["columns"][column_name]  # type: ignore
-    #                 )
-
-    # return db_info
-
-
-def extract_schema_descriptions(engine: Engine) -> Dict[str, Dict[str, Any]]:
-    """
-    Extracts the schema descriptions from the database connected to by the engine.
-
-    Args:
-        engine (Engine): SQLAlchemy engine instance.
-
-    Returns:
-        Dict[str, Dict[str, Any]]: A dictionary representation of table and column
-        descriptions.
-    """
-    import langroid.agent.special.sql.utils.description_extractors as x
-
-    extractors = {
-        "postgresql": x.extract_postgresql_descriptions,
-        "mysql": x.extract_mysql_descriptions,
-    }
-    return extractors.get(engine.dialect.name, x.extract_default_descriptions)(engine)

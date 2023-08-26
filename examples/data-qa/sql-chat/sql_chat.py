@@ -167,6 +167,7 @@ def chat(opts: CLIOptions) -> None:
             use_tools=not opts.fn_api,
             use_functions_api=opts.fn_api,
             context_descriptions=context_descriptions,  # Add context descriptions to the config
+            use_schema_tools=False,
             llm=OpenAIGPTConfig(
                 chat_model=OpenAIChatModel.GPT4,
             ),
