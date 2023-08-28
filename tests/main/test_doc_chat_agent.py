@@ -29,6 +29,7 @@ class _TestDocChatAgentConfig(DocChatAgentConfig):
     vecdb: VectorStoreConfig = QdrantDBConfig(
         type="qdrant",
         collection_name="test-data",
+        replace_collection=True,
         storage_path=storage_path,
         embedding=OpenAIEmbeddingsConfig(
             model_type="openai",
@@ -46,7 +47,7 @@ class _TestDocChatAgentConfig(DocChatAgentConfig):
 
     parsing: ParsingConfig = ParsingConfig(
         splitter=Splitter.SIMPLE,
-        n_similar_docs=2,
+        n_similar_docs=3,
     )
 
     prompts: PromptsConfig = PromptsConfig(
@@ -85,15 +86,16 @@ documents: List[Document] = (
         
         Charlie Chaplin was a great comedian.
         
-        In 2050, all countries merged into Lithuania.
+        Charlie Chaplin was born in 1889.
+        
+        Beethoven was born in 1770.
+        
+        In the year 2050, all countries merged into Lithuania.
         """,
             metadata=DocMetaData(source="almanac"),
         ),
     ]
-    + [
-        Document(content=generate_random_text(5), metadata={"source": "random"})
-        for _ in range(10)
-    ]
+    + [Document(content=generate_random_text(5), metadata={"source": "random"})] * 100
 )
 
 
@@ -111,28 +113,36 @@ warnings.filterwarnings(
 
 QUERY_EXPECTED_PAIRS = [
     ("what happened in the year 2050?", "GPT10, Lithuania"),
+    ("what is the capital of England?", "Paris"),
     ("Who was Charlie Chaplin?", "comedian"),
     # ("What was the old capital of England?", "London"), this often fails!!
     ("What was the old capital of France?", "Paris"),
     ("When was global warming solved?", "2060"),
-    ("what is the capital of England?", "Paris"),
     ("What do we know about paperclips?", "2057, 2061"),
 ]
 
 
 @pytest.mark.parametrize("query, expected", QUERY_EXPECTED_PAIRS)
-def test_doc_chat_agent(test_settings: Settings, query: str, expected: str):
-    # set_global(Settings(debug=options.show, cache=not options.nocache))
+def test_doc_chat_agent_llm(test_settings: Settings, query: str, expected: str):
+    """
+    Test directly using `llm_response` method of DocChatAgent.
+    """
+
     # note that the (query, ans) pairs are accumulated into the
     # internal dialog history of the agent.
     set_global(test_settings)
+    agent.config.conversation_mode = False
     ans = agent.llm_response(query).content
     expected = [e.strip() for e in expected.split(",")]
     assert all([e in ans for e in expected])
 
 
-def test_doc_chat_process(test_settings: Settings):
+def test_doc_chat_agent_task(test_settings: Settings):
+    """
+    Test DocChatAgent wrapped in a Task.
+    """
     set_global(test_settings)
+    agent.config.conversation_mode = True
     task = Task(agent, restart=True)
     task.init()
     # LLM responds to Sys msg, initiates conv, says thank you, etc.
@@ -145,3 +155,23 @@ def test_doc_chat_process(test_settings: Settings):
         expected = [e.strip() for e in expected.split(",")]
         assert all([e in ans for e in expected])
         assert task.pending_message.metadata.sender == Entity.LLM
+
+
+@pytest.mark.parametrize("conv_mode", [True, False])
+def test_doc_chat_followup(test_settings: Settings, conv_mode: bool):
+    """
+    Test whether follow-up question is handled correctly.
+    """
+    agent.config.conversation_mode = conv_mode
+    set_global(test_settings)
+    task = Task(
+        agent,
+        default_human_response="",
+        restart=True,
+        single_round=True,
+    )
+    result = task.run("Who was Charlie Chaplin?")
+    assert "comedian" in result.content.lower()
+
+    result = task.run("When was he born?")
+    assert "1889" in result.content

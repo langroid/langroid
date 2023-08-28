@@ -4,6 +4,12 @@ from typing import Callable, List
 from bs4 import BeautifulSoup
 
 
+def remove_extra_whitespace(s: str) -> str:
+    lines = s.split("\n")
+    cleaned_lines = [" ".join(line.split()) for line in lines]
+    return "\n".join(cleaned_lines)
+
+
 def custom_sent_tokenize(text: str) -> List[str]:
     sentences = [
         sentence.strip()

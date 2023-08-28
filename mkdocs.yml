@@ -78,6 +78,8 @@ nav:
     - Three Agents, with Routing: quick-start/three-agent-chat-num-router.md
     - Agent with Retrieval: quick-start/chat-agent-docs.md
   # defer to gen-files + literate-nav
+  - Examples:
+    - Hierarchical Agent Computation: examples/agent-tree.md
   - Demos:
     - Audience Targeting: demos/targeting/audience-targeting.md
   - Code/API Docs: reference/  #
