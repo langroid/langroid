@@ -15,14 +15,14 @@ class RunQueryTool(ToolMessage):
 class GetTableNamesTool(ToolMessage):
     request: str = "get_table_names"
     purpose: str = """
-            To retrieve the names of all tables in the database 'db'.
+            To retrieve the names of all <tables> in the database 'db'.
             """
 
 
 class GetTableSchemaTool(ToolMessage):
     request: str = "get_table_schema"
     purpose: str = """
-            To retrieve the schema of all provided tables in the database 'db'.
+            To retrieve the schema of all provided <tables> in the database 'db'.
             """
     tables: List[str]
 
@@ -36,8 +36,8 @@ class GetTableSchemaTool(ToolMessage):
 class GetColumnDescriptionsTool(ToolMessage):
     request: str = "get_column_descriptions"
     purpose: str = """
-            To retrieve the description of columns from the requested tables/columns in 
-            the database 'db'.
+            To retrieve the description of one or more <columns> from the respective 
+            <table> in the database 'db'.
             """
     table: str
     columns: str
