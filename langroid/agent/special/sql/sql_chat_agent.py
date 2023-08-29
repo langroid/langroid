@@ -72,7 +72,6 @@ class SQLChatAgentConfig(ChatAgentConfig):
     vecdb: None | VectorStoreConfig = None
     context_descriptions: Dict[str, Dict[str, Union[str, Dict[str, str]]]] = {}
     use_schema_tools: bool = False
-    use_relevence: bool = False
 
     """
     Optional, but strongly recommended, context descriptions for tables, columns, 
