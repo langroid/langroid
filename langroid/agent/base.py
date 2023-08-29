@@ -27,6 +27,7 @@ from langroid.language_models.base import (
     LLMConfig,
     LLMMessage,
     LLMResponse,
+    LLMTokenUsage,
 )
 from langroid.mytypes import DocMetaData, Entity
 from langroid.parsing.json import extract_top_level_json
@@ -70,9 +71,10 @@ class Agent(ABC):
         self.config = config
         self.dialog: List[Tuple[str, str]] = []  # seq of LLM (prompt, response) tuples
         self.llm_tools_map: Dict[str, Type[ToolMessage]] = {}
-        self.all_llm_responses: List[LLMResponse] = []
         self.llm_tools_handled: Set[str] = set()
         self.llm_tools_usable: Set[str] = set()
+        self.total_llm_token_cost = 0.0
+        self.total_llm_token = 0
         self.default_human_response: Optional[str] = None
         self._indent = ""
         self.llm = LanguageModel.create(config.llm)
@@ -431,8 +433,7 @@ class Agent(ABC):
             console.print(f"[green]{self.indent}", end="")
             print("[green]" + response.message)
             displayed = True
-        if not response.cached:
-            self.update_usage_dict(response, prompt)
+        self.update_token_usage(response, prompt, self.llm.get_stream())
         return ChatDocument.from_LLMResponse(response, displayed)
 
     def get_tool_messages(self, msg: str | ChatDocument) -> List[ToolMessage]:
@@ -617,43 +618,42 @@ class Agent(ABC):
         else:
             return sum([self.parser.num_tokens(m.content) for m in prompt])
 
-    def get_total_tokens(self) -> int:
-        """
-        Return the total number of tokens in the LLM Responses.
-        """
-        total_tokens = 0
-        for msg in self.all_llm_responses:
-            total_tokens += int(msg.usage["total_tokens"])
-        return total_tokens
-
-    def update_usage_dict(
-        self, response: LLMResponse, prompt: str | List[LLMMessage]
+    def update_token_usage(
+        self, response: LLMResponse, prompt: str | List[LLMMessage], stream: bool
     ) -> None:
-        response.usage = dict(
-            prompt_tokens=self.num_tokens(prompt),
-            completion_tokens=self.num_tokens(response.message),
-        )
-        response.usage["total_tokens"] = (
-            response.usage["prompt_tokens"] + response.usage["completion_tokens"]
-        )
-        response.usage["cost"] = self.compute_token_cost(
-            int(response.usage["prompt_tokens"]),
-            int(response.usage["completion_tokens"]),
-        )
-        self.all_llm_responses.append(response)
+        """
+        Updates the usage memebr field in the response.
+        It updates the cost after checking the cache and updates the
+        tokens (prompts and completion) if the response stream is True, because OpenAI
+        doesn't returns these fields.
+
+        Args:
+            response (LLMResponse): LLMResponse object
+            prompt (str | List[LLMMessage]): prompt or list of LLMMessage objects
+            stream (bool): whether to update the usage in the response object
+                if the response is not cached.
+        """
+        if response is not None:
+            if stream:
+                prompt_tokens = self.num_tokens(prompt)
+                completion_tokens = self.num_tokens(response.message)
+                response.usage = LLMTokenUsage(
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                )
+                # we just need to update the cost when the response is not cached
+                if not response.cached:
+                    cost = self.compute_token_cost(prompt_tokens, completion_tokens)
+                    response.usage.cost = cost
+
+            # update total counters
+            if response.usage is not None:
+                self.total_llm_token_cost += response.usage.cost
+                self.total_llm_token += response.usage.total_tokens
 
     def compute_token_cost(self, prompt: int, completion: int) -> float:
         price = cast(LanguageModel, self.llm).chat_cost()
         return (price[0] * prompt + price[1] * completion) / 1000
-
-    def get_total_cost(self) -> float:
-        """
-        Return the total cost of all the LLM Responses.
-        """
-        total_cost = 0.0
-        for msg in self.all_llm_responses:
-            total_cost += msg.usage["cost"]
-        return total_cost
 
     def ask_agent(
         self,

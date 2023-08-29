@@ -7,6 +7,7 @@ from langroid.language_models.base import (
     LLMFunctionCall,
     LLMMessage,
     LLMResponse,
+    LLMTokenUsage,
     Role,
 )
 from langroid.mytypes import DocMetaData, Document, Entity
@@ -29,12 +30,7 @@ class ChatDocMetaData(DocMetaData):
     block: None | Entity = None
     sender_name: str = ""
     recipient: str = ""
-    usage: dict[str, float] = {
-        "prompt_tokens": 0,
-        "completion_tokens": 0,
-        "total_tokens": 0,
-        "cost": 0.0,
-    }
+    usage: Optional[LLMTokenUsage]
     cached: bool = False
     displayed: bool = False
 

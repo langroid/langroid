@@ -66,6 +66,16 @@ class LLMFunctionSpec(BaseModel):
     parameters: Dict[str, Any]
 
 
+class LLMTokenUsage(BaseModel):
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    cost: float = 0.0
+
+    @property
+    def total_tokens(self) -> int:
+        return self.prompt_tokens + self.completion_tokens
+
+
 class Role(str, Enum):
     USER = "user"
     SYSTEM = "system"
@@ -119,12 +129,7 @@ class LLMResponse(BaseModel):
 
     message: str
     function_call: Optional[LLMFunctionCall] = None
-    usage: dict[str, float] = {
-        "prompt_tokens": 0,
-        "completion_tokens": 0,
-        "total_tokens": 0,
-        "cost": 0.0,
-    }
+    usage: Optional[LLMTokenUsage]
     cached: bool = False
 
     def to_LLMMessage(self) -> LLMMessage:

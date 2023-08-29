@@ -20,6 +20,7 @@ from langroid.language_models.base import (
     LLMFunctionSpec,
     LLMMessage,
     LLMResponse,
+    LLMTokenUsage,
     Role,
 )
 from langroid.language_models.utils import (
@@ -233,6 +234,29 @@ class OpenAIGPT(LanguageModel):
             return hashed_key, None
         # Try to get the result from the cache
         return hashed_key, self.cache.retrieve(hashed_key)
+
+    def _cost_chat_model(self, prompt: int, completion: int) -> float:
+        price = self.chat_cost()
+        return (price[0] * prompt + price[1] * completion) / 1000
+
+    def _handle_token_usage(
+        self, cached: bool, response: Dict[str, Any]
+    ) -> LLMTokenUsage:
+        cost = 0.0
+        prompt_tokens = 0
+        completion_tokens = 0
+        if not cached:
+            cost = self._cost_chat_model(
+                response["usage"]["prompt_tokens"],
+                response["usage"]["completion_tokens"],
+            )
+        if not self.config.stream:
+            prompt_tokens = response["usage"]["prompt_tokens"]
+            completion_tokens = response["usage"]["completion_tokens"]
+
+        return LLMTokenUsage(
+            prompt_tokens=prompt_tokens, completion_tokens=completion_tokens, cost=cost
+        )
 
     def generate(self, prompt: str, max_tokens: int) -> LLMResponse:
         try:
@@ -478,7 +502,6 @@ class OpenAIGPT(LanguageModel):
             }
         }
         """
-
         message = response["choices"][0]["message"]
         msg = message["content"] or ""
         if message.get("function_call") is None:
@@ -502,4 +525,5 @@ class OpenAIGPT(LanguageModel):
             message=msg.strip() if msg is not None else "",
             function_call=fun_call,
             cached=cached,
+            usage=self._handle_token_usage(cached, response),
         )
