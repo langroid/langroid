@@ -453,7 +453,8 @@ class ChatAgent(Agent):
             else:
                 response_str = response.message
             print(cached + "[green]" + response_str)
-
+        stream = self.llm.get_stream()  # type: ignore
+        self.update_token_usage(response, messages, stream)
         return ChatDocument.from_LLMResponse(response, displayed)
 
     def _llm_response_temp_context(self, message: str, prompt: str) -> ChatDocument:
