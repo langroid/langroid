@@ -8,7 +8,9 @@ from langroid.language_models.openai_gpt import OpenAIGPT, OpenAIGPTConfig
 
 class AzureConfig(OpenAIGPTConfig):
     """
-    Configuration for Azure OpenAI GPT.
+    Configuration for Azure OpenAI GPT. You need to supply the env vars listed in
+    ``.azure_env_template`` after renaming the file to ``.azure_env``. Because this file
+    is used by this class to find the env vars.
     Attributes:
         type (str): should be ``azure``
         api_version (str): can be set inside the ``.azure_env``
