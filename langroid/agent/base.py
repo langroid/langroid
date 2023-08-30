@@ -1,9 +1,20 @@
 import inspect
 import json
 import logging
+import textwrap
 from abc import ABC
 from contextlib import ExitStack
-from typing import Callable, Dict, List, Optional, Set, Tuple, Type, cast, no_type_check
+from typing import (
+    Callable,
+    Dict,
+    List,
+    Optional,
+    Set,
+    Tuple,
+    Type,
+    cast,
+    no_type_check,
+)
 
 from pydantic import BaseSettings, ValidationError
 from rich import print
@@ -15,6 +26,9 @@ from langroid.agent.tool_message import INSTRUCTION, ToolMessage
 from langroid.language_models.base import (
     LanguageModel,
     LLMConfig,
+    LLMMessage,
+    LLMResponse,
+    LLMTokenUsage,
 )
 from langroid.mytypes import DocMetaData, Entity
 from langroid.parsing.json import extract_top_level_json
@@ -60,6 +74,8 @@ class Agent(ABC):
         self.llm_tools_map: Dict[str, Type[ToolMessage]] = {}
         self.llm_tools_handled: Set[str] = set()
         self.llm_tools_usable: Set[str] = set()
+        self.total_llm_token_cost = 0.0
+        self.total_llm_token_usage = 0
         self.default_human_response: Optional[str] = None
         self._indent = ""
         self.llm = LanguageModel.create(config.llm)
@@ -315,7 +331,7 @@ class Agent(ABC):
         else:
             user_msg = Prompt.ask(
                 f"[blue]{self.indent}Human "
-                f"(respond or q, x to exit current level, "
+                "(respond or q, x to exit current level, "
                 f"or hit enter to continue)\n{self.indent}",
             ).strip()
 
@@ -410,6 +426,7 @@ class Agent(ABC):
             if self.llm.get_stream():
                 console.print(f"[green]{self.indent}", end="")
             response = self.llm.generate(prompt, output_len)
+
         displayed = False
         if not self.llm.get_stream() or response.cached:
             # we would have already displayed the msg "live" ONLY if
@@ -417,7 +434,7 @@ class Agent(ABC):
             console.print(f"[green]{self.indent}", end="")
             print("[green]" + response.message)
             displayed = True
-
+        self.update_token_usage(response, prompt, self.llm.get_stream())
         return ChatDocument.from_LLMResponse(response, displayed)
 
     def get_tool_messages(self, msg: str | ChatDocument) -> List[ToolMessage]:
@@ -594,10 +611,66 @@ class Agent(ABC):
             result = f"Error in tool/function-call {tool_name} usage: {type(e)}: {e}"
         return result  # type: ignore
 
-    def num_tokens(self, prompt: str) -> int:
+    def num_tokens(self, prompt: str | List[LLMMessage]) -> int:
         if self.parser is None:
             raise ValueError("Parser must be set, to count tokens")
-        return self.parser.num_tokens(prompt)
+        if isinstance(prompt, str):
+            return self.parser.num_tokens(prompt)
+        else:
+            return sum([self.parser.num_tokens(m.content) for m in prompt])
+
+    def update_token_usage(
+        self, response: LLMResponse, prompt: str | List[LLMMessage], stream: bool
+    ) -> None:
+        """
+        Updates `response.usage` obj (token usage and cost fields).the usage memebr
+        It updates the cost after checking the cache and updates the
+        tokens (prompts and completion) if the response stream is True, because OpenAI
+        doesn't returns these fields.
+
+        Args:
+            response (LLMResponse): LLMResponse object
+            prompt (str | List[LLMMessage]): prompt or list of LLMMessage objects
+            stream (bool): whether to update the usage in the response object
+                if the response is not cached.
+        """
+        if response is not None:
+            # Note: If response was not streamed, then
+            # `response.usage` would already have been set by the API,
+            # so we only need to update in the stream case.
+            if stream:
+                # usage, cost = 0 when response is from cache
+                prompt_tokens = 0
+                completion_tokens = 0
+                cost = 0.0
+                if not response.cached:
+                    prompt_tokens = self.num_tokens(prompt)
+                    completion_tokens = self.num_tokens(response.message)
+                    cost = self.compute_token_cost(prompt_tokens, completion_tokens)
+                response.usage = LLMTokenUsage(
+                    prompt_tokens=prompt_tokens,
+                    completion_tokens=completion_tokens,
+                    cost=cost,
+                )
+
+            if settings.debug and response.usage is not None:
+                print(
+                    textwrap.dedent(
+                        f"""
+                        Stream: {stream}
+                        prompt_tokens: {response.usage.prompt_tokens}
+                        completion_tokens: {response.usage.completion_tokens}
+                        """.lstrip()
+                    )
+                )
+            # update total counters
+            if response.usage is not None:
+                self.total_llm_token_cost += response.usage.cost
+                self.total_llm_token_usage += response.usage.total_tokens
+
+    def compute_token_cost(self, prompt: int, completion: int) -> float:
+        price = cast(LanguageModel, self.llm).chat_cost()
+        return (price[0] * prompt + price[1] * completion) / 1000
 
     def ask_agent(
         self,
