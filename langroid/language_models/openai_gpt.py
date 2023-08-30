@@ -422,7 +422,12 @@ class OpenAIGPT(LanguageModel):
                     self.cache.store(hashed_key, result)
             return cached, hashed_key, result
 
-        key_name = "engine" if self.config.type == "azure" else "model"
+        if self.config.type == "azure":
+            key_name = "engine"
+            if hasattr(self, "deployment_name"):
+                self.config.chat_model = self.deployment_name
+        else:
+            key_name = "model"
         args: Dict[str, Any] = dict(
             **{key_name: self.config.chat_model},
             messages=[m.api_dict() for m in llm_messages],
