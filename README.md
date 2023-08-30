@@ -275,7 +275,12 @@ Your `.azure_env` file should look like this:
 AZURE_API_KEY=your-key-here-without-quotes
 ````
 
-Follow these steps from [Microsoft Azure OpenAI](https://learn.microsoft.com/en-us/azure/ai-services/openai/chatgpt-quickstart?tabs=command-line&pivots=programming-language-python#retrieve-key-and-endpoint) to find these variables.
+This page [Microsoft Azure OpenAI](https://learn.microsoft.com/en-us/azure/ai-services/openai/chatgpt-quickstart?tabs=command-line&pivots=programming-language-python#retrieve-key-and-endpoint) provides more information. Where:
+
+- `API-KEY` represents `AZURE_API_KEY`
+- `ENDPOINT` represents `OPENAI_API_BASE`
+- For `OPENAI_API_VERSION`, you can used the default value in `.azure_env`. But to find the updated version can be found [here](https://learn.microsoft.com/en-us/azure/ai-services/openai/whats-new#azure-openai-chat-completion-general-availability-ga)
+- `OPENAI_DEPLOYMENT_NAME` is the deployment name you chose when you deployed the GPT-35-Turbo or GPT-4 models.
 
 </details>
 
