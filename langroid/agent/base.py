@@ -641,11 +641,26 @@ class Agent(ABC):
                     prompt_tokens=prompt_tokens,
                     completion_tokens=completion_tokens,
                 )
+
                 # we just need to update the cost when the response is not cached
                 if not response.cached:
                     cost = self.compute_token_cost(prompt_tokens, completion_tokens)
                     response.usage.cost = cost
-
+                    if settings.debug:
+                        print(
+                            f"Stream: {stream}\n"
+                            "prompt_tokens:"
+                            f" {response.usage.prompt_tokens}\ncompletion_tokens:"
+                            f" {response.usage.completion_tokens}\n"
+                        )
+            else:
+                if settings.debug:
+                    print(
+                        f"Stream: {stream}\n"
+                        "prompt_tokens:"
+                        f" {response.usage.prompt_tokens}\ncompletion_tokens:"
+                        f" {response.usage.completion_tokens}\n"
+                    )
             # update total counters
             if response.usage is not None:
                 self.total_llm_token_cost += response.usage.cost
