@@ -296,8 +296,9 @@ class OpenAIGPT(LanguageModel):
                     self.cache.store(hashed_key, result)
             return cached, hashed_key, result
 
+        key_name = "engine" if self.config.type == "azure" else "model"
         cached, hashed_key, response = completions_with_backoff(
-            model=self.config.completion_model,
+            **{key_name: self.config.completion_model},
             prompt=prompt,
             max_tokens=max_tokens,  # for output/completion
             request_timeout=self.config.timeout,
@@ -449,8 +450,14 @@ class OpenAIGPT(LanguageModel):
                     self.cache.store(hashed_key, result)
             return cached, hashed_key, result
 
+        if self.config.type == "azure":
+            key_name = "engine"
+            if hasattr(self, "deployment_name"):
+                self.config.chat_model = self.deployment_name
+        else:
+            key_name = "model"
         args: Dict[str, Any] = dict(
-            model=self.config.chat_model,
+            **{key_name: self.config.chat_model},
             messages=[m.api_dict() for m in llm_messages],
             max_tokens=max_tokens,
             n=1,
