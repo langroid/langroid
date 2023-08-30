@@ -259,6 +259,26 @@ GOOGLE_CSE_ID=your-cse-id
 ```
 </details>
 
+<details>
+<summary><b>Setup instructions for Microsoft Azure OpenAI(click to expand)</b></summary> 
+In the root of the repo, copy the `.azure_env_template` file to a new file `.azure_env`: 
+
+```bash
+cp .azure_env_template .azure_env
+```
+
+The file `.azure_env` contains four environment variables that are required to use Azure OpenAI: `AZURE_API_KEY`, `OPENAI_API_BASE`, `OPENAI_API_VERSION`, and `OPENAI_DEPLOYMENT_NAME`
+
+Then insert your Azure API Key. 
+Your `.azure_env` file should look like this:
+```bash
+AZURE_API_KEY=your-key-here-without-quotes
+````
+
+Follow these steps from [Microsoft Azure OpenAI](https://learn.microsoft.com/en-us/azure/ai-services/openai/chatgpt-quickstart?tabs=command-line&pivots=programming-language-python#retrieve-key-and-endpoint) to find these variables.
+
+</details>
+
 ---
 
 # :whale: Docker Instructions
