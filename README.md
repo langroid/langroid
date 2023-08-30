@@ -259,6 +259,26 @@ GOOGLE_CSE_ID=your-cse-id
 ```
 </details>
 
+<details>
+<summary><b>Setup instructions for Microsoft Azure OpenAI(click to expand)</b></summary> 
+In the root of the repo, copy the `.azure_env_template` file to a new file `.azure_env`: 
+
+```bash
+cp .azure_env_template .azure_env
+```
+
+The file `.azure_env` contains four environment variables that are required to use Azure OpenAI: `AZURE_API_KEY`, `OPENAI_API_BASE`, `OPENAI_API_VERSION`, and `OPENAI_DEPLOYMENT_NAME`
+
+This page [Microsoft Azure OpenAI](https://learn.microsoft.com/en-us/azure/ai-services/openai/chatgpt-quickstart?tabs=command-line&pivots=programming-language-python#environment-variables)
+provides more information, and you can set each environment variable as follows:
+
+- `AZURE_API_KEY`, from the value of `API_KEY`
+- `OPENAI_API_BASE` from the value of `ENDPOINT`, typically looks like `https://your.domain.azure.com`.
+- For `OPENAI_API_VERSION`, you can use the default value in `.azure_env_template`, and latest version can be found [here](https://learn.microsoft.com/en-us/azure/ai-services/openai/whats-new#azure-openai-chat-completion-general-availability-ga)
+- `OPENAI_DEPLOYMENT_NAME` is the deployment name you chose when you deployed the GPT-35-Turbo or GPT-4 models.
+
+</details>
+
 ---
 
 # :whale: Docker Instructions

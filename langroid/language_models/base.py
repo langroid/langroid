@@ -36,6 +36,9 @@ class LLMConfig(BaseSettings):
     stream: bool = False  # stream output from API?
     cache_config: None | RedisCacheConfig | MomentoCacheConfig = None
 
+    # Dict of model -> (input/prompt cost, output/completion cost)
+    cost_per_1k_tokens: Optional[Dict[str, Tuple[float, float]]] = None
+
 
 class LLMFunctionCall(BaseModel):
     """
@@ -61,6 +64,16 @@ class LLMFunctionSpec(BaseModel):
     name: str
     description: str
     parameters: Dict[str, Any]
+
+
+class LLMTokenUsage(BaseModel):
+    prompt_tokens: int = 0
+    completion_tokens: int = 0
+    cost: float = 0.0
+
+    @property
+    def total_tokens(self) -> int:
+        return self.prompt_tokens + self.completion_tokens
 
 
 class Role(str, Enum):
@@ -116,7 +129,7 @@ class LLMResponse(BaseModel):
 
     message: str
     function_call: Optional[LLMFunctionCall] = None
-    usage: int
+    usage: Optional[LLMTokenUsage]
     cached: bool = False
 
     def to_LLMMessage(self) -> LLMMessage:
@@ -193,13 +206,21 @@ class LanguageModel(ABC):
             config: configuration for language model
         Returns: instance of language model
         """
+        from langroid.language_models.azure_openai import AzureGPT
         from langroid.language_models.openai_gpt import OpenAIGPT
 
         if config is None or config.type is None:
             return None
+
+        openai: Union[Type[AzureGPT], Type[OpenAIGPT]]
+
+        if config.type == "azure":
+            openai = AzureGPT
+        else:
+            openai = OpenAIGPT
         cls = dict(
-            openai=OpenAIGPT,
-        ).get(config.type, OpenAIGPT)
+            openai=openai,
+        ).get(config.type, openai)
         return cls(config)  # type: ignore
 
     @abstractmethod
@@ -247,6 +268,13 @@ class LanguageModel(ABC):
         if self.config.context_length is None:
             raise ValueError("No context length  specified")
         return self.config.context_length[self.config.completion_model]
+
+    def chat_cost(self) -> Tuple[float, float]:
+        if self.config.chat_model is None:
+            raise ValueError("No chat model specified")
+        if self.config.cost_per_1k_tokens is None:
+            raise ValueError("No cost per 1k tokens  specified")
+        return self.config.cost_per_1k_tokens[self.config.chat_model]
 
     def followup_to_standalone(
         self, chat_history: List[Tuple[str, str]], question: str
@@ -368,7 +396,10 @@ class LanguageModel(ABC):
             sources = ""
         return Document(
             content=content,
-            metadata={"source": "SOURCE: " + sources, "cached": llm_response.cached},
+            metadata={
+                "source": "SOURCE: " + sources,
+                "cached": llm_response.cached,
+            },
         )
 
 

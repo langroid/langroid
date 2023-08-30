@@ -20,6 +20,7 @@ from langroid.language_models.base import (
     LLMFunctionSpec,
     LLMMessage,
     LLMResponse,
+    LLMTokenUsage,
     Role,
 )
 from langroid.language_models.utils import (
@@ -61,6 +62,12 @@ class OpenAIGPTConfig(LLMConfig):
         OpenAIChatModel.GPT4: 8192,
         OpenAIChatModel.GPT4_NOFUNC: 8192,
         OpenAICompletionModel.TEXT_DA_VINCI_003: 4096,
+    }
+    cost_per_1k_tokens: Dict[str, Tuple[float, float]] = {
+        # (input/prompt cost, output/completion cost)
+        OpenAIChatModel.GPT3_5_TURBO: (0.0015, 0.002),
+        OpenAIChatModel.GPT4: (0.03, 0.06),  # 8K context
+        OpenAIChatModel.GPT4_NOFUNC: (0.03, 0.06),
     }
 
 
@@ -208,7 +215,6 @@ class OpenAIGPT(LanguageModel):
         return (  # type: ignore
             LLMResponse(
                 message=completion,
-                usage=0,
                 cached=False,
                 function_call=function_call if has_function else None,
             ),
@@ -229,6 +235,31 @@ class OpenAIGPT(LanguageModel):
         # Try to get the result from the cache
         return hashed_key, self.cache.retrieve(hashed_key)
 
+    def _cost_chat_model(self, prompt: int, completion: int) -> float:
+        price = self.chat_cost()
+        return (price[0] * prompt + price[1] * completion) / 1000
+
+    def _handle_token_usage(
+        self, cached: bool, response: Dict[str, Any]
+    ) -> LLMTokenUsage:
+        cost = 0.0
+        prompt_tokens = 0
+        completion_tokens = 0
+        if not cached and not self.config.stream:
+            prompt_tokens = response["usage"]["prompt_tokens"]
+            completion_tokens = response["usage"]["completion_tokens"]
+            cost = self._cost_chat_model(
+                response["usage"]["prompt_tokens"],
+                response["usage"]["completion_tokens"],
+            )
+        # if not self.config.stream:
+        #     prompt_tokens = response["usage"]["prompt_tokens"]
+        #     completion_tokens = response["usage"]["completion_tokens"]
+
+        return LLMTokenUsage(
+            prompt_tokens=prompt_tokens, completion_tokens=completion_tokens, cost=cost
+        )
+
     def generate(self, prompt: str, max_tokens: int) -> LLMResponse:
         try:
             return self._generate(prompt, max_tokens)
@@ -236,7 +267,7 @@ class OpenAIGPT(LanguageModel):
             # capture exceptions not handled by retry, so we don't crash
             err_msg = str(e)[:500]
             logging.error(f"OpenAI API error: {err_msg}")
-            return LLMResponse(message=NO_ANSWER, usage=0, cached=False)
+            return LLMResponse(message=NO_ANSWER, cached=False)
 
     def _generate(self, prompt: str, max_tokens: int) -> LLMResponse:
         if self.config.use_chat_for_completion:
@@ -265,8 +296,9 @@ class OpenAIGPT(LanguageModel):
                     self.cache.store(hashed_key, result)
             return cached, hashed_key, result
 
+        key_name = "engine" if self.config.type == "azure" else "model"
         cached, hashed_key, response = completions_with_backoff(
-            model=self.config.completion_model,
+            **{key_name: self.config.completion_model},
             prompt=prompt,
             max_tokens=max_tokens,  # for output/completion
             request_timeout=self.config.timeout,
@@ -275,9 +307,8 @@ class OpenAIGPT(LanguageModel):
             stream=self.config.stream,
         )
 
-        usage = response["usage"]["total_tokens"]
         msg = response["choices"][0]["text"].strip()
-        return LLMResponse(message=msg, usage=usage, cached=cached)
+        return LLMResponse(message=msg, cached=cached)
 
     async def agenerate(self, prompt: str, max_tokens: int) -> LLMResponse:
         try:
@@ -286,7 +317,7 @@ class OpenAIGPT(LanguageModel):
             # capture exceptions not handled by retry, so we don't crash
             err_msg = str(e)[:500]
             logging.error(f"OpenAI API error: {err_msg}")
-            return LLMResponse(message=NO_ANSWER, usage=0, cached=False)
+            return LLMResponse(message=NO_ANSWER, cached=False)
 
     async def _agenerate(self, prompt: str, max_tokens: int) -> LLMResponse:
         openai.api_key = self.api_key
@@ -324,7 +355,6 @@ class OpenAIGPT(LanguageModel):
                 temperature=self.config.temperature,
                 stream=self.config.stream,
             )
-            usage = response["usage"]["total_tokens"]
             msg = response["choices"][0]["message"]["content"].strip()
         else:
 
@@ -349,9 +379,8 @@ class OpenAIGPT(LanguageModel):
                 echo=False,
                 stream=self.config.stream,
             )
-            usage = response["usage"]["total_tokens"]
             msg = response["choices"][0]["text"].strip()
-        return LLMResponse(message=msg, usage=usage, cached=cached)
+        return LLMResponse(message=msg, cached=cached)
 
     def chat(
         self,
@@ -366,7 +395,7 @@ class OpenAIGPT(LanguageModel):
             # capture exceptions not handled by retry, so we don't crash
             err_msg = str(e)[:500]
             logging.error(f"OpenAI API error: {err_msg}")
-            return LLMResponse(message=NO_ANSWER, usage=0, cached=False)
+            return LLMResponse(message=NO_ANSWER, cached=False)
 
     def _chat(
         self,
@@ -421,8 +450,14 @@ class OpenAIGPT(LanguageModel):
                     self.cache.store(hashed_key, result)
             return cached, hashed_key, result
 
+        if self.config.type == "azure":
+            key_name = "engine"
+            if hasattr(self, "deployment_name"):
+                self.config.chat_model = self.deployment_name
+        else:
+            key_name = "model"
         args: Dict[str, Any] = dict(
-            model=self.config.chat_model,
+            **{key_name: self.config.chat_model},
             messages=[m.api_dict() for m in llm_messages],
             max_tokens=max_tokens,
             n=1,
@@ -447,7 +482,6 @@ class OpenAIGPT(LanguageModel):
             self.cache.store(hashed_key, openai_response)
             return llm_response
 
-        usage = response["usage"]["total_tokens"]
         # openAI response will look like this:
         """
         {
@@ -477,7 +511,6 @@ class OpenAIGPT(LanguageModel):
             }
         }
         """
-
         message = response["choices"][0]["message"]
         msg = message["content"] or ""
         if message.get("function_call") is None:
@@ -489,10 +522,10 @@ class OpenAIGPT(LanguageModel):
                 fun_call.arguments = fun_args
             except (ValueError, SyntaxError):
                 logging.warning(
-                    f"Could not parse function arguments: "
+                    "Could not parse function arguments: "
                     f"{message['function_call']['arguments']} "
                     f"for function {message['function_call']['name']} "
-                    f"treating as normal non-function message"
+                    "treating as normal non-function message"
                 )
                 fun_call = None
                 msg = message["content"] + message["function_call"]["arguments"]
@@ -500,6 +533,6 @@ class OpenAIGPT(LanguageModel):
         return LLMResponse(
             message=msg.strip() if msg is not None else "",
             function_call=fun_call,
-            usage=usage,
             cached=cached,
+            usage=self._handle_token_usage(cached, response),
         )
