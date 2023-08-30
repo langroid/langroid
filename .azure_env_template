@@ -1,0 +1,4 @@
+AZURE_API_KEY=
+OPENAI_API_BASE=https://your-resource-name.openai.azure.com/
+OPENAI_API_VERSION=2023-05-15
+OPENAI_DEPLOYMENT_NAME=

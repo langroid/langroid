@@ -193,13 +193,21 @@ class LanguageModel(ABC):
             config: configuration for language model
         Returns: instance of language model
         """
+        from langroid.language_models.azure_openai import AzureGPT
         from langroid.language_models.openai_gpt import OpenAIGPT
 
         if config is None or config.type is None:
             return None
+
+        openai: Union[Type[AzureGPT], Type[OpenAIGPT]]
+
+        if config.type == "azure":
+            openai = AzureGPT
+        else:
+            openai = OpenAIGPT
         cls = dict(
-            openai=OpenAIGPT,
-        ).get(config.type, OpenAIGPT)
+            openai=openai,
+        ).get(config.type, openai)
         return cls(config)  # type: ignore
 
     @abstractmethod
