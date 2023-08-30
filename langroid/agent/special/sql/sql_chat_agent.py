@@ -7,6 +7,7 @@ Functionality includes:
 - asking a question about a SQL schema
 """
 import logging
+import textwrap
 from typing import Any, Dict, Optional, Union
 
 from rich import print
@@ -39,7 +40,7 @@ and holds a description and a dictionary of columns,
 with column names as keys and their descriptions as values. 
 {schema_dict}
 
-ONLY the tables and column names and tables specified above should be used in
+ONLY the tables and column names specified above should be used in
 the generated queries. 
 You must be smart about using the right tables and columns based on the 
 english description. If you are thinking of using a table or column that 
@@ -200,17 +201,19 @@ class SQLChatAgent(ChatAgent):
         )
 
     def retry_query(self, e: Exception, query: str) -> str:
-        result = f"""{SQL_ERROR_MSG}: '{query}'
-{str(e)} 
-Run a new query, correcting the errors. 
-This JSON schema maps SQL database structure. It outlines tables, each 
-with a description and columns. Each table is identified by a key, 
-and holds a description and a dictionary of columns, 
-with column names as keys and their descriptions as values.
-
-```json
-{self.config.context_descriptions}
-```"""
+        result = textwrap.dedent(
+            f"""{SQL_ERROR_MSG}: '{query}'
+                {str(e)} 
+                Run a new query, correcting the errors. 
+                This JSON schema maps SQL database structure. It outlines tables, each 
+                with a description and columns. Each table is identified by a key, 
+                and holds a description and a dictionary of columns, 
+                with column names as keys and their descriptions as values.
+                
+                ```json
+                {self.config.context_descriptions}
+                ```
+            """.lstrip())
 
         return result
 
@@ -240,7 +243,7 @@ with column names as keys and their descriptions as values.
 
                 # Check if the list of rows is not empty
                 if rows:
-                    result = ", ".join(str(row) for row in rows)
+                    result = ",\n".join(str(row) for row in rows)
                 else:
                     result = "Query executed successfully."
             except Exception:

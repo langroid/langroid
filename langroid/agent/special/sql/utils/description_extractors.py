@@ -115,3 +115,22 @@ def extract_default_descriptions(engine: Engine) -> Dict[str, Dict[str, Any]]:
         result[table] = {"description": "", "columns": columns}
 
     return result
+
+
+def extract_schema_descriptions(engine: Engine) -> Dict[str, Dict[str, Any]]:
+    """
+    Extracts the schema descriptions from the database connected to by the engine.
+
+    Args:
+        engine (Engine): SQLAlchemy engine instance.
+
+    Returns:
+        Dict[str, Dict[str, Any]]: A dictionary representation of table and column
+        descriptions.
+    """
+
+    extractors = {
+        "postgresql": extract_postgresql_descriptions,
+        "mysql": extract_mysql_descriptions,
+    }
+    return extractors.get(engine.dialect.name, extract_default_descriptions)(engine)
