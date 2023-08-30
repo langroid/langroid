@@ -13,7 +13,7 @@ First define the configuration for the LLM, in this case one of the
 OpenAI GPT chat models:
 ```py
 from langroid.language_models.openai_gpt import ( 
-        OpenAIGPTConfig, OpenAIChatModel, OpenAIGPT,
+        OpenAIGPTConfig, OpenAIChatModel
 )
 cfg = OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT4)
 ```
