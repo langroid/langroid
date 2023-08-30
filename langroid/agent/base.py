@@ -654,7 +654,7 @@ class Agent(ABC):
                             f" {response.usage.completion_tokens}\n"
                         )
             else:
-                if settings.debug:
+                if settings.debug and response.usage is not None:
                     print(
                         f"Stream: {stream}\n"
                         "prompt_tokens:"
