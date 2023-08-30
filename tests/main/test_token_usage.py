@@ -38,20 +38,16 @@ def test_agent(stream):
 
     set_global(Settings(cache=True, stream=stream))
     print("***2nd round***")
-    # this convo shouldn't change the cost because `cache` is `True`
-    # while number of tokens should change
+    # this convo shouldn't change the cost and tokens because `cache` is `True`
     agent.llm_response_forget(question)
     assert total_cost_after_1st_rnd == agent.total_llm_token_cost
-    assert agent.total_llm_token > total_tokens_after_1st_rnd
-
-    total_tokens_after_2nd_rnd = agent.total_llm_token
+    assert agent.total_llm_token == total_tokens_after_1st_rnd
 
     # this convo should change the cost because `cache` is `False`
-    # number of accumulated tokens should be based on `prev_tokens` and messages in
-    # the message_history
+    # number of accumulated tokens should be doubled because the question/response pair
+    # is the same
     set_global(Settings(cache=False, stream=stream))
     agent.llm_response(question)
     print("***3rd round***")
-    assert (
-        agent.total_llm_token == total_tokens_after_2nd_rnd + total_tokens_after_1st_rnd
-    )
+    assert agent.total_llm_token == total_tokens_after_1st_rnd * 2
+    assert agent.total_llm_token_cost == total_cost_after_1st_rnd * 2

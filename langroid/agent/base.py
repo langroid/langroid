@@ -635,32 +635,28 @@ class Agent(ABC):
         """
         if response is not None:
             if stream:
-                prompt_tokens = self.num_tokens(prompt)
-                completion_tokens = self.num_tokens(response.message)
+                # we just need to update the cost when the response is not cached
+                if not response.cached:
+                    prompt_tokens = self.num_tokens(prompt)
+                    completion_tokens = self.num_tokens(response.message)
+                    cost = self.compute_token_cost(prompt_tokens, completion_tokens)
+                else:
+                    prompt_tokens = 0
+                    completion_tokens = 0
+                    cost = 0.0
                 response.usage = LLMTokenUsage(
                     prompt_tokens=prompt_tokens,
                     completion_tokens=completion_tokens,
+                    cost=cost,
                 )
 
-                # we just need to update the cost when the response is not cached
-                if not response.cached:
-                    cost = self.compute_token_cost(prompt_tokens, completion_tokens)
-                    response.usage.cost = cost
-                    if settings.debug:
-                        print(
-                            f"Stream: {stream}\n"
-                            "prompt_tokens:"
-                            f" {response.usage.prompt_tokens}\ncompletion_tokens:"
-                            f" {response.usage.completion_tokens}\n"
-                        )
-            else:
-                if settings.debug and response.usage is not None:
-                    print(
-                        f"Stream: {stream}\n"
-                        "prompt_tokens:"
-                        f" {response.usage.prompt_tokens}\ncompletion_tokens:"
-                        f" {response.usage.completion_tokens}\n"
-                    )
+            if settings.debug and response.usage is not None:
+                print(
+                    f"Stream: {stream}\n"
+                    "prompt_tokens:"
+                    f" {response.usage.prompt_tokens}\ncompletion_tokens:"
+                    f" {response.usage.completion_tokens}\n"
+                )
             # update total counters
             if response.usage is not None:
                 self.total_llm_token_cost += response.usage.cost

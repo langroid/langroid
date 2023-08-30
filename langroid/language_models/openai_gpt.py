@@ -245,14 +245,16 @@ class OpenAIGPT(LanguageModel):
         cost = 0.0
         prompt_tokens = 0
         completion_tokens = 0
-        if not cached:
+        if not cached and not self.config.stream:
+            prompt_tokens = response["usage"]["prompt_tokens"]
+            completion_tokens = response["usage"]["completion_tokens"]
             cost = self._cost_chat_model(
                 response["usage"]["prompt_tokens"],
                 response["usage"]["completion_tokens"],
             )
-        if not self.config.stream:
-            prompt_tokens = response["usage"]["prompt_tokens"]
-            completion_tokens = response["usage"]["completion_tokens"]
+        # if not self.config.stream:
+        #     prompt_tokens = response["usage"]["prompt_tokens"]
+        #     completion_tokens = response["usage"]["completion_tokens"]
 
         return LLMTokenUsage(
             prompt_tokens=prompt_tokens, completion_tokens=completion_tokens, cost=cost
