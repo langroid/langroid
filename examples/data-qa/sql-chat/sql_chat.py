@@ -120,6 +120,7 @@ def load_context_descriptions(engine: Engine) -> dict:
 
 class CLIOptions(BaseSettings):
     fn_api: bool = True  # whether to use function-calling instead of langroid Tools
+    schema_tools: bool = False  # whether to use schema tools
 
 
 def chat(opts: CLIOptions) -> None:
@@ -167,6 +168,7 @@ def chat(opts: CLIOptions) -> None:
             use_tools=not opts.fn_api,
             use_functions_api=opts.fn_api,
             context_descriptions=context_descriptions,  # Add context descriptions to the config
+            use_schema_tools=opts.schema_tools,
             llm=OpenAIGPTConfig(
                 chat_model=OpenAIChatModel.GPT4,
             ),
@@ -187,6 +189,9 @@ def main(
     cache_type: str = typer.Option(
         "redis", "--cachetype", "-ct", help="redis or momento"
     ),
+    schema_tools: bool = typer.Option(
+        False, "--schema_tools", "-st", help="use schema tools"
+    ),
 ) -> None:
     set_global(
         Settings(
@@ -196,7 +201,7 @@ def main(
             cache_type=cache_type,
         )
     )
-    chat(CLIOptions(fn_api=not tools))
+    chat(CLIOptions(fn_api=not tools, schema_tools=schema_tools))
 
 
 if __name__ == "__main__":
