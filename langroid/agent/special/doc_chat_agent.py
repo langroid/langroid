@@ -342,7 +342,7 @@ class DocChatAgent(ChatAgent):
                     k=self.config.parsing.n_similar_docs,
                 )
             if len(docs_and_scores) == 0:
-                return []
+                return query, []
             passages = [
                 Document(content=d.content, metadata=d.metadata)
                 for (d, _) in docs_and_scores
