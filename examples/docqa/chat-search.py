@@ -61,7 +61,7 @@ class GoogleSearchDocChatAgent(DocChatAgent):
         """Get docs/extracts relevant to the query, from vecdb"""
         self.tried_vecdb = True
         query = msg.query
-        extracts = self.get_relevant_extracts(query)
+        _, extracts = self.get_relevant_extracts(query)
         if len(extracts) == 0:
             return NO_ANSWER
         return "\n".join(str(e) for e in extracts)
@@ -77,7 +77,7 @@ class GoogleSearchDocChatAgent(DocChatAgent):
         links = [r.link for r in results]
         self.config.doc_paths = links
         self.ingest()
-        extracts = self.get_relevant_extracts(query)
+        _, extracts = self.get_relevant_extracts(query)
         return "\n".join(str(e) for e in extracts)
 
 

@@ -7,7 +7,7 @@ Functionality includes:
 """
 import logging
 from contextlib import ExitStack
-from typing import List, Optional, no_type_check
+from typing import List, Optional, Tuple, no_type_check
 
 from rich import print
 from rich.console import Console
@@ -304,7 +304,7 @@ class DocChatAgent(ChatAgent):
         )
 
     @no_type_check
-    def get_relevant_extracts(self, query: str) -> List[Document]:
+    def get_relevant_extracts(self, query: str) -> Tuple[str, List[Document]]:
         """
         Get list of docs or extracts relevant to a query. These could be:
         - the original docs, if they exist and are not too long, or
@@ -316,6 +316,7 @@ class DocChatAgent(ChatAgent):
             query (str): query to search for
 
         Returns:
+            query (str): stand-alone version of input query
             List[Document]: list of relevant docs
 
         """
@@ -347,14 +348,12 @@ class DocChatAgent(ChatAgent):
                 for (d, _) in docs_and_scores
             ]
 
-        # if passages not too long, no need to extract relevant verbatim text
-        extracts = passages
-        if self.doc_length(passages) > self.config.max_context_tokens:
-            with console.status("[cyan]LLM Extracting verbatim passages..."):
-                with StreamingIfAllowed(self.llm, False):
-                    extracts = self.llm.get_verbatim_extracts(query, passages)
+        with console.status("[cyan]LLM Extracting verbatim passages..."):
+            with StreamingIfAllowed(self.llm, False):
+                extracts = self.llm.get_verbatim_extracts(query, passages)
+                extracts = [e for e in extracts if e.content != NO_ANSWER]
 
-        return extracts
+        return query, extracts
 
     @no_type_check
     def answer_from_docs(self, query: str) -> Document:
@@ -373,7 +372,8 @@ class DocChatAgent(ChatAgent):
                 source="None",
             ),
         )
-        extracts = self.get_relevant_extracts(query)
+        # query may be updated to a stand-alone version
+        query, extracts = self.get_relevant_extracts(query)
         if len(extracts) == 0:
             return response
         with ExitStack() as stack:

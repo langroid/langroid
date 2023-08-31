@@ -8,15 +8,16 @@ EXTRACT_RELEVANT = """
     Question:{question}
     Relevant text, if any: """.strip()
 
-EXTRACTION_PROMPT_GPT4 = """
+EXTRACTION_PROMPT_GPT4 = f"""
 Given the content and question below, extract COMPLETE SENTENCES OR PHRASES 
 VERBATIM from the content, that are relevant to answering the question (if such text 
 exists), even if it contradicts your knowledge, and even if it is factually incorrect.
 Do not  make up an answer that is not supported by the content. 
-When you answer, be concise, no need to explain anything. 
+When you answer, be concise, no need to explain anything. If there is no relevant text,
+simply say {NO_ANSWER}.
 
-Content: {content}
-Question: {question}
+Content: {{content}}
+Question: {{question}}
 Relevant text, if any:
 """
 
