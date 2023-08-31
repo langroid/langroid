@@ -99,9 +99,12 @@ documents: List[Document] = (
 )
 
 
-agent = DocChatAgent(config)
-agent.ingest_docs(documents)
-os.environ["TOKENIZERS_PARALLELISM"] = "false"
+@pytest.fixture
+def agent():
+    agent = DocChatAgent(config)
+    agent.ingest_docs(documents)
+    os.environ["TOKENIZERS_PARALLELISM"] = "false"
+    return agent
 
 
 warnings.filterwarnings(
@@ -115,15 +118,14 @@ QUERY_EXPECTED_PAIRS = [
     ("what happened in the year 2050?", "GPT10, Lithuania"),
     ("what is the capital of England?", "Paris"),
     ("Who was Charlie Chaplin?", "comedian"),
-    # ("What was the old capital of England?", "London"), this often fails!!
-    ("What was the old capital of France?", "Paris"),
+    ("What used to be capital of France?", "Paris"),
     ("When was global warming solved?", "2060"),
     ("What do we know about paperclips?", "2057, 2061"),
 ]
 
 
 @pytest.mark.parametrize("query, expected", QUERY_EXPECTED_PAIRS)
-def test_doc_chat_agent_llm(test_settings: Settings, query: str, expected: str):
+def test_doc_chat_agent_llm(test_settings: Settings, agent, query: str, expected: str):
     """
     Test directly using `llm_response` method of DocChatAgent.
     """
@@ -137,7 +139,7 @@ def test_doc_chat_agent_llm(test_settings: Settings, query: str, expected: str):
     assert all([e in ans for e in expected])
 
 
-def test_doc_chat_agent_task(test_settings: Settings):
+def test_doc_chat_agent_task(test_settings: Settings, agent):
     """
     Test DocChatAgent wrapped in a Task.
     """
@@ -158,7 +160,7 @@ def test_doc_chat_agent_task(test_settings: Settings):
 
 
 @pytest.mark.parametrize("conv_mode", [True, False])
-def test_doc_chat_followup(test_settings: Settings, conv_mode: bool):
+def test_doc_chat_followup(test_settings: Settings, agent, conv_mode: bool):
     """
     Test whether follow-up question is handled correctly.
     """
