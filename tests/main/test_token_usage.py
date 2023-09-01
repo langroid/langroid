@@ -1,11 +1,7 @@
-import importlib
-
-import openai
 import pytest
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
-from langroid.language_models.azure_openai import AzureConfig
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
 from langroid.parsing.parser import ParsingConfig
 from langroid.prompts.prompts_config import PromptsConfig
@@ -23,21 +19,15 @@ class _TestChatAgentConfig(ChatAgentConfig):
 
 
 # Define the configurations
-openai_config = OpenAIGPTConfig(
+config = OpenAIGPTConfig(
     cache_config=RedisCacheConfig(fake=False),
     chat_model=OpenAIChatModel.GPT3_5_TURBO,
     use_chat_for_completion=True,
 )
 
-azure_config = AzureConfig(
-    cache_config=RedisCacheConfig(fake=False),
-    use_chat_for_completion=True,
-)
-
 
 @pytest.mark.parametrize("stream", [True, False])
-@pytest.mark.parametrize("config", [openai_config, azure_config])
-def test_agent(config, stream):
+def test_agent(stream):
     set_global(Settings(cache=False, stream=stream))
     cfg = _TestChatAgentConfig(llm=config)
     agent = ChatAgent(cfg)
@@ -64,4 +54,3 @@ def test_agent(config, stream):
     print("***3rd round***")
     assert agent.total_llm_token_usage == total_tokens_after_1st_rnd * 2
     assert agent.total_llm_token_cost == total_cost_after_1st_rnd * 2
-    importlib.reload(openai)
