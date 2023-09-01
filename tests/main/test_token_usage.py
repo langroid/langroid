@@ -1,3 +1,6 @@
+import importlib
+
+import openai
 import pytest
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
@@ -61,3 +64,4 @@ def test_agent(config, stream):
     print("***3rd round***")
     assert agent.total_llm_token_usage == total_tokens_after_1st_rnd * 2
     assert agent.total_llm_token_cost == total_cost_after_1st_rnd * 2
+    importlib.reload(openai)
