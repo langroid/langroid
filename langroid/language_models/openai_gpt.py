@@ -242,6 +242,11 @@ class OpenAIGPT(LanguageModel):
     def _handle_token_usage(
         self, cached: bool, response: Dict[str, Any]
     ) -> LLMTokenUsage:
+        """
+        handles the token usage in response ONLY when stream is False and not chached.
+        The cost is set to zero when stream is True. But it will be updated later by the
+        fn ``update_token_usage``.
+        """
         cost = 0.0
         prompt_tokens = 0
         completion_tokens = 0
@@ -252,9 +257,6 @@ class OpenAIGPT(LanguageModel):
                 response["usage"]["prompt_tokens"],
                 response["usage"]["completion_tokens"],
             )
-        # if not self.config.stream:
-        #     prompt_tokens = response["usage"]["prompt_tokens"]
-        #     completion_tokens = response["usage"]["completion_tokens"]
 
         return LLMTokenUsage(
             prompt_tokens=prompt_tokens, completion_tokens=completion_tokens, cost=cost
@@ -450,14 +452,18 @@ class OpenAIGPT(LanguageModel):
                     self.cache.store(hashed_key, result)
             return cached, hashed_key, result
 
+        # Azure uses differnt parameters. It uses ``engine`` instead of ``model``
+        # and the value should be the deployment_name not ``self.config.chat_model``
+        chat_model = self.config.chat_model
         if self.config.type == "azure":
             key_name = "engine"
             if hasattr(self, "deployment_name"):
-                self.config.chat_model = self.deployment_name
+                chat_model = self.deployment_name
         else:
             key_name = "model"
+
         args: Dict[str, Any] = dict(
-            **{key_name: self.config.chat_model},
+            **{key_name: chat_model},
             messages=[m.api_dict() for m in llm_messages],
             max_tokens=max_tokens,
             n=1,

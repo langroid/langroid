@@ -2,6 +2,7 @@ import pytest
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
+from langroid.language_models.azure_openai import AzureConfig
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
 from langroid.parsing.parser import ParsingConfig
 from langroid.prompts.prompts_config import PromptsConfig
@@ -12,21 +13,30 @@ from langroid.vector_store.base import VectorStoreConfig
 class _TestChatAgentConfig(ChatAgentConfig):
     max_tokens: int = 200
     vecdb: VectorStoreConfig = None
-    llm: OpenAIGPTConfig = OpenAIGPTConfig(
-        cache_config=RedisCacheConfig(fake=False),
-        chat_model=OpenAIChatModel.GPT3_5_TURBO,
-        use_chat_for_completion=True,
-    )
     parsing: ParsingConfig = ParsingConfig()
     prompts: PromptsConfig = PromptsConfig(
         max_tokens=200,
     )
 
 
+# Define the configurations
+openai_config = OpenAIGPTConfig(
+    cache_config=RedisCacheConfig(fake=False),
+    chat_model=OpenAIChatModel.GPT3_5_TURBO,
+    use_chat_for_completion=True,
+)
+
+azure_config = AzureConfig(
+    cache_config=RedisCacheConfig(fake=False),
+    use_chat_for_completion=True,
+)
+
+
 @pytest.mark.parametrize("stream", [True, False])
-def test_agent(stream):
+@pytest.mark.parametrize("config", [openai_config, azure_config])
+def test_agent(config, stream):
     set_global(Settings(cache=False, stream=stream))
-    cfg = _TestChatAgentConfig()
+    cfg = _TestChatAgentConfig(llm=config)
     agent = ChatAgent(cfg)
     question = "What is the capital of Canada?"
     agent.llm_response_forget(question)

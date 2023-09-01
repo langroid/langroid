@@ -24,6 +24,12 @@ jobs:
       GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
       GOOGLE_CSE_ID: ${{ secrets.GOOGLE_CSE_ID }}
 
+      # Azure OpenAI env vars
+      AZURE_API_KEY: ${{ secrets.AZURE_API_KEY }}
+      AZURE_OPENAI_API_BASE: ${{ secrets.AZURE_OPENAI_API_BASE }}
+      AZURE_OPENAI_API_VERSION: "2023-05-15"
+      AZURE_OPENAI_DEPLOYMENT_NAME: ${{ secrets.AZURE_OPENAI_DEPLOYMENT_NAME }}
+
     steps:
     - name: Check out repository
       uses: actions/checkout@v3
