@@ -120,6 +120,7 @@ def _test_sql_chat_agent(
     context: dict,
     prompt: str,
     answer: str,
+    use_schema_tools: bool = False,
     turns: int = 2,
 ) -> None:
     """
@@ -132,6 +133,7 @@ def _test_sql_chat_agent(
             context_descriptions=context,
             use_tools=not fn_api,
             use_functions_api=fn_api,
+            use_schema_tools=use_schema_tools,
         )
     )
 
@@ -182,4 +184,25 @@ def test_sql_chat_agent_query(fn_api, mock_db_session, mock_context, query, answ
         context={},
         prompt=query,
         answer=answer,
+    )
+
+
+@pytest.mark.parametrize(
+    "fn_api,query,answer",
+    [
+        (True, "How many departments are there?", "2"),
+        (False, "How many departments are there?", "2"),
+    ],
+)
+def test_sql_schema_tools(fn_api, mock_db_session, mock_context, query, answer):
+    # with schema tools:
+    _test_sql_chat_agent(
+        test_settings=Settings(),
+        fn_api=fn_api,
+        db_session=mock_db_session,
+        context=mock_context,
+        prompt=query,
+        answer=answer,
+        use_schema_tools=True,
+        turns=6,
     )
