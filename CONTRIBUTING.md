@@ -48,10 +48,18 @@ You are welcome to take on un-assigned open [issues](https://github.com/langroid
 
 **CORE LANGROID**
 
+- **Long-running, loosely coupled agents, communicating over message queues**: Currently all agents run within a session,
+  launched from a single script. Extend this so agents can run in different
+  processes, machines, or envs or cloud, and communicate via message queues.
+- **Improve observability:** we currently log all agent interactions into structured
+  and unstructured forms. Add features on top, to improve inspection and
+  diagnosis of issues.
 - Implement a way to **backtrack** 1 step in a multi-agent task. 
 For instance during a long multi-agent conversation, if we receive a bad response from the LLM,
 when the user gets a chance to respond, they may insert a special code (e.g. `b`) so that 
 the previous step is re-done and the LLM gets another chance to respond.
+- **Integrate LLM APIs:** There are a couple of libs that simulate OpenAI-like interface for other models: https://github.com/BerriAI/litellm
+    and https://github.com/philschmid/easyllm. It would be useful to have Langroid work with these APIs.
 - Implement Agents that communicate via REST APIs: Currently, all agents within 
 the multi-agent system are created in a single script. 
 We can remove this limitation, and add the ability to have agents running and 
@@ -64,6 +72,8 @@ This is roughly the mechanism behind OpenAI plugins, e.g. https://github.com/ope
 
 **DEMOS, POC, Use-cases**
 
+- **Text labeling/classification:** Specifically do what this repo does: https://github.com/refuel-ai/autolabel, 
+  but using Langroid instead of Langchain (which that repo uses).
 - Data Analyst Demo: A multi-agent system that automates a data analysis workflow, e.g. 
 feature-exploration, visualization, ML model training.
 - Document classification based on rules in an unstructured “policy” document. 
