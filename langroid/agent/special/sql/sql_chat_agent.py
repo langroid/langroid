@@ -25,7 +25,10 @@ from langroid.agent.special.sql.utils.populate_metadata import (
     populate_metadata,
     populate_metadata_with_schema_tools,
 )
-from langroid.agent.special.sql.utils.system_message import DEFAULT, SCHEMA_TOOLS
+from langroid.agent.special.sql.utils.system_message import (
+    DEFAULT_SYS_MSG,
+    SCHEMA_TOOLS_SYS_MSG,
+)
 from langroid.agent.special.sql.utils.tools import (
     GetColumnDescriptionsTool,
     GetTableNamesTool,
@@ -117,7 +120,7 @@ class SQLChatAgentConfig(ChatAgentConfig):
 
 class SQLChatAgent(ChatAgent):
     """
-    Agent for chatting with a collection of documents.
+    Agent for chatting with a SQL database
     """
 
     def __init__(self, config: "SQLChatAgentConfig") -> None:
@@ -189,9 +192,9 @@ class SQLChatAgent(ChatAgent):
 
         """Format the system message based on the engine and table metadata."""
         return (
-            SCHEMA_TOOLS.format(dialect=self.engine.dialect.name)
+            SCHEMA_TOOLS_SYS_MSG.format(dialect=self.engine.dialect.name)
             if self.config.use_schema_tools
-            else DEFAULT.format(
+            else DEFAULT_SYS_MSG.format(
                 dialect=self.engine.dialect.name, schema_dict=self.table_metadata
             )
         )
@@ -312,7 +315,7 @@ class SQLChatAgent(ChatAgent):
         """
         # TODO: UPDATE FORMATTING
         return (
-            ", ".join(str(row) for row in rows)
+            ",\n".join(str(row) for row in rows)
             if rows
             else "Query executed successfully."
         )
