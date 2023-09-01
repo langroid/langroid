@@ -64,6 +64,8 @@ for ideas on what to contribute.
 <details>
 <summary> <b>:fire: Updates/Releases</b></summary>
 
+- **Sep 2023:**
+  - **0.1.55:** Improved [`SQLChatAgent`](https://github.com/langroid/langroid/blob/main/langroid/agent/special/sql/sql_chat_agent.py) that efficiently retrieves relevant schema info when translating natural language to SQL.  
 - **Aug 2023:**
   - **[Hierarchical computation](https://langroid.github.io/langroid/examples/agent-tree/)** example using Langroid agents and task orchestration.
   - **0.1.51:** Support for global state, see [test_global_state.py](tests/main/test_global_state.py).
