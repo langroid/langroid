@@ -239,9 +239,15 @@ class OpenAIGPT(LanguageModel):
         price = self.chat_cost()
         return (price[0] * prompt + price[1] * completion) / 1000
 
-    def _handle_token_usage(
+    def _get_non_stream_token_usage(
         self, cached: bool, response: Dict[str, Any]
     ) -> LLMTokenUsage:
+        """
+        Extracts token usage from ``response`` and computes cost, only when NOT
+        in streaming mode, since the LLM API (OpenAI currently) does not populate the
+        usage fields in streaming mode. In streaming mode, these are set to zero for
+        now, and will be updated later by the fn ``update_token_usage``.
+        """
         cost = 0.0
         prompt_tokens = 0
         completion_tokens = 0
@@ -252,9 +258,6 @@ class OpenAIGPT(LanguageModel):
                 response["usage"]["prompt_tokens"],
                 response["usage"]["completion_tokens"],
             )
-        # if not self.config.stream:
-        #     prompt_tokens = response["usage"]["prompt_tokens"]
-        #     completion_tokens = response["usage"]["completion_tokens"]
 
         return LLMTokenUsage(
             prompt_tokens=prompt_tokens, completion_tokens=completion_tokens, cost=cost
@@ -450,14 +453,17 @@ class OpenAIGPT(LanguageModel):
                     self.cache.store(hashed_key, result)
             return cached, hashed_key, result
 
+        # Azure uses different parameters. It uses ``engine`` instead of ``model``
+        # and the value should be the deployment_name not ``self.config.chat_model``
+        chat_model = self.config.chat_model
+        key_name = "model"
         if self.config.type == "azure":
             key_name = "engine"
             if hasattr(self, "deployment_name"):
-                self.config.chat_model = self.deployment_name
-        else:
-            key_name = "model"
+                chat_model = self.deployment_name
+
         args: Dict[str, Any] = dict(
-            **{key_name: self.config.chat_model},
+            **{key_name: chat_model},
             messages=[m.api_dict() for m in llm_messages],
             max_tokens=max_tokens,
             n=1,
@@ -534,5 +540,5 @@ class OpenAIGPT(LanguageModel):
             message=msg.strip() if msg is not None else "",
             function_call=fun_call,
             cached=cached,
-            usage=self._handle_token_usage(cached, response),
+            usage=self._get_non_stream_token_usage(cached, response),
         )
