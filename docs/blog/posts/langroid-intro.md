@@ -1,5 +1,6 @@
 ---
-draft: true 
+title: 'Langroid: Harness LLMs with Multi-Agent Programming'
+draft: false
 date: 2023-09-03
 authors: 
   - pchalasani
@@ -8,6 +9,7 @@ categories:
   - llm
 ---
 
+# Langroid: Harness LLMs with Multi-Agent Programming
 
 ## The LLM Opportunity
 
