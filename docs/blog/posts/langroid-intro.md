@@ -7,6 +7,7 @@ authors:
 categories:
   - langroid
   - llm
+comments: true
 ---
 
 # Langroid: Harness LLMs with Multi-Agent Programming

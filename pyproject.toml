@@ -62,6 +62,7 @@ psycopg2 = {version="^2.9.7", optional=true}
 pymysql = {version = "^1.1.0", optional = true}
 pytest-postgresql = {version = "^5.0.0", optional = true}
 pytest-mysql = {version = "^2.4.2", optional = true}
+mkdocs-rss-plugin = "^1.8.0"
 
 [tool.poetry.extras]
 # install these using `poetry install -E [...]` where [...] is one of the extras below

@@ -1,6 +1,8 @@
 site_name: "langroid"
 repo_name: langroid/langroid
+site_description: "Langroid LLM App Development Framework"
 repo_url: https://github.com/langroid/langroid
+site_url: https://langroid.github.io/langroid
 
 edit_uri: ""
 extra_css:
@@ -40,7 +42,20 @@ theme:
         name: Switch to light mode
 
 plugins:
-  - blog
+  - blog:
+      archive: true
+      blog_toc: true
+      blog_dir: blog
+
+  - rss:
+      enabled: true
+      match_path: blog/posts/.*
+      image: https://upload.wikimedia.org/wikipedia/commons/thumb/4/43/Feed-icon.svg/128px-Feed-icon.svg.png
+      date_from_meta:
+        as_creation: date
+      categories:
+        - categories
+        - tags
   - search
   - autorefs
   #- awesome-pages
@@ -85,7 +100,7 @@ nav:
     - Hierarchical Agent Computation: examples/agent-tree.md
   - Demos:
     - Audience Targeting: demos/targeting/audience-targeting.md
-  - Code/API Docs: reference/  #
+  - Code/API Docs: reference/
 #  - API Documentation:
 #    - language_models: api/language_models_base.md
 
