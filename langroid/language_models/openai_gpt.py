@@ -5,6 +5,7 @@ import os
 import sys
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple, Union
+import litellm
 from litellm import completion, acompletion
 import openai
 from dotenv import load_dotenv
@@ -48,6 +49,51 @@ class OpenAICompletionModel(str, Enum):
     TEXT_ADA_001 = "text-ada-001"
     GPT4 = "gpt-4"
 
+class CohereModel(str, Enum):
+    """Enum for Cohere models"""
+
+    COMMAND = "command"
+    COMMAND_LIGHT = "command-light"
+    COMMAND_MEDIUM = "command-medium-beta"
+    COMMAND_XLARGE = "command-xlarge-beta"
+    COMMAND_NIGHTLY = "command-nightly"
+
+class AnthropicModel(str, Enum):
+    """Enum for Anthropic models"""
+
+    CLAUDE_INSTANT = "claude-instant-1"
+    CLAUDE_2 = "claude-2"
+
+class OpenRouterModel(str, Enum):
+    """Enum for Openrouter models"""
+
+    CODE_CHAT_BISON = "google/palm-2-codechat-bison"
+    CHAT_BISON = "google/palm-2-chat-bison"
+    GPT3_5_TURBO = "openai/gpt-3.5-turbo"
+    GPT3_5_TURBO_16K = "openai/gpt-3.5-turbo-16k"
+    GPT_4_32K = "openai/gpt-4-32k"
+    CLAUDE_2 = "anthropic/claude-2"
+    CLAUDE_INSTANT = "anthropic/claude-instant-v1"
+    LLAMA_2_13B = "meta-llama/llama-2-13b-chat"
+    LLAMA_2_70B = "meta-llama/llama-2-70b-chat"
+
+
+class AI21Model(str, Enum):
+    """Enum for AI21 models"""
+
+    J2_LIGHT = "j2-light"
+    J2_MID = "j2-mid"
+    J2_ULTRA = "j2-ultra"
+
+class AlephAlphaModel(str, Enum):
+    """Enum for Aleph Alpha models"""
+
+    LUMINOUS_BASE = "luminous-base"
+    LUMINOUS_BASE_CONTROL = "luminous-base-control"
+    LUMINOUS_EXTENDED = "luminous-extended"
+    LUMINOUS_EXTENDED_CONTROL = "luminous-extended-control"
+    LUMINOUS_SUPREME = "luminous-supreme"
+    LUMINOUS_SUPREME_CONTROL = "luminous-supreme-control"
 
 class OpenAIGPTConfig(LLMConfig):
     type: str = "openai"
@@ -55,7 +101,7 @@ class OpenAIGPTConfig(LLMConfig):
     min_output_tokens: int = 64
     timeout: int = 20
     temperature: float = 0.2
-    chat_model: OpenAIChatModel = OpenAIChatModel.GPT4
+    chat_model: AnthropicModel = AnthropicModel.CLAUDE_INSTANT
     completion_model: OpenAICompletionModel = OpenAICompletionModel.GPT4
     context_length: Dict[str, int] = {
         OpenAIChatModel.GPT3_5_TURBO: 4096,
@@ -93,7 +139,7 @@ class OpenAIGPT(LanguageModel):
         if settings.nofunc:
             self.chat_model = OpenAIChatModel.GPT4_NOFUNC
         load_dotenv()
-        self.api_key = os.getenv("OPENAI_API_KEY", "")
+        self.api_key = self.set_api_key()
         if self.api_key == "":
             raise ValueError(
                 """
@@ -107,6 +153,30 @@ class OpenAIGPT(LanguageModel):
         else:
             config.cache_config = RedisCacheConfig()
             self.cache = RedisCache(config.cache_config)
+    
+    def set_api_key(self):
+        if "ANTHROPIC_API_KEY" in os.environ:
+            self.api_key = os.getenv("ANTHROPIC_API_KEY")
+        elif "OPENAI_API_KEY" in os.environ:
+            self.api_key = os.getenv("OPENAI_API_KEY")
+        elif "AZURE_API_KEY" in os.environ:
+            self.api_key = os.getenv("AZURE_API_KEY")
+        elif "HUGGINGFACE_API_KEY" in os.environ:
+            self.api_key = os.getenv("HUGGINGFACE_API_KEY")
+        elif "ANTHROPIC_API_KEY" in os.environ:
+            self.api_key = os.getenv("ANTHROPIC_API_KEY")
+        elif "TOGETHERAI_API_KEY" in os.environ:
+            self.api_key = os.getenv("TOGETHERAI_API_KEY")
+        elif "BASETEN_API_KEY" in os.environ:
+            self.api_key = os.getenv("BASETEN_API_KEY")
+        elif "ALEPHALPHA_API_KEY" in os.environ:
+            self.api_key = os.getenv("ALEPHALPHA_API_KEY")
+        elif "AI21_API_KEY" in os.environ:
+            self.api_key = os.getenv("AI21_API_KEY")
+        elif "COHERE_API_KEY" in os.environ:
+            self.api_key = os.getenv("COHERE_API_KEY")
+        elif "OPENROUTER_API_KEY" in os.environ:
+            self.api_key = os.getenv("OPENROUTER_API_KEY")
 
     def set_stream(self, stream: bool) -> bool:
         """Enable or disable streaming output from API.
@@ -275,7 +345,6 @@ class OpenAIGPT(LanguageModel):
     def _generate(self, prompt: str, max_tokens: int) -> LLMResponse:
         if self.config.use_chat_for_completion:
             return self.chat(messages=prompt, max_tokens=max_tokens)
-        openai.api_key = self.api_key
 
         if settings.debug:
             print(f"[red]PROMPT: {prompt}[/red]")
@@ -323,7 +392,7 @@ class OpenAIGPT(LanguageModel):
             return LLMResponse(message=NO_ANSWER, cached=False)
 
     async def _agenerate(self, prompt: str, max_tokens: int) -> LLMResponse:
-        openai.api_key = self.api_key
+        litellm.api_key = self.api_key
         # note we typically will not have self.config.stream = True
         # when issuing several api calls concurrently/asynchronously.
         # The calling fn should use the context `with Streaming(..., False)` to
@@ -425,7 +494,7 @@ class OpenAIGPT(LanguageModel):
         Returns:
             LLMResponse object
         """
-        openai.api_key = self.api_key
+        litellm.api_key = self.api_key
         if isinstance(messages, str):
             llm_messages = [
                 LLMMessage(role=Role.SYSTEM, content="You are a helpful assistant."),
