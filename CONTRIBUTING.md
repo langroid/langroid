@@ -34,7 +34,8 @@ You are welcome to take on un-assigned open [issues](https://github.com/langroid
 **INTEGRATIONS**
 
 - Vector databases, e.g.:
-    - [ ] Qdrant
+    - [x] Qdrant
+    - [x] Chroma
     - [ ] Pinecone 
     - [ ] Milvus 
     - [ ] Marqo 
@@ -54,7 +55,7 @@ You are welcome to take on un-assigned open [issues](https://github.com/langroid
 
 **CORE LANGROID**
 
-- [ ]**Long-running, loosely coupled agents, communicating over message queues**: Currently all agents run within a session,
+- [ ] **Long-running, loosely coupled agents, communicating over message queues**: Currently all agents run within a session,
   launched from a single script. Extend this so agents can run in different
   processes, machines, or envs or cloud, and communicate via message queues.
 - [ ] **Improve observability:** we currently log all agent interactions into structured
