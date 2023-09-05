@@ -33,8 +33,14 @@ You are welcome to take on un-assigned open [issues](https://github.com/langroid
 
 **INTEGRATIONS**
 
-- Vector databases, e.g.: Pinecone, Milvus, Weaviate, PostgresML, ...
-- Other LLM APIs, e.g.: Claude, Cohere, ...
+- Vector databases, e.g.:
+    - [ ] Qdrant
+    - [ ] Pinecone 
+    - [ ] Milvus 
+    - [ ] Marqo 
+    - [ ] Weaviate
+    - [ ] PostgresML (pgvector?)
+- Other LLM APIs, e.g.: Claude, Cohere, ... (see below)
 - Local LLMs, e.g.: llama2
 - Data Sources: SQL DBs, NoSQL DBs, Neo4j (Graph DBs), ...
 - Query languages: SQL, GraphQL, Cypher, ...
@@ -42,25 +48,25 @@ You are welcome to take on un-assigned open [issues](https://github.com/langroid
 
 **SPECIALIZED AGENTS**
 
-- `SQLChatAgent`, analogous to `DocChatAgent`: adds ability to chat with SQL databases
-- `TableChatAgent`: adds ability to chat with a tabular dataset in a file. 
+- [x] `SQLChatAgent`, analogous to `DocChatAgent`: adds ability to chat with SQL databases
+- [x] `TableChatAgent`: adds ability to chat with a tabular dataset in a file. 
    This can derive from `RetrieverAgent`
 
 **CORE LANGROID**
 
-- **Long-running, loosely coupled agents, communicating over message queues**: Currently all agents run within a session,
+- [ ]**Long-running, loosely coupled agents, communicating over message queues**: Currently all agents run within a session,
   launched from a single script. Extend this so agents can run in different
   processes, machines, or envs or cloud, and communicate via message queues.
-- **Improve observability:** we currently log all agent interactions into structured
+- [ ] **Improve observability:** we currently log all agent interactions into structured
   and unstructured forms. Add features on top, to improve inspection and
   diagnosis of issues.
-- Implement a way to **backtrack** 1 step in a multi-agent task. 
+- [ ] Implement a way to **backtrack** 1 step in a multi-agent task. 
 For instance during a long multi-agent conversation, if we receive a bad response from the LLM,
 when the user gets a chance to respond, they may insert a special code (e.g. `b`) so that 
 the previous step is re-done and the LLM gets another chance to respond.
-- **Integrate LLM APIs:** There are a couple of libs that simulate OpenAI-like interface for other models: https://github.com/BerriAI/litellm
+- [ ] **Integrate LLM APIs:** There are a couple of libs that simulate OpenAI-like interface for other models: https://github.com/BerriAI/litellm
     and https://github.com/philschmid/easyllm. It would be useful to have Langroid work with these APIs.
-- Implement Agents that communicate via REST APIs: Currently, all agents within 
+- [ ] Implement Agents that communicate via REST APIs: Currently, all agents within 
 the multi-agent system are created in a single script. 
 We can remove this limitation, and add the ability to have agents running and 
 listening to an end-point (e.g. a flask server). For example the LLM may 
@@ -72,11 +78,11 @@ This is roughly the mechanism behind OpenAI plugins, e.g. https://github.com/ope
 
 **DEMOS, POC, Use-cases**
 
-- **Text labeling/classification:** Specifically do what this repo does: https://github.com/refuel-ai/autolabel, 
+- [ ] **Text labeling/classification:** Specifically do what this repo does: https://github.com/refuel-ai/autolabel, 
   but using Langroid instead of Langchain (which that repo uses).
-- Data Analyst Demo: A multi-agent system that automates a data analysis workflow, e.g. 
+- [ ] Data Analyst Demo: A multi-agent system that automates a data analysis workflow, e.g. 
 feature-exploration, visualization, ML model training.
-- Document classification based on rules in an unstructured “policy” document. 
+- [ ] Document classification based on rules in an unstructured “policy” document. 
     This is an actual use-case from a large US bank. The task is to classify 
     documents into categories “Public” or “Sensitive”. The classification must be 
     informed by a “policy” document which has various criteria. 
@@ -87,18 +93,18 @@ feature-exploration, visualization, ML model training.
     Another agent would apply the various criteria from the policy to the document in question, 
     and (possibly with other helper agents) classify the document, along with a detailed justification.
 
-- Document classification and tagging: Given a collection of already labeled/tagged docs, 
+- [ ] Document classification and tagging: Given a collection of already labeled/tagged docs, 
 which have been ingested into a vecdb (to allow semantic search), 
 when given a new document to label/tag, we retrieve the most similar docs 
 from multiple categories/tags from the vecdb and present these (with the labels/tags) 
 as few-shot examples to the LLM, and have the LLM classify/tag the retrieved document.
 
-- Implement the CAMEL multi-agent debate system : https://lablab.ai/t/camel-tutorial-building-communicative-agents-for-large-scale-language-model-exploration
+- [ ] Implement the CAMEL multi-agent debate system : https://lablab.ai/t/camel-tutorial-building-communicative-agents-for-large-scale-language-model-exploration
 
-- Implement Stanford’s Simulacra paper with Langroid.
+- [ ] Implement Stanford’s Simulacra paper with Langroid.
 Generative Agents: Interactive Simulacra of Human Behavior https://arxiv.org/abs/2304.03442
 
-- Implement CMU's paper with Langroid.
+- [ ] Implement CMU's paper with Langroid.
 Emergent autonomous scientific research capabilities of large language models https://arxiv.org/pdf/2304.05332.pdf
 
 ---
