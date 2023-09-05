@@ -5,7 +5,7 @@ import os
 import sys
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple, Union
-
+from litellm import completion, acompletion
 import openai
 from dotenv import load_dotenv
 from pydantic import BaseModel
@@ -344,7 +344,7 @@ class OpenAIGPT(LanguageModel):
                     cached = True
                 else:
                     # If it's not in the cache, call the API
-                    result = await openai.ChatCompletion.acreate(  # type: ignore
+                    result = await acompletion(  # type: ignore
                         **kwargs
                     )
                     self.cache.store(hashed_key, result)
@@ -444,7 +444,7 @@ class OpenAIGPT(LanguageModel):
                     print("[red]CACHED[/red]")
             else:
                 # If it's not in the cache, call the API
-                result = openai.ChatCompletion.create(**kwargs)  # type: ignore
+                result = completion(**kwargs)  # type: ignore
                 if not self.config.stream:
                     # if streaming, cannot cache result
                     # since it is a generator. Instead,
