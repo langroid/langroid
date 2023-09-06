@@ -45,6 +45,7 @@ plugins:
   - blog:
       archive: false
       blog_toc: true
+      categories: false
       blog_dir: blog
 
   - rss:
