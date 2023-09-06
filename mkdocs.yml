@@ -43,7 +43,7 @@ theme:
 
 plugins:
   - blog:
-      archive: true
+      archive: false
       blog_toc: true
       blog_dir: blog
 
