@@ -94,6 +94,7 @@ class OpenAIGPT(LanguageModel):
             self.chat_model = OpenAIChatModel.GPT4_NOFUNC
         load_dotenv()
         self.api_key = os.getenv("OPENAI_API_KEY", "")
+        self.api_base: str | None = os.getenv("OPENAI_API_BASE")
         if self.api_key == "":
             raise ValueError(
                 """
@@ -276,6 +277,8 @@ class OpenAIGPT(LanguageModel):
         if self.config.use_chat_for_completion:
             return self.chat(messages=prompt, max_tokens=max_tokens)
         openai.api_key = self.api_key
+        if self.api_base:
+            openai.api_base = self.api_base
 
         if settings.debug:
             print(f"[red]PROMPT: {prompt}[/red]")
@@ -324,6 +327,8 @@ class OpenAIGPT(LanguageModel):
 
     async def _agenerate(self, prompt: str, max_tokens: int) -> LLMResponse:
         openai.api_key = self.api_key
+        if self.api_base:
+            openai.api_base = self.api_base
         # note we typically will not have self.config.stream = True
         # when issuing several api calls concurrently/asynchronously.
         # The calling fn should use the context `with Streaming(..., False)` to
@@ -426,6 +431,8 @@ class OpenAIGPT(LanguageModel):
             LLMResponse object
         """
         openai.api_key = self.api_key
+        if self.api_base:
+            openai.api_base = self.api_base
         if isinstance(messages, str):
             llm_messages = [
                 LLMMessage(role=Role.SYSTEM, content="You are a helpful assistant."),
