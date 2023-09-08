@@ -18,6 +18,8 @@ from langroid.utils.configuration import settings
 from langroid.utils.constants import DONE, NO_ANSWER, USER_QUIT
 from langroid.utils.logging import RichFileLogger, setup_file_logger
 
+from langroid.io.base import IOFactory
+
 logger = logging.getLogger(__name__)
 
 Responder = Entity | Type["Task"]
@@ -157,6 +159,8 @@ class Task:
         self.sub_tasks: List[Task] = []
         self.parent_task: Set[Task] = set()
         self.caller: Task | None = None  # which task called this task's `run` method
+        self.io_input = IOFactory.get_provider("input")
+        self.io_output = IOFactory.get_provider("output")
 
     def __repr__(self) -> str:
         return f"{self.name}"
@@ -303,10 +307,15 @@ class Task:
             )
 
         i = 0
-        print(
+        # print(
+        #     f"[bold magenta]{self._enter} Starting Agent "
+        #     f"{self.name} ({message_history_idx+1}) [/bold magenta]"
+        # )
+        self.io_output(
             f"[bold magenta]{self._enter} Starting Agent "
             f"{self.name} ({message_history_idx+1}) [/bold magenta]"
         )
+
         # self.turns overrides if it is > 0 and turns not set (i.e. = -1)
         turns = self.turns if turns < 0 else turns
 
@@ -314,7 +323,8 @@ class Task:
             self.step()
             if self.done():
                 if self._level == 0:
-                    print("[magenta]Bye, hope this was useful!")
+                    #print("[magenta]Bye, hope this was useful!")
+                    self.io_output("[magenta]Bye, hope this was useful!")
                 break
             i += 1
             if turns > 0 and i >= turns:
@@ -336,7 +346,11 @@ class Task:
                 # ONLY talking to the current agent.
                 if isinstance(t.agent, ChatAgent):
                     t.agent.clear_history(0)
-        print(
+        # print(
+        #     f"[bold magenta]{self._leave} Finished Agent "
+        #     f"{self.name} ({n_messages}) [/bold magenta]"
+        # )
+        self.io_output(
             f"[bold magenta]{self._leave} Finished Agent "
             f"{self.name} ({n_messages}) [/bold magenta]"
         )

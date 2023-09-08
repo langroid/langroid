@@ -37,6 +37,7 @@ from langroid.prompts.prompts_config import PromptsConfig
 from langroid.utils.configuration import settings
 from langroid.utils.constants import NO_ANSWER
 from langroid.vector_store.base import VectorStore, VectorStoreConfig
+from langroid.io.base import IOFactory
 
 console = Console()
 
@@ -83,6 +84,8 @@ class Agent(ABC):
         self.parser: Optional[Parser] = (
             Parser(config.parsing) if config.parsing else None
         )
+        self.io_input = IOFactory.get_provider("input")
+        self.io_output = IOFactory.get_provider("output")
 
     def entity_responders(
         self,
@@ -292,7 +295,8 @@ class Agent(ABC):
         if isinstance(results, ChatDocument):
             return results
         console.print(f"[red]{self.indent}", end="")
-        print(f"[red]Agent: {results}")
+        #print(f"[red]Agent: {results}")
+        self.io_output(f"[red]Agent: {results}")
         sender_name = self.config.name
         if isinstance(msg, ChatDocument) and msg.function_call is not None:
             # if result was from handling an LLM `function_call`,
@@ -329,11 +333,15 @@ class Agent(ABC):
         elif not settings.interactive:
             user_msg = ""
         else:
-            user_msg = Prompt.ask(
-                f"[blue]{self.indent}Human "
-                "(respond or q, x to exit current level, "
-                f"or hit enter to continue)\n{self.indent}",
-            ).strip()
+            # user_msg = Prompt.ask(
+            #     f"[blue]{self.indent}Human "
+            #     "(respond or q, x to exit current level, "
+            #     f"or hit enter to continue)\n{self.indent}",
+            # ).strip()
+            user_msg = self.io_input(f"[blue]{self.indent}Human "
+                            "(respond or q, x to exit current level, "
+                            f"or hit enter to continue)\n{self.indent}").strip()
+
 
         # only return non-None result if user_msg not empty
         if not user_msg:
@@ -424,15 +432,15 @@ class Agent(ABC):
                     """
                     )
             if self.llm.get_stream():
-                console.print(f"[green]{self.indent}", end="")
+                self.io_output(f"[green]{self.indent}")
             response = self.llm.generate(prompt, output_len)
 
         displayed = False
         if not self.llm.get_stream() or response.cached:
             # we would have already displayed the msg "live" ONLY if
             # streaming was enabled, AND we did not find a cached response
-            console.print(f"[green]{self.indent}", end="")
-            print("[green]" + response.message)
+            self.io_output(f"[green]{self.indent}")
+            self.io_output(f"[green]{response.message}")
             displayed = True
         self.update_token_usage(response, prompt, self.llm.get_stream())
         return ChatDocument.from_LLMResponse(response, displayed)

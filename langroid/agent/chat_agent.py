@@ -17,6 +17,7 @@ from langroid.language_models.base import (
     StreamingIfAllowed,
 )
 from langroid.utils.configuration import settings
+from langroid.io.base import IOFactory
 
 console = Console()
 
@@ -87,6 +88,8 @@ class ChatAgent(Agent):
                     LLMMessage(role=Role.USER, content=config.user_message)
                 )
         self.task_messages = priming_messages
+        self.io_input = IOFactory.get_provider("input")
+        self.io_output = IOFactory.get_provider("output")
 
     def clear_history(self, start: int = -2) -> None:
         """
@@ -425,7 +428,8 @@ class ChatAgent(Agent):
                 cm = console.status("LLM responding to messages...")
                 stack.enter_context(cm)
             if self.llm.get_stream():  # type: ignore
-                console.print(f"[green]{self.indent}", end="")
+                #console.print(f"[green]{self.indent}", end="")
+                self.io_output(f"[green]{self.indent}")
             functions: Optional[List[LLMFunctionSpec]] = None
             fun_call: str | Dict[str, str] = "none"
             if self.config.use_functions_api and len(self.llm_functions_usable) > 0:
@@ -452,7 +456,8 @@ class ChatAgent(Agent):
                 response_str = str(response.function_call)
             else:
                 response_str = response.message
-            print(cached + "[green]" + response_str)
+            #print(cached + "[green]" + response_str)
+            self.io_output(cached + "[green]" + response_str)
         stream = self.llm.get_stream()  # type: ignore
         self.update_token_usage(response, messages, stream)
         return ChatDocument.from_LLMResponse(response, displayed)
