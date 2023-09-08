@@ -14,13 +14,13 @@ class OutputProvider(ABC):
     def __call__(self, message: str):
         pass
 
-class ProviderFactory:
+class IOFactory:
     providers = {}
 
     @staticmethod
     def get_provider(name):
-        return ProviderFactory.providers[name]
+        return IOFactory.providers[name]
 
     @staticmethod
     def set_provider(provider):
-        ProviderFactory.providers[provider.name] = provider
+        IOFactory.providers[provider.name] = provider
