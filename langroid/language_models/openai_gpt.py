@@ -161,19 +161,13 @@ class OpenAIGPT(LanguageModel):
                 event_text = event["choices"][0]["text"]
             if event_text:
                 completion += event_text
-                # sys.stdout.write(Colors().GREEN + event_text)
-                # sys.stdout.flush()
                 self.io_output(Colors().GREEN + event_text)
             if event_fn_name:
                 function_name = event_fn_name
                 has_function = True
-                # sys.stdout.write(Colors().GREEN + "FUNC: " + event_fn_name + ": ")
-                # sys.stdout.flush()
                 self.io_output(Colors().GREEN + "FUNC: " + event_fn_name + ": ")
             if event_args:
                 function_args += event_args
-                # sys.stdout.write(Colors().GREEN + event_args)
-                # sys.stdout.flush()
                 self.io_output(Colors().GREEN + event_args)
             if event.choices[0].finish_reason in ["stop", "function_call"]:
                 # for function_call, finish_reason does not necessarily

@@ -75,6 +75,7 @@ class Agent(ABC):
         self.llm_tools_map: Dict[str, Type[ToolMessage]] = {}
         self.llm_tools_handled: Set[str] = set()
         self.llm_tools_usable: Set[str] = set()
+        self.llm_tools_usable: Set[str] = set()
         self.total_llm_token_cost = 0.0
         self.total_llm_token_usage = 0
         self.default_human_response: Optional[str] = None
@@ -295,7 +296,6 @@ class Agent(ABC):
         if isinstance(results, ChatDocument):
             return results
         console.print(f"[red]{self.indent}", end="")
-        #print(f"[red]Agent: {results}")
         self.io_output(f"[red]Agent: {results}")
         sender_name = self.config.name
         if isinstance(msg, ChatDocument) and msg.function_call is not None:
@@ -333,11 +333,6 @@ class Agent(ABC):
         elif not settings.interactive:
             user_msg = ""
         else:
-            # user_msg = Prompt.ask(
-            #     f"[blue]{self.indent}Human "
-            #     "(respond or q, x to exit current level, "
-            #     f"or hit enter to continue)\n{self.indent}",
-            # ).strip()
             user_msg = self.io_input(f"[blue]{self.indent}Human "
                             "(respond or q, x to exit current level, "
                             f"or hit enter to continue)\n{self.indent}").strip()

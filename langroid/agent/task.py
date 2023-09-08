@@ -307,10 +307,6 @@ class Task:
             )
 
         i = 0
-        # print(
-        #     f"[bold magenta]{self._enter} Starting Agent "
-        #     f"{self.name} ({message_history_idx+1}) [/bold magenta]"
-        # )
         self.io_output(
             f"[bold magenta]{self._enter} Starting Agent "
             f"{self.name} ({message_history_idx+1}) [/bold magenta]"
@@ -323,7 +319,6 @@ class Task:
             self.step()
             if self.done():
                 if self._level == 0:
-                    #print("[magenta]Bye, hope this was useful!")
                     self.io_output("[magenta]Bye, hope this was useful!")
                 break
             i += 1
@@ -346,10 +341,6 @@ class Task:
                 # ONLY talking to the current agent.
                 if isinstance(t.agent, ChatAgent):
                     t.agent.clear_history(0)
-        # print(
-        #     f"[bold magenta]{self._leave} Finished Agent "
-        #     f"{self.name} ({n_messages}) [/bold magenta]"
-        # )
         self.io_output(
             f"[bold magenta]{self._leave} Finished Agent "
             f"{self.name} ({n_messages}) [/bold magenta]"
