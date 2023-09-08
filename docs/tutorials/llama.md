@@ -120,6 +120,7 @@ In your `.env` file, set the following:
 OPENAI_API_BASE=http://localhost:8000/v1
 OPENAI_API_KEY=sx-xxx
 ```
+Also set the other env vars as described in the [langroid-examples](https://github.com/langroid/langroid-examples#set-up-environment-variables-api-keys-etc) repo.
 
 Then you can use Langroid as usual. Try some simple tests, such as:
 
