@@ -39,6 +39,7 @@ class OpenAIChatModel(str, Enum):
     GPT3_5_TURBO = "gpt-3.5-turbo-0613"
     GPT4_NOFUNC = "gpt-4"  # before function_call API
     GPT4 = "gpt-4"
+    LOCAL = "local"  # dummy for any local model
 
 
 class OpenAICompletionModel(str, Enum):
@@ -47,10 +48,12 @@ class OpenAICompletionModel(str, Enum):
     TEXT_DA_VINCI_003 = "text-davinci-003"
     TEXT_ADA_001 = "text-ada-001"
     GPT4 = "gpt-4"
+    LOCAL = "local"  # dummy for any local model
 
 
 class OpenAIGPTConfig(LLMConfig):
     type: str = "openai"
+    api_base: str | None = None  # used for local or other non-OpenAI models
     max_output_tokens: int = 1024
     min_output_tokens: int = 64
     timeout: int = 20
@@ -62,13 +65,26 @@ class OpenAIGPTConfig(LLMConfig):
         OpenAIChatModel.GPT4: 8192,
         OpenAIChatModel.GPT4_NOFUNC: 8192,
         OpenAICompletionModel.TEXT_DA_VINCI_003: 4096,
+        # 2048 is default in llama-cpp-python, but can be set
+        # via cmd line, e.g.
+        # python3 -m llama-cpp.server --n_ctx 4096
+        OpenAICompletionModel.LOCAL: 2048,
     }
     cost_per_1k_tokens: Dict[str, Tuple[float, float]] = {
         # (input/prompt cost, output/completion cost)
         OpenAIChatModel.GPT3_5_TURBO: (0.0015, 0.002),
         OpenAIChatModel.GPT4: (0.03, 0.06),  # 8K context
         OpenAIChatModel.GPT4_NOFUNC: (0.03, 0.06),
+        OpenAIChatModel.LOCAL: (0.0, 0.0),
     }
+
+    # all of the non-dict vars above can be set via env vars,
+    # by upper-casing the name and prefixing with OPENAI_, e.g.
+    # OPENAI_MAX_OUTPUT_TOKENS=1000.
+    # The dict fields can also be set via env vars by passing json strings, e.g.
+    # OPENAI_CONTEXT_LENGTH='{"gpt-3.5-turbo-0613": 4096, "local": 8192}'
+    class Config:
+        env_prefix = "OPENAI_"
 
 
 class OpenAIResponse(BaseModel):
@@ -94,7 +110,7 @@ class OpenAIGPT(LanguageModel):
             self.chat_model = OpenAIChatModel.GPT4_NOFUNC
         load_dotenv()
         self.api_key = os.getenv("OPENAI_API_KEY", "")
-        self.api_base: str | None = os.getenv("OPENAI_API_BASE")
+        self.api_base: str | None = config.api_base
         if self.api_key == "":
             raise ValueError(
                 """
