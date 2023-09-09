@@ -53,7 +53,7 @@ def chat(opts: CLIOptions) -> None:
     )
     sys_msg = Prompt.ask(
         "[blue]Tell me who I am. Hit Enter for default, or type your own\n",
-        default="Default: 'You are a helpful assistant'",
+        default="You are a helpful assistant",
     )
 
     api_base = "http://localhost:8000/v1" if opts.local_llm else None

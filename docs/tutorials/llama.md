@@ -123,6 +123,7 @@ print(completion.choices[0].message.content)
 
 Once you have the above server running (e.g., in a separate terminal tab),
 create another virtual env where you install langroid as usual.
+Note that local models are supported from version 0.1.58 onwards. 
 There are two ways to setup Langroid to use this local model:
 
 ### Option 1: Via environment variables
@@ -188,7 +189,8 @@ task = Task(agent=agent)
 task.run()
 ```
 
-
+See a fully working examples of this in the `langroid-examples` repo:
+https://github.com/langroid/langroid-examples/blob/main/examples/basic/chat.py
 
 !!! warning "Tests May Fail, results may be inferior, apps/examples may fail!"
         Be aware that while the above enables you to use Langroid with local llama2 models,
