@@ -1,6 +1,27 @@
 from langroid.io.base import InputProvider, OutputProvider
 import socketio
 import threading
+import re
+
+def input_processor(message):
+    outputs = []
+    color_split = message.split("][")
+    for i,cur in enumerate(color_split):
+        if i>0: cur = "["+cur
+        if i<len(color_split)-1: cur = cur+"]"
+        match = re.search(r'\[[^\]]+\]', cur)
+        if match:
+            color = match.group()[1:-1]
+        else: color = "black"
+        for x in cur.split("\n"):
+            outputs.append([color, re.sub(r'\[[^\]]+\]','',x)])
+
+    messages = []
+    for o in range(len(outputs)):
+        messages.append(f"[{outputs[o][0].split(' ')[-1]}]{outputs[o][1]}")
+
+    return messages
+
 
 class WebSocketInputProvider(InputProvider):
     def __init__(self, name):
@@ -23,7 +44,9 @@ class WebSocketInputProvider(InputProvider):
             self.sio.disconnect()
 
     def __call__(self, message, default=""):
-        self.sio.emit('receiveMessage', message)
+        messages = input_processor(message)
+        for m in messages:
+            self.sio.emit('receiveMessage', m)
         while self.returned_value is None:
             pass
         returned_value = self.returned_value
@@ -51,4 +74,6 @@ class WebSocketOutputProvider(OutputProvider):
             self.sio.disconnect()
 
     def __call__(self, message: str):
-        self.sio.emit('receiveMessage', message)
+        messages = input_processor(message)
+        for m in messages:
+            self.sio.emit('receiveMessage', m)

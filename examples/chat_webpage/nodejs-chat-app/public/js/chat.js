@@ -47,7 +47,8 @@ socket.on("message", message => {
 socket.on("receive", message => {
   console.log(message);
   const html = Mustache.render(messageTemplate, {
-    message: message.text
+    message: message.text,
+    color: message.color
   });
 
   $messages.insertAdjacentHTML("beforeend", html);
