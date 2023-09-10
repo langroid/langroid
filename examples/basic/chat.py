@@ -41,6 +41,7 @@ app = typer.Typer()
 
 setup_colored_logging()
 
+
 class CLIOptions(BaseSettings):
     local_llm: bool = False
     local_ctx: int = 2048
@@ -48,8 +49,9 @@ class CLIOptions(BaseSettings):
     class Config:
         extra = "forbid"
         env_prefix = ""
-       
-def chat() -> None:
+
+
+def chat(opts: CLIOptions) -> None:
     IOFactory.set_provider(CmdInputProvider("input"))
     IOFactory.set_provider(CmdOutputProvider("output"))
 
