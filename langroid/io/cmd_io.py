@@ -9,7 +9,7 @@ class CmdInputProvider(InputProvider):
         super().__init__(name)
 
     def __call__(self, message: str, default: str = "") -> str:
-        return Prompt.ask("updated" + message, default=default)
+        return Prompt.ask(message, default=default)
 
 
 class CmdOutputProvider(OutputProvider):
@@ -17,4 +17,4 @@ class CmdOutputProvider(OutputProvider):
         super().__init__(name)
 
     def __call__(self, message: str) -> None:
-        print("updated" + message)
+        print(message)
