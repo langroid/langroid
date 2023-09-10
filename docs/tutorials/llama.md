@@ -123,57 +123,59 @@ print(completion.choices[0].message.content)
 
 Once you have the above server running (e.g., in a separate terminal tab),
 create another virtual env where you install langroid as usual.
-Note that local models are supported from version 0.1.58 onwards. 
-There are two ways to setup Langroid to use this local model:
+Note that local models are supported from version 0.1.59 onwards. 
+There are two ways to setup Langroid to use local Llama2 models:
 
-### Option 1: Via environment variables
-With this option, you set up certain environment variables, and then any
-script where you use langroid will use the local model.
+###  Option 1: Via Environment Variables
 
-In your `.env` file, set the following:
+Make sure you have set up a `.env` file as described in
+the [langroid-examples](https://github.com/langroid/langroid-examples#set-up-environment-variables-api-keys-etc) repo.
+Then add these variable to the `.env` file:
 ```bash
-# modify if using non-default host, port 
-OPENAI_API_BASE=http://localhost:8000/v1
+# modify if using non-default host, port when you set up the server above
+OPENAI_LOCAL.API_BASE=http://localhost:8000/v1
+OPENAI_CHAT_MODEL=local
 ```
 In case you are using the non-default context length (by passing `--n_ctx` to the server),
-you would need to set this environment variable as well:
+you would need to set an additional environment variable as well, as in this example:
 ```bash
-OPENAI_CONTEXT_LENGTH={"local": 1000}
+OPENAI_LOCAL.CONTEXT_LENGTH=1000
 ```
-Also set the other env vars as described in the [langroid-examples](https://github.com/langroid/langroid-examples#set-up-environment-variables-api-keys-etc) repo.
 Since you are using a local model, of course the value of `OPENAI_API_KEY` is irrelevant.
 You can set it to a junk value just to make sure you are not using the OpenAI API.
-Then you can use Langroid as usual. Try some simple tests, such as:
 
-```python
-pytest -s tests/main/test_llm.py
-```
-The advantage of switching to using a local Llama model 
-using environment variables is that you don't need to change any code. 
-However, there are downsides:
+Now any script or test that uses Langroid will use the local model.
 
-- you have to maintain two sets of `.env` file versions
-- you can't have some agents using the local model and others using the OpenAI API
+### Option 2: By creating config objects in Python Code
 
-The second option where you specify a local Llama model within your python code,
-offers more flexibility, and can of course be combined with the first option.
+Switching to a local Llama model using environment variables is convenient because
+you don't need to change any code. 
+However, switching models within our Python code offers more flexibility, 
+e.g., to programmatically switch 
+between using a local model and the OpenAI API, for different types of tasks, or 
+allow different agents to use different models. 
+Of course, the two options can be combined, as noted in the comments below.
 
-### Option 2: Within your python code
-
-In your script where you want to use the local model, 
+In your script where you want to use the local model,
 first specify an instance of `OpenAIGPTConfig` with the relevant values:
 
 ```python
-from langroid.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
+from langroid.language_models.openai_gpt import (
+    OpenAIGPTConfig, OpenAIChatModel, LocalModelConfig
+)
+from dotenv import load_dotenv
+load_dotenv() # read in .env file
 local_llm_config = OpenAIGPTConfig(
-        chat_model=OpenAIChatModel.LOCAL,
-        api_base="http://localhost:8000/v1", # modify as needed
-        context_length={
-                # in case you used a non-default value running the server with the --n_ctx option
-                OpenAIChatModel.LOCAL: 1000, 
-        }
+    chat_model=OpenAIChatModel.LOCAL,
+    local=LocalModelConfig(
+        # If omitted, this is obtained from the OPENAI_LOCAL.API_BASE env variable
+        api_base="http://localhost:8000/v1", # modify if using non-default host, port
+        # if omitted, this is obtained from the OPENAI_LOCAL.CONTEXT_LENGTH env variable
+        context_length=1000, # if using non-default context length
+    ),
 )
 ```
+
 Then use this config to define a `ChatAgentConfig`, create an agent, wrap it in a Task, and run it:
 
 ```python
@@ -189,8 +191,9 @@ task = Task(agent=agent)
 task.run()
 ```
 
-See a fully working examples of this in the `langroid-examples` repo:
-https://github.com/langroid/langroid-examples/blob/main/examples/basic/chat.py
+See a full working example of a simple command-line chatbot that you can use with either
+the OpenAI GPT4 model or a local llama model, in the `langroid-examples` repo:
+[https://github.com/langroid/langroid-examples/blob/main/examples/basic/chat.py](https://github.com/langroid/langroid-examples/blob/main/examples/basic/chat.py).
 
 !!! warning "Tests May Fail, results may be inferior, apps/examples may fail!"
         Be aware that while the above enables you to use Langroid with local llama2 models,

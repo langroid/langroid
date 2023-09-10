@@ -22,10 +22,15 @@ import typer
 from rich import print
 from rich.prompt import Prompt
 from pydantic import BaseSettings
+from dotenv import load_dotenv
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
-from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
+from langroid.language_models.openai_gpt import (
+    OpenAIChatModel,
+    OpenAIGPTConfig,
+    LocalModelConfig,
+)
 from langroid.utils.configuration import set_global, Settings
 from langroid.utils.logging import setup_colored_logging
 
@@ -51,21 +56,36 @@ def chat(opts: CLIOptions) -> None:
         Enter x or q to quit at any point.
         """
     )
+
+    load_dotenv()
+
+    # create the appropriate OpenAIGPTConfig depending on local model or not
+
+    if opts.local_llm:
+        # assumes local endpoint is either the default http://localhost:8000/v1
+        # or if not, it has been set in the .env file as the value of
+        # OPENAI_LOCAL.API_BASE
+        llm_config = OpenAIGPTConfig(
+            chat_model=OpenAIChatModel.LOCAL,
+            local=LocalModelConfig(
+                context_length=opts.local_ctx,
+            ),
+        )
+    else:
+        # defaults to chat_model = OpenAIChatModel.GPT4
+        llm_config = OpenAIGPTConfig()
+
+    default_sys_msg = (
+        "You are a helpful assistant. Ask me how you can help. "
+        "Be very concise in your answers."
+        if llm_config.chat_model == OpenAIChatModel.LOCAL
+        else "You are a helpful assistant."
+    )
     sys_msg = Prompt.ask(
         "[blue]Tell me who I am. Hit Enter for default, or type your own\n",
-        default="You are a helpful assistant",
+        default=default_sys_msg,
     )
 
-    api_base = "http://localhost:8000/v1" if opts.local_llm else None
-    chat_model = OpenAIChatModel.GPT4 if not opts.local_llm else OpenAIChatModel.LOCAL
-    llm_config = OpenAIGPTConfig(
-        chat_model=chat_model,
-        api_base=api_base,
-    )
-    if opts.local_ctx != 2048:
-        llm_config.context_length = {
-            OpenAIChatModel.LOCAL: opts.local_ctx,
-        }
     config = ChatAgentConfig(
         system_message=sys_msg,
         llm=llm_config,

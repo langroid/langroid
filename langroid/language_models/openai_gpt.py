@@ -7,7 +7,6 @@ from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple, Union
 
 import openai
-from dotenv import load_dotenv
 from pydantic import BaseModel
 from rich import print
 
@@ -51,8 +50,22 @@ class OpenAICompletionModel(str, Enum):
     LOCAL = "local"  # dummy for any local model
 
 
+class LocalModelConfig(BaseModel):
+    """
+    Configuration for local model available via
+    an OpenAI-compatible API.
+    """
+
+    # OPENAI_LOCAL.API_BASE env var can be used to set this
+    api_base: str = "http://localhost:8000/v1"
+    # OPENAI_LOCAL.CONTEXT_LENGTH env var can be used to set this
+    context_length: int = 2048  # default for llama-cpp-python
+
+
 class OpenAIGPTConfig(LLMConfig):
     type: str = "openai"
+    # This allows local configs to be set via OPENAI_LOCAL.* env vars
+    local: LocalModelConfig = LocalModelConfig()
     api_base: str | None = None  # used for local or other non-OpenAI models
     max_output_tokens: int = 1024
     min_output_tokens: int = 64
@@ -108,9 +121,16 @@ class OpenAIGPT(LanguageModel):
         super().__init__(config)
         if settings.nofunc:
             self.chat_model = OpenAIChatModel.GPT4_NOFUNC
-        load_dotenv()
-        self.api_key = os.getenv("OPENAI_API_KEY", "")
-        self.api_base: str | None = config.api_base
+        self.api_base: str | None = None
+        if config.chat_model == OpenAIChatModel.LOCAL:
+            self.api_key = "sx-xxx"
+            self.api_base = config.local.api_base
+            config.context_length = {OpenAIChatModel.LOCAL: config.local.context_length}
+        else:
+            # TODO: get rid of this and add `api_key` to the OpenAIGPTConfig
+            # so we can get it from the OPENAI_API_KEY env var
+            self.api_key = os.getenv("OPENAI_API_KEY", "")
+
         if self.api_key == "":
             raise ValueError(
                 """
