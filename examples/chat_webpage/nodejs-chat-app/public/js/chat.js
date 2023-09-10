@@ -45,14 +45,32 @@ socket.on("message", message => {
 });
 
 socket.on("receive", message => {
-  console.log(message);
-  const html = Mustache.render(messageTemplate, {
-    message: message.text,
-    color: message.color
-  });
+  // console.log(message);
+  // const html = Mustache.render(messageTemplate, {
+  //   message: message.text,
+  //   color: message.color
+  // });
+  //
+  // $messages.insertAdjacentHTML("beforeend", html);
+  // autoscroll();
 
-  $messages.insertAdjacentHTML("beforeend", html);
-  autoscroll();
+  console.log(message);
+    if (message.stream) {
+        // Find the last message paragraph and append the new text
+        const $lastMessage = $messages.lastElementChild.querySelector('p:last-child');
+        if ($lastMessage) {
+            $lastMessage.textContent += message.text;
+        }
+    } else {
+        // Render a new message
+        const html = Mustache.render(messageTemplate, {
+            message: message.text,
+            color: message.color
+        });
+        $messages.insertAdjacentHTML("beforeend", html);
+    }
+    autoscroll();
+
 });
 
 $messageForm.addEventListener("submit", e => {

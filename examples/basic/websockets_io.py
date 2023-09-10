@@ -62,6 +62,7 @@ class WebSocketOutputProvider(OutputProvider):
     def __init__(self, name):
         super().__init__(name)
         self.returned_value = None
+        self.streaming = False
         self.sio = socketio.Client()
 
         @self.sio.on("message")
@@ -78,7 +79,18 @@ class WebSocketOutputProvider(OutputProvider):
         except KeyboardInterrupt:
             self.sio.disconnect()
 
-    def __call__(self, message: str):
+    def handle_message(self, message, prefix):
         messages = input_processor(message)
         for m in messages:
-            self.sio.emit("receiveMessage", m)
+            self.sio.emit("receiveMessage", f"{prefix}{m}")
+
+    def __call__(self, message: str, streaming: bool = False):
+        if streaming:
+            if self.streaming:
+                self.handle_message(message, "<s>")
+            else:
+                self.streaming = True
+                self.handle_message(message, "")
+        else:
+            self.streaming = False
+            self.handle_message(message, "")

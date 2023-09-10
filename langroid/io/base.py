@@ -13,7 +13,10 @@ class OutputProvider(ABC):
     def __init__(self, name: str) -> None:
         self.name = name
 
-    def __call__(self, message: str) -> None:
+    def __call__(self, message: str, streaming: bool = False) -> None:
+        pass
+
+    def flush(self) -> None:
         pass
 
 

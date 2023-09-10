@@ -11,10 +11,16 @@ function extractValue(str) {
 }
 
 const generateMessage = (text) => {
+    let stream = false;
+    if (text.startsWith("<s>")){
+      text = text.slice(3);
+      stream = true;
+  }
   out = extractValue(text);
   return {
     "text": out.str,
-    "color": out.color
+    "color": out.color,
+    "stream": stream
   };
 };
 

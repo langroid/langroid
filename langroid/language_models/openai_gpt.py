@@ -2,7 +2,6 @@ import ast
 import hashlib
 import logging
 import os
-import sys
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple, Union
 
@@ -28,7 +27,7 @@ from langroid.language_models.utils import (
     retry_with_exponential_backoff,
 )
 from langroid.utils.configuration import settings
-from langroid.utils.constants import NO_ANSWER, Colors
+from langroid.utils.constants import NO_ANSWER
 
 logging.getLogger("openai").setLevel(logging.ERROR)
 
@@ -179,8 +178,6 @@ class OpenAIGPT(LanguageModel):
         function_args = ""
         function_name = ""
 
-        sys.stdout.write(Colors().GREEN)
-        sys.stdout.flush()
         has_function = False
         for event in response:
             event_args = ""
@@ -197,14 +194,14 @@ class OpenAIGPT(LanguageModel):
                 event_text = event["choices"][0]["text"]
             if event_text:
                 completion += event_text
-                self.io_output(Colors().GREEN + event_text)
+                self.io_output(event_text, streaming=True)
             if event_fn_name:
                 function_name = event_fn_name
                 has_function = True
-                self.io_output(Colors().GREEN + "FUNC: " + event_fn_name + ": ")
+                self.io_output("FUNC: " + event_fn_name + ": ", streaming=True)
             if event_args:
                 function_args += event_args
-                self.io_output(Colors().GREEN + event_args)
+                self.io_output(event_args, streaming=True)
             if event.choices[0].finish_reason in ["stop", "function_call"]:
                 # for function_call, finish_reason does not necessarily
                 # contain "function_call" as mentioned in the docs.
