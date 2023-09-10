@@ -168,13 +168,14 @@ load_dotenv() # read in .env file
 local_llm_config = OpenAIGPTConfig(
     chat_model=OpenAIChatModel.LOCAL,
     local=LocalModelConfig(
-        # If omitted, this is obtained from the OPENAI_LOCAL.API_BASE env variable
-        api_base="http://localhost:8000/v1", # modify if using non-default host, port
-        # if omitted, this is obtained from the OPENAI_LOCAL.CONTEXT_LENGTH env variable
-        context_length=1000, # if using non-default context length
+        api_base="http://localhost:8000/v1", #(1)! 
+        context_length=1000, #(2)!
     ),
 )
 ```
+
+1. If omitted, uses the value of `OPENAI_LOCAL.API_BASE` env var
+2. If omitted, uses the value of `OPENAI_LOCAL.CONTEXT_LENGTH` env var
 
 Then use this config to define a `ChatAgentConfig`, create an agent, wrap it in a Task, and run it:
 
