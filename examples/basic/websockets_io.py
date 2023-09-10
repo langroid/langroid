@@ -3,18 +3,22 @@ import socketio
 import threading
 import re
 
+
 def input_processor(message):
     outputs = []
     color_split = message.split("][")
-    for i,cur in enumerate(color_split):
-        if i>0: cur = "["+cur
-        if i<len(color_split)-1: cur = cur+"]"
-        match = re.search(r'\[[^\]]+\]', cur)
+    for i, cur in enumerate(color_split):
+        if i > 0:
+            cur = "[" + cur
+        if i < len(color_split) - 1:
+            cur = cur + "]"
+        match = re.search(r"\[[^\]]+\]", cur)
         if match:
             color = match.group()[1:-1]
-        else: color = "black"
+        else:
+            color = "black"
         for x in cur.split("\n"):
-            outputs.append([color, re.sub(r'\[[^\]]+\]','',x)])
+            outputs.append([color, re.sub(r"\[[^\]]+\]", "", x)])
 
     messages = []
     for o in range(len(outputs)):
@@ -29,11 +33,11 @@ class WebSocketInputProvider(InputProvider):
         self.returned_value = None
         self.sio = socketio.Client()
 
-        @self.sio.on('message')
+        @self.sio.on("message")
         def on_message(data):
             self.returned_value = data["text"]
 
-        self.sio.connect('http://localhost:3000')
+        self.sio.connect("http://localhost:3000")
 
         threading.Thread(target=self.setup, daemon=True).start()
 
@@ -46,12 +50,13 @@ class WebSocketInputProvider(InputProvider):
     def __call__(self, message, default=""):
         messages = input_processor(message)
         for m in messages:
-            self.sio.emit('receiveMessage', m)
+            self.sio.emit("receiveMessage", m)
         while self.returned_value is None:
             pass
         returned_value = self.returned_value
         self.returned_value = None
         return returned_value
+
 
 class WebSocketOutputProvider(OutputProvider):
     def __init__(self, name):
@@ -59,11 +64,11 @@ class WebSocketOutputProvider(OutputProvider):
         self.returned_value = None
         self.sio = socketio.Client()
 
-        @self.sio.on('message')
+        @self.sio.on("message")
         def on_message(data):
             self.returned_value = data["text"]
 
-        self.sio.connect('http://localhost:3000')
+        self.sio.connect("http://localhost:3000")
 
         threading.Thread(target=self.setup, daemon=True).start()
 
@@ -76,4 +81,4 @@ class WebSocketOutputProvider(OutputProvider):
     def __call__(self, message: str):
         messages = input_processor(message)
         for m in messages:
-            self.sio.emit('receiveMessage', m)
+            self.sio.emit("receiveMessage", m)

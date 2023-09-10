@@ -9,10 +9,15 @@ from langroid.agent.special.retriever_agent import (
     RetrieverAgent,
     RetrieverAgentConfig,
 )
+from langroid.io.base import IOFactory
+from langroid.io.cmd_io import CmdInputProvider, CmdOutputProvider
 from langroid.parsing.parser import ParsingConfig
 from langroid.utils.configuration import Settings, set_global
 from langroid.utils.constants import NO_ANSWER
 from langroid.vector_store.base import VectorStoreConfig
+
+IOFactory.set_provider(CmdInputProvider("input"))
+IOFactory.set_provider(CmdOutputProvider("output"))
 
 
 def gen_data(size: int) -> List[Dict[str, Any]]:

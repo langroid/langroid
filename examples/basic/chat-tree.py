@@ -41,6 +41,9 @@ from langroid.utils.configuration import set_global, Settings
 from langroid.utils.logging import setup_colored_logging
 from langroid.utils.constants import NO_ANSWER
 
+from langroid.io.cmd_io import CmdInputProvider, CmdOutputProvider
+from langroid.io.base import IOFactory
+
 app = typer.Typer()
 
 setup_colored_logging()
@@ -87,6 +90,9 @@ def chat() -> None:
         ),
         vecdb=None,
     )
+
+    IOFactory.set_provider(CmdInputProvider("input"))
+    IOFactory.set_provider(CmdOutputProvider("output"))
 
     main_agent = ChatAgent(config)
     main_task = Task(

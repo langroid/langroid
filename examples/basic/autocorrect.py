@@ -10,7 +10,6 @@ python3 examples/basic/autocorrect.py
 """
 
 import typer
-from rich import print
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
@@ -18,6 +17,8 @@ from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
 from langroid.utils.configuration import set_global, Settings
 from langroid.utils.logging import setup_colored_logging
 
+from langroid.io.cmd_io import CmdInputProvider, CmdOutputProvider
+from langroid.io.base import IOFactory
 
 app = typer.Typer()
 
@@ -25,7 +26,12 @@ setup_colored_logging()
 
 
 def chat() -> None:
-    print(
+    IOFactory.set_provider(CmdInputProvider("input"))
+    IOFactory.set_provider(CmdOutputProvider("output"))
+
+    io_output = IOFactory.get_provider("output")
+
+    io_output(
         """
         [blue]Welcome to the Autocorrecting Chatbot!
         You can quickly type your message, don't even look at your keyboard. 

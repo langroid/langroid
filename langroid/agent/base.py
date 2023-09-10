@@ -23,6 +23,7 @@ from rich.prompt import Prompt
 
 from langroid.agent.chat_document import ChatDocMetaData, ChatDocument
 from langroid.agent.tool_message import INSTRUCTION, ToolMessage
+from langroid.io.base import IOFactory
 from langroid.language_models.base import (
     LanguageModel,
     LLMConfig,
@@ -37,7 +38,6 @@ from langroid.prompts.prompts_config import PromptsConfig
 from langroid.utils.configuration import settings
 from langroid.utils.constants import NO_ANSWER
 from langroid.vector_store.base import VectorStore, VectorStoreConfig
-from langroid.io.base import IOFactory
 
 console = Console()
 
@@ -74,7 +74,6 @@ class Agent(ABC):
         self.dialog: List[Tuple[str, str]] = []  # seq of LLM (prompt, response) tuples
         self.llm_tools_map: Dict[str, Type[ToolMessage]] = {}
         self.llm_tools_handled: Set[str] = set()
-        self.llm_tools_usable: Set[str] = set()
         self.llm_tools_usable: Set[str] = set()
         self.total_llm_token_cost = 0.0
         self.total_llm_token_usage = 0
@@ -333,10 +332,11 @@ class Agent(ABC):
         elif not settings.interactive:
             user_msg = ""
         else:
-            user_msg = self.io_input(f"[blue]{self.indent}Human "
-                            "(respond or q, x to exit current level, "
-                            f"or hit enter to continue)\n{self.indent}").strip()
-
+            user_msg = self.io_input(
+                f"[blue]{self.indent}Human "
+                "(respond or q, x to exit current level, "
+                f"or hit enter to continue)\n{self.indent}"
+            ).strip()
 
         # only return non-None result if user_msg not empty
         if not user_msg:

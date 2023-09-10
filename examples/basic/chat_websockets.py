@@ -3,8 +3,6 @@ The most basic chatbot example, using the default settings.
 A single Agent allows you to chat with a pre-trained Language Model.
 """
 import typer
-from rich import print
-from rich.prompt import Prompt
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
@@ -23,7 +21,6 @@ setup_colored_logging()
 
 
 def chat() -> None:
-
     IOFactory.set_provider(WebSocketInputProvider("input"))
     IOFactory.set_provider(WebSocketOutputProvider("output"))
 

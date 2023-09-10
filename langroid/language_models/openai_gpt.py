@@ -13,6 +13,7 @@ from rich import print
 
 from langroid.cachedb.momento_cachedb import MomentoCache, MomentoCacheConfig
 from langroid.cachedb.redis_cachedb import RedisCache, RedisCacheConfig
+from langroid.io.base import IOFactory
 from langroid.language_models.base import (
     LanguageModel,
     LLMConfig,
@@ -29,8 +30,6 @@ from langroid.language_models.utils import (
 )
 from langroid.utils.configuration import settings
 from langroid.utils.constants import NO_ANSWER, Colors
-
-from langroid.io.base import IOFactory
 
 logging.getLogger("openai").setLevel(logging.ERROR)
 

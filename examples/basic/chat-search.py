@@ -10,8 +10,6 @@ environment variables in your `.env` file, as explained in the
 """
 
 import typer
-from rich import print
-from rich.prompt import Prompt
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
@@ -20,6 +18,8 @@ from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
 from langroid.utils.configuration import set_global, Settings
 from langroid.utils.logging import setup_colored_logging
 
+from langroid.io.cmd_io import CmdInputProvider, CmdOutputProvider
+from langroid.io.base import IOFactory
 
 app = typer.Typer()
 
@@ -27,7 +27,13 @@ setup_colored_logging()
 
 
 def chat() -> None:
-    print(
+    IOFactory.set_provider(CmdInputProvider("input"))
+    IOFactory.set_provider(CmdOutputProvider("output"))
+
+    io_input = IOFactory.get_provider("input")
+    io_output = IOFactory.get_provider("output")
+
+    io_output(
         """
         [blue]Welcome to the Google Search chatbot!
         I will try to answer your questions, relying on (summaries of links from) 
@@ -36,7 +42,7 @@ def chat() -> None:
         Enter x or q to quit at any point.
         """
     )
-    sys_msg = Prompt.ask(
+    sys_msg = io_input(
         "[blue]Tell me who I am. Hit Enter for default, or type your own\n",
         default="Default: 'You are a helpful assistant'",
     )

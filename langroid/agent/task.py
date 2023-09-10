@@ -12,13 +12,12 @@ from langroid.agent.chat_document import (
     ChatDocMetaData,
     ChatDocument,
 )
+from langroid.io.base import IOFactory
 from langroid.language_models.base import LLMMessage, Role
 from langroid.mytypes import Entity
 from langroid.utils.configuration import settings
 from langroid.utils.constants import DONE, NO_ANSWER, USER_QUIT
 from langroid.utils.logging import RichFileLogger, setup_file_logger
-
-from langroid.io.base import IOFactory
 
 logger = logging.getLogger(__name__)
 

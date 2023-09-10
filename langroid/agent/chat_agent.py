@@ -9,6 +9,7 @@ from rich.console import Console
 from langroid.agent.base import Agent, AgentConfig
 from langroid.agent.chat_document import ChatDocument
 from langroid.agent.tool_message import ToolMessage
+from langroid.io.base import IOFactory
 from langroid.language_models.base import (
     LanguageModel,
     LLMFunctionSpec,
@@ -17,7 +18,6 @@ from langroid.language_models.base import (
     StreamingIfAllowed,
 )
 from langroid.utils.configuration import settings
-from langroid.io.base import IOFactory
 
 console = Console()
 

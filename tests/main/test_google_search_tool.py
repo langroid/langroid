@@ -11,6 +11,8 @@ import pytest
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.tools.google_search_tool import GoogleSearchTool
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
+from langroid.io.base import IOFactory
+from langroid.io.cmd_io import CmdInputProvider, CmdOutputProvider
 from langroid.language_models.openai_gpt import (
     OpenAIChatModel,
     OpenAIGPTConfig,
@@ -18,6 +20,9 @@ from langroid.language_models.openai_gpt import (
 from langroid.parsing.parser import ParsingConfig
 from langroid.prompts.prompts_config import PromptsConfig
 from langroid.utils.configuration import Settings, set_global
+
+IOFactory.set_provider(CmdInputProvider("input"))
+IOFactory.set_provider(CmdOutputProvider("output"))
 
 cfg = ChatAgentConfig(
     name="test-langroid",

@@ -8,6 +8,8 @@ from langroid.agent.special.doc_chat_agent import DocChatAgent, DocChatAgentConf
 from langroid.agent.task import Task
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
+from langroid.io.base import IOFactory
+from langroid.io.cmd_io import CmdInputProvider, CmdOutputProvider
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
 from langroid.mytypes import DocMetaData, Document, Entity
 from langroid.parsing.parser import ParsingConfig, Splitter
@@ -17,6 +19,9 @@ from langroid.utils.configuration import Settings, set_global
 from langroid.utils.system import rmdir
 from langroid.vector_store.base import VectorStoreConfig
 from langroid.vector_store.qdrantdb import QdrantDBConfig
+
+IOFactory.set_provider(CmdInputProvider("input"))
+IOFactory.set_provider(CmdOutputProvider("output"))
 
 storage_path = ".qdrant/testdata1"
 rmdir(storage_path)
