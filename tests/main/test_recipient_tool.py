@@ -98,7 +98,8 @@ def test_agents_with_recipient_tool(
         
         (a) If n is even:
          (a.1) if n is a multiple of 10, send it to EvenHandler,
-             using the `square` tool/function-call, specifying the `recipient` field 
+             using the `square` tool/function-call, specifying the `intended_recipient` 
+             field 
              as "EvenHandler".
          (a.2) if n is NOT a multiple of 10, send it to EvenHandler,
              
@@ -126,15 +127,6 @@ def test_agents_with_recipient_tool(
         llm_delegate=True,
         single_round=False,
     )
-
-    # You are also forgetful when it comes to numbers bigger than 10.
-    # When a number is bigger than 10, just send your number without specifying
-    # a recipient, as a simple non-JSON string, and do this without explaining why
-    # you are doing this, and do not correct yourself until I remind you.
-    # When I receive this message, I will remind you to correct this, and you can
-    # then correct yourself. For example when trying to transform 25, since it is
-    # bigger than 10, you will send me simply the  message "25", and say nothing else.
-
     even_agent = ChatAgent(config)
     even_agent.enable_message(
         SquareTool,

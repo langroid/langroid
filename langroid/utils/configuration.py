@@ -1,3 +1,4 @@
+import os
 from typing import List
 
 from dotenv import load_dotenv
@@ -51,3 +52,15 @@ def update_global_settings(cfg: BaseSettings, keys: List[str]) -> None:
 def set_global(key_vals: Settings) -> None:
     """Update the unique global settings object"""
     settings.__dict__.update(key_vals.__dict__)
+
+
+def set_env(settings: BaseSettings) -> None:
+    """
+    Set environment variables from a BaseSettings instance
+    Args:
+        settings (BaseSettings): desired settings
+    Returns:
+    """
+    for field_name, field in settings.__class__.__fields__.items():
+        env_var_name = field.field_info.extra.get("env", field_name).upper()
+        os.environ[env_var_name] = str(settings.dict()[field_name])
