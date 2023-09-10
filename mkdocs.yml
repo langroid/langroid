@@ -102,6 +102,7 @@ nav:
     - Demos:
       - Audience Targeting: demos/targeting/audience-targeting.md
   - Tutorials:
+    - Local Llama2 Models: tutorials/llama.md
     - SQLChatAgent: tutorials/postgresql-agent.md
   - Code/API Docs: reference/
 #  - API Documentation:
