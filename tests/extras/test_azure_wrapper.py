@@ -1,6 +1,5 @@
-import importlib
+from contextlib import contextmanager
 
-import openai
 import pytest
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
@@ -19,6 +18,19 @@ cfg = AzureConfig(
     min_output_tokens=10,
     cache_config=RedisCacheConfig(fake=False),
 )
+
+
+@contextmanager
+def reload_openai_on_azure_config(new_config):
+    try:
+        yield
+    finally:
+        if isinstance(new_config, AzureConfig):
+            import importlib
+
+            import openai
+
+            importlib.reload(openai)
 
 
 class _TestChatAgentConfig(ChatAgentConfig):
@@ -69,8 +81,8 @@ def test_azure_wrapper(streaming, country, capital):
 def test_chat_agent(test_settings: Settings):
     set_global(test_settings)
     cfg = _TestChatAgentConfig()
-    # just testing that these don't fail
-    agent = ChatAgent(cfg)
-    response = agent.llm_response("what is the capital of France?")
-    assert "Paris" in response.content
-    importlib.reload(openai)
+    with reload_openai_on_azure_config(cfg):
+        # just testing that these don't fail
+        agent = ChatAgent(cfg)
+        response = agent.llm_response("what is the capital of France?")
+        assert "Paris" in response.content
