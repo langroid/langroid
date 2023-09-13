@@ -393,11 +393,13 @@ class ChatAgent(Agent):
                     )
 
         if output_len < self.config.llm.min_output_tokens:
-            raise ValueError(
+            logger.warning(
                 f"""
                 Tried to shorten prompt history for chat mode 
                 but the feasible output length {output_len} is still
                 less than the minimum output length {self.config.llm.min_output_tokens}.
+                Your chat history is too long for this model, 
+                and the response may be truncated.
                 """
             )
         with StreamingIfAllowed(self.llm):

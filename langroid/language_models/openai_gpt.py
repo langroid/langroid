@@ -22,6 +22,9 @@ from langroid.language_models.base import (
     LLMTokenUsage,
     Role,
 )
+from langroid.language_models.prompt_formatter.base import (
+    PromptFormatter,
+)
 from langroid.language_models.utils import (
     async_retry_with_exponential_backoff,
     retry_with_exponential_backoff,
@@ -50,45 +53,26 @@ class OpenAICompletionModel(str, Enum):
     LOCAL = "local"  # dummy for any local model
 
 
-class LocalModelConfig(BaseModel):
-    """
-    Configuration for local model available via
-    an OpenAI-compatible API.
-    """
-
-    # OPENAI_LOCAL.API_BASE env var can be used to set this
-    api_base: str = "http://localhost:8000/v1"
-    # OPENAI_LOCAL.CONTEXT_LENGTH env var can be used to set this
-    context_length: int = 2048  # default for llama-cpp-python
-
-
 class OpenAIGPTConfig(LLMConfig):
     type: str = "openai"
-    # This allows local configs to be set via OPENAI_LOCAL.* env vars
-    local: LocalModelConfig = LocalModelConfig()
     api_base: str | None = None  # used for local or other non-OpenAI models
     max_output_tokens: int = 1024
     min_output_tokens: int = 64
     timeout: int = 20
     temperature: float = 0.2
-    chat_model: OpenAIChatModel = OpenAIChatModel.GPT4
-    completion_model: OpenAICompletionModel = OpenAICompletionModel.GPT4
+    chat_model: str | OpenAIChatModel = OpenAIChatModel.GPT4
+    completion_model: str | OpenAICompletionModel = OpenAICompletionModel.GPT4
     context_length: Dict[str, int] = {
         OpenAIChatModel.GPT3_5_TURBO: 4096,
         OpenAIChatModel.GPT4: 8192,
         OpenAIChatModel.GPT4_NOFUNC: 8192,
         OpenAICompletionModel.TEXT_DA_VINCI_003: 4096,
-        # 2048 is default in llama-cpp-python, but can be set
-        # via cmd line, e.g.
-        # python3 -m llama-cpp.server --n_ctx 4096
-        OpenAICompletionModel.LOCAL: 2048,
     }
     cost_per_1k_tokens: Dict[str, Tuple[float, float]] = {
         # (input/prompt cost, output/completion cost)
         OpenAIChatModel.GPT3_5_TURBO: (0.0015, 0.002),
         OpenAIChatModel.GPT4: (0.03, 0.06),  # 8K context
         OpenAIChatModel.GPT4_NOFUNC: (0.03, 0.06),
-        OpenAIChatModel.LOCAL: (0.0, 0.0),
     }
 
     # all of the non-dict vars above can be set via env vars,
@@ -122,10 +106,16 @@ class OpenAIGPT(LanguageModel):
         if settings.nofunc:
             self.chat_model = OpenAIChatModel.GPT4_NOFUNC
         self.api_base: str | None = None
-        if config.chat_model == OpenAIChatModel.LOCAL:
+        if config.local:
+            self.config.chat_model = config.local.model
+            self.config.use_completion_for_chat = config.local.use_completion_for_chat
+            self.config.use_chat_for_completion = config.local.use_chat_for_completion
             self.api_key = "sx-xxx"
             self.api_base = config.local.api_base
-            config.context_length = {OpenAIChatModel.LOCAL: config.local.context_length}
+            config.context_length = {config.local.model: config.local.context_length}
+            config.cost_per_1k_tokens = {
+                config.local.model: (0.0, 0.0),
+            }
         else:
             # TODO: get rid of this and add `api_key` to the OpenAIGPTConfig
             # so we can get it from the OPENAI_API_KEY env var
@@ -433,6 +423,24 @@ class OpenAIGPT(LanguageModel):
         functions: Optional[List[LLMFunctionSpec]] = None,
         function_call: str | Dict[str, str] = "auto",
     ) -> LLMResponse:
+        if self.config.use_completion_for_chat:
+            # only makes sense for local models
+            if self.config.local is None or self.config.local.formatter is None:
+                raise ValueError(
+                    """
+                    `formatter` must be specified in config to use completion for chat.
+                    """
+                )
+            formatter = PromptFormatter.create(self.config.local.formatter)
+            if isinstance(messages, str):
+                messages = [
+                    LLMMessage(
+                        role=Role.SYSTEM, content="You are a helpful assistant."
+                    ),
+                    LLMMessage(role=Role.USER, content=messages),
+                ]
+            prompt = formatter.format(messages)
+            return self.generate(prompt=prompt, max_tokens=max_tokens)
         try:
             return self._chat(messages, max_tokens, functions, function_call)
         except Exception as e:

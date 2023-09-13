@@ -27,20 +27,29 @@ In these notes we explore the `llama.cpp` approach.
 !!! note "Tested on Macbook M1 Pro Max"
         This has been tested only on a Macbook Pro M1 Max with 64GB RAM. 
 
-## Install `llama-cpp-python`
-The overall plan will be to spin up a server that presents an OpenAI-like API to 
-the local llama model, and then use Langroid to interact with this server.
+There are a few libraries that let you run llama (and many other) models locally, 
+and spin up a server that presents an OpenAI-like API to the local model.
+Then your python code that works with the OpenAI API can be used with the local model,
+by making a simple change, i.e. set `openai.api_base` to the local server URL.
+
+We recommend these libraries for setting up local models with OpenAI-like APIs:
+
+- [`oobabooga/text-generation-webui`](https://github.com/oobabooga/text-generation-webui)
+- [`abetlen/llama-cpp-python`](https://github.com/abetlen/llama-cpp-python)
+
+Here we show instructions for `llama-cpp-python`.
+The process for `text-generation-webui` is similar.
+
+## Set up a local llama2 model server using `llama-cpp-python`
 
 !!! warning "Keep the server, client virtual envs separate" 
         Very important to install `llama-cpp-python` in a separate virtual env 
         from the one where you install Langroid.
 
-Follow the instructions here:
+Install `llama-cpp-python` as described in this repo:
 [https://github.com/abetlen/llama-cpp-python](https://github.com/abetlen/llama-cpp-python)
-
-Essentially, you can do `poetry add llama-cpp-python` or `pip install llama-cpp-python`.
-
-As the repo says, you may need to do:
+Mainly, you just need to do this (various optional settings are mentioned in 
+the repo, but you can ignore those for a basic example).
 
 ```bash
 pip install "llama-cpp-python[server]" --force-reinstall --upgrade --no-cache-dir
@@ -54,29 +63,13 @@ E.g. go here:
 
 Pick one of the `gguf` model files, say `llama-2-13b-chat.Q4_K_M.gguf` and click 
 the download button, save the model under your `./models/` dir.
+To be able to use the model in "chat" mode, you will need one of the models 
+with the word `chat` or `instruct` in the name.
 
-## Directly use the model in Python
-
-```python
-from llama_cpp import Llama
-llm = Llama(
-    model_path="./models/Llama-2-13B-chat-GGUF/llama-2-13b-chat.Q4_K_M.gguf",
-    n_ctx=1000, # context window
-)
-# since we are using a "chat" model, we can directly ask questions
-llm("Name the planets in the solar system")
-```
-
-## Set up a web-server that presents an OpenAI-like API
-
-This is more interesting for us, since this means we can directly use it with Langroid.
-
-Then you can run the server like this:
+Now you can setup a web-server that presents an OpenAI-like API to this model:
 
 ```bash
-python3 -m llama_cpp.server \
-  --model models/Llama-2-13B-chat-GGUF/llama-2-13b-chat.Q4_K_M.gguf \
-  --
+python3 -m llama_cpp.server --model models/llama-2-13b-chat.Q4_K_M.gguf 
 ```
 There are various command-line options you can give here, see the full list
 by running: 
@@ -93,8 +86,7 @@ Then this presents an OpenAPI doc here:
 
 [http://localhost:8000/docs](http://localhost:8000/docs)
 
-As you can all the usual OpenAI end-points are available here.
-
+As you can see, all the usual OpenAI end-points are available here.
 
 ## Use the local model with the OpenAI library
 
@@ -123,7 +115,7 @@ print(completion.choices[0].message.content)
 
 Once you have the above server running (e.g., in a separate terminal tab),
 create another virtual env where you install langroid as usual.
-Note that local models are supported from version 0.1.59 onwards. 
+Note that local models are supported from version 0.1.60 onwards. 
 There are two ways to setup Langroid to use local Llama2 models:
 
 ###  Option 1: Via Environment Variables
@@ -134,7 +126,6 @@ Then add these variable to the `.env` file:
 ```bash
 # modify if using non-default host, port when you set up the server above
 OPENAI_LOCAL.API_BASE=http://localhost:8000/v1
-OPENAI_CHAT_MODEL=local
 ```
 In case you are using the non-default context length (by passing `--n_ctx` to the server),
 you would need to set an additional environment variable as well, as in this example:
@@ -164,12 +155,21 @@ from langroid.language_models.openai_gpt import (
     OpenAIGPTConfig, OpenAIChatModel, LocalModelConfig
 )
 from dotenv import load_dotenv
-load_dotenv() # read in .env file
+
+load_dotenv()  # read in .env file to set env vars
+
+local_model_config = LocalModelConfig(
+        api_base="http://localhost:8000/v1",  # (1)! 
+        context_length=1000,  # (2)!
+        formatter=Llama2FormatterConfig()
+)
+
+llm_config = OpenAIGPTConfig(local=local_model_config)
+
 local_llm_config = OpenAIGPTConfig(
-    chat_model=OpenAIChatModel.LOCAL,
     local=LocalModelConfig(
-        api_base="http://localhost:8000/v1", #(1)! 
-        context_length=1000, #(2)!
+        api_base="http://localhost:8000/v1",  # (1)! 
+        context_length=1000,  # (2)!
     ),
 )
 ```
