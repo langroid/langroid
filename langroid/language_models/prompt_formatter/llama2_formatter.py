@@ -8,8 +8,8 @@ from langroid.language_models.prompt_formatter.base import PromptFormatter
 logger = logging.getLogger(__name__)
 
 
-BOS: str = ""
-EOS: str = ""
+BOS: str = "<s>"
+EOS: str = "</s>"
 B_INST: str = "[INST]"
 E_INST: str = "[/INST]"
 B_SYS: str = "<<SYS>>\n"

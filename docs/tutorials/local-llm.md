@@ -1,44 +1,44 @@
-# Using Langroid with a local LLama2 model
+# Using Langroid with Local LLMs
 
-## Background
+## Why local models?
+There are commercial, remotely served models that currently appear to beat all open/local
+models. So why care about local models? Local models are exciting for a number of reasons:
 
-There are a couple of ways to use LLama2 models:
+- **cost**: other than compute/electricity, there is no cost to use them.
+- **privacy**: no concerns about sending your data to a remote server.
+- **latency**: no network latency due to remote API calls, so faster response times, provided you can get fast enough inference.
+- **uncensored**: some like the fact many local models are not censored to avoid sensitive topics.
+- **fine-tunable**: you can fine-tune them on private/recent data, which current commercial models don't have access to.
+- **sheer thrill**: having a model running on your machine with no internet connection, 
+  and being able to have an intelligent conversation with it -- there is something almost magical about it.
 
-- Using the HuggingFace `transformers` library, e.g. if you click on "Use In Transformers" 
-button on [https://huggingface.co/TheBloke/Llama-2-13B-chat-GGUF](https://huggingface.co/TheBloke/Llama-2-13B-chat-GGUF) you get the following 
-instructions:
-```python
-# Use a pipeline as a high-level helper
-from transformers import pipeline
-pipe = pipeline("text-generation", model="TheBloke/Llama-2-13B-chat-GGUF")
+The main appeal with local models is that with sufficiently careful prompting,
+they may behave sufficiently well to be useful for specific tasks/domains, 
+and bring all of the above benefits.
 
-OR 
+## Running LLMs locally
 
-# Load model directly
-from transformers import AutoModel
-model = AutoModel.from_pretrained("TheBloke/Llama-2-13B-chat-GGUF")
-```
-  In general with this approach you will need GPUs to run the model.
+There are several ways to use LLMs locally. See the [`r/LocalLLaMA`](https://www.reddit.com/r/LocalLLaMA/comments/11o6o3f/how_to_install_llama_8bit_and_4bit/) subreddit for 
+a wealth of information. There are open source libraries that offer front-ends
+to run local models, for example [`oobabooga/text-generation-webui`](https://github.com/oobabooga/text-generation-webui)
+(or "ooba-TGW" for short) but the focus in this tutorial is on spinning up a
+server that mimics an OpenAI-like API, so that any Langroid code that works with 
+the OpenAI API (for say GPT3.5 or GPT4) will work with a local model,
+with just a simple change: set `openai.api_base` to the URL where the local API 
+server is listening, typically `http://localhost:8000/v1`.
 
-- Using `llama.cpp`: run quantized versions of these models locally on CPU, e.g. on your macbook.
+There are two libraries we recommend for setting up local models with OpenAI-like APIs:
 
-In these notes we explore the `llama.cpp` approach. 
+- [ooba-TGW](https://github.com/oobabooga/text-generation-webui) mentioned above, for a variety of models, including llama2 models.
+- [llama-cpp-python](https://github.com/abetlen/llama-cpp-python) (LCP for short), specifically for llama2 models.
 
-!!! note "Tested on Macbook M1 Pro Max"
-        This has been tested only on a Macbook Pro M1 Max with 64GB RAM. 
 
-There are a few libraries that let you run llama (and many other) models locally, 
-and spin up a server that presents an OpenAI-like API to the local model.
-Then your python code that works with the OpenAI API can be used with the local model,
-by making a simple change, i.e. set `openai.api_base` to the local server URL.
-
-We recommend these libraries for setting up local models with OpenAI-like APIs:
-
-- [`oobabooga/text-generation-webui`](https://github.com/oobabooga/text-generation-webui)
-- [`abetlen/llama-cpp-python`](https://github.com/abetlen/llama-cpp-python)
-
-Here we show instructions for `llama-cpp-python`.
-The process for `text-generation-webui` is similar.
+Here we show instructions for `llama-cpp-python`. The process for `text-generation-webui` is similar. 
+Although the instructions specifically mention `llama2` models, 
+the same process should work for other local models as well (for example using ooba-TGW)
+as long as you are able to spin up a server that mimics the OpenAI API. 
+As mentioned above, all you need to do is set `openai.api_base` to the URL where the local API
+server is listening.
 
 ## Set up a local llama2 model server using `llama-cpp-python`
 
@@ -55,10 +55,7 @@ the repo, but you can ignore those for a basic example).
 pip install "llama-cpp-python[server]" --force-reinstall --upgrade --no-cache-dir
 ```
 
-
-## Download a model
-
-E.g. go here:
+Next, download a model from the HuggingFace model hub, for example:
 [https://huggingface.co/TheBloke/Llama-2-13B-chat-GGUF/tree/main](https://huggingface.co/TheBloke/Llama-2-13B-chat-GGUF/tree/main)
 
 Pick one of the `gguf` model files, say `llama-2-13b-chat.Q4_K_M.gguf` and click 
@@ -122,7 +119,7 @@ There are two ways to setup Langroid to use local Llama2 models:
 
 Make sure you have set up a `.env` file as described in
 the [langroid-examples](https://github.com/langroid/langroid-examples#set-up-environment-variables-api-keys-etc) repo.
-Then add these variable to the `.env` file:
+Then add this variable to the `.env` file:
 ```bash
 # modify if using non-default host, port when you set up the server above
 OPENAI_LOCAL.API_BASE=http://localhost:8000/v1
@@ -148,12 +145,13 @@ allow different agents to use different models.
 Of course, the two options can be combined, as noted in the comments below.
 
 In your script where you want to use the local model,
-first specify an instance of `OpenAIGPTConfig` with the relevant values:
+first specify a `LocalModelConfig` object with various settings, and 
+create an instance of `OpenAIGPTConfig` object from this:
 
 ```python
-from langroid.language_models.openai_gpt import (
-    OpenAIGPTConfig, OpenAIChatModel, LocalModelConfig
-)
+from langroid.language_models.base import LocalModelConfig
+from langroid.language_models.openai_gpt import OpenAIGPTConfig
+
 from dotenv import load_dotenv
 
 load_dotenv()  # read in .env file to set env vars
@@ -161,21 +159,17 @@ load_dotenv()  # read in .env file to set env vars
 local_model_config = LocalModelConfig(
         api_base="http://localhost:8000/v1",  # (1)! 
         context_length=1000,  # (2)!
-        formatter=Llama2FormatterConfig()
+        use_completion_for_chat=True,  # (3)
 )
 
 llm_config = OpenAIGPTConfig(local=local_model_config)
-
-local_llm_config = OpenAIGPTConfig(
-    local=LocalModelConfig(
-        api_base="http://localhost:8000/v1",  # (1)! 
-        context_length=1000,  # (2)!
-    ),
-)
 ```
 
 1. If omitted, uses the value of `OPENAI_LOCAL.API_BASE` env var
 2. If omitted, uses the value of `OPENAI_LOCAL.CONTEXT_LENGTH` env var
+3. If omitted, uses the value of `OPENAI_LOCAL.USE_COMPLETION_FOR_CHAT` env var. See the next section for more.
+
+For more on the `use_completion_for_chat` flag, see the [`Chat Completion`](chat-completion.md) tutorial. 
 
 Then use this config to define a `ChatAgentConfig`, create an agent, wrap it in a Task, and run it:
 
@@ -189,7 +183,8 @@ config = ChatAgentConfig(
 )
 agent = ChatAgent(config=config)
 task = Task(agent=agent)
-task.run()
+user_message = "Hello"
+task.run(user_message)
 ```
 
 See a full working example of a simple command-line chatbot that you can use with either
@@ -197,18 +192,17 @@ the OpenAI GPT4 model or a local llama model, in the `langroid-examples` repo:
 [https://github.com/langroid/langroid-examples/blob/main/examples/basic/chat.py](https://github.com/langroid/langroid-examples/blob/main/examples/basic/chat.py).
 
 !!! warning "Tests May Fail, results may be inferior, apps/examples may fail!"
-        Be aware that while the above enables you to use Langroid with local llama2 models,
-        the tests or examples may fail, and tools and special agents may not work well, 
-        if they work at all. The reason is that a lot of the code in Langroid (and for that 
-        matter in any LLM framework) relies on a certain level of competence of the underlying
-        LLM model. When we say "competence" we are referring to accuracy of responses, alignment,
-        and ability to follow instructions. Since there is still (as of Aug 2023) a huge gap between Llama2 models
-        and GPT-4, much of the code in Langroid may not work well with Llama2 models.
-        It could well be that with much more explicit prompting and many more few-shot examples,
-        the behavior of the agents using llama2 models can be improved. But we leave this to the 
-        user to explore. Another point to note is that it is possible that llama2 behavior
-        is sufficiently "smart" for certain narrowly defined tasks, but again we leave
-        this to users to explore.
+    Be aware that while the above enables you to use Langroid with local llama2 models,
+    the tests or examples may fail, and tools and special agents may not work well,
+    if they work at all. The reason is that a lot of the code in Langroid (and for that
+    matter in any LLM framework) relies on a certain level of competence of the underlying
+    LLM model. When we say "competence" we are referring to accuracy of responses, alignment,
+    and ability to follow instructions. Since there is still (as of Aug 2023) a huge gap between Llama2 models
+    and GPT-4, much of the code in Langroid may not work well with Llama2 models.
+    It could well be that with much more explicit prompting and many more few-shot examples,
+    the behavior of the agents using llama2 models can be improved, especially on specific tasks or domains. 
+    But we leave this to the user to explore.
+
 
         
 

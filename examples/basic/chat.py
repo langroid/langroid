@@ -27,10 +27,7 @@ from dotenv import load_dotenv
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
 from langroid.language_models.base import LocalModelConfig
-from langroid.language_models.openai_gpt import (
-    OpenAIChatModel,
-    OpenAIGPTConfig,
-)
+from langroid.language_models.openai_gpt import OpenAIGPTConfig
 from langroid.utils.configuration import set_global, Settings
 from langroid.utils.logging import setup_colored_logging
 
@@ -71,6 +68,7 @@ def chat(opts: CLIOptions) -> None:
             api_base=opts.api_base,
             model=opts.local_model,
             context_length=opts.local_ctx,
+            use_completion_for_chat=False,
         )
         llm_config = OpenAIGPTConfig(
             local=local_model_config,
@@ -79,12 +77,8 @@ def chat(opts: CLIOptions) -> None:
         # defaults to chat_model = OpenAIChatModel.GPT4
         llm_config = OpenAIGPTConfig()
 
-    default_sys_msg = (
-        "You are a helpful assistant. Ask me how you can help. "
-        "Be very concise in your answers."
-        if llm_config.chat_model == OpenAIChatModel.LOCAL
-        else "You are a helpful assistant."
-    )
+    default_sys_msg = "You are a helpful assistant. Be concise in your answers."
+
     sys_msg = Prompt.ask(
         "[blue]Tell me who I am. Hit Enter for default, or type your own\n",
         default=default_sys_msg,
@@ -97,6 +91,7 @@ def chat(opts: CLIOptions) -> None:
     )
     agent = ChatAgent(config)
     task = Task(agent)
+    # local (llama2) models do not like the first message to be empty
     user_message = "Hello." if (opts.local or opts.local_model) else None
     task.run(user_message)
 
