@@ -34,8 +34,8 @@ by making a simple change, i.e. set `openai.api_base` to the local server URL.
 
 We recommend these libraries for setting up local models with OpenAI-like APIs:
 
-- [`oobabooga/text-generation-webui`](https://github.com/oobabooga/text-generation-webui)
-- [`abetlen/llama-cpp-python`](https://github.com/abetlen/llama-cpp-python)
+- [`oobabooga/text-generation-webui`](https://github.com/oobabooga/text-generation-webui) or "ooba" for short
+- [`abetlen/llama-cpp-python`](https://github.com/abetlen/llama-cpp-python) or LCP for short.
 
 Here we show instructions for `llama-cpp-python`.
 The process for `text-generation-webui` is similar.
@@ -55,10 +55,7 @@ the repo, but you can ignore those for a basic example).
 pip install "llama-cpp-python[server]" --force-reinstall --upgrade --no-cache-dir
 ```
 
-
-## Download a model
-
-E.g. go here:
+Next, download a model from the HuggingFace model hub, for example:
 [https://huggingface.co/TheBloke/Llama-2-13B-chat-GGUF/tree/main](https://huggingface.co/TheBloke/Llama-2-13B-chat-GGUF/tree/main)
 
 Pick one of the `gguf` model files, say `llama-2-13b-chat.Q4_K_M.gguf` and click 
@@ -148,12 +145,13 @@ allow different agents to use different models.
 Of course, the two options can be combined, as noted in the comments below.
 
 In your script where you want to use the local model,
-first specify an instance of `OpenAIGPTConfig` with the relevant values:
+first specify a `LocalModelConfig` object with various settings, and 
+create an instance of `OpenAIGPTConfig` object from this:
 
 ```python
-from langroid.language_models.openai_gpt import (
-    OpenAIGPTConfig, OpenAIChatModel, LocalModelConfig
-)
+from langroid.language_models.base import LocalModelConfig
+from langroid.language_models.openai_gpt import OpenAIGPTConfig
+
 from dotenv import load_dotenv
 
 load_dotenv()  # read in .env file to set env vars
@@ -161,21 +159,16 @@ load_dotenv()  # read in .env file to set env vars
 local_model_config = LocalModelConfig(
         api_base="http://localhost:8000/v1",  # (1)! 
         context_length=1000,  # (2)!
-        formatter=Llama2FormatterConfig()
+        use_completion_for_chat=True,  # (3)
 )
 
 llm_config = OpenAIGPTConfig(local=local_model_config)
-
-local_llm_config = OpenAIGPTConfig(
-    local=LocalModelConfig(
-        api_base="http://localhost:8000/v1",  # (1)! 
-        context_length=1000,  # (2)!
-    ),
-)
 ```
 
 1. If omitted, uses the value of `OPENAI_LOCAL.API_BASE` env var
 2. If omitted, uses the value of `OPENAI_LOCAL.CONTEXT_LENGTH` env var
+3. If omitted, uses the value of `OPENAI_LOCAL.USE_COMPLETION_FOR_CHAT` env var. See the next section for more.
+
 
 Then use this config to define a `ChatAgentConfig`, create an agent, wrap it in a Task, and run it:
 
@@ -189,7 +182,8 @@ config = ChatAgentConfig(
 )
 agent = ChatAgent(config=config)
 task = Task(agent=agent)
-task.run()
+user_message = "Hello"
+task.run(user_message)
 ```
 
 See a full working example of a simple command-line chatbot that you can use with either
@@ -197,18 +191,85 @@ the OpenAI GPT4 model or a local llama model, in the `langroid-examples` repo:
 [https://github.com/langroid/langroid-examples/blob/main/examples/basic/chat.py](https://github.com/langroid/langroid-examples/blob/main/examples/basic/chat.py).
 
 !!! warning "Tests May Fail, results may be inferior, apps/examples may fail!"
-        Be aware that while the above enables you to use Langroid with local llama2 models,
-        the tests or examples may fail, and tools and special agents may not work well, 
-        if they work at all. The reason is that a lot of the code in Langroid (and for that 
-        matter in any LLM framework) relies on a certain level of competence of the underlying
-        LLM model. When we say "competence" we are referring to accuracy of responses, alignment,
-        and ability to follow instructions. Since there is still (as of Aug 2023) a huge gap between Llama2 models
-        and GPT-4, much of the code in Langroid may not work well with Llama2 models.
-        It could well be that with much more explicit prompting and many more few-shot examples,
-        the behavior of the agents using llama2 models can be improved. But we leave this to the 
-        user to explore. Another point to note is that it is possible that llama2 behavior
-        is sufficiently "smart" for certain narrowly defined tasks, but again we leave
-        this to users to explore.
+    Be aware that while the above enables you to use Langroid with local llama2 models,
+    the tests or examples may fail, and tools and special agents may not work well,
+    if they work at all. The reason is that a lot of the code in Langroid (and for that
+    matter in any LLM framework) relies on a certain level of competence of the underlying
+    LLM model. When we say "competence" we are referring to accuracy of responses, alignment,
+    and ability to follow instructions. Since there is still (as of Aug 2023) a huge gap between Llama2 models
+    and GPT-4, much of the code in Langroid may not work well with Llama2 models.
+    It could well be that with much more explicit prompting and many more few-shot examples,
+    the behavior of the agents using llama2 models can be improved. But we leave this to the
+    user to explore. Another point to note is that it is possible that llama2 behavior
+    is sufficiently "smart" for certain narrowly defined tasks, but again we leave
+    this to users to explore.
+
+
+## Completion vs Chat-Completion Endpoints
+
+As a quick refresher, all LLMs today provide a "completion" endpoint.
+The completion endpoints simply take a prompt and return a completion (i.e. a continuation): in a sense,
+this is the "core" ability of a language model. A typical prompt sent to a
+completion endpoint might look like this:
+```
+The capital of Belgium is...
+```
+On the other hand, a chat-completion endpoint allows the user to interact with the model
+in a more natural way, e.g. they can "instruct" the model, ask it questions, 
+and have multi-turn conversations with the model.
+Examples of these interactions are:
+```
+User: What is the capital of Belgium?
+Assistant: The capital of Belgium is Brussels.
+```
+or
+```
+User: In the text below, find all proper nouns:
+    Jack lives in Bosnia, and Jill lives in Belgium.
+Assistant: John, Bosnia, Jill, Belgium are all proper nouns.
+User: where does John live?
+Assistant: John lives in Bosnia. 
+```
+Not all LLMs provide a chat-completion endpoint. This is because the "base"
+(completion-only) models need to be trained and tuned to be able to handle
+chat-like interactions. These are the so-called "instruction-tuned" models,
+and their names typically have the word "chat" or "instruct" in them (though not always).
+
+In order for an API library (such as the above) to provide a chat-completion
+endpoint, it first needs to convert the chat-like multi-turn conversation
+history into a single prompt that can be sent to the completion endpoint.
+This is where things get a little tricky: we cannot simply concatenate the
+conversation history any way we want, because the model is trained on a certain
+format of conversation history. For example, the llama2 models are trained on
+a format where the user's input is bracketed within special strings `[INST]`
+and `[/INST]`. There are other requirements that we don't go into here, but
+interested readers can refer to these links:
+
+- A reddit thread on the [llama2 formats](https://www.reddit.com/r/LocalLLaMA/comments/155po2p/get_llama_2_prompt_format_right/)
+- Facebook's [llama2 code](https://github.com/facebookresearch/llama/blob/main/llama/generation.py#L44)
+
+This means that if a library wants to provide a chat-completion endpoint for
+a llama2 model, it needs to provide a way to convert chat history to a single prompt
+using the specific formatting rules of the model.
+The `ooba` (`text-generation-webui`) library has an extensive set of chat formatting
+templates for a variety of models.
+
+A user of these LLM server libraries thus has two options:
+
+- use the chat-completion endpoint, and let the underlying library handle the formatting, or
+- first format the chat history according to the model's requirements, and then use the
+  completion endpoint
+
+For llama2 models, Langroid supports both options via the `use_completion_for_chat` flag 
+in the `LocalModelConfig` object. When set to `True`, Langroid will first format the chat history
+in the appropriate way, and then use the completion endpoint. When set to `False`, Langroid will
+use the chat-completion endpoint provided by the underlying library (and leave the formatting to 
+the library).
+
+
+
+
+
 
         
 
