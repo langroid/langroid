@@ -72,6 +72,7 @@ def chat(opts: CLIOptions) -> None:
         )
         llm_config = OpenAIGPTConfig(
             local=local_model_config,
+            timeout=60,
         )
     else:
         # defaults to chat_model = OpenAIChatModel.GPT4
