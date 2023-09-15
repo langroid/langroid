@@ -31,8 +31,7 @@ and bring all of the above benefits. Some ideas on how you might use local LLMs:
 
 - In a mult-agent system, you could have some agents use local models for narrow 
   tasks with a lower bar for accuracy (and fix responses with multiple tries).
-- Since local LLMs are cheap/fast, you could run many instances of the same or different models 
-  and combine their responses.
+- You could run many instances of the same or different models and combine their responses.
 - Local LLMs can act as a privacy layer, to identify and handle sensitive data before passing to remote LLMs.
 - Some local LLMs have intriguing features, for example llama.cpp lets you 
   constrain its output using grammars.
