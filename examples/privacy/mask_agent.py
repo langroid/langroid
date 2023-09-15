@@ -31,7 +31,6 @@ class MaskAgentConfig(ChatAgentConfig):
     sensitive_categories: List[str]
 
 
-
 class MaskAgentAttachment(ChatDocAttachment):
     content: str = ""
 
@@ -52,15 +51,15 @@ class MaskAgent(ChatAgent):
         self.vecdb = None
 
     def user_response(
-            self,
-            msg: Optional[str | ChatDocument] = None,
+        self,
+        msg: Optional[str | ChatDocument] = None,
     ) -> Optional[ChatDocument]:
         # don't get user input
         return None
 
     def agent_response(
-            self,
-            msg: Optional[str | ChatDocument] = None,
+        self,
+        msg: Optional[str | ChatDocument] = None,
     ) -> Optional[ChatDocument]:
         """
         Check whether the incoming message is in the expected format.
@@ -94,7 +93,7 @@ class MaskAgent(ChatAgent):
         responder: None | Entity = None
         sender_name = self.config.name
         if (
-                has_func_call or "TOOL" in content
+            has_func_call or "TOOL" in content
         ) and self.config.tool_recipient is not None:
             # assume it is meant for Coder, so simply set the recipient field,
             # and the parent task loop continues as normal
@@ -104,7 +103,7 @@ class MaskAgent(ChatAgent):
             # the incoming message is a clarification response from LLM
             recipient = content
             if msg.attachment is not None and isinstance(
-                    msg.attachment, MaskAgentAttachment
+                msg.attachment, MaskAgentAttachment
             ):
                 content = msg.attachment.content
             else:
