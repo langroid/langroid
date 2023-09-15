@@ -620,10 +620,7 @@ class Agent(ABC):
             return sum([self.parser.num_tokens(m.content) for m in prompt])
 
     def _print_response_stats(
-            self,
-            chat_length: int,
-            tot_cost: float,
-            response: LLMResponse
+        self, chat_length: int, tot_cost: float, response: LLMResponse
     ) -> None:
         """
         Printing LLM response stats.
