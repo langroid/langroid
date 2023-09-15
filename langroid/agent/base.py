@@ -1,7 +1,6 @@
 import inspect
 import json
 import logging
-import textwrap
 from abc import ABC
 from contextlib import ExitStack
 from typing import (
@@ -683,16 +682,6 @@ class Agent(ABC):
                     cost=cost,
                 )
 
-            if settings.debug and response.usage is not None:
-                print(
-                    textwrap.dedent(
-                        f"""
-                        Stream: {stream}
-                        prompt_tokens: {response.usage.prompt_tokens}
-                        completion_tokens: {response.usage.completion_tokens}
-                        """.lstrip()
-                    )
-                )
             # update total counters
             if response.usage is not None:
                 self.total_llm_token_cost += response.usage.cost
