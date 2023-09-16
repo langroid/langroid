@@ -93,7 +93,6 @@ def chat(opts: CLIOptions) -> None:
 
 @app.command()
 def main(
-<<<<<<< Updated upstream
     debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
     local: bool = typer.Option(False, "--local", "-l", help="use local llm"),
     local_model: str = typer.Option(
@@ -113,26 +112,6 @@ def main(
     cache_type: str = typer.Option(
         "redis", "--cachetype", "-ct", help="redis or momento"
     ),
-=======
-        debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
-        local: bool = typer.Option(False, "--local", "-l", help="use local llm"),
-        local_model: str = typer.Option(
-            "", "--local_model", "-lm", help="local model path"
-        ),
-        api_base: str = typer.Option(
-            "http://localhost:8000/v1", "--api_base", "-api", help="local model api base"
-        ),
-        local_ctx: int = typer.Option(
-            2048, "--local_ctx", "-lc", help="local llm context size (default 2048)"
-        ),
-        completion: bool = typer.Option(
-            False, "--completion", "-c", help="use completion endpoint for chat"),
-        no_stream: bool = typer.Option(False, "--nostream", "-ns", help="no streaming"),
-        nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
-        cache_type: str = typer.Option(
-            "redis", "--cachetype", "-ct", help="redis or momento"
-        ),
->>>>>>> Stashed changes
 ) -> None:
     set_global(
         Settings(

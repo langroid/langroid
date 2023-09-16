@@ -6,24 +6,14 @@ from typing import List, Optional
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.base import ChatDocument
 from langroid.utils.logging import setup_colored_logging
-<<<<<<< Updated upstream
-
-setup_colored_logging()
-=======
->>>>>>> Stashed changes
 
 setup_colored_logging()
 
 class MaskAgentConfig(ChatAgentConfig):
-<<<<<<< Updated upstream
     name = "MaskAgent"
     sensitive_categories: List[str] = ["Medical", "CreditCard", "SSN", "Name"]
     system_message = textwrap.dedent(
         """
-=======
-    sensitive_categories: List[str] = ["Medical", "CreditCard", "SSN", "Name"]
-    system_message = textwrap.dedent("""
->>>>>>> Stashed changes
         You are an expert on privacy/security, and can recognize sensitive information
         in one of these categories: {sensitive_categories}.
         
@@ -74,8 +64,4 @@ class MaskAgent(ChatAgent):
         # respond and forget (erase) the latest user, assistant messages,
         # so that the chat history contains only the system msg.
         return self.llm_response_forget(content)
-<<<<<<< Updated upstream
-=======
 
-
->>>>>>> Stashed changes
