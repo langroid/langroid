@@ -9,6 +9,7 @@ from langroid.utils.logging import setup_colored_logging
 
 setup_colored_logging()
 
+
 class MaskAgentConfig(ChatAgentConfig):
     name = "MaskAgent"
     sensitive_categories: List[str] = ["Medical", "CreditCard", "SSN", "Name"]
@@ -47,7 +48,6 @@ class MaskAgentConfig(ChatAgentConfig):
 
 
 class MaskAgent(ChatAgent):
-
     def __init__(self, config: MaskAgentConfig):
         self.config: MaskAgentConfig = config
         self.config.system_message = self.config.system_message.format(
@@ -64,4 +64,3 @@ class MaskAgent(ChatAgent):
         # respond and forget (erase) the latest user, assistant messages,
         # so that the chat history contains only the system msg.
         return self.llm_response_forget(content)
-

@@ -278,33 +278,14 @@ class ChatAgent(Agent):
     def update_json_tool_instructions(self) -> None:
         """
         Add special instructions on situations when the LLM should send JSON-formatted
-        messages, and save the index position of these instructions in the
-        message history. Note this specifically only relates to the
-        Langroid JSON tools mechanism, not the LLM-native function-calling.
+        messages. Note this specifically only relates to the
+        Langroid JSON tools mechanism, not the LLM-native function-calling
+        (e.g. OpenAI function-calling API).
         """
-        # Add the instructions as a user message...
-        # TODO need to adapt this based on model type, as some models may
-        # pay more attention to system message.
+        # Append the json instructions to self.system_tool_instructions
+        # so that later they can be appended to the system message.
         json_instructions = super().json_tool_format_instructions()
-        if not self.tool_instructions_added:
-            self.task_messages.append(
-                LLMMessage(role=Role.USER, content=json_instructions)
-            )
-            self.tool_instructions_added = True
-        else:
-            # json_instructions will contain instructions on ALL tools,
-            # so it is ok to overwrite the last message in the task_messages,
-            # since we know it is a tool-instruction msg.
-            self.task_messages[-1].content = json_instructions
-
-        # Note that task_messages is the initial set of messages created to set up
-        # the task, and they may not yet have been sent to the LLM at this point.
-
-        # But if the task_messages have already been sent to the LLM, then we need to
-        # update the self.message_history as well, since this history will be sent to
-        # the LLM on each round, after appending the latest assistant, user msgs.
-        if len(self.message_history) > 0:
-            self.message_history[-1].content = json_instructions
+        self.system_tool_instructions += "\n\n" + json_instructions
 
     @no_type_check
     def llm_response(

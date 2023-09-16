@@ -1,7 +1,6 @@
 import inspect
 import json
 import logging
-import textwrap
 from abc import ABC
 from contextlib import ExitStack
 from typing import (
@@ -637,13 +636,13 @@ class Agent(ABC):
             cumul_cost = format(tot_cost, ".4f")
             assert isinstance(self.llm, LanguageModel)
             context_length = self.llm.chat_context_length()
-
-            print(
-                f"[bold]Stats:[/bold] [magenta] N_MSG={chat_length}, "
-                f"TOKENS: in={in_tokens}, out={out_tokens}, ctx={context_length}, "
-                f"COST: now=${llm_response_cost}, cumul=${cumul_cost}[/magenta]"
-                ""
-            )
+            if settings.debug:
+                print(
+                    f"{self.indent}[bold]Stats:[/bold] [magenta] N_MSG={chat_length}, "
+                    f"TOKENS: in={in_tokens}, out={out_tokens}, ctx={context_length}, "
+                    f"COST: now=${llm_response_cost}, cumul=${cumul_cost}[/magenta]"
+                    ""
+                )
 
     def update_token_usage(
         self,
@@ -683,16 +682,6 @@ class Agent(ABC):
                     cost=cost,
                 )
 
-            if settings.debug and response.usage is not None:
-                print(
-                    textwrap.dedent(
-                        f"""
-                        Stream: {stream}
-                        prompt_tokens: {response.usage.prompt_tokens}
-                        completion_tokens: {response.usage.completion_tokens}
-                        """.lstrip()
-                    )
-                )
             # update total counters
             if response.usage is not None:
                 self.total_llm_token_cost += response.usage.cost
