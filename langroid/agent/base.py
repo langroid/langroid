@@ -636,13 +636,13 @@ class Agent(ABC):
             cumul_cost = format(tot_cost, ".4f")
             assert isinstance(self.llm, LanguageModel)
             context_length = self.llm.chat_context_length()
-
-            print(
-                f"[bold]Stats:[/bold] [magenta] N_MSG={chat_length}, "
-                f"TOKENS: in={in_tokens}, out={out_tokens}, ctx={context_length}, "
-                f"COST: now=${llm_response_cost}, cumul=${cumul_cost}[/magenta]"
-                ""
-            )
+            if settings.debug:
+                print(
+                    f"{self.indent}[bold]Stats:[/bold] [magenta] N_MSG={chat_length}, "
+                    f"TOKENS: in={in_tokens}, out={out_tokens}, ctx={context_length}, "
+                    f"COST: now=${llm_response_cost}, cumul=${cumul_cost}[/magenta]"
+                    ""
+                )
 
     def update_token_usage(
         self,
