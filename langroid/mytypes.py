@@ -18,6 +18,7 @@ class Entity(str, Enum):
     AGENT = "Agent"
     LLM = "LLM"
     USER = "User"
+    SYSTEM = "System"
 
 
 class DocMetaData(BaseModel):

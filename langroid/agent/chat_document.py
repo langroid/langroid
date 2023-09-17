@@ -172,6 +172,8 @@ class ChatDocument(Document):
             content = message.content
             fun_call = message.function_call
             sender_name = message.metadata.sender_name
+            if message.metadata.sender == Entity.SYSTEM:
+                sender_role = Role.SYSTEM
             if (
                 message.metadata.parent is not None
                 and message.metadata.parent.function_call is not None

@@ -1,6 +1,7 @@
 import inspect
 import json
 import logging
+import textwrap
 from abc import ABC
 from contextlib import ExitStack
 from typing import (
@@ -211,7 +212,7 @@ class Agent(ABC):
     def json_format_rules(self) -> str:
         """
         Specification of JSON formatting rules, based on the currently enabled
-        message classes.
+        usable `ToolMessage`s
 
         Returns:
             str: formatting rules
@@ -220,7 +221,7 @@ class Agent(ABC):
         if len(enabled_classes) == 0:
             return "You can ask questions in natural language."
 
-        json_conditions = "\n\n".join(
+        json_instructions = "\n\n".join(
             [
                 str(msg_cls.default_value("request"))
                 + ":\n"
@@ -229,7 +230,53 @@ class Agent(ABC):
                 if msg_cls.default_value("request") in self.llm_tools_usable
             ]
         )
-        return json_conditions
+        return textwrap.dedent(
+            f"""
+            === ALL AVAILABLE TOOLS and THEIR JSON FORMAT INSTRUCTIONS ===
+            You have access to the following TOOLS to accomplish your task:
+
+            {json_instructions}
+            
+            {INSTRUCTION}            
+            ----------------------------
+            """.lstrip()
+        )
+
+    def tool_instructions(self) -> str:
+        """
+        Instructions (defined via `instructions` classmethod in a
+        ToolMessage class) for currently enabled and usable Tools.
+
+        Returns:
+            str: concatenation of instructions for all usable tools
+        """
+        enabled_classes: List[Type[ToolMessage]] = list(self.llm_tools_map.values())
+        if len(enabled_classes) == 0:
+            return ""
+        instructions = []
+        for msg_cls in enabled_classes:
+            if (
+                hasattr(msg_cls, "instructions")
+                and inspect.ismethod(msg_cls.instructions)
+                and msg_cls.default_value("request") in self.llm_tools_usable
+            ):
+                instructions.append(
+                    textwrap.dedent(
+                        f"""
+                        {msg_cls.default_value("request")}:
+                        {msg_cls.instructions()}
+                        """.lstrip()
+                    )
+                )
+        if len(instructions) == 0:
+            return ""
+        instructions = "\n\n".join(instructions)
+        return textwrap.dedent(
+            f"""
+            === GUIDELINES ON SOME TOOLS/FUNCTIONS USAGE ===
+            {instructions}
+            """.lstrip()
+        )
 
     def sample_multi_round_dialog(self) -> str:
         """
@@ -245,26 +292,6 @@ class Agent(ABC):
             if i < 2
         ]
         return "\n\n".join(sample_convo)
-
-    def json_tool_format_instructions(self) -> str:
-        """
-        Generate a string containing instructions to the LLM on when to format
-        requests/questions as JSON, based on the currently enabled message classes.
-
-        Returns:
-            str: The instructions string.
-        """
-        format_rules = self.json_format_rules()
-
-        return f"""
-        You have access to the following TOOLS to accomplish your task:
-        TOOLS AVAILABLE:
-        {format_rules}
-        
-        {INSTRUCTION}
-        
-        Now start, and be concise!                 
-        """
 
     def agent_response(
         self,
@@ -338,11 +365,18 @@ class Agent(ABC):
         if not user_msg:
             return None
         else:
+            if user_msg.startswith("SYSTEM"):
+                user_msg = user_msg[6:].strip()
+                source = Entity.SYSTEM
+                sender = Entity.SYSTEM
+            else:
+                source = Entity.USER
+                sender = Entity.USER
             return ChatDocument(
                 content=user_msg,
                 metadata=DocMetaData(
-                    source=Entity.USER,
-                    sender=Entity.USER,
+                    source=source,
+                    sender=sender,
                 ),
             )
 
@@ -433,7 +467,12 @@ class Agent(ABC):
             console.print(f"[green]{self.indent}", end="")
             print("[green]" + response.message)
             displayed = True
-        self.update_token_usage(response, prompt, self.llm.get_stream())
+        self.update_token_usage(
+            response,
+            prompt,
+            self.llm.get_stream(),
+            print_response_stats=settings.debug,
+        )
         return ChatDocument.from_LLMResponse(response, displayed)
 
     def get_tool_messages(self, msg: str | ChatDocument) -> List[ToolMessage]:
@@ -636,13 +675,14 @@ class Agent(ABC):
             cumul_cost = format(tot_cost, ".4f")
             assert isinstance(self.llm, LanguageModel)
             context_length = self.llm.chat_context_length()
-            if settings.debug:
-                print(
-                    f"{self.indent}[bold]Stats:[/bold] [magenta] N_MSG={chat_length}, "
-                    f"TOKENS: in={in_tokens}, out={out_tokens}, ctx={context_length}, "
-                    f"COST: now=${llm_response_cost}, cumul=${cumul_cost}[/magenta]"
-                    ""
-                )
+            max_out = self.config.llm.max_output_tokens
+            print(
+                f"{self.indent}[bold]Stats:[/bold] [magenta] N_MSG={chat_length}, "
+                f"TOKENS: in={in_tokens}, out={out_tokens}, "
+                f"max={max_out}, ctx={context_length}, "
+                f"COST: now=${llm_response_cost}, cumul=${cumul_cost}[/magenta]"
+                ""
+            )
 
     def update_token_usage(
         self,

@@ -56,7 +56,7 @@ INSTRUCTION = """
     In this case you realize there is no available TOOL for this, so you just ask in 
     natural language: "What is the population of France?"
     
-    Whenever possible, AND ONLY IF APPLICABLE, use these TOOL, with the JSON syntax 
+    Whenever possible, AND ONLY IF APPLICABLE, use these TOOLS, with the JSON syntax 
     specified above. When a TOOL is applicable, simply use this syntax, do not write 
     anything else. Only if no TOOL is exactly applicable, ask in natural language. 
     """

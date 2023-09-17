@@ -12,7 +12,6 @@ from langroid.agent.chat_document import (
     ChatDocMetaData,
     ChatDocument,
 )
-from langroid.language_models.base import LLMMessage, Role
 from langroid.mytypes import Entity
 from langroid.utils.configuration import settings
 from langroid.utils.constants import DONE, NO_ANSWER, USER_QUIT
@@ -82,8 +81,8 @@ class Task:
                 and subsequent response by non-controller. If false, runs for the
                 specified number of turns in `run`, or until `done()` is true.
                 One run of step() is considered a "turn".
-            system_message (str): if not empty, overrides agent's `task_messages[0]`
-            user_message (str): if not empty, overrides agent's `task_messages[1]`
+            system_message (str): if not empty, overrides agent's system_message
+            user_message (str): if not empty, overrides agent's user_message
             restart (bool): if true, resets the agent's message history
             default_human_response (str): default response from user; useful for
                 testing, to avoid interactive input from user.
@@ -99,18 +98,14 @@ class Task:
         """
         if isinstance(agent, ChatAgent) and len(agent.message_history) == 0 or restart:
             agent = cast(ChatAgent, agent)
-            agent.message_history = []
-            # possibly change the task messages
+            agent.clear_history(0)
+            # possibly change the system and user messages
             if system_message:
                 # we always have at least 1 task_message
-                agent.task_messages[0].content = system_message
+                agent.set_system_message(system_message)
             if user_message:
-                agent.task_messages.append(
-                    LLMMessage(
-                        role=Role.USER,
-                        content=user_message,
-                    )
-                )
+                agent.set_user_message(user_message)
+
         self.logger: None | RichFileLogger = None
         self.tsv_logger: None | logging.Logger = None
         self.color_log: bool = True
@@ -231,6 +226,8 @@ class Task:
                 # the CURRENT task's USER entity
                 self.pending_message.metadata.sender = Entity.USER
 
+        self._show_pending_message_if_debug()
+
         if self.caller is not None and self.caller.logger is not None:
             self.logger = self.caller.logger
         else:
@@ -257,8 +254,8 @@ class Task:
 
         Args:
             msg (str|ChatDocument): initial message to process; if None,
-                the LLM will respond to the initial `self.task_messages`
-                which set up the overall task.
+                the LLM will respond to its initial `self.task_messages`
+                which set up and kick off the overall task.
                 The agent tries to achieve this goal by looping
                 over `self.step()` until the task is considered
                 done; this can involve a series of messages produced by Agent,
@@ -325,6 +322,8 @@ class Task:
         n_messages = 0
         if isinstance(self.agent, ChatAgent):
             if self.erase_substeps:
+                # TODO I don't like directly accessing agent message_history. Revisit.
+                # (Pchalasani)
                 del self.agent.message_history[message_history_idx + 2 : n_messages - 1]
             n_messages = len(self.agent.message_history)
         if self.erase_substeps:
@@ -441,11 +440,16 @@ class Task:
             self.pending_sender = responder
             self.log_message(self.pending_sender, self.pending_message, mark=True)
 
+        self._show_pending_message_if_debug()
+        return self.pending_message
+
+    def _show_pending_message_if_debug(self) -> None:
+        if self.pending_message is None:
+            return
         if settings.debug:
             sender_str = str(self.pending_sender)
             msg_str = str(self.pending_message)
             print(f"[red][{sender_str}]{msg_str}")
-        return self.pending_message
 
     def response(self, e: Responder, turns: int = -1) -> Optional[ChatDocument]:
         """
@@ -589,6 +593,7 @@ class Task:
                 Entity.LLM: "green",
                 Entity.USER: "blue",
                 Entity.AGENT: "red",
+                Entity.SYSTEM: "magenta",
             }[msg.metadata.sender]
             f = msg.log_fields()
             tool_type = f.tool_type.rjust(6)

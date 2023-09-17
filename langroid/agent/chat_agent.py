@@ -1,5 +1,5 @@
-import inspect
 import logging
+import textwrap
 from contextlib import ExitStack
 from typing import Dict, List, Optional, Set, Type, cast, no_type_check
 
@@ -28,8 +28,10 @@ class ChatAgentConfig(AgentConfig):
     Configuration for ChatAgent
     Attributes:
         system_message: system message to include in message sequence
-             (typically defines role and task of agent)
-        user_message: user message to include in message sequence
+             (typically defines role and task of agent).
+             Used only if `task` is not specified in the constructor.
+        user_message: user message to include in message sequence.
+             Used only if `task` is not specified in the constructor.
         use_tools: whether to use our own ToolMessages mechanism
         use_functions_api: whether to use functions native to the LLM API
                 (e.g. OpenAI's `function_call` mechanism)
@@ -70,23 +72,53 @@ class ChatAgent(Agent):
         self.config: ChatAgentConfig = config
         self.message_history: List[LLMMessage] = []
         self.tool_instructions_added: bool = False
-        # system-level instructions for using tools/functions
+        # An agent's "task" is defined by a system msg and an optional user msg;
+        # These are "priming" messages that kick off the agent's conversation.
+        self.system_message: str = self.config.system_message
+        self.user_message: str | None = self.config.user_message
+
+        if task is not None:
+            # if task contains a system msg, we override the config system msg
+            if len(task) > 0 and task[0].role == Role.SYSTEM:
+                self.system_message = task[0].content
+            # if task contains a user msg, we override the config user msg
+            if len(task) > 1 and task[1].role == Role.USER:
+                self.user_message = task[1].content
+
+        # system-level instructions for using tools/functions:
+        # We maintain these as tools/functions are enabled/disabled,
+        # and whenever an LLM response is sought, these are used to
+        # recreate the system message (via `_create_system_and_tools_message`)
+        # each time, so it reflects the current set of enabled tools/functions.
+        # (a) these are general instructions on using certain tools/functions,
+        #   if they are specified in a ToolMessage class as a classmethod `instructions`
         self.system_tool_instructions: str = ""
+        # (b) these are only for the builtin in Langroid TOOLS mechanism:
+        self.system_json_tool_instructions: str = ""
+
         self.llm_functions_map: Dict[str, LLMFunctionSpec] = {}
         self.llm_functions_handled: Set[str] = set()
         self.llm_functions_usable: Set[str] = set()
         self.llm_function_force: Optional[Dict[str, str]] = None
 
-        priming_messages = task
-        if priming_messages is None:
-            priming_messages = [
-                LLMMessage(role=Role.SYSTEM, content=config.system_message),
-            ]
-            if config.user_message:
-                priming_messages.append(
-                    LLMMessage(role=Role.USER, content=config.user_message)
-                )
-        self.task_messages = priming_messages
+    def set_system_message(self, msg: str) -> None:
+        self.system_message = msg
+
+    def set_user_message(self, msg: str) -> None:
+        self.user_message = msg
+
+    @property
+    def task_messages(self) -> List[LLMMessage]:
+        """
+        The task messages are the initial messages that define the task
+        of the agent. There will be at least a system message plus possibly a user msg.
+        Returns:
+            List[LLMMessage]: the task messages
+        """
+        msgs = [self._create_system_and_tools_message()]
+        if self.user_message:
+            msgs.append(LLMMessage(role=Role.USER, content=self.user_message))
+        return msgs
 
     def clear_history(self, start: int = -2) -> None:
         """
@@ -122,31 +154,11 @@ class ChatAgent(Agent):
         Args:
             message (str): system message
         """
-        if len(self.message_history) > 0:
-            if self.message_history[0].role == Role.SYSTEM:
-                self.message_history[0].content = (
-                    self.message_history[0].content + "\n\n" + message
-                )
-        else:
-            if self.task_messages[0].role == Role.SYSTEM:
-                self.task_messages[0].content = (
-                    self.task_messages[0].content + "\n\n" + message
-                )
-
-    def add_user_message(self, message: str) -> None:
-        """
-        Add a user message to the message history.
-        Args:
-            message (str): user message
-        """
-        if len(self.message_history) > 0:
-            self.message_history.append(LLMMessage(role=Role.USER, content=message))
-        else:
-            self.task_messages.append(LLMMessage(role=Role.USER, content=message))
+        self.system_message += "\n\n" + message
 
     def update_last_message(self, message: str, role: str = Role.USER) -> None:
         """
-        Update the last message with role `role` in the message history.
+        Update the last message that has role `role` in the message history.
         Useful when we want to replace a long user prompt, that may contain context
         documents plus a question, with just the question.
         Args:
@@ -160,6 +172,33 @@ class ChatAgent(Agent):
             if self.message_history[i].role == role:
                 self.message_history[i].content = message
                 break
+
+    def _create_system_and_tools_message(self) -> LLMMessage:
+        """
+        (Re-)Create the system message for the LLM of the agent,
+        taking into account any tool instructions that have been added
+        after the agent was initialized.
+
+        The system message will consist of:
+        (a) the system message from the `task` arg in constructor, if any,
+            otherwise the default system message from the config
+        (b) the system tool instructions, if any
+        (c) the system json tool instructions, if any
+
+        Returns:
+            LLMMessage object
+        """
+        content = textwrap.dedent(
+            f"""
+            {self.system_message}
+            
+            {self.system_tool_instructions}
+            
+            {self.system_json_tool_instructions}
+            
+            """.lstrip()
+        )
+        return LLMMessage(role=Role.SYSTEM, content=content)
 
     def enable_message(
         self,
@@ -202,15 +241,7 @@ class ChatAgent(Agent):
                 self.llm_function_force = dict(name=request)
             else:
                 self.llm_function_force = None
-            if hasattr(message_class, "instructions") and inspect.ismethod(
-                message_class.instructions
-            ):
-                # save tool instructions so that when LLM is ready
-                # to respond (i.e. either when a wrapping Task is started,
-                # or when the LLM is directly queried),
-                # we can append to system msg.
-                self.system_tool_instructions += "\n\n" + message_class.instructions()
-        n_usable_tools = len(self.llm_tools_usable)
+
         for t in tools:
             if handle:
                 self.llm_tools_handled.add(t)
@@ -226,12 +257,10 @@ class ChatAgent(Agent):
                 self.llm_tools_usable.discard(t)
                 self.llm_functions_usable.discard(t)
 
-        # TODO we should do this only on demand when we actually are
-        # ready to send the instructions.
-        # But for now leave as is.
-        if len(self.llm_tools_usable) != n_usable_tools and self.config.use_tools:
-            # Update JSON format instructions if the set of usable tools has changed
-            self.update_json_tool_instructions()
+        # Set tool instructions and JSON format instructions
+        if self.config.use_tools:
+            self.system_json_tool_instructions = self.json_format_rules()
+        self.system_tool_instructions = self.tool_instructions()
 
     def disable_message_handling(
         self,
@@ -275,18 +304,6 @@ class ChatAgent(Agent):
                 self.llm_tools_usable.discard(r)
                 self.llm_functions_usable.discard(r)
 
-    def update_json_tool_instructions(self) -> None:
-        """
-        Add special instructions on situations when the LLM should send JSON-formatted
-        messages. Note this specifically only relates to the
-        Langroid JSON tools mechanism, not the LLM-native function-calling
-        (e.g. OpenAI function-calling API).
-        """
-        # Append the json instructions to self.system_tool_instructions
-        # so that later they can be appended to the system message.
-        json_instructions = super().json_tool_format_instructions()
-        self.system_tool_instructions += "\n\n" + json_instructions
-
     @no_type_check
     def llm_response(
         self, message: Optional[str | ChatDocument] = None
@@ -308,13 +325,13 @@ class ChatAgent(Agent):
         ), "message can be None only if message_history is empty, i.e. at start."
 
         if len(self.message_history) == 0:
-            # task_messages have not yet been loaded, so load them
-            self.message_history = self.task_messages.copy()
-            # first message is system msg, augment if needed
-            if self.system_tool_instructions != "":
-                self.message_history[0].content += (
-                    "\n\n" + self.system_tool_instructions
+            # initial messages have not yet been loaded, so load them
+            self.message_history = [self._create_system_and_tools_message()]
+            if self.user_message:
+                self.message_history.append(
+                    LLMMessage(role=Role.USER, content=self.user_message)
                 )
+
             # for debugging, show the initial message history
             if settings.debug:
                 print(
@@ -323,6 +340,10 @@ class ChatAgent(Agent):
                 {self.message_history_str()}
                 """
                 )
+        else:
+            assert self.message_history[0].role == Role.SYSTEM
+            # update the system message with the latest tool instructions
+            self.message_history[0] = self._create_system_and_tools_message()
 
         if message is not None:
             llm_msg = ChatDocument.to_LLMMessage(message)
@@ -437,7 +458,9 @@ class ChatAgent(Agent):
                 response_str = response.message
             print(cached + "[green]" + response_str)
         stream = self.llm.get_stream()  # type: ignore
-        self.update_token_usage(response, messages, stream)
+        self.update_token_usage(
+            response, messages, stream, print_response_stats=settings.debug
+        )
         return ChatDocument.from_LLMResponse(response, displayed)
 
     def _llm_response_temp_context(self, message: str, prompt: str) -> ChatDocument:
