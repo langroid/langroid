@@ -270,11 +270,11 @@ class Agent(ABC):
                 )
         if len(instructions) == 0:
             return ""
-        instructions = "\n\n".join(instructions)
+        instructions_str = "\n\n".join(instructions)
         return textwrap.dedent(
             f"""
             === GUIDELINES ON SOME TOOLS/FUNCTIONS USAGE ===
-            {instructions}
+            {instructions_str}
             """.lstrip()
         )
 
