@@ -28,12 +28,12 @@ Brussels.
 ```
 OpenAI's GPT3 is an example of a pure completion LLM.
 But interacting with a completion LLM is not very natural or useful:
-you would always need to formulate your input as a prompt
-whose natural continuation is your desired output.
+you cannot give instructions or ask questions; instead you would always need to 
+formulate your input as a prompt whose natural continuation is your desired output.
 For example, if you wanted the LLM to highlight all proper nouns in a sentence,
 you would format it as the following prompt:
 
-**Example P:** Chat/Instruction converted to a completion prompt.
+**Chat-To-Prompt Example:** Chat/Instruction converted to a completion prompt.
 
 ```
 User: here is a sentence, the Assistant's task is to identify all proper nouns.
@@ -46,7 +46,7 @@ something like:
 John, Bosnia, Jill, Belgium are all proper nouns.
 ```
 
-This _seems_ sensible in theory, but a "bare" LLM that performs well on completions
+This _seems_ sensible in theory, but a "base" LLM that performs well on completions
 may _not_ perform well on these kinds of prompts. The reason is that during its training, it may not
 have been exposed to very many examples of this type of prompt-response pair.
 So how can an LLM be improved to perform well on these kinds of prompts?
@@ -61,10 +61,9 @@ the models behind ChatGPT (i.e., GPT-3.5-Turbo and GPT-4) are further tuned to p
 responses that _align_ with human preferences (i.e. produce responses preferred by humans),
 using a procedure called Reinforcement Learning with Human Feedback (RLHF).
 
-
 For convenience, we refer to the combination of IFT and RLHF as **chat-tuning**.
-A chat-tuned LLM can be expected to perform well on prompts such as the one in Example P above.
-These types of prompts are still unnatural, however, so as a convenience,
+A chat-tuned LLM can be expected to perform well on prompts such as the one in 
+the Chat-To-Prompt Example above. These types of prompts are still unnatural, however, so as a convenience,
 chat-tuned LLM API servers also provide a "chat-completion" endpoint, which allows the user
 to interact with them in a natural dialog, which might look like this
 (the portions in square brackets are indicators of who is generating the text):
@@ -85,15 +84,17 @@ or
 ## Chat Completion Endpoints: under the hood
 
 How could this work, given that LLMs are fundamentally next-token predictors?
-This is a convenience provided by the LLM API service (e.g. OpenAI or the APIs
-of local models):
+This is a convenience provided by the LLM API service (e.g. from OpenAI or
+local model server libraries):
 when a user invokes the chat-completion endpoint (typically
 at `/chat/completions` under the base URL), under the hood, the server converts the
 instructions and multi-turn chat history into a single string, with annotations indicating
 user and assistant turns, and ending with something like "Assistant:"
-as in the Example P above.
+as in the Chat-To-Prompt Example above.
 
-Now the subtle detail to note here is that it matters _how_ the
+Now the subtle detail to note here is this:
+
+>It matters _how_ the
 dialog (instructions plus chat history) is converted into a single prompt string.
 Converting to a single prompt by simply concatenating the
 instructions and chat history using an "intuitive" format (e.g. indicating
@@ -135,8 +136,9 @@ Jill lives in Belgium. </s><s>
 This means that if a library wants to provide a chat-completion endpoint for
 a local model, it needs to provide a way to convert chat history to a single prompt
 using the specific formatting rules of the model.
-The `ooba` (`text-generation-webui`) library has an extensive set of chat formatting
-templates for a variety of models, and their model server auto-detects the
+The [`oobabooga/text-generation-webui`](https://github.com/oobabooga/text-generation-webui) 
+library has an extensive set of chat formatting [templates](https://github.com/oobabooga/text-generation-webui/tree/main/instruction-templates)
+for a variety of models, and their model server auto-detects the
 format template from the model name.
 
 !!! note "Chat completion model names: look for 'chat' or 'instruct' in the name"
@@ -164,9 +166,15 @@ and the completion endpoint is used.
 When the flag is set to `False`, the chat history is sent directly to the chat-completion
 endpoint, which internally converts the chat history to a prompt in the expected llama2 format.
 
-For local models other than Llama2, users can write their own formatters by
-writing a class similar to `Llama2Formatter` and then setting the `use_completion_for_chat` flag
-to `False` in the `LocalModelConfig` object.
+For local models other than Llama2, users can either:
+
+- write their own formatters by writing a class similar to `Llama2Formatter` and 
+then setting the `use_completion_for_chat` flag to `True` in the `LocalModelConfig` object, or
+- use a LLM server library (such as the `oobabooga` library mentioned above) that provides a chat-completion endpoint, 
+_and converts chats to single prompts under the hood,_ and set the
+  `use_completion_for_chat` flag to `False` in the `LocalModelConfig` object.
+
+You can use a similar approach if you are using an LLM application framework other than Langroid.
 
 
 <iframe src="https://langroid.substack.com/embed" width="480" height="320" style="border:1px solid #EEE; background:white;" frameborder="0" scrolling="no"></iframe>

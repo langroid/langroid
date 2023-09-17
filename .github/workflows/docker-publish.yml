@@ -2,6 +2,9 @@ name: Docker Publish
 
 on:
   push:
+    paths-ignore:
+      - "docs/**"
+      - "mkdocs.yml"
     branches:
       - main
 

@@ -2,6 +2,9 @@ name: Doc pages
 
 on:
   push:
+    paths:
+      - "docs/**"
+      - "mkdocs.yml"
     branches:
       - main
       - simpler_doc_linking
