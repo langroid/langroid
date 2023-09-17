@@ -42,6 +42,7 @@ class CLIOptions(BaseSettings):
     api_base: str = "http://localhost:8000/v1"
     local_model: str = ""
     local_ctx: int = 2048
+    completion: bool = False
 
     class Config:
         extra = "forbid"
@@ -68,7 +69,7 @@ def chat(opts: CLIOptions) -> None:
             api_base=opts.api_base,
             model=opts.local_model,
             context_length=opts.local_ctx,
-            use_completion_for_chat=False,
+            use_completion_for_chat=opts.completion,
         )
         llm_config = OpenAIGPTConfig(
             local=local_model_config,
@@ -115,6 +116,9 @@ def main(
     cache_type: str = typer.Option(
         "redis", "--cachetype", "-ct", help="redis or momento"
     ),
+    completion: bool = typer.Option(
+        False, "--completion", "-c", help="use completion endpoint for chat"
+    ),
 ) -> None:
     set_global(
         Settings(
@@ -129,6 +133,7 @@ def main(
         api_base=api_base,
         local_model=local_model,
         local_ctx=local_ctx,
+        completion=completion,
     )
     chat(opts)
 

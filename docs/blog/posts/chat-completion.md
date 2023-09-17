@@ -1,7 +1,7 @@
 ---
 title: 'Language Models: Completion and Chat-Completion'
 draft: false
-date: 2023-09-14
+date: 2023-09-18
 authors: 
   - pchalasani
 categories:
@@ -155,12 +155,13 @@ A user of these local LLM server libraries thus has two options when using a loc
 ## Using Local Models in Langroid
 
 Local models can be used in Langroid by defining a `LocalModelConfig` object.
-More details are in this [tutorial](blog/posts/local-llm.md), but here we briefly
-discuss prompt-formatting in this context.
+More details are in this [tutorial](https://langroid.github.io/langroid/blog/2023/09/14/using-langroid-with-local-llms/), 
+but here we briefly discuss prompt-formatting in this context.
 Langroid provides a built-in [formatter for LLama2 models](https://github.com/langroid/langroid/blob/main/langroid/language_models/prompt_formatter/llama2_formatter.py), 
 so users looking to use llama2 models with langroid can try either of these options, by setting the
 `use_completion_for_chat` flag in the `LocalModelConfig` object
-(See the local-LLM [tutorial](blog/posts/local-llm.md) for details).
+(See the local-LLM [tutorial](https://langroid.github.io/langroid/blog/2023/09/14/using-langroid-with-local-llms/) for details).
+
 When this flag is set to `True`, the chat history is formatted using the built-in llama2 formatter
 and the completion endpoint is used. 
 When the flag is set to `False`, the chat history is sent directly to the chat-completion

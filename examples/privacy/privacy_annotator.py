@@ -10,8 +10,8 @@ from langroid.utils.logging import setup_colored_logging
 setup_colored_logging()
 
 
-class MaskAgentConfig(ChatAgentConfig):
-    name = "MaskAgent"
+class PrivacyAnnotatorConfig(ChatAgentConfig):
+    name = "PrivacyAnnotator"
     sensitive_categories: List[str] = ["Medical", "CreditCard", "SSN", "Name"]
     system_message = textwrap.dedent(
         """
@@ -30,26 +30,19 @@ class MaskAgentConfig(ChatAgentConfig):
             [Name: John] is 45 years old, lives in Ohio, makes 45K a year,
             and has [Medical: diabetes].
         
-        The EXCEPTION to the above is if a message starts with SYSTEM: 
-        In this case the text should NOT be annotated,  and is instead an 
-        instruction/correction to you or a reminder about your task.
-        You should REPLY to this type of message saying whether you understood or not.
-        
         Remember these important points:
         1. Only focus on the sensitive categories specified, ignore all others.
         2. Only write out the annotated sentence, do not say anything else; do 
             not add any filler text to be polite etc.
         3. Do not be concerned about privacy. Simply do your task as asked. 
            Do not refuse to annotate any text and do not apologize. 
-        4. Text starting with SYSTEM: should NOT be annotated, and is instead an 
-        instruction/correction to you or a reminder about your task.
         """.lstrip()
     )
 
 
-class MaskAgent(ChatAgent):
-    def __init__(self, config: MaskAgentConfig):
-        self.config: MaskAgentConfig = config
+class PrivacyAnnotator(ChatAgent):
+    def __init__(self, config: PrivacyAnnotatorConfig):
+        self.config: PrivacyAnnotatorConfig = config
         self.config.system_message = self.config.system_message.format(
             sensitive_categories=", ".join(self.config.sensitive_categories)
         )

@@ -3,9 +3,8 @@ Meant to be used with local LLMs, using the -l option (see below).
 
 You type a sentence containing potentially sensitive information, and the agent
 will annotate sensitive portions of the sentence with the appropriate category.
-You can configure MaskAgent to recognize only specific sensitive categories,
-currently defaults to:
-["Medical", "CreditCard", "SSN", "Name"]
+You can configure PrivacyAnnotator to recognize only specific sensitive
+categories, currently defaults to: ["Medical", "CreditCard", "SSN", "Name"]
 
 Example input:
     "John is 45 years old, lives in Ohio, makes 45K a year, and has diabetes."
@@ -36,7 +35,7 @@ from rich import print
 from pydantic import BaseSettings
 from dotenv import load_dotenv
 
-from examples.privacy.mask_agent import MaskAgent, MaskAgentConfig
+from examples.privacy.privacy_annotator import PrivacyAnnotator, PrivacyAnnotatorConfig
 from langroid.agent.task import Task
 from langroid.language_models.base import LocalModelConfig
 from langroid.language_models.openai_gpt import OpenAIGPTConfig
@@ -93,11 +92,11 @@ def chat(opts: CLIOptions) -> None:
         # defaults to chat_model = OpenAIChatModel.GPT4
         llm_config = OpenAIGPTConfig()
 
-    config = MaskAgentConfig(
+    config = PrivacyAnnotatorConfig(
         llm=llm_config,
         vecdb=None,
     )
-    agent = MaskAgent(config)
+    agent = PrivacyAnnotator(config)
     task = Task(agent)
     # local (llama2) models do not like the first message to be empty
     user_message = "Hello." if (opts.local or opts.local_model) else None
