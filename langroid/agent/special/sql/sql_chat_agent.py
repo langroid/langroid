@@ -49,10 +49,11 @@ DEFAULT_SQL_CHAT_SYSTEM_MESSAGE = """
 
 You do not need to attempt answering a question with just one query. 
 You could make a sequence of SQL queries to help you write the final query.
-Also if you receive a null or other unexpected result, 
-see if you have made an assumption in your SQL query, and try another way, 
-or use `run_query` to explore the database table contents before submitting your 
-final query. For example when searching for "males" you may have used "gender= 'M'",
+Also if you receive a null or other unexpected result,
+(a) make sure you use the available TOOLs correctly, and 
+(b) see if you have made an assumption in your SQL query, and try another way, 
+   or use `run_query` to explore the database table contents before submitting your 
+   final query. For example when searching for "males" you may have used "gender= 'M'",
 in your query, because you did not know that the possible genders in the table
 are "Male" and "Female". 
 

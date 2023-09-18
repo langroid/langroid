@@ -575,7 +575,11 @@ class OpenAIGPT(LanguageModel):
         else:
             fun_call = LLMFunctionCall(name=message["function_call"]["name"])
             try:
-                fun_args = ast.literal_eval(message["function_call"]["arguments"])
+                fun_args_str = message["function_call"]["arguments"]
+                # sometimes may be malformed with invalid indents,
+                # so we try to be safe by removing newlines.
+                fun_args_str = fun_args_str.replace("\n", "").strip()
+                fun_args = ast.literal_eval(fun_args_str)
                 fun_call.arguments = fun_args
             except (ValueError, SyntaxError):
                 logging.warning(
@@ -585,7 +589,9 @@ class OpenAIGPT(LanguageModel):
                     "treating as normal non-function message"
                 )
                 fun_call = None
-                msg = message["content"] + message["function_call"]["arguments"]
+                args_str = message["function_call"]["arguments"] or ""
+                msg_str = message["content"] or ""
+                msg = msg_str + args_str
 
         return LLMResponse(
             message=msg.strip() if msg is not None else "",

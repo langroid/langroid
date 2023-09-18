@@ -114,7 +114,6 @@ def mock_context() -> dict:
 
 
 def _test_sql_chat_agent(
-    test_settings: Settings,
     fn_api: bool,
     db_session: Session,
     context: dict,
@@ -126,7 +125,6 @@ def _test_sql_chat_agent(
     """
     Test the SQLChatAgent with a uri as data source
     """
-    set_global(test_settings)
     agent = SQLChatAgent(
         config=SQLChatAgentConfig(
             database_session=db_session,
@@ -165,10 +163,17 @@ def _test_sql_chat_agent(
         (False, "How many employees are in Sales?", "1"),
     ],
 )
-def test_sql_chat_agent_query(fn_api, mock_db_session, mock_context, query, answer):
+def test_sql_chat_agent_query(
+    test_settings: Settings,
+    fn_api,
+    mock_db_session,
+    mock_context,
+    query,
+    answer,
+):
+    set_global(test_settings)
     # with context descriptions:
     _test_sql_chat_agent(
-        test_settings=Settings(),
         fn_api=fn_api,
         db_session=mock_db_session,
         context=mock_context,
@@ -178,7 +183,6 @@ def test_sql_chat_agent_query(fn_api, mock_db_session, mock_context, query, answ
 
     # without context descriptions:
     _test_sql_chat_agent(
-        test_settings=Settings(),
         fn_api=fn_api,
         db_session=mock_db_session,
         context={},
@@ -194,10 +198,17 @@ def test_sql_chat_agent_query(fn_api, mock_db_session, mock_context, query, answ
         (False, "How many departments are there?", "2"),
     ],
 )
-def test_sql_schema_tools(fn_api, mock_db_session, mock_context, query, answer):
+def test_sql_schema_tools(
+    settings: Settings,
+    fn_api,
+    mock_db_session,
+    mock_context,
+    query,
+    answer,
+):
+    set_global(settings)
     # with schema tools:
     _test_sql_chat_agent(
-        test_settings=Settings(),
         fn_api=fn_api,
         db_session=mock_db_session,
         context=mock_context,
