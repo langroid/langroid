@@ -1,6 +1,7 @@
 import difflib
 import random
-from typing import List
+from itertools import islice
+from typing import Any, Iterable, List
 
 import nltk
 from faker import Faker
@@ -10,6 +11,16 @@ nltk.download("gutenberg")
 
 Faker.seed(23)
 random.seed(43)
+
+
+def batched(iterable: Iterable[Any], n: int) -> Iterable[Any]:
+    """Batch data into tuples of length n. The last batch may be shorter."""
+    # batched('ABCDEFG', 3) --> ABC DEF G
+    if n < 1:
+        raise ValueError("n must be at least one")
+    it = iter(iterable)
+    while batch := tuple(islice(it, n)):
+        yield batch
 
 
 def generate_random_sentences(k: int) -> str:

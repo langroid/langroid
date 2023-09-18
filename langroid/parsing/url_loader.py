@@ -42,7 +42,7 @@ class URLLoader:
                 sleep_time=5,
             )
             for url, result in buffered_downloads(buffer, threads):
-                if ".pdf" in url:
+                if url.lower().endswith(".pdf"):
                     docs.append(get_doc_from_pdf_url(url))
                 else:
                     text = trafilatura.extract(

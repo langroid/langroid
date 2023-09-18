@@ -23,6 +23,7 @@ from langroid.parsing.parser import ParsingConfig, Splitter
 from langroid.parsing.repo_loader import RepoLoader
 from langroid.parsing.url_loader import URLLoader
 from langroid.parsing.urls import get_urls_and_paths
+from langroid.parsing.utils import batched
 from langroid.prompts.prompts_config import PromptsConfig
 from langroid.prompts.templates import SUMMARY_ANSWER_PROMPT_GPT4
 from langroid.utils.configuration import settings
@@ -64,6 +65,12 @@ class DocChatAgentConfig(ChatAgentConfig):
     summarize_prompt: str = SUMMARY_ANSWER_PROMPT_GPT4
     max_context_tokens: int = 1000
     conversation_mode: bool = True
+    # Use LLM to generate hypothetical answer A to the query Q,
+    # and use the embed(A) to find similar chunks in vecdb.
+    # Referred to as HyDE in the paper:
+    # https://arxiv.org/pdf/2212.10496.pdf
+    hypothetical_answer: bool = False
+    embed_batch_size: int = 500  # get embedding of at most this many at a time
     cache: bool = True  # cache results
     debug: bool = False
     stream: bool = True  # allow streaming where needed
@@ -79,11 +86,11 @@ class DocChatAgentConfig(ChatAgentConfig):
     ]
     parsing: ParsingConfig = ParsingConfig(  # modify as needed
         splitter=Splitter.TOKENS,
-        chunk_size=100,  # aim for this many tokens per chunk
+        chunk_size=500,  # aim for this many tokens per chunk
         max_chunks=10_000,
         # aim to have at least this many chars per chunk when
         # truncating due to punctuation
-        min_chunk_chars=350,
+        min_chunk_chars=200,
         discard_chunk_chars=5,  # discard chunks with fewer than this many chars
         n_similar_docs=4,
     )
@@ -170,7 +177,10 @@ class DocChatAgent(ChatAgent):
         docs = self.parser.split(docs)
         if self.vecdb is None:
             raise ValueError("VecDB not set")
-        self.vecdb.add_documents(docs)
+        # add embeddings in batches, to stay under limit of embeddings API
+        batches = list(batched(docs, self.config.embed_batch_size))
+        for batch in batches:
+            self.vecdb.add_documents(batch)
         self.original_docs_length = self.doc_length(docs)
         return len(docs)
 
@@ -329,24 +339,44 @@ class DocChatAgent(ChatAgent):
                     query = self.llm.followup_to_standalone(self.dialog, query)
             print(f"[orange2]New query: {query}")
 
-        passages = self.original_docs
+        queries = [query]
+        if self.config.hypothetical_answer:
+            with console.status("[cyan]LLM generating hypothetical answer..."):
+                with StreamingIfAllowed(self.llm, False):
+                    answer = self.llm_response_forget(
+                        f"""
+                        Give a sample answer the following query, 
+                        in up to 3 sentences. Do not explain yourself, 
+                        and do not apologize, just show 
+                        a possible answer. Guess a hypothetical answer 
+                        even if you do not have any information.
+                        Preface your answer with "HYPOTHETICAL ANSWER: "
+                        
+                        QUERY: {query}
+                        """
+                    ).content
+                queries = [query, answer]
 
-        # if original docs not too long, no need to look for relevant parts.
-        if (
-            passages is None
-            or self.original_docs_length > self.config.max_context_tokens
-        ):
-            with console.status("[cyan]Searching VecDB for relevant doc passages..."):
-                docs_and_scores = self.vecdb.similar_texts_with_scores(
-                    query,
+        with console.status("[cyan]Searching VecDB for relevant doc passages..."):
+            docs_and_scores = []
+            for q in queries:
+                docs_and_scores += self.vecdb.similar_texts_with_scores(
+                    q,
                     k=self.config.parsing.n_similar_docs,
                 )
-            if len(docs_and_scores) == 0:
-                return query, []
-            passages = [
-                Document(content=d.content, metadata=d.metadata)
-                for (d, _) in docs_and_scores
-            ]
+        # keep only docs with unique d.id()
+        id2doc_score = {d.id(): (d, s) for d, s in docs_and_scores}
+        docs_and_scores = list(id2doc_score.values())
+        # get top k docs based on score
+        docs_and_scores = sorted(docs_and_scores, key=lambda x: x[1], reverse=True)
+        docs_and_scores = docs_and_scores[: self.config.parsing.n_similar_docs]
+
+        if len(docs_and_scores) == 0:
+            return query, []
+        passages = [
+            Document(content=d.content, metadata=d.metadata)
+            for (d, _) in docs_and_scores
+        ]
 
         with console.status("[cyan]LLM Extracting verbatim passages..."):
             with StreamingIfAllowed(self.llm, False):
