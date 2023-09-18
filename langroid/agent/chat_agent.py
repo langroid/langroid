@@ -404,7 +404,7 @@ class ChatAgent(Agent):
                 and the response may be truncated.
                 """
             )
-        with StreamingIfAllowed(self.llm):
+        with StreamingIfAllowed(self.llm, self.llm.get_stream()):
             response = self.llm_response_messages(hist, output_len)
         # TODO - when response contains function_call we should include
         # that (and related fields) in the message_history
@@ -497,7 +497,8 @@ class ChatAgent(Agent):
         """
         # explicitly call THIS class's respond method,
         # not a derived class's (or else there would be infinite recursion!)
-        response = cast(ChatDocument, ChatAgent.llm_response(self, message))
+        with StreamingIfAllowed(self.llm, self.llm.get_stream()):  # type: ignore
+            response = cast(ChatDocument, ChatAgent.llm_response(self, message))
         # clear the last two messages, which are the
         # user message and the assistant response
         self.message_history.pop()
