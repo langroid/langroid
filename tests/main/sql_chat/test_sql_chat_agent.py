@@ -199,14 +199,14 @@ def test_sql_chat_agent_query(
     ],
 )
 def test_sql_schema_tools(
-    settings: Settings,
+    test_settings: Settings,
     fn_api,
     mock_db_session,
     mock_context,
     query,
     answer,
 ):
-    set_global(settings)
+    set_global(test_settings)
     # with schema tools:
     _test_sql_chat_agent(
         fn_api=fn_api,

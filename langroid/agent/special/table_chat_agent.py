@@ -45,6 +45,10 @@ If you receive a null or other unexpected result, see if you have made an assump
 in your code, and try another way, or use `run_code` to explore the dataframe 
 before submitting your final code. 
 
+Once you have the answer to the question, say DONE and show me the answer.
+If you receive an error message, try using the `run_code` tool/function 
+again with the corrected code. 
+
 Start by asking me what I want to know about the data.
 """
 

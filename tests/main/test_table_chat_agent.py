@@ -10,6 +10,7 @@ from langroid.agent.task import Task
 from langroid.parsing.table_loader import read_tabular_data
 from langroid.parsing.utils import closest_string
 from langroid.utils.configuration import Settings, set_global
+from tests.utils import contains_approx_float
 
 DATA_STRING = """age,gender,income,state,,,,
 20,Male,50000,CA,,,
@@ -68,14 +69,12 @@ def mock_data_file(tmp_path: Path) -> str:
 
 
 def _test_table_chat_agent(
-    test_settings: Settings,
     fn_api: bool,
     tabular_data: pd.DataFrame | str,
 ) -> None:
     """
     Test the TableChatAgent with a file as data source
     """
-    set_global(test_settings)
     agent = TableChatAgent(
         config=TableChatAgentConfig(
             data=tabular_data,
@@ -88,15 +87,14 @@ def _test_table_chat_agent(
         agent,
         name="TableChatAgent",
         default_human_response="",  # avoid waiting for human response
-        llm_delegate=False,
+        only_user_quits_root=False,
+        llm_delegate=True,
         single_round=False,
     )
 
-    # run for 3 turns:
-    # 0: user question
-    # 1: LLM response via fun-call/tool
-    # 2: agent response, handling the fun-call/tool
-    result = task.run("What is the average income of men under 40 in CA?", turns=2)
+    # run until LLM says DONE and shows answer,
+    # at which point the task loop ends.
+    result = task.run("What is the average income of men under 40 in CA?", turns=5)
     age_col = closest_string("age", agent.df.columns)
     state_col = closest_string("state", agent.df.columns)
     gender_col = closest_string("gender", agent.df.columns)
@@ -107,40 +105,44 @@ def _test_table_chat_agent(
         & (agent.df[gender_col] == "Male")
     ][income_col].mean()
 
-    assert np.round(float(result.content)) == np.round(answer)
+    assert contains_approx_float(result.content, answer)
 
 
 @pytest.mark.parametrize("fn_api", [True, False])
-def test_table_chat_agent_dataframe(fn_api, mock_dataframe):
+def test_table_chat_agent_dataframe(test_settings: Settings, fn_api, mock_dataframe):
+    set_global(test_settings)
     _test_table_chat_agent(
-        test_settings=Settings(),
         fn_api=fn_api,
         tabular_data=mock_dataframe,
     )
 
 
 @pytest.mark.parametrize("fn_api", [True, False])
-def test_table_chat_agent_file(fn_api, mock_data_file):
+def test_table_chat_agent_file(test_settings: Settings, fn_api, mock_data_file):
+    set_global(test_settings)
     _test_table_chat_agent(
-        test_settings=Settings(),
         fn_api=fn_api,
         tabular_data=mock_data_file,
     )
 
 
 @pytest.mark.parametrize("fn_api", [True, False])
-def test_table_chat_agent_dataframe_blanks(fn_api, mock_data_frame_blanks):
+def test_table_chat_agent_dataframe_blanks(
+    test_settings: Settings, fn_api, mock_data_frame_blanks
+):
+    set_global(test_settings)
     _test_table_chat_agent(
-        test_settings=Settings(),
         fn_api=fn_api,
         tabular_data=mock_data_frame_blanks,
     )
 
 
 @pytest.mark.parametrize("fn_api", [True, False])
-def test_table_chat_agent_file_blanks(fn_api, mock_data_file_blanks):
+def test_table_chat_agent_file_blanks(
+    test_settings: Settings, fn_api, mock_data_file_blanks
+):
+    set_global(test_settings)
     _test_table_chat_agent(
-        test_settings=Settings(),
         fn_api=fn_api,
         tabular_data=mock_data_file_blanks,
     )
@@ -165,18 +167,20 @@ def test_table_chat_agent_url(test_settings: Settings, fn_api: bool) -> None:
     task = Task(
         agent,
         name="TableChatAgent",
+        only_user_quits_root=False,
+        llm_delegate=True,
+        single_round=False,
         default_human_response="",  # avoid waiting for human response
     )
 
-    # run for 3 turns:
-    # 0: user question
-    # 1: LLM response via fun-call/tool
-    # 2: agent response, handling the fun-call/tool
+    # run until LLM says DONE and shows answer,
+    # at which point the task loop ends.
+
     result = task.run(
         """
         What is the average alcohol content of wines with a quality rating above 7?
         """,
-        turns=2,
+        turns=5,
     )
 
     data = agent.df
@@ -185,5 +189,4 @@ def test_table_chat_agent_url(test_settings: Settings, fn_api: bool) -> None:
 
     # Compute the average alcohol content in this subset
     answer = high_quality_wines["alcohol"].mean()
-
-    assert np.round(float(result.content)) == np.round(answer)
+    assert contains_approx_float(result.content, answer)
