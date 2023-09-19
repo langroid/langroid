@@ -39,14 +39,15 @@ class VectorStore(ABC):
 
     @staticmethod
     def create(config: VectorStoreConfig) -> "VectorStore":
-        from langroid.vector_store.chromadb import ChromaDB
-        from langroid.vector_store.qdrantdb import QdrantDB
+        from langroid.vector_store.chromadb import ChromaDB, ChromaDBConfig
+        from langroid.vector_store.qdrantdb import QdrantDB, QdrantDBConfig
 
-        vecstore_class = dict(qdrant=QdrantDB, chroma=ChromaDB).get(
-            config.type, QdrantDB
-        )
-
-        return vecstore_class(config)  # type: ignore
+        if isinstance(config, QdrantDBConfig):
+            return QdrantDB(config)
+        elif isinstance(config, ChromaDBConfig):
+            return ChromaDB(config)
+        else:
+            raise ValueError(f"Unknown vector store config: {config.__repr_name__()}")
 
     @abstractmethod
     def clear_empty_collections(self) -> int:
@@ -94,6 +95,13 @@ class VectorStore(ABC):
         k: int = 1,
         where: Optional[str] = None,
     ) -> List[Tuple[Document, float]]:
+        pass
+
+    @abstractmethod
+    def get_all_documents(self) -> List[Document]:
+        """
+        Get all documents in the current collection.
+        """
         pass
 
     @abstractmethod

@@ -1,9 +1,16 @@
 """
 Agent that supports asking queries about a set of documents, using
-retrieval-augmented queries.
+retrieval-augmented generation (RAG).
+
 Functionality includes:
 - summarizing a document, with a custom instruction; see `summarize_docs`
 - asking a question about a document; see `answer_from_docs`
+
+Note: to use the sentence-transformer embeddings, you must install
+langroid with the [hf-embeddings] extra, e.g.:
+
+pip install "langroid[hf-embeddings]"
+
 """
 import logging
 from contextlib import ExitStack
@@ -21,6 +28,7 @@ from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
 from langroid.mytypes import DocMetaData, Document, Entity
 from langroid.parsing.parser import Parser, ParsingConfig, Splitter
 from langroid.parsing.repo_loader import RepoLoader
+from langroid.parsing.search import find_closest_matches_with_bm25, preprocess_text
 from langroid.parsing.url_loader import URLLoader
 from langroid.parsing.urls import get_urls_and_paths
 from langroid.parsing.utils import batched
@@ -70,6 +78,7 @@ class DocChatAgentConfig(ChatAgentConfig):
     # Referred to as HyDE in the paper:
     # https://arxiv.org/pdf/2212.10496.pdf
     hypothetical_answer: bool = False
+    use_bm25_search: bool = True
     embed_batch_size: int = 500  # get embedding of at most this many at a time
     cache: bool = True  # cache results
     debug: bool = False
@@ -93,22 +102,32 @@ class DocChatAgentConfig(ChatAgentConfig):
         # truncating due to punctuation
         min_chunk_chars=200,
         discard_chunk_chars=5,  # discard chunks with fewer than this many chars
-        n_similar_docs=4,
+        n_similar_docs=3,
     )
+    from langroid.embedding_models.models import SentenceTransformerEmbeddingsConfig
+
+    hf_embed_config = SentenceTransformerEmbeddingsConfig(
+        model_type="sentence-transformer",
+        model_name="BAAI/bge-large-en-v1.5",
+        dims=1024,
+    )
+    oai_embed_config = OpenAIEmbeddingsConfig(
+        model_type="openai",
+        model_name="text-embedding-ada-002",
+        dims=1536,
+    )
+
     vecdb: VectorStoreConfig = QdrantDBConfig(
         type="qdrant",
         collection_name=None,
         storage_path=".qdrant/data/",
-        embedding=OpenAIEmbeddingsConfig(
-            model_type="openai",
-            model_name="text-embedding-ada-002",
-            dims=1536,
-        ),
+        embedding=hf_embed_config,
     )
     llm: OpenAIGPTConfig = OpenAIGPTConfig(
         type="openai",
         chat_model=OpenAIChatModel.GPT4,
         completion_model=OpenAIChatModel.GPT4,
+        timeout=40,
     )
     prompts: PromptsConfig = PromptsConfig(
         max_tokens=1000,
@@ -128,6 +147,8 @@ class DocChatAgent(ChatAgent):
         self.config: DocChatAgentConfig = config
         self.original_docs: None | List[Document] = None
         self.original_docs_length = 0
+        self.chunked_docs: None | List[Document] = None
+        self.chunked_docs_clean: None | List[Document] = None
         self.response: None | Document = None
         if len(config.doc_paths) > 0:
             self.ingest()
@@ -143,6 +164,16 @@ class DocChatAgent(ChatAgent):
                 paths: list of file paths
         """
         if len(self.config.doc_paths) == 0:
+            # we must be using a previously defined collection
+            # But let's get all the chunked docs so we can
+            # do keyword and other non-vector searches
+            if self.vecdb is None:
+                raise ValueError("VecDB not set")
+            self.chunked_docs = self.vecdb.get_all_documents()
+            self.chunked_docs_clean = [
+                Document(content=preprocess_text(d.content), metadata=d.metadata)
+                for d in self.chunked_docs
+            ]
             return
         urls, paths = get_urls_and_paths(self.config.doc_paths)
         docs: List[Document] = []
@@ -177,6 +208,11 @@ class DocChatAgent(ChatAgent):
         if self.parser is None:
             raise ValueError("Parser not set")
         docs = self.parser.split(docs)
+        self.chunked_docs = docs
+        self.chunked_docs_clean = [
+            Document(content=preprocess_text(d.content), metadata=d.metadata)
+            for d in self.chunked_docs
+        ]
         if self.vecdb is None:
             raise ValueError("VecDB not set")
         # add embeddings in batches, to stay under limit of embeddings API
@@ -380,8 +416,26 @@ class DocChatAgent(ChatAgent):
             for (d, _) in docs_and_scores
         ]
 
+        if self.config.use_bm25_search:
+            # find similar docs using bm25 similarity:
+            # these may sometimes be more likely to contain a relevant verbatim extract
+            with console.status("[cyan]Searching for similar chunks using bm25..."):
+                if self.chunked_docs is None:
+                    raise ValueError("No chunked docs")
+                docs_scores = find_closest_matches_with_bm25(
+                    self.chunked_docs,
+                    self.chunked_docs_clean,  # already pre-processed!
+                    query,
+                    k=self.config.parsing.n_similar_docs,
+                )
+                passages += [d for (d, _) in docs_scores]
+            # keep unique passages
+            id2passage = {p.id(): p for p in passages}
+            passages = list(id2passage.values())
+
         with console.status("[cyan]LLM Extracting verbatim passages..."):
             with StreamingIfAllowed(self.llm, False):
+                # these are async calls, one per passage
                 extracts = self.llm.get_verbatim_extracts(query, passages)
                 extracts = [e for e in extracts if e.content != NO_ANSWER]
 

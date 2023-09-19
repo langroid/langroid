@@ -6,6 +6,7 @@ import re
 import typer
 from rich import print
 from rich.prompt import Prompt
+import os
 
 from langroid.agent.special.doc_chat_agent import (
     DocChatAgent,
@@ -19,6 +20,7 @@ from langroid.utils.logging import setup_colored_logging
 app = typer.Typer()
 
 setup_colored_logging()
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 
 def chat(config: DocChatAgentConfig) -> None:

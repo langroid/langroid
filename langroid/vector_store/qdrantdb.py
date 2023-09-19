@@ -189,6 +189,26 @@ class QdrantDB(VectorStore):
         except ValueError:
             return id
 
+    def get_all_documents(self) -> List[Document]:
+        if self.config.collection_name is None:
+            raise ValueError("No collection name set, cannot retrieve docs")
+        docs = []
+        offset = 0
+        while True:
+            results, next_page_offset = self.client.scroll(
+                collection_name=self.config.collection_name,
+                scroll_filter=None,
+                offset=offset,
+                limit=10_000,  # try getting all at once, if not we keep paging
+                with_payload=True,
+                with_vectors=False,
+            )
+            docs += [Document(**record.payload) for record in results]  # type: ignore
+            if next_page_offset is None:
+                break
+            offset = next_page_offset  # type: ignore
+        return docs
+
     def get_documents_by_ids(self, ids: List[str]) -> List[Document]:
         if self.config.collection_name is None:
             raise ValueError("No collection name set, cannot retrieve docs")
