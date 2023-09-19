@@ -19,7 +19,7 @@ from langroid.embedding_models.models import OpenAIEmbeddingsConfig
 from langroid.language_models.base import StreamingIfAllowed
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
 from langroid.mytypes import DocMetaData, Document, Entity
-from langroid.parsing.parser import ParsingConfig, Splitter
+from langroid.parsing.parser import Parser, ParsingConfig, Splitter
 from langroid.parsing.repo_loader import RepoLoader
 from langroid.parsing.url_loader import URLLoader
 from langroid.parsing.urls import get_urls_and_paths
@@ -86,7 +86,8 @@ class DocChatAgentConfig(ChatAgentConfig):
     ]
     parsing: ParsingConfig = ParsingConfig(  # modify as needed
         splitter=Splitter.TOKENS,
-        chunk_size=500,  # aim for this many tokens per chunk
+        chunk_size=800,  # aim for this many tokens per chunk
+        overlap=100,  # overlap between chunks
         max_chunks=10_000,
         # aim to have at least this many chars per chunk when
         # truncating due to punctuation
@@ -145,12 +146,13 @@ class DocChatAgent(ChatAgent):
             return
         urls, paths = get_urls_and_paths(self.config.doc_paths)
         docs: List[Document] = []
+        parser = Parser(self.config.parsing)
         if len(urls) > 0:
-            loader = URLLoader(urls=urls)
+            loader = URLLoader(urls=urls, parser=parser)
             docs = loader.load()
         if len(paths) > 0:
             for p in paths:
-                path_docs = RepoLoader.get_documents(p)
+                path_docs = RepoLoader.get_documents(p, parser=parser)
                 docs.extend(path_docs)
         n_docs = len(docs)
         n_splits = self.ingest_docs(docs)

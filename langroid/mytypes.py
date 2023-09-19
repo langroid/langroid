@@ -25,6 +25,7 @@ class DocMetaData(BaseModel):
     """Metadata for a document."""
 
     source: str = "context"
+    is_chunk: bool = False  # if it is a chunk, don't split
 
     class Config:
         extra = Extra.allow

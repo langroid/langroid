@@ -18,7 +18,8 @@ from github.Repository import Repository
 from pydantic import BaseSettings
 
 from langroid.mytypes import DocMetaData, Document
-from langroid.parsing.pdf_parser import get_doc_from_pdf_file
+from langroid.parsing.parser import Parser
+from langroid.parsing.pdf_parser import PdfParser
 
 logger = logging.getLogger(__name__)
 
@@ -443,6 +444,7 @@ class RepoLoader:
         exclude_dirs: Optional[List[str]] = None,
         depth: int = -1,
         lines: Optional[int] = None,
+        parser: Optional[Parser] = None,
     ) -> List[Document]:
         """
         Recursively get all files under a path as Document objects.
@@ -458,6 +460,7 @@ class RepoLoader:
                 which includes all depths.
             lines (int, optional): Number of lines to read from each file.
                 Defaults to None, which reads all lines.
+            parser (Parser, optional): Parser to use to parse files.
 
         Returns:
             List[Document]: List of Document objects representing files.
@@ -490,8 +493,11 @@ class RepoLoader:
 
         for file_path in file_paths:
             _, file_extension = os.path.splitext(file_path)
-            if file_extension == ".pdf":
-                docs.append(get_doc_from_pdf_file(file_path))
+            if file_extension.lower() == ".pdf":
+                if parser is None:
+                    docs.append(PdfParser.get_doc_from_pdf_file(file_path))
+                else:
+                    docs.extend(PdfParser.doc_chunks_from_pdf_path(file_path, parser))
             else:
                 with open(file_path, "r") as f:
                     if lines is not None:
