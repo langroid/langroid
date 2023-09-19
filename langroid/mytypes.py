@@ -1,7 +1,7 @@
 import hashlib
 import uuid
 from enum import Enum
-from typing import Any, List, Union
+from typing import Any, Dict, List, Union
 
 from pydantic import BaseModel, Extra
 
@@ -26,6 +26,20 @@ class DocMetaData(BaseModel):
 
     source: str = "context"
     is_chunk: bool = False  # if it is a chunk, don't split
+
+    def dict(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
+        """
+        Override dict method to convert bool fields to int, to appease some
+        downstream libraries,  e.g. Chroma which complains about bool fields in
+        metadata.
+        """
+        original_dict = super().dict(*args, **kwargs)
+
+        for key, value in original_dict.items():
+            if isinstance(value, bool):
+                original_dict[key] = 1 * value
+
+        return original_dict
 
     class Config:
         extra = Extra.allow

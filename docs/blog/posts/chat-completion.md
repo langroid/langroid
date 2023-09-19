@@ -1,7 +1,7 @@
 ---
 title: 'Language Models: Completion and Chat-Completion'
 draft: false
-date: 2023-09-18
+date: 2023-09-19
 authors: 
   - pchalasani
 categories:
@@ -60,11 +60,13 @@ as **instruction-fine-tuning** or IFT for short. In addition to fine-tuning on i
 the models behind ChatGPT (i.e., GPT-3.5-Turbo and GPT-4) are further tuned to produce
 responses that _align_ with human preferences (i.e. produce responses preferred by humans),
 using a procedure called Reinforcement Learning with Human Feedback (RLHF).
+See this [Ouyang et. al. OpenAI Paper](https://arxiv.org/pdf/2203.02155.pdf) for details on these techniques and references to the 
+original papers that introduced these ideas.
 
 For convenience, we refer to the combination of IFT and RLHF as **chat-tuning**.
 A chat-tuned LLM can be expected to perform well on prompts such as the one in 
-the Chat-To-Prompt Example above. These types of prompts are still unnatural, however, so as a convenience,
-chat-tuned LLM API servers also provide a "chat-completion" endpoint, which allows the user
+the Chat-To-Prompt Example above. These types of prompts are still unnatural, however, 
+so as a convenience, chat-tuned LLM API servers also provide a "chat-completion" endpoint, which allows the user
 to interact with them in a natural dialog, which might look like this
 (the portions in square brackets are indicators of who is generating the text):
 
@@ -146,7 +148,8 @@ format template from the model name.
     For example if you see a name `Llama-2-70B-chat-GGUF` you know it is chat-tuned.
     Another example of a chat-tuned model is `Llama-2-7B-32K-Instruct` 
     
-A user of these local LLM server libraries thus has two options when using a local in chat mode:
+A user of these local LLM server libraries thus has two options when using a 
+local model in chat mode:
 
 - use the _chat-completion_ endpoint, and let the underlying library handle the chat-to-prompt formatting, or
 - first format the chat history according to the model's requirements, and then use the
@@ -162,10 +165,10 @@ so users looking to use llama2 models with langroid can try either of these opti
 `use_completion_for_chat` flag in the `LocalModelConfig` object
 (See the local-LLM [tutorial](https://langroid.github.io/langroid/blog/2023/09/14/using-langroid-with-local-llms/) for details).
 
-When this flag is set to `True`, the chat history is formatted using the built-in llama2 formatter
-and the completion endpoint is used. 
-When the flag is set to `False`, the chat history is sent directly to the chat-completion
-endpoint, which internally converts the chat history to a prompt in the expected llama2 format.
+When this flag is set to `True`, the chat history is formatted using the built-in 
+Langroid llama2 formatter and the completion endpoint is used. When the flag is set to `False`, the chat 
+history is sent directly to the chat-completion endpoint, which internally converts the 
+chat history to a prompt in the expected llama2 format.
 
 For local models other than Llama2, users can either:
 
