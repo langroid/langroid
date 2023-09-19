@@ -100,7 +100,10 @@ def main(
         "redis", "--cachetype", "-ct", help="redis or momento"
     ),
 ) -> None:
-    config = DocChatAgentConfig()
+    config = DocChatAgentConfig(
+        n_query_rephrases=3,
+        cross_encoder_reranking_model="cross-encoder/ms-marco-MiniLM-L-6-v2",
+    )
     set_global(
         Settings(
             debug=debug,

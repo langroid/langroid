@@ -78,7 +78,9 @@ class DocChatAgentConfig(ChatAgentConfig):
     # Referred to as HyDE in the paper:
     # https://arxiv.org/pdf/2212.10496.pdf
     hypothetical_answer: bool = False
+    n_query_rephrases: int = 3
     use_bm25_search: bool = True
+    cross_encoder_reranking_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
     embed_batch_size: int = 500  # get embedding of at most this many at a time
     cache: bool = True  # cache results
     debug: bool = False
@@ -377,13 +379,17 @@ class DocChatAgent(ChatAgent):
                     query = self.llm.followup_to_standalone(self.dialog, query)
             print(f"[orange2]New query: {query}")
 
+        # if we are using cross-encoder reranking, we can retrieve more docs
+        # during retrieval, and leave it to the cross-encoder re-ranking
+        # to whittle down to self.config.parsing.n_similar_docs
+        retrieval_multiple = 1 if self.config.cross_encoder_reranking_model == "" else 3
         queries = [query]
         if self.config.hypothetical_answer:
             with console.status("[cyan]LLM generating hypothetical answer..."):
                 with StreamingIfAllowed(self.llm, False):
                     answer = self.llm_response_forget(
                         f"""
-                        Give a sample answer the following query, 
+                        Give a sample answer to the following query, 
                         in up to 3 sentences. Do not explain yourself, 
                         and do not apologize, just show 
                         a possible answer. Guess a hypothetical answer 
@@ -395,12 +401,24 @@ class DocChatAgent(ChatAgent):
                     ).content
                 queries = [query, answer]
 
+        if self.config.n_query_rephrases > 0:
+            with console.status("[cyan]LLM generating rephrases of query..."):
+                with StreamingIfAllowed(self.llm, False):
+                    rephrases = self.llm_response_forget(
+                        f"""
+                        Rephrase the following query in {self.config.n_query_rephrases}
+                        different equivalent ways, separate them with 2 newlines.
+                        QUERY: {query}
+                        """
+                    ).content.split("\n\n")
+                queries += rephrases
+
         with console.status("[cyan]Searching VecDB for relevant doc passages..."):
             docs_and_scores = []
             for q in queries:
                 docs_and_scores += self.vecdb.similar_texts_with_scores(
                     q,
-                    k=self.config.parsing.n_similar_docs,
+                    k=self.config.parsing.n_similar_docs * retrieval_multiple,
                 )
         # keep only docs with unique d.id()
         id2doc_score = {d.id(): (d, s) for d, s in docs_and_scores}
@@ -426,12 +444,29 @@ class DocChatAgent(ChatAgent):
                     self.chunked_docs,
                     self.chunked_docs_clean,  # already pre-processed!
                     query,
-                    k=self.config.parsing.n_similar_docs,
+                    k=self.config.parsing.n_similar_docs * retrieval_multiple,
                 )
                 passages += [d for (d, _) in docs_scores]
             # keep unique passages
             id2passage = {p.id(): p for p in passages}
             passages = list(id2passage.values())
+
+        # now passages can potentially have a lot of doc chunks,
+        # so we re-rank them using a cross-encoder scoring model
+        # https://www.sbert.net/examples/applications/retrieve_rerank
+        if self.config.cross_encoder_reranking_model != "":
+            with console.status(
+                "[cyan]Re-ranking retrieved chunks using cross-encoder..."
+            ):
+                if self.chunked_docs is None:
+                    raise ValueError("No chunked docs")
+                from sentence_transformers import CrossEncoder
+
+                model = CrossEncoder(self.config.cross_encoder_reranking_model)
+                scores = model.predict([(query, p.content) for p in passages])
+                # get top k scoring passages
+                passages = [p for _, p in sorted(zip(scores, passages), reverse=True)]
+                passages = passages[: self.config.parsing.n_similar_docs]
 
         with console.status("[cyan]LLM Extracting verbatim passages..."):
             with StreamingIfAllowed(self.llm, False):
