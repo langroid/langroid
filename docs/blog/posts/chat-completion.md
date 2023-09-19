@@ -12,12 +12,24 @@ categories:
 comments: true
 ---
 
+Transformer-based language models are fundamentally next-token predictors, so 
+naturally all LLM APIs today at least provide a completion endpoint. 
+If an LLM is a next-token predictor, how could it possibly be used to 
+generate a response to a question or instruction, or to engage in a conversation with 
+a human user? This is where the idea of "chat-completion" comes in.
+This post is a refresher on the distinction between completion and chat-completion,
+and some interesting details on how chat-completion is implemented in practice.
+
+<!-- more -->
+
 ## Language Models as Next-token Predictors
 
 A Language Model is essentially a "next-token prediction" model,
-and so all LLMs today provide a "completion" endpoint.
+and so all LLMs today provide a "completion" endpoint, typically something like:
+`/completions` under the base URL.
+
 The endpoint simply takes a prompt and returns a completion (i.e. a continuation).
-<!-- more -->
+
 A typical prompt sent to a completion endpoint might look like this:
 ```
 The capital of Belgium is 
@@ -58,15 +70,17 @@ it uses an enhancement of GPT3 that (besides having a lot more parameters),
 was _explicitly_ fine-tuned on instructions (and dialogs more generally) -- this is referred to
 as **instruction-fine-tuning** or IFT for short. In addition to fine-tuning on instructions/dialogs,
 the models behind ChatGPT (i.e., GPT-3.5-Turbo and GPT-4) are further tuned to produce
-responses that _align_ with human preferences (i.e. produce responses preferred by humans),
+responses that _align_ with human preferences (i.e. produce responses that are more helpful and safe),
 using a procedure called Reinforcement Learning with Human Feedback (RLHF).
-See this [Ouyang et. al. OpenAI Paper](https://arxiv.org/pdf/2203.02155.pdf) for details on these techniques and references to the 
-original papers that introduced these ideas.
+See this [OpenAI InstructGPT Paper](https://arxiv.org/pdf/2203.02155.pdf) for details on these techniques and references to the 
+original papers that introduced these ideas. Another recommended read is Sebastian 
+Raschka's post on [RLHF and related techniques](https://magazine.sebastianraschka.com/p/llm-training-rlhf-and-its-alternatives). 
 
 For convenience, we refer to the combination of IFT and RLHF as **chat-tuning**.
 A chat-tuned LLM can be expected to perform well on prompts such as the one in 
 the Chat-To-Prompt Example above. These types of prompts are still unnatural, however, 
-so as a convenience, chat-tuned LLM API servers also provide a "chat-completion" endpoint, which allows the user
+so as a convenience, chat-tuned LLM API servers also provide a "chat-completion" 
+endpoint (typically `/chat/completions` under the base URL), which allows the user
 to interact with them in a natural dialog, which might look like this
 (the portions in square brackets are indicators of who is generating the text):
 
@@ -135,10 +149,10 @@ Jill lives in Belgium. </s><s>
 [INST] Which are its neighboring countries? [/INST]
 ```
 
-This means that if a library wants to provide a chat-completion endpoint for
+This means that if an LLM server library wants to provide a chat-completion endpoint for
 a local model, it needs to provide a way to convert chat history to a single prompt
 using the specific formatting rules of the model.
-The [`oobabooga/text-generation-webui`](https://github.com/oobabooga/text-generation-webui) 
+For example the [`oobabooga/text-generation-webui`](https://github.com/oobabooga/text-generation-webui) 
 library has an extensive set of chat formatting [templates](https://github.com/oobabooga/text-generation-webui/tree/main/instruction-templates)
 for a variety of models, and their model server auto-detects the
 format template from the model name.

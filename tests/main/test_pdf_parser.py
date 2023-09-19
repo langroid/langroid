@@ -24,7 +24,7 @@ def test_get_pdf_doc_path():
     current_dir = os.path.dirname(os.path.abspath(__file__))
 
     # Construct the path to the PDF file
-    path = os.path.join(current_dir, "test.pdf")
+    path = os.path.join(current_dir, "dummy.pdf")
     doc = PdfParser.get_doc_from_pdf_file(path)
 
     # Check the results
