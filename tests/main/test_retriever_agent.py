@@ -12,7 +12,7 @@ from langroid.agent.special.retriever_agent import (
 from langroid.parsing.parser import ParsingConfig
 from langroid.utils.configuration import Settings, set_global
 from langroid.utils.constants import NO_ANSWER
-from langroid.vector_store.base import VectorStoreConfig
+from langroid.vector_store.qdrantdb import QdrantDBConfig
 
 
 def gen_data(size: int) -> List[Dict[str, Any]]:
@@ -61,7 +61,7 @@ class _TestRetrieverAgentConfig(RetrieverAgentConfig):
         """
     data: List[Dict[str, Any]]
     n_matches: int = 3  # num final matches to be picked by LLM
-    vecdb: VectorStoreConfig = VectorStoreConfig(
+    vecdb: QdrantDBConfig = QdrantDBConfig(
         type="qdrant",
         collection_name="test-retriever",
         storage_path=".qdrant/test/",
