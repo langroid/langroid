@@ -9,7 +9,8 @@ from trafilatura.downloads import (
 )
 
 from langroid.mytypes import DocMetaData, Document
-from langroid.parsing.pdf_parser import get_doc_from_pdf_url
+from langroid.parsing.parser import Parser
+from langroid.parsing.pdf_parser import PdfParser
 
 logging.getLogger("trafilatura").setLevel(logging.ERROR)
 
@@ -26,8 +27,9 @@ class URLLoader:
      the "accept" button on the cookie dialog.
     """
 
-    def __init__(self, urls: List[str]):
+    def __init__(self, urls: List[str], parser: Parser | None = None):
         self.urls = urls
+        self.parser = parser
 
     @no_type_check
     def load(self) -> List[Document]:
@@ -43,7 +45,10 @@ class URLLoader:
             )
             for url, result in buffered_downloads(buffer, threads):
                 if url.lower().endswith(".pdf"):
-                    docs.append(get_doc_from_pdf_url(url))
+                    if self.parser is None:
+                        docs.append(PdfParser.get_doc_from_pdf_url(url))
+                    else:
+                        docs.extend(PdfParser.doc_chunks_from_pdf_url(url, self.parser))
                 else:
                     text = trafilatura.extract(
                         result,
