@@ -93,6 +93,10 @@ class ChromaDB(VectorStore):
             ids=ids,
         )
 
+    def get_all_documents(self) -> List[Document]:
+        results = self.collection.get(include=["documents", "metadatas"])
+        return self._docs_from_results(results)
+
     def get_documents_by_ids(self, ids: List[str]) -> List[Document]:
         results = self.collection.get(ids=ids, include=["documents", "metadatas"])
         return self._docs_from_results(results)
