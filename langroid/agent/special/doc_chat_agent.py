@@ -465,8 +465,14 @@ class DocChatAgent(ChatAgent):
                 model = CrossEncoder(self.config.cross_encoder_reranking_model)
                 scores = model.predict([(query, p.content) for p in passages])
                 # get top k scoring passages
-                passages = [p for _, p in sorted(zip(scores, passages), reverse=True)]
-                passages = passages[: self.config.parsing.n_similar_docs]
+                sorted_pairs = sorted(
+                    zip(scores, passages),
+                    key=lambda x: x[0],
+                    reverse=True,
+                )
+                passages = [
+                    d for _, d in sorted_pairs[: self.config.parsing.n_similar_docs]
+                ]
 
         with console.status("[cyan]LLM Extracting verbatim passages..."):
             with StreamingIfAllowed(self.llm, False):
