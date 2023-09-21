@@ -28,7 +28,11 @@ from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
 from langroid.mytypes import DocMetaData, Document, Entity
 from langroid.parsing.parser import Parser, ParsingConfig, Splitter
 from langroid.parsing.repo_loader import RepoLoader
-from langroid.parsing.search import find_closest_matches_with_bm25, preprocess_text
+from langroid.parsing.search import (
+    find_closest_matches_with_bm25,
+    find_fuzzy_matches_in_docs,
+    preprocess_text,
+)
 from langroid.parsing.url_loader import URLLoader
 from langroid.parsing.urls import get_urls_and_paths
 from langroid.parsing.utils import batched
@@ -78,7 +82,8 @@ class DocChatAgentConfig(ChatAgentConfig):
     # Referred to as HyDE in the paper:
     # https://arxiv.org/pdf/2212.10496.pdf
     hypothetical_answer: bool = False
-    n_query_rephrases: int = 3
+    n_query_rephrases: int = 0
+    use_fuzzy_match: bool = True
     use_bm25_search: bool = True
     cross_encoder_reranking_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
     embed_batch_size: int = 500  # get embedding of at most this many at a time
@@ -97,7 +102,7 @@ class DocChatAgentConfig(ChatAgentConfig):
     ]
     parsing: ParsingConfig = ParsingConfig(  # modify as needed
         splitter=Splitter.TOKENS,
-        chunk_size=800,  # aim for this many tokens per chunk
+        chunk_size=1000,  # aim for this many tokens per chunk
         overlap=100,  # overlap between chunks
         max_chunks=10_000,
         # aim to have at least this many chars per chunk when
@@ -447,9 +452,24 @@ class DocChatAgent(ChatAgent):
                     k=self.config.parsing.n_similar_docs * retrieval_multiple,
                 )
                 passages += [d for (d, _) in docs_scores]
-            # keep unique passages
-            id2passage = {p.id(): p for p in passages}
-            passages = list(id2passage.values())
+
+        if self.config.use_fuzzy_match:
+            # find similar docs using fuzzy matching:
+            # these may sometimes be more likely to contain a relevant verbatim extract
+            with console.status("[cyan]Finding fuzzy matches in chunks..."):
+                if self.chunked_docs is None:
+                    raise ValueError("No chunked docs")
+                fuzzy_match_docs = find_fuzzy_matches_in_docs(
+                    query,
+                    self.chunked_docs,
+                    k=self.config.parsing.n_similar_docs * retrieval_multiple,
+                    surrounding_words=1000,
+                )
+                passages += fuzzy_match_docs
+
+        # keep unique passages
+        id2passage = {p.id(): p for p in passages}
+        passages = list(id2passage.values())
 
         # now passages can potentially have a lot of doc chunks,
         # so we re-rank them using a cross-encoder scoring model
@@ -460,7 +480,16 @@ class DocChatAgent(ChatAgent):
             ):
                 if self.chunked_docs is None:
                     raise ValueError("No chunked docs")
-                from sentence_transformers import CrossEncoder
+                try:
+                    from sentence_transformers import CrossEncoder
+                except ImportError:
+                    raise ImportError(
+                        """
+                        To use cross-encoder re-ranking, you must install
+                        langroid with the [hf-embeddings] extra, e.g.:
+                        pip install "langroid[hf-embeddings]"
+                        """
+                    )
 
                 model = CrossEncoder(self.config.cross_encoder_reranking_model)
                 scores = model.predict([(query, p.content) for p in passages])

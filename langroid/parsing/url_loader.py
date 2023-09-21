@@ -27,7 +27,7 @@ class URLLoader:
      the "accept" button on the cookie dialog.
     """
 
-    def __init__(self, urls: List[str], parser: Parser | None = None):
+    def __init__(self, urls: List[str], parser: Parser):
         self.urls = urls
         self.parser = parser
 
@@ -45,10 +45,11 @@ class URLLoader:
             )
             for url, result in buffered_downloads(buffer, threads):
                 if url.lower().endswith(".pdf"):
-                    if self.parser is None:
-                        docs.append(PdfParser.get_doc_from_pdf_url(url))
-                    else:
-                        docs.extend(PdfParser.doc_chunks_from_pdf_url(url, self.parser))
+                    pdf_parser = PdfParser.create(
+                        url,
+                        self.parser.config,
+                    )
+                    docs.extend(pdf_parser.get_doc_chunks())
                 else:
                     text = trafilatura.extract(
                         result,

@@ -18,7 +18,7 @@ class OpenAIEmbeddingsConfig(EmbeddingModelsConfig):
 
 class SentenceTransformerEmbeddingsConfig(EmbeddingModelsConfig):
     model_type: str = "sentence-transformer"
-    model_name: str = "all-MiniLM-L6-v2"
+    model_name: str = "BAAI/bge-large-en-v1.5"
     dims: int = 384
 
 
@@ -55,7 +55,16 @@ class OpenAIEmbeddings(EmbeddingModel):
 class SentenceTransformerEmbeddings(EmbeddingModel):
     def __init__(self, config: SentenceTransformerEmbeddingsConfig):
         # this is an "extra" optional dependency, so we import it here
-        from sentence_transformers import SentenceTransformer
+        try:
+            from sentence_transformers import SentenceTransformer
+        except ImportError:
+            raise ImportError(
+                """
+                To use sentence_transformers embeddings, 
+                you must install langroid with the [hf-embeddings] extra, e.g.:
+                pip install "langroid[hf-embeddings]"
+                """
+            )
 
         super().__init__()
         self.config = config

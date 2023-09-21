@@ -21,6 +21,7 @@ from langroid.vector_store.qdrantdb import QdrantDBConfig
 storage_path = ".qdrant/testdata1"
 rmdir(storage_path)
 
+
 class _TestDocChatAgentConfig(DocChatAgentConfig):
     cross_encoder_reranking_model = ""
     n_query_rephrases = 0
