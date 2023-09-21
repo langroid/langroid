@@ -1,6 +1,7 @@
 import json
 from pathlib import Path
 
+from langroid.parsing.parser import Parser, ParsingConfig
 from langroid.parsing.repo_loader import RepoLoader, RepoLoaderConfig
 
 
@@ -46,6 +47,7 @@ def test_repo_loader() -> None:
     # use a different fn to just load documents from folder
     docs = RepoLoader.get_documents(
         repo_loader.clone_path,
+        parser=Parser(ParsingConfig()),
         depth=1,
         lines=5,
         file_types=["md", "txt", "toml"],
@@ -56,6 +58,7 @@ def test_repo_loader() -> None:
     # test making doc from single file path
     docs = RepoLoader.get_documents(
         Path(repo_loader.clone_path) / "pyproject.toml",
+        parser=Parser(ParsingConfig()),
         depth=1,
         lines=5,
         file_types=["md", "txt", "toml"],
