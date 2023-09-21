@@ -590,6 +590,7 @@ First create a `DocChatAgentConfig` instance, with a
 
 ```python
 from langroid.agent.doc_chat_agent import DocChatAgentConfig
+from langroid.vector_store.qdrantdb import QdrantDBConfig
 config = DocChatAgentConfig(
   doc_paths = [
     "https://en.wikipedia.org/wiki/Language_model",
@@ -599,9 +600,7 @@ config = DocChatAgentConfig(
   llm = OpenAIGPTConfig(
     chat_model=OpenAIChatModel.GPT4,
   ),
-  vecdb=VectorStoreConfig(
-    type="qdrant",
-  ),
+  vecdb=QdrantDBConfig()
 )
 ```
 

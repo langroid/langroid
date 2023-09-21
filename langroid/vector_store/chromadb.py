@@ -17,7 +17,6 @@ logger = logging.getLogger(__name__)
 
 
 class ChromaDBConfig(VectorStoreConfig):
-    type: str = "chroma"
     collection_name: str = "chroma-langroid"
     storage_path: str = ".chroma/data"
     embedding: EmbeddingModelsConfig = OpenAIEmbeddingsConfig()

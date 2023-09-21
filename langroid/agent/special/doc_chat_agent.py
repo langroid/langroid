@@ -125,7 +125,6 @@ class DocChatAgentConfig(ChatAgentConfig):
     )
 
     vecdb: VectorStoreConfig = QdrantDBConfig(
-        type="qdrant",
         collection_name=None,
         storage_path=".qdrant/data/",
         embedding=hf_embed_config,

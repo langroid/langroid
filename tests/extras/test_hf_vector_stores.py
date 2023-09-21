@@ -25,7 +25,6 @@ def generate_vecdbs(embed_cfg: EmbeddingModelsConfig) -> VectorStore:
     qd_dir = ".qdrant-" + embed_cfg.model_type
     rmdir(qd_dir)
     qd_cfg = QdrantDBConfig(
-        type="qdrant",
         cloud=False,
         collection_name="test-" + embed_cfg.model_type,
         storage_path=qd_dir,
@@ -33,7 +32,6 @@ def generate_vecdbs(embed_cfg: EmbeddingModelsConfig) -> VectorStore:
     )
 
     qd_cfg_cloud = QdrantDBConfig(
-        type="qdrant",
         cloud=True,
         collection_name="test-" + embed_cfg.model_type,
         storage_path=qd_dir,
@@ -43,7 +41,6 @@ def generate_vecdbs(embed_cfg: EmbeddingModelsConfig) -> VectorStore:
     cd_dir = ".chroma-" + embed_cfg.model_type
     rmdir(cd_dir)
     cd_cfg = ChromaDBConfig(
-        type="chroma",
         collection_name="test-" + embed_cfg.model_type,
         storage_path=cd_dir,
         embedding=embed_cfg,

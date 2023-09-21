@@ -62,7 +62,6 @@ class _TestRetrieverAgentConfig(RetrieverAgentConfig):
     data: List[Dict[str, Any]]
     n_matches: int = 3  # num final matches to be picked by LLM
     vecdb: QdrantDBConfig = QdrantDBConfig(
-        type="qdrant",
         collection_name="test-retriever",
         storage_path=".qdrant/test/",
     )

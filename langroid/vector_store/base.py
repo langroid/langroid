@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 class VectorStoreConfig(BaseSettings):
+    type: str = "qdrant"  # deprecated, keeping it for backward compatibility
     collection_name: str | None = None
     replace_collection: bool = False  # replace collection if it already exists
     storage_path: str = ".qdrant/data"
@@ -23,7 +24,6 @@ class VectorStoreConfig(BaseSettings):
         model_type="openai",
     )
     timeout: int = 60
-    type: str = "qdrant"
     host: str = "127.0.0.1"
     port: int = 6333
     # compose_file: str = "langroid/vector_store/docker-compose-qdrant.yml"
@@ -38,7 +38,7 @@ class VectorStore(ABC):
         self.config = config
 
     @staticmethod
-    def create(config: VectorStoreConfig) -> "VectorStore":
+    def create(config: VectorStoreConfig) -> Optional["VectorStore"]:
         from langroid.vector_store.chromadb import ChromaDB, ChromaDBConfig
         from langroid.vector_store.qdrantdb import QdrantDB, QdrantDBConfig
 
@@ -47,7 +47,16 @@ class VectorStore(ABC):
         elif isinstance(config, ChromaDBConfig):
             return ChromaDB(config)
         else:
-            raise ValueError(f"Unknown vector store config: {config.__repr_name__()}")
+            logger.warning(
+                f"""
+                Unknown vector store config: {config.__repr_name__()},
+                so skipping vector store creation!
+                If you intended to use a vector-store, please set a specific 
+                vector-store in your script, typically in the `vecdb` field of a 
+                `ChatAgentConfig`, otherwise set it to None.
+                """
+            )
+            return None
 
     @abstractmethod
     def clear_empty_collections(self) -> int:

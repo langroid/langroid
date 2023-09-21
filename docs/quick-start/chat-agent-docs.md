@@ -114,15 +114,14 @@ and then instantiate a [`DocChatAgent`][langroid.agent.special.doc_chat_agent.Do
 
 ```py
 from langroid.agent.special.doc_chat_agent import DocChatAgent, DocChatAgentConfig
-from langroid.vector_store.base import VectorStoreConfig
+from langroid.vector_store.qdrantdb import QdrantDBConfig
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
 
 config = DocChatAgentConfig(
   llm = OpenAIGPTConfig(
     chat_model=OpenAIChatModel.GPT4,
   ),
-  vecdb=VectorStoreConfig(
-    type="qdrant",
+  vecdb=QdrantDBConfig(
     collection_name="quick-start-chat-agent-docs",
     replace_collection=True, #(1)!
   ),

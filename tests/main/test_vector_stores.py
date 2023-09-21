@@ -39,7 +39,6 @@ def vecdb(request) -> VectorStore:
         qd_dir = ".qdrant/data/" + embed_cfg.model_type
         rmdir(qd_dir)
         qd_cfg = QdrantDBConfig(
-            type="qdrant",
             cloud=False,
             collection_name="test-" + embed_cfg.model_type,
             storage_path=qd_dir,
@@ -54,7 +53,6 @@ def vecdb(request) -> VectorStore:
     if request.param == "qdrant_cloud":
         qd_dir = ".qdrant/cloud/" + embed_cfg.model_type
         qd_cfg_cloud = QdrantDBConfig(
-            type="qdrant",
             cloud=True,
             collection_name="test-" + embed_cfg.model_type,
             storage_path=qd_dir,
@@ -70,7 +68,6 @@ def vecdb(request) -> VectorStore:
         cd_dir = ".chroma/" + embed_cfg.model_type
         rmdir(cd_dir)
         cd_cfg = ChromaDBConfig(
-            type="chroma",
             collection_name="test-" + embed_cfg.model_type,
             storage_path=cd_dir,
             embedding=embed_cfg,

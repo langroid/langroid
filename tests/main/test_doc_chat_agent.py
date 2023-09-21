@@ -29,7 +29,6 @@ class _TestDocChatAgentConfig(DocChatAgentConfig):
     stream: bool = True  # allow streaming where needed
     conversation_mode = True
     vecdb: VectorStoreConfig = QdrantDBConfig(
-        type="qdrant",
         collection_name="test-data",
         replace_collection=True,
         storage_path=storage_path,

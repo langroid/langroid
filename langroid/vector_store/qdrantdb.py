@@ -28,9 +28,7 @@ logger = logging.getLogger(__name__)
 
 
 class QdrantDBConfig(VectorStoreConfig):
-    type: str = "qdrant"
     cloud: bool = True
-
     collection_name: str | None = None
     storage_path: str = ".qdrant/data"
     embedding: EmbeddingModelsConfig = OpenAIEmbeddingsConfig()
