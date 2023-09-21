@@ -18,7 +18,7 @@ from github.Repository import Repository
 from pydantic import BaseSettings
 
 from langroid.mytypes import DocMetaData, Document
-from langroid.parsing.parser import Parser
+from langroid.parsing.parser import Parser, ParsingConfig
 from langroid.parsing.pdf_parser import PdfParser
 
 logger = logging.getLogger(__name__)
@@ -440,7 +440,7 @@ class RepoLoader:
     @staticmethod
     def get_documents(
         path: str,
-        parser: Parser,
+        parser: Parser = Parser(ParsingConfig()),
         file_types: Optional[List[str]] = None,
         exclude_dirs: Optional[List[str]] = None,
         depth: int = -1,

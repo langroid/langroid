@@ -9,7 +9,7 @@ from trafilatura.downloads import (
 )
 
 from langroid.mytypes import DocMetaData, Document
-from langroid.parsing.parser import Parser
+from langroid.parsing.parser import Parser, ParsingConfig
 from langroid.parsing.pdf_parser import PdfParser
 
 logging.getLogger("trafilatura").setLevel(logging.ERROR)
@@ -27,7 +27,7 @@ class URLLoader:
      the "accept" button on the cookie dialog.
     """
 
-    def __init__(self, urls: List[str], parser: Parser):
+    def __init__(self, urls: List[str], parser: Parser = Parser(ParsingConfig())):
         self.urls = urls
         self.parser = parser
 

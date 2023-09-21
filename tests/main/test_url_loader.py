@@ -1,6 +1,5 @@
 import re
 
-from langroid.parsing.parser import Parser, ParsingConfig
 from langroid.parsing.url_loader import URLLoader
 
 
@@ -10,7 +9,6 @@ def test_url_loader():
             "https://pytorch.org",
             "https://openai.com",
         ],
-        parser=Parser(ParsingConfig()),
     )
 
     docs = loader.load()
