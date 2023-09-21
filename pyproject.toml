@@ -66,6 +66,7 @@ mkdocs-rss-plugin = "^1.8.0"
 rank-bm25 = "^0.2.2"
 thefuzz = "^0.20.0"
 pdfplumber = "^0.10.2"
+pymupdf = "^1.23.3"
 
 [tool.poetry.extras]
 # install these using `poetry install -E [...]` where [...] is one of the extras below

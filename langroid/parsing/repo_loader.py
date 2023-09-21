@@ -440,17 +440,18 @@ class RepoLoader:
     @staticmethod
     def get_documents(
         path: str,
+        parser: Parser,
         file_types: Optional[List[str]] = None,
         exclude_dirs: Optional[List[str]] = None,
         depth: int = -1,
         lines: Optional[int] = None,
-        parser: Optional[Parser] = None,
     ) -> List[Document]:
         """
         Recursively get all files under a path as Document objects.
 
         Args:
             path (str): The path to the directory or file.
+            parser (Parser): Parser to use to parse files.
             file_types (List[str], optional): List of file extensions OR
                 filenames OR file_path_names to  include.
                 Defaults to None, which includes all files.
@@ -460,7 +461,6 @@ class RepoLoader:
                 which includes all depths.
             lines (int, optional): Number of lines to read from each file.
                 Defaults to None, which reads all lines.
-            parser (Parser, optional): Parser to use to parse files.
 
         Returns:
             List[Document]: List of Document objects representing files.
@@ -494,10 +494,11 @@ class RepoLoader:
         for file_path in file_paths:
             _, file_extension = os.path.splitext(file_path)
             if file_extension.lower() == ".pdf":
-                if parser is None:
-                    docs.append(PdfParser.get_doc_from_pdf_file(file_path))
-                else:
-                    docs.extend(PdfParser.doc_chunks_from_pdf_path(file_path, parser))
+                pdf_parser = PdfParser.create(
+                    file_path,
+                    parser.config,
+                )
+                docs.extend(pdf_parser.get_doc_chunks())
             else:
                 with open(file_path, "r") as f:
                     if lines is not None:

@@ -19,6 +19,10 @@ class Splitter(str, Enum):
     SIMPLE = "simple"
 
 
+class PdfParsingConfig(BaseSettings):
+    library: str = "pdfplumber"
+
+
 class ParsingConfig(BaseSettings):
     splitter: str = Splitter.TOKENS
     chunk_size: int = 200  # aim for this many tokens per chunk
@@ -30,6 +34,7 @@ class ParsingConfig(BaseSettings):
     n_similar_docs: int = 4
     separators: List[str] = ["\n\n", "\n", " ", ""]
     token_encoding_model: str = "text-embedding-ada-002"
+    pdf: PdfParsingConfig = PdfParsingConfig()
 
 
 class Parser:

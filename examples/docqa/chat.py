@@ -101,7 +101,7 @@ def main(
     ),
 ) -> None:
     config = DocChatAgentConfig(
-        n_query_rephrases=3,
+        n_query_rephrases=0,
         cross_encoder_reranking_model="cross-encoder/ms-marco-MiniLM-L-6-v2",
     )
     set_global(

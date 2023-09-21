@@ -1,54 +1,119 @@
+import re
+from abc import abstractmethod
 from io import BytesIO
-from typing import List
+from typing import Any, Generator, List, Tuple
 
+import fitz
+import pdfplumber
+import pypdf
 import requests
-from pypdf import PdfReader
 
 from langroid.mytypes import DocMetaData, Document
-from langroid.parsing.parser import Parser
+from langroid.parsing.parser import Parser, ParsingConfig
 
 
 class PdfParser(Parser):
-    def __init__(self, parser: Parser):
-        super().__init__(parser.config)
+    """
+    Abstract base class for extracting text from PDFs.
+
+    Attributes:
+        source (str): The PDF source, either a URL or a file path.
+        pdf_bytes (BytesIO): BytesIO object containing the PDF data.
+    """
 
     @classmethod
-    def from_Parser(cls, parser: Parser) -> "PdfParser":
-        return cls(parser)
-
-    @staticmethod
-    def _text_from_pdf_reader(reader: PdfReader) -> str:
+    def create(cls, source: str, config: ParsingConfig) -> "PdfParser":
         """
-        Extract text from a `PdfReader` object.
+        Create a PDF Parser instance based on config.library specified.
+
         Args:
-            reader (PdfReader): a `PdfReader` object
-        Returns:
-            str: the extracted text
-        """
-        text = ""
-        for page in reader.pages:
-            text += page.extract_text()
-        return text
+            source (str): The source of the PDF, either a URL or a file path.
+            config (ParserConfig): The parser configuration.
 
-    def _doc_chunks_from_pdf_reader(
-        self,
-        reader: PdfReader,
-        doc: str,
-        chunk_tokens: int,
-        overlap: int = 0,
-    ) -> List[Document]:
+        Returns:
+            PdfParser: An instance of a PDF Parser subclass.
         """
-        Get document chunks from a PdfReader object,
+        if config.pdf.library == "fitz":
+            return FitzPdfParser(source, config)
+        elif config.pdf.library == "pypdf":
+            return PyPdfParser(source, config)
+        elif config.pdf.library == "pdfplumber":
+            return PdfPlumberParser(source, config)
+        else:
+            raise ValueError(f"Unsupported library specified: {config.pdf.library}")
+
+    def __init__(self, source: str, config: ParsingConfig):
+        """
+        Initialize the PDFParser.
+
+        Args:
+            source (str): The source of the PDF, either a URL or a file path.
+        """
+        super().__init__(config)
+        self.source = source
+        self.config = config
+        self.pdf_bytes = self._load_pdf_as_bytesio()
+
+    def _load_pdf_as_bytesio(self) -> BytesIO:
+        """
+        Load the PDF into a BytesIO object.
+
+        Returns:
+            BytesIO: A BytesIO object containing the PDF data.
+        """
+        if self.source.startswith(("http://", "https://")):
+            response = requests.get(self.source)
+            response.raise_for_status()
+            return BytesIO(response.content)
+        else:
+            with open(self.source, "rb") as f:
+                return BytesIO(f.read())
+
+    @abstractmethod
+    def iterate_pages(self) -> Generator[Tuple[int, Any], None, None]:
+        """Yield each page in the PDF."""
+        pass
+
+    @abstractmethod
+    def extract_text_from_page(self, page: Any) -> str:
+        """Extract text from a given page."""
+        pass
+
+    def fix_text(self, text: str) -> str:
+        """
+        Fix text extracted from a PDF.
+
+        Args:
+            text (str): The extracted text.
+
+        Returns:
+            str: The fixed text.
+        """
+        # Some pdf parsers introduce extra space before hyphen,
+        # so use regular expression to replace 'space-hyphen' with just 'hyphen'
+        return re.sub(r" +\-", "-", text)
+
+    def get_doc(self) -> Document:
+        """
+        Get entire text from pdf source as a single document.
+
+        Returns:
+            a `Document` object containing the content of the pdf file,
+                and metadata containing source name (URL or path)
+        """
+
+        text = "".join(
+            [self.extract_text_from_page(page) for _, page in self.iterate_pages()]
+        )
+        return Document(content=text, metadata=DocMetaData(source=self.source))
+
+    def get_doc_chunks(self) -> List[Document]:
+        """
+        Get document chunks from a pdf source,
         with page references in the document metadata.
 
         Adapted from
         https://github.com/whitead/paper-qa/blob/main/paperqa/readers.py
-
-        Args:
-            reader (PdfReader): a `PdfReader` object
-            doc: URL or filename of the PDF file
-            chunk_tokens (int): number of tokens in each chunk
-            overlap (int): number of tokens to overlap between chunks
 
         Returns:
             List[Document]: a list of `Document` objects,
@@ -58,117 +123,127 @@ class PdfParser(Parser):
         split = []  # tokens in curr split
         pages: List[str] = []
         docs: List[Document] = []
-        for i, page in enumerate(reader.pages):
-            split += self.tokenizer.encode(page.extract_text())
+        for i, page in self.iterate_pages():
+            split += self.tokenizer.encode(self.extract_text_from_page(page))
             pages.append(str(i + 1))
             # split could be so long it needs to be split
             # into multiple chunks. Or it could be so short
             # that it needs to be combined with the next chunk.
-            while len(split) > chunk_tokens:
+            while len(split) > self.config.chunk_size:
                 # pretty formatting of pages (e.g. 1-3, 4, 5-7)
                 pg = "-".join([pages[0], pages[-1]])
+                text = self.tokenizer.decode(split[: self.config.chunk_size])
                 docs.append(
                     Document(
-                        content=self.tokenizer.decode(split[:chunk_tokens]),
+                        content=text,
                         metadata=DocMetaData(
-                            source=f"{doc} pages {pg}",
+                            source=f"{self.source} pages {pg}",
                             is_chunk=True,
                         ),
                     )
                 )
-                split = split[chunk_tokens - overlap :]
+                split = split[self.config.chunk_size - self.config.overlap :]
                 pages = [str(i + 1)]
-        if len(split) > overlap:
+        if len(split) > self.config.overlap:
             pg = "-".join([pages[0], pages[-1]])
+            text = self.tokenizer.decode(split[: self.config.chunk_size])
             docs.append(
                 Document(
-                    content=self.tokenizer.decode(split[:chunk_tokens]),
+                    content=text,
                     metadata=DocMetaData(
-                        source=f"{doc} pages {pg}",
+                        source=f"{self.source} pages {pg}",
                         is_chunk=True,
                     ),
                 )
             )
         return docs
 
-    @staticmethod
-    def doc_chunks_from_pdf_url(url: str, parser: Parser) -> List[Document]:
+
+class FitzPdfParser(PdfParser):
+    """
+    Parser for processing PDFs using the `fitz` library.
+    """
+
+    def iterate_pages(self) -> Generator[Tuple[int, fitz.Page], None, None]:
         """
-        Get chunks of text from pdf URL as a list of Document objects,
-        using the parser's chunk_size and overlap settings.
+        Yield each page in the PDF using `fitz`.
+
+        Returns:
+            Generator[fitz.Page]: Generator yielding each page.
+        """
+        doc = fitz.open(stream=self.pdf_bytes, filetype="pdf")
+        for i, page in enumerate(doc):
+            yield i, page
+        doc.close()
+
+    def extract_text_from_page(self, page: fitz.Page) -> str:
+        """
+        Extract text from a given `fitz` page.
 
         Args:
-            url (str): contains the URL to the PDF file
+            page (fitz.Page): The `fitz` page object.
+
         Returns:
-            a `Document` object containing the content of the pdf file,
-                and metadata containing url
+            str: Extracted text from the page.
         """
+        return self.fix_text(page.get_text())
 
-        pdfParser = PdfParser.from_Parser(parser)
-        response = requests.get(url)
-        response.raise_for_status()
-        with BytesIO(response.content) as f:
-            reader = PdfReader(f)
-            docs = pdfParser._doc_chunks_from_pdf_reader(
-                reader,
-                doc=url,
-                chunk_tokens=parser.config.chunk_size,
-                overlap=parser.config.overlap,
-            )
-        return docs
 
-    @staticmethod
-    def get_doc_from_pdf_url(url: str) -> Document:
+class PyPdfParser(PdfParser):
+    """
+    Parser for processing PDFs using the `pypdf` library.
+    """
+
+    def iterate_pages(self) -> Generator[Tuple[int, pypdf.PageObject], None, None]:
         """
-        Get entire text from pdf URL as a single document.
+        Yield each page in the PDF using `pypdf`.
+
+        Returns:
+            Generator[pypdf.pdf.PageObject]: Generator yielding each page.
+        """
+        reader = pypdf.PdfReader(self.pdf_bytes)
+        for i, page in enumerate(reader.pages):
+            yield i, page
+
+    def extract_text_from_page(self, page: pypdf.PageObject) -> str:
+        """
+        Extract text from a given `pypdf` page.
 
         Args:
-            url (str): contains the URL to the PDF file
-        Returns:
-            a `Document` object containing the content of the pdf file,
-                and metadata containing url
-        """
-        response = requests.get(url)
-        response.raise_for_status()
-        with BytesIO(response.content) as f:
-            reader = PdfReader(f)
-            text = PdfParser._text_from_pdf_reader(reader)
-        return Document(content=text, metadata=DocMetaData(source=str(url)))
+            page (pypdf.pdf.PageObject): The `pypdf` page object.
 
-    @staticmethod
-    def doc_chunks_from_pdf_path(path: str, parser: Parser) -> List[Document]:
+        Returns:
+            str: Extracted text from the page.
         """
-        Get chunks of text from pdf path as a list of Document objects,
-        using the parser's chunk_size and overlap settings.
+        return self.fix_text(page.extract_text())
+
+
+class PdfPlumberParser(PdfParser):
+    """
+    Parser for processing PDFs using the `pdfplumber` library.
+    """
+
+    def iterate_pages(
+        self,
+    ) -> (Generator)[Tuple[int, pdfplumber.pdf.Page], None, None]:  # type: ignore
+        """
+        Yield each page in the PDF using `pdfplumber`.
+
+        Returns:
+            Generator[pdfplumber.Page]: Generator yielding each page.
+        """
+        with pdfplumber.open(self.pdf_bytes) as pdf:
+            for i, page in enumerate(pdf.pages):
+                yield i, page
+
+    def extract_text_from_page(self, page: pdfplumber.pdf.Page) -> str:  # type: ignore
+        """
+        Extract text from a given `pdfplumber` page.
 
         Args:
-            url (str): contains the URL to the PDF file
-        Returns:
-            a `Document` object containing the content of the pdf file,
-                and metadata containing url
-        """
+            page (pdfplumber.Page): The `pdfplumber` page object.
 
-        pdfParser = PdfParser.from_Parser(parser)
-        reader = PdfReader(path)
-        docs = pdfParser._doc_chunks_from_pdf_reader(
-            reader,
-            doc=path,
-            chunk_tokens=parser.config.chunk_size,
-            overlap=parser.config.overlap,
-        )
-        return docs
-
-    @staticmethod
-    def get_doc_from_pdf_file(path: str) -> Document:
-        """
-        Given local path to a PDF file, extract the text content.
-        Args:
-            path (str): full path to the PDF file
-                PDF file obtained via URL
         Returns:
-            a `Document` object containing the content of the pdf file,
-                and metadata containing path/url
+            str: Extracted text from the page.
         """
-        reader = PdfReader(path)
-        text = PdfParser._text_from_pdf_reader(reader)
-        return Document(content=text, metadata=DocMetaData(source=str(path)))
+        return self.fix_text(page.extract_text())

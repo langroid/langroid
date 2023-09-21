@@ -9,8 +9,64 @@ from nltk.corpus import stopwords
 from nltk.stem import WordNetLemmatizer
 from nltk.tokenize import RegexpTokenizer
 from rank_bm25 import BM25Okapi
+from thefuzz import fuzz, process
 
 from langroid.mytypes import Document
+
+
+def find_fuzzy_matches_in_docs(
+    query: str, docs: List[Document], k: int, surrounding_words: int
+) -> List[Document]:
+    """
+    Find approximate matches of the query in the docs and return surrounding
+    characters.
+
+    Args:
+        query (str): The search string.
+        docs (List[Document]): List of Document objects to search through.
+        k (int): Number of best matches to return.
+        surrounding_words (int): Number of words to
+            include before and after each match.
+
+    Returns:
+        List[Document]: List of Documents containing the matches,
+            including the given number of words around the match.
+    """
+    best_matches = process.extract(
+        query,
+        [d.content for d in docs],
+        limit=k,
+        scorer=fuzz.partial_token_sort_ratio,
+    )
+
+    results = []
+    for match, _ in best_matches:
+        words = match.split()
+        for doc in docs:
+            if match in doc.content:
+                words_in_text = doc.content.split()
+                first_word_idx = next(
+                    (
+                        i
+                        for i, word in enumerate(words_in_text)
+                        if word.startswith(words[0])
+                    ),
+                    -1,
+                )
+                if first_word_idx != -1:
+                    start_idx = max(0, first_word_idx - surrounding_words)
+                    end_idx = min(
+                        len(words_in_text),
+                        first_word_idx + len(words) + surrounding_words,
+                    )
+                    doc_match = Document(
+                        content=" ".join(words_in_text[start_idx:end_idx]),
+                        metadata=doc.metadata,
+                    )
+                    results.append(doc_match)
+                break
+
+    return results
 
 
 # Ensure NLTK resources are available
