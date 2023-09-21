@@ -98,6 +98,7 @@ nav:
     - Agent with Retrieval: quick-start/chat-agent-docs.md
   # defer to gen-files + literate-nav
   - Examples:
+    - Guide: examples/guide.md
     - Hierarchical Agent Computation: examples/agent-tree.md
     - Demos:
       - Audience Targeting: demos/targeting/audience-targeting.md

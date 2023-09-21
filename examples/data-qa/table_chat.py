@@ -19,7 +19,10 @@ setup_colored_logging()
 
 def chat() -> None:
     print("[blue]Welcome to the tabular-data chatbot!\n")
-    path = Prompt.ask("[blue]Enter a local path or URL to a tabular dataset")
+    path = Prompt.ask(
+        "[blue]Enter a local path or URL to a tabular dataset (hit enter to use default)\n",
+        default="https://raw.githubusercontent.com/fivethirtyeight/data/master/airline-safety/airline-safety.csv",
+    )
 
     agent = TableChatAgent(
         config=TableChatAgentConfig(

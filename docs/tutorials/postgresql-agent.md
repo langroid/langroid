@@ -1,7 +1,13 @@
 # Chat with a PostgreSQL DB using SQLChatAgent
 
-The [`SQLChatAgent`](../../reference/agent/special/sql/sql_chat_agent) is
+The [`SQLChatAgent`](../reference/agent/special/sql/sql_chat_agent.md) is
 designed to facilitate interactions with an SQL database using natural language.
+A ready-to-use script based on the `SQLChatAgent` is available in the `langroid-examples` 
+repo at [`examples/data-qa/sql-chat/sql_chat.py`](https://github.com/langroid/langroid-examples/blob/main/examples/data-qa/sql-chat/sql_chat.py)
+(and also in a similar location in the main `langroid` repo).
+This tutorial walks you through how you might use the `SQLChatAgent` if you were
+to write your own script from scratch. We also show some of the internal workings of this Agent.
+
 The agent uses the schema context to generate SQL queries based on a user's
 input. Here is a tutorial on how to set up an agent with your PostgreSQL
 database. The steps for other databases are similar. Since the agent implementation relies 
@@ -19,7 +25,7 @@ automatically extracting schemas from the database.
     - `sudo apt-get install libpq-dev` on Ubuntu,
     - `brew install postgresql` on Mac, etc.
 
-2. Follow the general [setup guide](/quick-start/setup/) to get started with Langroid
+2. Follow the general [setup guide](../quick-start/setup.md) to get started with Langroid
 (mainly, install `langroid` into your virtual env, and set up suitable values in 
 the `.env` file). Note that to use the SQLChatAgent with a PostgreSQL database,
 you need to install the `langroid[postgres]` extra, e.g.:
