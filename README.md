@@ -67,6 +67,7 @@ for ideas on what to contribute.
 <summary> <b>:fire: Updates/Releases</b></summary>
 
 - **Sep 2023:**
+  - **0.1.76:** DocChatAgent: support for loading `docx` files (preliminary).
   - **0.1.72:** Many improvements to DocChatAgent: better embedding model, 
           hybrid search to improve retrieval, better pdf parsing, re-ranking retrieved results with cross-encoders. 
   - **Use with local LLama Models:** see tutorial [here](https://langroid.github.io/langroid/blog/2023/09/14/using-langroid-with-local-llms/)
