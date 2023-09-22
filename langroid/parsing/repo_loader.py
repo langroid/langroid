@@ -18,8 +18,8 @@ from github.Repository import Repository
 from pydantic import BaseSettings
 
 from langroid.mytypes import DocMetaData, Document
+from langroid.parsing.document_parser import DocumentParser
 from langroid.parsing.parser import Parser, ParsingConfig
-from langroid.parsing.pdf_parser import PdfParser
 
 logger = logging.getLogger(__name__)
 
@@ -493,12 +493,12 @@ class RepoLoader:
 
         for file_path in file_paths:
             _, file_extension = os.path.splitext(file_path)
-            if file_extension.lower() == ".pdf":
-                pdf_parser = PdfParser.create(
+            if file_extension.lower() in [".pdf", ".docx"]:
+                doc_parser = DocumentParser.create(
                     file_path,
                     parser.config,
                 )
-                docs.extend(pdf_parser.get_doc_chunks())
+                docs.extend(doc_parser.get_doc_chunks())
             else:
                 with open(file_path, "r") as f:
                     if lines is not None:

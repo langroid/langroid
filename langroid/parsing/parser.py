@@ -23,6 +23,10 @@ class PdfParsingConfig(BaseSettings):
     library: str = "pdfplumber"
 
 
+class DocxParsingConfig(BaseSettings):
+    library: str = "unstructured"
+
+
 class ParsingConfig(BaseSettings):
     splitter: str = Splitter.TOKENS
     chunk_size: int = 200  # aim for this many tokens per chunk
@@ -35,6 +39,7 @@ class ParsingConfig(BaseSettings):
     separators: List[str] = ["\n\n", "\n", " ", ""]
     token_encoding_model: str = "text-embedding-ada-002"
     pdf: PdfParsingConfig = PdfParsingConfig()
+    docx: DocxParsingConfig = DocxParsingConfig()
 
 
 class Parser:

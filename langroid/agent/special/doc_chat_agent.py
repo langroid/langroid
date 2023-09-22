@@ -81,6 +81,7 @@ class DocChatAgentConfig(ChatAgentConfig):
     # and use the embed(A) to find similar chunks in vecdb.
     # Referred to as HyDE in the paper:
     # https://arxiv.org/pdf/2212.10496.pdf
+    # It is False by default; its benefits depends on the context.
     hypothetical_answer: bool = False
     n_query_rephrases: int = 0
     use_fuzzy_match: bool = True
@@ -391,13 +392,14 @@ class DocChatAgent(ChatAgent):
         if self.config.hypothetical_answer:
             with console.status("[cyan]LLM generating hypothetical answer..."):
                 with StreamingIfAllowed(self.llm, False):
+                    # TODO: provide an easy way to
+                    # Adjust this prompt depending on context.
                     answer = self.llm_response_forget(
                         f"""
-                        Give a sample answer to the following query, 
+                        Give an ideal answer to the following query, 
                         in up to 3 sentences. Do not explain yourself, 
                         and do not apologize, just show 
-                        a possible answer. Guess a hypothetical answer 
-                        even if you do not have any information.
+                        a good possible answer, even if you do not have any information.
                         Preface your answer with "HYPOTHETICAL ANSWER: "
                         
                         QUERY: {query}
@@ -504,7 +506,7 @@ class DocChatAgent(ChatAgent):
 
         with console.status("[cyan]LLM Extracting verbatim passages..."):
             with StreamingIfAllowed(self.llm, False):
-                # these are async calls, one per passage
+                # these are async calls, one per passage; turn off streaming
                 extracts = self.llm.get_verbatim_extracts(query, passages)
                 extracts = [e for e in extracts if e.content != NO_ANSWER]
 

@@ -9,8 +9,8 @@ from trafilatura.downloads import (
 )
 
 from langroid.mytypes import DocMetaData, Document
+from langroid.parsing.document_parser import DocumentParser
 from langroid.parsing.parser import Parser, ParsingConfig
-from langroid.parsing.pdf_parser import PdfParser
 
 logging.getLogger("trafilatura").setLevel(logging.ERROR)
 
@@ -44,12 +44,12 @@ class URLLoader:
                 sleep_time=5,
             )
             for url, result in buffered_downloads(buffer, threads):
-                if url.lower().endswith(".pdf"):
-                    pdf_parser = PdfParser.create(
+                if url.lower().endswith(".pdf") or url.lower().endswith(".docx"):
+                    doc_parser = DocumentParser.create(
                         url,
                         self.parser.config,
                     )
-                    docs.extend(pdf_parser.get_doc_chunks())
+                    docs.extend(doc_parser.get_doc_chunks())
                 else:
                     text = trafilatura.extract(
                         result,

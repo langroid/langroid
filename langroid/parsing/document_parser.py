@@ -1,5 +1,6 @@
 import re
 from abc import abstractmethod
+from enum import Enum
 from io import BytesIO
 from typing import Any, Generator, List, Tuple
 
@@ -12,35 +13,56 @@ from langroid.mytypes import DocMetaData, Document
 from langroid.parsing.parser import Parser, ParsingConfig
 
 
-class PdfParser(Parser):
+class DocumentType(str, Enum):
+    PDF = "pdf"
+    DOCX = "docx"
+
+
+class DocumentParser(Parser):
     """
-    Abstract base class for extracting text from PDFs.
+    Abstract base class for extracting text from special types of docs
+    such as PDFs or Docx.
 
     Attributes:
-        source (str): The PDF source, either a URL or a file path.
-        pdf_bytes (BytesIO): BytesIO object containing the PDF data.
+        source (str): The source, either a URL or a file path.
+        doc_bytes (BytesIO): BytesIO object containing the doc data.
     """
 
     @classmethod
-    def create(cls, source: str, config: ParsingConfig) -> "PdfParser":
+    def create(cls, source: str, config: ParsingConfig) -> "DocumentParser":
         """
-        Create a PDF Parser instance based on config.library specified.
+        Create a DocumentParser instance based on source type
+            and config.<source_type>.library specified.
 
         Args:
             source (str): The source of the PDF, either a URL or a file path.
             config (ParserConfig): The parser configuration.
 
         Returns:
-            PdfParser: An instance of a PDF Parser subclass.
+            DocumentParser: An instance of a DocumentParser subclass.
         """
-        if config.pdf.library == "fitz":
-            return FitzPdfParser(source, config)
-        elif config.pdf.library == "pypdf":
-            return PyPdfParser(source, config)
-        elif config.pdf.library == "pdfplumber":
-            return PdfPlumberParser(source, config)
+        if DocumentParser._document_type(source) == DocumentType.PDF:
+            if config.pdf.library == "fitz":
+                return FitzPDFParser(source, config)
+            elif config.pdf.library == "pypdf":
+                return PyPDFParser(source, config)
+            elif config.pdf.library == "pdfplumber":
+                return PDFPlumberParser(source, config)
+            elif config.pdf.library == "unstructured":
+                return UnstructuredPDFParser(source, config)
+            else:
+                raise ValueError(
+                    f"Unsupported PDF library specified: {config.pdf.library}"
+                )
+        elif DocumentParser._document_type(source) == DocumentType.DOCX:
+            if config.docx.library == "unstructured":
+                return UnstructuredDocxParser(source, config)
+            else:
+                raise ValueError(
+                    f"Unsupported DOCX library specified: {config.docx.library}"
+                )
         else:
-            raise ValueError(f"Unsupported library specified: {config.pdf.library}")
+            raise ValueError(f"Unsupported document type: {source}")
 
     def __init__(self, source: str, config: ParsingConfig):
         """
@@ -52,14 +74,32 @@ class PdfParser(Parser):
         super().__init__(config)
         self.source = source
         self.config = config
-        self.pdf_bytes = self._load_pdf_as_bytesio()
+        self.doc_bytes = self._load_doc_as_bytesio()
 
-    def _load_pdf_as_bytesio(self) -> BytesIO:
+    @staticmethod
+    def _document_type(source: str) -> DocumentType:
         """
-        Load the PDF into a BytesIO object.
+        Determine the type of document based on the source.
+
+        Args:
+            source (str): The source of the PDF, either a URL or a file path.
 
         Returns:
-            BytesIO: A BytesIO object containing the PDF data.
+            str: The document type.
+        """
+        if source.lower().endswith(".pdf"):
+            return DocumentType.PDF
+        elif source.lower().endswith(".docx"):
+            return DocumentType.DOCX
+        else:
+            raise ValueError(f"Unsupported document type: {source}")
+
+    def _load_doc_as_bytesio(self) -> BytesIO:
+        """
+        Load the docs into a BytesIO object.
+
+        Returns:
+            BytesIO: A BytesIO object containing the doc data.
         """
         if self.source.startswith(("http://", "https://")):
             response = requests.get(self.source)
@@ -159,7 +199,7 @@ class PdfParser(Parser):
         return docs
 
 
-class FitzPdfParser(PdfParser):
+class FitzPDFParser(DocumentParser):
     """
     Parser for processing PDFs using the `fitz` library.
     """
@@ -171,7 +211,7 @@ class FitzPdfParser(PdfParser):
         Returns:
             Generator[fitz.Page]: Generator yielding each page.
         """
-        doc = fitz.open(stream=self.pdf_bytes, filetype="pdf")
+        doc = fitz.open(stream=self.doc_bytes, filetype="pdf")
         for i, page in enumerate(doc):
             yield i, page
         doc.close()
@@ -189,7 +229,7 @@ class FitzPdfParser(PdfParser):
         return self.fix_text(page.get_text())
 
 
-class PyPdfParser(PdfParser):
+class PyPDFParser(DocumentParser):
     """
     Parser for processing PDFs using the `pypdf` library.
     """
@@ -201,7 +241,7 @@ class PyPdfParser(PdfParser):
         Returns:
             Generator[pypdf.pdf.PageObject]: Generator yielding each page.
         """
-        reader = pypdf.PdfReader(self.pdf_bytes)
+        reader = pypdf.PdfReader(self.doc_bytes)
         for i, page in enumerate(reader.pages):
             yield i, page
 
@@ -218,7 +258,7 @@ class PyPdfParser(PdfParser):
         return self.fix_text(page.extract_text())
 
 
-class PdfPlumberParser(PdfParser):
+class PDFPlumberParser(DocumentParser):
     """
     Parser for processing PDFs using the `pdfplumber` library.
     """
@@ -232,7 +272,7 @@ class PdfPlumberParser(PdfParser):
         Returns:
             Generator[pdfplumber.Page]: Generator yielding each page.
         """
-        with pdfplumber.open(self.pdf_bytes) as pdf:
+        with pdfplumber.open(self.doc_bytes) as pdf:
             for i, page in enumerate(pdf.pages):
                 yield i, page
 
@@ -247,3 +287,60 @@ class PdfPlumberParser(PdfParser):
             str: Extracted text from the page.
         """
         return self.fix_text(page.extract_text())
+
+
+class UnstructuredPDFParser(DocumentParser):
+    """
+    Parser for processing PDF files using the `unstructured` library.
+    """
+
+    def iterate_pages(self) -> Generator[Tuple[int, Any], None, None]:  # type: ignore
+        from unstructured.partition.pdf import partition_pdf
+
+        elements = partition_pdf(file=self.doc_bytes, include_page_breaks=True)
+        for i, el in enumerate(elements):
+            yield i, el
+
+    def extract_text_from_page(self, page: Any) -> str:
+        """
+        Extract text from a given `unstructured` element.
+
+        Args:
+            page (unstructured element): The `unstructured` element object.
+
+        Returns:
+            str: Extracted text from the element.
+        """
+        return self.fix_text(str(page))
+
+
+class UnstructuredDocxParser(DocumentParser):
+    """
+    Parser for processing DOCX files using the `unstructured` library.
+    """
+
+    def iterate_pages(self) -> Generator[Tuple[int, Any], None, None]:  # type: ignore
+        from unstructured.partition.docx import partition_docx
+
+        elements = partition_docx(file=self.doc_bytes)
+        for i, el in enumerate(elements):
+            yield i, el
+
+    def extract_text_from_page(self, page: Any) -> str:
+        """
+        Extract text from a given `unstructured` element.
+
+        Note:
+            The concept of "pages" doesn't actually exist in the .docx file format in
+            the same way it does in formats like .pdf. A .docx file is made up of a
+            series of elements like paragraphs and tables, but the division into
+            pages is done dynamically based on the rendering settings (like the page
+            size, margin size, font size, etc.).
+
+        Args:
+            page (unstructured element): The `unstructured` element object.
+
+        Returns:
+            str: Extracted text from the element.
+        """
+        return self.fix_text(str(page))

@@ -2,14 +2,14 @@ import os
 
 import pytest
 
+from langroid.parsing.document_parser import DocumentParser
 from langroid.parsing.parser import ParsingConfig, PdfParsingConfig
-from langroid.parsing.pdf_parser import PdfParser
 
 
-@pytest.mark.parametrize("pdflib", ["fitz", "pypdf", "pdfplumber"])
+@pytest.mark.parametrize("pdflib", ["fitz", "pypdf", "pdfplumber", "unstructured"])
 def test_get_pdf_doc_url(pdflib: str):
     url = "https://arxiv.org/pdf/2104.05490.pdf"
-    pdf_parser = PdfParser.create(
+    pdf_parser = DocumentParser.create(
         url, ParsingConfig(pdf=PdfParsingConfig(library=pdflib))
     )
     doc = pdf_parser.get_doc()
@@ -28,13 +28,13 @@ def test_get_pdf_doc_url(pdflib: str):
     assert all(d.metadata.is_chunk for d in docs)
 
 
-@pytest.mark.parametrize("pdflib", ["fitz", "pypdf", "pdfplumber"])
+@pytest.mark.parametrize("pdflib", ["fitz", "pypdf", "pdfplumber", "unstructured"])
 def test_get_pdf_doc_path(pdflib: str):
     current_dir = os.path.dirname(os.path.abspath(__file__))
 
     # Construct the path to the PDF file
     path = os.path.join(current_dir, "dummy.pdf")
-    pdf_parser = PdfParser.create(
+    pdf_parser = DocumentParser.create(
         path, ParsingConfig(pdf=PdfParsingConfig(library=pdflib))
     )
     doc = pdf_parser.get_doc()
@@ -47,3 +47,4 @@ def test_get_pdf_doc_path(pdflib: str):
     docs = pdf_parser.get_doc_chunks()
     assert len(docs) > 0
     assert all(d.metadata.is_chunk for d in docs)
+    assert all(path in d.metadata.source for d in docs)
