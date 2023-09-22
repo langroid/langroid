@@ -7,6 +7,7 @@ Repeat: WriterAgent --Question--> DocAgent --> Answer
 """
 import typer
 from rich import print
+import os
 
 from langroid.agent.special.doc_chat_agent import (
     DocChatAgent,
@@ -22,6 +23,7 @@ from langroid.utils.logging import setup_colored_logging
 app = typer.Typer()
 
 setup_colored_logging()
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 
 def chat(config: DocChatAgentConfig) -> None:
@@ -56,7 +58,12 @@ def chat(config: DocChatAgentConfig) -> None:
         """,
     )
 
-    writer_agent = ChatAgent(ChatAgentConfig(llm=OpenAIGPTConfig()))
+    writer_agent = ChatAgent(
+        ChatAgentConfig(
+            llm=OpenAIGPTConfig(),
+            vecdb=None,
+        )
+    )
     writer_task = Task(
         writer_agent,
         name="WriterAgent",

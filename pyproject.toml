@@ -54,6 +54,7 @@ sqlalchemy = "^2.0.19"
 prettytable = "^3.8.0"
 google-api-python-client = "^2.95.0"
 lxml = "^4.9.3"
+unstructured = {extras = ["docx", "pptx", "pdf"], version = "^0.10.16"}
 
 # optional; see extras section below
 sentence-transformers = {version="2.2.2", optional=true}

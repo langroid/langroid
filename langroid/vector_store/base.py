@@ -132,4 +132,4 @@ class VectorStore(ABC):
     def show_if_debug(self, doc_score_pairs: List[Tuple[Document, float]]) -> None:
         if settings.debug:
             for i, (d, s) in enumerate(doc_score_pairs):
-                print_long_text("red", "italic red", f"MATCH-{i}", d.content)
+                print_long_text("red", "italic red", f"\nMATCH-{i}\n", d.content)

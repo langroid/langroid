@@ -55,8 +55,8 @@ This Multi-Agent paradigm is inspired by the
 [Actor Framework](https://en.wikipedia.org/wiki/Actor_model)
 (but you do not need to know anything about this!). 
 
-Langroid is a fresh take on LLM app-development, where considerable thought has gone 
-into simplifying the developer experience. It does not use `Langchain` or `Llama-Index`.
+`Langroid` is a fresh take on LLM app-development, where considerable thought has gone 
+into simplifying the developer experience; it does not use `Langchain`.
 
 We welcome contributions -- See the [contributions](./CONTRIBUTING.md) document
 for ideas on what to contribute.
@@ -94,7 +94,7 @@ See [this test](tests/main/test_recipient_tool.py) for example usage.
   - **0.1.27**: Added [support](langroid/cachedb/momento_cachedb.py) 
     for [Momento Serverless Cache](https://www.gomomento.com/) as an alternative to Redis.
   - **0.1.24**: [`DocChatAgent`](langroid/agent/special/doc_chat_agent.py) 
-    now [accepts](langroid/parsing/pdf_parser.py) PDF files or URLs.
+    now [accepts](langroid/parsing/document_parser.py) PDF files or URLs.
 
 </details>
 
@@ -157,9 +157,6 @@ Here is what it looks like in action:
 --- 
 
 # :gear: Installation and Setup
-
-:whale: For a simpler setup, see the Docker section below, which lets you get started just
-by setting up environment variables in a `.env` file.
 
 ### Install `langroid`
 Langroid requires Python 3.11+. We recommend using a virtual environment.
