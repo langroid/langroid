@@ -10,7 +10,6 @@ from langroid.agent.base import Agent, AgentConfig
 from langroid.agent.chat_document import ChatDocument
 from langroid.agent.tool_message import ToolMessage
 from langroid.language_models.base import (
-    LanguageModel,
     LLMFunctionSpec,
     LLMMessage,
     Role,
@@ -424,11 +423,11 @@ class ChatAgent(Agent):
         assert self.config.llm is not None and self.llm is not None
         output_len = output_len or self.config.llm.max_output_tokens
         with ExitStack() as stack:  # for conditionally using rich spinner
-            if not self.llm.get_stream():  # type: ignore
+            if not self.llm.get_stream():
                 # show rich spinner only if not streaming!
                 cm = console.status("LLM responding to messages...")
                 stack.enter_context(cm)
-            if self.llm.get_stream():  # type: ignore
+            if self.llm.get_stream():
                 console.print(f"[green]{self.indent}", end="")
             functions: Optional[List[LLMFunctionSpec]] = None
             fun_call: str | Dict[str, str] = "none"
@@ -442,14 +441,14 @@ class ChatAgent(Agent):
                     else self.llm_function_force
                 )
             assert self.llm is not None
-            response = cast(LanguageModel, self.llm).chat(
+            response = self.llm.chat(
                 messages,
                 output_len,
                 functions=functions,
                 function_call=fun_call,
             )
         displayed = False
-        if not self.llm.get_stream() or response.cached:  # type: ignore
+        if not self.llm.get_stream() or response.cached:
             displayed = True
             cached = f"[red]{self.indent}(cached)[/red]" if response.cached else ""
             if response.function_call is not None:
@@ -457,7 +456,7 @@ class ChatAgent(Agent):
             else:
                 response_str = response.message
             print(cached + "[green]" + response_str)
-        stream = self.llm.get_stream()  # type: ignore
+        stream = self.llm.get_stream()
         self.update_token_usage(
             response, messages, stream, print_response_stats=settings.debug
         )

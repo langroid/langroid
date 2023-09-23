@@ -201,8 +201,8 @@ class RetrieverAgent(DocChatAgent, ABC):
         if self.llm is None:
             logger.warning("No LLM specified")
             return [default_response]
-        response = self.llm.generate(  # type: ignore
-            prompt, max_tokens=self.config.llm.max_output_tokens  # type: ignore
+        response = self.llm.generate(
+            prompt, max_tokens=self.config.llm.max_output_tokens
         )
         if response.message == NO_ANSWER:
             return [default_response]

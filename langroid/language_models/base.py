@@ -253,7 +253,7 @@ class LanguageModel(ABC):
         self.config = config
 
     @staticmethod
-    def create(config: Optional[LLMConfig]) -> Optional[Type["LanguageModel"]]:
+    def create(config: Optional[LLMConfig]) -> Optional["LanguageModel"]:
         """
         Create a language model.
         Args:

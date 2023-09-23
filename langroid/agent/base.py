@@ -668,6 +668,9 @@ class Agent(ABC):
             tot_cost (float): total cost of the chat so far
             response (LLMResponse): LLMResponse object
         """
+        if self.config.llm is None:
+            logger.warning("LLM config is None, cannot print response stats")
+            return
         if response.usage:
             in_tokens = response.usage.prompt_tokens
             out_tokens = response.usage.completion_tokens

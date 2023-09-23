@@ -359,6 +359,8 @@ class DocChatAgent(ChatAgent):
         )
 
     def llm_hypothetical_answer(self, query: str) -> str:
+        if self.llm is None:
+            raise ValueError("LLM not set")
         with console.status("[cyan]LLM generating hypothetical answer..."):
             with StreamingIfAllowed(self.llm, False):
                 # TODO: provide an easy way to
@@ -376,7 +378,9 @@ class DocChatAgent(ChatAgent):
                 ).content
         return answer
 
-    def llm_rephrase_query(self, query:str) -> List[str]:
+    def llm_rephrase_query(self, query: str) -> List[str]:
+        if self.llm is None:
+            raise ValueError("LLM not set")
         with console.status("[cyan]LLM generating rephrases of query..."):
             with StreamingIfAllowed(self.llm, False):
                 rephrases = self.llm_response_forget(
@@ -389,15 +393,15 @@ class DocChatAgent(ChatAgent):
         return rephrases
 
     def get_similar_chunks_bm25(
-            self,
-            query:str,
-            multiple: int
+        self, query: str, multiple: int
     ) -> List[Tuple[Document, float]]:
         # find similar docs using bm25 similarity:
         # these may sometimes be more likely to contain a relevant verbatim extract
         with console.status("[cyan]Searching for similar chunks using bm25..."):
             if self.chunked_docs is None:
                 raise ValueError("No chunked docs")
+            if self.chunked_docs_clean is None:
+                raise ValueError("No cleaned chunked docs")
             docs_scores = find_closest_matches_with_bm25(
                 self.chunked_docs,
                 self.chunked_docs_clean,  # already pre-processed!
@@ -406,7 +410,7 @@ class DocChatAgent(ChatAgent):
             )
         return docs_scores
 
-    def get_fuzzy_matches(self, query:str, multiple:int) -> List[Document]:
+    def get_fuzzy_matches(self, query: str, multiple: int) -> List[Document]:
         # find similar docs using fuzzy matching:
         # these may sometimes be more likely to contain a relevant verbatim extract
         with console.status("[cyan]Finding fuzzy matches in chunks..."):
@@ -421,14 +425,9 @@ class DocChatAgent(ChatAgent):
         return fuzzy_match_docs
 
     def rerank_with_cross_encoder(
-            self,
-            query: str,
-            passages: List[Document]
+        self, query: str, passages: List[Document]
     ) -> List[Document]:
-
-        with console.status(
-                "[cyan]Re-ranking retrieved chunks using cross-encoder..."
-        ):
+        with console.status("[cyan]Re-ranking retrieved chunks using cross-encoder..."):
             if self.chunked_docs is None:
                 raise ValueError("No chunked docs")
             try:

@@ -79,7 +79,12 @@ class SentenceTransformerEmbeddings(EmbeddingModel):
 
     @property
     def embedding_dims(self) -> int:
-        return self.model.get_sentence_embedding_dimension()
+        dims = self.model.get_sentence_embedding_dimension()
+        if dims is None:
+            raise ValueError(
+                f"Could not get embedding dimension for model {self.config.model_name}"
+            )
+        return dims  # type: ignore
 
 
 def embedding_model(embedding_fn_type: str = "openai") -> EmbeddingModel:
