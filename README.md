@@ -166,12 +166,11 @@ Use `pip` to install `langroid` (from PyPi) to your virtual environment:
 pip install langroid
 ```
 The core Langroid package lets you use OpenAI Embeddings models via their API. 
-If you instead want to use the `all-MiniLM-L6-v2` embeddings model
-from from HuggingFace, install Langroid like this:
+If you instead want to use the `sentence-transformers` embedding models from HuggingFace, 
+install Langroid like this: 
 ```bash
 pip install langroid[hf-embeddings]
 ```
-Note that this will install `torch` and `sentence-transformers` libraries.
 
 <details>
 <summary><b>Optional Installs for using SQL Chat with a PostgreSQL DB </b></summary>
