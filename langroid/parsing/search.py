@@ -36,7 +36,7 @@ def find_fuzzy_matches_in_docs(
         query,
         [d.content for d in docs],
         limit=k,
-        scorer=fuzz.partial_token_sort_ratio,
+        scorer=fuzz.partial_ratio,
     )
 
     results = []
@@ -150,3 +150,47 @@ def find_closest_matches_with_bm25(
 
     # return the original docs, based on the scores from cleaned docs
     return [(docs[i], doc_scores[i]) for i in top_indices]
+
+
+def eliminate_near_duplicates(passages: List[str], threshold: float = 0.8) -> List[str]:
+    """
+    Eliminate near duplicate text passages from a given list using MinHash and LSH.
+    TODO: this has not been tested and the datasketch lib is not a dependency.
+    Args:
+        passages (List[str]): A list of text passages.
+        threshold (float, optional): Jaccard similarity threshold to consider two
+                                     passages as near-duplicates. Default is 0.8.
+
+    Returns:
+        List[str]: A list of passages after eliminating near duplicates.
+
+    Example:
+        passages = ["Hello world", "Hello, world!", "Hi there", "Hello world!"]
+        print(eliminate_near_duplicates(passages))
+        # ['Hello world', 'Hi there']
+    """
+
+    from datasketch import MinHash, MinHashLSH
+
+    # Create LSH index
+    lsh = MinHashLSH(threshold=threshold, num_perm=128)
+
+    # Create MinHash objects for each passage and insert to LSH
+    minhashes = {}
+    for idx, passage in enumerate(passages):
+        m = MinHash(num_perm=128)
+        for word in passage.split():
+            m.update(word.encode("utf-8"))
+        lsh.insert(idx, m)
+        minhashes[idx] = m
+
+    unique_idxs = set()
+    for idx in minhashes.keys():
+        # Query for similar passages (including itself)
+        result = lsh.query(minhashes[idx])
+
+        # If only the passage itself is returned, it's unique
+        if len(result) == 1 and idx in result:
+            unique_idxs.add(idx)
+
+    return [passages[idx] for idx in unique_idxs]

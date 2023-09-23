@@ -9,6 +9,7 @@ logging.getLogger("openai").setLevel(logging.ERROR)
 
 class EmbeddingModelsConfig(BaseSettings):
     model_type: str = "openai"
+    dims: int = 0
 
 
 class EmbeddingModel(ABC):

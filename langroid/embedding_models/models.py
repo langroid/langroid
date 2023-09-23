@@ -19,7 +19,6 @@ class OpenAIEmbeddingsConfig(EmbeddingModelsConfig):
 class SentenceTransformerEmbeddingsConfig(EmbeddingModelsConfig):
     model_type: str = "sentence-transformer"
     model_name: str = "BAAI/bge-large-en-v1.5"
-    dims: int = 1024  # should correspond to the model's embedding dims
 
 
 class OpenAIEmbeddings(EmbeddingModel):
@@ -80,7 +79,7 @@ class SentenceTransformerEmbeddings(EmbeddingModel):
 
     @property
     def embedding_dims(self) -> int:
-        return self.config.dims
+        return self.model.get_sentence_embedding_dimension()
 
 
 def embedding_model(embedding_fn_type: str = "openai") -> EmbeddingModel:
