@@ -19,7 +19,7 @@ class OpenAIEmbeddingsConfig(EmbeddingModelsConfig):
 class SentenceTransformerEmbeddingsConfig(EmbeddingModelsConfig):
     model_type: str = "sentence-transformer"
     model_name: str = "BAAI/bge-large-en-v1.5"
-    dims: int = 1024 # should correspond to the model's embedding dims
+    dims: int = 1024  # should correspond to the model's embedding dims
 
 
 class OpenAIEmbeddings(EmbeddingModel):
