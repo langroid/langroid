@@ -77,6 +77,10 @@ class DocChatAgentConfig(ChatAgentConfig):
     summarize_prompt: str = SUMMARY_ANSWER_PROMPT_GPT4
     max_context_tokens: int = 1000
     conversation_mode: bool = True
+    # In assistant mode, DocChatAgent receives questions from another Agent,
+    # and those will already be in stand-alone form, so in this mode
+    # there is no need to convert them to stand-alone form.
+    assistant_mode: bool = False
     # Use LLM to generate hypothetical answer A to the query Q,
     # and use the embed(A) to find similar chunks in vecdb.
     # Referred to as HyDE in the paper:
@@ -477,7 +481,7 @@ class DocChatAgent(ChatAgent):
             List[Document]: list of relevant extracts
 
         """
-        if len(self.dialog) > 0:
+        if len(self.dialog) > 0 and not self.config.assistant_mode:
             # Regardless of whether we are in conversation mode or not,
             # for relevant doc/chunk extraction, we must convert the query
             # to a standalone query to get more relevant results.

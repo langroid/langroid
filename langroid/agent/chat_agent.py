@@ -370,15 +370,16 @@ class ChatAgent(Agent):
                     # TODO we should really be doing summarization or other types of
                     #   prompt-size reduction
                     if len(hist) <= 2:
-                        # first two are "reserved" for the initial system, user msgs
-                        # that presumably set up the initial "priming" or "task" for
-                        # the agent.
+                        # We want to preserve the first message (typically system msg)
+                        # and last message (user msg).
                         raise ValueError(
                             """
                         The message history is longer than the max chat context 
                         length allowed, and we have run out of messages to drop."""
                         )
-                    hist = hist[:2] + hist[3:]
+                    # drop the second message, i.e. first msg after the sys msg
+                    # (typically user msg).
+                    hist = hist[:1] + hist[2:]
 
                 if len(hist) < len(self.message_history):
                     msg_tokens = self.chat_num_tokens()
@@ -387,12 +388,23 @@ class ChatAgent(Agent):
                     Chat Model context length is {self.llm.chat_context_length()} 
                     tokens, but the current message history is {msg_tokens} tokens long.
                     Dropped the {len(self.message_history) - len(hist)} messages
-                    from early in the conversation history so total tokens are 
-                    low enough to allow minimum output length of 
+                    from early in the conversation history so that history token 
+                    length is {self.chat_num_tokens(hist)}.
+                    This may still not be low enough to allow minimum output length of 
                     {self.config.llm.min_output_tokens} tokens.
                     """
                     )
 
+        if output_len < 0:
+            raise ValueError(
+                f"""
+                Tried to shorten prompt history for chat mode 
+                but even after dropping all messages except system msg and last (
+                user) msg, the history token len {self.chat_num_tokens(hist)} is longer 
+                than the model's max context length {self.llm.chat_context_length()}.
+                Please try shortening the system msg or user prompts.
+                """
+            )
         if output_len < self.config.llm.min_output_tokens:
             logger.warning(
                 f"""
