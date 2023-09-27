@@ -4,7 +4,6 @@ import pytest
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
-from langroid.agent.tool_message import ToolMessage
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
 from langroid.language_models.base import Role
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
@@ -14,20 +13,6 @@ from langroid.prompts.prompts_config import PromptsConfig
 from langroid.utils.configuration import Settings, set_global
 from langroid.utils.constants import NO_ANSWER
 from langroid.vector_store.base import VectorStoreConfig
-
-
-class ExponentialTool(ToolMessage):
-    request: str = "calc_expontential"
-    purpose: str = "To calculate the value of <x> raised to the power <e>"
-    x: int
-    e: int
-
-
-class MultiplicationTool(ToolMessage):
-    request: str = "calc_multiplication"
-    purpose: str = "To calculate the value of <x> multiplied by <y>"
-    x: int
-    y: int
 
 
 class _TestChatAgentConfig(ChatAgentConfig):

@@ -5,7 +5,9 @@ import textwrap
 from abc import ABC
 from contextlib import ExitStack
 from typing import (
+    Any,
     Callable,
+    Coroutine,
     Dict,
     List,
     Optional,
@@ -29,6 +31,7 @@ from langroid.language_models.base import (
     LLMMessage,
     LLMResponse,
     LLMTokenUsage,
+    StreamingIfAllowed,
 )
 from langroid.mytypes import DocMetaData, Entity
 from langroid.parsing.json import extract_top_level_json
@@ -100,6 +103,25 @@ class Agent(ABC):
             (Entity.AGENT, self.agent_response),
             (Entity.LLM, self.llm_response),
             (Entity.USER, self.user_response),
+        ]
+
+    def entity_responders_async(
+        self,
+    ) -> List[
+        Tuple[
+            Entity,
+            Callable[
+                [None | str | ChatDocument], Coroutine[Any, Any, None | ChatDocument]
+            ],
+        ]
+    ]:
+        """
+        Async version of `entity_responders`. See there for details.
+        """
+        return [
+            (Entity.AGENT, self.agent_response_async),
+            (Entity.LLM, self.llm_response_async),
+            (Entity.USER, self.user_response_async),
         ]
 
     @property
@@ -293,6 +315,12 @@ class Agent(ABC):
         ]
         return "\n\n".join(sample_convo)
 
+    async def agent_response_async(
+        self,
+        msg: Optional[str | ChatDocument] = None,
+    ) -> Optional[ChatDocument]:
+        return self.agent_response(msg)
+
     def agent_response(
         self,
         msg: Optional[str | ChatDocument] = None,
@@ -333,6 +361,12 @@ class Agent(ABC):
                 sender_name=sender_name,
             ),
         )
+
+    async def user_response_async(
+        self,
+        msg: Optional[str | ChatDocument] = None,
+    ) -> Optional[ChatDocument]:
+        return self.user_response(msg)
 
     def user_response(
         self,
@@ -408,6 +442,57 @@ class Agent(ABC):
         return True
 
     @no_type_check
+    async def llm_response_async(
+        self,
+        msg: Optional[str | ChatDocument] = None,
+    ) -> Optional[ChatDocument]:
+        """
+        Asynch version of `llm_response`. See there for details.
+        """
+        if msg is None or not self.llm_can_respond(msg):
+            return None
+
+        if isinstance(msg, ChatDocument):
+            prompt = msg.content
+        else:
+            prompt = msg
+
+        output_len = self.config.llm.max_output_tokens
+        if self.num_tokens(prompt) + output_len > self.llm.completion_context_length():
+            output_len = self.llm.completion_context_length() - self.num_tokens(prompt)
+            if output_len < self.config.llm.min_output_tokens:
+                raise ValueError(
+                    """
+                Token-length of Prompt + Output is longer than the
+                completion context length of the LLM!
+                """
+                )
+            else:
+                logger.warning(
+                    f"""
+                Requested output length has been shortened to {output_len}
+                so that the total length of Prompt + Output is less than
+                the completion context length of the LLM. 
+                """
+                )
+
+        with StreamingIfAllowed(self.llm, False):
+            response = await self.llm.agenerate(prompt, output_len)
+
+        # we would have already displayed the msg "live" ONLY if
+        # streaming was enabled, AND we did not find a cached response
+        console.print(f"[green]{self.indent}", end="")
+        print("[green]" + response.message)
+        displayed = True
+        self.update_token_usage(
+            response,
+            prompt,
+            False,
+            print_response_stats=settings.debug,
+        )
+        return ChatDocument.from_LLMResponse(response, displayed)
+
+    @no_type_check
     def llm_response(
         self,
         msg: Optional[str | ChatDocument] = None,
@@ -451,7 +536,7 @@ class Agent(ABC):
                 else:
                     logger.warning(
                         f"""
-                    Requested output length has been shorted to {output_len}
+                    Requested output length has been shortened to {output_len}
                     so that the total length of Prompt + Output is less than
                     the completion context length of the LLM. 
                     """

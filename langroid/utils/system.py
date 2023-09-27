@@ -1,3 +1,4 @@
+import inspect
 import logging
 import shutil
 
@@ -37,3 +38,20 @@ def rmdir(path: str) -> bool:
     except Exception as e:
         logger.error(f"Error while removing directory '{path}': {e}")
     return True
+
+
+def caller_name() -> str:
+    """
+    Who called the function?
+    """
+    frame = inspect.currentframe()
+    if frame is None:
+        return ""
+
+    caller_frame = frame.f_back
+
+    # If there's no caller frame, the function was called from the global scope
+    if caller_frame is None:
+        return ""
+
+    return caller_frame.f_code.co_name
