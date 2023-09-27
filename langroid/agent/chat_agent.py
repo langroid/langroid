@@ -332,7 +332,7 @@ class ChatAgent(Agent):
         Async version of `llm_response`. See there for details.
         """
         hist, output_len = self._prep_llm_messages(message)
-        with StreamingIfAllowed(self.llm, False):
+        with StreamingIfAllowed(self.llm, self.llm.get_stream()):
             response = await self.llm_response_messages_async(hist, output_len)
         # TODO - when response contains function_call we should include
         # that (and related fields) in the message_history
@@ -559,7 +559,8 @@ class ChatAgent(Agent):
         """
         # we explicitly call THIS class's respond method,
         # not a derived class's (or else there would be infinite recursion!)
-        answer_doc = cast(ChatDocument, ChatAgent.llm_response(self, prompt))
+        with StreamingIfAllowed(self.llm, self.llm.get_stream()):  # type: ignore
+            answer_doc = cast(ChatDocument, ChatAgent.llm_response(self, prompt))
         self.update_last_message(message, role=Role.USER)
         return answer_doc
 
@@ -571,10 +572,11 @@ class ChatAgent(Agent):
         """
         # we explicitly call THIS class's respond method,
         # not a derived class's (or else there would be infinite recursion!)
-        answer_doc = cast(
-            ChatDocument,
-            await ChatAgent.llm_response_async(self, prompt),
-        )
+        with StreamingIfAllowed(self.llm, self.llm.get_stream()):  # type: ignore
+            answer_doc = cast(
+                ChatDocument,
+                await ChatAgent.llm_response_async(self, prompt),
+            )
         self.update_last_message(message, role=Role.USER)
         return answer_doc
 
@@ -607,7 +609,7 @@ class ChatAgent(Agent):
         """
         # explicitly call THIS class's respond method,
         # not a derived class's (or else there would be infinite recursion!)
-        with StreamingIfAllowed(self.llm, False):  # type: ignore
+        with StreamingIfAllowed(self.llm, self.llm.get_stream()):  # type: ignore
             response = cast(
                 ChatDocument, await ChatAgent.llm_response_async(self, message)
             )
