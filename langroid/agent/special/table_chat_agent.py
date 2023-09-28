@@ -10,7 +10,7 @@ the code and returns the result as a string.
 import io
 import logging
 import sys
-from typing import no_type_check
+from typing import List, no_type_check
 
 import numpy as np
 import pandas as pd
@@ -125,6 +125,13 @@ class RunCodeTool(ToolMessage):
             return the results to answer a question.
             """
     code: str
+
+    @classmethod
+    def examples(cls) -> List["ToolMessage"]:
+        return [
+            cls(code="df.head()"),
+            cls(code="df[(df['gender'] == 'Male')]['income'].mean()"),
+        ]
 
 
 class TableChatAgent(ChatAgent):

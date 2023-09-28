@@ -86,8 +86,9 @@ class LLMConfig(BaseSettings):
     # we will try shortening requested output
     min_output_tokens: int = 64
     use_completion_for_chat: bool = False  # use completion model for chat?
-    use_chat_for_completion: bool = True  # use chat model for completion?
-    stream: bool = False  # stream output from API?
+    # use chat model for completion? For OpenAI models, this MUST be set to True!
+    use_chat_for_completion: bool = True
+    stream: bool = True  # stream output from API?
     cache_config: None | RedisCacheConfig | MomentoCacheConfig = None
 
     # Dict of model -> (input/prompt cost, output/completion cost)
@@ -253,7 +254,7 @@ class LanguageModel(ABC):
         self.config = config
 
     @staticmethod
-    def create(config: Optional[LLMConfig]) -> Optional[Type["LanguageModel"]]:
+    def create(config: Optional[LLMConfig]) -> Optional["LanguageModel"]:
         """
         Create a language model.
         Args:
@@ -365,6 +366,16 @@ class LanguageModel(ABC):
 
     @abstractmethod
     def chat(
+        self,
+        messages: Union[str, List[LLMMessage]],
+        max_tokens: int,
+        functions: Optional[List[LLMFunctionSpec]] = None,
+        function_call: str | Dict[str, str] = "auto",
+    ) -> LLMResponse:
+        pass
+
+    @abstractmethod
+    async def achat(
         self,
         messages: Union[str, List[LLMMessage]],
         max_tokens: int,

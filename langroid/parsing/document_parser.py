@@ -164,7 +164,8 @@ class DocumentParser(Parser):
         pages: List[str] = []
         docs: List[Document] = []
         for i, page in self.iterate_pages():
-            split += self.tokenizer.encode(self.extract_text_from_page(page))
+            page_text = self.extract_text_from_page(page)
+            split += self.tokenizer.encode(page_text)
             pages.append(str(i + 1))
             # split could be so long it needs to be split
             # into multiple chunks. Or it could be so short

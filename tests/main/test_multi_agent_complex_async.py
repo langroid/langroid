@@ -28,9 +28,10 @@ class _TestChatAgentConfig(ChatAgentConfig):
 EXPONENTIALS = "3**4 8**3"
 
 
+@pytest.mark.asyncio
 @pytest.mark.parametrize("fn_api", [True, False])
 @pytest.mark.parametrize("constrain_recipients", [True, False])
-def test_agents_with_recipient(
+async def test_agents_with_recipient(
     test_settings: Settings,
     fn_api: bool,
     constrain_recipients: bool,
@@ -90,7 +91,9 @@ def test_agents_with_recipient(
                 "Multiplier" who can compute multiplications. So to calculate the
                 exponential you receive from "Master", you have to ask a sequence of
                 multiplication questions to "Multiplier", to figure out the 
-                exponential.
+                exponential. When addressing "Multiplier", you must use the 
+                `recipient_message` tool/function, with 
+                the `intended_recipient` field set to "Multiplier".
                 
                 When you have your final answer, report your answer
                 back to "Master" using the same `recipient_message` tool/function-call.
@@ -126,7 +129,7 @@ def test_agents_with_recipient(
     planner.default_human_response = ""
     multiplier.default_human_response = ""
 
-    result = task_master.run()
+    result = await task_master.run_async()
 
     answers = [str(eval(e)) for e in EXPONENTIALS.split()]
     assert all(a in result.content for a in answers)

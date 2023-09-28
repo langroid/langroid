@@ -5,7 +5,9 @@ import textwrap
 from abc import ABC
 from contextlib import ExitStack
 from typing import (
+    Any,
     Callable,
+    Coroutine,
     Dict,
     List,
     Optional,
@@ -22,13 +24,14 @@ from rich.console import Console
 from rich.prompt import Prompt
 
 from langroid.agent.chat_document import ChatDocMetaData, ChatDocument
-from langroid.agent.tool_message import INSTRUCTION, ToolMessage
+from langroid.agent.tool_message import ToolMessage
 from langroid.language_models.base import (
     LanguageModel,
     LLMConfig,
     LLMMessage,
     LLMResponse,
     LLMTokenUsage,
+    StreamingIfAllowed,
 )
 from langroid.mytypes import DocMetaData, Entity
 from langroid.parsing.json import extract_top_level_json
@@ -100,6 +103,25 @@ class Agent(ABC):
             (Entity.AGENT, self.agent_response),
             (Entity.LLM, self.llm_response),
             (Entity.USER, self.user_response),
+        ]
+
+    def entity_responders_async(
+        self,
+    ) -> List[
+        Tuple[
+            Entity,
+            Callable[
+                [None | str | ChatDocument], Coroutine[Any, Any, None | ChatDocument]
+            ],
+        ]
+    ]:
+        """
+        Async version of `entity_responders`. See there for details.
+        """
+        return [
+            (Entity.AGENT, self.agent_response_async),
+            (Entity.LLM, self.llm_response_async),
+            (Entity.USER, self.user_response_async),
         ]
 
     @property
@@ -223,9 +245,14 @@ class Agent(ABC):
 
         json_instructions = "\n\n".join(
             [
-                str(msg_cls.default_value("request"))
-                + ":\n"
-                + str(msg_cls.default_value("purpose"))
+                textwrap.dedent(
+                    f"""
+                TOOL: {msg_cls.default_value("request")}
+                PURPOSE: {msg_cls.default_value("purpose")} 
+                JSON FORMAT: {msg_cls.llm_function_schema(request=True)}
+                EXAMPLE: {msg_cls.usage_example()}
+                """.lstrip()
+                )
                 for i, msg_cls in enumerate(enabled_classes)
                 if msg_cls.default_value("request") in self.llm_tools_usable
             ]
@@ -237,44 +264,18 @@ class Agent(ABC):
 
             {json_instructions}
             
-            {INSTRUCTION}            
+            When one of the above TOOLs is applicable, you must express your 
+            request as "TOOL:" followed by the request in the above JSON format.
+            """
+            + """
+            The JSON format will be:
+                \\{
+                    "request": "<tool_name>",
+                    "<arg1>": <value1>,
+                    "<arg2>": <value2>,
+                    ...
+                \\}             
             ----------------------------
-            """.lstrip()
-        )
-
-    def tool_instructions(self) -> str:
-        """
-        Instructions (defined via `instructions` classmethod in a
-        ToolMessage class) for currently enabled and usable Tools.
-
-        Returns:
-            str: concatenation of instructions for all usable tools
-        """
-        enabled_classes: List[Type[ToolMessage]] = list(self.llm_tools_map.values())
-        if len(enabled_classes) == 0:
-            return ""
-        instructions = []
-        for msg_cls in enabled_classes:
-            if (
-                hasattr(msg_cls, "instructions")
-                and inspect.ismethod(msg_cls.instructions)
-                and msg_cls.default_value("request") in self.llm_tools_usable
-            ):
-                instructions.append(
-                    textwrap.dedent(
-                        f"""
-                        {msg_cls.default_value("request")}:
-                        {msg_cls.instructions()}
-                        """.lstrip()
-                    )
-                )
-        if len(instructions) == 0:
-            return ""
-        instructions_str = "\n\n".join(instructions)
-        return textwrap.dedent(
-            f"""
-            === GUIDELINES ON SOME TOOLS/FUNCTIONS USAGE ===
-            {instructions_str}
             """.lstrip()
         )
 
@@ -292,6 +293,12 @@ class Agent(ABC):
             if i < 2
         ]
         return "\n\n".join(sample_convo)
+
+    async def agent_response_async(
+        self,
+        msg: Optional[str | ChatDocument] = None,
+    ) -> Optional[ChatDocument]:
+        return self.agent_response(msg)
 
     def agent_response(
         self,
@@ -333,6 +340,12 @@ class Agent(ABC):
                 sender_name=sender_name,
             ),
         )
+
+    async def user_response_async(
+        self,
+        msg: Optional[str | ChatDocument] = None,
+    ) -> Optional[ChatDocument]:
+        return self.user_response(msg)
 
     def user_response(
         self,
@@ -408,6 +421,57 @@ class Agent(ABC):
         return True
 
     @no_type_check
+    async def llm_response_async(
+        self,
+        msg: Optional[str | ChatDocument] = None,
+    ) -> Optional[ChatDocument]:
+        """
+        Asynch version of `llm_response`. See there for details.
+        """
+        if msg is None or not self.llm_can_respond(msg):
+            return None
+
+        if isinstance(msg, ChatDocument):
+            prompt = msg.content
+        else:
+            prompt = msg
+
+        output_len = self.config.llm.max_output_tokens
+        if self.num_tokens(prompt) + output_len > self.llm.completion_context_length():
+            output_len = self.llm.completion_context_length() - self.num_tokens(prompt)
+            if output_len < self.config.llm.min_output_tokens:
+                raise ValueError(
+                    """
+                Token-length of Prompt + Output is longer than the
+                completion context length of the LLM!
+                """
+                )
+            else:
+                logger.warning(
+                    f"""
+                Requested output length has been shortened to {output_len}
+                so that the total length of Prompt + Output is less than
+                the completion context length of the LLM. 
+                """
+                )
+
+        with StreamingIfAllowed(self.llm, self.llm.get_stream()):
+            response = await self.llm.agenerate(prompt, output_len)
+
+        # we would have already displayed the msg "live" ONLY if
+        # streaming was enabled, AND we did not find a cached response
+        console.print(f"[green]{self.indent}", end="")
+        print("[green]" + response.message)
+        displayed = True
+        self.update_token_usage(
+            response,
+            prompt,
+            self.llm.get_stream(),
+            print_response_stats=settings.debug,
+        )
+        return ChatDocument.from_LLMResponse(response, displayed)
+
+    @no_type_check
     def llm_response(
         self,
         msg: Optional[str | ChatDocument] = None,
@@ -451,7 +515,7 @@ class Agent(ABC):
                 else:
                     logger.warning(
                         f"""
-                    Requested output length has been shorted to {output_len}
+                    Requested output length has been shortened to {output_len}
                     so that the total length of Prompt + Output is less than
                     the completion context length of the LLM. 
                     """
@@ -668,6 +732,9 @@ class Agent(ABC):
             tot_cost (float): total cost of the chat so far
             response (LLMResponse): LLMResponse object
         """
+        if self.config.llm is None:
+            logger.warning("LLM config is None, cannot print response stats")
+            return
         if response.usage:
             in_tokens = response.usage.prompt_tokens
             out_tokens = response.usage.completion_tokens

@@ -77,6 +77,10 @@ class DocChatAgentConfig(ChatAgentConfig):
     summarize_prompt: str = SUMMARY_ANSWER_PROMPT_GPT4
     max_context_tokens: int = 1000
     conversation_mode: bool = True
+    # In assistant mode, DocChatAgent receives questions from another Agent,
+    # and those will already be in stand-alone form, so in this mode
+    # there is no need to convert them to stand-alone form.
+    assistant_mode: bool = False
     # Use LLM to generate hypothetical answer A to the query Q,
     # and use the embed(A) to find similar chunks in vecdb.
     # Referred to as HyDE in the paper:
@@ -117,8 +121,8 @@ class DocChatAgentConfig(ChatAgentConfig):
     hf_embed_config = SentenceTransformerEmbeddingsConfig(
         model_type="sentence-transformer",
         model_name="BAAI/bge-large-en-v1.5",
-        dims=1024,
     )
+
     oai_embed_config = OpenAIEmbeddingsConfig(
         model_type="openai",
         model_name="text-embedding-ada-002",
@@ -358,24 +362,126 @@ class DocChatAgent(ChatAgent):
             ),
         )
 
+    def llm_hypothetical_answer(self, query: str) -> str:
+        if self.llm is None:
+            raise ValueError("LLM not set")
+        with console.status("[cyan]LLM generating hypothetical answer..."):
+            with StreamingIfAllowed(self.llm, False):
+                # TODO: provide an easy way to
+                # Adjust this prompt depending on context.
+                answer = self.llm_response_forget(
+                    f"""
+                    Give an ideal answer to the following query, 
+                    in up to 3 sentences. Do not explain yourself, 
+                    and do not apologize, just show 
+                    a good possible answer, even if you do not have any information.
+                    Preface your answer with "HYPOTHETICAL ANSWER: "
+                    
+                    QUERY: {query}
+                    """
+                ).content
+        return answer
+
+    def llm_rephrase_query(self, query: str) -> List[str]:
+        if self.llm is None:
+            raise ValueError("LLM not set")
+        with console.status("[cyan]LLM generating rephrases of query..."):
+            with StreamingIfAllowed(self.llm, False):
+                rephrases = self.llm_response_forget(
+                    f"""
+                        Rephrase the following query in {self.config.n_query_rephrases}
+                        different equivalent ways, separate them with 2 newlines.
+                        QUERY: {query}
+                        """
+                ).content.split("\n\n")
+        return rephrases
+
+    def get_similar_chunks_bm25(
+        self, query: str, multiple: int
+    ) -> List[Tuple[Document, float]]:
+        # find similar docs using bm25 similarity:
+        # these may sometimes be more likely to contain a relevant verbatim extract
+        with console.status("[cyan]Searching for similar chunks using bm25..."):
+            if self.chunked_docs is None:
+                raise ValueError("No chunked docs")
+            if self.chunked_docs_clean is None:
+                raise ValueError("No cleaned chunked docs")
+            docs_scores = find_closest_matches_with_bm25(
+                self.chunked_docs,
+                self.chunked_docs_clean,  # already pre-processed!
+                query,
+                k=self.config.parsing.n_similar_docs * multiple,
+            )
+        return docs_scores
+
+    def get_fuzzy_matches(self, query: str, multiple: int) -> List[Document]:
+        # find similar docs using fuzzy matching:
+        # these may sometimes be more likely to contain a relevant verbatim extract
+        with console.status("[cyan]Finding fuzzy matches in chunks..."):
+            if self.chunked_docs is None:
+                raise ValueError("No chunked docs")
+            fuzzy_match_docs = find_fuzzy_matches_in_docs(
+                query,
+                self.chunked_docs,
+                k=self.config.parsing.n_similar_docs * multiple,
+                surrounding_words=1000,
+            )
+        return fuzzy_match_docs
+
+    def rerank_with_cross_encoder(
+        self, query: str, passages: List[Document]
+    ) -> List[Document]:
+        with console.status("[cyan]Re-ranking retrieved chunks using cross-encoder..."):
+            if self.chunked_docs is None:
+                raise ValueError("No chunked docs")
+            try:
+                from sentence_transformers import CrossEncoder
+            except ImportError:
+                raise ImportError(
+                    """
+                    To use cross-encoder re-ranking, you must install
+                    langroid with the [hf-embeddings] extra, e.g.:
+                    pip install "langroid[hf-embeddings]"
+                    """
+                )
+
+            model = CrossEncoder(self.config.cross_encoder_reranking_model)
+            scores = model.predict([(query, p.content) for p in passages])
+            # get top k scoring passages
+            sorted_pairs = sorted(
+                zip(scores, passages),
+                key=lambda x: x[0],
+                reverse=True,
+            )
+            passages = [
+                d for _, d in sorted_pairs[: self.config.parsing.n_similar_docs]
+            ]
+        return passages
+
     @no_type_check
     def get_relevant_extracts(self, query: str) -> Tuple[str, List[Document]]:
         """
-        Get list of docs or extracts relevant to a query. These could be:
-        - the original docs, if they exist and are not too long, or
-        - a list of doc-chunks retrieved from the VecDB
-            that are "relevant" to the query, if these are not too long, or
-        - a list of relevant extracts from these doc-chunks
+        Get list of extracts from doc-chunks relevant to answering a query.
+        These are the stages (some optional based on config):
+        - use LLM to convert query to stand-alone query
+        - optionally rephrase query to use below
+        - optionally generate hypothetical answer (HyDE) to use below.
+        - get relevant doc-chunks, via:
+            - vector-embedding distance, from vecdb
+            - bm25-ranking (keyword similarity)
+            - fuzzy matching (keyword similarity)
+        - re-ranking of doc-chunks using cross-encoder, pick top k
+        - use LLM to get relevant extracts from doc-chunks
 
         Args:
             query (str): query to search for
 
         Returns:
             query (str): stand-alone version of input query
-            List[Document]: list of relevant docs
+            List[Document]: list of relevant extracts
 
         """
-        if len(self.dialog) > 0:
+        if len(self.dialog) > 0 and not self.config.assistant_mode:
             # Regardless of whether we are in conversation mode or not,
             # for relevant doc/chunk extraction, we must convert the query
             # to a standalone query to get more relevant results.
@@ -390,34 +496,12 @@ class DocChatAgent(ChatAgent):
         retrieval_multiple = 1 if self.config.cross_encoder_reranking_model == "" else 3
         queries = [query]
         if self.config.hypothetical_answer:
-            with console.status("[cyan]LLM generating hypothetical answer..."):
-                with StreamingIfAllowed(self.llm, False):
-                    # TODO: provide an easy way to
-                    # Adjust this prompt depending on context.
-                    answer = self.llm_response_forget(
-                        f"""
-                        Give an ideal answer to the following query, 
-                        in up to 3 sentences. Do not explain yourself, 
-                        and do not apologize, just show 
-                        a good possible answer, even if you do not have any information.
-                        Preface your answer with "HYPOTHETICAL ANSWER: "
-                        
-                        QUERY: {query}
-                        """
-                    ).content
-                queries = [query, answer]
+            answer = self.llm_hypothetical_answer(query)
+            queries = [query, answer]
 
         if self.config.n_query_rephrases > 0:
-            with console.status("[cyan]LLM generating rephrases of query..."):
-                with StreamingIfAllowed(self.llm, False):
-                    rephrases = self.llm_response_forget(
-                        f"""
-                        Rephrase the following query in {self.config.n_query_rephrases}
-                        different equivalent ways, separate them with 2 newlines.
-                        QUERY: {query}
-                        """
-                    ).content.split("\n\n")
-                queries += rephrases
+            rephrases = self.llm_rephrase_query(query)
+            queries += rephrases
 
         with console.status("[cyan]Searching VecDB for relevant doc passages..."):
             docs_and_scores = []
@@ -429,44 +513,19 @@ class DocChatAgent(ChatAgent):
         # keep only docs with unique d.id()
         id2doc_score = {d.id(): (d, s) for d, s in docs_and_scores}
         docs_and_scores = list(id2doc_score.values())
-        # get top k docs based on score
-        docs_and_scores = sorted(docs_and_scores, key=lambda x: x[1], reverse=True)
-        docs_and_scores = docs_and_scores[: self.config.parsing.n_similar_docs]
 
-        if len(docs_and_scores) == 0:
-            return query, []
         passages = [
             Document(content=d.content, metadata=d.metadata)
             for (d, _) in docs_and_scores
         ]
 
         if self.config.use_bm25_search:
-            # find similar docs using bm25 similarity:
-            # these may sometimes be more likely to contain a relevant verbatim extract
-            with console.status("[cyan]Searching for similar chunks using bm25..."):
-                if self.chunked_docs is None:
-                    raise ValueError("No chunked docs")
-                docs_scores = find_closest_matches_with_bm25(
-                    self.chunked_docs,
-                    self.chunked_docs_clean,  # already pre-processed!
-                    query,
-                    k=self.config.parsing.n_similar_docs * retrieval_multiple,
-                )
-                passages += [d for (d, _) in docs_scores]
+            docs_scores = self.get_similar_chunks_bm25(query, retrieval_multiple)
+            passages += [d for (d, _) in docs_scores]
 
         if self.config.use_fuzzy_match:
-            # find similar docs using fuzzy matching:
-            # these may sometimes be more likely to contain a relevant verbatim extract
-            with console.status("[cyan]Finding fuzzy matches in chunks..."):
-                if self.chunked_docs is None:
-                    raise ValueError("No chunked docs")
-                fuzzy_match_docs = find_fuzzy_matches_in_docs(
-                    query,
-                    self.chunked_docs,
-                    k=self.config.parsing.n_similar_docs * retrieval_multiple,
-                    surrounding_words=1000,
-                )
-                passages += fuzzy_match_docs
+            fuzzy_match_docs = self.get_fuzzy_matches(query, retrieval_multiple)
+            passages += fuzzy_match_docs
 
         # keep unique passages
         id2passage = {p.id(): p for p in passages}
@@ -476,33 +535,10 @@ class DocChatAgent(ChatAgent):
         # so we re-rank them using a cross-encoder scoring model
         # https://www.sbert.net/examples/applications/retrieve_rerank
         if self.config.cross_encoder_reranking_model != "":
-            with console.status(
-                "[cyan]Re-ranking retrieved chunks using cross-encoder..."
-            ):
-                if self.chunked_docs is None:
-                    raise ValueError("No chunked docs")
-                try:
-                    from sentence_transformers import CrossEncoder
-                except ImportError:
-                    raise ImportError(
-                        """
-                        To use cross-encoder re-ranking, you must install
-                        langroid with the [hf-embeddings] extra, e.g.:
-                        pip install "langroid[hf-embeddings]"
-                        """
-                    )
+            passages = self.rerank_with_cross_encoder(query, passages)
 
-                model = CrossEncoder(self.config.cross_encoder_reranking_model)
-                scores = model.predict([(query, p.content) for p in passages])
-                # get top k scoring passages
-                sorted_pairs = sorted(
-                    zip(scores, passages),
-                    key=lambda x: x[0],
-                    reverse=True,
-                )
-                passages = [
-                    d for _, d in sorted_pairs[: self.config.parsing.n_similar_docs]
-                ]
+        if len(passages) == 0:
+            return query, []
 
         with console.status("[cyan]LLM Extracting verbatim passages..."):
             with StreamingIfAllowed(self.llm, False):

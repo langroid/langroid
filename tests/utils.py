@@ -14,7 +14,7 @@ def contains_approx_float(s: str, x: int | float, k: int = 0) -> bool:
     """
     for word in s.split():
         # Remove commas and dollar signs
-        clean_word = word.replace(",", "").replace("$", "")
+        clean_word = word.replace(",", "").replace("$", "").replace("%", "")
         # Remove trailing period if present
         if clean_word.endswith("."):
             clean_word = clean_word[:-1]

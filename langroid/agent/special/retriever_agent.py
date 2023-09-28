@@ -11,6 +11,7 @@ from rich.console import Console
 from langroid.agent.chat_document import ChatDocMetaData, ChatDocument
 from langroid.agent.special.doc_chat_agent import DocChatAgent, DocChatAgentConfig
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
+from langroid.language_models.base import StreamingIfAllowed
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
 from langroid.mytypes import DocMetaData, Document, Entity
 from langroid.parsing.parser import ParsingConfig, Splitter
@@ -158,7 +159,8 @@ class RetrieverAgent(DocChatAgent, ABC):
             logger.warning("No LLM specified")
             return nearest_docs
         with console.status("LLM selecting relevant docs from retrieved ones..."):
-            doc_list = self.llm_select_relevant_docs(query, nearest_docs)
+            with StreamingIfAllowed(self.llm, False):
+                doc_list = self.llm_select_relevant_docs(query, nearest_docs)
 
         return doc_list
 
@@ -201,8 +203,8 @@ class RetrieverAgent(DocChatAgent, ABC):
         if self.llm is None:
             logger.warning("No LLM specified")
             return [default_response]
-        response = self.llm.generate(  # type: ignore
-            prompt, max_tokens=self.config.llm.max_output_tokens  # type: ignore
+        response = self.llm.generate(
+            prompt, max_tokens=self.config.llm.max_output_tokens
         )
         if response.message == NO_ANSWER:
             return [default_response]

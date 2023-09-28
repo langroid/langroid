@@ -33,26 +33,12 @@ def test_openai_gpt(test_settings: Settings, streaming, country, capital):
             if test_settings.gpt3_5
             else OpenAIChatModel.GPT4
         ),
-        completion_model=OpenAICompletionModel.TEXT_DA_VINCI_003,
+        completion_model=OpenAICompletionModel.GPT4,
         cache_config=RedisCacheConfig(fake=False),
     )
 
     mdl = OpenAIGPT(config=cfg)
-
-    # completion mode
-    cfg.use_chat_for_completion = False
     question = "What is the capital of " + country + "?"
-
-    set_global(Settings(cache=False))
-    response = mdl.generate(prompt=question, max_tokens=20)
-    assert capital in response.message
-    assert not response.cached
-
-    set_global(Settings(cache=True))
-    # should be from cache this time
-    response = mdl.generate(prompt=question, max_tokens=20)
-    assert capital in response.message
-    assert response.cached
 
     set_global(Settings(cache=False))
     # chat mode via `generate`,
@@ -66,7 +52,7 @@ def test_openai_gpt(test_settings: Settings, streaming, country, capital):
 
     # actual chat mode
     messages = [
-        LLMMessage(role=Role.SYSTEM, content="You are a helpful assitant"),
+        LLMMessage(role=Role.SYSTEM, content="You are a helpful assistant"),
         LLMMessage(role=Role.USER, content=question),
     ]
     response = mdl.chat(messages=messages, max_tokens=10)
