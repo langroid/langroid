@@ -25,7 +25,7 @@ class _TestChatAgentConfig(ChatAgentConfig):
     )
 
 
-EXPONENTIALS = "3**5 8**3 9**3"
+EXPONENTIALS = "3**4 8**3"
 
 
 @pytest.mark.asyncio

@@ -92,6 +92,10 @@ class ToolMessage(ABC, BaseModel):
         schema_extra = {"exclude": {"purpose", "result"}}
 
     @classmethod
+    def instructions(cls) -> str:
+        return ""
+
+    @classmethod
     def require_recipient(cls) -> Type["ToolMessage"]:
         class ToolMessageWithRecipient(cls):  # type: ignore
             recipient: str  # no default, so it is required
@@ -104,7 +108,7 @@ class ToolMessage(ABC, BaseModel):
         Examples to use in few-shot demos with JSON formatting instructions.
         Returns:
         """
-        raise NotImplementedError("Subclass must implement this method")
+        return []
 
     @classmethod
     def usage_example(cls) -> str:
@@ -114,6 +118,8 @@ class ToolMessage(ABC, BaseModel):
             str: example of how to use the message
         """
         # pick a random example of the fields
+        if len(cls.examples()) == 0:
+            return ""
         ex = choice(cls.examples())
         return ex.json_example()
 
@@ -139,20 +145,31 @@ class ToolMessage(ABC, BaseModel):
         return properties.get(f, {}).get("default", None)
 
     @classmethod
-    def llm_function_schema(cls) -> LLMFunctionSpec:
+    def llm_function_schema(cls, request: bool = False) -> LLMFunctionSpec:
         """
         Returns schema for use in OpenAI Function Calling API.
+
+        Args:
+            request (bool): whether to include the "request" field.
+                We set it to True when we want to use the schema as an example
+                in the TOOL instructions (when not using the Function Calling API).
         Returns:
             Dict[str, Any]: schema for use in OpenAI Function Calling API
 
         """
-        schema = cls.schema()
+
+        # use jsonref to dereference "$ref" from "definition" fields,
+        # where there are nested structures like a List of XYZ objects
+        schema = cls.schema()  # jsonref.loads(cls.schema_json())
+        # schema = jsonref.JsonRef.replace_refs(cls.schema())
         spec = LLMFunctionSpec(
             name=cls.default_value("request"),
             description=cls.default_value("purpose"),
             parameters=dict(),
         )
-        excludes = ["result", "request", "purpose"]
+        excludes = (
+            ["result", "purpose"] if request else ["request", "result", "purpose"]
+        )
         properties = {}
         if schema.get("properties"):
             properties = {

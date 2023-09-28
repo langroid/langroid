@@ -24,7 +24,7 @@ from rich.console import Console
 from rich.prompt import Prompt
 
 from langroid.agent.chat_document import ChatDocMetaData, ChatDocument
-from langroid.agent.tool_message import INSTRUCTION, ToolMessage
+from langroid.agent.tool_message import ToolMessage
 from langroid.language_models.base import (
     LanguageModel,
     LLMConfig,
@@ -245,9 +245,14 @@ class Agent(ABC):
 
         json_instructions = "\n\n".join(
             [
-                str(msg_cls.default_value("request"))
-                + ":\n"
-                + str(msg_cls.default_value("purpose"))
+                textwrap.dedent(
+                    f"""
+                TOOL: {msg_cls.default_value("request")}
+                PURPOSE: {msg_cls.default_value("purpose")} 
+                JSON FORMAT: {msg_cls.llm_function_schema(request=True)}
+                EXAMPLE: {msg_cls.usage_example()}
+                """.lstrip()
+                )
                 for i, msg_cls in enumerate(enabled_classes)
                 if msg_cls.default_value("request") in self.llm_tools_usable
             ]
@@ -259,44 +264,18 @@ class Agent(ABC):
 
             {json_instructions}
             
-            {INSTRUCTION}            
+            When one of the above TOOLs is applicable, you must express your 
+            request as "TOOL:" followed by the request in the above JSON format.
+            """
+            + """
+            The JSON format will be:
+                \\{
+                    "request": "<tool_name>",
+                    "<arg1>": <value1>,
+                    "<arg2>": <value2>,
+                    ...
+                \\}             
             ----------------------------
-            """.lstrip()
-        )
-
-    def tool_instructions(self) -> str:
-        """
-        Instructions (defined via `instructions` classmethod in a
-        ToolMessage class) for currently enabled and usable Tools.
-
-        Returns:
-            str: concatenation of instructions for all usable tools
-        """
-        enabled_classes: List[Type[ToolMessage]] = list(self.llm_tools_map.values())
-        if len(enabled_classes) == 0:
-            return ""
-        instructions = []
-        for msg_cls in enabled_classes:
-            if (
-                hasattr(msg_cls, "instructions")
-                and inspect.ismethod(msg_cls.instructions)
-                and msg_cls.default_value("request") in self.llm_tools_usable
-            ):
-                instructions.append(
-                    textwrap.dedent(
-                        f"""
-                        {msg_cls.default_value("request")}:
-                        {msg_cls.instructions()}
-                        """.lstrip()
-                    )
-                )
-        if len(instructions) == 0:
-            return ""
-        instructions_str = "\n\n".join(instructions)
-        return textwrap.dedent(
-            f"""
-            === GUIDELINES ON SOME TOOLS/FUNCTIONS USAGE ===
-            {instructions_str}
             """.lstrip()
         )
 

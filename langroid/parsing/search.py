@@ -32,6 +32,8 @@ def find_fuzzy_matches_in_docs(
         List[Document]: List of Documents containing the matches,
             including the given number of words around the match.
     """
+    if len(docs) == 0:
+        return []
     best_matches = process.extract(
         query,
         [d.content for d in docs],
@@ -136,6 +138,8 @@ def find_closest_matches_with_bm25(
     Returns:
         List[Tuple[Document,float]]: List of (Document, score) tuples.
     """
+    if len(docs) == 0:
+        return []
     texts = [doc.content for doc in docs_clean]
     query = preprocess_text(query)
 

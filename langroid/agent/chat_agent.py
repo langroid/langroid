@@ -1,3 +1,4 @@
+import inspect
 import logging
 import textwrap
 from contextlib import ExitStack
@@ -145,6 +146,53 @@ class ChatAgent(Agent):
                 LLMMessage(role=Role.USER, content=message),
                 LLMMessage(role=Role.ASSISTANT, content=response),
             ]
+        )
+
+    def tool_instructions(self) -> str:
+        """
+        Instructions (defined via `instructions` classmethod in a
+        ToolMessage class) for currently enabled and usable Tools.
+
+        Returns:
+            str: concatenation of instructions for all usable tools
+        """
+        enabled_classes: List[Type[ToolMessage]] = list(self.llm_tools_map.values())
+        if len(enabled_classes) == 0:
+            return ""
+        instructions = []
+        for msg_cls in enabled_classes:
+            if (
+                hasattr(msg_cls, "instructions")
+                and inspect.ismethod(msg_cls.instructions)
+                and msg_cls.default_value("request") in self.llm_tools_usable
+            ):
+                example = "" if self.config.use_tools else (msg_cls.usage_example())
+                if example != "":
+                    example = "EXAMPLE: " + example
+                guidance = (
+                    ""
+                    if msg_cls.instructions() == ""
+                    else ("GUIDANCE: " + msg_cls.instructions())
+                )
+                if guidance == "" and example == "":
+                    continue
+                instructions.append(
+                    textwrap.dedent(
+                        f"""
+                        TOOL: {msg_cls.default_value("request")}:
+                        {guidance}
+                        {example}
+                        """.lstrip()
+                    )
+                )
+        if len(instructions) == 0:
+            return ""
+        instructions_str = "\n\n".join(instructions)
+        return textwrap.dedent(
+            f"""
+            === GUIDELINES ON SOME TOOLS/FUNCTIONS USAGE ===
+            {instructions_str}
+            """.lstrip()
         )
 
     def augment_system_message(self, message: str) -> None:

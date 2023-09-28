@@ -157,8 +157,7 @@ def chat(opts: CLIOptions) -> None:
         have access to the lease itself. 
         You can ask me questions about the lease, ONE AT A TIME, I will answer each 
         question. You only need to collect info corresponding to the fields in this 
-        example:
-        {LeaseMessage.usage_example()}
+        specified structure. 
         If I am unable to answer your question initially, try asking me 
         differently. If I am still unable to answer after 3 tries, fill in 
         {NO_ANSWER} for that field.
