@@ -67,3 +67,36 @@ def test_stateful_tool(test_settings: Settings, fn_api: bool):
     )
     result = task.run()
     assert "25" in result.content
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("fn_api", [True, False])
+async def test_stateful_tool_async(test_settings: Settings, fn_api: bool):
+    set_global(test_settings)
+    number_game_agent = NumberGameAgent(
+        ChatAgentConfig(
+            name="Gamer",
+            llm=OpenAIGPTConfig(
+                chat_model=OpenAIChatModel.GPT4,
+            ),
+            vecdb=None,
+            use_tools=not fn_api,
+            use_functions_api=fn_api,
+        )
+    )
+
+    number_game_agent.enable_message(IncrementTool)
+    task = Task(
+        number_game_agent,
+        default_human_response="",
+        only_user_quits_root=False,
+        system_message="""
+            I have a number in mind. Your job is to keep incrementing
+            it by 5 using the `increment` tool, and I will tell you the result.
+            Once you have reached 25 or more, you can say DONE and show me the result.
+        """,
+        llm_delegate=True,
+        single_round=False,
+    )
+    result = await task.run_async()
+    assert "25" in result.content

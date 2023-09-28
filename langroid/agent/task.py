@@ -506,7 +506,7 @@ class Task:
             return error_doc
 
         responders: List[Responder] = self.non_human_responders_async.copy()
-        if Entity.USER in self.responders and not self.human_tried:
+        if Entity.USER in self.responders_async and not self.human_tried:
             # give human first chance if they haven't been tried in last step:
             # ensures human gets chance at each turn.
             responders.insert(0, Entity.USER)
@@ -641,8 +641,6 @@ class Task:
             )
             return result
         else:
-            # Note we always use async responders, even though
-            # ultimately a synch endpoint is used.
             response_fn = self._entity_responder_async_map[cast(Entity, e)]
             result = await response_fn(self.pending_message)
             return result

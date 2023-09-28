@@ -278,6 +278,7 @@ class OpenAIGPT(LanguageModel):
             ) = self._process_stream_event(
                 event,
                 chat=chat,
+                has_function=has_function,
                 completion=completion,
                 function_args=function_args,
                 function_name=function_name,

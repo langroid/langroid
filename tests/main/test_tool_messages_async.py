@@ -1,6 +1,5 @@
 import itertools
-import json
-from typing import List, Optional
+from typing import List
 
 import pytest
 from pydantic import Field
@@ -104,68 +103,6 @@ cartesian_product = list(
 agent.enable_message(FileExistsMessage)
 agent.enable_message(PythonVersionMessage)
 
-
-@pytest.mark.parametrize(
-    # cartesian product of all combinations of use, handle, force
-    "msg_class, use, handle, force",
-    cartesian_product,
-)
-def test_enable_message(
-    msg_class: Optional[ToolMessage], use: bool, handle: bool, force: bool
-):
-    agent.enable_message(msg_class, use=use, handle=handle, force=force)
-    tools = agent._get_tool_list(msg_class)
-    for tool in tools:
-        assert tool in agent.llm_tools_map
-        if msg_class is not None:
-            assert agent.llm_tools_map[tool] == msg_class
-            assert agent.llm_functions_map[tool] == msg_class.llm_function_schema()
-        assert (tool in agent.llm_tools_handled) == handle
-        assert (tool in agent.llm_tools_usable) == use
-        assert (tool in agent.llm_functions_handled) == handle
-        assert (tool in agent.llm_functions_usable) == use
-
-    if msg_class is not None:
-        assert (
-            agent.llm_function_force is not None
-            and agent.llm_function_force["name"] == tools[0]
-        ) == force
-
-
-@pytest.mark.parametrize("msg_class", [None, FileExistsMessage, PythonVersionMessage])
-def test_disable_message_handling(msg_class: Optional[ToolMessage]):
-    agent.enable_message(FileExistsMessage)
-    agent.enable_message(PythonVersionMessage)
-
-    agent.disable_message_handling(msg_class)
-    tools = agent._get_tool_list(msg_class)
-    for tool in tools:
-        assert tool not in agent.llm_tools_handled
-        assert tool not in agent.llm_functions_handled
-        assert tool in agent.llm_tools_usable
-        assert tool in agent.llm_functions_usable
-
-
-@pytest.mark.parametrize("msg_class", [None, FileExistsMessage, PythonVersionMessage])
-def test_disable_message_use(msg_class: Optional[ToolMessage]):
-    agent.enable_message(FileExistsMessage)
-    agent.enable_message(PythonVersionMessage)
-
-    agent.disable_message_use(msg_class)
-    tools = agent._get_tool_list(msg_class)
-    for tool in tools:
-        assert tool not in agent.llm_tools_usable
-        assert tool not in agent.llm_functions_usable
-        assert tool in agent.llm_tools_handled
-        assert tool in agent.llm_functions_handled
-
-
-@pytest.mark.parametrize("msg_cls", [PythonVersionMessage, FileExistsMessage])
-def test_usage_instruction(msg_cls: ToolMessage):
-    usage = msg_cls.usage_example()
-    assert json.loads(usage)["request"] == msg_cls.default_value("request")
-
-
 NONE_MSG = "nothing to see here"
 
 FILE_EXISTS_MSG = """
@@ -185,34 +122,6 @@ great, please tell me this --
 """
 
 
-def test_agent_handle_message():
-    """
-    Test whether messages are handled correctly, and that
-    message enabling/disabling works as expected.
-    """
-    agent.enable_message(FileExistsMessage)
-    agent.enable_message(PythonVersionMessage)
-    assert agent.handle_message(NONE_MSG) is None
-    assert agent.handle_message(FILE_EXISTS_MSG) == "no"
-    assert agent.handle_message(PYTHON_VERSION_MSG) == "3.9"
-
-    agent.disable_message_handling(FileExistsMessage)
-    assert agent.handle_message(FILE_EXISTS_MSG) is None
-    assert agent.handle_message(PYTHON_VERSION_MSG) == "3.9"
-
-    agent.disable_message_handling(PythonVersionMessage)
-    assert agent.handle_message(FILE_EXISTS_MSG) is None
-    assert agent.handle_message(PYTHON_VERSION_MSG) is None
-
-    agent.enable_message(FileExistsMessage)
-    assert agent.handle_message(FILE_EXISTS_MSG) == "no"
-    assert agent.handle_message(PYTHON_VERSION_MSG) is None
-
-    agent.enable_message(PythonVersionMessage)
-    assert agent.handle_message(FILE_EXISTS_MSG) == "no"
-    assert agent.handle_message(PYTHON_VERSION_MSG) == "3.9"
-
-
 BAD_FILE_EXISTS_MSG = """
 Ok, thank you.
 {
@@ -222,18 +131,7 @@ Hope you can tell me!
 """
 
 
-def test_handle_bad_tool_message():
-    """
-    Test that a correct tool name with bad/missing args is
-            handled correctly, i.e. the agent returns a clear
-            error message to the LLM so it can try to fix it.
-    """
-    agent.enable_message(FileExistsMessage)
-    assert agent.handle_message(NONE_MSG) is None
-    result = agent.handle_message(BAD_FILE_EXISTS_MSG)
-    assert "file_exists" in result and "filename" in result and "required" in result
-
-
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     "use_functions_api, message_class, prompt, result",
     [
@@ -275,7 +173,7 @@ def test_handle_bad_tool_message():
         ),
     ],
 )
-def test_llm_tool_message(
+async def test_llm_tool_message(
     test_settings: Settings,
     use_functions_api: bool,
     message_class: ToolMessage,
@@ -301,7 +199,7 @@ def test_llm_tool_message(
     agent.enable_message(PythonVersionMessage)
     agent.enable_message(CountryCapitalMessage)
 
-    llm_msg = agent.llm_response_forget(prompt)
+    llm_msg = await agent.llm_response_forget_async(prompt)
     tool_name = message_class.default_value("request")
     if use_functions_api:
         assert llm_msg.function_call.name == tool_name
@@ -312,11 +210,3 @@ def test_llm_tool_message(
 
     agent_result = agent.handle_message(llm_msg)
     assert result.lower() in agent_result.lower()
-
-
-def test_llm_non_tool():
-    llm_msg = agent.llm_response_forget(
-        "Ask me to check what is the population of France."
-    ).content
-    agent_result = agent.handle_message(llm_msg)
-    assert agent_result is None

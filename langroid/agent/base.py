@@ -476,7 +476,7 @@ class Agent(ABC):
                 """
                 )
 
-        with StreamingIfAllowed(self.llm, False):
+        with StreamingIfAllowed(self.llm, self.llm.get_stream()):
             response = await self.llm.agenerate(prompt, output_len)
 
         # we would have already displayed the msg "live" ONLY if
@@ -487,7 +487,7 @@ class Agent(ABC):
         self.update_token_usage(
             response,
             prompt,
-            False,
+            self.llm.get_stream(),
             print_response_stats=settings.debug,
         )
         return ChatDocument.from_LLMResponse(response, displayed)

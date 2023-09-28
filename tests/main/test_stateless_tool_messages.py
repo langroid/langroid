@@ -225,3 +225,58 @@ def test_llm_tool_message(
 
     agent_result = agent.handle_message(llm_msg)
     assert result.lower() in agent_result.lower()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "use_functions_api, message_class, prompt, result",
+    [
+        (
+            False,
+            SquareTool,
+            "Ask me to square the number 9",
+            "81",
+        ),
+        (
+            True,
+            SquareTool,
+            "Ask me to square the number 9, using a tool/function-call",
+            "81",
+        ),
+    ],
+)
+async def test_llm_tool_message_async(
+    test_settings: Settings,
+    use_functions_api: bool,
+    message_class: ToolMessage,
+    prompt: str,
+    result: str,
+):
+    """
+    Test whether LLM is able to GENERATE message (tool) in required format, and the
+    agent handles the message correctly.
+    Args:
+        test_settings: test settings from conftest.py
+        use_functions_api: whether to use LLM's functions api or not
+            (i.e. use the langroid ToolMessage tools instead).
+        message_class: the message class (i.e. tool/function) to test
+        prompt: the prompt to use to induce the LLM to use the tool
+        result: the expected result from agent handling the tool-message
+    """
+    set_global(test_settings)
+    agent = ChatAgent(cfg)
+    agent.config.use_functions_api = use_functions_api
+    agent.config.use_tools = not use_functions_api
+    agent.enable_message(SquareTool)
+
+    llm_msg = await agent.llm_response_forget_async(prompt)
+    tool_name = message_class.default_value("request")
+    if use_functions_api:
+        assert llm_msg.function_call.name == tool_name
+    else:
+        tools = agent.get_tool_messages(llm_msg)
+        assert len(tools) == 1
+        assert isinstance(tools[0], message_class)
+
+    agent_result = agent.handle_message(llm_msg)
+    assert result.lower() in agent_result.lower()

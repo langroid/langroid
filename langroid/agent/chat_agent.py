@@ -540,7 +540,10 @@ class ChatAgent(Agent):
             response_str = response.message
         print(cached + "[green]" + response_str)
         self.update_token_usage(
-            response, messages, False, print_response_stats=settings.debug
+            response,
+            messages,
+            self.llm.get_stream(),
+            print_response_stats=settings.debug,
         )
         return ChatDocument.from_LLMResponse(response, displayed)
 
