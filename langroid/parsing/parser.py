@@ -20,7 +20,7 @@ class Splitter(str, Enum):
 
 
 class PdfParsingConfig(BaseSettings):
-    library: str = "pdfplumber"
+    library: str = "unstructured"
 
 
 class DocxParsingConfig(BaseSettings):

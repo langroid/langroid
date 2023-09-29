@@ -299,8 +299,20 @@ class UnstructuredPDFParser(DocumentParser):
         from unstructured.partition.pdf import partition_pdf
 
         elements = partition_pdf(file=self.doc_bytes, include_page_breaks=True)
-        for i, el in enumerate(elements):
-            yield i, el
+
+        page_number = 1
+        page_elements = []  # type: ignore
+        for el in elements:
+            if el.category == "PageBreak":
+                if page_elements:  # Avoid yielding empty pages at the start
+                    yield page_number, page_elements
+                page_number += 1
+                page_elements = []
+            else:
+                page_elements.append(el)
+        # Yield the last page if it's not empty
+        if page_elements:
+            yield page_number, page_elements
 
     def extract_text_from_page(self, page: Any) -> str:
         """
@@ -312,7 +324,8 @@ class UnstructuredPDFParser(DocumentParser):
         Returns:
             str: Extracted text from the element.
         """
-        return self.fix_text(str(page))
+        text = " ".join(el.text for el in page)
+        return self.fix_text(text)
 
 
 class UnstructuredDocxParser(DocumentParser):
@@ -323,9 +336,21 @@ class UnstructuredDocxParser(DocumentParser):
     def iterate_pages(self) -> Generator[Tuple[int, Any], None, None]:  # type: ignore
         from unstructured.partition.docx import partition_docx
 
-        elements = partition_docx(file=self.doc_bytes)
-        for i, el in enumerate(elements):
-            yield i, el
+        elements = partition_docx(file=self.doc_bytes, include_page_breaks=True)
+
+        page_number = 1
+        page_elements = []  # type: ignore
+        for el in elements:
+            if el.category == "PageBreak":
+                if page_elements:  # Avoid yielding empty pages at the start
+                    yield page_number, page_elements
+                page_number += 1
+                page_elements = []
+            else:
+                page_elements.append(el)
+        # Yield the last page if it's not empty
+        if page_elements:
+            yield page_number, page_elements
 
     def extract_text_from_page(self, page: Any) -> str:
         """
@@ -344,4 +369,5 @@ class UnstructuredDocxParser(DocumentParser):
         Returns:
             str: Extracted text from the element.
         """
-        return self.fix_text(str(page))
+        text = " ".join(el.text for el in page)
+        return self.fix_text(text)
