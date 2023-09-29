@@ -119,6 +119,8 @@ class TableChatAgentConfig(ChatAgentConfig):
 
 
 class RunCodeTool(ToolMessage):
+    """Tool/function to run code on a dataframe named `df`"""
+
     request: str = "run_code"
     purpose: str = """
             To run <code> on the dataframe 'df' and 

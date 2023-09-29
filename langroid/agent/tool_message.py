@@ -153,6 +153,8 @@ class ToolMessage(ABC, BaseModel):
             for k, v in parameters["properties"].items()
             if ("default" not in v and k not in excludes)
         )
+        if request:
+            parameters["required"].append("request")
 
         if "description" not in schema:
             if docstring.short_description:
