@@ -23,66 +23,81 @@ cfg = ChatAgentConfig(
 )
 
 
-# on purpose choose a non-descriptive name so
-# we are sure the LLM is not filling in fields based on the name
-# (E.g. we want to avoid names like Address).
-class Blob(BaseModel):
-    """Info about a blob"""
+class Country(BaseModel):
+    """Info about a country"""
 
-    country: str = Field(..., description="Country of origin of the blob")
-    age: int = Field(..., description="Age of the blob")
-    religion: str = Field(..., description="Religion of the blob")
+    name: str = Field(..., description="Name of the country")
+    capital: str = Field(..., description="Capital of the country")
 
 
-class SuperBlob(BaseModel):
-    """Info about a super-blob, who has a supername and contains a blob"""
+class President(BaseModel):
+    """Info about a president of a country"""
 
-    blob: Blob = Field(..., description="A blob")
-    supername: str = Field(..., description="Name of the super-blob")
-
-
-class BlobList(BaseModel):
-    blobs: List[Blob] = Field(..., description="List of blobs")
+    country: Country = Field(..., description="Country of the president")
+    name: str = Field(..., description="Name of the president")
+    election_year: int = Field(..., description="Year of election of the president")
 
 
-class BlobListTool(ToolMessage):
-    request: str = "blob_list"
-    purpose: str = """To show a list of example blobs"""
-    my_blobs: BlobList = Field(..., description="List of blobs")
+class PresidentList(BaseModel):
+    """List of presidents of various countries"""
+
+    presidents: List[President] = Field(..., description="List of presidents")
+
+
+class PresidentListTool(ToolMessage):
+    """Tool/Function-call to present a list of presidents"""
+
+    request: str = "president_list"
+    purpose: str = """To show a list of presidents"""
+    my_presidents: PresidentList = Field(..., description="List of presidents")
 
     def handle(self) -> str:
-        return str(len(self.my_blobs.blobs))
+        return str(len(self.my_presidents.presidents))
 
     @classmethod
-    def examples(cls) -> List["BlobListTool"]:
+    def examples_(cls) -> List["PresidentListTool"]:
+        """Examples to use in prompt; Not essential, but increases chance of LLM
+        generating in the expected format"""
         return [
             cls(
-                my_blobs=BlobList(
-                    blobs=[
-                        Blob(country="USA", age=100, religion="Christian"),
-                        Blob(country="China", age=20, religion="Buddhist"),
-                        Blob(country="India", age=30, religion="Hindu"),
+                my_presidents=PresidentList(
+                    presidents=[
+                        President(
+                            country=Country(name="USA", capital="Washington DC"),
+                            name="Joe Biden",
+                            election_year=2020,
+                        ),
+                        President(
+                            country=Country(name="France", capital="Paris"),
+                            name="Emmanuel Macron",
+                            election_year=2017,
+                        ),
                     ]
                 )
             ),
         ]
 
 
-class SuperBlobTool(ToolMessage):
-    request: str = "super_blob"
-    purpose: str = """To generate a SuperBlob example"""
-    hyper: SuperBlob = Field(..., description="A super_blob example")
+class PresidentTool(ToolMessage):
+    """Tool/function to generate a president example"""
+
+    request: str = "show_president"
+    purpose: str = """To generate an example of a president"""
+    president: President = Field(..., description="An example of a president")
 
     def handle(self) -> str:
-        return self.hyper.blob.country
+        return self.president.country.name
 
     @classmethod
-    def examples(cls) -> List["SuperBlobTool"]:
+    def examples(cls) -> List["PresidentTool"]:
+        """Examples to use in prompt; Not essential, but increases chance of LLM
+        generating in the expected format"""
         return [
             cls(
-                hyper=SuperBlob(
-                    supername="Superman",
-                    blob=Blob(country="USA", age=100, religion="Christian"),
+                president=President(
+                    name="Joe Biden",
+                    country=Country(name="USA", capital="Washington DC"),
+                    election_year=2020,
                 )
             )
         ]
@@ -100,18 +115,18 @@ def test_llm_structured_output_list(
     agent = ChatAgent(cfg)
     agent.config.use_functions_api = use_functions_api
     agent.config.use_tools = not use_functions_api
-    agent.enable_message(BlobListTool)
-    N = 4
-    prompt = f"Show me a list of {N} blobs, using the blob_list tool/function"
+    agent.enable_message(PresidentListTool)
+    N = 3
+    prompt = f"Show me examples of {N} Presidents of any set of countries you choose"
     llm_msg = agent.llm_response_forget(prompt)
-    tool_name = BlobListTool.default_value("request")
+    tool_name = PresidentListTool.default_value("request")
     if use_functions_api:
         assert llm_msg.function_call is not None
         assert llm_msg.function_call.name == tool_name
     else:
         tools = agent.get_tool_messages(llm_msg)
         assert len(tools) == 1
-        assert isinstance(tools[0], BlobListTool)
+        assert isinstance(tools[0], PresidentListTool)
 
     agent_result = agent.agent_response(llm_msg)
     assert agent_result.content == str(N)
@@ -129,16 +144,17 @@ def test_llm_structured_output_nested(
     agent = ChatAgent(cfg)
     agent.config.use_functions_api = use_functions_api
     agent.config.use_tools = not use_functions_api
-    agent.enable_message(SuperBlobTool)
-    prompt = "Show me an example of a SuperBlob"
+    agent.enable_message(PresidentTool)
+    country = "France"
+    prompt = f"Show me an example of a President of {country}"
     llm_msg = agent.llm_response_forget(prompt)
-    tool_name = SuperBlobTool.default_value("request")
+    tool_name = PresidentTool.default_value("request")
     if use_functions_api:
         assert llm_msg.function_call is not None
         assert llm_msg.function_call.name == tool_name
     else:
         tools = agent.get_tool_messages(llm_msg)
         assert len(tools) == 1
-        assert isinstance(tools[0], SuperBlobTool)
+        assert isinstance(tools[0], PresidentTool)
 
-    agent.agent_response(llm_msg)
+    assert country == agent.agent_response(llm_msg).content

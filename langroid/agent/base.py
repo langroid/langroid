@@ -1,7 +1,6 @@
 import inspect
 import json
 import logging
-import textwrap
 from abc import ABC
 from contextlib import ExitStack
 from typing import (
@@ -230,54 +229,6 @@ class Agent(ABC):
         """
         for t in self._get_tool_list(message_class):
             self.llm_tools_handled.discard(t)
-
-    def json_format_rules(self) -> str:
-        """
-        Specification of JSON formatting rules, based on the currently enabled
-        usable `ToolMessage`s
-
-        Returns:
-            str: formatting rules
-        """
-        enabled_classes: List[Type[ToolMessage]] = list(self.llm_tools_map.values())
-        if len(enabled_classes) == 0:
-            return "You can ask questions in natural language."
-
-        json_instructions = "\n\n".join(
-            [
-                textwrap.dedent(
-                    f"""
-                TOOL: {msg_cls.default_value("request")}
-                PURPOSE: {msg_cls.default_value("purpose")} 
-                JSON FORMAT: {msg_cls.llm_function_schema(request=True)}
-                EXAMPLE: {msg_cls.usage_example()}
-                """.lstrip()
-                )
-                for i, msg_cls in enumerate(enabled_classes)
-                if msg_cls.default_value("request") in self.llm_tools_usable
-            ]
-        )
-        return textwrap.dedent(
-            f"""
-            === ALL AVAILABLE TOOLS and THEIR JSON FORMAT INSTRUCTIONS ===
-            You have access to the following TOOLS to accomplish your task:
-
-            {json_instructions}
-            
-            When one of the above TOOLs is applicable, you must express your 
-            request as "TOOL:" followed by the request in the above JSON format.
-            """
-            + """
-            The JSON format will be:
-                \\{
-                    "request": "<tool_name>",
-                    "<arg1>": <value1>,
-                    "<arg2>": <value2>,
-                    ...
-                \\}             
-            ----------------------------
-            """.lstrip()
-        )
 
     def sample_multi_round_dialog(self) -> str:
         """

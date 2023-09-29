@@ -85,7 +85,7 @@ class ToolMessage(ABC, BaseModel):
         if len(cls.examples()) == 0:
             return ""
         ex = choice(cls.examples())
-        return ex.json_example()
+        return f"EXAMPLE: {ex.json_example()}"
 
     def json_example(self) -> str:
         return self.json(indent=4, exclude={"result", "purpose"})

@@ -148,10 +148,59 @@ class ChatAgent(Agent):
             ]
         )
 
+    def json_format_rules(self) -> str:
+        """
+        Specification of JSON formatting rules, based on the currently enabled
+        usable `ToolMessage`s
+
+        Returns:
+            str: formatting rules
+        """
+        enabled_classes: List[Type[ToolMessage]] = list(self.llm_tools_map.values())
+        if len(enabled_classes) == 0:
+            return "You can ask questions in natural language."
+
+        json_instructions = "\n\n".join(
+            [
+                textwrap.dedent(
+                    f"""
+                TOOL: {msg_cls.default_value("request")}
+                PURPOSE: {msg_cls.default_value("purpose")} 
+                JSON FORMAT: {msg_cls.llm_function_schema(request=True).parameters}
+                {msg_cls.usage_example()}
+                """.lstrip()
+                )
+                for i, msg_cls in enumerate(enabled_classes)
+                if msg_cls.default_value("request") in self.llm_tools_usable
+            ]
+        )
+        return textwrap.dedent(
+            f"""
+            === ALL AVAILABLE TOOLS and THEIR JSON FORMAT INSTRUCTIONS ===
+            You have access to the following TOOLS to accomplish your task:
+
+            {json_instructions}
+            
+            When one of the above TOOLs is applicable, you must express your 
+            request as "TOOL:" followed by the request in the above JSON format.
+            """
+            + """
+            The JSON format will be:
+                \\{
+                    "request": "<tool_name>",
+                    "<arg1>": <value1>,
+                    "<arg2>": <value2>,
+                    ...
+                \\}             
+            ----------------------------
+            """.lstrip()
+        )
+
     def tool_instructions(self) -> str:
         """
-        Instructions (defined via `instructions` classmethod in a
-        ToolMessage class) for currently enabled and usable Tools.
+        Instructions for tools or function-calls, for enabled and usable Tools.
+        These are inserted into system prompt regardless of whether we are using
+        our own ToolMessage mechanism or the LLM's function-call mechanism.
 
         Returns:
             str: concatenation of instructions for all usable tools
@@ -166,9 +215,9 @@ class ChatAgent(Agent):
                 and inspect.ismethod(msg_cls.instructions)
                 and msg_cls.default_value("request") in self.llm_tools_usable
             ):
+                # example will be shown in json_format_rules() when using TOOLs,
+                # so we don't need to show it here.
                 example = "" if self.config.use_tools else (msg_cls.usage_example())
-                if example != "":
-                    example = "EXAMPLE: " + example
                 guidance = (
                     ""
                     if msg_cls.instructions() == ""
