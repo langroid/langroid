@@ -6,7 +6,7 @@ on:
       - "docs/**"
       - "mkdocs.yml"
     branches:
-      - fix_docker_build
+      - main
 
 jobs:
   build_amd64:
