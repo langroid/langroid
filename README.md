@@ -67,6 +67,8 @@ for ideas on what to contribute.
 <summary> <b>:fire: Updates/Releases</b></summary>
 
 - **Sep 2023:**
+  - **0.1.78:** Async versions of several Task, Agent and LLM methods; 
+      Nested Pydantic classes are now supported for LLM Function-calling, Tools, Structured Output.    
   - **0.1.76:** DocChatAgent: support for loading `docx` files (preliminary).
   - **0.1.72:** Many improvements to DocChatAgent: better embedding model, 
           hybrid search to improve retrieval, better pdf parsing, re-ranking retrieved results with cross-encoders. 
