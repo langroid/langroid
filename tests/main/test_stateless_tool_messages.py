@@ -179,15 +179,13 @@ def test_handle_bad_tool_message():
         (
             False,
             SquareTool,
-            """Start by asking me to square the number 9, using the 
-                `square` tool/function call""",
+            """Use the `square` tool to square the number 9""",
             "81",
         ),
         (
             True,
             SquareTool,
-            """Start by asking me to square the number 9, using the 
-                `square` tool/function call""",
+            """Use the `square` tool to square the number 9""",
             "81",
         ),
     ],
@@ -236,15 +234,13 @@ def test_llm_tool_message(
         (
             False,
             SquareTool,
-            """Start by asking me to square the number 9, using the 
-                `square` tool/function call""",
+            """Use the `square` tool to square the number 9""",
             "81",
         ),
         (
             True,
             SquareTool,
-            """Start by asking me to square the number 9, using the 
-                `square` tool/function call""",
+            """Use the `square` tool to square the number 9""",
             "81",
         ),
     ],

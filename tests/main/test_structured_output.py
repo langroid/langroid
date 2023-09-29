@@ -27,12 +27,16 @@ cfg = ChatAgentConfig(
 # we are sure the LLM is not filling in fields based on the name
 # (E.g. we want to avoid names like Address).
 class Blob(BaseModel):
+    """Info about a blob"""
+
     country: str = Field(..., description="Country of origin of the blob")
     age: int = Field(..., description="Age of the blob")
     religion: str = Field(..., description="Religion of the blob")
 
 
 class SuperBlob(BaseModel):
+    """Info about a super-blob, who has a supername and contains a blob"""
+
     blob: Blob = Field(..., description="A blob")
     supername: str = Field(..., description="Name of the super-blob")
 
@@ -44,21 +48,23 @@ class BlobList(BaseModel):
 class BlobListTool(ToolMessage):
     request: str = "blob_list"
     purpose: str = """To show a list of example blobs"""
-    my_blobs: List[Blob] = Field(..., description="List of blobs")
+    my_blobs: BlobList = Field(..., description="List of blobs")
 
     def handle(self) -> str:
-        return "\n".join(a.country for a in self.my_blobs)
+        return str(len(self.my_blobs.blobs))
 
     @classmethod
     def examples(cls) -> List["BlobListTool"]:
         return [
             cls(
-                my_blobs=[
-                    Blob(country="USA", age=100, religion="Christian"),
-                    Blob(country="China", age=20, religion="Buddhist"),
-                    Blob(country="India", age=30, religion="Hindu"),
-                ]
-            )
+                my_blobs=BlobList(
+                    blobs=[
+                        Blob(country="USA", age=100, religion="Christian"),
+                        Blob(country="China", age=20, religion="Buddhist"),
+                        Blob(country="India", age=30, religion="Hindu"),
+                    ]
+                )
+            ),
         ]
 
 
@@ -82,10 +88,7 @@ class SuperBlobTool(ToolMessage):
         ]
 
 
-# TODO need to enable the "True" case (use_functions_api=True)
-# when we figure out how to get the proper schema from nested
-# pydantic classes. See tool_message.py: llm_function_schema()
-@pytest.mark.parametrize("use_functions_api", [False])
+@pytest.mark.parametrize("use_functions_api", [True, False])
 def test_llm_structured_output_list(
     test_settings: Settings,
     use_functions_api: bool,
@@ -111,14 +114,10 @@ def test_llm_structured_output_list(
         assert isinstance(tools[0], BlobListTool)
 
     agent_result = agent.agent_response(llm_msg)
-    blobs = agent_result.content.split("\n")
-    assert len(blobs) == N
+    assert agent_result.content == str(N)
 
 
-# TODO need to enable the "True" case (use_functions_api=True)
-# when we figure out how to get the proper schema from nested
-# pydantic classes. See tool_message.py: llm_function_schema()
-@pytest.mark.parametrize("use_functions_api", [False])
+@pytest.mark.parametrize("use_functions_api", [True, False])
 def test_llm_structured_output_nested(
     test_settings: Settings,
     use_functions_api: bool,

@@ -10,56 +10,20 @@ from abc import ABC
 from random import choice
 from typing import Any, Dict, List, Type
 
+from docstring_parser import parse
 from pydantic import BaseModel
 
 from langroid.language_models.base import LLMFunctionSpec
 
-INSTRUCTION = """
-    When one of these tools is applicable, you must express your request as
-    "TOOL:" followed by the request in JSON format. The fields will be based on the 
-    tool description, which will be of the form:
-    
-    <tool_name>: description involving <arg1> maybe some other <arg2> and so on.
-    
-    The JSON format will be:
-    \\{
-        "request": "<tool_name>",
-        "<arg1>": <value1>,
-        "<arg2>": <value2>
-    \\} 
-    where it is important to note that <arg1> is the NAME of the argument, 
-    and <value1> is the VALUE of the argument.
-    
-    For example suppose a tool with this description is available:
-    
-    country_capital: check if <city> is the capital of <country>.
-    
-    Now suppose you want to do this:
-     
-     "Check whether the capital of France is Paris",
-      
-    you realize that the `country_capital` tool is applicable, and so you must 
-    ask in the following format: "TOOL: <JSON-formatted-request>", which in this 
-    case will look like:
 
-    TOOL: 
-    \\{
-        "request": "country_capital",
-        "country": "France",
-        "city": "Paris"
-    \\}
-    
-    On the other hand suppose you want to:
-    
-    "Find out the population of France".
-    
-    In this case you realize there is no available TOOL for this, so you just ask in 
-    natural language: "What is the population of France?"
-    
-    Whenever possible, AND ONLY IF APPLICABLE, use these TOOLS, with the JSON syntax 
-    specified above. When a TOOL is applicable, simply use this syntax, do not write 
-    anything else. Only if no TOOL is exactly applicable, ask in natural language. 
-    """
+def _recursive_purge_dict_key(d: Dict[str, Any], k: str) -> None:
+    """Remove a key from a dictionary recursively"""
+    if isinstance(d, dict):
+        for key in list(d.keys()):
+            if key == k and "type" in d.keys():
+                del d[key]
+            else:
+                _recursive_purge_dict_key(d[key], k)
 
 
 class ToolMessage(ABC, BaseModel):
@@ -147,46 +111,63 @@ class ToolMessage(ABC, BaseModel):
     @classmethod
     def llm_function_schema(cls, request: bool = False) -> LLMFunctionSpec:
         """
-        Returns schema for use in OpenAI Function Calling API.
+        Clean up the schema of the Pydantic class (which can recursively contain
+        other Pydantic classes), to create a version compatible with OpenAI
+        Function-call API.
+
+        Adapted from this excellent library:
+        https://github.com/jxnl/instructor/blob/main/instructor/function_calls.py
 
         Args:
-            request (bool): whether to include the "request" field.
-                We set it to True when we want to use the schema as an example
-                in the TOOL instructions (when not using the Function Calling API).
+            request: whether to include the "request" field in the schema.
+                (we set this to True when using Langroid-native TOOLs as opposed to
+                OpenAI Function calls)
+
         Returns:
-            Dict[str, Any]: schema for use in OpenAI Function Calling API
+            LLMFunctionSpec: the schema as an LLMFunctionSpec
 
         """
+        schema = cls.schema()
+        docstring = parse(cls.__doc__ or "")
+        parameters = {
+            k: v for k, v in schema.items() if k not in ("title", "description")
+        }
+        for param in docstring.params:
+            if (name := param.arg_name) in parameters["properties"] and (
+                description := param.description
+            ):
+                if "description" not in parameters["properties"][name]:
+                    parameters["properties"][name]["description"] = description
 
-        # use jsonref to dereference "$ref" from "definition" fields,
-        # where there are nested structures like a List of XYZ objects
-        schema = cls.schema()  # jsonref.loads(cls.schema_json())
-        # schema = jsonref.JsonRef.replace_refs(cls.schema())
-        spec = LLMFunctionSpec(
-            name=cls.default_value("request"),
-            description=cls.default_value("purpose"),
-            parameters=dict(),
-        )
         excludes = (
             ["result", "purpose"] if request else ["request", "result", "purpose"]
         )
-        properties = {}
-        if schema.get("properties"):
-            properties = {
-                field: details
-                for field, details in schema["properties"].items()
-                if field not in excludes
-            }
-        required = []
-        if schema.get("required"):
-            required = [field for field in schema["required"] if field not in excludes]
-        properties = {
-            k: {prop: val for prop, val in v.items() if prop != "title"}
-            for k, v in properties.items()
+        # exclude 'excludes' from parameters["properties"]:
+        parameters["properties"] = {
+            field: details
+            for field, details in parameters["properties"].items()
+            if field not in excludes
         }
-        spec.parameters = dict(
-            type="object",
-            properties=properties,
-            required=required,
+        parameters["required"] = sorted(
+            k
+            for k, v in parameters["properties"].items()
+            if ("default" not in v and k not in excludes)
         )
-        return spec
+
+        if "description" not in schema:
+            if docstring.short_description:
+                schema["description"] = docstring.short_description
+            else:
+                schema["description"] = (
+                    f"Correctly extracted `{cls.__name__}` with all "
+                    f"the required parameters with correct types"
+                )
+
+        parameters.pop("exclude")
+        _recursive_purge_dict_key(parameters, "title")
+        _recursive_purge_dict_key(parameters, "additionalProperties")
+        return LLMFunctionSpec(
+            name=cls.default_value("request"),
+            description=cls.default_value("purpose"),
+            parameters=parameters,
+        )
