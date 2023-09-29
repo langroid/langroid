@@ -173,7 +173,7 @@ class ChatAgent(Agent):
                         indent=4,
                     )
                 }
-                {msg_cls.usage_example()}
+                {"EXAMPLE: " + msg_cls.usage_example() if msg_cls.examples() else ""}
                 """.lstrip()
                 )
                 for i, msg_cls in enumerate(enabled_classes)
@@ -224,6 +224,8 @@ class ChatAgent(Agent):
                 # example will be shown in json_format_rules() when using TOOLs,
                 # so we don't need to show it here.
                 example = "" if self.config.use_tools else (msg_cls.usage_example())
+                if example != "":
+                    example = "EXAMPLE: " + example
                 guidance = (
                     ""
                     if msg_cls.instructions() == ""

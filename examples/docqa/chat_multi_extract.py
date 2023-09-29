@@ -56,6 +56,8 @@ class Lease(BaseModel):
 
 
 class LeaseMessage(ToolMessage):
+    """Tool/function to use to present details about a commercial lease"""
+
     request: str = "lease_info"
     purpose: str = """
         Collect information about a Commercial Lease.

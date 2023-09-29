@@ -85,7 +85,7 @@ class ToolMessage(ABC, BaseModel):
         if len(cls.examples()) == 0:
             return ""
         ex = choice(cls.examples())
-        return f"EXAMPLE: {ex.json_example()}"
+        return ex.json_example()
 
     def json_example(self) -> str:
         return self.json(indent=4, exclude={"result", "purpose"})
@@ -153,6 +153,8 @@ class ToolMessage(ABC, BaseModel):
             for k, v in parameters["properties"].items()
             if ("default" not in v and k not in excludes)
         )
+        if request:
+            parameters["required"].append("request")
 
         if "description" not in schema:
             if docstring.short_description:
