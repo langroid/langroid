@@ -55,7 +55,7 @@ class PresidentListTool(ToolMessage):
         return str(len(self.my_presidents.presidents))
 
     @classmethod
-    def examples_(cls) -> List["PresidentListTool"]:
+    def examples(cls) -> List["PresidentListTool"]:
         """Examples to use in prompt; Not essential, but increases chance of LLM
         generating in the expected format"""
         return [

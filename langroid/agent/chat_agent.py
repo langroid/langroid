@@ -1,4 +1,5 @@
 import inspect
+import json
 import logging
 import textwrap
 from contextlib import ExitStack
@@ -166,7 +167,12 @@ class ChatAgent(Agent):
                     f"""
                 TOOL: {msg_cls.default_value("request")}
                 PURPOSE: {msg_cls.default_value("purpose")} 
-                JSON FORMAT: {msg_cls.llm_function_schema(request=True).parameters}
+                JSON FORMAT: {
+                    json.dumps(
+                        msg_cls.llm_function_schema(request=True).parameters,
+                        indent=4,
+                    )
+                }
                 {msg_cls.usage_example()}
                 """.lstrip()
                 )
