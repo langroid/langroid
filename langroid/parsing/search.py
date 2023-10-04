@@ -1,7 +1,13 @@
 """
-Utils to search for close matches in a list of strings.
+Utils to search for close matches in (a list of) strings.
+Useful for retrieval of docs/chunks relevant to a query, in the context of
+Retrieval-Augmented Generation (RAG), and SQLChat (e.g., to pull relevant parts of a
+large schema).
+See tests for examples: tests/main/test_string_search.py
 """
 
+import difflib
+import re
 from typing import List, Tuple
 
 import nltk
@@ -15,7 +21,11 @@ from langroid.mytypes import Document
 
 
 def find_fuzzy_matches_in_docs(
-    query: str, docs: List[Document], k: int, surrounding_words: int
+    query: str,
+    docs: List[Document],
+    k: int,
+    words_before: int | None = None,
+    words_after: int | None = None,
 ) -> List[Document]:
     """
     Find approximate matches of the query in the docs and return surrounding
@@ -25,8 +35,10 @@ def find_fuzzy_matches_in_docs(
         query (str): The search string.
         docs (List[Document]): List of Document objects to search through.
         k (int): Number of best matches to return.
-        surrounding_words (int): Number of words to
-            include before and after each match.
+        words_before (int|None): Number of words to include before each match.
+            Default None => return max
+        words_after (int|None): Number of words to include after each match.
+            Default None => return max
 
     Returns:
         List[Document]: List of Documents containing the matches,
@@ -41,8 +53,10 @@ def find_fuzzy_matches_in_docs(
         scorer=fuzz.partial_ratio,
     )
 
+    real_matches = [m for m, score in best_matches if score > 50]
+
     results = []
-    for match, _ in best_matches:
+    for match in real_matches:
         words = match.split()
         for doc in docs:
             if match in doc.content:
@@ -55,11 +69,15 @@ def find_fuzzy_matches_in_docs(
                     ),
                     -1,
                 )
+                if words_before is None:
+                    words_before = len(words_in_text)
+                if words_after is None:
+                    words_after = len(words_in_text)
                 if first_word_idx != -1:
-                    start_idx = max(0, first_word_idx - surrounding_words)
+                    start_idx = max(0, first_word_idx - words_before)
                     end_idx = min(
                         len(words_in_text),
-                        first_word_idx + len(words) + surrounding_words,
+                        first_word_idx + len(words) + words_after,
                     )
                     doc_match = Document(
                         content=" ".join(words_in_text[start_idx:end_idx]),
@@ -154,6 +172,55 @@ def find_closest_matches_with_bm25(
 
     # return the original docs, based on the scores from cleaned docs
     return [(docs[i], doc_scores[i]) for i in top_indices]
+
+
+def get_context(
+    query: str,
+    text: str,
+    words_before: int | None = 100,
+    words_after: int | None = 100,
+) -> str:
+    """
+    Returns a portion of text containing the best approximate match of the query,
+    including b words before and a words after the match.
+
+    Args:
+    query (str): The string to search for.
+    text (str): The body of text in which to search.
+    b (int): The number of words before the query to return.
+    a (int): The number of words after the query to return.
+
+    Returns:
+    str: A string containing b words before, the match, and a words after
+        the best approximate match position of the query in the text. If no
+        match is found, returns "No match found".
+
+    Example:
+    >>> get_context("apple", "The quick brown fox jumps over the apple.", 3, 2)
+    # 'fox jumps over the apple.'
+    """
+    if words_after is None and words_before is None:
+        # return entire text since we're not asked to return a bounded context
+        return text
+
+    sequence_matcher = difflib.SequenceMatcher(None, text, query)
+    match = sequence_matcher.find_longest_match(0, len(text), 0, len(query))
+
+    if match.size == 0:
+        return "No match found"
+
+    words = re.findall(r"\b\w+\b", text)
+    if words_after is None:
+        words_after = len(words)
+    if words_before is None:
+        words_before = len(words)
+    start_word_pos = len(re.findall(r"\b\w+\b", text[: match.a]))
+    start_pos = max(0, start_word_pos - words_before)
+    end_pos = min(
+        len(words), start_word_pos + words_after + len(re.findall(r"\b\w+\b", query))
+    )
+
+    return " ".join(words[start_pos:end_pos])
 
 
 def eliminate_near_duplicates(passages: List[str], threshold: float = 0.8) -> List[str]:

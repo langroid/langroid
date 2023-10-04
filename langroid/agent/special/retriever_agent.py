@@ -1,5 +1,6 @@
 """
 Agent to retrieve relevant verbatim whole docs/records from a vector store.
+See test_retriever_agent.py for example usage:
 """
 import logging
 from abc import ABC, abstractmethod

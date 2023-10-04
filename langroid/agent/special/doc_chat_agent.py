@@ -26,7 +26,7 @@ from langroid.embedding_models.models import OpenAIEmbeddingsConfig
 from langroid.language_models.base import StreamingIfAllowed
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
 from langroid.mytypes import DocMetaData, Document, Entity
-from langroid.parsing.parser import Parser, ParsingConfig, Splitter
+from langroid.parsing.parser import Parser, ParsingConfig, PdfParsingConfig, Splitter
 from langroid.parsing.repo_loader import RepoLoader
 from langroid.parsing.search import (
     find_closest_matches_with_bm25,
@@ -115,6 +115,13 @@ class DocChatAgentConfig(ChatAgentConfig):
         min_chunk_chars=200,
         discard_chunk_chars=5,  # discard chunks with fewer than this many chars
         n_similar_docs=3,
+        pdf=PdfParsingConfig(
+            # NOTE: PDF parsing is extremely challenging, and each library
+            # has its own strengths and weaknesses.
+            # Try one that works for your use case.
+            # or "haystack", "unstructured", "pdfplumber", "fitz", "pypdf"
+            library="pdfplumber",
+        ),
     )
     from langroid.embedding_models.models import SentenceTransformerEmbeddingsConfig
 
@@ -424,7 +431,8 @@ class DocChatAgent(ChatAgent):
                 query,
                 self.chunked_docs,
                 k=self.config.parsing.n_similar_docs * multiple,
-                surrounding_words=1000,
+                words_before=1000,
+                words_after=1000,
             )
         return fuzzy_match_docs
 

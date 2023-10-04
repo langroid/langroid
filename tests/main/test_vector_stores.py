@@ -9,6 +9,7 @@ from langroid.mytypes import DocMetaData, Document
 from langroid.utils.system import rmdir
 from langroid.vector_store.base import VectorStore
 from langroid.vector_store.chromadb import ChromaDB, ChromaDBConfig
+from langroid.vector_store.meilisearch import MeiliSearch, MeiliSearchConfig
 from langroid.vector_store.qdrantdb import QdrantDB, QdrantDBConfig
 
 load_dotenv()
@@ -28,12 +29,12 @@ phrases = SimpleNamespace(
 )
 
 stored_docs = [
-    Document(content=d, metadata=DocMetaData(id=i))
+    Document(content=d, metadata=DocMetaData(id=str(i)))
     for i, d in enumerate(vars(phrases).values())
 ]
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="function")
 def vecdb(request) -> VectorStore:
     if request.param == "qdrant_local":
         qd_dir = ".qdrant/data/" + embed_cfg.model_type
@@ -78,24 +79,42 @@ def vecdb(request) -> VectorStore:
         rmdir(cd_dir)
         return
 
+    if request.param == "meilisearch":
+        ms_cfg = MeiliSearchConfig(
+            collection_name="test-meilisearch",
+        )
+        ms = MeiliSearch(ms_cfg)
+        ms.add_documents(stored_docs)
+        yield ms
+        ms.delete_collection(collection_name=ms_cfg.collection_name)
+        return
+
 
 @pytest.mark.parametrize(
-    "query,results",
+    "query,results,exceptions",
     [
-        ("which city is Belgium's capital?", [phrases.BELGIUM]),
-        ("capital of France", [phrases.FRANCE]),
-        ("hello", [phrases.HELLO]),
-        ("hi there", [phrases.HI_THERE]),
-        ("men and women over 40", [phrases.OVER_40]),
-        ("people aged less than 40", [phrases.UNDER_40]),
-        ("Canadian residents", [phrases.CANADA]),
-        ("people outside Canada", [phrases.NOT_CANADA]),
+        ("which city is Belgium's capital?", [phrases.BELGIUM], []),
+        ("capital of France", [phrases.FRANCE], []),
+        ("hello", [phrases.HELLO], []),
+        ("hi there", [phrases.HI_THERE], []),
+        ("men and women over 40", [phrases.OVER_40], ["meilisearch"]),
+        ("people aged less than 40", [phrases.UNDER_40], ["meilisearch"]),
+        ("Canadian residents", [phrases.CANADA], ["meilisearch"]),
+        ("people outside Canada", [phrases.NOT_CANADA], ["meilisearch"]),
     ],
 )
 @pytest.mark.parametrize(
-    "vecdb", ["qdrant_local", "qdrant_cloud", "chroma"], indirect=True
+    "vecdb",
+    ["chroma", "meilisearch", "qdrant_local", "qdrant_cloud"],
+    indirect=True,
 )
-def test_vector_stores(vecdb, query: str, results: List[str]):
+def test_vector_stores_search(
+    vecdb, query: str, results: List[str], exceptions: List[str]
+):
+    if vecdb.__class__.__name__.lower() in exceptions:
+        # we don't expect some of these to work,
+        # e.g. MeiliSearch is a text search engine, not a vector store
+        return
     docs_and_scores = vecdb.similar_texts_with_scores(query, k=len(vars(phrases)))
     # first doc should be best match
     if isinstance(vecdb, ChromaDB):
@@ -105,3 +124,40 @@ def test_vector_stores(vecdb, query: str, results: List[str]):
         # scores are cosine similarities, so high means close
         matching_docs = [doc.content for doc, score in docs_and_scores if score > 0.8]
     assert set(results).issubset(set(matching_docs))
+
+
+@pytest.mark.parametrize(
+    "vecdb",
+    ["meilisearch", "chroma", "qdrant_local", "qdrant_cloud"],
+    indirect=True,
+)
+def test_vector_stores_access(vecdb):
+    assert vecdb is not None
+
+    all_docs = vecdb.get_all_documents()
+    assert len(all_docs) == len(stored_docs)
+
+    coll_name = vecdb.config.collection_name
+    assert coll_name is not None
+
+    vecdb.delete_collection(collection_name=coll_name)
+    vecdb.create_collection(collection_name=coll_name)
+    all_docs = vecdb.get_all_documents()
+    assert len(all_docs) == 0
+
+    vecdb.add_documents(stored_docs)
+    all_docs = vecdb.get_all_documents()
+    ids = [doc.id() for doc in all_docs]
+    assert len(all_docs) == len(stored_docs)
+
+    docs = vecdb.get_documents_by_ids(ids[:3])
+    assert len(docs) == 3
+
+    coll_names = [f"test_junk_{i}" for i in range(3)]
+    for coll in coll_names:
+        vecdb.create_collection(collection_name=coll)
+    n_colls = len(
+        [c for c in vecdb.list_collections(empty=True) if c.startswith("test_junk")]
+    )
+    n_dels = vecdb.clear_all_collections(really=True, prefix="test_junk")
+    assert n_colls == n_dels

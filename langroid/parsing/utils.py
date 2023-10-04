@@ -6,8 +6,8 @@ from typing import Any, Iterable, List
 import nltk
 from faker import Faker
 
-nltk.download("punkt")
-nltk.download("gutenberg")
+nltk.download("punkt", quiet=True)
+nltk.download("gutenberg", quiet=True)
 
 Faker.seed(23)
 random.seed(43)
