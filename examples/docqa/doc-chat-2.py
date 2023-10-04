@@ -1,6 +1,12 @@
 """
-Single agent to use to chat with a Retrieval-augmented LLM.
-Repeat: User asks question -> LLM answers.
+2-agent doc-chat:
+WriterAgent is in charge of answering user's question.
+Breaks it down into smaller questions (if needed) to send to DocAgent,
+who has access to the docs via a vector-db.
+
+Run like this:
+python3 examples/docqa/doc-chat-2.py
+
 """
 import typer
 from rich import print
