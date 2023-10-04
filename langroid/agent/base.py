@@ -3,6 +3,7 @@ import json
 import logging
 from abc import ABC
 from contextlib import ExitStack
+import asyncio
 from typing import (
     Any,
     Callable,
@@ -377,7 +378,12 @@ class Agent(ABC):
         msg: Optional[str | ChatDocument] = None,
     ) -> Optional[ChatDocument]:
         """
-        Asynch version of `llm_response`. See there for details.
+        LLM response to a prompt.
+        Args:
+            msg (str|ChatDocument): prompt string, or ChatDocument object
+
+        Returns:
+            Response from LLM, packaged as a ChatDocument
         """
         if msg is None or not self.llm_can_respond(msg):
             return None
@@ -428,67 +434,9 @@ class Agent(ABC):
         msg: Optional[str | ChatDocument] = None,
     ) -> Optional[ChatDocument]:
         """
-        LLM response to a prompt.
-        Args:
-            msg (str|ChatDocument): prompt string, or ChatDocument object
-
-        Returns:
-            Response from LLM, packaged as a ChatDocument
+        Synchronous version of `llm_response_async`. See there for details.
         """
-        if msg is None or not self.llm_can_respond(msg):
-            return None
-
-        if isinstance(msg, ChatDocument):
-            prompt = msg.content
-        else:
-            prompt = msg
-
-        with ExitStack() as stack:  # for conditionally using rich spinner
-            if not self.llm.get_stream():
-                # show rich spinner only if not streaming!
-                cm = console.status("LLM responding to message...")
-                stack.enter_context(cm)
-            output_len = self.config.llm.max_output_tokens
-            if (
-                self.num_tokens(prompt) + output_len
-                > self.llm.completion_context_length()
-            ):
-                output_len = self.llm.completion_context_length() - self.num_tokens(
-                    prompt
-                )
-                if output_len < self.config.llm.min_output_tokens:
-                    raise ValueError(
-                        """
-                    Token-length of Prompt + Output is longer than the
-                    completion context length of the LLM!
-                    """
-                    )
-                else:
-                    logger.warning(
-                        f"""
-                    Requested output length has been shortened to {output_len}
-                    so that the total length of Prompt + Output is less than
-                    the completion context length of the LLM. 
-                    """
-                    )
-            if self.llm.get_stream():
-                console.print(f"[green]{self.indent}", end="")
-            response = self.llm.generate(prompt, output_len)
-
-        displayed = False
-        if not self.llm.get_stream() or response.cached:
-            # we would have already displayed the msg "live" ONLY if
-            # streaming was enabled, AND we did not find a cached response
-            console.print(f"[green]{self.indent}", end="")
-            print("[green]" + response.message)
-            displayed = True
-        self.update_token_usage(
-            response,
-            prompt,
-            self.llm.get_stream(),
-            print_response_stats=settings.debug,
-        )
-        return ChatDocument.from_LLMResponse(response, displayed)
+        return asyncio.run(self.llm_response_async(msg))
 
     def get_tool_messages(self, msg: str | ChatDocument) -> List[ToolMessage]:
         if isinstance(msg, str):
