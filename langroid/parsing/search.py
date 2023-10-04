@@ -10,7 +10,7 @@ from nltk.stem import WordNetLemmatizer
 from nltk.tokenize import RegexpTokenizer
 from rank_bm25 import BM25Okapi
 from thefuzz import fuzz, process
-from .utils import download_nltk_resources
+from .utils import download_nltk_resource
 
 from langroid.mytypes import Document
 
@@ -88,7 +88,8 @@ def preprocess_text(text: str) -> str:
         str: The preprocessed text.
     """
     # Ensure the NLTK resources are available
-    download_nltk_resources()
+    for resource in ["punkt", "wordnet", "stopwords"]:
+        download_nltk_resource(resource)
 
     # Lowercase the text
     text = text.lower()

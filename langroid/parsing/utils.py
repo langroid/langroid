@@ -1,7 +1,8 @@
 import difflib
 import random
 from itertools import islice
-from typing import Any, Iterable, List, Callable
+from typing import Any, Iterable, List
+from functools import cache
 
 import nltk
 from faker import Faker
@@ -9,30 +10,13 @@ from faker import Faker
 Faker.seed(23)
 random.seed(43)
 
-
-# Wraps a function and ensures that it is run at most once
-def run_once(f : Callable[[], None]) -> Callable[[], None]:
-    has_run = False
-
-    def wrapped():
-        nonlocal has_run
-
-        if not has_run:
-            f()
-            has_run = True
-
-    return wrapped
-
-
-# Ensure NLTK resources are available
-@run_once
-def download_nltk_resources() -> None:
-    resources = ["punkt", "wordnet", "stopwords", "gutenberg"]
-    for resource in resources:
-        try:
-            nltk.data.find(resource)
-        except LookupError:
-            nltk.download(resource)
+# Ensures the NLTK resource is available
+@cache
+def download_nltk_resource(resource: str) -> None:
+    try:
+        nltk.data.find(resource)
+    except LookupError:
+        nltk.download(resource)
 
 
 def batched(iterable: Iterable[Any], n: int) -> Iterable[Any]:
@@ -47,7 +31,7 @@ def batched(iterable: Iterable[Any], n: int) -> Iterable[Any]:
 
 def generate_random_sentences(k: int) -> str:
     # Load the sample text
-    download_nltk_resources()
+    download_nltk_resource("gutenberg")
 
     from nltk.corpus import gutenberg
 
