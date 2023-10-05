@@ -17,7 +17,6 @@ from dotenv import load_dotenv
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
-from langroid.language_models.base import LocalModelConfig
 from langroid.agent.tools.google_search_tool import GoogleSearchTool
 from langroid.language_models.openai_gpt import OpenAIGPTConfig
 from langroid.utils.configuration import set_global, Settings
@@ -34,9 +33,8 @@ class CLIOptions(BaseSettings):
     api_base: str = "http://localhost:8000/v1"
     local_model: str = ""
     local_ctx: int = 2048
-    # use completion endpoint for chat?
-    # if so, we should format chat->prompt ourselves, if we know the required syntax
     completion: bool = False
+    litellm: bool = False
 
     class Config:
         extra = "forbid"
@@ -65,16 +63,14 @@ def chat(opts: CLIOptions) -> None:
     if opts.local or opts.local_model:
         # assumes local endpoint is either the default http://localhost:8000/v1
         # or if not, it has been set in the .env file as the value of
-        # OPENAI_LOCAL.API_BASE
-        local_model_config = LocalModelConfig(
-            api_base=opts.api_base,
-            model=opts.local_model,
-            context_length=opts.local_ctx,
-            use_completion_for_chat=opts.completion,
-        )
+        # OPENAI_API_BASE
         llm_config = OpenAIGPTConfig(
-            local=local_model_config,
-            timeout=180,
+            api_base=opts.api_base,
+            chat_model=opts.local_model,
+            litellm=opts.litellm,
+            chat_context_length=opts.local_ctx,
+            use_completion_for_chat=opts.completion,
+            timeout=60,
         )
     else:
         # defaults to chat_model = OpenAIChatModel.GPT4
@@ -119,6 +115,7 @@ def main(
     debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
     no_stream: bool = typer.Option(False, "--nostream", "-ns", help="no streaming"),
     nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
+    litellm: bool = typer.Option(False, "--litellm", "-ll", help="use litellm endpt"),
     cache_type: str = typer.Option(
         "redis", "--cachetype", "-ct", help="redis or momento"
     ),
@@ -147,6 +144,7 @@ def main(
     opts = CLIOptions(
         local=local,
         api_base=api_base,
+        litellm=litellm,
         local_model=local_model,
         local_ctx=local_ctx,
         completion=completion,

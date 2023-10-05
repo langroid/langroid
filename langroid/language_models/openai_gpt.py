@@ -1,12 +1,13 @@
 import ast
 import hashlib
 import logging
-import os
 import sys
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple, Union, no_type_check
 
 import openai
+from litellm import acompletion as litellm_acompletion
+from litellm import completion as litellm_completion
 from pydantic import BaseModel
 from rich import print
 
@@ -41,7 +42,6 @@ class OpenAIChatModel(str, Enum):
     GPT3_5_TURBO = "gpt-3.5-turbo-0613"
     GPT4_NOFUNC = "gpt-4"  # before function_call API
     GPT4 = "gpt-4"
-    LOCAL = "local"  # dummy for any local model
 
 
 class OpenAICompletionModel(str, Enum):
@@ -50,37 +50,52 @@ class OpenAICompletionModel(str, Enum):
     TEXT_DA_VINCI_003 = "text-davinci-003"  # deprecated
     TEXT_ADA_001 = "text-ada-001"  # deprecated
     GPT4 = "gpt-4"  # only works on chat-completion endpoint
-    LOCAL = "local"  # dummy for any local model
+
+
+_context_length: Dict[str, int] = {
+    # can add other non-openAI models here
+    OpenAIChatModel.GPT3_5_TURBO: 4096,
+    OpenAIChatModel.GPT4: 8192,
+    OpenAIChatModel.GPT4_NOFUNC: 8192,
+    OpenAICompletionModel.TEXT_DA_VINCI_003: 4096,
+}
+
+_cost_per_1k_tokens: Dict[str, Tuple[float, float]] = {
+    # can add other non-openAI models here.
+    # model => (prompt cost, generation cost) in USD
+    OpenAIChatModel.GPT3_5_TURBO: (0.0015, 0.002),
+    OpenAIChatModel.GPT4: (0.03, 0.06),  # 8K context
+    OpenAIChatModel.GPT4_NOFUNC: (0.03, 0.06),
+}
 
 
 class OpenAIGPTConfig(LLMConfig):
+    """
+    Class for any LLM with an OpenAI-like API: besides the OpenAI models this includes:
+    (a) locally-served models behind an OpenAI-compatible API
+    (b) non-local models, using a proxy adaptor lib like litellm that provides
+        an OpenAI-compatible API.
+    We could rename this class to OpenAILikeConfig.
+    """
+
     type: str = "openai"
+    api_key: str = ""  # CAUTION: set this ONLY via env var OPENAI_API_KEY
     api_base: str | None = None  # used for local or other non-OpenAI models
+    litellm: bool = False  # use litellm api?
     max_output_tokens: int = 1024
     min_output_tokens: int = 64
     use_chat_for_completion = True  # do not change this, for OpenAI models!
     timeout: int = 20
     temperature: float = 0.2
-    chat_model: str | OpenAIChatModel = OpenAIChatModel.GPT4
-    completion_model: str | OpenAICompletionModel = OpenAICompletionModel.GPT4
-    context_length: Dict[str, int] = {
-        OpenAIChatModel.GPT3_5_TURBO: 4096,
-        OpenAIChatModel.GPT4: 8192,
-        OpenAIChatModel.GPT4_NOFUNC: 8192,
-        OpenAICompletionModel.TEXT_DA_VINCI_003: 4096,
-    }
-    cost_per_1k_tokens: Dict[str, Tuple[float, float]] = {
-        # (input/prompt cost, output/completion cost)
-        OpenAIChatModel.GPT3_5_TURBO: (0.0015, 0.002),
-        OpenAIChatModel.GPT4: (0.03, 0.06),  # 8K context
-        OpenAIChatModel.GPT4_NOFUNC: (0.03, 0.06),
-    }
+    # these can be any model name that is served at an OpenAI-compatible API end point
+    chat_model: str = OpenAIChatModel.GPT4
+    completion_model: str = OpenAICompletionModel.GPT4
 
-    # all of the non-dict vars above can be set via env vars,
+    # all of the vars above can be set via env vars,
     # by upper-casing the name and prefixing with OPENAI_, e.g.
     # OPENAI_MAX_OUTPUT_TOKENS=1000.
-    # The dict fields can also be set via env vars by passing json strings, e.g.
-    # OPENAI_CONTEXT_LENGTH='{"gpt-3.5-turbo-0613": 4096, "local": 8192}'
+    # This is either done in the .env file, or via an explicit
+    # `export OPENAI_MAX_OUTPUT_TOKENS=1000` or `setenv OPENAI_MAX_OUTPUT_TOKENS 1000`
     class Config:
         env_prefix = "OPENAI_"
 
@@ -104,30 +119,17 @@ class OpenAIGPT(LanguageModel):
             config: configuration for openai-gpt model
         """
         super().__init__(config)
+        self.config: OpenAIGPTConfig = config
         if settings.nofunc:
             self.chat_model = OpenAIChatModel.GPT4_NOFUNC
-        self.api_base: str | None = None
-        if config.local:
-            self.config.chat_model = config.local.model
-            self.config.use_completion_for_chat = config.local.use_completion_for_chat
-            self.config.use_chat_for_completion = config.local.use_chat_for_completion
-            self.api_key = "sx-xxx"
-            self.api_base = config.local.api_base
-            config.context_length = {config.local.model: config.local.context_length}
-            config.cost_per_1k_tokens = {
-                config.local.model: (0.0, 0.0),
-            }
-        else:
-            # TODO: get rid of this and add `api_key` to the OpenAIGPTConfig
-            # so we can get it from the OPENAI_API_KEY env var
-            self.api_key = os.getenv("OPENAI_API_KEY", "")
+        self.api_base: str | None = config.api_base
 
-        if self.api_key == "":
-            raise ValueError(
-                """
-                OPENAI_API_KEY not set in .env file,
-                please set it to your OpenAI API key."""
-            )
+        # NOTE: The api_key should be set in the .env file, or via
+        # an explicit `export OPENAI_API_KEY=xxx` or `setenv OPENAI_API_KEY xxx`
+        # Pydantic's BaseSettings will automatically pick it up from the
+        # .env file
+        self.api_key = config.api_key
+
         self.cache: MomentoCache | RedisCache
         if settings.cache_type == "momento":
             config.cache_config = MomentoCacheConfig()
@@ -135,6 +137,46 @@ class OpenAIGPT(LanguageModel):
         else:
             config.cache_config = RedisCacheConfig()
             self.cache = RedisCache(config.cache_config)
+
+    def _is_openai_chat_model(self) -> bool:
+        openai_chat_models = [e.value for e in OpenAIChatModel]
+        return self.config.chat_model in openai_chat_models
+
+    def _is_openai_completion_model(self) -> bool:
+        openai_completion_models = [e.value for e in OpenAICompletionModel]
+        return self.config.completion_model in openai_completion_models
+
+    def chat_context_length(self) -> int:
+        """
+        Context-length for chat-completion models/endpoints
+        Get it from the dict, otherwise fail-over to general method
+        """
+        model = (
+            self.config.completion_model
+            if self.config.use_completion_for_chat
+            else self.config.chat_model
+        )
+        return _context_length.get(model, super().chat_context_length())
+
+    def completion_context_length(self) -> int:
+        """
+        Context-length for completion models/endpoints
+        Get it from the dict, otherwise fail-over to general method
+        """
+        model = (
+            self.config.chat_model
+            if self.config.use_chat_for_completion
+            else self.config.completion_model
+        )
+        return _context_length.get(model, super().completion_context_length())
+
+    def chat_cost(self) -> Tuple[float, float]:
+        """
+        (Prompt, Generation) cost per 100 tokens, for chat-completion
+        models/endpoints.
+        Get it from the dict, otherwise fail-over to general method
+        """
+        return _cost_per_1k_tokens.get(self.config.chat_model, super().chat_cost())
 
     def set_stream(self, stream: bool) -> bool:
         """Enable or disable streaming output from API.
@@ -161,6 +203,13 @@ class OpenAIGPT(LanguageModel):
         function_name: str = "",
         is_async: bool = False,
     ) -> Tuple[bool, bool, str, str]:
+        """Process state vars while processing a streaming API response.
+            Returns a tuple consisting of:
+        - is_break: whether to break out of the loop
+        - has_function: whether the response contains a function_call
+        - function_name: name of the function
+        - function_args: args of the function
+        """
         event_args = ""
         event_fn_name = ""
         if chat:
@@ -189,7 +238,7 @@ class OpenAIGPT(LanguageModel):
             if not is_async:
                 sys.stdout.write(Colors().GREEN + event_args)
                 sys.stdout.flush()
-        if event.choices[0].finish_reason in ["stop", "function_call"]:
+        if event["choices"][0].get("finish_reason", "") in ["stop", "function_call"]:
             # for function_call, finish_reason does not necessarily
             # contain "function_call" as mentioned in the docs.
             # So we check for "stop" or "function_call" here.
@@ -476,10 +525,14 @@ class OpenAIGPT(LanguageModel):
                 if result is not None:
                     cached = True
                 else:
-                    # If it's not in the cache, call the API
-                    result = await openai.ChatCompletion.acreate(  # type: ignore
-                        **kwargs
+                    completion_call = (
+                        litellm_acompletion
+                        if self.config.litellm
+                        else openai.ChatCompletion.acreate
                     )
+
+                    # If it's not in the cache, call the API
+                    result = await completion_call(**kwargs)
                     self.cache.store(hashed_key, result)
                 return cached, hashed_key, result
 
@@ -527,15 +580,15 @@ class OpenAIGPT(LanguageModel):
         functions: Optional[List[LLMFunctionSpec]] = None,
         function_call: str | Dict[str, str] = "auto",
     ) -> LLMResponse:
-        if self.config.use_completion_for_chat:
-            # only makes sense for local models
-            if self.config.local is None or self.config.local.formatter is None:
+        if self.config.use_completion_for_chat and not self._is_openai_chat_model():
+            # only makes sense for non-OpenAI models
+            if self.config.formatter is None:
                 raise ValueError(
                     """
                     `formatter` must be specified in config to use completion for chat.
                     """
                 )
-            formatter = PromptFormatter.create(self.config.local.formatter)
+            formatter = PromptFormatter.create(self.config.formatter)
             if isinstance(messages, str):
                 messages = [
                     LLMMessage(
@@ -561,15 +614,15 @@ class OpenAIGPT(LanguageModel):
         function_call: str | Dict[str, str] = "auto",
     ) -> LLMResponse:
         # turn off streaming for async calls
-        if self.config.use_completion_for_chat:
+        if self.config.use_completion_for_chat and not self._is_openai_chat_model():
             # only makes sense for local models
-            if self.config.local is None or self.config.local.formatter is None:
+            if self.config.formatter is None:
                 raise ValueError(
                     """
                     `formatter` must be specified in config to use completion for chat.
                     """
                 )
-            formatter = PromptFormatter.create(self.config.local.formatter)
+            formatter = PromptFormatter.create(self.config.formatter)
             if isinstance(messages, str):
                 messages = [
                     LLMMessage(
@@ -598,7 +651,12 @@ class OpenAIGPT(LanguageModel):
                 print("[red]CACHED[/red]")
         else:
             # If it's not in the cache, call the API
-            result = openai.ChatCompletion.create(**kwargs)  # type: ignore
+            completion_call = (
+                litellm_completion
+                if self.config.litellm
+                else openai.ChatCompletion.create
+            )
+            result = completion_call(**kwargs)
             if not self.get_stream():
                 # if streaming, cannot cache result
                 # since it is a generator. Instead,

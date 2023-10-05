@@ -319,7 +319,7 @@ class Task:
             caller (Task|None): the calling task, if any
 
         Returns:
-            Optional[ChatDocument]: valid response from the agent
+            Optional[ChatDocument]: valid result of the task.
         """
 
         # Even if the initial "sender" is not literally the USER (since the task could

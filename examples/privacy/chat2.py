@@ -46,7 +46,6 @@ from dotenv import load_dotenv
 from examples.privacy.privacy_annotator import PrivacyAnnotator, PrivacyAnnotatorConfig
 from examples.privacy.privacy_agent import PrivacyAgent, PrivacyAgentConfig
 from langroid.agent.task import Task
-from langroid.language_models.base import LocalModelConfig
 from langroid.language_models.openai_gpt import OpenAIGPTConfig
 from langroid.utils.configuration import set_global, Settings
 from langroid.utils.logging import setup_colored_logging
@@ -65,6 +64,7 @@ class CLIOptions(BaseSettings):
     # use completion endpoint for chat?
     # if so, we should format chat->prompt ourselves, if we know the required syntax
     completion: bool = False
+    litellm: bool = False
 
     class Config:
         extra = "forbid"
@@ -86,17 +86,14 @@ def chat(opts: CLIOptions) -> None:
     if opts.local or opts.local_model:
         # assumes local endpoint is either the default http://localhost:8000/v1
         # or if not, it has been set in the .env file as the value of
-        # OPENAI_LOCAL.API_BASE
-        local_model_config = LocalModelConfig(
-            api_base=opts.api_base,
-            model=opts.local_model,
-            context_length=opts.local_ctx,
-            use_completion_for_chat=opts.completion,
-        )
+        # OPENAI_API_BASE
         llm_config = OpenAIGPTConfig(
-            local=local_model_config,
-            timeout=180,
-            max_output_tokens=500,
+            api_base=opts.api_base,
+            chat_model=opts.local_model,
+            litellm=opts.litellm,
+            chat_context_length=opts.local_ctx,
+            use_completion_for_chat=opts.completion,
+            timeout=60,
         )
     else:
         # defaults to chat_model = OpenAIChatModel.GPT4
@@ -137,6 +134,7 @@ def main(
     local_model: str = typer.Option(
         "", "--local_model", "-lm", help="local model path"
     ),
+    litellm: bool = typer.Option(False, "--litellm", "-ll", help="use litellm endpt"),
     api_base: str = typer.Option(
         "http://localhost:8000/v1", "--api_base", "-api", help="local model api base"
     ),
@@ -165,6 +163,7 @@ def main(
         api_base=api_base,
         local_model=local_model,
         local_ctx=local_ctx,
+        litellm=litellm,
         completion=completion,
     )
     chat(opts)

@@ -26,7 +26,6 @@ from dotenv import load_dotenv
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
-from langroid.language_models.base import LocalModelConfig
 from langroid.language_models.openai_gpt import OpenAIGPTConfig
 from langroid.utils.configuration import set_global, Settings
 from langroid.utils.logging import setup_colored_logging
@@ -43,6 +42,7 @@ class CLIOptions(BaseSettings):
     local_model: str = ""
     local_ctx: int = 2048
     completion: bool = False
+    litellm: bool = False
 
     class Config:
         extra = "forbid"
@@ -64,15 +64,13 @@ def chat(opts: CLIOptions) -> None:
     if opts.local or opts.local_model:
         # assumes local endpoint is either the default http://localhost:8000/v1
         # or if not, it has been set in the .env file as the value of
-        # OPENAI_LOCAL.API_BASE
-        local_model_config = LocalModelConfig(
-            api_base=opts.api_base,
-            model=opts.local_model,
-            context_length=opts.local_ctx,
-            use_completion_for_chat=opts.completion,
-        )
+        # OPENAI_API_BASE
         llm_config = OpenAIGPTConfig(
-            local=local_model_config,
+            api_base=opts.api_base,
+            chat_model=opts.local_model,
+            litellm=opts.litellm,
+            chat_context_length=opts.local_ctx,
+            use_completion_for_chat=opts.completion,
             timeout=60,
         )
     else:
@@ -102,6 +100,7 @@ def chat(opts: CLIOptions) -> None:
 def main(
     debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
     local: bool = typer.Option(False, "--local", "-l", help="use local llm"),
+    litellm: bool = typer.Option(False, "--litellm", "-ll", help="use litellm endpt"),
     local_model: str = typer.Option(
         "", "--local_model", "-lm", help="local model path"
     ),
@@ -130,6 +129,7 @@ def main(
     )
     opts = CLIOptions(
         local=local,
+        litellm=litellm,
         api_base=api_base,
         local_model=local_model,
         local_ctx=local_ctx,
