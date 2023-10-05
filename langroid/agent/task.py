@@ -484,7 +484,7 @@ class Task:
         concurrent_responders = responders[concurrent_start:]
 
         # Asynchronously returns the results from a responder and checks for validity
-        async def response(cls, r):
+        async def response(cls: Task, r :Responder) -> Dict[str, Any]:
             if not cls._can_respond(r):
                 # create dummy msg for logging
                 log_doc = ChatDocument(
