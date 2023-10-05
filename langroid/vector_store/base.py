@@ -66,8 +66,24 @@ class VectorStore(ABC):
         pass
 
     @abstractmethod
-    def list_collections(self) -> List[str]:
-        """List all collections in the vector store."""
+    def clear_all_collections(self, really: bool = False, prefix: str = "") -> int:
+        """
+        Clear all collections in the vector store.
+
+        Args:
+            really (bool, optional): Whether to really clear all collections.
+                Defaults to False.
+            prefix (str, optional): Prefix of collections to clear.
+        Returns:
+            int: Number of collections deleted.
+        """
+        pass
+
+    @abstractmethod
+    def list_collections(self, empty: bool = False) -> List[str]:
+        """List all collections in the vector store
+        (only non empty collections if empty=False).
+        """
         pass
 
     def set_collection(self, collection_name: str, replace: bool = False) -> None:

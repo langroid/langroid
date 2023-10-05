@@ -1,5 +1,5 @@
+import logging
 import re
-from abc import abstractmethod
 from enum import Enum
 from io import BytesIO
 from typing import Any, Generator, List, Tuple
@@ -11,6 +11,9 @@ import requests
 
 from langroid.mytypes import DocMetaData, Document
 from langroid.parsing.parser import Parser, ParsingConfig
+from langroid.parsing.urls import url_to_tempfile
+
+logger = logging.getLogger(__name__)
 
 
 class DocumentType(str, Enum):
@@ -50,6 +53,8 @@ class DocumentParser(Parser):
                 return PDFPlumberParser(source, config)
             elif config.pdf.library == "unstructured":
                 return UnstructuredPDFParser(source, config)
+            elif config.pdf.library == "haystack":
+                return HaystackPDFParser(source, config)
             else:
                 raise ValueError(
                     f"Unsupported PDF library specified: {config.pdf.library}"
@@ -109,15 +114,13 @@ class DocumentParser(Parser):
             with open(self.source, "rb") as f:
                 return BytesIO(f.read())
 
-    @abstractmethod
     def iterate_pages(self) -> Generator[Tuple[int, Any], None, None]:
         """Yield each page in the PDF."""
-        pass
+        raise NotImplementedError
 
-    @abstractmethod
     def extract_text_from_page(self, page: Any) -> str:
         """Extract text from a given page."""
-        pass
+        raise NotImplementedError
 
     def fix_text(self, text: str) -> str:
         """
@@ -290,6 +293,52 @@ class PDFPlumberParser(DocumentParser):
         return self.fix_text(page.extract_text())
 
 
+class HaystackPDFParser(DocumentParser):
+    """
+    Parser for processing PDFs using the `haystack` library.
+    """
+
+    def get_doc_chunks(self) -> List[Document]:
+        """
+        Overrides the base class method to use the `haystack` library.
+        See there for more details.
+        """
+
+        from haystack.nodes import PDFToTextConverter, PreProcessor
+
+        converter = PDFToTextConverter(
+            remove_numeric_tables=True,
+        )
+        path = self.source
+        if path.startswith(("http://", "https://")):
+            path = url_to_tempfile(path)
+        doc = converter.convert(file_path=path, meta=None)
+        # note self.config.chunk_size is in token units,
+        # and we use an approximation of 75 words per 100 tokens
+        # to convert to word units
+        preprocessor = PreProcessor(
+            clean_empty_lines=True,
+            clean_whitespace=True,
+            clean_header_footer=False,
+            split_by="word",
+            split_length=int(0.75 * self.config.chunk_size),
+            split_overlap=int(0.75 * self.config.overlap),
+            split_respect_sentence_boundary=True,
+            add_page_number=True,
+        )
+        chunks = preprocessor.process(doc)
+        return [
+            Document(
+                content=chunk.content,
+                metadata=DocMetaData(
+                    source=f"{self.source} page {chunk.meta['page']}",
+                    is_chunk=True,
+                ),
+            )
+            for chunk in chunks
+        ]
+
+
 class UnstructuredPDFParser(DocumentParser):
     """
     Parser for processing PDF files using the `unstructured` library.
@@ -298,8 +347,23 @@ class UnstructuredPDFParser(DocumentParser):
     def iterate_pages(self) -> Generator[Tuple[int, Any], None, None]:  # type: ignore
         from unstructured.partition.pdf import partition_pdf
 
-        elements = partition_pdf(file=self.doc_bytes, include_page_breaks=True)
+        # from unstructured.chunking.title import chunk_by_title
 
+        try:
+            elements = partition_pdf(file=self.doc_bytes, include_page_breaks=True)
+        except Exception as e:
+            raise Exception(
+                f"""
+                Error parsing PDF: {e}
+                The `unstructured` library failed to parse the pdf.
+                Please try a different library by setting the `library` field
+                in the `pdf` section of the `parsing` field in the config file.
+                Supported libraries are: 
+                fitz, pypdf, pdfplumber, unstructured, haystack 
+                """
+            )
+
+        # elements = chunk_by_title(elements)
         page_number = 1
         page_elements = []  # type: ignore
         for el in elements:

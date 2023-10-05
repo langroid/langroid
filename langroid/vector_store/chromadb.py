@@ -42,6 +42,30 @@ class ChromaDB(VectorStore):
                 replace=self.config.replace_collection,
             )
 
+    def clear_all_collections(self, really: bool = False, prefix: str = "") -> int:
+        """Clear all collections in the vector store with the given prefix."""
+
+        if not really:
+            logger.warning("Not deleting all collections, set really=True to confirm")
+            return 0
+        coll = [c for c in self.client.list_collections() if c.name.startswith(prefix)]
+        if len(coll) == 0:
+            logger.warning(f"No collections found with prefix {prefix}")
+            return 0
+        n_empty_deletes = 0
+        n_non_empty_deletes = 0
+        for c in coll:
+            n_empty_deletes += c.count() == 0
+            n_non_empty_deletes += c.count() > 0
+            self.client.delete_collection(name=c.name)
+        logger.warning(
+            f"""
+            Deleted {n_empty_deletes} empty collections and 
+            {n_non_empty_deletes} non-empty collections.
+            """
+        )
+        return n_empty_deletes + n_non_empty_deletes
+
     def clear_empty_collections(self) -> int:
         colls = self.client.list_collections()
         n_deletes = 0
@@ -51,13 +75,17 @@ class ChromaDB(VectorStore):
                 self.client.delete_collection(name=coll.name)
         return n_deletes
 
-    def list_collections(self) -> List[str]:
+    def list_collections(self, empty: bool = False) -> List[str]:
         """
         List non-empty collections in the vector store.
+        Args:
+            empty (bool, optional): Whether to list empty collections.
         Returns:
             List[str]: List of non-empty collection names.
         """
         colls = self.client.list_collections()
+        if empty:
+            return [coll.name for coll in colls]
         return [coll.name for coll in colls if coll.count() > 0]
 
     def create_collection(self, collection_name: str, replace: bool = False) -> None:
@@ -94,10 +122,14 @@ class ChromaDB(VectorStore):
 
     def get_all_documents(self) -> List[Document]:
         results = self.collection.get(include=["documents", "metadatas"])
+        results["documents"] = [results["documents"]]
+        results["metadatas"] = [results["metadatas"]]
         return self._docs_from_results(results)
 
     def get_documents_by_ids(self, ids: List[str]) -> List[Document]:
         results = self.collection.get(ids=ids, include=["documents", "metadatas"])
+        results["documents"] = [results["documents"]]
+        results["metadatas"] = [results["metadatas"]]
         return self._docs_from_results(results)
 
     def delete_collection(self, collection_name: str) -> None:
@@ -125,7 +157,7 @@ class ChromaDB(VectorStore):
         Returns:
             List[Document]: list of Documents
         """
-        if len(results["documents"]) == 0:
+        if len(results["documents"][0]) == 0:
             return []
         contents = results["documents"][0]
         if settings.debug:
@@ -133,7 +165,7 @@ class ChromaDB(VectorStore):
                 print_long_text("red", "italic red", f"MATCH-{i}", c)
         metadatas = results["metadatas"][0]
         docs = [
-            Document(content=d, metadata=DocMetaData.parse_obj(m))
+            Document(content=d, metadata=DocMetaData(**m))
             for d, m in zip(contents, metadatas)
         ]
         return docs

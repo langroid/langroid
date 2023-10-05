@@ -1,5 +1,6 @@
 import logging
 import os
+import tempfile
 import urllib.parse
 from typing import List, Optional, Set, Tuple
 from urllib.parse import urljoin
@@ -12,6 +13,29 @@ from rich import print
 from rich.prompt import Prompt
 
 logger = logging.getLogger(__name__)
+
+
+def url_to_tempfile(url: str) -> str:
+    """
+    Fetch content from the given URL and save it to a temporary local file.
+
+    Args:
+        url (str): The URL of the content to fetch.
+
+    Returns:
+        str: The path to the temporary file where the content is saved.
+
+    Raises:
+        HTTPError: If there's any issue fetching the content.
+    """
+
+    response = requests.get(url)
+    response.raise_for_status()  # Raise an exception for HTTP errors
+
+    # Create a temporary file and write the content
+    with tempfile.NamedTemporaryFile(delete=False, suffix=".tmp") as temp_file:
+        temp_file.write(response.content)
+        return temp_file.name
 
 
 def get_user_input(msg: str, color: str = "blue") -> str:

@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "langroid"
-version = "0.1.81"
+version = "0.1.83"
 description = "Harness LLMs with Multi-Agent Programming"
 authors = ["Prasad Chalasani <pchalasani@gmail.com>"]
 readme = "README.md"
@@ -32,7 +32,7 @@ halo = "^0.0.31"
 typer = "^0.9.0"
 colorlog = "^6.7.0"
 openai = "^0.27.5"
-tiktoken = ">=0.4.0,<0.5.0"
+tiktoken = "^0.5.1"
 pygithub = "^1.58.1"
 pygments = "^2.15.1"
 redis = "^4.5.5"
@@ -54,7 +54,7 @@ sqlalchemy = "^2.0.19"
 prettytable = "^3.8.0"
 google-api-python-client = "^2.95.0"
 lxml = "^4.9.3"
-unstructured = {extras = ["docx", "pptx", "pdf"], version = "^0.10.16"}
+unstructured = {extras = ["docx", "pptx", "pdf"], version = ">=0.10.16,<0.10.18"}
 
 # optional; see extras section below
 sentence-transformers = {version="2.2.2", optional=true}
@@ -71,6 +71,9 @@ pymupdf = "^1.23.3"
 jinja2 = "^3.1.2"
 pytest-asyncio = "^0.21.1"
 docstring-parser = "^0.15"
+farm-haystack = {extras = ["ocr", "preprocessing", "file-conversion", "pdf"], version = "^1.21.1"}
+meilisearch = "^0.28.3"
+meilisearch-python-sdk = "^2.0.1"
 
 [tool.poetry.extras]
 # install these using `poetry install -E [...]` where [...] is one of the extras below
