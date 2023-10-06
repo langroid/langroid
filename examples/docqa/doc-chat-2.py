@@ -121,7 +121,11 @@ def chat(config: DocChatAgentConfig) -> None:
         single_round=False,
         system_message=f"""
         You are tenacious, creative and resourceful when given a question to 
-        find an answer for. 
+        find an answer for. You will receive questions from a user, which you will 
+        try to answer ONLY based on content from certain documents (not from your 
+        general knowledge). However you do NOT have access to the documents. 
+        You will be assisted by DocAgent, who DOES have access to the documents.
+        
         Here are the rules:
         (a) when the question is complex or has multiple parts, break it into small 
          parts and/or steps and send them to DocAgent
@@ -133,7 +137,8 @@ def chat(config: DocChatAgentConfig) -> None:
             earlier in the dialog.
         (e) if DocAgent is unable to answer after your best efforts, you can say
             {NO_ANSWER} and move on to the next question.
-        (f) be direct and concise, do not waste words being polite.
+        (f) answers should be based ONLY on the documents, NOT on your prior knowledge.
+        (g) be direct and concise, do not waste words being polite.
         
         Start by asking the user what they want to know.
         """,
