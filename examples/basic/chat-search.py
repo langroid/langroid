@@ -27,14 +27,29 @@ app = typer.Typer()
 
 setup_colored_logging()
 
+# create classes for other model configs
+LiteLLMOllamaConfig = OpenAIGPTConfig.create(prefix="ollama")
+litellm_ollama_config = LiteLLMOllamaConfig(
+    chat_model="ollama/llama2",
+    completion_model="ollama/llama2",
+    api_base="http://localhost:11434",
+    litellm=True,
+    chat_context_length=4096,
+    use_completion_for_chat=False,
+)
+OobaConfig = OpenAIGPTConfig.create(prefix="ooba")
+ooba_config = OobaConfig(
+    chat_model="local",  # doesn't matter
+    completion_model="local",  # doesn't matter
+    api_base="http://localhost:8000/v1",  # <- edit if running at a different port
+    chat_context_length=2048,
+    litellm=False,
+    use_completion_for_chat=False,
+)
+
 
 class CLIOptions(BaseSettings):
-    local: bool = False
-    api_base: str = "http://localhost:8000/v1"
-    local_model: str = ""
-    local_ctx: int = 2048
-    completion: bool = False
-    litellm: bool = False
+    model: str = ""
 
     class Config:
         extra = "forbid"
@@ -58,22 +73,13 @@ def chat(opts: CLIOptions) -> None:
 
     load_dotenv()
 
-    # create the appropriate OpenAIGPTConfig depending on local model or not
-
-    if opts.local or opts.local_model:
-        # assumes local endpoint is either the default http://localhost:8000/v1
-        # or if not, it has been set in the .env file as the value of
-        # OPENAI_API_BASE
-        llm_config = OpenAIGPTConfig(
-            api_base=opts.api_base,
-            chat_model=opts.local_model,
-            litellm=opts.litellm,
-            chat_context_length=opts.local_ctx,
-            use_completion_for_chat=opts.completion,
-            timeout=60,
-        )
+    # use the appropriate config instance depending on model name
+    if opts.model == "ooba":
+        llm_config = ooba_config
+    elif opts.model.startswith("ollama"):
+        llm_config = litellm_ollama_config
+        llm_config.chat_model = opts.model
     else:
-        # defaults to chat_model = OpenAIChatModel.GPT4
         llm_config = OpenAIGPTConfig()
 
     config = ChatAgentConfig(
@@ -106,31 +112,18 @@ def chat(opts: CLIOptions) -> None:
         """,
     )
     # local models do not like the first message to be empty
-    user_message = "Hello." if (opts.local or opts.local_model) else None
+    user_message = "Hello." if (opts.model != "") else None
     task.run(user_message)
 
 
 @app.command()
 def main(
     debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
+    model: str = typer.Option("", "--model", "-m", help="model name"),
     no_stream: bool = typer.Option(False, "--nostream", "-ns", help="no streaming"),
     nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
-    litellm: bool = typer.Option(False, "--litellm", "-ll", help="use litellm endpt"),
     cache_type: str = typer.Option(
         "redis", "--cachetype", "-ct", help="redis or momento"
-    ),
-    local: bool = typer.Option(False, "--local", "-l", help="use local llm"),
-    local_model: str = typer.Option(
-        "", "--local_model", "-lm", help="local model path"
-    ),
-    api_base: str = typer.Option(
-        "http://localhost:8000/v1", "--api_base", "-api", help="local model api base"
-    ),
-    local_ctx: int = typer.Option(
-        2048, "--local_ctx", "-lc", help="local llm context size (default 2048)"
-    ),
-    completion: bool = typer.Option(
-        False, "--completion", "-c", help="use completion endpoint for chat"
     ),
 ) -> None:
     set_global(
@@ -141,14 +134,7 @@ def main(
             cache_type=cache_type,
         )
     )
-    opts = CLIOptions(
-        local=local,
-        api_base=api_base,
-        litellm=litellm,
-        local_model=local_model,
-        local_ctx=local_ctx,
-        completion=completion,
-    )
+    opts = (CLIOptions(model=model),)
     chat(opts)
 
 

@@ -381,9 +381,14 @@ class Task:
                 - 1
             )
         # TODO decide on whether or not to print, based on is_async
+        llm_model = (
+            "no-LLM"
+            if self.agent.config.llm is None
+            else self.agent.config.llm.chat_model
+        )
         print(
             f"[bold magenta]{self._enter} Starting Agent "
-            f"{self.name} ({self.message_history_idx+1}) [/bold magenta]"
+            f"{self.name} ({self.message_history_idx+1}) {llm_model} [/bold magenta]"
         )
 
     def _post_run_loop(self) -> None:

@@ -3,7 +3,7 @@ import hashlib
 import logging
 import sys
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple, Union, no_type_check
+from typing import Any, Dict, List, Optional, Tuple, Type, Union, no_type_check
 
 import openai
 from litellm import acompletion as litellm_acompletion
@@ -99,6 +99,28 @@ class OpenAIGPTConfig(LLMConfig):
     class Config:
         env_prefix = "OPENAI_"
 
+    @classmethod
+    def create(cls, prefix: str) -> Type["OpenAIGPTConfig"]:
+        """Create a config class whose params can be set via a desired
+        prefix from the .env file or env vars.
+        E.g., using
+        ```python
+        OllamaConfig = OpenAIGPTConfig.create("ollama")
+        ollama_config = OllamaConfig()
+        ```
+        you can have a group of params prefixed by "OLLAMA_", to be used
+        with models served via `ollama`.
+        This way, you can maintain several setting-groups in your .env file,
+        one per model type.
+        """
+
+        class DynamicConfig(OpenAIGPTConfig):
+            pass
+
+        DynamicConfig.Config.env_prefix = prefix.upper() + "_"
+
+        return DynamicConfig
+
 
 class OpenAIResponse(BaseModel):
     """OpenAI response model, either completion or chat."""
@@ -172,7 +194,7 @@ class OpenAIGPT(LanguageModel):
 
     def chat_cost(self) -> Tuple[float, float]:
         """
-        (Prompt, Generation) cost per 100 tokens, for chat-completion
+        (Prompt, Generation) cost per 1000 tokens, for chat-completion
         models/endpoints.
         Get it from the dict, otherwise fail-over to general method
         """
