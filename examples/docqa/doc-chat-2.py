@@ -56,7 +56,7 @@ def chat(config: DocChatAgentConfig) -> None:
             try:
                 if -1 <= int(choice) <= n:
                     break
-            except:
+            except Exception:
                 pass
 
         if choice == "-1":
@@ -157,8 +157,8 @@ def main(
         assistant_mode=True,
         parsing=ParsingConfig(  # modify as needed
             splitter=Splitter.TOKENS,
-            chunk_size=1000,  # aim for this many tokens per chunk
-            overlap=100,  # overlap between chunks
+            chunk_size=500,  # aim for this many tokens per chunk
+            overlap=200,  # overlap between chunks
             max_chunks=10_000,
             # aim to have at least this many chars per chunk when
             # truncating due to punctuation

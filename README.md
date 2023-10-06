@@ -114,7 +114,8 @@ answer the `LeaseExtractor`'s questions, cites the specific excerpt supporting t
 needs, the `LeaseExtractor` LLM presents the information in a structured 
 format using a Function-call. 
 
-Here is what it looks like in action:
+Here is what it looks like in action 
+(a pausable mp4 video is [here](https://vimeo.com/871429249)).
 
 ![Demo](docs/assets/demos/lease-extractor-demo.gif)
 

@@ -74,6 +74,7 @@ docstring-parser = "^0.15"
 farm-haystack = {extras = ["ocr", "preprocessing", "file-conversion", "pdf"], version = "^1.21.1"}
 meilisearch = "^0.28.3"
 meilisearch-python-sdk = "^2.0.1"
+litellm = "^0.1.821"
 
 [tool.poetry.extras]
 # install these using `poetry install -E [...]` where [...] is one of the extras below
