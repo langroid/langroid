@@ -8,9 +8,15 @@ python3 examples/basic/chat.py
 
 Use optional arguments to change the settings, e.g.:
 
--m "ooba" to use a model served via oobabooga at an OpenAI-compatible API endpoint
+-m "local" to use a model served locally at an OpenAI-API-compatible endpoint
+[ Ensure the API endpoint url matches the one in the code below, or edit it. ]
 OR
-- m "ollama/llama2" to use a locally running llama model launched via ollama.
+- m "litellm/ollama/llama2" to use any model supported by litellm
+(see list here https://docs.litellm.ai/docs/providers)
+[Note you must prepend "litellm/" to the model name required in the litellm docs,
+e.g. "ollama/llama2" becomes "litellm/ollama/llama2",
+"bedrock/anthropic.claude-instant-v1" becomes
+"litellm/bedrock/anthropic.claude-instant-v1"]
 
 -ns # no streaming
 -d # debug mode
@@ -18,7 +24,7 @@ OR
 -ct momento # use momento cache (instead of redis)
 
 For details on running with local Llama model, see:
-https://langroid.github.io/langroid/tutorials/llama/
+https://langroid.github.io/langroid/blog/2023/09/14/using-langroid-with-local-llms/
 """
 import typer
 from rich import print
@@ -37,20 +43,26 @@ app = typer.Typer()
 
 setup_colored_logging()
 
-# create classes for other model configs
+# Create classes for other model configs
+
+# Use this config for any model supported by litellm.
+# (see list here https://docs.litellm.ai/docs/providers)
 LiteLLMOllamaConfig = OpenAIGPTConfig.create(prefix="ollama")
 litellm_ollama_config = LiteLLMOllamaConfig(
-    chat_model="ollama/llama2",
-    completion_model="ollama/llama2",
-    api_base="http://localhost:11434",
+    chat_model="ollama/llama2",  # or, e.g., "bedrock/anthropic.claude-instant-v1"
+    api_base="http://localhost:11434",  # not needed for models at remote APIs
     litellm=True,
     chat_context_length=4096,
     use_completion_for_chat=False,
 )
-OobaConfig = OpenAIGPTConfig.create(prefix="ooba")
-ooba_config = OobaConfig(
+
+# Use this config for any model that is locally served at an
+# OpenAI-compatible API endpoint. In this case the `chat_model` name is ignored,
+# but you must set the `api_base` to the URL where the model is listening.
+
+LocalConfig = OpenAIGPTConfig.create(prefix="local")
+local_config = LocalConfig(
     chat_model="local",  # doesn't matter
-    completion_model="local",  # doesn't matter
     api_base="http://localhost:8000/v1",  # <- edit if running at a different port
     chat_context_length=2048,
     litellm=False,
@@ -77,11 +89,12 @@ def chat(opts: CLIOptions) -> None:
     load_dotenv()
 
     # use the appropriate config instance depending on model name
-    if opts.model == "ooba":
-        llm_config = ooba_config
-    elif opts.model.startswith("ollama"):
+    if opts.model == "local":
+        llm_config = local_config
+    elif opts.model.startswith("litellm"):
+        # e.g. litellm/ollama/llama2 or litellm/bedrock/anthropic.claude-instant-v1
         llm_config = litellm_ollama_config
-        llm_config.chat_model = opts.model
+        llm_config.chat_model = opts.model.split("/", 1)[1]  # => ollama/llama2
     else:
         llm_config = OpenAIGPTConfig()
 

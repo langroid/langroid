@@ -412,9 +412,10 @@ class Task:
                 # ONLY talking to the current agent.
                 if isinstance(t.agent, ChatAgent):
                     t.agent.clear_history(0)
+        token_stats = self.agent.token_stats_str
         print(
             f"[bold magenta]{self._leave} Finished Agent "
-            f"{self.name} ({n_messages}) [/bold magenta]"
+            f"{self.name} ({n_messages}) [/bold magenta] {token_stats}"
         )
 
     def step(self, turns: int = -1) -> ChatDocument | None:

@@ -5,6 +5,7 @@ import sys
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple, Type, Union, no_type_check
 
+import litellm
 import openai
 from litellm import acompletion as litellm_acompletion
 from litellm import completion as litellm_completion
@@ -34,6 +35,7 @@ from langroid.utils.configuration import settings
 from langroid.utils.constants import NO_ANSWER, Colors
 
 logging.getLogger("openai").setLevel(logging.ERROR)
+litellm.telemetry = False
 
 
 class OpenAIChatModel(str, Enum):

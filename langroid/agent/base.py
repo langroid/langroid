@@ -78,6 +78,7 @@ class Agent(ABC):
         self.llm_tools_usable: Set[str] = set()
         self.total_llm_token_cost = 0.0
         self.total_llm_token_usage = 0
+        self.token_stats_str = ""
         self.default_human_response: Optional[str] = None
         self._indent = ""
         self.llm = LanguageModel.create(config.llm)
@@ -672,20 +673,21 @@ class Agent(ABC):
         else:
             return sum([self.parser.num_tokens(m.content) for m in prompt])
 
-    def _print_response_stats(
+    def _get_response_stats(
         self, chat_length: int, tot_cost: float, response: LLMResponse
-    ) -> None:
+    ) -> str:
         """
-        Printing LLM response stats.
+        Get LLM response stats as a string
 
         Args:
             chat_length (int): number of messages in the chat
             tot_cost (float): total cost of the chat so far
             response (LLMResponse): LLMResponse object
         """
+
         if self.config.llm is None:
-            logger.warning("LLM config is None, cannot print response stats")
-            return
+            logger.warning("LLM config is None, cannot get response stats")
+            return ""
         if response.usage:
             in_tokens = response.usage.prompt_tokens
             out_tokens = response.usage.completion_tokens
@@ -694,13 +696,13 @@ class Agent(ABC):
             assert isinstance(self.llm, LanguageModel)
             context_length = self.llm.chat_context_length()
             max_out = self.config.llm.max_output_tokens
-            print(
+            return (
                 f"{self.indent}[bold]Stats:[/bold] [magenta] N_MSG={chat_length}, "
                 f"TOKENS: in={in_tokens}, out={out_tokens}, "
                 f"max={max_out}, ctx={context_length}, "
                 f"COST: now=${llm_response_cost}, cumul=${cumul_cost}[/magenta]"
-                ""
             )
+        return ""
 
     def update_token_usage(
         self,
@@ -745,10 +747,11 @@ class Agent(ABC):
                 self.total_llm_token_cost += response.usage.cost
                 self.total_llm_token_usage += response.usage.total_tokens
                 chat_length = 1 if isinstance(prompt, str) else len(prompt)
+                self.token_stats_str = self._get_response_stats(
+                    chat_length, self.total_llm_token_cost, response
+                )
                 if print_response_stats:
-                    self._print_response_stats(
-                        chat_length, self.total_llm_token_cost, response
-                    )
+                    print(self.token_stats_str)
 
     def compute_token_cost(self, prompt: int, completion: int) -> float:
         price = cast(LanguageModel, self.llm).chat_cost()
