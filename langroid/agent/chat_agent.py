@@ -611,7 +611,7 @@ class ChatAgent(Agent):
             response,
             messages,
             self.llm.get_stream(),
-            print_response_stats=settings.debug,
+            print_response_stats=True,
         )
         return ChatDocument.from_LLMResponse(response, displayed)
 
@@ -648,7 +648,7 @@ class ChatAgent(Agent):
             response,
             messages,
             self.llm.get_stream(),
-            print_response_stats=settings.debug,
+            print_response_stats=True,
         )
         return ChatDocument.from_LLMResponse(response, displayed)
 

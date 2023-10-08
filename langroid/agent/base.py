@@ -419,7 +419,7 @@ class Agent(ABC):
             response,
             prompt,
             self.llm.get_stream(),
-            print_response_stats=settings.debug,
+            print_response_stats=True,
         )
         return ChatDocument.from_LLMResponse(response, displayed)
 
@@ -487,7 +487,7 @@ class Agent(ABC):
             response,
             prompt,
             self.llm.get_stream(),
-            print_response_stats=settings.debug,
+            print_response_stats=True,
         )
         return ChatDocument.from_LLMResponse(response, displayed)
 
@@ -697,7 +697,7 @@ class Agent(ABC):
             context_length = self.llm.chat_context_length()
             max_out = self.config.llm.max_output_tokens
             return (
-                f"{self.indent}[bold]Stats:[/bold] [magenta] N_MSG={chat_length}, "
+                f"[bold]Stats:[/bold] [magenta] N_MSG={chat_length}, "
                 f"TOKENS: in={in_tokens}, out={out_tokens}, "
                 f"max={max_out}, ctx={context_length}, "
                 f"COST: now=${llm_response_cost}, cumul=${cumul_cost}[/magenta]"
@@ -751,7 +751,7 @@ class Agent(ABC):
                     chat_length, self.total_llm_token_cost, response
                 )
                 if print_response_stats:
-                    print(self.token_stats_str)
+                    print(self.indent + self.token_stats_str)
 
     def compute_token_cost(self, prompt: int, completion: int) -> float:
         price = cast(LanguageModel, self.llm).chat_cost()
