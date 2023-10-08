@@ -52,8 +52,7 @@ litellm_ollama_config = LiteLLMOllamaConfig(
     chat_model="ollama/llama2",  # or, e.g., "bedrock/anthropic.claude-instant-v1"
     api_base="http://localhost:11434",  # not needed for models at remote APIs
     litellm=True,
-    chat_context_length=4096,
-    use_completion_for_chat=False,
+    chat_context_length=2048,  # adjust based on model
 )
 
 # Use this config for any model that is locally served at an
@@ -64,9 +63,8 @@ LocalConfig = OpenAIGPTConfig.create(prefix="local")
 local_config = LocalConfig(
     chat_model="local",  # doesn't matter
     api_base="http://localhost:8000/v1",  # <- edit if running at a different port
-    chat_context_length=2048,
     litellm=False,
-    use_completion_for_chat=False,
+    chat_context_length=2048,  # adjust based on model
 )
 
 
@@ -95,6 +93,7 @@ def chat(opts: CLIOptions) -> None:
         # e.g. litellm/ollama/llama2 or litellm/bedrock/anthropic.claude-instant-v1
         llm_config = litellm_ollama_config
         llm_config.chat_model = opts.model.split("/", 1)[1]  # => ollama/llama2
+
     else:
         llm_config = OpenAIGPTConfig()
 

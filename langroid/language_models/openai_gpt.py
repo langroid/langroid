@@ -101,6 +101,23 @@ class OpenAIGPTConfig(LLMConfig):
     class Config:
         env_prefix = "OPENAI_"
 
+    def _validate_litellm(self) -> None:
+        """
+        When using liteLLM, validate whether all env vars required by the model
+        have been set.
+        """
+        if not self.litellm:
+            return
+        keys_dict = litellm.validate_environment(self.chat_model)
+        missing_keys = keys_dict.get("missing_keys", [])
+        if len(missing_keys) > 0:
+            raise ValueError(
+                f"""
+                Missing environment variables for litellm-proxied model:
+                {missing_keys}
+                """
+            )
+
     @classmethod
     def create(cls, prefix: str) -> Type["OpenAIGPTConfig"]:
         """Create a config class whose params can be set via a desired
@@ -161,6 +178,8 @@ class OpenAIGPT(LanguageModel):
         else:
             config.cache_config = RedisCacheConfig()
             self.cache = RedisCache(config.cache_config)
+
+        self.config._validate_litellm()
 
     def _is_openai_chat_model(self) -> bool:
         openai_chat_models = [e.value for e in OpenAIChatModel]
