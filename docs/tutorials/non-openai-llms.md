@@ -29,7 +29,6 @@ Set these in your `.env` file or explicitly at the command-line using
 AWS_ACCESS_KEY_ID=<your-aws-access-key-id>
 AWS_SECRET_ACCESS_KEY=<your-aws-secret-access-key>
 AWS_REGION=<your-aws-region>
-OPENAI_LITELLM=true # this tells Langroid to use LiteLLM
 ```
 
 or explicitly assign these in your python script:
@@ -39,7 +38,6 @@ import os
 os.environ["AWS_ACCESS_KEY_ID"] = ""  # Access key
 os.environ["AWS_SECRET_ACCESS_KEY"] = "" # Secret access key
 os.environ["AWS_REGION_NAME"] = "" # us-east-1, us-east-2, us-west-1, us-west-2
-os.environ["OPENAI_LITELLM"] = "true"
 ```
 
 - On that same LiteLLM instruction page, you will see the model name needs to 
@@ -47,13 +45,18 @@ be specified. Set the required model name in your `.env` file or explicitly at t
   `export` or `setenv`. For example in the `.env` you will add this:
 
 ```bash
-OPENAI_CHAT_MODEL=bedrock/anthropic.claude-instant-v1
+OPENAI_CHAT_MODEL=litellm/bedrock/anthropic.claude-instant-v1
 ```
 or explicitly assign this in your python script:
 
 ```python
-os.environ["OPENAI_CHAT_MODEL"] = "bedrock/anthropic.claude-instant-v1"
+os.environ["OPENAI_CHAT_MODEL"] = "litellm/bedrock/anthropic.claude-instant-v1"
 ```
+This three-part model name denotes that:
+
+- we are using the `litellm` adapter library
+- the LLM provider is `bedrock`
+- the actual model is `anthropic.claude-instant-v1`
 
 You will now be able to use any existing Langroid script with this LLM
 instead of the default GPT-4. Of course you will need to refine the prompts to get the 
@@ -80,8 +83,7 @@ Next, instantiate an instance of this Config class:
 
 ```python
 litellm_bedrock_config = LiteLLMBedrockConfig(
-    chat_model="bedrock/anthropic.claude-instant-v1",
-    litellm=True,
+    chat_model="litellm/bedrock/anthropic.claude-instant-v1",
     chat_context_length=4096, 
 )
 ```
