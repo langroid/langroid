@@ -76,6 +76,7 @@ meilisearch = "^0.28.3"
 meilisearch-python-sdk = "^2.0.1"
 litellm = "^0.1.821"
 scrapy = "^2.11.0"
+async-generator = "^1.10"
 
 [tool.poetry.extras]
 # install these using `poetry install -E [...]` where [...] is one of the extras below

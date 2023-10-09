@@ -4,7 +4,7 @@ import tempfile
 import urllib.parse
 import urllib.robotparser
 from typing import List, Optional, Set, Tuple
-from urllib.parse import urljoin
+from urllib.parse import urldefrag, urljoin, urlparse
 
 import fire
 import requests
@@ -13,8 +13,6 @@ from pydantic import BaseModel, HttpUrl, ValidationError, parse_obj_as
 from rich import print
 from rich.prompt import Prompt
 from trafilatura.spider import focused_crawler
-
-from langroid.parsing.spider import scrapy_fetch_urls
 
 logger = logging.getLogger(__name__)
 
@@ -86,7 +84,15 @@ def get_list_from_user(
             url = input_str
             input_str = Prompt.ask("[blue] How many new URLs to crawl?", default="0")
             max_urls = int(input_str) + 1
-            tot_urls = scrapy_fetch_urls(url, k=max_urls)
+            tot_urls = list(find_urls(url, max_links=max_urls, max_depth=2))
+            tot_urls_str = "\n".join(tot_urls)
+            print(
+                f"""
+                Found these {len(tot_urls)} links upto depth 2:
+                {tot_urls_str}
+                """
+            )
+
             input_set.update(tot_urls)
         else:
             input_set.add(input_str.strip())
@@ -132,6 +138,7 @@ def crawl_url(url: str, max_urls: int = 1) -> List[str]:
     """
     Crawl starting at the url and return a list of URLs to be parsed,
     up to a maximum of `max_urls`.
+    This has not been tested to work as intended. Ignore.
     """
     if max_urls == 1:
         # no need to crawl, just return the original list
@@ -161,6 +168,7 @@ def crawl_url(url: str, max_urls: int = 1) -> List[str]:
             )
         if to_visit is None:
             break
+
     if known_urls is None:
         return [url]
     final_urls = [s.strip() for s in known_urls]
@@ -169,46 +177,74 @@ def crawl_url(url: str, max_urls: int = 1) -> List[str]:
 
 def find_urls(
     url: str = "https://en.wikipedia.org/wiki/Generative_pre-trained_transformer",
+    max_links: int = 20,
     visited: Optional[Set[str]] = None,
     depth: int = 0,
     max_depth: int = 2,
+    match_domain: bool = True,
 ) -> Set[str]:
     """
     Recursively find all URLs on a given page.
+
     Args:
-        url:
-        visited:
-        depth:
-        max_depth:
+        url (str): The URL to start from.
+        max_links (int): The maximum number of links to find.
+        visited (set): A set of URLs that have already been visited.
+        depth (int): The current depth of the recursion.
+        max_depth (int): The maximum depth of the recursion.
+        match_domain (bool): Whether to only return URLs that are on the same domain.
 
     Returns:
-
+        set: A set of URLs found on the page.
     """
+
     if visited is None:
         visited = set()
-    visited.add(url)
 
-    try:
-        response = requests.get(url)
-        response.raise_for_status()
-    except (
-        requests.exceptions.HTTPError,
-        requests.exceptions.RequestException,
-    ):
-        print(f"Failed to fetch '{url}'")
+    if url in visited or depth > max_depth:
         return visited
 
-    soup = BeautifulSoup(response.content, "html.parser")
-    links = soup.find_all("a", href=True)
+    visited.add(url)
+    base_domain = urlparse(url).netloc
 
-    urls = [urljoin(url, link["href"]) for link in links]  # Construct full URLs
+    try:
+        response = requests.get(url, timeout=5)
+        response.raise_for_status()
+        soup = BeautifulSoup(response.text, "html.parser")
+        links = [urljoin(url, a["href"]) for a in soup.find_all("a", href=True)]
 
-    if depth < max_depth:
-        for link_url in urls:
-            if link_url not in visited:
-                find_urls(link_url, visited, depth + 1, max_depth)
+        # Defrag links: discard links that are to portions of same page
+        defragged_links = list(set(urldefrag(link).url for link in links))
 
-    return visited
+        # Filter links based on domain matching requirement
+        domain_matching_links = [
+            link for link in defragged_links if urlparse(link).netloc == base_domain
+        ]
+
+        # If found links exceed max_links, return immediately
+        if len(domain_matching_links) >= max_links:
+            return set(domain_matching_links[:max_links])
+
+        for link in domain_matching_links:
+            if len(visited) >= max_links:
+                break
+
+            if link not in visited:
+                visited.update(
+                    find_urls(
+                        link,
+                        max_links,
+                        visited,
+                        depth + 1,
+                        max_depth,
+                        match_domain,
+                    )
+                )
+
+    except (requests.RequestException, Exception) as e:
+        print(f"Error fetching {url}. Error: {e}")
+
+    return set(list(visited)[:max_links])
 
 
 def org_user_from_github(url: str) -> str:
