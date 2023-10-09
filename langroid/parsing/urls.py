@@ -14,6 +14,8 @@ from rich import print
 from rich.prompt import Prompt
 from trafilatura.spider import focused_crawler
 
+from langroid.parsing.spider import scrapy_fetch_urls
+
 logger = logging.getLogger(__name__)
 
 
@@ -84,7 +86,7 @@ def get_list_from_user(
             url = input_str
             input_str = Prompt.ask("[blue] How many new URLs to crawl?", default="0")
             max_urls = int(input_str) + 1
-            tot_urls = crawl_url(url, max_urls=max_urls)
+            tot_urls = scrapy_fetch_urls(url, k=max_urls)
             input_set.update(tot_urls)
         else:
             input_set.add(input_str.strip())
@@ -128,7 +130,7 @@ def get_urls_and_paths(inputs: List[str]) -> Tuple[List[str], List[str]]:
 
 def crawl_url(url: str, max_urls: int = 1) -> List[str]:
     """
-    Crawl the seed_urls and return a list of URLs to be parsed,
+    Crawl starting at the url and return a list of URLs to be parsed,
     up to a maximum of `max_urls`.
     """
     if max_urls == 1:
