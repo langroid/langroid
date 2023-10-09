@@ -47,11 +47,12 @@ setup_colored_logging()
 
 # Use this config for any model supported by litellm.
 # (see list here https://docs.litellm.ai/docs/providers)
+# For external (remote) models, typical there will be specific env vars
+# (e.g. API Keys, etc) that need to be set.
+# If those are not set, you will get an err msg saying which vars need to be set.
 LiteLLMOllamaConfig = OpenAIGPTConfig.create(prefix="ollama")
 litellm_ollama_config = LiteLLMOllamaConfig(
-    chat_model="ollama/llama2",  # or, e.g., "bedrock/anthropic.claude-instant-v1"
-    api_base="http://localhost:11434",  # not needed for models at remote APIs
-    litellm=True,
+    chat_model="litellm/ollama/llama2",  # or, "bedrock/anthropic.claude-instant-v1"
     chat_context_length=2048,  # adjust based on model
 )
 
@@ -63,7 +64,6 @@ LocalConfig = OpenAIGPTConfig.create(prefix="local")
 local_config = LocalConfig(
     chat_model="local",  # doesn't matter
     api_base="http://localhost:8000/v1",  # <- edit if running at a different port
-    litellm=False,
     chat_context_length=2048,  # adjust based on model
 )
 
@@ -92,7 +92,7 @@ def chat(opts: CLIOptions) -> None:
     elif opts.model.startswith("litellm"):
         # e.g. litellm/ollama/llama2 or litellm/bedrock/anthropic.claude-instant-v1
         llm_config = litellm_ollama_config
-        llm_config.chat_model = opts.model.split("/", 1)[1]  # => ollama/llama2
+        llm_config.chat_model = opts.model  # e.g. litellm/ollama/llama2
 
     else:
         llm_config = OpenAIGPTConfig()

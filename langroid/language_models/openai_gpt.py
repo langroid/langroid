@@ -162,7 +162,20 @@ class OpenAIGPT(LanguageModel):
         super().__init__(config)
         self.config: OpenAIGPTConfig = config
         if settings.nofunc:
-            self.chat_model = OpenAIChatModel.GPT4_NOFUNC
+            self.config.chat_model = OpenAIChatModel.GPT4_NOFUNC
+
+        # global override of chat_model,
+        # to allow quick testing with other models
+        if settings.chat_model != "":
+            self.config.chat_model = settings.chat_model
+
+        # if model name starts with "litellm",
+        # set the actual model name by stripping the "litellm/" prefix
+        # and set the litellm flag to True
+        if self.config.chat_model.startswith("litellm"):
+            self.config.litellm = True
+            self.config.chat_model = self.config.chat_model.split("/", 1)[1]
+            # litellm/ollama/llama2 => ollama/llama2 for example
         self.api_base: str | None = config.api_base
 
         # NOTE: The api_key should be set in the .env file, or via

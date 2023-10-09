@@ -52,7 +52,10 @@ async def test_openai_gpt_async(test_settings: Settings, streaming, country, cap
 
     # actual chat mode
     messages = [
-        LLMMessage(role=Role.SYSTEM, content="You are a helpful assistant"),
+        LLMMessage(
+            role=Role.SYSTEM,
+            content="You are a serious, helpful assistant. Be very concise, not funny",
+        ),
         LLMMessage(role=Role.USER, content=question),
     ]
     response = await mdl.achat(messages=messages, max_tokens=10)

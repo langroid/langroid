@@ -15,6 +15,9 @@ def pytest_addoption(parser) -> None:
     parser.addoption("--ns", action="store_true", default=False, help="no streaming")
     parser.addoption("--ct", default="redis", help="redis or momento")
     parser.addoption(
+        "--m", default="", help="language model name, e.g. litellm/ollama/llama2"
+    )
+    parser.addoption(
         "--nof",
         action="store_true",
         default=False,
@@ -31,4 +34,5 @@ def test_settings(request) -> Settings:
         gpt3_5=request.config.getoption("--3"),
         stream=not request.config.getoption("--ns"),
         nofunc=request.config.getoption("--nof"),
+        chat_model=request.config.getoption("--m"),
     )

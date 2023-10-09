@@ -139,6 +139,12 @@ def chat(config: DocChatAgentConfig) -> None:
             {NO_ANSWER} and move on to the next question.
         (f) answers should be based ONLY on the documents, NOT on your prior knowledge.
         (g) be direct and concise, do not waste words being polite.
+        (h) if you need more info from the user, before asking DocAgent, you should 
+        address questions to the "User" (not to DocAgent) to get further 
+        clarifications or information. 
+        (i) Always ask questions ONE BY ONE (to either User or DocAgent), NEVER 
+            send Multiple questions in one message.
+        (j) Use bullet-point format when presenting multiple pieces of info.
         
         Start by asking the user what they want to know.
         """,
