@@ -1,126 +1,170 @@
 # Using Langroid with Non-OpenAI LLMs
 
-Langroid currently supports any LLM API that is compatible with the OpenAI API. 
-This means two things:
+Langroid was initially written to work with OpenAI models via their API.
+This may sound limiting, but fortunately there are tools that enable you to use
+Langroid with many other LLMs. We show below how you can define an `OpenAIGPTConfig` object
+for these scenarios. This config object then be used to create a Langroid 
+LLM object to interact with directly, or you can wrap it into an Agent and a Task
+to create a chat loop or a more complex multi-agent setup where different agents may be using
+different LLMs.
 
-- You can use Langroid with any locally-served LLM that _mimics_ the OpenAI API, 
-    and the `openai` python client will continue to work, by simply changing the 
-    `openai.api_base` to point to the local server 
-    (see the [local-models](../blog/posts/local-llm.md) blog post for details.)
-- You can use langroid with other (local or remote) LLMs, using an "adapter" or "proxy" library that _translates_ 
-    between the OpenAI API to that LLM's API. The excellent [`LiteLLM`](https://github.com/berriai/litellm)
-   is the best (and possibly only) such library, which was integrated into Langroid in version 0.1.84.
+## LiteLLM LLM Proxy Server
+LiteLLM is an excellent library which, among other things
+(see below), offers a [proxy server](https://docs.litellm.ai/docs/proxy_server) that allows you 
+spin up a server acting as a proxy for a variety of LLM models (over a 100 providers!) at an 
+OpenAI-like endpoint. This means you can continue to use the `openai` python client, 
+except that you will need to change the `openai.api_base` to point to the proxy server's URL
+(this is done behind the scenes in Langroid via the `chat_model` name as shown below).
+Here are the specifics steps to use this proxy server with Langroid:
 
-Below we outline the second approach, i.e. using `LiteLLM` to enable Langroid to work with any LLM 
-supported by LiteLLM (over a 100 LLM providers).
-
-## Switch to any LiteLLM-supported model, using environment variables
-
-If you want to run an existing Langroid script with a different LLM that is supported by LiteLLM,
-and don't want to change any code or write new code, you will want to follow this method.
-Here are the steps, using AWS Bedrock's `claude-instant-v1` as an example:
-
-- Look up the LiteLLM instructions for that model, e.g. [here](https://docs.litellm.ai/docs/providers/bedrock#required-environment-variables).
-- On that page you will see that you need to set some environment variables. 
-Set these in your `.env` file or explicitly at the command-line using 
-  `export` or `setenv`. For example in the `.env` you will add these:
-
+First in a separate terminal window, spin up the proxy server `litellm`.
+For example to use the `anthropic.claude-instant-v1` model, you can do:
 ```bash
-AWS_ACCESS_KEY_ID=<your-aws-access-key-id>
-AWS_SECRET_ACCESS_KEY=<your-aws-secret-access-key>
-AWS_REGION=<your-aws-region>
+export ANTHROPIC_API_KEY=my-api-key
+litellm --model claude-instant-1
+```
+Or if you want to use the proxy server for a local model running with `ollama`, 
+you can first run `ollama run mistral` for example and then 
+run `litellm --model ollama/mistral` to spin up the proxy server for this model.
+```bash
+This will show a message indicating the URL where the server is listening, e.g.,
+```bash
+Uvicorn running on http://0.0.0.0:8000
 ```
 
-or explicitly assign these in your python script:
+This URL is equivalent to `http://localhost:8000`, which is the URL
+you will use in your Langroid code below.
+To use this model in your Langroid code, first create config object for
+this model and instantiate it.
 
 ```python
-import os
-os.environ["AWS_ACCESS_KEY_ID"] = ""  # Access key
-os.environ["AWS_SECRET_ACCESS_KEY"] = "" # Secret access key
-os.environ["AWS_REGION_NAME"] = "" # us-east-1, us-east-2, us-west-1, us-west-2
+from langroid.language_models.openai_gpt import OpenAIGPTConfig, OpenAIGPT
+
+# create the (Pydantic-derived) config class: Allows setting params via MYLLM_XXX env vars
+MyLLMConfig = OpenAIGPTConfig.create(prefix="myllm") #(1)!
+
+# instantiate the class, with the model name and context length
+my_llm_config = MyLLMConfig(
+    chat_model="local/localhost:8000",
+    chat_context_length=2048,  # adjust based on model
+)
 ```
 
-- On that same LiteLLM instruction page, you will see the model name needs to 
-be specified. Set the required model name in your `.env` file or explicitly at the command-line using 
-  `export` or `setenv`. For example in the `.env` you will add this:
+1. The prefix ensures you can specify the settings in the instantiated object
+   using environment variables (or in the `.env` file), using the `MYLLM_` prefix.
+   This helps when you want to have different agents use
+   different models, each with their own environment settings. If you create
+   subclasses of `OpenAIGPTConfig` with different prefixes, you can set the
+   environment variables for each of these models separately, and have all of these
+   in the `.env` file without any conflicts.
 
-```bash
-OPENAI_CHAT_MODEL=litellm/bedrock/anthropic.claude-instant-v1
-```
-or explicitly assign this in your python script:
+## Other local LLM servers
+There are other ways to spin up a local server running an LLM behind an OpenAI-compatible API,
 
-```python
-os.environ["OPENAI_CHAT_MODEL"] = "litellm/bedrock/anthropic.claude-instant-v1"
-```
-This three-part model name denotes that:
+- [`oobabooga/text-generation-webui`](https://github.com/oobabooga/text-generation-webui/tree/main/extensions), `ollama`, and `llama-cpp-python`.
+- [`ollama`](https://github.com/jmorganca/ollama)
+- [`llama-cpp-python`](https://github.com/abetlen/llama-cpp-python)
 
-- we are using the `litellm` adapter library
-- the LLM provider is `bedrock`
-- the actual model is `anthropic.claude-instant-v1`
+For all of these, the process is the same as in the above example, except that you will
+set the `chat_model` to a string that looks like `local/localhost:<port>` or 
+`local/localhost:<port>/v1` (depending on the model). 
 
-You will now be able to use any existing Langroid script with this LLM
-instead of the default GPT-4. Of course you will need to refine the prompts to get the 
-results you want. 
+## Using the LiteLLM library
 
-## Finer control, by creating a subclass of `OpenAIGPTConfig`
-
-
-If you are writing code in the Langroid framework and you want finer control on 
-which LLM is being used (and perhaps allow different agents to use different LLMs),
-in addition to setting the `AWS_*` environment variables above,
-you will want to additionally do the following. We again use the AWS Bedrock `claud-instant-v1`
-example here.
-
-First create a subclass of `OpenAIGPTConfig`, with a suitable prefix, say 
-"BEDROCK" (see below for why it is useful to have a special prefix).
+LiteLLM also has a [python library](https://docs.litellm.ai/docs/providers) that 
+provides functions that mimic the OpenAI API
+for a variety of LLMs. This means that instead of using `openai.ChatCompletion.create`,
+you can use liteLLM's corresponding `completion` function, and the rest of your code
+can remain the same (of course this is handled behind the scenes in Langroid, as you see below).
+Also, there is no need to spin up a local server,
+which is useful in some scenarios, especially when you want to have multiple
+agents using different LLMs. Using the LiteLLM library with Langroid is very simple: 
+simply set the `chat_agent` in the `OpenAIGPTConfig` to a string like 
+`litellm/bedrock/anthropic.claude-instant-v1`:
 
 ```python
 from langroid.language_models.openai_gpt import OpenAIGPTConfig
-LiteLLMBedrockConfig = OpenAIGPTConfig.create(prefix="BEDROCK")
-```
-
-Next, instantiate an instance of this Config class:
-
-```python
+LiteLLMBedrockConfig = OpenAIGPTConfig.create(prefix="BEDROCK") 
 litellm_bedrock_config = LiteLLMBedrockConfig(
-    chat_model="litellm/bedrock/anthropic.claude-instant-v1",
-    chat_context_length=4096, 
+    chat_model="litellm/bedrock/anthropic.claude-instant-v1", #(1)!
+    chat_context_length=4096, # adjust according to model
 )
 ```
-Now you can use this LLM config instance to create a `ChatAgentConfig`, 
-which you then use to instantiate a `ChatAgent`.
+
+1. This three-part model name denotes that we are using the `litellm` adapter library, 
+    the LLM provider is `bedrock` and the actual model is `anthropic.claude-instant-v1`.
+
+
+The general rule for the `chat_model` parameter is to prepend `litellm/` to the model name
+specified in the [LiteLLM docs](https://docs.litellm.ai/docs/providers). 
+For non-local models you will also need to specify one or more API Keys and related values. 
+There is an internal validation function that will check if the keys for the model
+have been specified in the environment variables. If not, it will raise an exception telling 
+you which keys to specify. 
+
+If you are using environment variables or a `.env` file, you can specify these 
+variables using the upper-case version of the `prefix` argument to the `OpenAIGPTConfig.create`,
+e.g. in the above case, you would set the following environment variables like
+`BEDROCK_API_KEY=<your-api-key>`.
+
+## Working with the created `OpenAIGPTConfig` object
+Once you create an `OpenAIGPTConfig` object using any of the above methods, 
+you can use it to create an `OpenAIGPT` object and interact with it directly:
+```python
+from langroid.language_models.base import LLMMessage, Role
+
+llm = OpenAIGPT(my_llm_config)
+messages = [
+    LLMMessage(content="You are a helpful assistant",  role=Role.SYSTEM),
+    LLMMessage(content="What is the capital of Ontario?",  role=Role.USER),
+],
+response = mdl.chat(messages, max_tokens=50)
+```
+
+When you interact directly with the LLM, you are responsible for keeping dialog history.
+Also you would often want an LLM to have access to tools/functions and external
+data/documents (e.g. vector DB or traditional DB). An Agent class simplifies managing all of these.
+For example, you can create an Agent powered by the above LLM, wrap it in a Task and have it
+run as an interactive chat app:
 
 ```python
 from langroid.agent.base import ChatAgent, ChatAgentConfig
-agent_config = ChatAgentConfig(
-    llm=litellm_bedrock_config,
-    name="bedrock-chat",
-    vecdb=None, # or a suitable vector db config
-)
+from langroid.agent.task import Task
+
+agent_config = ChatAgentConfig(llm=my_llm_config, name="my-llm-agent")
 agent = ChatAgent(agent_config)
+
+task = Task(agent, name="my-llm-task")
+task.run()
 ```
 
-Recall that we used a prefix `BEDROCK` in the `OpenAIGPTConfig` subclass we 
-created above. This is useful because the `OpenAIGPTConfig` class is derived from 
-Pydantic's `BaseSettings` class, which allows you to set environment variables
-with a prefix. So suppose you want to switch your code to another model 
-offered in AWS Bedrock. You can set the `BEDROCK_CHAT_MODEL` to this new model,
-and it will be used without needing to change any of your code
-(the model in your code will be used as a fallback if the environment variable is not set).
+## Working example: Simple Chat script with a local/remote model
 
+For a working example, see the [basic chat script](https://github.com/langroid/langroid-examples/blob/main/examples/basic/chat.py)
+in the `langroid-examples` repo, 
+which you can run a few different ways, to interact with a non-OpenAI model in an interactive chat loop.
+(If you omit the `-m` option, it will use the default OpenAI GPT-4 model.) 
+
+1. Using the `liteLLM` proxy server, with `ollama`:
+First run [`ollama`](https://github.com/jmorganca/ollama) to download and serve a local model, say `mistral`: 
 ```bash
-BEDROCK_CHAT_MODEL=litellm/bedrock/ai21.j2-ultra
-BEDROCK_CHAT_CONTEXT_LENGTH=...
+ollama run mistral # download and run the mistral model
+```
+Then in a separate terminal window, run the liteLLM proxy server:
+```bash
+litellm --model ollama/llama2 # run the proxy server, listening at localhost:8000
+```
+In a third terminal window, run the chat script:
+```bash
+python3 examples/basic/chat.py -m local/localhost:8000
 ```
 
-The environment prefix also helps when you want to have different agents use
-different models, each with their own environment settings. If you create
-subclasses of `OpenAIGPTConfig` with different prefixes, you can set the
-environment variables for each of these models separately, and have all of these 
-in the `.env` file without any conflicts.
+2. Using the `liteLLM` library, with a remote model:
+```bash
+python3 examples/basic/chat.py -m litellm/bedrock/anthropic.claude-instant-v1
+```
 
-For a working example, see [basic chat script](https://github.com/langroid/langroid/blob/main/examples/basic/chat.py)
-where we apply this method to a locally-running model spun up using [ollama](https://github.com/jmorganca/ollama).
+
 
 
 

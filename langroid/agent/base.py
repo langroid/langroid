@@ -53,7 +53,7 @@ class AgentConfig(BaseSettings):
 
     name: str = "LLM-Agent"
     debug: bool = False
-    vecdb: Optional[VectorStoreConfig] = VectorStoreConfig()
+    vecdb: Optional[VectorStoreConfig] = None
     llm: Optional[LLMConfig] = LLMConfig()
     parsing: Optional[ParsingConfig] = ParsingConfig()
     prompts: Optional[PromptsConfig] = PromptsConfig()

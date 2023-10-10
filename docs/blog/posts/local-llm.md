@@ -10,7 +10,6 @@ categories:
   - local-llm
 comments: true
 ---
-
 ## Why local models?
 There are commercial, remotely served models that currently appear to beat all open/local
 models. So why care about local models? Local models are exciting for a number of reasons:

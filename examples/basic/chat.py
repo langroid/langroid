@@ -121,7 +121,6 @@ def chat(opts: CLIOptions) -> None:
     config = ChatAgentConfig(
         system_message=sys_msg,
         llm=llm_config,
-        vecdb=None,
     )
     agent = ChatAgent(config)
     task = Task(agent)
