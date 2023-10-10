@@ -4,6 +4,7 @@ on:
   push:
     paths-ignore:
       - "docs/**"
+      - "examples/**"
       - "mkdocs.yml"
     branches:
       - main  # Replace with your default branch name 

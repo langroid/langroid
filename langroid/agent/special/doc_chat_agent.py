@@ -596,6 +596,8 @@ class DocChatAgent(ChatAgent):
         instruction: str = "Give a concise summary of the following text:",
     ) -> None | ChatDocument:
         """Summarize all docs"""
+        if self.llm is None:
+            raise ValueError("LLM not set")
         if self.original_docs is None:
             logger.warning(
                 """
@@ -610,13 +612,8 @@ class DocChatAgent(ChatAgent):
         if self.parser is None:
             raise ValueError("No parser defined")
         tot_tokens = self.parser.num_tokens(full_text)
-        model = (
-            self.config.llm.chat_model
-            if self.config.llm.use_chat_for_completion
-            else self.config.llm.completion_model
-        )
         MAX_INPUT_TOKENS = (
-            self.config.llm.context_length[model]
+            self.llm.completion_context_length()
             - self.config.llm.max_output_tokens
             - 100
         )
@@ -632,7 +629,7 @@ class DocChatAgent(ChatAgent):
         {instruction}
         {full_text}
         """.strip()
-        with StreamingIfAllowed(self.llm):  # type: ignore
+        with StreamingIfAllowed(self.llm):
             summary = Agent.llm_response(self, prompt)
             return summary  # type: ignore
 

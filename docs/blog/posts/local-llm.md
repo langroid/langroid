@@ -47,10 +47,11 @@ the OpenAI API (for say GPT3.5 or GPT4) will work with a local model,
 with just a simple change: set `openai.api_base` to the URL where the local API
 server is listening, typically `http://localhost:8000/v1`.
 
-There are two libraries we recommend for setting up local models with OpenAI-like APIs:
+There are a few libraries we recommend for setting up local models with OpenAI-like APIs:
 
 - [ooba-TGW](https://github.com/oobabooga/text-generation-webui) mentioned above, for a variety of models, including llama2 models.
 - [llama-cpp-python](https://github.com/abetlen/llama-cpp-python) (LCP for short), specifically for llama2 models.
+- [ollama](https://github.com/jmorganca/ollama)
 
 
 Here we show instructions for `llama-cpp-python`. The process for `text-generation-webui` is similar.
@@ -130,86 +131,10 @@ print(completion.choices[0].message.content)
 
 ## Use the locally running Llama2 with Langroid
 
-Once you have the above server running (e.g., in a separate terminal tab),
-create another virtual env where you install langroid as usual.
-Note that local models are supported from version 0.1.60 onwards.
-There are two ways to setup Langroid to use local Llama2 models:
+Please see the script
+[`examples/basic/chat.py`](https://github.com/langroid/langroid/blob/main/examples/basic/chat.py)
+for an example of how to setup langroid to use a local llama2 model.
 
-###  Option 1: Via Environment Variables
-
-Make sure you have set up a `.env` file as described in
-the [langroid-examples](https://github.com/langroid/langroid-examples#set-up-environment-variables-api-keys-etc) repo.
-Then add this variable to the `.env` file:
-```bash
-# modify if using non-default host, port when you set up the server above
-OPENAI_LOCAL.API_BASE=http://localhost:8000/v1
-```
-In case you are using the non-default context length (by passing `--n_ctx` to the server),
-you would need to set an additional environment variable as well, as in this example:
-```bash
-OPENAI_LOCAL.CONTEXT_LENGTH=1000
-```
-Since you are using a local model, of course the value of `OPENAI_API_KEY` is irrelevant.
-You can set it to a junk value just to make sure you are not using the OpenAI API.
-
-Now any script or test that uses Langroid will use the local model.
-
-### Option 2: By creating config objects in Python Code
-
-Switching to a local Llama model using environment variables is convenient because
-you don't need to change any code.
-However, switching models within our Python code offers more flexibility,
-e.g., to programmatically switch
-between using a local model and the OpenAI API, for different types of tasks, or
-allow different agents to use different models.
-Of course, the two options can be combined, as noted in the comments below.
-
-In your script where you want to use the local model,
-first specify a `LocalModelConfig` object with various settings, and
-create an instance of `OpenAIGPTConfig` object from this:
-
-```python
-from langroid.language_models.base import LocalModelConfig
-from langroid.language_models.openai_gpt import OpenAIGPTConfig
-
-from dotenv import load_dotenv
-
-load_dotenv()  # read in .env file to set env vars
-
-local_model_config = LocalModelConfig(
-        api_base="http://localhost:8000/v1",  # (1)! 
-        context_length=1000,  # (2)!
-        use_completion_for_chat=True,  # (3)
-)
-
-llm_config = OpenAIGPTConfig(local=local_model_config)
-```
-
-1. If omitted, uses the value of `OPENAI_LOCAL.API_BASE` env var
-2. If omitted, uses the value of `OPENAI_LOCAL.CONTEXT_LENGTH` env var
-3. If omitted, uses the value of `OPENAI_LOCAL.USE_COMPLETION_FOR_CHAT` env var. See the next section for more.
-
-For more on the `use_completion_for_chat` flag, see the [`Chat Completion`](chat-completion.md) tutorial.
-
-Then use this config to define a `ChatAgentConfig`, create an agent, wrap it in a Task, and run it:
-
-```python
-from langroid.agent.chat_agent import ChatAgentConfig, ChatAgent
-from langroid.agent.task import Task
-
-config = ChatAgentConfig(
-        system_message="You are a helpful assistant.",
-        llm=local_llm_config,
-)
-agent = ChatAgent(config=config)
-task = Task(agent=agent)
-user_message = "Hello"
-task.run(user_message)
-```
-
-See a full working example of a simple command-line chatbot that you can use with either
-the OpenAI GPT4 model or a local llama model, in the `langroid-examples` repo:
-[https://github.com/langroid/langroid-examples/blob/main/examples/basic/chat.py](https://github.com/langroid/langroid-examples/blob/main/examples/basic/chat.py).
 
 !!! warning "Tests May Fail, results may be inferior, apps/examples may fail!"
     Be aware that while the above enables you to use Langroid with local llama2 models,
