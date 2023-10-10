@@ -63,7 +63,7 @@ litellm_ollama_config = LiteLLMOllamaConfig(
 LocalConfig = OpenAIGPTConfig.create(prefix="local")
 local_config = LocalConfig(
     chat_model="local",  # doesn't matter
-    api_base="http://localhost:8000/v1",  # <- edit if running at a different port
+    api_base="http://localhost:8000",  # <- edit if running at a different port
     chat_context_length=2048,  # adjust based on model
 )
 
