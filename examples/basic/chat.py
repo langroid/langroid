@@ -43,18 +43,26 @@ app = typer.Typer()
 
 setup_colored_logging()
 
-# Create classes for other model configs
+# Create classes for non-OpenAI model configs
 
-# Use this config for any model supported by litellm.
-# (see list here https://docs.litellm.ai/docs/providers)
+# OPTION 1: LiteLLM-supported models
+# -----------------------------------
+# Use this config for any model supported by litellm
+# (see list here https://docs.litellm.ai/docs/providers).
+# The `chat_model` should be specified as "litellm/" followed by
+# the chat_model name in the litellm docs.
 # For external (remote) models, typical there will be specific env vars
 # (e.g. API Keys, etc) that need to be set.
 # If those are not set, you will get an err msg saying which vars need to be set.
-LiteLLMOllamaConfig = OpenAIGPTConfig.create(prefix="ollama")
-litellm_ollama_config = LiteLLMOllamaConfig(
-    chat_model="litellm/ollama/llama2",  # or, "bedrock/anthropic.claude-instant-v1"
+LiteLLMConfig = OpenAIGPTConfig.create(prefix="litellm")
+litellm_config = LiteLLMConfig(
+    chat_model="litellm/ollama/llama2",
+    # or, for example "litellm/bedrock/anthropic.claude-instant-v1"
     chat_context_length=2048,  # adjust based on model
 )
+
+# OPTION 2: Local models served at an OpenAI-compatible API endpoint
+# -----------------------------------------------------------------
 
 # Use this config for any model that is locally served at an
 # OpenAI-compatible API endpoint. In this case the `chat_model` name is ignored,
@@ -63,9 +71,15 @@ litellm_ollama_config = LiteLLMOllamaConfig(
 LocalConfig = OpenAIGPTConfig.create(prefix="local")
 local_config = LocalConfig(
     chat_model="local",  # doesn't matter
-    api_base="http://localhost:8000/v1",  # <- edit if running at a different port
+    # edit api_base if running at a different port;
+    # Depending on how you launch your model, you may or may not need the "/v1"
+    api_base="http://localhost:8000/v1",
     chat_context_length=2048,  # adjust based on model
 )
+
+# In the script below, one of the two options is chosen based on the
+# `model` argument passed in the CLI (via `-m` or `--model`).
+# If no model is specified, the default is to use GPT4
 
 
 class CLIOptions(BaseSettings):
@@ -91,7 +105,7 @@ def chat(opts: CLIOptions) -> None:
         llm_config = local_config
     elif opts.model.startswith("litellm"):
         # e.g. litellm/ollama/llama2 or litellm/bedrock/anthropic.claude-instant-v1
-        llm_config = litellm_ollama_config
+        llm_config = litellm_config
         llm_config.chat_model = opts.model  # e.g. litellm/ollama/llama2
 
     else:
