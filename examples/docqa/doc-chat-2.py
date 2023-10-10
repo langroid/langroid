@@ -56,7 +56,7 @@ def chat(config: DocChatAgentConfig) -> None:
             try:
                 if -1 <= int(choice) <= n:
                     break
-            except:
+            except Exception:
                 pass
 
         if choice == "-1":
@@ -121,7 +121,11 @@ def chat(config: DocChatAgentConfig) -> None:
         single_round=False,
         system_message=f"""
         You are tenacious, creative and resourceful when given a question to 
-        find an answer for. 
+        find an answer for. You will receive questions from a user, which you will 
+        try to answer ONLY based on content from certain documents (not from your 
+        general knowledge). However you do NOT have access to the documents. 
+        You will be assisted by DocAgent, who DOES have access to the documents.
+        
         Here are the rules:
         (a) when the question is complex or has multiple parts, break it into small 
          parts and/or steps and send them to DocAgent
@@ -133,7 +137,14 @@ def chat(config: DocChatAgentConfig) -> None:
             earlier in the dialog.
         (e) if DocAgent is unable to answer after your best efforts, you can say
             {NO_ANSWER} and move on to the next question.
-        (f) be direct and concise, do not waste words being polite.
+        (f) answers should be based ONLY on the documents, NOT on your prior knowledge.
+        (g) be direct and concise, do not waste words being polite.
+        (h) if you need more info from the user, before asking DocAgent, you should 
+        address questions to the "User" (not to DocAgent) to get further 
+        clarifications or information. 
+        (i) Always ask questions ONE BY ONE (to either User or DocAgent), NEVER 
+            send Multiple questions in one message.
+        (j) Use bullet-point format when presenting multiple pieces of info.
         
         Start by asking the user what they want to know.
         """,
@@ -157,8 +168,8 @@ def main(
         assistant_mode=True,
         parsing=ParsingConfig(  # modify as needed
             splitter=Splitter.TOKENS,
-            chunk_size=1000,  # aim for this many tokens per chunk
-            overlap=100,  # overlap between chunks
+            chunk_size=500,  # aim for this many tokens per chunk
+            overlap=200,  # overlap between chunks
             max_chunks=10_000,
             # aim to have at least this many chars per chunk when
             # truncating due to punctuation

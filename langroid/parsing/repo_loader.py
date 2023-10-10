@@ -33,6 +33,16 @@ def _get_decoded_content(content_file: ContentFile) -> str:
         raise ValueError(f"Unsupported encoding: {content_file.encoding}")
 
 
+def _has_files(directory: str) -> bool:
+    """
+    Recursively checks if there is at least one file in a directory.
+    """
+    for dirpath, dirnames, filenames in os.walk(directory):
+        if filenames:
+            return True
+    return False
+
+
 class RepoLoaderConfig(BaseSettings):
     """
     Configuration for RepoLoader.
@@ -212,7 +222,11 @@ class RepoLoader:
         with open(self.log_file, "r") as f:
             log: Dict[str, str] = json.load(f)
 
-        if self.url in log and os.path.exists(log[self.url]):
+        if (
+            self.url in log
+            and os.path.exists(log[self.url])
+            and _has_files(log[self.url])
+        ):
             logger.warning(f"Repo Already downloaded in {log[self.url]}")
             self.clone_path = log[self.url]
             return self.clone_path
@@ -326,7 +340,7 @@ class RepoLoader:
               A list of Document objects for each file.
         """
         if path is None:
-            if self.clone_path is None:
+            if self.clone_path is None or not _has_files(self.clone_path):
                 self.clone()
             path = self.clone_path
         if path is None:

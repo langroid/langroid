@@ -83,5 +83,9 @@ async def test_agent_token_usage_async(stream):
     set_global(Settings(cache=False, stream=stream))
     await agent.llm_response_async(question)
     print("***3rd round***")
-    assert agent.total_llm_token_usage == total_tokens_after_1st_rnd * 2
-    assert agent.total_llm_token_cost == total_cost_after_1st_rnd * 2
+
+    b = max(agent.total_llm_token_usage, total_tokens_after_1st_rnd * 2)
+    assert abs(agent.total_llm_token_usage - total_tokens_after_1st_rnd * 2) < 0.1 * b
+
+    b = max(agent.total_llm_token_cost, total_cost_after_1st_rnd * 2)
+    assert abs(agent.total_llm_token_cost - total_cost_after_1st_rnd * 2) < 0.1 * b

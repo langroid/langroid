@@ -25,62 +25,15 @@ from langroid.utils.output.printing import show_if_debug
 logger = logging.getLogger(__name__)
 
 
-class LocalModelConfig(BaseModel):
-    """
-    Configuration for local model available via
-    an OpenAI-compatible API.
-
-    Support local LLM endpoint that spoofs the OpenAI API.
-    Examples of libraries that enable this are:
-    - llama-cpp-python (LCP)
-    - text-generation-webui (TGW) (from oobabooga or "ooba" for short)
-    Typically these allow spinning up a server that listens on
-    http://localhost:8000/v1
-    and we can continue using our OpenAI-API-based python code, except we
-    set openai.api_base to this URL.
-
-    These endpoints usually support both /completions and /chat/completions requests.
-    Supporting /chat/completions is more complex because each family of local model
-    has its own (finicky) formatting for turns and roles in a chat.
-    The TGW lib has an extensive set of templates for various model families,
-    and the template is auto-detected from the model, at least for common models,
-    so we can directly use the /chat/completions endpoint, and it works well (at
-    least on llama2 models). However, when in doubt,
-    we can always do our own formatting of the chat history and use the /completions
-    endpoint instead.  This is what we do for LCP models. In this case,
-    we need to set `use_completion_for_chat` to True.
-    With a model served via TGW, for chats we can set this to either True or False
-    (in which case we rely on the TGW templates correctly formatting the chat history).
-
-    Both of the above libs assume a single model is available at the endpoint.
-    As far as I know, they do not support run-time switching of models.
-    There is another library that we can potentially integrate, `localAI`,
-    which does have model switching, and can be very useful, e.g.
-    when we want different agents to use different models.
-
-    All of the above considerations are outside of this interface, however.
-    All we care about here is the endpoint url.
-    """
-
-    # OPENAI_LOCAL.* env vars can be used to set these in .env file or environment
-
-    api_base: str = "http://localhost:8000/v1"
-    model: str = "local"  # usually not needed
-    model_type: str = "llama2"
-    formatter: None | PromptFormatterConfig = Llama2FormatterConfig()
-    context_length: int = 2048  # default for llama-cpp-python
-    use_chat_for_completion: bool = False
-    use_completion_for_chat: bool = True
-
-
 class LLMConfig(BaseSettings):
     type: str = "openai"
-    local: None | LocalModelConfig = None
+    formatter: None | PromptFormatterConfig = Llama2FormatterConfig()
     timeout: int = 20  # timeout for API requests
-    chat_model: Optional[str] = None
-    completion_model: Optional[str] = None
+    chat_model: str = ""
+    completion_model: str = ""
     temperature: float = 0.0
-    context_length: Optional[Dict[str, int]] = None
+    chat_context_length: int = 1024
+    completion_context_length: int = 1024
     max_output_tokens: int = 1024  # generate at most this many tokens
     # if input length + max_output_tokens > context length of model,
     # we will try shortening requested output
@@ -92,7 +45,8 @@ class LLMConfig(BaseSettings):
     cache_config: None | RedisCacheConfig | MomentoCacheConfig = None
 
     # Dict of model -> (input/prompt cost, output/completion cost)
-    cost_per_1k_tokens: Optional[Dict[str, Tuple[float, float]]] = None
+    chat_cost_per_1k_tokens: Tuple[float, float] = (0.0, 0.0)
+    completion_cost_per_1k_tokens: Tuple[float, float] = (0.0, 0.0)
 
 
 class LLMFunctionCall(BaseModel):
@@ -388,25 +342,13 @@ class LanguageModel(ABC):
         return self.generate(prompt, max_tokens)
 
     def chat_context_length(self) -> int:
-        if self.config.chat_model is None:
-            raise ValueError("No chat model specified")
-        if self.config.context_length is None:
-            raise ValueError("No context length  specified")
-        return self.config.context_length[self.config.chat_model]
+        return self.config.chat_context_length
 
     def completion_context_length(self) -> int:
-        if self.config.completion_model is None:
-            raise ValueError("No completion model specified")
-        if self.config.context_length is None:
-            raise ValueError("No context length  specified")
-        return self.config.context_length[self.config.completion_model]
+        return self.config.completion_context_length
 
     def chat_cost(self) -> Tuple[float, float]:
-        if self.config.chat_model is None:
-            raise ValueError("No chat model specified")
-        if self.config.cost_per_1k_tokens is None:
-            raise ValueError("No cost per 1k tokens  specified")
-        return self.config.cost_per_1k_tokens[self.config.chat_model]
+        return self.config.chat_cost_per_1k_tokens
 
     def followup_to_standalone(
         self, chat_history: List[Tuple[str, str]], question: str

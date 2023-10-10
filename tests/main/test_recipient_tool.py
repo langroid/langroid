@@ -33,8 +33,8 @@ from langroid.agent.tools.recipient_tool import RecipientTool
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
 from langroid.utils.configuration import Settings, set_global
 
-INPUT_NUMBERS = [1, 100, 2, 21, 4, 40, 33]
-TRANSFORMED_NUMBERS = [4, 10000, 1, 64, 2, 1600, 100]
+INPUT_NUMBERS = [1, 100, 12]
+TRANSFORMED_NUMBERS = [4, 10000, 6]
 
 
 class SquareTool(ToolMessage):

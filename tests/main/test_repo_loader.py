@@ -27,7 +27,7 @@ def test_repo_loader() -> None:
     # tree, docs from local clone (if exists, else clone first)
     tree, docs = repo_loader.load(depth=1, lines=5)
     assert len(tree) > 0
-    assert len(docs) > 0
+    assert len(docs) > 0, f"No docs loaded from repo {repo_loader.clone_path}"
 
     # test static fn that loads from a local folder;
     # this is a general fn that can be used to load from any folder,

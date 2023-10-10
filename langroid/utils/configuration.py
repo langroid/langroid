@@ -16,6 +16,7 @@ class Settings(BaseSettings):
     interactive: bool = True  # interactive mode?
     gpt3_5: bool = True  # use GPT-3.5?
     nofunc: bool = False  # use model without function_call? (i.e. gpt-4)
+    chat_model: str = ""  # language model name, e.g. litellm/ollama/llama2
 
     class Config:
         extra = "forbid"

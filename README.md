@@ -66,6 +66,9 @@ for ideas on what to contribute.
 <details>
 <summary> <b>:fire: Updates/Releases</b></summary>
 
+- **Oct 2023:**
+  - **0.1.84:** Added [LiteLLM](https://docs.litellm.ai/docs/providers), so now Langroid can be used with over 100 LLM providers (remote or local)! 
+     See guide [here](https://langroid.github.io/langroid/tutorials/non-openai-llms/).
 - **Sep 2023:**
   - **0.1.78:** Async versions of several Task, Agent and LLM methods; 
       Nested Pydantic classes are now supported for LLM Function-calling, Tools, Structured Output.    
@@ -114,7 +117,8 @@ answer the `LeaseExtractor`'s questions, cites the specific excerpt supporting t
 needs, the `LeaseExtractor` LLM presents the information in a structured 
 format using a Function-call. 
 
-Here is what it looks like in action:
+Here is what it looks like in action 
+(a pausable mp4 video is [here](https://vimeo.com/871429249)).
 
 ![Demo](docs/assets/demos/lease-extractor-demo.gif)
 
