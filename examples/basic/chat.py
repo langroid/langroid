@@ -124,9 +124,11 @@ def chat(opts: CLIOptions) -> None:
     )
     agent = ChatAgent(config)
     task = Task(agent)
-    # local (llama2) models do not like the first message to be empty
-    user_message = "Hello." if (opts.model != "") else None
-    task.run(user_message)
+    # OpenAI models are ok with just a system msg,
+    # but in some scenarios, other (e.g. llama) models
+    # seem to do better when kicked off with a sys msg and a user msg.
+    # In those cases we may want to do task.run("hello") instead.
+    task.run()
 
 
 @app.command()
