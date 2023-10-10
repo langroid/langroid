@@ -172,27 +172,22 @@ class OpenAIGPT(LanguageModel):
         # if model name starts with "litellm",
         # set the actual model name by stripping the "litellm/" prefix
         # and set the litellm flag to True
-        if self.config.chat_model.startswith("litellm"):
+        if self.config.chat_model.startswith("litellm/"):
             self.config.litellm = True
             self.config.chat_model = self.config.chat_model.split("/", 1)[1]
             self.api_base = self.config.api_base
             # litellm/ollama/llama2 => ollama/llama2 for example
-        elif self.config.chat_model.startswith("local"):
-            # model served locally behind an OpenAI-compatible API
+        elif self.config.chat_model.startswith("local/"):
+            # expect this to be of the form "local/localhost:8000/v1",
+            # depending on how the model is launched locally.
+            # In this case the model served locally behind an OpenAI-compatible API
             # so we can just use `openai.*` methods directly,
-            # and don't need a proxy/adaptor like litellm
+            # and don't need a adaptor library like litellm
             self.config.litellm = False
-            # if there is an explicit port in chat_model, use it
-            # else use the default port 8000
-            if ":" in self.config.chat_model:
-                # expect this is of the form "localhost:8000" or "localhost:8000/v1"
-                # The chat_model is immediaterial in this case!
-                self.api_base = "http://" + self.config.chat_model
-            else:
-                # hope this works, else the user will get an error
-                self.api_base = "http://localhost:8000/v1"
+            # Extract the api_base from the model name after the "local/" prefix
+            self.api_base = "http://" + self.config.chat_model.split("/", 1)[1]
         else:
-            self.api_base = config.api_base
+            self.api_base = self.config.api_base
 
         # NOTE: The api_key should be set in the .env file, or via
         # an explicit `export OPENAI_API_KEY=xxx` or `setenv OPENAI_API_KEY xxx`
