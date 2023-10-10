@@ -109,7 +109,7 @@ and it will be used without needing to change any of your code
 (the model in your code will be used as a fallback if the environment variable is not set).
 
 ```bash
-BEDROCK_CHAT_MODEL=bedrock/ai21.j2-ultra
+BEDROCK_CHAT_MODEL=litellm/bedrock/ai21.j2-ultra
 BEDROCK_CHAT_CONTEXT_LENGTH=...
 ```
 
