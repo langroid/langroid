@@ -2,7 +2,6 @@ import inspect
 import json
 import logging
 import textwrap
-import asyncio
 from contextlib import ExitStack
 from typing import Dict, List, Optional, Set, Tuple, Type, cast, no_type_check
 
@@ -414,15 +413,6 @@ class ChatAgent(Agent):
         self, message: Optional[str | ChatDocument] = None
     ) -> Optional[ChatDocument]:
         """
-        Synchronous version of `llm_response_async`. See there for details.
-        """
-        return asyncio.run(self.llm_response_async(message=message))
-
-    @no_type_check
-    async def llm_response_async(
-        self, message: Optional[str | ChatDocument] = None
-    ) -> Optional[ChatDocument]:
-        """
         Respond to a single user message, appended to the message history,
         in "chat" mode
         Args:
@@ -430,6 +420,21 @@ class ChatAgent(Agent):
                 If None, use the self.task_messages
         Returns:
             LLM response as a ChatDocument object
+        """
+        hist, output_len = self._prep_llm_messages(message)
+        with StreamingIfAllowed(self.llm, self.llm.get_stream()):
+            response = self.llm_response_messages(hist, output_len)
+        # TODO - when response contains function_call we should include
+        # that (and related fields) in the message_history
+        self.message_history.append(ChatDocument.to_LLMMessage(response))
+        return response
+
+    @no_type_check
+    async def llm_response_async(
+        self, message: Optional[str | ChatDocument] = None
+    ) -> Optional[ChatDocument]:
+        """
+        Async version of `llm_response`. See there for details.
         """
         hist, output_len = self._prep_llm_messages(message)
         with StreamingIfAllowed(self.llm, self.llm.get_stream()):
@@ -558,14 +563,6 @@ class ChatAgent(Agent):
         self, messages: List[LLMMessage], output_len: Optional[int] = None
     ) -> ChatDocument:
         """
-        Synchronous version of `llm_response_messages`. See there for details.
-        """
-        return asyncio.run(self.llm_response_messages_async(messages, output_len))
-
-    async def llm_response_messages_async(
-        self, messages: List[LLMMessage], output_len: Optional[int] = None
-    ) -> ChatDocument:
-        """
         Respond to a series of messages, e.g. with OpenAI ChatCompletion
         Args:
             messages: seq of messages (with role, content fields) sent to LLM
@@ -573,6 +570,56 @@ class ChatAgent(Agent):
                     If None, use the LLM's default max_output_tokens.
         Returns:
             Document (i.e. with fields "content", "metadata")
+        """
+        assert self.config.llm is not None and self.llm is not None
+        output_len = output_len or self.config.llm.max_output_tokens
+        with ExitStack() as stack:  # for conditionally using rich spinner
+            if not self.llm.get_stream():
+                # show rich spinner only if not streaming!
+                cm = console.status("LLM responding to messages...")
+                stack.enter_context(cm)
+            if self.llm.get_stream():
+                console.print(f"[green]{self.indent}", end="")
+            functions: Optional[List[LLMFunctionSpec]] = None
+            fun_call: str | Dict[str, str] = "none"
+            if self.config.use_functions_api and len(self.llm_functions_usable) > 0:
+                functions = [
+                    self.llm_functions_map[f] for f in self.llm_functions_usable
+                ]
+                fun_call = (
+                    "auto"
+                    if self.llm_function_force is None
+                    else self.llm_function_force
+                )
+            assert self.llm is not None
+            response = self.llm.chat(
+                messages,
+                output_len,
+                functions=functions,
+                function_call=fun_call,
+            )
+        displayed = False
+        if not self.llm.get_stream() or response.cached:
+            displayed = True
+            cached = f"[red]{self.indent}(cached)[/red]" if response.cached else ""
+            if response.function_call is not None:
+                response_str = str(response.function_call)
+            else:
+                response_str = response.message
+            print(cached + "[green]" + response_str)
+        self.update_token_usage(
+            response,
+            messages,
+            self.llm.get_stream(),
+            print_response_stats=settings.debug,
+        )
+        return ChatDocument.from_LLMResponse(response, displayed)
+
+    async def llm_response_messages_async(
+        self, messages: List[LLMMessage], output_len: Optional[int] = None
+    ) -> ChatDocument:
+        """
+        Async version of `llm_response_messages`. See there for details.
         """
         assert self.config.llm is not None and self.llm is not None
         output_len = output_len or self.config.llm.max_output_tokens
@@ -607,14 +654,6 @@ class ChatAgent(Agent):
 
     def _llm_response_temp_context(self, message: str, prompt: str) -> ChatDocument:
         """
-        Synchronous version of `_llm_response_temp_context_async`. See there for details.
-        """
-        return asyncio.run(self._llm_response_temp_context_async(message, prompt))
-
-    async def _llm_response_temp_context_async(
-        self, message: str, prompt: str
-    ) -> ChatDocument:
-        """
         Get LLM response to `prompt` (which presumably includes the `message`
         somewhere, along with possible large "context" passages),
         but only include `message` as the USER message, and not the
@@ -629,6 +668,19 @@ class ChatAgent(Agent):
         # we explicitly call THIS class's respond method,
         # not a derived class's (or else there would be infinite recursion!)
         with StreamingIfAllowed(self.llm, self.llm.get_stream()):  # type: ignore
+            answer_doc = cast(ChatDocument, ChatAgent.llm_response(self, prompt))
+        self.update_last_message(message, role=Role.USER)
+        return answer_doc
+
+    async def _llm_response_temp_context_async(
+        self, message: str, prompt: str
+    ) -> ChatDocument:
+        """
+        Async version of `_llm_response_temp_context`. See there for details.
+        """
+        # we explicitly call THIS class's respond method,
+        # not a derived class's (or else there would be infinite recursion!)
+        with StreamingIfAllowed(self.llm, self.llm.get_stream()):  # type: ignore
             answer_doc = cast(
                 ChatDocument,
                 await ChatAgent.llm_response_async(self, prompt),
@@ -637,12 +689,6 @@ class ChatAgent(Agent):
         return answer_doc
 
     def llm_response_forget(self, message: str) -> ChatDocument:
-        """
-        Synchronous version of `llm_response_forget_async`. See there for details.
-        """
-        return asyncio.run(self.llm_response_forget_async(message))
-
-    async def llm_response_forget_async(self, message: str) -> ChatDocument:
         """
         LLM Response to single message, and restore message_history.
         In effect a "one-off" message & response that leaves agent
@@ -654,6 +700,20 @@ class ChatAgent(Agent):
         Returns:
             A Document object with the response.
 
+        """
+        # explicitly call THIS class's respond method,
+        # not a derived class's (or else there would be infinite recursion!)
+        with StreamingIfAllowed(self.llm, self.llm.get_stream()):  # type: ignore
+            response = cast(ChatDocument, ChatAgent.llm_response(self, message))
+        # clear the last two messages, which are the
+        # user message and the assistant response
+        self.message_history.pop()
+        self.message_history.pop()
+        return response
+
+    async def llm_response_forget_async(self, message: str) -> ChatDocument:
+        """
+        Async version of `llm_response_forget`. See there for details.
         """
         # explicitly call THIS class's respond method,
         # not a derived class's (or else there would be infinite recursion!)

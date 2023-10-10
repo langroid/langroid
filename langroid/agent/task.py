@@ -3,7 +3,6 @@ from __future__ import annotations
 import logging
 import asyncio
 from typing import Any, Callable, Coroutine, Dict, List, Optional, Set, Type, cast
-from functools import partial
 
 from rich import print
 
@@ -423,9 +422,54 @@ class Task:
         """
         Synchronous version of `step_async()`. See `step_async()` for details.
         """
-        return asyncio.run(
-            self.step_async(turns=turns)
+        result = None
+        parent = self.pending_message
+        recipient = (
+            ""
+            if self.pending_message is None
+            else self.pending_message.metadata.recipient
         )
+        if not self._valid_recipient(recipient):
+            logger.warning(f"Invalid recipient: {recipient}")
+            error_doc = ChatDocument(
+                content=f"Invalid recipient: {recipient}",
+                metadata=ChatDocMetaData(
+                    sender=Entity.AGENT,
+                    sender_name=Entity.AGENT,
+                ),
+            )
+            self.pending_message = error_doc
+            return error_doc
+
+        responders: List[Responder] = self.non_human_responders.copy()
+        if Entity.USER in self.responders and not self.human_tried:
+            # give human first chance if they haven't been tried in last step:
+            # ensures human gets chance at each turn.
+            responders.insert(0, Entity.USER)
+
+        for r in responders:
+            if not self._can_respond(r):
+                # create dummy msg for logging
+                log_doc = ChatDocument(
+                    content="[CANNOT RESPOND]",
+                    function_call=None,
+                    metadata=ChatDocMetaData(
+                        sender=r if isinstance(r, Entity) else Entity.USER,
+                        sender_name=str(r),
+                        recipient=recipient,
+                    ),
+                )
+                self.log_message(r, log_doc)
+                continue
+            self.human_tried = r == Entity.USER
+            result = self.response(r, turns)
+            is_break = self._process_responder_result(r, parent, result)
+            if is_break:
+                break
+        if not self.valid(result):
+            self._process_invalid_step_result(parent)
+        self._show_pending_message_if_debug()
+        return self.pending_message
 
     async def step_async(self, turns: int = -1) -> ChatDocument | None:
         """
@@ -615,7 +659,20 @@ class Task:
         """
         Sync version of `response_async()`. See `response_async()` for details.
         """
-        return asyncio.run(self.response_async(e, turns=turns))
+        if isinstance(e, Task):
+            actual_turns = e.turns if e.turns > 0 else turns
+            result = e.run(
+                self.pending_message,
+                turns=actual_turns,
+                caller=self,
+            )
+            return result
+        else:
+            # Note we always use async responders, even though
+            # ultimately a synch endpoint is used.
+            response_fn = self._entity_responder_map[cast(Entity, e)]
+            result = response_fn(self.pending_message)
+            return result
 
     async def response_async(
         self,
