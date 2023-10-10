@@ -15,7 +15,12 @@ def pytest_addoption(parser) -> None:
     parser.addoption("--ns", action="store_true", default=False, help="no streaming")
     parser.addoption("--ct", default="redis", help="redis or momento")
     parser.addoption(
-        "--m", default="", help="language model name, e.g. litellm/ollama/llama2"
+        "--m",
+        default="",
+        help="""
+        language model name, e.g. litellm/ollama/llama2, or 
+        local or localhost:8000 or localhost:8000/v1
+        """,
     )
     parser.addoption(
         "--nof",
