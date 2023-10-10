@@ -11,3 +11,4 @@ from . import urls
 from . import utils
 from . import search
 from . import web_search
+from . import spider
