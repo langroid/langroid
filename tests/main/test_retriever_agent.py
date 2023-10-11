@@ -68,6 +68,7 @@ class _TestRetrieverAgentConfig(RetrieverAgentConfig):
     parsing: ParsingConfig = ParsingConfig(
         n_similar_docs=5,
     )
+    cross_encoder_reranking_model = ""  # turn off cross-encoder reranking
 
 
 class _TestRetrieverAgent(RetrieverAgent):
