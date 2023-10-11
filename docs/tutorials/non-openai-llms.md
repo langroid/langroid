@@ -1,14 +1,14 @@
 # Using Langroid with Non-OpenAI LLMs
 
 Langroid was initially written to work with OpenAI models via their API.
-This may sound limiting, but fortunately there are tools that enable you to use
-Langroid with many other LLMs. We show below how you can define an `OpenAIGPTConfig` object
+This may sound limiting, but fortunately there are tools that provide an OpenAI-like API 
+for _hundreds_ of LLM providers.  We show below how you can define an `OpenAIGPTConfig` object
 for these scenarios. This config object then be used to create a Langroid 
 LLM object to interact with directly, or you can wrap it into an Agent and a Task
 to create a chat loop or a more complex multi-agent setup where different agents may be using
 different LLMs.
 
-## LiteLLM LLM Proxy Server
+## LiteLLM OpenAI Proxy Server
 LiteLLM is an excellent library which, among other things
 (see below), offers a [proxy server](https://docs.litellm.ai/docs/proxy_server) that allows you 
 spin up a server acting as a proxy for a variety of LLM models (over a 100 providers!) at an 
@@ -23,8 +23,8 @@ For example to use the `anthropic.claude-instant-v1` model, you can do:
 export ANTHROPIC_API_KEY=my-api-key
 litellm --model claude-instant-1
 ```
-Or if you want to use the proxy server for a local model running with `ollama`, 
-you can first run `ollama run mistral` for example and then 
+Or if you want to use the proxy server for a local model running with [`ollama`](https://github.com/jmorganca/ollama),
+you can first run `ollama pull mistral` for example and then 
 run `litellm --model ollama/mistral` to spin up the proxy server for this model.
 ```bash
 This will show a message indicating the URL where the server is listening, e.g.,
@@ -65,7 +65,7 @@ There are other ways to spin up a local server running an LLM behind an OpenAI-c
 - [`ollama`](https://github.com/jmorganca/ollama)
 - [`llama-cpp-python`](https://github.com/abetlen/llama-cpp-python)
 
-For all of these, the process is the same as in the above example, except that you will
+For all of these, the process is the same as in the above example, i.e., you will
 set the `chat_model` to a string that looks like `local/localhost:<port>` or 
 `local/localhost:<port>/v1` (depending on the model). 
 
@@ -107,9 +107,17 @@ variables using the upper-case version of the `prefix` argument to the `OpenAIGP
 e.g. in the above case, you would set the following environment variables like
 `BEDROCK_API_KEY=<your-api-key>`.
 
+The `LiteLLM` library can also be used when you have a **locally-served model,**
+but you are not using the `LiteLLM` proxy server. In this case you would set the 
+`chat_model` parameter in the `OpenAIGPTConfig` to a string like `litellm/ollama/mistral`,
+again following the pattern of prepending `litellm/` to the model name specified in the
+[LiteLLM docs](https://docs.litellm.ai/docs/providers).
+
 ## Working with the created `OpenAIGPTConfig` object
+
 Once you create an `OpenAIGPTConfig` object using any of the above methods, 
-you can use it to create an `OpenAIGPT` object and interact with it directly:
+you can use it to create an object of class `OpenAIGPT` (which represents any
+LLM with an OpenAI-compatible API) and interact with it directly:
 ```python
 from langroid.language_models.base import LLMMessage, Role
 
@@ -163,6 +171,29 @@ python3 examples/basic/chat.py -m local/localhost:8000
 ```bash
 python3 examples/basic/chat.py -m litellm/bedrock/anthropic.claude-instant-v1
 ```
+
+## Quick testing with non-OpenAI models
+
+There are numerous tests in the main [Langroid repo](https://github.com/langroid/langroid) that involve
+LLMs, and once you setup the dev environment as described in the README of the repo, 
+you can run any of those tests (which run against the default GPT4 model) against
+local/remote models that are proxied by `liteLLM` (or served locally via the options mentioned above,
+such as `oobabooga`, `ollama` or `llama-cpp-python`), using the `--m <model-name>` option,
+where `model-name` takes one of the forms above. Some examples of tests are:
+
+```bash
+pytest -s tests/test_llm.py --m local/localhost:8000
+pytest -s tests/test_llm.py --m litellm/bedrock/anthropic.claude-instant-v1
+pytest -s tests/test_llm.py --m litellm/ollama/mistral
+```
+When the `--m` option is omitted, the default OpenAI GPT4 model is used.
+
+!!! note "`chat_context_length` is not affected by `--m`"
+      Be aware that the `--m` only switches the model, but does not affect the `chat_context_length` 
+      parameter in the `OpenAIGPTConfig` object. which you may need to adjust for different models.
+      So this option is only meant for quickly testing against different models, and not meant as
+      a way to switch between models in a production environment.
+
 
 
 

@@ -138,8 +138,9 @@ Here is what it looks like in action
   after the agent's own responders.
 - **Modularity, Reusabilily, Loose coupling:** The `Agent` and `Task` abstractions allow users to design
   Agents with specific skills, wrap them in Tasks, and combine tasks in a flexible way.
-- **LLM Support**: Langroid supports OpenAI LLMs including GPT-3.5-Turbo,
-  GPT-4.
+- **LLM Support**: Langroid supports OpenAI LLMs as well as LLMs from hundreds of 
+providers (local/open or remote/commercial) via proxy libraries and local model servers
+such as [LiteLLM](https://docs.litellm.ai/docs/providers) that in effect mimic the OpenAI API. 
 - **Caching of LLM responses:** Langroid supports [Redis](https://redis.com/try-free/) and 
   [Momento](https://www.gomomento.com/) to cache LLM responses.
 - **Vector-stores**: [Qdrant](https://qdrant.tech/) and [Chroma](https://www.trychroma.com/) are currently supported.
@@ -360,6 +361,25 @@ messages = [
 response = mdl.chat(messages, max_tokens=200)
 print(response.message)
 ```
+</details>
+
+<details>
+<summary> <b> Interaction with non-OpenAI LLM (local or remote) </b> </summary>
+Local model: if model is served at `http://localhost:8000`:
+
+```python
+cfg = OpenAIGPTConfig(
+  chat_model="local/localhost:8000", 
+  chat_context_length=4096
+)
+mdl = OpenAIGPT(cfg)
+# now interact with it as above, or create an Agent + Task as shown below.
+```
+
+If the model is [supported by `liteLLM`](https://docs.litellm.ai/docs/providers), 
+then no need to launch the proxy server.
+Just set the `chat_model` param above to `litellm/[provider]/[model]`, e.g. 
+`litellm/anthropic/claude-instant-1` and use the config object as above.
 </details>
 
 <details>
