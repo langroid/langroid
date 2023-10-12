@@ -530,6 +530,9 @@ class DocChatAgent(ChatAgent):
         id2passage = {p.id(): p for p in passages}
         passages = list(id2passage.values())
 
+        if len(passages) == 0:
+            return []
+
         # now passages can potentially have a lot of doc chunks,
         # so we re-rank them using a cross-encoder scoring model
         # https://www.sbert.net/examples/applications/retrieve_rerank
