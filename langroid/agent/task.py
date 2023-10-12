@@ -802,8 +802,12 @@ class Task:
         """
         if recipient == "":
             return True
-        responder_names = [self.name] + [r.name for r in self.responders]
-        return recipient in responder_names
+        # native responders names are USER, LLM, AGENT,
+        # and the names of subtasks are from Task.name attribute
+        responder_names = [self.name.lower()] + [
+            r.name.lower() for r in self.responders
+        ]
+        return recipient.lower() in responder_names
 
     def _recipient_mismatch(self, e: Responder) -> bool:
         """

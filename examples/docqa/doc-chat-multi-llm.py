@@ -190,7 +190,7 @@ def main(
     )
 
     if model == "":
-        llm_config = OpenAIGPTConfig()  # default GPT-4
+        llm_config = OpenAIGPTConfig(timeout=45)  # default GPT-4
     else:
         llm_config = my_llm_config
         llm_config.chat_model = model
