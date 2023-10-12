@@ -160,6 +160,10 @@ def chat(config: DocChatAgentConfig) -> None:
         (i) Always ask questions ONE BY ONE (to either User or DocAgent), NEVER 
             send Multiple questions in one message.
         (j) Use bullet-point format when presenting multiple pieces of info.
+        (k) When DocAgent responds without citing a SOURCE and EXTRACT(S), you should
+            send your question again to DocChat, reminding it to cite the source and
+            extract(s).
+        
         
         Start by asking the user what they want to know.
         """,
@@ -185,7 +189,7 @@ def main(
         # "litellm/ollama/llama2"
         # "local/localhost:8000/v1"
         # "local/localhost:8000"
-        chat_context_length=2048,  # adjust based on model
+        chat_context_length=8192,  # adjust based on model
         timeout=45,
     )
 
