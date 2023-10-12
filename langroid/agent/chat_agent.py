@@ -83,7 +83,7 @@ class ChatAgent(Agent):
         super().__init__(config)
         self.config: ChatAgentConfig = config
         if self.llm is not None and (
-            not isinstance(self.llm, OpenAIGPT) or self.llm.is_openai_chat_model()
+            not isinstance(self.llm, OpenAIGPT) or not self.llm.is_openai_chat_model()
         ):
             # for non-OpenAI models, use Langroid Tool instead of Function-calling
             logger.warning(
