@@ -205,7 +205,7 @@ class OpenAIGPT(LanguageModel):
 
         self.config._validate_litellm()
 
-    def _is_openai_chat_model(self) -> bool:
+    def is_openai_chat_model(self) -> bool:
         openai_chat_models = [e.value for e in OpenAIChatModel]
         return self.config.chat_model in openai_chat_models
 
@@ -652,7 +652,17 @@ class OpenAIGPT(LanguageModel):
         functions: Optional[List[LLMFunctionSpec]] = None,
         function_call: str | Dict[str, str] = "auto",
     ) -> LLMResponse:
-        if self.config.use_completion_for_chat and not self._is_openai_chat_model():
+        if functions is not None and not self.is_openai_chat_model():
+            raise ValueError(
+                f"""
+                `functions` can only be specified for OpenAI chat models;
+                {self.config.chat_model} does not support function-calling.
+                Instead, please use Langroid's ToolMessages, which are equivalent.
+                In the ChatAgentConfig, set `use_functions_api=False` 
+                and `use_tools=True`, this will enable ToolMessages.
+                """
+            )
+        if self.config.use_completion_for_chat and not self.is_openai_chat_model():
             # only makes sense for non-OpenAI models
             if self.config.formatter is None:
                 raise ValueError(
@@ -685,8 +695,18 @@ class OpenAIGPT(LanguageModel):
         functions: Optional[List[LLMFunctionSpec]] = None,
         function_call: str | Dict[str, str] = "auto",
     ) -> LLMResponse:
+        if functions is not None and not self.is_openai_chat_model():
+            raise ValueError(
+                f"""
+                `functions` can only be specified for OpenAI chat models;
+                {self.config.chat_model} does not support function-calling.
+                Instead, please use Langroid's ToolMessages, which are equivalent.
+                In the ChatAgentConfig, set `use_functions_api=False` 
+                and `use_tools=True`, this will enable ToolMessages.
+                """
+            )
         # turn off streaming for async calls
-        if self.config.use_completion_for_chat and not self._is_openai_chat_model():
+        if self.config.use_completion_for_chat and not self.is_openai_chat_model():
             # only makes sense for local models
             if self.config.formatter is None:
                 raise ValueError(
