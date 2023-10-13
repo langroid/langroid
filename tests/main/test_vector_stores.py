@@ -10,6 +10,7 @@ from langroid.utils.system import rmdir
 from langroid.vector_store.base import VectorStore
 from langroid.vector_store.chromadb import ChromaDB, ChromaDBConfig
 from langroid.vector_store.meilisearch import MeiliSearch, MeiliSearchConfig
+from langroid.vector_store.momento import MomentoVI, MomentoVIConfig
 from langroid.vector_store.qdrantdb import QdrantDB, QdrantDBConfig
 
 load_dotenv()
@@ -89,6 +90,16 @@ def vecdb(request) -> VectorStore:
         ms.delete_collection(collection_name=ms_cfg.collection_name)
         return
 
+    if request.param == "momento":
+        cfg = MomentoVIConfig(
+            collection_name="test-momento",
+        )
+        vdb = MomentoVI(cfg)
+        vdb.add_documents(stored_docs)
+        yield vdb
+        vdb.delete_collection(collection_name=cfg.collection_name)
+        return
+
 
 @pytest.mark.parametrize(
     "query,results,exceptions",
@@ -105,7 +116,7 @@ def vecdb(request) -> VectorStore:
 )
 @pytest.mark.parametrize(
     "vecdb",
-    ["chroma", "meilisearch", "qdrant_local", "qdrant_cloud"],
+    ["momento", "chroma", "meilisearch", "qdrant_local", "qdrant_cloud"],
     indirect=True,
 )
 def test_vector_stores_search(
@@ -128,7 +139,7 @@ def test_vector_stores_search(
 
 @pytest.mark.parametrize(
     "vecdb",
-    ["meilisearch", "chroma", "qdrant_local", "qdrant_cloud"],
+    ["momento", "meilisearch", "chroma", "qdrant_local", "qdrant_cloud"],
     indirect=True,
 )
 def test_vector_stores_access(vecdb):

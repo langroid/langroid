@@ -6,6 +6,7 @@ import logging
 import os
 from typing import List, Optional, Sequence, Tuple
 
+import momento.responses.vector_index as mvi_response
 from chromadb.api.types import EmbeddingFunction
 from dotenv import load_dotenv
 from momento import (
@@ -14,8 +15,11 @@ from momento import (
     PreviewVectorIndexClient,
     VectorIndexConfigurations,
 )
-from momento.requests.vector_index import SimilarityMetric
-from momento.responses.vector_index import CreateIndex
+from momento.requests.vector_index import (
+    ALL_METADATA,
+    Item,
+    SimilarityMetric,
+)
 
 from langroid.embedding_models.base import (
     EmbeddingModel,
@@ -33,7 +37,7 @@ class MomentoVIConfig(VectorStoreConfig):
     cloud: bool = True
     collection_name: str | None = None
     embedding: EmbeddingModelsConfig = OpenAIEmbeddingsConfig()
-    distance: str = SimilarityMetric.COSINE_SIMILARITY
+    distance: SimilarityMetric = SimilarityMetric.COSINE_SIMILARITY
 
 
 class MomentoVI(VectorStore):
@@ -54,11 +58,10 @@ class MomentoVI(VectorStore):
                 """
             )
         if config.cloud:
+            api_key = os.getenv("MOMENTO_API_KEY", "")
             self.client = PreviewVectorIndexClient(
                 configuration=VectorIndexConfigurations.Default.latest(),
-                credential_provider=CredentialProvider.from_environment_variable(
-                    "MOMENTO_API_KEY"
-                ),
+                credential_provider=CredentialProvider.from_string(api_key),
             )
         else:
             raise NotImplementedError("MomentoVI local not available yet")
@@ -92,10 +95,10 @@ class MomentoVI(VectorStore):
             logger.warning(f"No collections found with prefix {prefix}")
             return 0
         for name in coll_names:
-            self.client.delete_index(index_name=name)
+            self.delete_collection(name)
         logger.warning(
             f"""
-            Deleted {len(coll_names)} indices from Momento VIk
+            Deleted {len(coll_names)} indices from Momento VI
             """
         )
         return len(coll_names)
@@ -108,14 +111,13 @@ class MomentoVI(VectorStore):
         Args:
             empty (bool, optional): Whether to include empty collections.
         """
-        colls = list(self.client.list_indexes())
-        if empty:
-            return [coll.name for coll in colls]
-        counts = [
-            self.client.get_collection(collection_name=coll.name).points_count
-            for coll in colls
-        ]
-        return [coll.name for coll, count in zip(colls, counts) if count > 0]
+        response = self.client.list_indexes()
+        if isinstance(response, mvi_response.ListIndexes.Success):
+            return response.index_names
+        elif isinstance(response, mvi_response.ListIndexes.Error):
+            raise ValueError(f"Error listing collections: {response.message}")
+        else:
+            raise ValueError(f"Unexpected response: {response}")
 
     def create_collection(self, collection_name: str, replace: bool = False) -> None:
         """
@@ -132,15 +134,14 @@ class MomentoVI(VectorStore):
             num_dimensions=self.embedding_dim,
             similarity_metric=self.config.distance,
         )
-        match response:
-            case CreateIndex.Success():
-                logger.info(f"Created collection {collection_name}")
-            case CreateIndex.IndexAlreadyExists():
-                logger.warning(f"Collection {collection_name} already exists")
-            case CreateIndex.Error(error):
-                raise ValueError(
-                    f"Error creating collection {collection_name}: {error}"
-                )
+        if isinstance(response, mvi_response.CreateIndex.Success):
+            logger.info(f"Created collection {collection_name}")
+        elif isinstance(response, mvi_response.CreateIndex.IndexAlreadyExists):
+            logger.warning(f"Collection {collection_name} already exists")
+        elif isinstance(response, mvi_response.CreateIndex.Error):
+            raise ValueError(
+                f"Error creating collection {collection_name}: {response.message}"
+            )
         if settings.debug:
             level = logger.getEffectiveLevel()
             logger.setLevel(logging.INFO)
@@ -148,9 +149,6 @@ class MomentoVI(VectorStore):
             logger.setLevel(level)
 
     def add_documents(self, documents: Sequence[Document]) -> None:
-        from momento.requests.vector_index import Item
-        from momento.responses.vector_index import UpsertItemBatch
-
         if len(documents) == 0:
             return
         embedding_vecs = self.embedding_fn([doc.content for doc in documents])
@@ -163,7 +161,7 @@ class MomentoVI(VectorStore):
             Item(
                 id=str(d.id()),
                 vector=embedding_vecs[i],
-                metadata=d,
+                metadata=d.dict(),
             )
             for i, d in enumerate(documents)
         ]
@@ -176,16 +174,22 @@ class MomentoVI(VectorStore):
                 index_name=self.config.collection_name,
                 items=items[i : i + b],
             )
-            match response:
-                case UpsertItemBatch.Success():
-                    pass
-                case UpsertItemBatch.Error(_):
-                    raise response.inner_exception
-                case _:
-                    raise ValueError("Unexpected response")
+            if isinstance(response, mvi_response.UpsertItemBatch.Success):
+                continue
+            elif isinstance(response, mvi_response.UpsertItemBatch.Error):
+                raise ValueError(f"Error adding documents: {response.message}")
+            else:
+                raise ValueError(f"Unexpected response: {response}")
 
     def delete_collection(self, collection_name: str) -> None:
-        self.client.delete_collection(collection_name=collection_name)
+        delete_response = self.client.delete_index(collection_name)
+        if isinstance(delete_response, mvi_response.DeleteIndex.Success):
+            logger.warning(f"Deleted index {collection_name}")
+        elif isinstance(delete_response, mvi_response.DeleteIndex.Error):
+            logger.error(
+                f"Error while deleting index {collection_name}: "
+                f" {delete_response.message}"
+            )
 
     def _to_int_or_uuid(self, id: str) -> int | str:
         try:
@@ -194,37 +198,20 @@ class MomentoVI(VectorStore):
             return id
 
     def get_all_documents(self) -> List[Document]:
-        if self.config.collection_name is None:
-            raise ValueError("No collection name set, cannot retrieve docs")
-        docs = []
-        offset = 0
-        while True:
-            results, next_page_offset = self.client.scroll(
-                collection_name=self.config.collection_name,
-                scroll_filter=None,
-                offset=offset,
-                limit=10_000,  # try getting all at once, if not we keep paging
-                with_payload=True,
-                with_vectors=False,
-            )
-            docs += [Document(**record.payload) for record in results]  # type: ignore
-            if next_page_offset is None:
-                break
-            offset = next_page_offset  # type: ignore
-        return docs
+        raise NotImplementedError(
+            """
+            MomentoVI does not support get_all_documents().
+            Please use a different vector database, e.g. qdrant or chromadb.
+            """
+        )
 
     def get_documents_by_ids(self, ids: List[str]) -> List[Document]:
-        if self.config.collection_name is None:
-            raise ValueError("No collection name set, cannot retrieve docs")
-        _ids = [self._to_int_or_uuid(id) for id in ids]
-        records = self.client.retrieve(
-            collection_name=self.config.collection_name,
-            ids=_ids,
-            with_vectors=False,
-            with_payload=True,
+        raise NotImplementedError(
+            """
+            MomentoVI does not support get_documents_by_ids.
+            Please use a different vector database, e.g. qdrant or chromadb.
+            """
         )
-        docs = [Document(**record.payload) for record in records]  # type: ignore
-        return docs
 
     def similar_texts_with_scores(
         self,
@@ -232,4 +219,35 @@ class MomentoVI(VectorStore):
         k: int = 1,
         where: Optional[str] = None,
     ) -> List[Tuple[Document, float]]:
-        return []
+        if self.config.collection_name is None:
+            raise ValueError("No collection name set, cannot search")
+        embedding = self.embedding_fn([text])[0]
+        response = self.client.search(
+            index_name=self.config.collection_name,
+            query_vector=embedding,
+            top_k=k,
+            metadata_fields=ALL_METADATA,
+        )
+
+        if isinstance(response, mvi_response.Search.Error):
+            logger.warning(
+                f"Error while searching on index {self.config.collection_name}:"
+                f" {response.message}"
+            )
+            return []
+        elif not isinstance(response, mvi_response.Search.Success):
+            logger.warning(f"Unexpected response: {response}")
+            return []
+
+        scores = [match.distance for match in response.hits]
+        docs = [
+            Document(**(match.metadata)) for match in response.hits if match is not None
+        ]
+        if len(docs) == 0:
+            logger.warning(f"No matches found for {text}")
+            return []
+        if settings.debug:
+            logger.info(f"Found {len(docs)} matches, max score: {max(scores)}")
+        doc_score_pairs = list(zip(docs, scores))
+        self.show_if_debug(doc_score_pairs)
+        return doc_score_pairs

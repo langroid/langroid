@@ -40,12 +40,15 @@ class VectorStore(ABC):
     @staticmethod
     def create(config: VectorStoreConfig) -> Optional["VectorStore"]:
         from langroid.vector_store.chromadb import ChromaDB, ChromaDBConfig
+        from langroid.vector_store.momento import MomentoVI, MomentoVIConfig
         from langroid.vector_store.qdrantdb import QdrantDB, QdrantDBConfig
 
         if isinstance(config, QdrantDBConfig):
             return QdrantDB(config)
         elif isinstance(config, ChromaDBConfig):
             return ChromaDB(config)
+        elif isinstance(config, MomentoVIConfig):
+            return MomentoVI(config)
         else:
             logger.warning(
                 f"""
