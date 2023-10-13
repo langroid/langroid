@@ -22,6 +22,9 @@ localhost:8000:
 
 python3 examples/docqa/doc-chat-multi-llm.py -m local/localhost:8000
 
+See here for a guide on how to use Langroid with non-OpenAI LLMs (local/remote):
+https://langroid.github.io/langroid/tutorials/non-openai-llms/
+
 """
 import typer
 from rich import print
