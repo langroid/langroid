@@ -7,6 +7,7 @@ logger = logging.getLogger(__name__)
 DELETION_ALLOWED_PATHS = [
     ".qdrant",
     ".chroma",
+    ".lancedb",
 ]
 
 
