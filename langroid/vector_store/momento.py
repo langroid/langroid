@@ -50,15 +50,14 @@ class MomentoVI(VectorStore):
         self.host = config.host
         self.port = config.port
         load_dotenv()
-        key = os.getenv("MOMENTO_API_KEY")
-        if config.cloud and key is None:
+        api_key = os.getenv("MOMENTO_API_KEY")
+        if config.cloud and api_key is None:
             raise ValueError(
                 """MOMENTO_API_KEY env variable must be set to 
                 MomentoVI hosted service. Please set this in your .env file. 
                 """
             )
         if config.cloud:
-            api_key = os.getenv("MOMENTO_API_KEY", "")
             self.client = PreviewVectorIndexClient(
                 configuration=VectorIndexConfigurations.Default.latest(),
                 credential_provider=CredentialProvider.from_string(api_key),
