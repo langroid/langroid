@@ -9,6 +9,7 @@ from langroid.mytypes import DocMetaData, Document
 from langroid.utils.system import rmdir
 from langroid.vector_store.base import VectorStore
 from langroid.vector_store.chromadb import ChromaDB, ChromaDBConfig
+from langroid.vector_store.lancedb import LanceDB, LanceDBConfig
 from langroid.vector_store.meilisearch import MeiliSearch, MeiliSearchConfig
 from langroid.vector_store.momento import MomentoVI, MomentoVIConfig
 from langroid.vector_store.qdrantdb import QdrantDB, QdrantDBConfig
@@ -29,8 +30,18 @@ phrases = SimpleNamespace(
     BELGIUM="which city is Belgium's capital?",
 )
 
+
+class MyDocMetaData(DocMetaData):
+    id: str
+
+
+class MyDoc(Document):
+    content: str
+    metadata: MyDocMetaData
+
+
 stored_docs = [
-    Document(content=d, metadata=DocMetaData(id=str(i)))
+    MyDoc(content=d, metadata=MyDocMetaData(id=str(i)))
     for i, d in enumerate(vars(phrases).values())
 ]
 
@@ -98,6 +109,21 @@ def vecdb(request) -> VectorStore:
         vdb.add_documents(stored_docs)
         yield vdb
         vdb.delete_collection(collection_name=cfg.collection_name)
+
+    if request.param == "lancedb":
+        ldb_dir = ".lancedb/data/" + embed_cfg.model_type
+        rmdir(ldb_dir)
+        ldb_cfg = LanceDBConfig(
+            cloud=False,
+            collection_name="test-" + embed_cfg.model_type,
+            storage_path=ldb_dir,
+            embedding=embed_cfg,
+            document_class=MyDoc,  # IMPORTANT, to ensure table has full schema!
+        )
+        ldb = LanceDB(ldb_cfg)
+        ldb.add_documents(stored_docs)
+        yield ldb
+        rmdir(ldb_dir)
         return
 
 
@@ -116,7 +142,7 @@ def vecdb(request) -> VectorStore:
 )
 @pytest.mark.parametrize(
     "vecdb",
-    ["momento", "chroma", "meilisearch", "qdrant_local", "qdrant_cloud"],
+    ["momento", "lancedb", "chroma", "meilisearch", "qdrant_local", "qdrant_cloud"],
     indirect=True,
 )
 def test_vector_stores_search(
@@ -139,7 +165,7 @@ def test_vector_stores_search(
 
 @pytest.mark.parametrize(
     "vecdb",
-    ["momento", "meilisearch", "chroma", "qdrant_local", "qdrant_cloud"],
+    ["momento", "lancedb", "meilisearch", "chroma", "qdrant_local", "qdrant_cloud"],
     indirect=True,
 )
 def test_vector_stores_access(vecdb):

@@ -83,6 +83,7 @@ class GoogleSearchDocChatAgent(DocChatAgent):
 
 class CLIOptions(BaseSettings):
     fn_api: bool = False
+    model: str = ""
 
 
 def chat(opts: CLIOptions) -> None:
@@ -140,10 +141,22 @@ def chat(opts: CLIOptions) -> None:
     agent = GoogleSearchDocChatAgent(config)
     agent.enable_message(RelevantExtractsTool)
     agent.enable_message(RelevantSearchExtractsTool)
-    collection_name = "docqa-chat-search"
-    print(f"[red]Using {collection_name}, possibly replacing it")
+    collection_name = Prompt.ask(
+        "Name a collection to use",
+        default="docqa-chat-search",
+    )
+    replace = (
+        Prompt.ask(
+            "Would you like to replace this collection?",
+            choices=["y", "n"],
+            default="n",
+        )
+        == "y"
+    )
 
-    agent.vecdb.set_collection(collection_name, replace=True)
+    print(f"[red]Using {collection_name}")
+
+    agent.vecdb.set_collection(collection_name, replace=replace)
 
     task = Task(
         agent,
@@ -157,6 +170,7 @@ def chat(opts: CLIOptions) -> None:
 def main(
     debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
     nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
+    model: str = typer.Option("", "--model", "-m", help="model name"),
     fn_api: bool = typer.Option(False, "--fn_api", "-f", help="use functions api"),
     cache_type: str = typer.Option(
         "redis", "--cachetype", "-ct", help="redis or momento"
@@ -164,6 +178,7 @@ def main(
 ) -> None:
     cli_opts = CLIOptions(
         fn_api=fn_api,
+        model=model,
     )
 
     set_global(

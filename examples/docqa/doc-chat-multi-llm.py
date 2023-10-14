@@ -22,10 +22,12 @@ localhost:8000:
 
 python3 examples/docqa/doc-chat-multi-llm.py -m local/localhost:8000
 
+See here for a guide on how to use Langroid with non-OpenAI LLMs (local/remote):
+https://langroid.github.io/langroid/tutorials/non-openai-llms/
+
 """
 import typer
 from rich import print
-from rich.prompt import Prompt
 import os
 
 from langroid.agent.special.doc_chat_agent import (
@@ -37,7 +39,6 @@ from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
 from langroid.language_models.openai_gpt import OpenAIGPTConfig
 from langroid.agent.tools.recipient_tool import RecipientTool
-from langroid.parsing.urls import get_list_from_user
 from langroid.utils.configuration import set_global, Settings
 from langroid.utils.logging import setup_colored_logging
 from langroid.utils.constants import NO_ANSWER
@@ -50,69 +51,9 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 def chat(config: DocChatAgentConfig) -> None:
     doc_agent = DocChatAgent(config)
-    n_deletes = doc_agent.vecdb.clear_empty_collections()
-    collections = doc_agent.vecdb.list_collections()
-    collection_name = "NEW"
-    is_new_collection = False
-    replace_collection = False
-    if len(collections) > 0:
-        n = len(collections)
-        delete_str = f"(deleted {n_deletes} empty collections)" if n_deletes > 0 else ""
-        print(f"Found {n} collections: {delete_str}")
-        for i, option in enumerate(collections, start=1):
-            print(f"{i}. {option}")
-        while True:
-            choice = Prompt.ask(
-                f"Enter 1-{n} to select a collection, "
-                "or hit ENTER to create a NEW collection, "
-                "or -1 to DELETE ALL COLLECTIONS",
-                default="0",
-            )
-            try:
-                if -1 <= int(choice) <= n:
-                    break
-            except Exception:
-                pass
-
-        if choice == "-1":
-            confirm = Prompt.ask(
-                "Are you sure you want to delete all collections?",
-                choices=["y", "n"],
-                default="n",
-            )
-            if confirm == "y":
-                doc_agent.vecdb.clear_all_collections(really=True)
-                collection_name = "NEW"
-
-        if int(choice) > 0:
-            collection_name = collections[int(choice) - 1]
-            print(f"Using collection {collection_name}")
-            choice = Prompt.ask(
-                "Would you like to replace this collection?",
-                choices=["y", "n"],
-                default="n",
-            )
-            replace_collection = choice == "y"
-
-    if collection_name == "NEW":
-        is_new_collection = True
-        collection_name = Prompt.ask(
-            "What would you like to name the NEW collection?",
-            default="doc-chat-2",
-        )
-
-    doc_agent.vecdb.set_collection(collection_name, replace=replace_collection)
-
     print("[blue]Welcome to the document chatbot!")
+    doc_agent.user_docs_ingest_dialog()
     print("[cyan]Enter x or q to quit, or ? for evidence")
-    default_urls_str = " (or leave empty for default URLs)" if is_new_collection else ""
-    print(f"[blue]Enter some URLs or file/dir paths below {default_urls_str}")
-    inputs = get_list_from_user()
-    if len(inputs) == 0:
-        if is_new_collection:
-            inputs = config.default_paths
-    doc_agent.config.doc_paths = inputs
-    doc_agent.ingest()
 
     doc_task = Task(
         doc_agent,
@@ -160,6 +101,10 @@ def chat(config: DocChatAgentConfig) -> None:
         (i) Always ask questions ONE BY ONE (to either User or DocAgent), NEVER 
             send Multiple questions in one message.
         (j) Use bullet-point format when presenting multiple pieces of info.
+        (k) When DocAgent responds without citing a SOURCE and EXTRACT(S), you should
+            send your question again to DocChat, reminding it to cite the source and
+            extract(s).
+        
         
         Start by asking the user what they want to know.
         """,
@@ -185,12 +130,12 @@ def main(
         # "litellm/ollama/llama2"
         # "local/localhost:8000/v1"
         # "local/localhost:8000"
-        chat_context_length=2048,  # adjust based on model
+        chat_context_length=8192,  # adjust based on model
         timeout=45,
     )
 
     if model == "":
-        llm_config = OpenAIGPTConfig()  # default GPT-4
+        llm_config = OpenAIGPTConfig(timeout=45)  # default GPT-4
     else:
         llm_config = my_llm_config
         llm_config.chat_model = model

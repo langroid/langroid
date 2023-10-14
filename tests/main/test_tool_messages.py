@@ -297,6 +297,13 @@ def test_llm_tool_message(
     agent = MessageHandlingAgent(cfg)
     agent.config.use_functions_api = use_functions_api
     agent.config.use_tools = not use_functions_api
+    if not agent.llm.is_openai_chat_model() and use_functions_api:
+        pytest.skip(
+            f"""
+            Function Calling not available for {agent.config.llm.chat_model}: skipping
+            """
+        )
+
     agent.enable_message(FileExistsMessage)
     agent.enable_message(PythonVersionMessage)
     agent.enable_message(CountryCapitalMessage)
@@ -314,7 +321,8 @@ def test_llm_tool_message(
     assert result.lower() in agent_result.lower()
 
 
-def test_llm_non_tool():
+def test_llm_non_tool(test_settings: Settings):
+    agent = MessageHandlingAgent(cfg)
     llm_msg = agent.llm_response_forget(
         "Ask me to check what is the population of France."
     ).content

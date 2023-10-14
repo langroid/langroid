@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "langroid"
-version = "0.1.88"
+version = "0.1.94"
 description = "Harness LLMs with Multi-Agent Programming"
 authors = ["Prasad Chalasani <pchalasani@gmail.com>"]
 readme = "README.md"
@@ -77,6 +77,7 @@ meilisearch-python-sdk = "^2.0.1"
 litellm = "^0.6.2"
 scrapy = "^2.11.0"
 async-generator = "^1.10"
+lancedb = "^0.3.0"
 
 [tool.poetry.extras]
 # install these using `poetry install -E [...]` where [...] is one of the extras below

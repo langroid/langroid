@@ -67,6 +67,7 @@ for ideas on what to contribute.
 <summary> <b>:fire: Updates/Releases</b></summary>
 
 - **Oct 2023:**
+  - **0.1.94:** Added support for [LanceDB](https://lancedb.github.io/lancedb/) vector-store -- allows vector, Full-text, SQL search.
   - **0.1.84:** Added [LiteLLM](https://docs.litellm.ai/docs/providers), so now Langroid can be used with over 100 LLM providers (remote or local)! 
      See guide [here](https://langroid.github.io/langroid/tutorials/non-openai-llms/).
 - **Sep 2023:**
@@ -380,6 +381,10 @@ If the model is [supported by `liteLLM`](https://docs.litellm.ai/docs/providers)
 then no need to launch the proxy server.
 Just set the `chat_model` param above to `litellm/[provider]/[model]`, e.g. 
 `litellm/anthropic/claude-instant-1` and use the config object as above.
+For remote models, you will typically need to set API Keys etc as environment variables.
+You can set those based on the LiteLLM docs. 
+If any required environment variables are missing, Langroid gives a helpful error
+message indicating which ones are needed.
 </details>
 
 <details>

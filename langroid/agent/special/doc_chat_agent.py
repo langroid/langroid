@@ -18,6 +18,7 @@ from typing import List, Optional, Tuple, no_type_check
 
 from rich import print
 from rich.console import Console
+from rich.prompt import Prompt
 
 from langroid.agent.base import Agent
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
@@ -34,7 +35,7 @@ from langroid.parsing.search import (
     preprocess_text,
 )
 from langroid.parsing.url_loader import URLLoader
-from langroid.parsing.urls import get_urls_and_paths
+from langroid.parsing.urls import get_list_from_user, get_urls_and_paths
 from langroid.parsing.utils import batched
 from langroid.prompts.prompts_config import PromptsConfig
 from langroid.prompts.templates import SUMMARY_ANSWER_PROMPT_GPT4
@@ -251,6 +252,78 @@ class DocChatAgent(ChatAgent):
         if self.parser is None:
             raise ValueError("Parser not set")
         return self.parser.num_tokens(self.doc_string(docs))
+
+    def user_docs_ingest_dialog(self) -> None:
+        """
+        Ask user to select doc-collection, enter filenames/urls, and ingest into vecdb.
+        """
+        if self.vecdb is None:
+            raise ValueError("VecDB not set")
+        n_deletes = self.vecdb.clear_empty_collections()
+        collections = self.vecdb.list_collections()
+        collection_name = "NEW"
+        is_new_collection = False
+        replace_collection = False
+        if len(collections) > 0:
+            n = len(collections)
+            delete_str = (
+                f"(deleted {n_deletes} empty collections)" if n_deletes > 0 else ""
+            )
+            print(f"Found {n} collections: {delete_str}")
+            for i, option in enumerate(collections, start=1):
+                print(f"{i}. {option}")
+            while True:
+                choice = Prompt.ask(
+                    f"Enter 1-{n} to select a collection, "
+                    "or hit ENTER to create a NEW collection, "
+                    "or -1 to DELETE ALL COLLECTIONS",
+                    default="0",
+                )
+                try:
+                    if -1 <= int(choice) <= n:
+                        break
+                except Exception:
+                    pass
+
+            if choice == "-1":
+                confirm = Prompt.ask(
+                    "Are you sure you want to delete all collections?",
+                    choices=["y", "n"],
+                    default="n",
+                )
+                if confirm == "y":
+                    self.vecdb.clear_all_collections(really=True)
+                    collection_name = "NEW"
+
+            if int(choice) > 0:
+                collection_name = collections[int(choice) - 1]
+                print(f"Using collection {collection_name}")
+                choice = Prompt.ask(
+                    "Would you like to replace this collection?",
+                    choices=["y", "n"],
+                    default="n",
+                )
+                replace_collection = choice == "y"
+
+        if collection_name == "NEW":
+            is_new_collection = True
+            collection_name = Prompt.ask(
+                "What would you like to name the NEW collection?",
+                default="doc-chat-2",
+            )
+
+        self.vecdb.set_collection(collection_name, replace=replace_collection)
+
+        default_urls_str = (
+            " (or leave empty for default URLs)" if is_new_collection else ""
+        )
+        print(f"[blue]Enter some URLs or file/dir paths below {default_urls_str}")
+        inputs = get_list_from_user()
+        if len(inputs) == 0:
+            if is_new_collection:
+                inputs = self.config.default_paths
+        self.config.doc_paths = inputs
+        self.ingest()
 
     @no_type_check
     def llm_response(
@@ -529,6 +602,9 @@ class DocChatAgent(ChatAgent):
         # keep unique passages
         id2passage = {p.id(): p for p in passages}
         passages = list(id2passage.values())
+
+        if len(passages) == 0:
+            return []
 
         # now passages can potentially have a lot of doc chunks,
         # so we re-rank them using a cross-encoder scoring model
