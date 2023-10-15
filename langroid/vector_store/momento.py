@@ -28,6 +28,10 @@ from langroid.embedding_models.base import (
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
 from langroid.mytypes import Document
 from langroid.utils.configuration import settings
+from langroid.utils.pydantic_utils import (
+    flatten_pydantic_instance,
+    nested_dict_from_flat,
+)
 from langroid.vector_store.base import VectorStore, VectorStoreConfig
 
 logger = logging.getLogger(__name__)
@@ -51,13 +55,13 @@ class MomentoVI(VectorStore):
         self.port = config.port
         load_dotenv()
         api_key = os.getenv("MOMENTO_API_KEY")
-        if config.cloud and api_key is None:
-            raise ValueError(
-                """MOMENTO_API_KEY env variable must be set to 
-                MomentoVI hosted service. Please set this in your .env file. 
-                """
-            )
         if config.cloud:
+            if api_key is None:
+                raise ValueError(
+                    """MOMENTO_API_KEY env variable must be set to 
+                    MomentoVI hosted service. Please set this in your .env file. 
+                    """
+                )
             self.client = PreviewVectorIndexClient(
                 configuration=VectorIndexConfigurations.Default.latest(),
                 credential_provider=CredentialProvider.from_string(api_key),
@@ -160,7 +164,8 @@ class MomentoVI(VectorStore):
             Item(
                 id=str(d.id()),
                 vector=embedding_vecs[i],
-                metadata=d.dict(),
+                metadata=flatten_pydantic_instance(d, force_str=True),
+                # force all values to str since Momento requires it
             )
             for i, d in enumerate(documents)
         ]
@@ -240,7 +245,9 @@ class MomentoVI(VectorStore):
 
         scores = [match.distance for match in response.hits]
         docs = [
-            Document(**(match.metadata)) for match in response.hits if match is not None
+            Document.parse_obj(nested_dict_from_flat(match.metadata))
+            for match in response.hits
+            if match is not None
         ]
         if len(docs) == 0:
             logger.warning(f"No matches found for {text}")

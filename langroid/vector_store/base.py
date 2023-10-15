@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 class VectorStoreConfig(BaseSettings):
-    type: str = "qdrant"  # deprecated, keeping it for backward compatibility
+    type: str = ""  # deprecated, keeping it for backward compatibility
     collection_name: str | None = None
     replace_collection: bool = False  # replace collection if it already exists
     storage_path: str = ".qdrant/data"
