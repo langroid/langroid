@@ -103,17 +103,36 @@ def flatten_pydantic_model(
     return create_model("FlatModel", __base__=base_model, **flattened_fields)
 
 
-def flatten_pydantic_instance(instance: BaseModel, prefix: str = "") -> Dict[str, Any]:
+def flatten_pydantic_instance(
+    instance: BaseModel,
+    prefix: str = "",
+    force_str: bool = False,
+) -> Dict[str, Any]:
+    """
+    Given a possibly nested Pydantic instance, return a flattened version of it,
+    as a dict where nested traversal paths are translated to keys a__b__c.
+
+    Args:
+        instance (BaseModel): The Pydantic instance to flatten.
+        prefix (str, optional): The prefix to use for the top-level fields.
+        force_str (bool, optional): Whether to force all values to be strings.
+
+    Returns:
+        Dict[str, Any]: The flattened dict.
+
+    """
     flat_data: Dict[str, Any] = {}
     for name, value in instance.dict().items():
         # Assuming nested pydantic model will be a dict here
         if isinstance(value, dict):
             nested_flat_data = flatten_pydantic_instance(
-                instance.__fields__[name].type_(**value), prefix=f"{prefix}{name}__"
+                instance.__fields__[name].type_(**value),
+                prefix=f"{prefix}{name}__",
+                force_str=force_str,
             )
             flat_data.update(nested_flat_data)
         else:
-            flat_data[f"{prefix}{name}"] = value
+            flat_data[f"{prefix}{name}"] = str(value) if force_str else value
     return flat_data
 
 
@@ -121,9 +140,23 @@ def nested_dict_from_flat(
     flat_data: Dict[str, Any],
     sub_dict: str = "",
 ) -> Dict[str, Any]:
+    """
+    Given a flattened version of a nested dict, reconstruct the nested dict.
+    Field names in the flattened dict are assumed to be of the form
+    "field1__field2__field3", going from top level down.
+
+    Args:
+        flat_data (Dict[str, Any]): The flattened dict.
+        sub_dict (str, optional): The name of the sub-dict to extract from the
+            flattened dict. Defaults to "" (extract the whole dict).
+
+    Returns:
+        Dict[str, Any]: The nested dict.
+
+    """
     nested_data: Dict[str, Any] = {}
     for key, value in flat_data.items():
-        if not key.startswith(sub_dict + "__"):
+        if sub_dict != "" and not key.startswith(sub_dict + "__"):
             continue
         keys = key.split("__")
         d = nested_data
@@ -140,5 +173,6 @@ def pydantic_obj_from_flat_dict(
     model: Type[BaseModel],
     sub_dict: str = "",
 ) -> BaseModel:
+    """flatened dict with a__b__c style keys -> nested dict -> pydantic object"""
     nested_data = nested_dict_from_flat(flat_data, sub_dict)
     return model(**nested_data)
