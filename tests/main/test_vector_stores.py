@@ -140,9 +140,10 @@ def vecdb(request) -> VectorStore:
         ("people outside Canada", [phrases.NOT_CANADA], ["meilisearch"]),
     ],
 )
+# add "momento" when index-creation timeout error is resolved.
 @pytest.mark.parametrize(
     "vecdb",
-    ["momento", "lancedb", "chroma", "meilisearch", "qdrant_local", "qdrant_cloud"],
+    ["lancedb", "chroma", "meilisearch", "qdrant_local", "qdrant_cloud"],
     indirect=True,
 )
 def test_vector_stores_search(
@@ -166,9 +167,10 @@ def test_vector_stores_search(
     assert set(results).issubset(set(matching_docs))
 
 
+# add "momento" when index-creation timeout error is resolved.
 @pytest.mark.parametrize(
     "vecdb",
-    ["momento", "lancedb", "meilisearch", "chroma", "qdrant_local", "qdrant_cloud"],
+    ["lancedb", "meilisearch", "chroma", "qdrant_local", "qdrant_cloud"],
     indirect=True,
 )
 def test_vector_stores_access(vecdb):
