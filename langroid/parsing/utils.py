@@ -77,9 +77,24 @@ def closest_string(query: str, string_list: List[str]) -> str:
     return original_closest_match
 
 
+def split_paragraphs(text: str) -> List[str]:
+    """
+    Split the input text into paragraphs using "\n\n" as the delimiter.
+
+    Args:
+        text (str): The input text.
+
+    Returns:
+        list: A list of paragraphs.
+    """
+    # Split based on a newline, followed by spaces/tabs, then another newline.
+    paras = re.split(r"\n[ \t]*\n", text)
+    return [para.strip() for para in paras if para.strip()]
+
+
 def number_sentences(s: str) -> str:
     """
-    Number the sentences in a given text.
+    Number the sentences in a given text, preserving paragraph structure.
 
     Args:
         s (str): The input text.
@@ -91,15 +106,20 @@ def number_sentences(s: str) -> str:
         >>> number_sentences("Hello world! How are you? Have a good day.")
         '(1) Hello world! (2) How are you? (3) Have a good day.'
     """
-    # Tokenize the text into sentences using NLTK's Punkt tokenizer
-    sentences = nltk.sent_tokenize(s)
+    numbered_text = []
+    count = 1
 
-    # Constructing the new string with numbers
-    numbered_text = " ".join(
-        [f"({i+1}) {sentence}" for i, sentence in enumerate(sentences)]
-    )
+    paragraphs = split_paragraphs(s)
+    for paragraph in paragraphs:
+        sentences = nltk.sent_tokenize(paragraph)
+        for i, sentence in enumerate(sentences):
+            sentence = f"({count}) {sentence}"
+            count += 1
+            sentences[i] = sentence
+        numbered_paragraph = " ".join(sentences)
+        numbered_text.append(numbered_paragraph)
 
-    return numbered_text
+    return "  \n\n  ".join(numbered_text)
 
 
 def parse_number_range_list(specs: str) -> List[int]:
@@ -126,21 +146,6 @@ def parse_number_range_list(specs: str) -> List[int]:
             spec_indices.add(int(part))
 
     return sorted(list(spec_indices))
-
-
-def split_paragraphs(text: str) -> List[str]:
-    """
-    Split the input text into paragraphs using "\n\n" as the delimiter.
-
-    Args:
-        text (str): The input text.
-
-    Returns:
-        list: A list of paragraphs.
-    """
-    # Split based on a newline, followed by spaces/tabs, then another newline.
-    paras = re.split(r"\n[ \t]*\n", text)
-    return [para.strip() for para in paras if para.strip()]
 
 
 def clean_whitespace(text: str) -> str:

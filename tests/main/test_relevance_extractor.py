@@ -10,44 +10,50 @@ from langroid.agent.tools.sentence_extract_tool import SentenceExtractTool
 from langroid.parsing.utils import (
     clean_whitespace,
     extract_numbered_sentences,
+    number_sentences,
     parse_number_range_list,
 )
 from langroid.utils.configuration import Settings, set_global
 
 
 @pytest.mark.parametrize(
-    "prompt, expected",
+    "passage, query, expected",
     [
         (
             """
-        PASSAGE:
-        (1) Whales are big. 
+        Whales are big. 
         
-        (2) Cats like to be clean. (3) They also like to be petted. (4) And when they 
-        are hungry they like to meow. (5) Dogs are very friendly. (6) They are also 
-        very loyal. (7) But so are cats. (8) Unlike cats, dogs can get dirty.
+        Cats like to be clean. They also like to be petted. And when they 
+        are hungry they like to meow. Dogs are very friendly. They are also 
+        very loyal. But so are cats. Unlike cats, dogs can get dirty.
         
-        (9) Cats are also very independent. (10) Unlike dogs, they like 
-        to be left alone.
-        
-        QUERY: What do we know about cats?
+        Cats are also very independent. Unlike dogs, they like to be left alone.
         """,
+            "What do we know about cats?",
             "2-4,7,9,10",  # or LLM could say 2,3,4,7,9,10; we handle this below
         )
     ],
 )
+@pytest.mark.parametrize("fn_api", [True, False])
 def test_relevance_extractor_agent(
     test_settings: Settings,
-    prompt: str,
+    fn_api: bool,
+    passage: str,
+    query: str,
     expected: str,
 ) -> None:
     set_global(test_settings)
-    prompt = clean_whitespace(prompt)
+    passage = clean_whitespace(passage)
+    agent_cfg = RelevanceExtractorAgentConfig(
+        use_tools=not fn_api,  # use tools if not fn_api
+        use_functions_api=fn_api,
+        query=query,
+    )
 
     # directly send to llm and verify response is as expected
-    extractor_agent = RelevanceExtractorAgent(RelevanceExtractorAgentConfig())
+    extractor_agent = RelevanceExtractorAgent(agent_cfg)
 
-    response = extractor_agent.llm_response(prompt)
+    response = extractor_agent.llm_response(passage)
     tools = extractor_agent.get_tool_messages(response)
     assert len(tools) == 1
     assert isinstance(tools[0], SentenceExtractTool)
@@ -58,15 +64,16 @@ def test_relevance_extractor_agent(
     # create task so that:
     # - llm generates sentence-list using SentenceExtractTool
     # - agent extracts sentences using SentenceExtractTool, says DONE
-    extractor_agent = RelevanceExtractorAgent(RelevanceExtractorAgentConfig())
+    extractor_agent = RelevanceExtractorAgent(agent_cfg)
     extractor_task = Task(
         extractor_agent,
         default_human_response="",  # eliminate human response
         only_user_quits_root=False,  # allow agent_response to quit via "DONE <msg>"
     )
 
-    result = extractor_task.run(prompt)
-    expected_sentences = extract_numbered_sentences(prompt, expected)
+    result = extractor_task.run(passage)
+    numbered_passage = number_sentences(passage)
+    expected_sentences = extract_numbered_sentences(numbered_passage, expected)
     # the result should be the expected sentences, modulo whitespace
     assert set(nltk.sent_tokenize(result.content)) == set(
         nltk.sent_tokenize(expected_sentences)

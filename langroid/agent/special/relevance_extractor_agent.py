@@ -4,14 +4,15 @@ that are relevant to a query.
 
 """
 import logging
+from typing import Optional, no_type_check
 
 from rich.console import Console
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
+from langroid.agent.chat_document import ChatDocument
 from langroid.agent.tools.sentence_extract_tool import SentenceExtractTool
-from langroid.language_models.base import Role
 from langroid.language_models.openai_gpt import OpenAIGPTConfig
-from langroid.parsing.utils import extract_numbered_sentences
+from langroid.parsing.utils import extract_numbered_sentences, number_sentences
 
 console = Console()
 logger = logging.getLogger(__name__)
@@ -19,6 +20,7 @@ logger = logging.getLogger(__name__)
 
 class RelevanceExtractorAgentConfig(ChatAgentConfig):
     llm: OpenAIGPTConfig = OpenAIGPTConfig()
+    query: str  # query for relevance extraction
     system_message = """
     The user will give you a PASSAGE containing numbered sentences, 
     followed by a QUERY. Your task is to extract the sentence-numbers from the PASSAGE
@@ -37,19 +39,42 @@ class RelevanceExtractorAgent(ChatAgent):
         super().__init__(config)
         self.config: RelevanceExtractorAgentConfig = config
         self.enable_message(SentenceExtractTool)
+        self.numbered_passage: Optional[str] = None
+
+    @no_type_check
+    def llm_response(
+        self, message: Optional[str | ChatDocument] = None
+    ) -> Optional[ChatDocument]:
+        """Compose a prompt asking to extract relevant sentences from a passage.
+        Steps:
+        - number the sentences in the passage
+        - compose prompt
+        - send to LLM
+        """
+        assert self.config.query is not None, "No query specified"
+        assert message is not None, "No message specified"
+        message_str = message.content if isinstance(message, ChatDocument) else message
+        # number the sentences in the passage
+        self.numbered_passage = number_sentences(message_str)
+        # compose prompt
+        prompt = f"""
+        PASSAGE:
+        {self.numbered_passage}
+        
+        QUERY: {self.config.query}
+        """
+        # send to LLM
+        return super().llm_response(prompt)
 
     def extract_sentences(self, msg: SentenceExtractTool) -> str:
+        """Method to handle a SentenceExtractTool message from LLM"""
         spec = msg.sentence_list
         if len(self.message_history) == 0:
             return ""
         if spec is None:
             return ""
-        assert len(self.message_history) > 0, "No message history"
-        assert self.message_history[-1].role == Role.ASSISTANT
-        last_user_msg = self.last_message_with_role(Role.USER)
-        if last_user_msg is None:
-            return ""
+        assert self.numbered_passage is not None, "No numbered passage"
         # assume this has numbered sentences
-        extracts = extract_numbered_sentences(last_user_msg.content, spec)
+        extracts = extract_numbered_sentences(self.numbered_passage, spec)
         # this response ends the task by saying DONE
         return "DONE " + extracts
