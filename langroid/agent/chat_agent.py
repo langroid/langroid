@@ -288,6 +288,13 @@ class ChatAgent(Agent):
         """
         self.system_message += "\n\n" + message
 
+    def last_message_with_role(self, role: Role) -> LLMMessage | None:
+        """from `message_history`, return the last message with role `role`"""
+        for i in range(len(self.message_history) - 1, -1, -1):
+            if self.message_history[i].role == role:
+                return self.message_history[i]
+        return None
+
     def update_last_message(self, message: str, role: str = Role.USER) -> None:
         """
         Update the last message that has role `role` in the message history.

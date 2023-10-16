@@ -1,5 +1,6 @@
 import difflib
 import random
+import re
 from itertools import islice
 from typing import Any, Iterable, List
 
@@ -74,3 +75,124 @@ def closest_string(query: str, string_list: List[str]) -> str:
     )
 
     return original_closest_match
+
+
+def number_sentences(s: str) -> str:
+    """
+    Number the sentences in a given text.
+
+    Args:
+        s (str): The input text.
+
+    Returns:
+        str: The text with sentences numbered in the style (1), (2), etc.
+
+    Example:
+        >>> number_sentences("Hello world! How are you? Have a good day.")
+        '(1) Hello world! (2) How are you? (3) Have a good day.'
+    """
+    # Tokenize the text into sentences using NLTK's Punkt tokenizer
+    sentences = nltk.sent_tokenize(s)
+
+    # Constructing the new string with numbers
+    numbered_text = " ".join(
+        [f"({i+1}) {sentence}" for i, sentence in enumerate(sentences)]
+    )
+
+    return numbered_text
+
+
+def parse_number_range_list(specs: str) -> List[int]:
+    """
+    Parse a specs string like "3,5,7-10" into a list of integers.
+
+    Args:
+        specs (str): A string containing sentence numbers and/or ranges
+                     (e.g., "3,5,7-10").
+
+    Returns:
+        List[int]: List of sentence numbers.
+
+    Example:
+        >>> parse_number_range_list("3,5,7-10")
+        [3, 5, 7, 8, 9, 10]
+    """
+    spec_indices = set()  # type: ignore
+    for part in specs.split(","):
+        if "-" in part:
+            start, end = map(int, part.split("-"))
+            spec_indices.update(range(start, end + 1))
+        else:
+            spec_indices.add(int(part))
+
+    return sorted(list(spec_indices))
+
+
+def split_paragraphs(text: str) -> List[str]:
+    """
+    Split the input text into paragraphs using "\n\n" as the delimiter.
+
+    Args:
+        text (str): The input text.
+
+    Returns:
+        list: A list of paragraphs.
+    """
+    # Split based on a newline, followed by spaces/tabs, then another newline.
+    paras = re.split(r"\n[ \t]*\n", text)
+    return [para.strip() for para in paras if para.strip()]
+
+
+def clean_whitespace(text: str) -> str:
+    """Remove extra whitespace from the input text, while preserving
+    paragraph structure.
+    """
+    paragraphs = split_paragraphs(text)
+    cleaned_paragraphs = [" ".join(p.split()) for p in paragraphs if p]
+    return "\n\n".join(cleaned_paragraphs)  # Join the cleaned paragraphs.
+
+
+def extract_numbered_sentences(s: str, specs: str) -> str:
+    """
+    Extract specified sentences from a numbered text, preserving paragraph structure.
+
+    Args:
+        s (str): The input text containing numbered sentences.
+        specs (str): A string containing sentence numbers and/or ranges
+                     (e.g., "3,5,7-10").
+
+    Returns:
+        str: Extracted sentences, keeping original paragraph structures.
+
+    Example:
+        >>> text = "(1) Hello world! (2) How are you? (3) Have a good day."
+        >>> extract_sentences(text, "1,3")
+        'Hello world! Have a good day.'
+    """
+    # Use the helper function to get the list of indices from specs
+    spec_indices = parse_number_range_list(specs)
+
+    # Regular expression to identify numbered sentences
+    sentence_pattern = re.compile(r"\((\d+)\) ([^()]+[.!?])")
+
+    # Split the text into paragraphs while preserving their boundaries
+    paragraphs = split_paragraphs(s)
+
+    extracted_paragraphs = []
+
+    for paragraph in paragraphs:
+        sentences_with_numbers = sentence_pattern.findall(paragraph)
+
+        # Extract the desired sentences from this paragraph
+        extracted_sentences = [
+            sentence
+            for num, sentence in sentences_with_numbers
+            if int(num) in spec_indices
+        ]
+
+        # If we extracted any sentences from this paragraph,
+        # join them and append to results
+        if extracted_sentences:
+            extracted_paragraphs.append(" ".join(extracted_sentences))
+
+    return "\n\n".join(extracted_paragraphs)
