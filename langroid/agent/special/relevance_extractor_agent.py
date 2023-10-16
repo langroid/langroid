@@ -66,12 +66,37 @@ class RelevanceExtractorAgent(ChatAgent):
         # send to LLM
         return super().llm_response(prompt)
 
+    @no_type_check
+    async def llm_response_async(
+        self, message: Optional[str | ChatDocument] = None
+    ) -> Optional[ChatDocument]:
+        """Compose a prompt asking to extract relevant sentences from a passage.
+        Steps:
+        - number the sentences in the passage
+        - compose prompt
+        - send to LLM
+        """
+        assert self.config.query is not None, "No query specified"
+        assert message is not None, "No message specified"
+        message_str = message.content if isinstance(message, ChatDocument) else message
+        # number the sentences in the passage
+        self.numbered_passage = number_sentences(message_str)
+        # compose prompt
+        prompt = f"""
+        PASSAGE:
+        {self.numbered_passage}
+        
+        QUERY: {self.config.query}
+        """
+        # send to LLM
+        return await super().llm_response_async(prompt)
+
     def extract_sentences(self, msg: SentenceExtractTool) -> str:
         """Method to handle a SentenceExtractTool message from LLM"""
         spec = msg.sentence_list
         if len(self.message_history) == 0:
             return ""
-        if spec is None:
+        if spec is None or spec.strip() == "":
             return ""
         assert self.numbered_passage is not None, "No numbered passage"
         # assume this has numbered sentences

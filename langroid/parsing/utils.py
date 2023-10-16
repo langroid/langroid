@@ -175,6 +175,8 @@ def extract_numbered_sentences(s: str, specs: str) -> str:
         'Hello world! Have a good day.'
     """
     # Use the helper function to get the list of indices from specs
+    if specs.strip() == "":
+        return ""
     spec_indices = parse_number_range_list(specs)
 
     # Regular expression to identify numbered sentences
