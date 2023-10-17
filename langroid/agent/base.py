@@ -32,6 +32,7 @@ from langroid.language_models.base import (
     LLMTokenUsage,
     StreamingIfAllowed,
 )
+from langroid.language_models.openai_gpt import OpenAIGPTConfig
 from langroid.mytypes import DocMetaData, Entity
 from langroid.parsing.json import extract_top_level_json
 from langroid.parsing.parser import Parser, ParsingConfig
@@ -54,7 +55,7 @@ class AgentConfig(BaseSettings):
     name: str = "LLM-Agent"
     debug: bool = False
     vecdb: Optional[VectorStoreConfig] = None
-    llm: Optional[LLMConfig] = LLMConfig()
+    llm: Optional[LLMConfig] = OpenAIGPTConfig()
     parsing: Optional[ParsingConfig] = ParsingConfig()
     prompts: Optional[PromptsConfig] = PromptsConfig()
 

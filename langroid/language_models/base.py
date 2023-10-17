@@ -27,6 +27,7 @@ logger = logging.getLogger(__name__)
 
 class LLMConfig(BaseSettings):
     type: str = "openai"
+    api_base: str | None = None
     formatter: None | PromptFormatterConfig = Llama2FormatterConfig()
     timeout: int = 20  # timeout for API requests
     chat_model: str = ""
@@ -215,6 +216,16 @@ class LanguageModel(ABC):
             config: configuration for language model
         Returns: instance of language model
         """
+        if type(config) is LLMConfig:
+            raise ValueError(
+                """
+                Cannot create a Language Model object from LLMConfig. 
+                Please specify a specific subclass of LLMConfig e.g., 
+                OpenAIGPTConfig. If you are creating a ChatAgent from 
+                a ChatAgentConfig, please specify the `llm` field of this config
+                as a specific subclass of LLMConfig, e.g., OpenAIGPTConfig.
+                """
+            )
         from langroid.language_models.azure_openai import AzureGPT
         from langroid.language_models.openai_gpt import OpenAIGPT
 

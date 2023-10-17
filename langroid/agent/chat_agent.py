@@ -456,6 +456,8 @@ class ChatAgent(Agent):
         Returns:
             LLM response as a ChatDocument object
         """
+        if self.llm is None:
+            return None
         hist, output_len = self._prep_llm_messages(message)
         with StreamingIfAllowed(self.llm, self.llm.get_stream()):
             response = self.llm_response_messages(hist, output_len)
@@ -471,6 +473,9 @@ class ChatAgent(Agent):
         """
         Async version of `llm_response`. See there for details.
         """
+        if self.llm is None:
+            return None
+
         hist, output_len = self._prep_llm_messages(message)
         with StreamingIfAllowed(self.llm, self.llm.get_stream()):
             response = await self.llm_response_messages_async(hist, output_len)
@@ -494,7 +499,7 @@ class ChatAgent(Agent):
         """
 
         if not self.llm_can_respond(message):
-            return None
+            return [], 0
 
         assert (
             message is not None or len(self.message_history) == 0
