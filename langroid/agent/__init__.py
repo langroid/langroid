@@ -11,6 +11,7 @@ from .task import Task
 
 from . import base
 from . import chat_document
+from . import chat_agent
 from . import task
 from . import tool_message
 from . import tools

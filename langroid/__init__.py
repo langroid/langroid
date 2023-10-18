@@ -15,10 +15,14 @@ from . import embedding_models
 from . import vector_store
 from . import agent
 
-from .agent import (
+from .agent.base import (
     Agent,
     AgentConfig,
+)
+
+from .agent.chat_agent import (
     ChatAgent,
     ChatAgentConfig,
-    Task,
 )
+
+from .agent.task import Task

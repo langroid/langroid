@@ -4,7 +4,6 @@ from .description_extractors import (
     extract_default_descriptions,
     extract_schema_descriptions,
 )
-from .populate_metadata import populate_metadata_with_schema_tools, populate_metadata
 from .tools import (
     RunQueryTool,
     GetTableNamesTool,

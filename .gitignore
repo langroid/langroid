@@ -142,3 +142,7 @@ dmypy.json
 # Emacs
 *~
 \#*\#
+
+# Vector DBs
+:memory/
+data.ms
