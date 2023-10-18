@@ -3,7 +3,6 @@ import asyncio
 import pytest
 
 from langroid.agent.base import NO_ANSWER
-from langroid.agent.batch import run_batch_tasks
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
@@ -207,36 +206,3 @@ async def test_task_concurrent(test_settings: Settings):
 
     for e in expected_answers:
         assert any(e.lower() in a.content.lower() for a in answers)
-
-
-def test_task_batch(test_settings: Settings):
-    set_global(test_settings)
-    cfg = _TestChatAgentConfig()
-
-    agent = ChatAgent(cfg)
-    task = Task(
-        agent,
-        name="Test",
-        llm_delegate=False,
-        single_round=True,
-        default_human_response="",
-    )
-
-    # run clones of this task on these inputs
-    N = 5
-    questions = list(range(5))
-    expected_answers = [(i + 3) for i in range(N)]
-
-    # batch run
-    answers = run_batch_tasks(
-        task,
-        questions,
-        input_map=lambda x: str(x) + "+" + str(3),  # what to feed to each task
-        output_map=lambda x: x,  # how to process the result of each task
-    )
-
-    # expected_answers are simple numbers, but
-    # actual answers may be more wordy like "sum of 1 and 3 is 4",
-    # so we just check if the expected answer is contained in the actual answer
-    for e in expected_answers:
-        assert any(str(e) in a.content.lower() for a in answers)

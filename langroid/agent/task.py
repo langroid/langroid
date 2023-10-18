@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import logging
 from typing import Any, Callable, Coroutine, Dict, List, Optional, Set, Type, cast
 
@@ -173,7 +174,8 @@ class Task:
         """
         assert type(self.agent) is ChatAgent, "Task clone only works for ChatAgent"
         agent_cls = type(self.agent)
-        agent: ChatAgent = agent_cls(self.agent.config)
+        config_copy = copy.deepcopy(self.agent.config)
+        agent: ChatAgent = agent_cls(config_copy)
         return Task(
             agent,
             name=self.name + f"-{i}",
