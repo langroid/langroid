@@ -18,7 +18,7 @@ def download_nltk_resource(resource: str) -> None:
     try:
         nltk.data.find(resource)
     except LookupError:
-        nltk.download(resource)
+        nltk.download(resource, quiet=True)
 
 
 def batched(iterable: Iterable[Any], n: int) -> Iterable[Any]:
