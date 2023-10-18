@@ -137,7 +137,6 @@ dmypy.json
 
 
 .vscode
-.qdrant-sentence-transformer*
 
 # Emacs
 *~
@@ -146,3 +145,4 @@ dmypy.json
 # Vector DBs
 :memory/
 data.ms
+.qdrant-sentence-transformer*
