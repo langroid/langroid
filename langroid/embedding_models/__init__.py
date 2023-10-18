@@ -8,4 +8,3 @@ from .models import (
     SentenceTransformerEmbeddings,
     embedding_model,
 )
-    

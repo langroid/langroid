@@ -4,10 +4,9 @@ from . import base
 from . import openai_gpt
 from . import azure_openai
 from . import prompt_formatter
-      
+
 from .base import (
     LLMConfig,
-    LocalModelConfig,
     LLMMessage,
     LLMFunctionCall,
     LLMFunctionSpec,

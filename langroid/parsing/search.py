@@ -10,15 +10,15 @@ import difflib
 import re
 from typing import List, Tuple
 
-import nltk
 from nltk.corpus import stopwords
 from nltk.stem import WordNetLemmatizer
 from nltk.tokenize import RegexpTokenizer
 from rank_bm25 import BM25Okapi
 from thefuzz import fuzz, process
-from .utils import download_nltk_resource
 
 from langroid.mytypes import Document
+
+from .utils import download_nltk_resource
 
 
 def find_fuzzy_matches_in_docs(

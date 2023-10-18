@@ -1,14 +1,15 @@
 import difflib
 import random
+from functools import cache
 from itertools import islice
 from typing import Any, Iterable, List
-from functools import cache
 
 import nltk
 from faker import Faker
 
 Faker.seed(23)
 random.seed(43)
+
 
 # Ensures the NLTK resource is available
 @cache
