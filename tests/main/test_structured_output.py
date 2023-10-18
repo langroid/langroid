@@ -138,7 +138,7 @@ def test_llm_structured_output_nested(
     use_functions_api: bool,
 ):
     """
-    Test whether LLM is able to GENERATE structured output.
+    Test whether LLM is able to GENERATE nested structured output.
     """
     set_global(test_settings)
     agent = ChatAgent(cfg)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import copy
 import logging
 from typing import Any, Callable, Coroutine, Dict, List, Optional, Set, Type, cast
 
@@ -59,7 +60,7 @@ class Task:
         llm_delegate: bool = False,
         single_round: bool = False,
         system_message: str = "",
-        user_message: str = "",
+        user_message: str | None = "",
         restart: bool = False,
         default_human_response: Optional[str] = None,
         interactive: bool = True,
@@ -149,6 +150,7 @@ class Task:
         self.pending_sender: Responder = Entity.USER
         self.single_round = single_round
         self.turns = -1  # no limit
+        self.llm_delegate = llm_delegate
         if llm_delegate:
             self.controller = Entity.LLM
             if self.single_round:
@@ -165,6 +167,29 @@ class Task:
         self.sub_tasks: List[Task] = []
         self.parent_task: Set[Task] = set()
         self.caller: Task | None = None  # which task called this task's `run` method
+
+    def clone(self, i: int) -> "Task":
+        """
+        Returns a copy of this task, with a new agent.
+        """
+        assert isinstance(self.agent, ChatAgent), "Task clone only works for ChatAgent"
+
+        agent_cls = type(self.agent)
+        config_copy = copy.deepcopy(self.agent.config)
+        agent: ChatAgent = agent_cls(config_copy)
+        return Task(
+            agent,
+            name=self.name + f"-{i}",
+            llm_delegate=self.llm_delegate,
+            single_round=self.single_round,
+            system_message=self.agent.system_message,
+            user_message=self.agent.user_message,
+            restart=False,
+            default_human_response=self.default_human_response,
+            interactive=self.interactive,
+            only_user_quits_root=self.only_user_quits_root,
+            erase_substeps=self.erase_substeps,
+        )
 
     def __repr__(self) -> str:
         return f"{self.name}"
@@ -802,8 +827,12 @@ class Task:
         """
         if recipient == "":
             return True
-        responder_names = [self.name] + [r.name for r in self.responders]
-        return recipient in responder_names
+        # native responders names are USER, LLM, AGENT,
+        # and the names of subtasks are from Task.name attribute
+        responder_names = [self.name.lower()] + [
+            r.name.lower() for r in self.responders
+        ]
+        return recipient.lower() in responder_names
 
     def _recipient_mismatch(self, e: Responder) -> bool:
         """

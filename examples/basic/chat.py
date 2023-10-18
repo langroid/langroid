@@ -47,39 +47,41 @@ setup_colored_logging()
 
 # OPTION 1: LiteLLM-supported models
 # -----------------------------------
-# Use this config for any model supported by litellm
-# (see list here https://docs.litellm.ai/docs/providers).
+# For any model supported by litellm
+# (see list here https://docs.litellm.ai/docs/providers)
 # The `chat_model` should be specified as "litellm/" followed by
 # the chat_model name in the litellm docs.
+# In this case Langroid uses the litellm adapter library to
+# translate between OpenAI API and the model's API.
 # For external (remote) models, typical there will be specific env vars
 # (e.g. API Keys, etc) that need to be set.
 # If those are not set, you will get an err msg saying which vars need to be set.
-LiteLLMConfig = OpenAIGPTConfig.create(prefix="litellm")
-litellm_config = LiteLLMConfig(
-    chat_model="litellm/ollama/llama2",
-    # or, for example "litellm/bedrock/anthropic.claude-instant-v1"
-    chat_context_length=2048,  # adjust based on model
-)
 
 # OPTION 2: Local models served at an OpenAI-compatible API endpoint
 # -----------------------------------------------------------------
-
 # Use this config for any model that is locally served at an
-# OpenAI-compatible API endpoint. In this case the `chat_model` name is ignored,
-# but you must set the `api_base` to the URL where the model is listening.
+# OpenAI-compatible API endpoint, for example, using either the
+# litellm proxy server https://docs.litellm.ai/docs/proxy_server
+# or the oooba/text-generation-webui server
+# https://github.com/oobabooga/text-generation-webui/tree/main/extensions/openai
+#
+# In this case the `chat_model` name should be specified as
+# "local/localhost:8000/v1" or "local/localhost:8000" or other port number
+# depending on how you launch the model locally.
+# Langroid takes care of extracting the local URL to set the `api_base`
+# of the config so that the `openai.*` completion functions can be used
+# without having to rely on adapter libraries like litellm.
 
-LocalConfig = OpenAIGPTConfig.create(prefix="local")
-local_config = LocalConfig(
-    chat_model="local",  # doesn't matter
-    # edit api_base if running at a different port;
-    # Depending on how you launch your model, you may or may not need the "/v1"
-    api_base="http://localhost:8000/v1",
+MyLLMConfig = OpenAIGPTConfig.create(prefix="myllm")
+my_llm_config = MyLLMConfig(
+    chat_model="litellm/ollama/llama2",
+    # or, other possibilities for example:
+    # "litellm/bedrock/anthropic.claude-instant-v1"
+    # "litellm/ollama/llama2"
+    # "local/localhost:8000/v1"
+    # "local/localhost:8000"
     chat_context_length=2048,  # adjust based on model
 )
-
-# In the script below, one of the two options is chosen based on the
-# `model` argument passed in the CLI (via `-m` or `--model`).
-# If no model is specified, the default is to use GPT4
 
 
 class CLIOptions(BaseSettings):
@@ -101,12 +103,10 @@ def chat(opts: CLIOptions) -> None:
     load_dotenv()
 
     # use the appropriate config instance depending on model name
-    if opts.model == "local":
-        llm_config = local_config
-    elif opts.model.startswith("litellm"):
+    if opts.model.startswith("litellm/") or opts.model.startswith("local/"):
         # e.g. litellm/ollama/llama2 or litellm/bedrock/anthropic.claude-instant-v1
-        llm_config = litellm_config
-        llm_config.chat_model = opts.model  # e.g. litellm/ollama/llama2
+        llm_config = my_llm_config
+        llm_config.chat_model = opts.model
 
     else:
         llm_config = OpenAIGPTConfig()
@@ -121,13 +121,14 @@ def chat(opts: CLIOptions) -> None:
     config = ChatAgentConfig(
         system_message=sys_msg,
         llm=llm_config,
-        vecdb=None,
     )
     agent = ChatAgent(config)
     task = Task(agent)
-    # local (llama2) models do not like the first message to be empty
-    user_message = "Hello." if (opts.model != "") else None
-    task.run(user_message)
+    # OpenAI models are ok with just a system msg,
+    # but in some scenarios, other (e.g. llama) models
+    # seem to do better when kicked off with a sys msg and a user msg.
+    # In those cases we may want to do task.run("hello") instead.
+    task.run()
 
 
 @app.command()

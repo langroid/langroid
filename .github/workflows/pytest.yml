@@ -28,6 +28,7 @@ jobs:
       REDIS_HOST: ${{ secrets.REDIS_HOST }}
       REDIS_PORT: ${{ secrets.REDIS_PORT }}
       MOMENTO_AUTH_TOKEN: ${{ secrets.MOMENTO_AUTH_TOKEN }}
+      MOMENTO_API_KEY: ${{ secrets.MOMENTO_API_KEY }}
       QDRANT_API_KEY: ${{ secrets.QDRANT_API_KEY }}
       QDRANT_API_URL: ${{ secrets.QDRANT_API_URL }}
       CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}

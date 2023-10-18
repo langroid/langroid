@@ -32,6 +32,7 @@ from langroid.language_models.base import (
     LLMTokenUsage,
     StreamingIfAllowed,
 )
+from langroid.language_models.openai_gpt import OpenAIGPTConfig
 from langroid.mytypes import DocMetaData, Entity
 from langroid.parsing.json import extract_top_level_json
 from langroid.parsing.parser import Parser, ParsingConfig
@@ -53,10 +54,11 @@ class AgentConfig(BaseSettings):
 
     name: str = "LLM-Agent"
     debug: bool = False
-    vecdb: Optional[VectorStoreConfig] = VectorStoreConfig()
-    llm: Optional[LLMConfig] = LLMConfig()
+    vecdb: Optional[VectorStoreConfig] = None
+    llm: Optional[LLMConfig] = OpenAIGPTConfig()
     parsing: Optional[ParsingConfig] = ParsingConfig()
     prompts: Optional[PromptsConfig] = PromptsConfig()
+    show_stats: bool = True  # show token usage/cost stats?
 
 
 class Agent(ABC):
@@ -410,18 +412,19 @@ class Agent(ABC):
         with StreamingIfAllowed(self.llm, self.llm.get_stream()):
             response = await self.llm.agenerate(prompt, output_len)
 
-        # we would have already displayed the msg "live" ONLY if
-        # streaming was enabled, AND we did not find a cached response
-        console.print(f"[green]{self.indent}", end="")
-        print("[green]" + response.message)
-        displayed = True
+        if not self.llm.get_stream() or response.cached:
+            # We would have already displayed the msg "live" ONLY if
+            # streaming was enabled, AND we did not find a cached response.
+            # If we are here, it means the response has not yet been displayed.
+            cached = f"[red]{self.indent}(cached)[/red]" if response.cached else ""
+            print(cached + "[green]" + response.message)
         self.update_token_usage(
             response,
             prompt,
             self.llm.get_stream(),
-            print_response_stats=True,
+            print_response_stats=self.config.show_stats,
         )
-        return ChatDocument.from_LLMResponse(response, displayed)
+        return ChatDocument.from_LLMResponse(response, displayed=True)
 
     @no_type_check
     def llm_response(
@@ -476,20 +479,20 @@ class Agent(ABC):
                 console.print(f"[green]{self.indent}", end="")
             response = self.llm.generate(prompt, output_len)
 
-        displayed = False
         if not self.llm.get_stream() or response.cached:
             # we would have already displayed the msg "live" ONLY if
             # streaming was enabled, AND we did not find a cached response
+            # If we are here, it means the response has not yet been displayed.
+            cached = f"[red]{self.indent}(cached)[/red]" if response.cached else ""
             console.print(f"[green]{self.indent}", end="")
-            print("[green]" + response.message)
-            displayed = True
+            print(cached + "[green]" + response.message)
         self.update_token_usage(
             response,
             prompt,
             self.llm.get_stream(),
-            print_response_stats=True,
+            print_response_stats=self.config.show_stats,
         )
-        return ChatDocument.from_LLMResponse(response, displayed)
+        return ChatDocument.from_LLMResponse(response, displayed=True)
 
     def get_tool_messages(self, msg: str | ChatDocument) -> List[ToolMessage]:
         if isinstance(msg, str):

@@ -17,6 +17,7 @@ from langroid.language_models.base import (
     Role,
     StreamingIfAllowed,
 )
+from langroid.language_models.openai_gpt import OpenAIGPT
 from langroid.utils.configuration import settings
 
 console = Console()
@@ -42,6 +43,16 @@ class ChatAgentConfig(AgentConfig):
     user_message: Optional[str] = None
     use_tools: bool = True
     use_functions_api: bool = False
+
+    def _switch_fn_to_tools(self) -> None:
+        """
+        Switch to using our own ToolMessage mechanism,
+        in case the LLM is not an OpenAI model.
+        """
+        if not self.use_functions_api:
+            return
+        self.use_functions_api = False
+        self.use_tools = True
 
 
 class ChatAgent(Agent):
@@ -71,6 +82,23 @@ class ChatAgent(Agent):
         """
         super().__init__(config)
         self.config: ChatAgentConfig = config
+        if (
+            self.llm is not None
+            and (
+                not isinstance(self.llm, OpenAIGPT)
+                or not self.llm.is_openai_chat_model()
+            )
+            and self.config.use_functions_api
+        ):
+            # for non-OpenAI models, use Langroid Tool instead of Function-calling
+            logger.warning(
+                f"""
+                Function calling not available for {self.llm.config.chat_model},
+                switching to Langroid Tools instead.
+                """
+            )
+            self.config._switch_fn_to_tools()
+
         self.message_history: List[LLMMessage] = []
         self.tool_instructions_added: bool = False
         # An agent's "task" is defined by a system msg and an optional user msg;
@@ -260,6 +288,13 @@ class ChatAgent(Agent):
         """
         self.system_message += "\n\n" + message
 
+    def last_message_with_role(self, role: Role) -> LLMMessage | None:
+        """from `message_history`, return the last message with role `role`"""
+        for i in range(len(self.message_history) - 1, -1, -1):
+            if self.message_history[i].role == role:
+                return self.message_history[i]
+        return None
+
     def update_last_message(self, message: str, role: str = Role.USER) -> None:
         """
         Update the last message that has role `role` in the message history.
@@ -421,6 +456,8 @@ class ChatAgent(Agent):
         Returns:
             LLM response as a ChatDocument object
         """
+        if self.llm is None:
+            return None
         hist, output_len = self._prep_llm_messages(message)
         with StreamingIfAllowed(self.llm, self.llm.get_stream()):
             response = self.llm_response_messages(hist, output_len)
@@ -436,6 +473,9 @@ class ChatAgent(Agent):
         """
         Async version of `llm_response`. See there for details.
         """
+        if self.llm is None:
+            return None
+
         hist, output_len = self._prep_llm_messages(message)
         with StreamingIfAllowed(self.llm, self.llm.get_stream()):
             response = await self.llm_response_messages_async(hist, output_len)
@@ -459,7 +499,7 @@ class ChatAgent(Agent):
         """
 
         if not self.llm_can_respond(message):
-            return None
+            return [], 0
 
         assert (
             message is not None or len(self.message_history) == 0
@@ -598,9 +638,10 @@ class ChatAgent(Agent):
                 functions=functions,
                 function_call=fun_call,
             )
-        displayed = False
         if not self.llm.get_stream() or response.cached:
-            displayed = True
+            # We would have already displayed the msg "live" ONLY if
+            # streaming was enabled, AND we did not find a cached response.
+            # If we are here, it means the response has not yet been displayed.
             cached = f"[red]{self.indent}(cached)[/red]" if response.cached else ""
             if response.function_call is not None:
                 response_str = str(response.function_call)
@@ -611,9 +652,9 @@ class ChatAgent(Agent):
             response,
             messages,
             self.llm.get_stream(),
-            print_response_stats=True,
+            print_response_stats=self.config.show_stats,
         )
-        return ChatDocument.from_LLMResponse(response, displayed)
+        return ChatDocument.from_LLMResponse(response, displayed=True)
 
     async def llm_response_messages_async(
         self, messages: List[LLMMessage], output_len: Optional[int] = None
@@ -637,20 +678,25 @@ class ChatAgent(Agent):
             functions=functions,
             function_call=fun_call,
         )
-        displayed = True
-        cached = f"[red]{self.indent}(cached)[/red]" if response.cached else ""
-        if response.function_call is not None:
-            response_str = str(response.function_call)
-        else:
-            response_str = response.message
-        print(cached + "[green]" + response_str)
+
+        if not self.llm.get_stream() or response.cached:
+            # We would have already displayed the msg "live" ONLY if
+            # streaming was enabled, AND we did not find a cached response.
+            # If we are here, it means the response has not yet been displayed.
+            cached = f"[red]{self.indent}(cached)[/red]" if response.cached else ""
+            if response.function_call is not None:
+                response_str = str(response.function_call)
+            else:
+                response_str = response.message
+            print(cached + "[green]" + response_str)
+
         self.update_token_usage(
             response,
             messages,
             self.llm.get_stream(),
-            print_response_stats=True,
+            print_response_stats=self.config.show_stats,
         )
-        return ChatDocument.from_LLMResponse(response, displayed)
+        return ChatDocument.from_LLMResponse(response, displayed=True)
 
     def _llm_response_temp_context(self, message: str, prompt: str) -> ChatDocument:
         """

@@ -131,7 +131,7 @@ def test_task(test_settings: Settings):
     task.run(turns=3)
 
     # 3 Turns:
-    # 1. LLM initiates convo saying thanks how can I help (since do_task msg empty)
+    # 1. LLM initiates convo saying thanks how can I help (since task msg empty)
     # 2. User asks the `default_human_response`: What is the capital of France?
     # 3. LLM responds
 

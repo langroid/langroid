@@ -14,7 +14,7 @@ logger = logging.getLogger(__name__)
 
 
 class VectorStoreConfig(BaseSettings):
-    type: str = "qdrant"  # deprecated, keeping it for backward compatibility
+    type: str = ""  # deprecated, keeping it for backward compatibility
     collection_name: str | None = None
     replace_collection: bool = False  # replace collection if it already exists
     storage_path: str = ".qdrant/data"
@@ -40,12 +40,22 @@ class VectorStore(ABC):
     @staticmethod
     def create(config: VectorStoreConfig) -> Optional["VectorStore"]:
         from langroid.vector_store.chromadb import ChromaDB, ChromaDBConfig
+        from langroid.vector_store.lancedb import LanceDB, LanceDBConfig
+        from langroid.vector_store.meilisearch import MeiliSearch, MeiliSearchConfig
+        from langroid.vector_store.momento import MomentoVI, MomentoVIConfig
         from langroid.vector_store.qdrantdb import QdrantDB, QdrantDBConfig
 
         if isinstance(config, QdrantDBConfig):
             return QdrantDB(config)
         elif isinstance(config, ChromaDBConfig):
             return ChromaDB(config)
+        elif isinstance(config, MomentoVIConfig):
+            return MomentoVI(config)
+        elif isinstance(config, LanceDBConfig):
+            return LanceDB(config)
+        elif isinstance(config, MeiliSearchConfig):
+            return MeiliSearch(config)
+
         else:
             logger.warning(
                 f"""

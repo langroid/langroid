@@ -18,6 +18,7 @@ from typing import List, Optional, Tuple, no_type_check
 
 from rich import print
 from rich.console import Console
+from rich.prompt import Prompt
 
 from langroid.agent.base import Agent
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
@@ -34,7 +35,7 @@ from langroid.parsing.search import (
     preprocess_text,
 )
 from langroid.parsing.url_loader import URLLoader
-from langroid.parsing.urls import get_urls_and_paths
+from langroid.parsing.urls import get_list_from_user, get_urls_and_paths
 from langroid.parsing.utils import batched
 from langroid.prompts.prompts_config import PromptsConfig
 from langroid.prompts.templates import SUMMARY_ANSWER_PROMPT_GPT4
@@ -252,6 +253,78 @@ class DocChatAgent(ChatAgent):
             raise ValueError("Parser not set")
         return self.parser.num_tokens(self.doc_string(docs))
 
+    def user_docs_ingest_dialog(self) -> None:
+        """
+        Ask user to select doc-collection, enter filenames/urls, and ingest into vecdb.
+        """
+        if self.vecdb is None:
+            raise ValueError("VecDB not set")
+        n_deletes = self.vecdb.clear_empty_collections()
+        collections = self.vecdb.list_collections()
+        collection_name = "NEW"
+        is_new_collection = False
+        replace_collection = False
+        if len(collections) > 0:
+            n = len(collections)
+            delete_str = (
+                f"(deleted {n_deletes} empty collections)" if n_deletes > 0 else ""
+            )
+            print(f"Found {n} collections: {delete_str}")
+            for i, option in enumerate(collections, start=1):
+                print(f"{i}. {option}")
+            while True:
+                choice = Prompt.ask(
+                    f"Enter 1-{n} to select a collection, "
+                    "or hit ENTER to create a NEW collection, "
+                    "or -1 to DELETE ALL COLLECTIONS",
+                    default="0",
+                )
+                try:
+                    if -1 <= int(choice) <= n:
+                        break
+                except Exception:
+                    pass
+
+            if choice == "-1":
+                confirm = Prompt.ask(
+                    "Are you sure you want to delete all collections?",
+                    choices=["y", "n"],
+                    default="n",
+                )
+                if confirm == "y":
+                    self.vecdb.clear_all_collections(really=True)
+                    collection_name = "NEW"
+
+            if int(choice) > 0:
+                collection_name = collections[int(choice) - 1]
+                print(f"Using collection {collection_name}")
+                choice = Prompt.ask(
+                    "Would you like to replace this collection?",
+                    choices=["y", "n"],
+                    default="n",
+                )
+                replace_collection = choice == "y"
+
+        if collection_name == "NEW":
+            is_new_collection = True
+            collection_name = Prompt.ask(
+                "What would you like to name the NEW collection?",
+                default="doc-chat-2",
+            )
+
+        self.vecdb.set_collection(collection_name, replace=replace_collection)
+
+        default_urls_str = (
+            " (or leave empty for default URLs)" if is_new_collection else ""
+        )
+        print(f"[blue]Enter some URLs or file/dir paths below {default_urls_str}")
+        inputs = get_list_from_user()
+        if len(inputs) == 0:
+            if is_new_collection:
+                inputs = self.config.default_paths
+        self.config.doc_paths = inputs
+        self.ingest()
+
     @no_type_check
     def llm_response(
         self,
@@ -410,9 +483,11 @@ class DocChatAgent(ChatAgent):
         # these may sometimes be more likely to contain a relevant verbatim extract
         with console.status("[cyan]Searching for similar chunks using bm25..."):
             if self.chunked_docs is None:
-                raise ValueError("No chunked docs")
+                logger.warning("No chunked docs; cannot use bm25-similarity")
+                return []
             if self.chunked_docs_clean is None:
-                raise ValueError("No cleaned chunked docs")
+                logger.warning("No cleaned chunked docs; cannot use bm25-similarity")
+                return []
             docs_scores = find_closest_matches_with_bm25(
                 self.chunked_docs,
                 self.chunked_docs_clean,  # already pre-processed!
@@ -426,7 +501,8 @@ class DocChatAgent(ChatAgent):
         # these may sometimes be more likely to contain a relevant verbatim extract
         with console.status("[cyan]Finding fuzzy matches in chunks..."):
             if self.chunked_docs is None:
-                raise ValueError("No chunked docs")
+                logger.warning("No chunked docs; cannot use fuzzy matching")
+                return []
             fuzzy_match_docs = find_fuzzy_matches_in_docs(
                 query,
                 self.chunked_docs,
@@ -440,8 +516,6 @@ class DocChatAgent(ChatAgent):
         self, query: str, passages: List[Document]
     ) -> List[Document]:
         with console.status("[cyan]Re-ranking retrieved chunks using cross-encoder..."):
-            if self.chunked_docs is None:
-                raise ValueError("No chunked docs")
             try:
                 from sentence_transformers import CrossEncoder
             except ImportError:
@@ -466,54 +540,44 @@ class DocChatAgent(ChatAgent):
             ]
         return passages
 
-    @no_type_check
-    def get_relevant_extracts(self, query: str) -> Tuple[str, List[Document]]:
+    def get_relevant_chunks(
+        self, query: str, query_proxies: List[str] = []
+    ) -> List[Document]:
         """
-        Get list of extracts from doc-chunks relevant to answering a query.
-        These are the stages (some optional based on config):
-        - use LLM to convert query to stand-alone query
-        - optionally rephrase query to use below
-        - optionally generate hypothetical answer (HyDE) to use below.
-        - get relevant doc-chunks, via:
-            - vector-embedding distance, from vecdb
-            - bm25-ranking (keyword similarity)
-            - fuzzy matching (keyword similarity)
+        The retrieval stage in RAG: get doc-chunks that are most "relevant"
+        to the query (and possibly any proxy queries), from the document-store,
+        which currently is the vector store,
+        but in theory could be any document store, or even web-search.
+        This stage does NOT involve an LLM, and the retrieved chunks
+        could either be pre-chunked text (from the initial pre-processing stage
+        where chunks were stored in the vector store), or they could be
+        dynamically retrieved based on a window around a lexical match.
+
+        These are the steps (some optional based on config):
+        - vector-embedding distance, from vecdb
+        - bm25-ranking (keyword similarity)
+        - fuzzy matching (keyword similarity)
         - re-ranking of doc-chunks using cross-encoder, pick top k
-        - use LLM to get relevant extracts from doc-chunks
 
         Args:
-            query (str): query to search for
+            query: original query (assumed to be in stand-alone form)
+            query_proxies: possible rephrases, or hypothetical answer to query
+                    (e.g. for HyDE-type retrieval)
 
         Returns:
-            query (str): stand-alone version of input query
-            List[Document]: list of relevant extracts
 
         """
-        if len(self.dialog) > 0 and not self.config.assistant_mode:
-            # Regardless of whether we are in conversation mode or not,
-            # for relevant doc/chunk extraction, we must convert the query
-            # to a standalone query to get more relevant results.
-            with console.status("[cyan]Converting to stand-alone query...[/cyan]"):
-                with StreamingIfAllowed(self.llm, False):
-                    query = self.llm.followup_to_standalone(self.dialog, query)
-            print(f"[orange2]New query: {query}")
-
         # if we are using cross-encoder reranking, we can retrieve more docs
         # during retrieval, and leave it to the cross-encoder re-ranking
         # to whittle down to self.config.parsing.n_similar_docs
         retrieval_multiple = 1 if self.config.cross_encoder_reranking_model == "" else 3
-        queries = [query]
-        if self.config.hypothetical_answer:
-            answer = self.llm_hypothetical_answer(query)
-            queries = [query, answer]
 
-        if self.config.n_query_rephrases > 0:
-            rephrases = self.llm_rephrase_query(query)
-            queries += rephrases
+        if self.vecdb is None:
+            raise ValueError("VecDB not set")
 
         with console.status("[cyan]Searching VecDB for relevant doc passages..."):
-            docs_and_scores = []
-            for q in queries:
+            docs_and_scores: List[Tuple[Document, float]] = []
+            for q in [query] + query_proxies:
                 docs_and_scores += self.vecdb.similar_texts_with_scores(
                     q,
                     k=self.config.parsing.n_similar_docs * retrieval_multiple,
@@ -539,11 +603,56 @@ class DocChatAgent(ChatAgent):
         id2passage = {p.id(): p for p in passages}
         passages = list(id2passage.values())
 
+        if len(passages) == 0:
+            return []
+
         # now passages can potentially have a lot of doc chunks,
         # so we re-rank them using a cross-encoder scoring model
         # https://www.sbert.net/examples/applications/retrieve_rerank
         if self.config.cross_encoder_reranking_model != "":
             passages = self.rerank_with_cross_encoder(query, passages)
+
+        return passages
+
+    @no_type_check
+    def get_relevant_extracts(self, query: str) -> Tuple[str, List[Document]]:
+        """
+        Get list of (verbatim) extracts from doc-chunks relevant to answering a query.
+
+        These are the stages (some optional based on config):
+        - use LLM to convert query to stand-alone query
+        - optionally use LLM to rephrase query to use below
+        - optionally use LLM to generate hypothetical answer (HyDE) to use below.
+        - get_relevant_chunks(): get doc-chunks relevant to query and proxies
+        - use LLM to get relevant extracts from doc-chunks
+
+        Args:
+            query (str): query to search for
+
+        Returns:
+            query (str): stand-alone version of input query
+            List[Document]: list of relevant extracts
+
+        """
+        if len(self.dialog) > 0 and not self.config.assistant_mode:
+            # Regardless of whether we are in conversation mode or not,
+            # for relevant doc/chunk extraction, we must convert the query
+            # to a standalone query to get more relevant results.
+            with console.status("[cyan]Converting to stand-alone query...[/cyan]"):
+                with StreamingIfAllowed(self.llm, False):
+                    query = self.llm.followup_to_standalone(self.dialog, query)
+            print(f"[orange2]New query: {query}")
+
+        proxies = []
+        if self.config.hypothetical_answer:
+            answer = self.llm_hypothetical_answer(query)
+            proxies = [answer]
+
+        if self.config.n_query_rephrases > 0:
+            rephrases = self.llm_rephrase_query(query)
+            proxies += rephrases
+
+        passages = self.get_relevant_chunks(query, proxies)  # no LLM involved
 
         if len(passages) == 0:
             return query, []

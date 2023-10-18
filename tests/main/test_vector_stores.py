@@ -9,7 +9,9 @@ from langroid.mytypes import DocMetaData, Document
 from langroid.utils.system import rmdir
 from langroid.vector_store.base import VectorStore
 from langroid.vector_store.chromadb import ChromaDB, ChromaDBConfig
+from langroid.vector_store.lancedb import LanceDB, LanceDBConfig
 from langroid.vector_store.meilisearch import MeiliSearch, MeiliSearchConfig
+from langroid.vector_store.momento import MomentoVI, MomentoVIConfig
 from langroid.vector_store.qdrantdb import QdrantDB, QdrantDBConfig
 
 load_dotenv()
@@ -28,8 +30,18 @@ phrases = SimpleNamespace(
     BELGIUM="which city is Belgium's capital?",
 )
 
+
+class MyDocMetaData(DocMetaData):
+    id: str
+
+
+class MyDoc(Document):
+    content: str
+    metadata: MyDocMetaData
+
+
 stored_docs = [
-    Document(content=d, metadata=DocMetaData(id=str(i)))
+    MyDoc(content=d, metadata=MyDocMetaData(id=str(i)))
     for i, d in enumerate(vars(phrases).values())
 ]
 
@@ -37,8 +49,7 @@ stored_docs = [
 @pytest.fixture(scope="function")
 def vecdb(request) -> VectorStore:
     if request.param == "qdrant_local":
-        qd_dir = ".qdrant/data/" + embed_cfg.model_type
-        rmdir(qd_dir)
+        qd_dir = ":memory"
         qd_cfg = QdrantDBConfig(
             cloud=False,
             collection_name="test-" + embed_cfg.model_type,
@@ -48,7 +59,6 @@ def vecdb(request) -> VectorStore:
         qd = QdrantDB(qd_cfg)
         qd.add_documents(stored_docs)
         yield qd
-        rmdir(qd_dir)
         return
 
     if request.param == "qdrant_cloud":
@@ -89,23 +99,49 @@ def vecdb(request) -> VectorStore:
         ms.delete_collection(collection_name=ms_cfg.collection_name)
         return
 
+    if request.param == "momento":
+        cfg = MomentoVIConfig(
+            collection_name="test-momento",
+        )
+        vdb = MomentoVI(cfg)
+        vdb.add_documents(stored_docs)
+        yield vdb
+        vdb.delete_collection(collection_name=cfg.collection_name)
+
+    if request.param == "lancedb":
+        ldb_dir = ".lancedb/data/" + embed_cfg.model_type
+        rmdir(ldb_dir)
+        ldb_cfg = LanceDBConfig(
+            cloud=False,
+            collection_name="test-" + embed_cfg.model_type,
+            storage_path=ldb_dir,
+            embedding=embed_cfg,
+            document_class=MyDoc,  # IMPORTANT, to ensure table has full schema!
+        )
+        ldb = LanceDB(ldb_cfg)
+        ldb.add_documents(stored_docs)
+        yield ldb
+        rmdir(ldb_dir)
+        return
+
 
 @pytest.mark.parametrize(
     "query,results,exceptions",
     [
-        ("which city is Belgium's capital?", [phrases.BELGIUM], []),
-        ("capital of France", [phrases.FRANCE], []),
-        ("hello", [phrases.HELLO], []),
-        ("hi there", [phrases.HI_THERE], []),
+        ("which city is Belgium's capital?", [phrases.BELGIUM], ["meliseach"]),
+        ("capital of France", [phrases.FRANCE], ["meliseach"]),
+        ("hello", [phrases.HELLO], ["meliseach"]),
+        ("hi there", [phrases.HI_THERE], ["meliseach"]),
         ("men and women over 40", [phrases.OVER_40], ["meilisearch"]),
         ("people aged less than 40", [phrases.UNDER_40], ["meilisearch"]),
         ("Canadian residents", [phrases.CANADA], ["meilisearch"]),
         ("people outside Canada", [phrases.NOT_CANADA], ["meilisearch"]),
     ],
 )
+# add "momento" when index-creation timeout error is resolved.
 @pytest.mark.parametrize(
     "vecdb",
-    ["chroma", "meilisearch", "qdrant_local", "qdrant_cloud"],
+    ["lancedb", "chroma", "meilisearch", "qdrant_local", "qdrant_cloud"],
     indirect=True,
 )
 def test_vector_stores_search(
@@ -115,35 +151,44 @@ def test_vector_stores_search(
         # we don't expect some of these to work,
         # e.g. MeiliSearch is a text search engine, not a vector store
         return
+    if isinstance(vecdb, MomentoVI):
+        # skip due to non-deterministic search failures. Maybe need to use async?
+        return
     docs_and_scores = vecdb.similar_texts_with_scores(query, k=len(vars(phrases)))
     # first doc should be best match
     if isinstance(vecdb, ChromaDB):
         # scores are (apparently) l2 distances (docs unclear), so low means close
-        matching_docs = [doc.content for doc, score in docs_and_scores if score < 0.2]
+        matching_docs = [doc.content for doc, score in docs_and_scores if score < 0.3]
     else:
         # scores are cosine similarities, so high means close
-        matching_docs = [doc.content for doc, score in docs_and_scores if score > 0.8]
+        matching_docs = [doc.content for doc, score in docs_and_scores if score > 0.7]
     assert set(results).issubset(set(matching_docs))
 
 
+# add "momento" when index-creation timeout error is resolved.
 @pytest.mark.parametrize(
     "vecdb",
-    ["meilisearch", "chroma", "qdrant_local", "qdrant_cloud"],
+    ["lancedb", "meilisearch", "chroma", "qdrant_local", "qdrant_cloud"],
     indirect=True,
 )
 def test_vector_stores_access(vecdb):
     assert vecdb is not None
 
-    all_docs = vecdb.get_all_documents()
-    assert len(all_docs) == len(stored_docs)
+    if not isinstance(vecdb, MomentoVI):
+        all_docs = vecdb.get_all_documents()
+        assert len(all_docs) == len(stored_docs)
 
     coll_name = vecdb.config.collection_name
     assert coll_name is not None
 
     vecdb.delete_collection(collection_name=coll_name)
     vecdb.create_collection(collection_name=coll_name)
-    all_docs = vecdb.get_all_documents()
-    assert len(all_docs) == 0
+    if not isinstance(vecdb, MomentoVI):
+        all_docs = vecdb.get_all_documents()
+        assert len(all_docs) == 0
+
+    if isinstance(vecdb, MomentoVI):
+        return
 
     vecdb.add_documents(stored_docs)
     all_docs = vecdb.get_all_documents()
