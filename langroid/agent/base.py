@@ -58,6 +58,7 @@ class AgentConfig(BaseSettings):
     llm: Optional[LLMConfig] = OpenAIGPTConfig()
     parsing: Optional[ParsingConfig] = ParsingConfig()
     prompts: Optional[PromptsConfig] = PromptsConfig()
+    show_stats: bool = True  # show token usage/cost stats?
 
 
 class Agent(ABC):
@@ -421,7 +422,7 @@ class Agent(ABC):
             response,
             prompt,
             self.llm.get_stream(),
-            print_response_stats=True,
+            print_response_stats=self.config.show_stats,
         )
         return ChatDocument.from_LLMResponse(response, displayed=True)
 
@@ -489,7 +490,7 @@ class Agent(ABC):
             response,
             prompt,
             self.llm.get_stream(),
-            print_response_stats=True,
+            print_response_stats=self.config.show_stats,
         )
         return ChatDocument.from_LLMResponse(response, displayed=True)
 
