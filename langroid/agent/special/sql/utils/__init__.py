@@ -1,9 +1,3 @@
-from .description_extractors import (
-    extract_postgresql_descriptions,
-    extract_mysql_descriptions,
-    extract_default_descriptions,
-    extract_schema_descriptions,
-)
 from .tools import (
     RunQueryTool,
     GetTableNamesTool,
