@@ -172,7 +172,8 @@ class Task:
         """
         Returns a copy of this task, with a new agent.
         """
-        assert type(self.agent) is ChatAgent, "Task clone only works for ChatAgent"
+        assert isinstance(self.agent, ChatAgent), "Task clone only works for ChatAgent"
+
         agent_cls = type(self.agent)
         config_copy = copy.deepcopy(self.agent.config)
         agent: ChatAgent = agent_cls(config_copy)

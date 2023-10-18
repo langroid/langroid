@@ -44,9 +44,10 @@ def run_batch_tasks(
 
     async def _do_task(input: str | ChatDocument, i: int) -> Any:
         task_i = task.clone(i)
-        assert task_i.agent.config.llm is not None, "task agent must have llm config"
-        task_i.agent.config.show_stats = False
-        task_i.agent.config.llm.stream = False
+        if task_i.agent.config.llm is not None:
+            task_i.agent.config.llm.stream = False
+            task_i.agent.config.show_stats = False
+
         result = await task_i.run_async(input)
         return output_map(result)
 
