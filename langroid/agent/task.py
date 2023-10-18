@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-import logging
 import asyncio
+import logging
 from typing import Any, Callable, Coroutine, Dict, List, Optional, Set, Type, cast
 
 from rich import print
@@ -99,7 +99,7 @@ class Task:
                 sub-task delegation.
             concurrent (bool): if true, all non-human responders are executed
                 concurrently; we keep the first valid response.
-                
+
         """
         if isinstance(agent, ChatAgent) and len(agent.message_history) == 0 or restart:
             agent = cast(ChatAgent, agent)
@@ -527,13 +527,13 @@ class Task:
             # give human first chance if they haven't been tried in last step:
             # ensures human gets chance at each turn.
             responders.insert(0, Entity.USER)
-            concurrent_start += 1 # We always wait for the human response if available
+            concurrent_start += 1  # We always wait for the human response if available
 
         sequential_responders = responders[:concurrent_start]
         concurrent_responders = responders[concurrent_start:]
 
         # Asynchronously returns the results from a responder and checks for validity
-        async def response(cls: Task, r :Responder) -> Dict[str, Any]:
+        async def response(cls: Task, r: Responder) -> Dict[str, Any]:
             if not cls._can_respond(r):
                 # create dummy msg for logging
                 log_doc = ChatDocument(
@@ -574,15 +574,19 @@ class Task:
             if is_break:
                 break
 
-        concurrent_tasks = set(map(
-            lambda r: asyncio.create_task(response(self, r)),
-            concurrent_responders,
-        ))
+        concurrent_tasks = set(
+            map(
+                lambda r: asyncio.create_task(response(self, r)),
+                concurrent_responders,
+            )
+        )
 
-        #  Run the remaining responders concurrently; retain the first successful result 
+        #  Run the remaining responders concurrently; retain the first successful result
         while not is_break and len(concurrent_tasks) > 0:
             # Wait for a result from some responder
-            done, concurrent_tasks = await asyncio.wait(concurrent_tasks, return_when=asyncio.FIRST_COMPLETED)
+            done, concurrent_tasks = await asyncio.wait(
+                concurrent_tasks, return_when=asyncio.FIRST_COMPLETED
+            )
 
             for task in done:
                 responder_result = task.result()
@@ -596,7 +600,7 @@ class Task:
         # Cancel remaining tasks
         for task in concurrent_tasks:
             task.cancel()
-            
+
         if not self.valid(result):
             self._process_invalid_step_result(parent)
         self._show_pending_message_if_debug()
