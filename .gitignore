@@ -138,3 +138,7 @@ dmypy.json
 
 .vscode
 .qdrant-sentence-transformer*
+
+# Emacs
+*~
+\#*\#
