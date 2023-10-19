@@ -1,7 +1,7 @@
 import os
 from typing import List
 
-from dotenv import load_dotenv
+from dotenv import find_dotenv, load_dotenv
 from pydantic import BaseSettings
 
 
@@ -22,7 +22,7 @@ class Settings(BaseSettings):
         extra = "forbid"
 
 
-load_dotenv()  # get settings from .env file
+load_dotenv(find_dotenv(usecwd=True))  # get settings from .env file
 settings = Settings()
 
 

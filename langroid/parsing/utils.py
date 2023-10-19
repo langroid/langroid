@@ -1,17 +1,24 @@
 import difflib
 import random
 import re
+from functools import cache
 from itertools import islice
 from typing import Any, Iterable, List
 
 import nltk
 from faker import Faker
 
-nltk.download("punkt", quiet=True)
-nltk.download("gutenberg", quiet=True)
-
 Faker.seed(23)
 random.seed(43)
+
+
+# Ensures the NLTK resource is available
+@cache
+def download_nltk_resource(resource: str) -> None:
+    try:
+        nltk.data.find(resource)
+    except LookupError:
+        nltk.download(resource, quiet=True)
 
 
 def batched(iterable: Iterable[Any], n: int) -> Iterable[Any]:
@@ -26,6 +33,8 @@ def batched(iterable: Iterable[Any], n: int) -> Iterable[Any]:
 
 def generate_random_sentences(k: int) -> str:
     # Load the sample text
+    download_nltk_resource("gutenberg")
+
     from nltk.corpus import gutenberg
 
     text = gutenberg.raw("austen-emma.txt")

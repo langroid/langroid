@@ -1,11 +1,11 @@
-from dotenv import load_dotenv
+from dotenv import find_dotenv, load_dotenv
 
 from langroid.embedding_models.base import EmbeddingModel
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
 
 
 def test_embeddings():
-    load_dotenv()
+    load_dotenv(find_dotenv(usecwd=True))
     openai_cfg = OpenAIEmbeddingsConfig(
         model_type="openai",
         model_name="text-embedding-ada-002",
