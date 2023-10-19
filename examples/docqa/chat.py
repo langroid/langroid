@@ -1,6 +1,10 @@
 """
 Single agent to use to chat with a Retrieval-augmented LLM.
 Repeat: User asks question -> LLM answers.
+
+Run like this:
+python3 examples/docqa/chat.py
+
 """
 import re
 import typer

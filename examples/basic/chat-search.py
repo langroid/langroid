@@ -134,7 +134,7 @@ def main(
             cache_type=cache_type,
         )
     )
-    opts = (CLIOptions(model=model),)
+    opts = CLIOptions(model=model)
     chat(opts)
 
 
