@@ -101,28 +101,32 @@ def split_paragraphs(text: str) -> List[str]:
     return [para.strip() for para in paras if para.strip()]
 
 
-def number_sentences(s: str) -> str:
+def number_segments(s: str, len: int = 1) -> str:
     """
-    Number the sentences in a given text, preserving paragraph structure.
+    Number the segments in a given text, preserving paragraph structure.
+    A segment is a sequence of `len` consecutive sentences.
 
     Args:
         s (str): The input text.
+        len (int): The number of sentences in a segment.
 
     Returns:
-        str: The text with sentences numbered in the style (1), (2), etc.
+        str: The text with segments numbered in the style <#1#>, <#2#> etc.
 
     Example:
-        >>> number_sentences("Hello world! How are you? Have a good day.")
-        '(1) Hello world! (2) How are you? (3) Have a good day.'
+        >>> number_segments("Hello world! How are you? Have a good day.")
+        '<#1#> Hello world! <#2#> How are you? <#3#> Have a good day.'
     """
     numbered_text = []
-    count = 1
+    count = 0
 
     paragraphs = split_paragraphs(s)
     for paragraph in paragraphs:
         sentences = nltk.sent_tokenize(paragraph)
         for i, sentence in enumerate(sentences):
-            sentence = f"({count}) {sentence}"
+            num = count // len + 1
+            number_prefix = f"<#{num}#>" if count % len == 0 else ""
+            sentence = f"{number_prefix} {sentence}"
             count += 1
             sentences[i] = sentence
         numbered_paragraph = " ".join(sentences)
@@ -131,16 +135,20 @@ def number_sentences(s: str) -> str:
     return "  \n\n  ".join(numbered_text)
 
 
+def number_sentences(s: str) -> str:
+    return number_segments(s, len=1)
+
+
 def parse_number_range_list(specs: str) -> List[int]:
     """
     Parse a specs string like "3,5,7-10" into a list of integers.
 
     Args:
-        specs (str): A string containing sentence numbers and/or ranges
+        specs (str): A string containing segment numbers and/or ranges
                      (e.g., "3,5,7-10").
 
     Returns:
-        List[int]: List of sentence numbers.
+        List[int]: List of segment numbers.
 
     Example:
         >>> parse_number_range_list("3,5,7-10")
@@ -166,21 +174,21 @@ def clean_whitespace(text: str) -> str:
     return "\n\n".join(cleaned_paragraphs)  # Join the cleaned paragraphs.
 
 
-def extract_numbered_sentences(s: str, specs: str) -> str:
+def extract_numbered_segments(s: str, specs: str) -> str:
     """
-    Extract specified sentences from a numbered text, preserving paragraph structure.
+    Extract specified segments from a numbered text, preserving paragraph structure.
 
     Args:
-        s (str): The input text containing numbered sentences.
-        specs (str): A string containing sentence numbers and/or ranges
+        s (str): The input text containing numbered segments.
+        specs (str): A string containing segment numbers and/or ranges
                      (e.g., "3,5,7-10").
 
     Returns:
-        str: Extracted sentences, keeping original paragraph structures.
+        str: Extracted segments, keeping original paragraph structures.
 
     Example:
         >>> text = "(1) Hello world! (2) How are you? (3) Have a good day."
-        >>> extract_sentences(text, "1,3")
+        >>> extract_numbered_segments(text, "1,3")
         'Hello world! Have a good day.'
     """
     # Use the helper function to get the list of indices from specs
@@ -188,8 +196,9 @@ def extract_numbered_sentences(s: str, specs: str) -> str:
         return ""
     spec_indices = parse_number_range_list(specs)
 
-    # Regular expression to identify numbered sentences
-    sentence_pattern = re.compile(r"\((\d+)\) ([^()]+[.!?])")
+    # Regular expression to identify numbered segments like
+    # <#1#> Hello world! This is me. <#2#> How are you? <#3#> Have a good day.
+    segment_pattern = re.compile(r"<#(\d+)#> ((?:(?!<#).)+)")
 
     # Split the text into paragraphs while preserving their boundaries
     paragraphs = split_paragraphs(s)
@@ -197,18 +206,18 @@ def extract_numbered_sentences(s: str, specs: str) -> str:
     extracted_paragraphs = []
 
     for paragraph in paragraphs:
-        sentences_with_numbers = sentence_pattern.findall(paragraph)
+        segments_with_numbers = segment_pattern.findall(paragraph)
 
-        # Extract the desired sentences from this paragraph
-        extracted_sentences = [
-            sentence
-            for num, sentence in sentences_with_numbers
+        # Extract the desired segments from this paragraph
+        extracted_segments = [
+            segment
+            for num, segment in segments_with_numbers
             if int(num) in spec_indices
         ]
 
-        # If we extracted any sentences from this paragraph,
+        # If we extracted any segments from this paragraph,
         # join them and append to results
-        if extracted_sentences:
-            extracted_paragraphs.append(" ".join(extracted_sentences))
+        if extracted_segments:
+            extracted_paragraphs.append(" ".join(extracted_segments))
 
     return "\n\n".join(extracted_paragraphs)
