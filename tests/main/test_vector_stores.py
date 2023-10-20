@@ -49,7 +49,7 @@ stored_docs = [
 @pytest.fixture(scope="function")
 def vecdb(request) -> VectorStore:
     if request.param == "qdrant_local":
-        qd_dir = ":memory"
+        qd_dir = ":memory:"
         qd_cfg = QdrantDBConfig(
             cloud=False,
             collection_name="test-" + embed_cfg.model_type,

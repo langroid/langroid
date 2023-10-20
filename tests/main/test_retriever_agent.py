@@ -63,7 +63,7 @@ class _TestRetrieverAgentConfig(RetrieverAgentConfig):
     n_matches: int = 3  # num final matches to be picked by LLM
     vecdb: QdrantDBConfig = QdrantDBConfig(
         collection_name="test-retriever",
-        storage_path=".qdrant/test/",
+        storage_path=":memory:",
     )
     parsing: ParsingConfig = ParsingConfig(
         n_similar_docs=5,

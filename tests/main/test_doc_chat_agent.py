@@ -14,12 +14,10 @@ from langroid.parsing.parser import ParsingConfig, Splitter
 from langroid.parsing.utils import generate_random_text
 from langroid.prompts.prompts_config import PromptsConfig
 from langroid.utils.configuration import Settings, set_global
-from langroid.utils.system import rmdir
 from langroid.vector_store.base import VectorStoreConfig
 from langroid.vector_store.qdrantdb import QdrantDBConfig
 
-storage_path = ".qdrant/testdata1"
-rmdir(storage_path)
+storage_path = ":memory:"
 
 
 class _TestDocChatAgentConfig(DocChatAgentConfig):

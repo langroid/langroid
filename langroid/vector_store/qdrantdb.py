@@ -135,10 +135,15 @@ class QdrantDB(VectorStore):
         colls = list(self.client.get_collections())[0][1]
         if empty:
             return [coll.name for coll in colls]
-        counts = [
-            self.client.get_collection(collection_name=coll.name).points_count
-            for coll in colls
-        ]
+        counts = []
+        for coll in colls:
+            try:
+                counts.append(
+                    self.client.get_collection(collection_name=coll.name).points_count
+                )
+            except Exception:
+                logger.warning(f"Error getting collection {coll.name}")
+                counts.append(0)
         return [coll.name for coll, count in zip(colls, counts) if count > 0]
 
     def create_collection(self, collection_name: str, replace: bool = False) -> None:
