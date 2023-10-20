@@ -13,6 +13,7 @@ from langroid.agent.chat_document import ChatDocument
 from langroid.agent.tools.segment_extract_tool import SegmentExtractTool
 from langroid.language_models.openai_gpt import OpenAIGPTConfig
 from langroid.parsing.utils import extract_numbered_segments, number_segments
+from langroid.utils.constants import NO_ANSWER
 
 console = Console()
 logger = logging.getLogger(__name__)
@@ -25,8 +26,8 @@ class RelevanceExtractorAgentConfig(ChatAgentConfig):
     system_message = """
     The user will give you a PASSAGE containing segments numbered as  
     <#1#>, <#2#>, <#3#>, etc.,
-    followed by a QUERY. Your task is to extract the segment-numbers from the PASSAGE
-    that are relevant to the QUERY. You must use the `extract_segments` 
+    followed by a QUERY. Your task is to extract ALL and ONLY the segment-numbers from 
+    the PASSAGE that are RELEVANT to the QUERY. You must use the `extract_segments` 
     tool/function to present your answer, by setting the `segment_list` field 
     to a list of segment numbers or ranges, like "10,12,14-17".
     """
@@ -97,9 +98,9 @@ class RelevanceExtractorAgent(ChatAgent):
         """Method to handle a segmentExtractTool message from LLM"""
         spec = msg.segment_list
         if len(self.message_history) == 0:
-            return ""
+            return NO_ANSWER
         if spec is None or spec.strip() == "":
-            return ""
+            return NO_ANSWER
         assert self.numbered_passage is not None, "No numbered passage"
         # assume this has numbered segments
         extracts = extract_numbered_segments(self.numbered_passage, spec)

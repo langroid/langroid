@@ -4,6 +4,7 @@ from typing import List
 import nltk
 import pytest
 
+from langroid.agent.batch import run_batch_tasks
 from langroid.agent.special.relevance_extractor_agent import (
     RelevanceExtractorAgent,
     RelevanceExtractorAgentConfig,
@@ -125,6 +126,7 @@ async def test_relevance_extractor_concurrent(
         query=query,
         segment_length=1,
     )
+    agent_cfg.llm.stream = False  # disable streaming for concurrent calls
 
     # send to task.run_async and gather results
     async def _run_task(msg: str, i: int):
@@ -143,6 +145,79 @@ async def test_relevance_extractor_concurrent(
     answers = await asyncio.gather(
         *(_run_task(passage, i) for i, passage in enumerate(passages))
     )
+    assert len(answers) == len(passages)
+
+    extracted_sentences = [
+        s for a in answers for s in nltk.sent_tokenize(a.content) if s != NO_ANSWER
+    ]
+    expected_sentences = [
+        s
+        for passg, exp in zip(passages, expected)
+        for s in nltk.sent_tokenize(
+            extract_numbered_segments(
+                number_segments(passg, len=agent_cfg.segment_length),
+                exp,
+            )
+        )
+        if s != ""
+    ]
+
+    assert set(extracted_sentences) == set(expected_sentences)
+
+
+@pytest.mark.parametrize(
+    "passages, query, expected",
+    [  # list of tuples
+        (
+            [
+                "Whales are big.",
+                """Cats like to be clean. They also like to be petted. And when they 
+                are hungry they like to meow. Dogs are very friendly. They are also 
+                very loyal. But so are cats. Unlike cats, dogs can get dirty.""",
+                "Cats are very independent. Unlike dogs, they like to be left alone.",
+            ],
+            "What do we know about cats?",
+            ["", "1-3,6", "1,2"],
+        )
+    ],
+)
+@pytest.mark.parametrize("fn_api", [False])
+def test_relevance_extractor_batch(
+    test_settings: Settings,
+    fn_api: bool,
+    passages: List[str],
+    query: str,
+    expected: List[str],
+) -> None:
+    """
+    Use `run_batch_tasks` to run the extractor on multiple passages.
+    """
+
+    set_global(test_settings)
+    passages = [clean_whitespace(passage) for passage in passages]
+    agent_cfg = RelevanceExtractorAgentConfig(
+        use_tools=not fn_api,  # use tools if not fn_api
+        use_functions_api=fn_api,
+        query=query,
+        segment_length=1,
+    )
+    agent_cfg.llm.stream = False  # disable streaming for concurrent calls
+
+    agent = RelevanceExtractorAgent(agent_cfg)
+    task = Task(
+        agent,
+        name="Test",
+        default_human_response="",  # eliminate human response
+        only_user_quits_root=False,  # allow agent_response to quit via "DONE <msg>"
+    )
+
+    answers = run_batch_tasks(
+        task,
+        passages,
+        input_map=lambda msg: msg,
+        output_map=lambda ans: ans,
+    )
+
     assert len(answers) == len(passages)
 
     extracted_sentences = [
