@@ -9,11 +9,11 @@ from langroid.agent.special.relevance_extractor_agent import (
     RelevanceExtractorAgentConfig,
 )
 from langroid.agent.task import Task
-from langroid.agent.tools.sentence_extract_tool import SentenceExtractTool
+from langroid.agent.tools.segment_extract_tool import SegmentExtractTool
 from langroid.parsing.utils import (
     clean_whitespace,
-    extract_numbered_sentences,
-    number_sentences,
+    extract_numbered_segments,
+    number_segments,
     parse_number_range_list,
 )
 from langroid.utils.configuration import Settings, set_global
@@ -30,11 +30,14 @@ from langroid.utils.constants import NO_ANSWER
         Cats like to be clean. They also like to be petted. And when they 
         are hungry they like to meow. Dogs are very friendly. They are also 
         very loyal. But so are cats. Unlike cats, dogs can get dirty.
+        Monkeys are very naughty. They like to jump around. They also like to steal 
+        bananas. 
         
-        Cats are also very independent. Unlike dogs, they like to be left alone.
+        Cats are very independent. Unlike dogs, they like to be left 
+        alone.
         """,
             "What do we know about cats?",
-            "2-4,7,9,10",  # or LLM could say 2,3,4,7,9,10; we handle this below
+            "2-4,7,12-13",  # or LLM could say 2,3,4,7,12,10; we handle this below
         )
     ],
 )
@@ -52,6 +55,7 @@ def test_relevance_extractor_agent(
         use_tools=not fn_api,  # use tools if not fn_api
         use_functions_api=fn_api,
         query=query,
+        segment_length=1,
     )
 
     # directly send to llm and verify response is as expected
@@ -60,8 +64,8 @@ def test_relevance_extractor_agent(
     response = extractor_agent.llm_response(passage)
     tools = extractor_agent.get_tool_messages(response)
     assert len(tools) == 1
-    assert isinstance(tools[0], SentenceExtractTool)
-    assert set(parse_number_range_list(tools[0].sentence_list)) == set(
+    assert isinstance(tools[0], SegmentExtractTool)
+    assert set(parse_number_range_list(tools[0].segment_list)) == set(
         parse_number_range_list(expected)
     )
 
@@ -76,8 +80,8 @@ def test_relevance_extractor_agent(
     )
 
     result = extractor_task.run(passage)
-    numbered_passage = number_sentences(passage)
-    expected_sentences = extract_numbered_sentences(numbered_passage, expected)
+    numbered_passage = number_segments(passage, len=agent_cfg.segment_length)
+    expected_sentences = extract_numbered_segments(numbered_passage, expected)
     # the result should be the expected sentences, modulo whitespace
     assert set(nltk.sent_tokenize(result.content)) == set(
         nltk.sent_tokenize(expected_sentences)
@@ -119,6 +123,7 @@ async def test_relevance_extractor_concurrent(
         use_tools=not fn_api,  # use tools if not fn_api
         use_functions_api=fn_api,
         query=query,
+        segment_length=1,
     )
 
     # send to task.run_async and gather results
@@ -147,7 +152,10 @@ async def test_relevance_extractor_concurrent(
         s
         for passg, exp in zip(passages, expected)
         for s in nltk.sent_tokenize(
-            extract_numbered_sentences(number_sentences(passg), exp)
+            extract_numbered_segments(
+                number_segments(passg, len=agent_cfg.segment_length),
+                exp,
+            )
         )
         if s != ""
     ]
