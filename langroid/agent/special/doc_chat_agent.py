@@ -21,8 +21,14 @@ from rich.console import Console
 from rich.prompt import Prompt
 
 from langroid.agent.base import Agent
+from langroid.agent.batch import run_batch_tasks
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.chat_document import ChatDocMetaData, ChatDocument
+from langroid.agent.special.relevance_extractor_agent import (
+    RelevanceExtractorAgent,
+    RelevanceExtractorAgentConfig,
+)
+from langroid.agent.task import Task
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
 from langroid.language_models.base import StreamingIfAllowed
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
@@ -660,10 +666,55 @@ class DocChatAgent(ChatAgent):
         with console.status("[cyan]LLM Extracting verbatim passages..."):
             with StreamingIfAllowed(self.llm, False):
                 # these are async calls, one per passage; turn off streaming
-                extracts = self.llm.get_verbatim_extracts(query, passages)
+                extracts = self.get_verbatim_extracts(query, passages)
                 extracts = [e for e in extracts if e.content != NO_ANSWER]
 
         return query, extracts
+
+    def get_verbatim_extracts(
+        self,
+        query: str,
+        passages: List[Document],
+    ) -> List[Document]:
+        """
+        Run RelevanceExtractorAgent in async/concurrent mode on passages,
+        to extract portions relevant to answering query, from each passage.
+        Args:
+            query (str): query to answer
+            passages (List[Documents]): list of passages to extract from
+
+        Returns:
+            List[Document]: list of Documents containing extracts and metadata.
+        """
+        agent_cfg = RelevanceExtractorAgentConfig(
+            use_tools=False,
+            use_functions_api=True,
+            query=query,
+            segment_length=1,
+        )
+        agent_cfg.llm.stream = False  # disable streaming for concurrent calls
+
+        agent = RelevanceExtractorAgent(agent_cfg)
+        task = Task(
+            agent,
+            name="Relevance-Extractor",
+            default_human_response="",  # eliminate human response
+            only_user_quits_root=False,  # allow agent_response to quit via "DONE <msg>"
+        )
+
+        extracts = run_batch_tasks(
+            task,
+            passages,
+            input_map=lambda msg: msg.content,
+            output_map=lambda ans: ans.content if ans is not None else NO_ANSWER,
+        )
+        metadatas = [P.metadata for P in passages]
+        # return with metadata so we can use it downstream, e.g. to cite sources
+        return [
+            Document(content=e, metadata=m)
+            for e, m in zip(extracts, metadatas)
+            if (e != NO_ANSWER and len(e) > 0)
+        ]
 
     @no_type_check
     def answer_from_docs(self, query: str) -> Document:

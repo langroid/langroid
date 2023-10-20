@@ -20,7 +20,7 @@ from langroid.language_models.base import (
 from langroid.language_models.openai_gpt import OpenAIGPT
 from langroid.utils.configuration import settings
 
-console = Console()
+console = Console(quiet=settings.quiet)
 
 logger = logging.getLogger(__name__)
 
@@ -614,11 +614,11 @@ class ChatAgent(Agent):
         assert self.config.llm is not None and self.llm is not None
         output_len = output_len or self.config.llm.max_output_tokens
         with ExitStack() as stack:  # for conditionally using rich spinner
-            if not self.llm.get_stream():
+            if not self.llm.get_stream() and not settings.quiet:
                 # show rich spinner only if not streaming!
                 cm = console.status("LLM responding to messages...")
                 stack.enter_context(cm)
-            if self.llm.get_stream():
+            if self.llm.get_stream() and not settings.quiet:
                 console.print(f"[green]{self.indent}", end="")
             functions: Optional[List[LLMFunctionSpec]] = None
             fun_call: str | Dict[str, str] = "none"
@@ -647,12 +647,13 @@ class ChatAgent(Agent):
                 response_str = str(response.function_call)
             else:
                 response_str = response.message
-            print(cached + "[green]" + response_str)
+            if not settings.quiet:
+                print(cached + "[green]" + response_str)
         self.update_token_usage(
             response,
             messages,
             self.llm.get_stream(),
-            print_response_stats=self.config.show_stats,
+            print_response_stats=self.config.show_stats and not settings.quiet,
         )
         return ChatDocument.from_LLMResponse(response, displayed=True)
 
@@ -688,13 +689,14 @@ class ChatAgent(Agent):
                 response_str = str(response.function_call)
             else:
                 response_str = response.message
-            print(cached + "[green]" + response_str)
+            if not settings.quiet:
+                print(cached + "[green]" + response_str)
 
         self.update_token_usage(
             response,
             messages,
             self.llm.get_stream(),
-            print_response_stats=self.config.show_stats,
+            print_response_stats=self.config.show_stats and not settings.quiet,
         )
         return ChatDocument.from_LLMResponse(response, displayed=True)
 

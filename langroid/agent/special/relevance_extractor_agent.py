@@ -73,12 +73,17 @@ class RelevanceExtractorAgent(ChatAgent):
     async def llm_response_async(
         self, message: Optional[str | ChatDocument] = None
     ) -> Optional[ChatDocument]:
-        """Compose a prompt asking to extract relevant segments from a passage.
+        """
+        Compose a prompt asking to extract relevant segments from a passage.
         Steps:
         - number the segments in the passage
         - compose prompt
         - send to LLM
+        The LLM is expected to generate a structured msg according to the
+        SegmentExtractTool schema, i.e. it should contain a `segment_list` field
+        whose value is a list of segment numbers or ranges, like "10,12,14-17".
         """
+
         assert self.config.query is not None, "No query specified"
         assert message is not None, "No message specified"
         message_str = message.content if isinstance(message, ChatDocument) else message

@@ -310,7 +310,7 @@ class Task:
         while True:
             self.step()
             if self.done():
-                if self._level == 0:
+                if self._level == 0 and not settings.quiet:
                     print("[magenta]Bye, hope this was useful!")
                 break
             i += 1
@@ -370,7 +370,7 @@ class Task:
         while True:
             await self.step_async()
             if self.done():
-                if self._level == 0:
+                if self._level == 0 and not settings.quiet:
                     print("[magenta]Bye, hope this was useful!")
                 break
             i += 1
@@ -411,10 +411,12 @@ class Task:
             if self.agent.config.llm is None
             else self.agent.config.llm.chat_model
         )
-        print(
-            f"[bold magenta]{self._enter} Starting Agent "
-            f"{self.name} ({self.message_history_idx+1}) {llm_model} [/bold magenta]"
-        )
+        if not settings.quiet:
+            print(
+                f"[bold magenta]{self._enter} Starting Agent "
+                f"{self.name} ({self.message_history_idx+1}) "
+                f"{llm_model} [/bold magenta]"
+            )
 
     def _post_run_loop(self) -> None:
         # delete all messages from our agent's history, AFTER the first incoming
@@ -437,10 +439,11 @@ class Task:
                 # ONLY talking to the current agent.
                 if isinstance(t.agent, ChatAgent):
                     t.agent.clear_history(0)
-        print(
-            f"[bold magenta]{self._leave} Finished Agent "
-            f"{self.name} ({n_messages}) [/bold magenta]"
-        )
+        if not settings.quiet:
+            print(
+                f"[bold magenta]{self._leave} Finished Agent "
+                f"{self.name} ({n_messages}) [/bold magenta]"
+            )
 
     def step(self, turns: int = -1) -> ChatDocument | None:
         """

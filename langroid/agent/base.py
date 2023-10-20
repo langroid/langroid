@@ -41,7 +41,7 @@ from langroid.utils.configuration import settings
 from langroid.utils.constants import NO_ANSWER
 from langroid.vector_store.base import VectorStore, VectorStoreConfig
 
-console = Console()
+console = Console(quiet=settings.quiet)
 
 logger = logging.getLogger(__name__)
 
@@ -278,8 +278,9 @@ class Agent(ABC):
             return None
         if isinstance(results, ChatDocument):
             return results
-        console.print(f"[red]{self.indent}", end="")
-        print(f"[red]Agent: {results}")
+        if not settings.quiet:
+            console.print(f"[red]{self.indent}", end="")
+            print(f"[red]Agent: {results}")
         sender_name = self.config.name
         if isinstance(msg, ChatDocument) and msg.function_call is not None:
             # if result was from handling an LLM `function_call`,
@@ -412,7 +413,7 @@ class Agent(ABC):
         with StreamingIfAllowed(self.llm, self.llm.get_stream()):
             response = await self.llm.agenerate(prompt, output_len)
 
-        if not self.llm.get_stream() or response.cached:
+        if not self.llm.get_stream() or response.cached and not settings.quiet:
             # We would have already displayed the msg "live" ONLY if
             # streaming was enabled, AND we did not find a cached response.
             # If we are here, it means the response has not yet been displayed.
@@ -422,7 +423,7 @@ class Agent(ABC):
             response,
             prompt,
             self.llm.get_stream(),
-            print_response_stats=self.config.show_stats,
+            print_response_stats=self.config.show_stats and not settings.quiet,
         )
         return ChatDocument.from_LLMResponse(response, displayed=True)
 
@@ -475,11 +476,11 @@ class Agent(ABC):
                     the completion context length of the LLM. 
                     """
                     )
-            if self.llm.get_stream():
+            if self.llm.get_stream() and not settings.quiet:
                 console.print(f"[green]{self.indent}", end="")
             response = self.llm.generate(prompt, output_len)
 
-        if not self.llm.get_stream() or response.cached:
+        if not self.llm.get_stream() or response.cached and not settings.quiet:
             # we would have already displayed the msg "live" ONLY if
             # streaming was enabled, AND we did not find a cached response
             # If we are here, it means the response has not yet been displayed.
@@ -490,7 +491,7 @@ class Agent(ABC):
             response,
             prompt,
             self.llm.get_stream(),
-            print_response_stats=self.config.show_stats,
+            print_response_stats=self.config.show_stats and not settings.quiet,
         )
         return ChatDocument.from_LLMResponse(response, displayed=True)
 

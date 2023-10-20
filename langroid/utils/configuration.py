@@ -1,5 +1,7 @@
+import copy
 import os
-from typing import List
+from contextlib import contextmanager
+from typing import Iterator, List
 
 from dotenv import find_dotenv, load_dotenv
 from pydantic import BaseSettings
@@ -17,6 +19,7 @@ class Settings(BaseSettings):
     gpt3_5: bool = True  # use GPT-3.5?
     nofunc: bool = False  # use model without function_call? (i.e. gpt-4)
     chat_model: str = ""  # language model name, e.g. litellm/ollama/llama2
+    quiet: bool = False  # quiet mode (i.e. suppress all output)?
 
     class Config:
         extra = "forbid"
@@ -53,6 +56,19 @@ def update_global_settings(cfg: BaseSettings, keys: List[str]) -> None:
 def set_global(key_vals: Settings) -> None:
     """Update the unique global settings object"""
     settings.__dict__.update(key_vals.__dict__)
+
+
+@contextmanager
+def temporary_settings(temp_settings: Settings) -> Iterator[None]:
+    """Temporarily update the global settings and restore them afterward."""
+    original_settings = copy.deepcopy(settings)
+
+    set_global(temp_settings)
+
+    try:
+        yield
+    finally:
+        settings.__dict__.update(original_settings.__dict__)
 
 
 def set_env(settings: BaseSettings) -> None:

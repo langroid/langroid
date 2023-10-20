@@ -9,9 +9,10 @@ from rich.console import Console
 from langroid.agent.base import Agent
 from langroid.agent.chat_document import ChatDocument
 from langroid.agent.task import Task
+from langroid.utils.configuration import Settings, settings, temporary_settings
 from langroid.utils.logging import setup_colored_logging
 
-console = Console()
+console = Console(quiet=settings.quiet)
 
 setup_colored_logging()
 
@@ -52,9 +53,10 @@ def run_batch_tasks(
         return output_map(result)
 
     async def _do_all() -> List[Any]:
-        return await asyncio.gather(  # type: ignore
-            *(_do_task(input, i) for i, input in enumerate(inputs))
-        )
+        with temporary_settings(Settings(quiet=True)):
+            return await asyncio.gather(  # type: ignore
+                *(_do_task(input, i) for i, input in enumerate(inputs))
+            )
 
     # show rich console spinner
 
