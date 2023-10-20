@@ -10,7 +10,6 @@ import difflib
 import re
 from typing import List, Tuple
 
-import nltk
 from nltk.corpus import stopwords
 from nltk.stem import WordNetLemmatizer
 from nltk.tokenize import RegexpTokenizer
@@ -18,6 +17,8 @@ from rank_bm25 import BM25Okapi
 from thefuzz import fuzz, process
 
 from langroid.mytypes import Document
+
+from .utils import download_nltk_resource
 
 
 def find_fuzzy_matches_in_docs(
@@ -89,19 +90,6 @@ def find_fuzzy_matches_in_docs(
     return results
 
 
-# Ensure NLTK resources are available
-def download_nltk_resources() -> None:
-    resources = ["punkt", "wordnet", "stopwords"]
-    for resource in resources:
-        try:
-            nltk.data.find(resource)
-        except LookupError:
-            nltk.download(resource)
-
-
-download_nltk_resources()
-
-
 def preprocess_text(text: str) -> str:
     """
     Preprocesses the given text by:
@@ -117,6 +105,10 @@ def preprocess_text(text: str) -> str:
     Returns:
         str: The preprocessed text.
     """
+    # Ensure the NLTK resources are available
+    for resource in ["punkt", "wordnet", "stopwords"]:
+        download_nltk_resource(resource)
+
     # Lowercase the text
     text = text.lower()
 

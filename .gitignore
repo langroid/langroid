@@ -137,3 +137,8 @@ dmypy.json
 
 
 .vscode
+
+# Emacs
+*~
+\#*\#
+.\#*
