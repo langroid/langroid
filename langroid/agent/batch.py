@@ -9,7 +9,7 @@ from rich.console import Console
 from langroid.agent.base import Agent
 from langroid.agent.chat_document import ChatDocument
 from langroid.agent.task import Task
-from langroid.utils.configuration import Settings, settings, temporary_settings
+from langroid.utils.configuration import quiet_mode, settings
 from langroid.utils.logging import setup_colored_logging
 
 console = Console(quiet=settings.quiet)
@@ -53,7 +53,7 @@ def run_batch_tasks(
         return output_map(result)
 
     async def _do_all() -> List[Any]:
-        with temporary_settings(Settings(quiet=True)):
+        with quiet_mode():
             return await asyncio.gather(  # type: ignore
                 *(_do_task(input, i) for i, input in enumerate(inputs))
             )

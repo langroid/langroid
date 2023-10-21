@@ -71,6 +71,19 @@ def temporary_settings(temp_settings: Settings) -> Iterator[None]:
         settings.__dict__.update(original_settings.__dict__)
 
 
+@contextmanager
+def quiet_mode() -> Iterator[None]:
+    """Temporarily set quiet=True in global settings and restore afterward."""
+    original_quiet = settings.quiet
+
+    set_global(Settings(quiet=True))
+
+    try:
+        yield
+    finally:
+        settings.quiet = original_quiet
+
+
 def set_env(settings: BaseSettings) -> None:
     """
     Set environment variables from a BaseSettings instance
