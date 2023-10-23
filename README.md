@@ -67,6 +67,7 @@ for ideas on what to contribute.
 <summary> <b>:fire: Updates/Releases</b></summary>
 
 - **Oct 2023:**
+  - **0.1.102:** `DocChatAgentConfig.n_neighbor_chunks > 0` allows returning context chunks around match. 
   - **0.1.99:** Convenience batch functions to run tasks, agent methods on a list of inputs concurrently in async mode. See examples in [test_batch.py](https://github.com/langroid/langroid/blob/main/tests/main/test_batch.py).
   - **0.1.95:** Added support for [Momento Serverless Vector Index](https://docs.momentohq.com/vector-index)
   - **0.1.94:** Added support for [LanceDB](https://lancedb.github.io/lancedb/) vector-store -- allows vector, Full-text, SQL search.
