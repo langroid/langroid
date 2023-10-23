@@ -263,6 +263,7 @@ class MeiliSearch(VectorStore):
         text: str,
         k: int = 20,
         where: Optional[str] = None,
+        neighbors: int = 0,  # ignored
     ) -> List[Tuple[Document, float]]:
         filter = [] if where is None else where
         if self.config.collection_name is None:

@@ -109,14 +109,17 @@ class ChromaDB(VectorStore):
         if documents is None:
             return
         contents: List[str] = [document.content for document in documents]
-        metadatas: List[dict[str, Any]] = [
-            document.metadata.dict() for document in documents
-        ]
+        # convert metadatas to dicts so chroma can handle them
+        metadata_dicts: List[dict[str, Any]] = [d.metadata.dict() for d in documents]
+        for m in metadata_dicts:
+            # chroma does not handle non-atomic types in metadata
+            m["window_ids"] = ",".join(m["window_ids"])
+
         ids = [str(d.id()) for d in documents]
         self.collection.add(
             # embedding_models=embedding_models,
             documents=contents,
-            metadatas=metadatas,
+            metadatas=metadata_dicts,
             ids=ids,
         )
 
@@ -145,7 +148,8 @@ class ChromaDB(VectorStore):
             include=["documents", "distances", "metadatas"],
         )
         docs = self._docs_from_results(results)
-        scores = results["distances"][0]
+        # chroma distances are 1 - cosine.
+        scores = [1 - s for s in results["distances"][0]]
         return list(zip(docs, scores))
 
     def _docs_from_results(self, results: Dict[str, Any]) -> List[Document]:
@@ -164,22 +168,11 @@ class ChromaDB(VectorStore):
             for i, c in enumerate(contents):
                 print_long_text("red", "italic red", f"MATCH-{i}", c)
         metadatas = results["metadatas"][0]
+        for m in metadatas:
+            # restore the stringified list of window_ids into the original List[str]
+            m["window_ids"] = m["window_ids"].split(",")
         docs = [
             Document(content=d, metadata=DocMetaData(**m))
             for d, m in zip(contents, metadatas)
         ]
         return docs
-
-
-# Example usage and testing
-# chroma_db = ChromaDB.from_documents(
-#     collection_name="all-my-documents",
-#     documents=["doc1000101", "doc288822"],
-#     metadatas=[{"style": "style1"}, {"style": "style2"}],
-#     ids=["uri9", "uri10"]
-# )
-# results = chroma_db.query(
-#     query_texts=["This is a query document"],
-#     n_results=2
-# )
-# print(results)

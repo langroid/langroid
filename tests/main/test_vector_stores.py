@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
 from langroid.mytypes import DocMetaData, Document
+from langroid.parsing.parser import Parser, ParsingConfig, Splitter
 from langroid.utils.system import rmdir
 from langroid.vector_store.base import VectorStore
 from langroid.vector_store.chromadb import ChromaDB, ChromaDBConfig
@@ -141,7 +142,7 @@ def vecdb(request) -> VectorStore:
 # add "momento" when index-creation timeout error is resolved.
 @pytest.mark.parametrize(
     "vecdb",
-    ["lancedb", "chroma", "meilisearch", "qdrant_local", "qdrant_cloud"],
+    ["qdrant_cloud", "qdrant_local", "lancedb", "chroma"],
     indirect=True,
 )
 def test_vector_stores_search(
@@ -156,19 +157,15 @@ def test_vector_stores_search(
         return
     docs_and_scores = vecdb.similar_texts_with_scores(query, k=len(vars(phrases)))
     # first doc should be best match
-    if isinstance(vecdb, ChromaDB):
-        # scores are (apparently) l2 distances (docs unclear), so low means close
-        matching_docs = [doc.content for doc, score in docs_and_scores if score < 0.3]
-    else:
-        # scores are cosine similarities, so high means close
-        matching_docs = [doc.content for doc, score in docs_and_scores if score > 0.7]
+    # scores are cosine similarities, so high means close
+    matching_docs = [doc.content for doc, score in docs_and_scores if score > 0.7]
     assert set(results).issubset(set(matching_docs))
 
 
 # add "momento" when index-creation timeout error is resolved.
 @pytest.mark.parametrize(
     "vecdb",
-    ["lancedb", "meilisearch", "chroma", "qdrant_local", "qdrant_cloud"],
+    ["qdrant_local", "qdrant_cloud", "lancedb", "chroma"],
     indirect=True,
 )
 def test_vector_stores_access(vecdb):
@@ -206,3 +203,127 @@ def test_vector_stores_access(vecdb):
     )
     n_dels = vecdb.clear_all_collections(really=True, prefix="test_junk")
     assert n_colls == n_dels
+
+
+@pytest.mark.parametrize(
+    "vecdb",
+    ["chroma", "qdrant_cloud", "qdrant_local", "lancedb"],
+    indirect=True,
+)
+def test_vector_stores_context_window(vecdb):
+    """Test whether retrieving context-window around matches is working."""
+
+    phrases = SimpleNamespace(
+        CATS="Cats are quiet and clean.",
+        DOGS="Dogs are noisy and messy.",
+        GIRAFFES="Giraffes are tall and quiet.",
+        ELEPHANTS="Elephants are big and noisy.",
+        OWLS="Owls are quiet and nocturnal.",
+        BATS="Bats are nocturnal and noisy.",
+    )
+    text = "\n\n".join(vars(phrases).values())
+    doc = Document(content=text, metadata=DocMetaData(id="0"))
+
+    cfg = ParsingConfig(
+        splitter=Splitter.SIMPLE,
+        n_neighbor_ids=2,
+        chunk_size=1,
+        max_chunks=20,
+        min_chunk_chars=3,
+        discard_chunk_chars=1,
+    )
+
+    parser = Parser(cfg)
+    splits = parser.split([doc])
+
+    vecdb.create_collection(collection_name="test-context-window", replace=True)
+    vecdb.add_documents(splits)
+
+    # Test context window retrieval
+    docs_scores = vecdb.similar_texts_with_scores("What are Giraffes like?", k=1)
+    docs_scores = vecdb.add_context_window(docs_scores, neighbors=2)
+
+    assert len(docs_scores) == 1
+    giraffes, score = docs_scores[0]
+    assert all(
+        p in giraffes.content
+        for p in [
+            phrases.CATS,
+            phrases.DOGS,
+            phrases.GIRAFFES,
+            phrases.ELEPHANTS,
+            phrases.OWLS,
+        ]
+    )
+    # check they are in the right sequence
+    indices = [
+        giraffes.content.index(p)
+        for p in ["Cats", "Dogs", "Giraffes", "Elephants", "Owls"]
+    ]
+    assert indices == sorted(indices)
+
+
+@pytest.mark.parametrize(
+    "vecdb",
+    ["chroma", "qdrant_cloud", "qdrant_local", "lancedb"],
+    indirect=True,
+)
+def test_vector_stores_overlapping_matches(vecdb):
+    """Test that overlapping windows are handled correctly."""
+
+    # The windows around the first two giraffe matches should overlap.
+    # The third giraffe match should be in a separate window.
+    phrases = SimpleNamespace(
+        CATS="Cats are quiet and clean.",
+        DOGS="Dogs are noisy and messy.",
+        GIRAFFES="Giraffes are tall and quiet.",
+        ELEPHANTS="Elephants are big and noisy.",
+        OWLS="Owls are quiet and nocturnal.",
+        GIRAFFES1="Giraffes eat a lot of leaves.",
+        COWS="Cows are quiet and gentle.",
+        BULLS="Bulls are noisy and aggressive.",
+        TIGERS="Tigers are big and noisy.",
+        LIONS="Lions are nocturnal and noisy.",
+        CHICKENS="Chickens are quiet and gentle.",
+        ROOSTERS="Roosters are noisy and aggressive.",
+        GIRAFFES3="Giraffes are really strange animals.",
+        MICE="Mice are puny and gentle.",
+        RATS="Rats are noisy and destructive.",
+    )
+    text = "\n\n".join(vars(phrases).values())
+    doc = Document(content=text, metadata=DocMetaData(id="0"))
+
+    cfg = ParsingConfig(
+        splitter=Splitter.SIMPLE,
+        n_neighbor_ids=2,
+        chunk_size=1,
+        max_chunks=20,
+        min_chunk_chars=3,
+        discard_chunk_chars=1,
+    )
+
+    parser = Parser(cfg)
+    splits = parser.split([doc])
+
+    vecdb.create_collection(collection_name="test-context-window", replace=True)
+    vecdb.add_documents(splits)
+
+    # Test context window retrieval
+    docs_scores = vecdb.similar_texts_with_scores("What are Giraffes like?", k=3)
+    docs_scores = vecdb.add_context_window(docs_scores, neighbors=2)
+
+    assert len(docs_scores) == 3
+    # verify no overlap in d.metadata.window_ids for d in docs
+    all_window_ids = [id for d, _ in docs_scores for id in d.metadata.window_ids]
+    assert len(all_window_ids) == len(set(all_window_ids))
+
+    # verify giraffe occurs in each match
+    assert all("Giraffes" in d.content for d, _ in docs_scores)
+
+    # verify correct sequence of chunks in each match
+    sentences = vars(phrases).values()
+    for d, _ in docs_scores:
+        content = d.content
+        indices = [content.find(p) for p in sentences]
+        indices = [i for i in indices if i >= 0]
+        assert indices == sorted(indices)

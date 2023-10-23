@@ -10,7 +10,11 @@ from langroid.parsing.parser import ParsingConfig, PdfParsingConfig
 def test_get_pdf_doc_url(pdflib: str):
     url = "https://arxiv.org/pdf/2104.05490.pdf"
     pdf_parser = DocumentParser.create(
-        url, ParsingConfig(pdf=PdfParsingConfig(library=pdflib))
+        url,
+        ParsingConfig(
+            n_neighbor_ids=2,
+            pdf=PdfParsingConfig(library=pdflib),
+        ),
     )
     doc = pdf_parser.get_doc()
     # PdfParser.get_doc_from_pdf_url(url)
@@ -26,6 +30,10 @@ def test_get_pdf_doc_url(pdflib: str):
     docs = pdf_parser.get_doc_chunks()
     assert len(docs) > 0
     assert all(d.metadata.is_chunk for d in docs)
+    n = len(docs)
+    k = pdf_parser.config.n_neighbor_ids
+    if n > 2 * k + 1:
+        assert len(docs[n // 2].metadata.window_ids) == 2 * k + 1
 
 
 @pytest.mark.parametrize("pdflib", ["fitz", "pypdf", "pdfplumber", "unstructured"])

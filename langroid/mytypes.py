@@ -26,6 +26,8 @@ class DocMetaData(BaseModel):
 
     source: str = "context"
     is_chunk: bool = False  # if it is a chunk, don't split
+    id: str | None = None  # unique id for the document
+    window_ids: List[str] = []  # for RAG: ids of chunks around this one
 
     def dict(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
         """
@@ -51,9 +53,10 @@ class Document(BaseModel):
     content: str
     metadata: DocMetaData
 
-    def _unique_hash_id(self) -> str:
+    @staticmethod
+    def hash_id(doc: str) -> str:
         # Encode the document as UTF-8
-        doc_utf8 = str(self).encode("utf-8")
+        doc_utf8 = str(doc).encode("utf-8")
 
         # Create a SHA256 hash object
         sha256_hash = hashlib.sha256()
@@ -69,8 +72,11 @@ class Document(BaseModel):
 
         return str(hash_uuid)
 
-    def id(self) -> Any:
-        if hasattr(self.metadata, "id"):
+    def _unique_hash_id(self) -> str:
+        return self.hash_id(str(self))
+
+    def id(self) -> str:
+        if hasattr(self.metadata, "id") and self.metadata.id is not None:
             return self.metadata.id
         else:
             return self._unique_hash_id()

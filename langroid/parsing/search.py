@@ -7,7 +7,6 @@ See tests for examples: tests/main/test_string_search.py
 """
 
 import difflib
-import re
 from typing import List, Tuple
 
 from nltk.corpus import stopwords
@@ -24,6 +23,7 @@ from .utils import download_nltk_resource
 def find_fuzzy_matches_in_docs(
     query: str,
     docs: List[Document],
+    docs_clean: List[Document],
     k: int,
     words_before: int | None = None,
     words_after: int | None = None,
@@ -49,45 +49,45 @@ def find_fuzzy_matches_in_docs(
         return []
     best_matches = process.extract(
         query,
-        [d.content for d in docs],
+        [d.content for d in docs_clean],
         limit=k,
         scorer=fuzz.partial_ratio,
     )
 
     real_matches = [m for m, score in best_matches if score > 50]
-
-    results = []
-    for match in real_matches:
-        words = match.split()
-        for doc in docs:
-            if match in doc.content:
-                words_in_text = doc.content.split()
-                first_word_idx = next(
-                    (
-                        i
-                        for i, word in enumerate(words_in_text)
-                        if word.startswith(words[0])
-                    ),
-                    -1,
-                )
-                if words_before is None:
-                    words_before = len(words_in_text)
-                if words_after is None:
-                    words_after = len(words_in_text)
-                if first_word_idx != -1:
-                    start_idx = max(0, first_word_idx - words_before)
-                    end_idx = min(
-                        len(words_in_text),
-                        first_word_idx + len(words) + words_after,
-                    )
-                    doc_match = Document(
-                        content=" ".join(words_in_text[start_idx:end_idx]),
-                        metadata=doc.metadata,
-                    )
-                    results.append(doc_match)
+    # find the original docs that corresponding to the matches
+    orig_doc_matches = []
+    for i, m in enumerate(real_matches):
+        for j, doc_clean in enumerate(docs_clean):
+            if m in doc_clean.content:
+                orig_doc_matches.append(docs[j])
                 break
+    if words_after is None and words_before is None:
+        return orig_doc_matches
 
-    return results
+    contextual_matches = []
+    for match in orig_doc_matches:
+        choice_text = match.content
+        contexts = []
+        while choice_text != "":
+            context, start_pos, end_pos = get_context(
+                query, choice_text, words_before, words_after
+            )
+            if context == "" or end_pos == 0:
+                break
+            contexts.append(context)
+            words = choice_text.split()
+            end_pos = min(end_pos, len(words))
+            choice_text = " ".join(words[end_pos:])
+        if len(contexts) > 0:
+            contextual_matches.append(
+                Document(
+                    content=" ... ".join(contexts),
+                    metadata=match.metadata,
+                )
+            )
+
+    return contextual_matches
 
 
 def preprocess_text(text: str) -> str:
@@ -171,7 +171,7 @@ def get_context(
     text: str,
     words_before: int | None = 100,
     words_after: int | None = 100,
-) -> str:
+) -> Tuple[str, int, int]:
     """
     Returns a portion of text containing the best approximate match of the query,
     including b words before and a words after the match.
@@ -185,7 +185,9 @@ def get_context(
     Returns:
     str: A string containing b words before, the match, and a words after
         the best approximate match position of the query in the text. If no
-        match is found, returns "No match found".
+        match is found, returns empty string.
+    int: The start position of the match in the text.
+    int: The end position of the match in the text.
 
     Example:
     >>> get_context("apple", "The quick brown fox jumps over the apple.", 3, 2)
@@ -193,26 +195,29 @@ def get_context(
     """
     if words_after is None and words_before is None:
         # return entire text since we're not asked to return a bounded context
-        return text
+        return text, 0, 0
+
+    # make sure there is a good enough fu
+    if fuzz.partial_ratio(query, text) < 70:
+        return "", 0, 0
 
     sequence_matcher = difflib.SequenceMatcher(None, text, query)
     match = sequence_matcher.find_longest_match(0, len(text), 0, len(query))
 
     if match.size == 0:
-        return "No match found"
+        return "", 0, 0
 
-    words = re.findall(r"\b\w+\b", text)
-    if words_after is None:
-        words_after = len(words)
-    if words_before is None:
-        words_before = len(words)
-    start_word_pos = len(re.findall(r"\b\w+\b", text[: match.a]))
-    start_pos = max(0, start_word_pos - words_before)
-    end_pos = min(
-        len(words), start_word_pos + words_after + len(re.findall(r"\b\w+\b", query))
-    )
+    segments = text.split()
+    n_segs = len(segments)
 
-    return " ".join(words[start_pos:end_pos])
+    start_segment_pos = len(text[: match.a].split())
+
+    words_before = words_before or n_segs
+    words_after = words_after or n_segs
+    start_pos = max(0, start_segment_pos - words_before)
+    end_pos = min(len(segments), start_segment_pos + words_after + len(query.split()))
+
+    return " ".join(segments[start_pos:end_pos]), start_pos, end_pos
 
 
 def eliminate_near_duplicates(passages: List[str], threshold: float = 0.8) -> List[str]:

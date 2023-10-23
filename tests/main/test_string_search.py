@@ -12,47 +12,63 @@ from langroid.parsing.search import (
 @pytest.fixture
 def original_docs():
     return [
-        Document(content="This is a sample blah document.", metadata=DocMetaData(id=1)),
-        Document(content="Another example of document.", metadata=DocMetaData(id=2)),
+        Document(
+            content="""
+            This is a sample blah document. Tigers are the largest cat species 
+            in the world. And they are also one of the most charismatic.
+            In Bengal, the tiger is the symbol of power.
+            And here another sample document.
+            Lions are the second largest cat species in the world.
+            """,
+            metadata=DocMetaData(id=1),
+        ),
+        Document(content="Another legal document.", metadata=DocMetaData(id=2)),
         Document(content="Yet a another document sample.", metadata=DocMetaData(id=3)),
     ]
 
 
+# mock "clean" version of original docs
 @pytest.fixture
 def sample_docs():
     return [
-        Document(content="This is a sample document.", metadata=DocMetaData(id=1)),
-        Document(content="Another example of document.", metadata=DocMetaData(id=2)),
+        Document(content="This is sample document.", metadata=DocMetaData(id=1)),
+        Document(content="Another legal document.", metadata=DocMetaData(id=2)),
         Document(content="Yet another document sample.", metadata=DocMetaData(id=3)),
     ]
 
 
 @pytest.mark.parametrize(
-    "query, k, expected_length",
-    [("sample", 1, 1), ("document", 2, 2), ("should not be found", 1, 0)],
+    "query, k, n_matches_expected",
+    [("sample", 3, 2), ("document", 2, 2), ("should not be found", 1, 0)],
 )
-def test_return_correct_number_of_matches(sample_docs, query, k, expected_length):
-    results = find_fuzzy_matches_in_docs(query, sample_docs, k)
-    assert len(results) == expected_length
+def test_return_correct_number_of_matches(
+    original_docs,
+    sample_docs,
+    query,
+    k,
+    n_matches_expected,
+):
+    results = find_fuzzy_matches_in_docs(query, original_docs, sample_docs, k)
+    assert len(results) == n_matches_expected
 
 
 @pytest.mark.parametrize(
     "words_before, words_after, expected",
     [
-        (1, 1, "is a sample document"),
-        (2, 2, "This is a sample document."),
-        (None, None, "This is a sample document."),
+        (1, 1, ["a sample blah", "another sample document"]),
+        (2, 2, ["is a sample blah document", "here another sample document. Lions"]),
+        (None, None, ["This is a sample blah document."]),
     ],
 )
 def test_find_match_with_surrounding_words(
-    sample_docs, words_before, words_after, expected
+    original_docs, sample_docs, words_before, words_after, expected
 ):
     query = "sample"
     k = 1
     results = find_fuzzy_matches_in_docs(
-        query, sample_docs, k, words_before, words_after
+        query, original_docs, sample_docs, k, words_before, words_after
     )
-    assert expected in results[0].content
+    assert all(e in results[0].content for e in expected)
 
 
 def test_empty_docs():
@@ -121,7 +137,7 @@ def test_preprocess_combined():
     ],
 )
 def test_get_context(query, text, before, after, expected, not_expected):
-    result = get_context(query, text, before, after)
+    result, _, _ = get_context(query, text, before, after)
     expected = expected.split(",")
     not_expected = not_expected.split(",")
     assert all(word in result for word in expected)

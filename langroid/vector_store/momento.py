@@ -222,6 +222,7 @@ class MomentoVI(VectorStore):
         text: str,
         k: int = 1,
         where: Optional[str] = None,
+        neighbors: int = 0,  # ignored
     ) -> List[Tuple[Document, float]]:
         if self.config.collection_name is None:
             raise ValueError("No collection name set, cannot search")
