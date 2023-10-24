@@ -35,7 +35,7 @@ class ParsingConfig(BaseSettings):
     min_chunk_chars: int = 350
     discard_chunk_chars: int = 5  # discard chunks with fewer than this many chars
     n_similar_docs: int = 4
-    n_neighbor_ids: int = 0  # window size to store around each chunk
+    n_neighbor_ids: int = 5  # window size to store around each chunk
     separators: List[str] = ["\n\n", "\n", " ", ""]
     token_encoding_model: str = "text-embedding-ada-002"
     pdf: PdfParsingConfig = PdfParsingConfig()
