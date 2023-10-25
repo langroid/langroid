@@ -1,7 +1,7 @@
 !!! tip "Script in `langroid-examples`"
-        A full working example for the material in this section is 
-        in the `try-llm.py` script in the `langroid-examples` repo:
-        [`examples/quick-start/try-llm.py`](https://github.com/langroid/langroid-examples/tree/main/examples/quick-start/try-llm.py).
+    A full working example for the material in this section is 
+    in the `try-llm.py` script in the `langroid-examples` repo:
+    [`examples/quick-start/try-llm.py`](https://github.com/langroid/langroid-examples/tree/main/examples/quick-start/try-llm.py).
         
 
 Let's start with the basics -- how to directly interact with an OpenAI LLM
@@ -18,14 +18,14 @@ from langroid.language_models.openai_gpt import (
 cfg = OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT4)
 ```
 !!! info inline end "About Configs"
-        A recurring pattern you will see in Langroid is that for many classes,
-        we have a corresponding `Config` class (an instance of a Pydantic `BaseModel`),
-        and the class constructor takes this `Config` class as its only argument.
-        This lets us avoid having long argument lists in constructors, and brings flexibility
-        since adding a new argument to the constructor is as simple as adding a new field
-        to the corresponding `Config` class.
-        For example the constructor for the `OpenAIGPT` class takes a single argument,
-        an instance of the `OpenAIGPTConfig` class.
+    A recurring pattern you will see in Langroid is that for many classes,
+    we have a corresponding `Config` class (an instance of a Pydantic `BaseModel`),
+    and the class constructor takes this `Config` class as its only argument.
+    This lets us avoid having long argument lists in constructors, and brings flexibility
+    since adding a new argument to the constructor is as simple as adding a new field
+    to the corresponding `Config` class.
+    For example the constructor for the `OpenAIGPT` class takes a single argument,
+    an instance of the `OpenAIGPTConfig` class.
 
 Now that we've defined the configuration of the LLM, we can instantiate it:
 ```py

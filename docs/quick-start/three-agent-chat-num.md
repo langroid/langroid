@@ -1,9 +1,9 @@
 # Three-Agent Collaboration
 
 !!! tip "Script in `langroid-examples`"
-        A full working example for the material in this section is
-        in the `three-agent-chat-num.py` script in the `langroid-examples` repo:
-        [`examples/quick-start/three-agent-chat-num.py`](https://github.com/langroid/langroid-examples/tree/main/examples/quick-start/three-agent-chat-num.py).
+    A full working example for the material in this section is
+    in the `three-agent-chat-num.py` script in the `langroid-examples` repo:
+    [`examples/quick-start/three-agent-chat-num.py`](https://github.com/langroid/langroid-examples/tree/main/examples/quick-start/three-agent-chat-num.py).
 
 
 Let us set up a simple numbers exercise between 3 agents.

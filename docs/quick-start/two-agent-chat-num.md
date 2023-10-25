@@ -1,9 +1,9 @@
 # Two-Agent Collaboration
 
 !!! tip "Script in `langroid-examples`"
-        A full working example for the material in this section is
-        in the `two-agent-chat-num.py` script in the `langroid-examples` repo:
-        [`examples/quick-start/two-agent-chat-num.py`](https://github.com/langroid/langroid-examples/tree/main/examples/quick-start/two-agent-chat-num.py).
+    A full working example for the material in this section is
+    in the `two-agent-chat-num.py` script in the `langroid-examples` repo:
+    [`examples/quick-start/two-agent-chat-num.py`](https://github.com/langroid/langroid-examples/tree/main/examples/quick-start/two-agent-chat-num.py).
 
 
 To illustrate these ideas, let's look at a toy example[^1] where 
@@ -105,8 +105,8 @@ Here is an example of the conversation that results:
 ## Logs of multi-agent interactions
 
 !!! note "For advanced users"
-        This section is for advanced users who want more visibility into the
-        internals of multi-agent interactions.
+    This section is for advanced users who want more visibility into the
+    internals of multi-agent interactions.
 
 When running a multi-agent chat, e.g. using `task.run()`, two types of logs
 are generated:

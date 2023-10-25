@@ -1,9 +1,9 @@
 # Three-Agent Collaboration, with message Routing
 
 !!! tip "Script in `langroid-examples`"
-        A full working example for the material in this section is
-        in the `three-agent-chat-num-router.py` script in the `langroid-examples` repo:
-        [`examples/quick-start/three-agent-chat-num-router.py`](https://github.com/langroid/langroid-examples/tree/main/examples/quick-start/three-agent-chat-num-router.py).
+    A full working example for the material in this section is
+    in the `three-agent-chat-num-router.py` script in the `langroid-examples` repo:
+    [`examples/quick-start/three-agent-chat-num-router.py`](https://github.com/langroid/langroid-examples/tree/main/examples/quick-start/three-agent-chat-num-router.py).
 
 Let's change the number game from the [three agent chat example](three-agent-chat-num.md) slightly.
 In that example, when the `even_agent`'s LLM receives an odd number,
