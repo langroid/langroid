@@ -665,8 +665,10 @@ class Agent(ABC):
         try:
             result = handler_method(tool)
         except Exception as e:
-            # return the error message to the LLM so it can try to fix the error
-            result = f"Error in tool/function-call {tool_name} usage: {type(e)}: {e}"
+            # raise the error here since we are sure it's
+            # not a pydantic validation error,
+            # which we check in `handle_message`
+            raise e
         return result  # type: ignore
 
     def num_tokens(self, prompt: str | List[LLMMessage]) -> int:
@@ -777,8 +779,8 @@ class Agent(ABC):
         Args:
             agent (Agent): agent to ask
             request (str): request to send
-            no_answer: expected response when agent does not know the answer
-            gate_human: whether to gate the request with a human confirmation
+            no_answer (str): expected response when agent does not know the answer
+            user_confirm (bool): whether to gate the request with a human confirmation
 
         Returns:
             str: response from agent
