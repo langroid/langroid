@@ -48,7 +48,7 @@ the LLM will try its best to interpret what you want, and offer choices when con
   directory or web url, and ask questions
     - Illustrates basic RAG
 - [`/examples/docqa/chat-search.py`](https://github.com/langroid/langroid-examples/blob/main/examples/docqa/chat-search.py): ask about anything and it will try to answer
-  based on docs indexed in vector-db, otherwise it will do a google search, and
+  based on docs indexed in vector-db, otherwise it will do a Google search, and
   index the results in the vec-db for this and later answers.
     - Illustrates RAG + Function-calling/tools
 - [`/examples/docqa/chat_multi.py`](https://github.com/langroid/langroid-examples/blob/main/examples/docqa/chat_multi.py):  — this is a 2-agent system that will summarize

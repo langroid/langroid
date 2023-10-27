@@ -20,8 +20,8 @@ We know that GPT-4 has  skills that are ideally suited for this task:
 Once you decide to use an LLM, you still need to figure out how to organize the 
 various components of this task:
 
-- **Research:** what are some ideal customer profiles for the business
-- **Segmentation:** which standard segments match an English description of a customer profile
+- **Research:** What are some ideal customer profiles for the business
+- **Segmentation:** Which standard segments match an English description of a customer profile
 - **Planning:** how to organize the task to identify a few standard segments
 
 ## Using Langroid Agents 
