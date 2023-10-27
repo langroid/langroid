@@ -66,6 +66,10 @@ You are a helpful assistant, helping me understand a collection of documents.
 """
 
 
+class DocChunkMetqdata(DocMetaData):
+    id: str
+
+
 class DocChatAgentConfig(ChatAgentConfig):
     """
     Attributes:
@@ -95,6 +99,7 @@ class DocChatAgentConfig(ChatAgentConfig):
     # It is False by default; its benefits depends on the context.
     hypothetical_answer: bool = False
     n_query_rephrases: int = 0
+    n_neighbor_chunks: int = 0  # how many neighbors on either side of match to retrieve
     use_fuzzy_match: bool = True
     use_bm25_search: bool = True
     cross_encoder_reranking_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
@@ -122,6 +127,7 @@ class DocChatAgentConfig(ChatAgentConfig):
         min_chunk_chars=200,
         discard_chunk_chars=5,  # discard chunks with fewer than this many chars
         n_similar_docs=3,
+        n_neighbor_ids=0,  # num chunk IDs to store on either side of each chunk
         pdf=PdfParsingConfig(
             # NOTE: PDF parsing is extremely challenging, and each library
             # has its own strengths and weaknesses.
@@ -195,6 +201,7 @@ class DocChatAgent(ChatAgent):
             if self.vecdb is None:
                 raise ValueError("VecDB not set")
             self.chunked_docs = self.vecdb.get_all_documents()
+            # used for lexical similarity e.g. keyword search (bm25 etc)
             self.chunked_docs_clean = [
                 Document(content=preprocess_text(d.content), metadata=d.metadata)
                 for d in self.chunked_docs
@@ -509,9 +516,13 @@ class DocChatAgent(ChatAgent):
             if self.chunked_docs is None:
                 logger.warning("No chunked docs; cannot use fuzzy matching")
                 return []
+            if self.chunked_docs_clean is None:
+                logger.warning("No cleaned chunked docs; cannot use fuzzy-search")
+                return []
             fuzzy_match_docs = find_fuzzy_matches_in_docs(
                 query,
                 self.chunked_docs,
+                self.chunked_docs_clean,
                 k=self.config.parsing.n_similar_docs * multiple,
                 words_before=1000,
                 words_after=1000,
@@ -546,6 +557,36 @@ class DocChatAgent(ChatAgent):
             ]
         return passages
 
+    def add_context_window(
+        self,
+        docs_scores: List[Tuple[Document, float]],
+    ) -> List[Tuple[Document, float]]:
+        """
+        In each doc's metadata, there may be a window_ids field indicating
+        the ids of the chunks around the current chunk.
+        These window_ids may overlap, so we
+        - gather connected-components of overlapping windows,
+        - split each component into roughly equal parts,
+        - create a new document for each part, preserving metadata,
+
+        We may have stored a longer set of window_ids than we need.
+        We just want `neighbors` on each side of the center of window_ids.
+
+        Args:
+            docs (List[Document]): List of documents to add context window to.
+            scores (List[float]): List of match scores for each document.
+            neighbors (int, optional): Number of neighbors on "each side" of match to
+                retrieve. Defaults to 0.
+                "Each side" here means before and after the match,
+                in the original text.
+
+        Returns:
+            List[Tuple[Document, float]]: List of (Document, score) tuples.
+        """
+        if self.vecdb is None or self.config.n_neighbor_chunks == 0:
+            return docs_scores
+        return self.vecdb.add_context_window(docs_scores, self.config.n_neighbor_chunks)
+
     def get_relevant_chunks(
         self, query: str, query_proxies: List[str] = []
     ) -> List[Document]:
@@ -560,10 +601,11 @@ class DocChatAgent(ChatAgent):
         dynamically retrieved based on a window around a lexical match.
 
         These are the steps (some optional based on config):
-        - vector-embedding distance, from vecdb
-        - bm25-ranking (keyword similarity)
+        - semantic search based on vector-embedding distance, from vecdb
+        - lexical search using bm25-ranking (keyword similarity)
         - fuzzy matching (keyword similarity)
-        - re-ranking of doc-chunks using cross-encoder, pick top k
+        - re-ranking of doc-chunks by relevance to query, using cross-encoder,
+           and pick top k
 
         Args:
             query: original query (assumed to be in stand-alone form)
@@ -612,6 +654,9 @@ class DocChatAgent(ChatAgent):
         if len(passages) == 0:
             return []
 
+        passages_scores = [(p, 0.0) for p in passages]
+        passages_scores = self.add_context_window(passages_scores)
+        passages = [p for p, _ in passages_scores]
         # now passages can potentially have a lot of doc chunks,
         # so we re-rank them using a cross-encoder scoring model
         # https://www.sbert.net/examples/applications/retrieve_rerank

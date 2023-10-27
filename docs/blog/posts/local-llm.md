@@ -28,12 +28,12 @@ The main appeal with local models is that with sufficiently careful prompting,
 they may behave sufficiently well to be useful for specific tasks/domains,
 and bring all of the above benefits. Some ideas on how you might use local LLMs:
 
-- In a mult-agent system, you could have some agents use local models for narrow 
+- In a multi-agent system, you could have some agents use local models for narrow 
   tasks with a lower bar for accuracy (and fix responses with multiple tries).
 - You could run many instances of the same or different models and combine their responses.
 - Local LLMs can act as a privacy layer, to identify and handle sensitive data before passing to remote LLMs.
 - Some local LLMs have intriguing features, for example llama.cpp lets you 
-  constrain its output using grammars.
+  constrain its output using a grammar.
 
 ## Running LLMs locally
 
@@ -59,7 +59,7 @@ We recommend visiting these links to see how to install and run these libraries.
 ## Use the local model with the OpenAI library
 
 Once you have a server running using any of the above methods, 
-your code that works with the OpenAI models can be made to instead work 
+your code that works with the OpenAI models can be made to work 
 with the local model, by simply changing the `openai.api_base` to the 
 URL where the local server is listening. 
 

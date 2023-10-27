@@ -1,5 +1,6 @@
 import os
 import warnings
+from types import SimpleNamespace
 from typing import List
 
 import pytest
@@ -176,3 +177,70 @@ def test_doc_chat_followup(test_settings: Settings, agent, conv_mode: bool):
 
     result = task.run("When was he born?")
     assert "1889" in result.content
+
+
+# setup config for retrieval test, with n_neighbor_chunks=2
+# and parser.n_neighbor_ids = 5
+class _MyDocChatAgentConfig(DocChatAgentConfig):
+    cross_encoder_reranking_model = ""
+    n_query_rephrases = 0
+    n_neighbor_chunks = 2
+    debug: bool = False
+    stream: bool = True  # allow streaming where needed
+    conversation_mode = True
+    vecdb: VectorStoreConfig = QdrantDBConfig(
+        collection_name="test-data",
+        replace_collection=True,
+        storage_path=storage_path,
+        embedding=OpenAIEmbeddingsConfig(
+            model_type="openai",
+            model_name="text-embedding-ada-002",
+            dims=1536,
+        ),
+    )
+
+    llm: OpenAIGPTConfig = OpenAIGPTConfig(
+        stream=True,
+        cache_config=RedisCacheConfig(fake=False),
+        chat_model=OpenAIChatModel.GPT4,
+        use_chat_for_completion=True,
+    )
+
+    parsing: ParsingConfig = ParsingConfig(
+        splitter=Splitter.SIMPLE,
+        n_similar_docs=2,
+        n_neighbor_ids=5,
+    )
+
+
+@pytest.mark.parametrize("conv_mode", [True, False])
+def test_doc_chat_retrieval(test_settings: Settings, agent, conv_mode: bool):
+    """
+    Test retrieval of relevant doc-chunks
+    """
+    agent = DocChatAgent(_MyDocChatAgentConfig())
+    agent.config.conversation_mode = conv_mode
+
+    set_global(test_settings)
+
+    phrases = SimpleNamespace(
+        CATS="Cats are quiet and clean.",
+        DOGS="Dogs are loud and messy.",
+        PIGS="Pigs cannot fly.",
+        GIRAFFES="Giraffes are tall and vegetarian.",
+        BATS="Bats are blind.",
+        COWS="Cows are peaceful.",
+        GIRAFFES2="Giraffes are really strange animals.",
+        HYENAS="Hyenas are dangerous and fast.",
+        ZEBRAS="Zebras are bizarre with stripes.",
+    )
+    text = "\n\n".join(vars(phrases).values())
+    agent.ingest_docs([Document(content=text, metadata={"source": "animals"})])
+    results = agent.get_relevant_chunks("What are giraffes like?")
+
+    all_but_cats = [p for p in vars(phrases).values() if "Cats" not in p]
+    # check that each phrases occurs in exactly one result
+    assert (
+        sum(p in r.content for p in all_but_cats for r in results)
+        == len(vars(phrases)) - 1
+    )

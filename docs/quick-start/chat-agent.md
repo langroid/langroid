@@ -110,11 +110,11 @@ and preventing an entity from responding if it has just responded, etc.
 override methods like `valid()`, `done()`, `result()`, or even `step()`.
 
 !!! note "`Task.run()` has the same signature as agent's responder methods."
-        The key to composability of tasks is that `Task.run()` 
-        _has exactly the same type-signature as any of the agent's responder methods_, 
-        i.e. `str | ChatDocument -> ChatDocument`. This means that a `Task` can be
-        used as a responder in another `Task`, and so on recursively. 
-        We will see this in action in the [Two Agent Chat section](two-agent-agent-chat-num.md).
+    The key to composability of tasks is that `Task.run()` 
+    *has exactly the same type-signature as any of the agent's responder methods*, 
+    i.e. `str | ChatDocument -> ChatDocument`. This means that a `Task` can be
+    used as a responder in another `Task`, and so on recursively. 
+    We will see this in action in the [Two Agent Chat section](two-agent-agent-chat-num.md).
 
 The above details were only provided to give you a glimpse into how Agents and 
 Tasks work. Unless you are creating a custom orchestration mechanism, you do not

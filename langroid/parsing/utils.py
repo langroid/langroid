@@ -165,6 +165,32 @@ def parse_number_range_list(specs: str) -> List[int]:
     return sorted(list(spec_indices))
 
 
+def strip_k(s: str, k: int = 2) -> str:
+    """
+    Strip any leading and trailing whitespaces from the input text beyond length k.
+    This is useful for removing leading/trailing whitespaces from a text while
+    preserving paragraph structure.
+
+    Args:
+        s (str): The input text.
+        k (int): The number of leading and trailing whitespaces to retain.
+
+    Returns:
+        str: The text with leading and trailing whitespaces removed beyond length k.
+    """
+
+    # Count leading and trailing whitespaces
+    leading_count = len(s) - len(s.lstrip())
+    trailing_count = len(s) - len(s.rstrip())
+
+    # Determine how many whitespaces to retain
+    leading_keep = min(leading_count, k)
+    trailing_keep = min(trailing_count, k)
+
+    # Use slicing to get the desired output
+    return s[leading_count - leading_keep : len(s) - (trailing_count - trailing_keep)]
+
+
 def clean_whitespace(text: str) -> str:
     """Remove extra whitespace from the input text, while preserving
     paragraph structure.

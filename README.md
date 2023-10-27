@@ -54,6 +54,7 @@ for ideas on what to contribute.
 <summary> <b>:fire: Updates/Releases</b></summary>
 
 - **Oct 2023:**
+  - **0.1.102:** `DocChatAgentConfig.n_neighbor_chunks > 0` allows returning context chunks around match. 
   - **0.1.100:** API update: all of Langroid is accessible with a single import, i.e. `import langroid as lr`. See the [documentation]("https://langroid.github.io/langroid/") for usage.
   - **0.1.99:** Convenience batch functions to run tasks, agent methods on a list of inputs concurrently in async mode. See examples in [test_batch.py](https://github.com/langroid/langroid/blob/main/tests/main/test_batch.py).
   - **0.1.95:** Added support for [Momento Serverless Vector Index](https://docs.momentohq.com/vector-index)
@@ -471,7 +472,7 @@ Langroid leverages Pydantic to support OpenAI's
 [Function-calling API](https://platform.openai.com/docs/guides/gpt/function-calling)
 as well as its own native tools. The benefits are that you don't have to write
 any JSON to specify the schema, and also if the LLM hallucinates a malformed
-tool syntax, Langroid sends the Pydantic validation error (suitiably sanitized) 
+tool syntax, Langroid sends the Pydantic validation error (suitably sanitized) 
 to the LLM so it can fix it!
 
 Simple example: Say the agent has a secret list of numbers, 

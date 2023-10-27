@@ -120,6 +120,9 @@ class Task:
         if default_human_response is not None:
             self.agent.default_human_response = default_human_response
         self.only_user_quits_root = only_user_quits_root
+        # set to True if we want to collapse multi-turn conversation with sub-tasks into
+        # just the first outgoing message and last incoming message.
+        # Note this also completely erases sub-task agents' message_history.
         self.erase_substeps = erase_substeps
 
         agent_entity_responders = agent.entity_responders()

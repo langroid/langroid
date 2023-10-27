@@ -160,7 +160,7 @@ ollama run mistral # download and run the mistral model
 ```
 Then in a separate terminal window, run the liteLLM proxy server:
 ```bash
-litellm --model ollama/llama2 # run the proxy server, listening at localhost:8000
+litellm --model ollama/mistral # run the proxy server, listening at localhost:8000
 ```
 In a third terminal window, run the chat script:
 ```bash

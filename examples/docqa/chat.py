@@ -63,11 +63,14 @@ def main(
         n_query_rephrases=0,
         cross_encoder_reranking_model="cross-encoder/ms-marco-MiniLM-L-6-v2",
         hypothetical_answer=False,
+        # set it to > 0 to retrieve a window of k chunks on either side of a match
+        n_neighbor_chunks=0,
         parsing=ParsingConfig(  # modify as needed
             splitter=Splitter.TOKENS,
             chunk_size=1000,  # aim for this many tokens per chunk
             overlap=100,  # overlap between chunks
             max_chunks=10_000,
+            n_neighbor_ids=5,  # store ids of window of k chunks around each chunk.
             # aim to have at least this many chars per chunk when
             # truncating due to punctuation
             min_chunk_chars=200,

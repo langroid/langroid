@@ -244,7 +244,11 @@ class QdrantDB(VectorStore):
             with_vectors=False,
             with_payload=True,
         )
-        docs = [Document(**record.payload) for record in records]  # type: ignore
+        # Note the records may NOT be in the order of the ids,
+        # so we re-order them here.
+        id2payload = {record.id: record.payload for record in records}
+        ordered_payloads = [id2payload[id] for id in _ids]
+        docs = [Document(**payload) for payload in ordered_payloads]  # type: ignore
         return docs
 
     def similar_texts_with_scores(
@@ -252,6 +256,7 @@ class QdrantDB(VectorStore):
         text: str,
         k: int = 1,
         where: Optional[str] = None,
+        neighbors: int = 0,
     ) -> List[Tuple[Document, float]]:
         embedding = self.embedding_fn([text])[0]
         # TODO filter may not work yet
@@ -268,7 +273,7 @@ class QdrantDB(VectorStore):
                 exact=False,  # use Apx NN, not exact NN
             ),
         )
-        scores = [match.score for match in search_result]
+        scores = [match.score for match in search_result if match is not None]
         docs = [
             Document(**(match.payload))  # type: ignore
             for match in search_result
@@ -277,8 +282,9 @@ class QdrantDB(VectorStore):
         if len(docs) == 0:
             logger.warning(f"No matches found for {text}")
             return []
-        if settings.debug:
-            logger.info(f"Found {len(docs)} matches, max score: {max(scores)}")
         doc_score_pairs = list(zip(docs, scores))
+        max_score = max(ds[1] for ds in doc_score_pairs)
+        if settings.debug:
+            logger.info(f"Found {len(doc_score_pairs)} matches, max score: {max_score}")
         self.show_if_debug(doc_score_pairs)
         return doc_score_pairs

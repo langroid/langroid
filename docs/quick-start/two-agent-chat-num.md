@@ -104,8 +104,8 @@ Here is an example of the conversation that results:
 ## Logs of multi-agent interactions
 
 !!! note "For advanced users"
-        This section is for advanced users who want more visibility into the
-        internals of multi-agent interactions.
+    This section is for advanced users who want more visibility into the
+    internals of multi-agent interactions.
 
 When running a multi-agent chat, e.g. using `task.run()`, two types of logs
 are generated:

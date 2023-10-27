@@ -106,9 +106,11 @@ def main(
         cross_encoder_reranking_model="cross-encoder/ms-marco-MiniLM-L-6-v2",
         hypothetical_answer=False,
         assistant_mode=True,
+        n_neighbor_chunks=2,
         parsing=ParsingConfig(  # modify as needed
             splitter=Splitter.TOKENS,
-            chunk_size=500,  # aim for this many tokens per chunk
+            chunk_size=100,  # aim for this many tokens per chunk
+            n_neighbor_ids=5,
             overlap=200,  # overlap between chunks
             max_chunks=10_000,
             # aim to have at least this many chars per chunk when

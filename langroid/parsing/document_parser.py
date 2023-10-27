@@ -200,6 +200,7 @@ class DocumentParser(Parser):
                     ),
                 )
             )
+        self.add_window_ids(docs)
         return docs
 
 

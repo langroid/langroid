@@ -79,7 +79,9 @@ def flatten_pydantic_model(
         current_model, current_prefix = models_to_process.pop()
 
         for name, field in current_model.__fields__.items():
-            if issubclass(field.outer_type_, BaseModel):
+            if isinstance(field.outer_type_, type) and issubclass(
+                field.outer_type_, BaseModel
+            ):
                 new_prefix = (
                     f"{current_prefix}{name}__" if current_prefix else f"{name}__"
                 )

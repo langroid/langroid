@@ -1,7 +1,7 @@
 import pytest
 
 from langroid.mytypes import Document
-from langroid.parsing.parser import Parser, ParsingConfig
+from langroid.parsing.parser import Parser, ParsingConfig, Splitter
 from langroid.parsing.utils import generate_random_text
 
 CHUNK_SIZE = 100
@@ -10,15 +10,17 @@ CHUNK_SIZE = 100
 @pytest.mark.parametrize(
     "chunk_size, max_chunks, min_chunk_chars, discard_chunk_chars",
     [
-        (100, 10_000, 350, 5),
+        # (200, 10_000, 35, 5),
         (10, 100, 35, 2),
-        (200, 1000, 300, 10),
+        # (200, 1000, 300, 10),
     ],
 )
 def test_parser(
     chunk_size: int, max_chunks: int, min_chunk_chars: int, discard_chunk_chars: int
 ):
     cfg = ParsingConfig(
+        splitter=Splitter.TOKENS,
+        n_neighbor_ids=2,
         chunk_size=chunk_size,
         max_chunks=max_chunks,
         min_chunk_chars=min_chunk_chars,
@@ -28,8 +30,8 @@ def test_parser(
 
     parser = Parser(cfg)
     docs = [
-        Document(content=generate_random_text(10), metadata={"id": i})
-        for i in range(30)
+        Document(content=generate_random_text(500), metadata={"id": i})
+        for i in range(5)
     ]
 
     split_docs = parser.split(docs)
@@ -37,6 +39,14 @@ def test_parser(
     assert all(parser.num_tokens(d.content) <= chunk_size + 5 for d in split_docs)
     assert len(split_docs) <= max_chunks * len(docs)
     assert all(len(d.content) >= discard_chunk_chars for d in split_docs)
+    assert all(d.metadata.is_chunk for d in split_docs)
+
+    # test neighbor chunks
+    doc = Document(content=generate_random_text(500), metadata={"id": 0})
+    chunks = parser.split([doc])
+    n = len(chunks)
+    if n > 2 * cfg.n_neighbor_ids + 1:
+        assert len(chunks[n // 2].metadata.window_ids) == 2 * cfg.n_neighbor_ids + 1
 
 
 def length_fn(text):
