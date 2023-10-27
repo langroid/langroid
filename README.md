@@ -484,7 +484,7 @@ Langroid leverages Pydantic to support OpenAI's
 [Function-calling API](https://platform.openai.com/docs/guides/gpt/function-calling)
 as well as its own native tools. The benefits are that you don't have to write
 any JSON to specify the schema, and also if the LLM hallucinates a malformed
-tool syntax, Langroid sends the Pydantic validation error (suitiably sanitized) 
+tool syntax, Langroid sends the Pydantic validation error (suitably sanitized) 
 to the LLM so it can fix it!
 
 Simple example: Say the agent has a secret list of numbers, 
