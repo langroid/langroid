@@ -160,8 +160,8 @@ class VectorStore(ABC):
         - split each component into roughly equal parts,
         - create a new document for each part, preserving metadata,
 
-        We may have stored a longer set of window_ids than we need.
-        We just want `neighbors` on each side of the center of window_ids.
+        We may have stored a longer set of window_ids than we need during chunking.
+        Now, we just want `neighbors` on each side of the center of the window_ids list.
 
         Args:
             docs (List[Document]): List of documents to add context window to.
@@ -189,6 +189,8 @@ class VectorStore(ABC):
         id2max_score: Dict[int | str, float] = {}
         for i, d in enumerate(docs):
             window_ids = d.metadata.window_ids
+            if len(window_ids) == 0:
+                window_ids = [d.id()]
             id2metadata.update({id: d.metadata for id in window_ids})
 
             id2max_score.update(
