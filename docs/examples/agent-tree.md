@@ -4,7 +4,7 @@ Here is a simple example showing tree-structured computation
 where each node in the tree is handled by a separate agent.
 This is a toy numerical example, and illustrates:
 
-- how to have agents organized in a hiearchical structure to accomplish a task 
+- how to have agents organized in a hierarchical structure to accomplish a task 
 - the use of global state accessible to all agents, and 
 - the use of tools/function-calling.
 
@@ -120,7 +120,7 @@ Below is one way to do this using Langroid. We designed this with the following
 desirable features:
 
 - Decoupling: Each agent is instructed separately, without mention of any other agents
-  (E.g. Even agent does not know about Odd Agent, or EvenZ agent, etc).
+  (E.g. Even agent does not know about Odd Agent, EvenZ agent, etc).
   In particular, this means agents will not be "addressing" their message
   to specific other agents, e.g. send number to Odd agent when number is odd,
   etc. Allowing addressing would make the solution easier to implement,
@@ -229,7 +229,7 @@ value in this task definition:
   to be handled by one of the sub-tasks, i.e. `Even, Odd`. Note that these sub-tasks
   are _not_ mentioned in the system message, consistent with the decoupling principle.
 - As soon as either of these sub-tasks returns a non-Null response, in the format "RESULT <number>", the `Main` agent
-  is instructured to return this result saying "DONE <number>". Since `llm_delegate`
+  is instructed to return this result saying "DONE <number>". Since `llm_delegate`
   is set to `True` (meaning the LLM can decide when the task has ended), 
   this causes the `Main` task to be considered finished and the task loop is exited.
 
@@ -281,7 +281,7 @@ to the initial number set by the `Main` agent.
 ## Connect the tasks into a tree structure
 
 So far, we have wrapped each agent in a task, in isolation, and there is no 
-connection between the tasks. The final step is to connect the tasks into 
+connection between the tasks. The final step is to connect the tasks to 
 the tree structure we saw earlier:
 
 ```python
@@ -292,7 +292,7 @@ even_nz_task.add_sub_task(adder_task)
 odd_task.add_sub_task(adder_task)
 ```
 
-And now all that remains is to run the main task:
+Now all that remains is to run the main task:
 
 ```python
 main_task.run()
