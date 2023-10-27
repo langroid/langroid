@@ -1,9 +1,9 @@
 # A simple chat agent
 
 !!! tip "Script in `langroid-examples`"
-        A full working example for the material in this section is
-        in the `chat-agent.py` script in the `langroid-examples` repo:
-        [`examples/quick-start/chat-agent.py`](https://github.com/langroid/langroid-examples/tree/main/examples/quick-start/chat-agent.py).
+    A full working example for the material in this section is
+    in the `chat-agent.py` script in the `langroid-examples` repo:
+    [`examples/quick-start/chat-agent.py`](https://github.com/langroid/langroid-examples/tree/main/examples/quick-start/chat-agent.py).
 
 ## Agents 
 
@@ -38,11 +38,14 @@ There are three responder methods in `ChatAgent`, one corresponding to each
 Creating an agent is easy. First define a `ChatAgentConfig` object, and then
 instantiate a `ChatAgent` object with that config:
 ```py
-from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
-config = ChatAgentConfig(
-    llm = OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT4) #(1)!
+import langroid as lr
+
+config = lr.ChatAgentConfig(
+    llm = lr.language_models.OpenAIGPTConfig(
+    chat_model=lr.language_models.OpenAIChatModel.GPT4
+    ) #(1)!
 )
-agent = ChatAgent(config)
+agent = lr.ChatAgent(config)
 ```
 
 1. This agent only has an LLM, and no vector-store. Examples of agents with
@@ -118,8 +121,7 @@ Tasks work. Unless you are creating a custom orchestration mechanism, you do not
 need to be aware of these details. In fact our basic human + LLM chat loop can be trivially 
 implemented with a `Task`, in a couple of lines of code:
 ```py
-from langroid.agent.task import Task
-task = Task(agent, name="Bot", system_message="You are a helpful assistant")
+task = lr.Task(agent, name="Bot", system_message="You are a helpful assistant")
 ```
 We can then run the task:
 ```py
@@ -135,7 +137,7 @@ implementation of this method looks for a tool/function-call, and these never oc
 in this task). So the calls to `task.step()` result in alternating responses from
 the LLM and the user.
 
-See the [`chat-agent.py](https://github.com/langroid/langroid-examples/blob/main/examples/quick-start/chat-agent.py)
+See [`chat-agent.py`](https://github.com/langroid/langroid-examples/blob/main/examples/quick-start/chat-agent.py)
 for a working example that you can run with
 ```sh
 python3 examples/quick-start/chat-agent.py

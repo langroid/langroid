@@ -66,7 +66,7 @@ Essentially the `ProbeTool` definition specifies
 
 Here is what the `ProbeTool` definition looks like:
 ```py
-class ProbeTool(ToolMessage):
+class ProbeTool(lr.agent.ToolMessage):
     request: str = "probe" #(1)!
     purpose: str = """ 
         To find which number in my list is closest to the <number> you specify
@@ -83,10 +83,10 @@ class ProbeTool(ToolMessage):
 As before we first create a `ChatAgentConfig` object:
 
 ```py
-config = ChatAgentConfig(
+config = lr.ChatAgentConfig(
     name="Spy",
-    llm = OpenAIGPTConfig(
-        chat_model=OpenAIChatModel.GPT4,
+    llm = lr.language_models.OpenAIGPTConfig(
+        chat_model=lr.language_models.OpenAIChatModel.GPT4,
     ),
     use_tools=True, #(1)!
     use_functions_api=False, #(2)!
@@ -103,8 +103,8 @@ We also add `probe` method (to handle the `ProbeTool` message)
 to this class, and instantiate it:
 
 ```py
-class SpyGameAgent(ChatAgent):
-    def __init__(self, config: ChatAgentConfig):
+class SpyGameAgent(lr.ChatAgent):
+    def __init__(self, config: lr.ChatAgentConfig):
         super().__init__(config)
         self.numbers = [3, 4, 8, 11, 15, 25, 40, 80, 90]
 
@@ -129,7 +129,7 @@ spy_game_agent.enable_message(ProbeTool)
 We set up the task for the `spy_game_agent` and run it:
 
 ```py
-task = Task(
+task = lr.Task(
    spy_game_agent,
    system_message="""
             I have a list of numbers between 1 and 100. 

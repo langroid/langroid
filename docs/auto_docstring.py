@@ -22,6 +22,9 @@ nav = mkdocs_gen_files.Nav()
 """
 # Iterate over each Python file
 for path in sorted(Path(src_dir).rglob("*.py")):
+    if ".ipynb_checkpoints" in str(path):
+        continue
+
     # Get path in module, documentation and absolute
     module_path = path.relative_to(src_dir).with_suffix("")
     doc_path = path.relative_to(src_dir).with_suffix(".md")

@@ -1,9 +1,9 @@
 # Three-Agent Collaboration
 
 !!! tip "Script in `langroid-examples`"
-        A full working example for the material in this section is
-        in the `three-agent-chat-num.py` script in the `langroid-examples` repo:
-        [`examples/quick-start/three-agent-chat-num.py`](https://github.com/langroid/langroid-examples/tree/main/examples/quick-start/three-agent-chat-num.py).
+    A full working example for the material in this section is
+    in the `three-agent-chat-num.py` script in the `langroid-examples` repo:
+    [`examples/quick-start/three-agent-chat-num.py`](https://github.com/langroid/langroid-examples/tree/main/examples/quick-start/three-agent-chat-num.py).
 
 
 Let us set up a simple numbers exercise between 3 agents.
@@ -18,20 +18,18 @@ Given a number $n$,
 As before we first create a common `ChatAgentConfig` to use for all agents:
 
 ```py
-from langroid.agent.chat_agent import ChatAgentConfig, ChatAgent
-from langroid.utils.constants import NO_ANSWER
-config = ChatAgentConfig(
-    llm = OpenAIGPTConfig(
-        chat_model=OpenAIChatModel.GPT4,
+config = lr.ChatAgentConfig(
+    llm = lr.language_models.OpenAIGPTConfig(
+        chat_model=lr.language_models.OpenAIChatModel.GPT4,
     ),
-    vecdb = None,
+    vecdb=None,
 )
 ```
 
 Next, set up the `processor_agent`, along with instructions for the task:
 ```py
-processor_agent = ChatAgent(config)
-processor_task = Task(
+processor_agent = lr.ChatAgent(config)
+processor_task = lr.Task(
     processor_agent,
     name = "Processor",
     system_message="""
@@ -64,8 +62,10 @@ processor_task = Task(
 Set up the other two agents and tasks:
 
 ```py
-even_agent = ChatAgent(config)
-even_task = Task(
+NO_ANSWER = lr.utils.constants.NO_ANSWER
+
+even_agent = lr.ChatAgent(config)
+even_task = lr.Task(
     even_agent,
     name = "EvenHandler",
     system_message=f"""
@@ -76,8 +76,8 @@ even_task = Task(
     single_round=True,  # task done after 1 step() with valid response
 )
 
-odd_agent = ChatAgent(config)
-odd_task = Task(
+odd_agent = lr.ChatAgent(config)
+odd_task = lr.Task(
     odd_agent,
     name = "OddHandler",
     system_message=f"""
@@ -87,15 +87,13 @@ odd_task = Task(
     """,
     single_round=True,  # task done after 1 step() with valid response
 )
-
-
 ```
 
 Now add the `even_task` and `odd_task` as subtasks of the `processor_task`, 
 and then run it as before:
 
 ```python
-processor_task.add_subtask([even_task, odd_task])
+processor_task.add_sub_task([even_task, odd_task])
 processor_task.run()
 ```
 

@@ -72,9 +72,8 @@ let us just set up some simple documents in the code itself,
 using Langroid's [`Document`][langroid.mytypes.Document] class:
 
 ```py
-from langroid.mytypes import Document, DocMetaData
 documents =[
-    Document(
+    lr.mytypes.Document(
         content="""
             In the year 2050, GPT10 was released. 
             
@@ -89,9 +88,9 @@ documents =[
             
             There was one more ice age in 2040.
             """,
-        metadata=DocMetaData(source="wikipedia-2063"),
+        metadata=lr.mytypes.DocMetaData(source="wikipedia-2063"),
     ),
-    Document(
+    lr.mytypes.Document(
         content="""
             We are living in an alternate universe 
             where Germany has occupied the USA, and the capital of USA is Berlin.
@@ -99,7 +98,7 @@ documents =[
             Charlie Chaplin was a great comedian.
             In 2050, all Asian merged into Indonesia.
             """,
-        metadata=DocMetaData(source="Almanac"),
+        metadata=lr.mytypes.DocMetaData(source="Almanac"),
     ),
 ]
 ```
@@ -113,26 +112,21 @@ Following the pattern in Langroid, we first set up a [`DocChatAgentConfig`][lang
 and then instantiate a [`DocChatAgent`][langroid.agent.special.doc_chat_agent.DocChatAgent] from it.
 
 ```py
-from langroid.agent.special.doc_chat_agent import DocChatAgent, DocChatAgentConfig
-from langroid.vector_store.qdrantdb import QdrantDBConfig
-from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
-
-config = DocChatAgentConfig(
-  llm = OpenAIGPTConfig(
-    chat_model=OpenAIChatModel.GPT4,
-  ),
-  vecdb=QdrantDBConfig(
-    collection_name="quick-start-chat-agent-docs",
-    replace_collection=True, #(1)!
-  ),
-  parsing=ParsingConfig(
-    separators=["\n\n"],
-    splitter=Splitter.SIMPLE, #(2)!
-    n_similar_docs=2, #(3)!
-  )
+config = lr.agent.special.DocChatAgentConfig(
+    llm = lr.language_models.OpenAIGPTConfig(
+        chat_model=lr.language_models.OpenAIChatModel.GPT4,
+    ),
+    vecdb=lr.vector_store.QdrantDBConfig(
+        collection_name="quick-start-chat-agent-docs",
+        replace_collection=True, #(1)!
+    ),
+    parsing=lr.parsing.parser.ParsingConfig(
+        separators=["\n\n"],
+        splitter=lr.parsing.parser.Splitter.SIMPLE, #(2)!
+        n_similar_docs=2, #(3)!
+    )
 )
-
-agent = DocChatAgent(config)
+agent = lr.agent.special.DocChatAgent(config)
 ```
 
 1. Specifies that each time we run the code, we create a fresh collection, 
@@ -154,8 +148,7 @@ agent.ingest_docs(documents)
 As before, all that remains is to set up the task and run it:
 
 ```py
-from langroid.agent.task import Task
-task = Task(agent)
+task = lr.Task(agent)
 task.run()
 ```
 
@@ -182,7 +175,7 @@ of those URLS?
 First include the URLs in the [`DocChatAgentConfig`][langroid.agent.special.doc_chat_agent.DocChatAgentConfig] object:
 
 ```py
-config = DocChatAgentConfig(
+config = lr.agent.special.DocChatAgentConfig(
   doc_paths = [
     "https://cthiriet.com/articles/scaling-laws",
     "https://www.jasonwei.net/blog/emergence",
