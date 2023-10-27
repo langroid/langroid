@@ -94,7 +94,11 @@ def _test_table_chat_agent(
 
     # run until LLM says DONE and shows answer,
     # at which point the task loop ends.
-    result = task.run("What is the average income of men under 40 in CA?", turns=5)
+    for _ in range(3):
+        # try 3 times to get non-empty result
+        result = task.run("What is the average income of men under 40 in CA?", turns=5)
+        if result.content:
+            break
     age_col = closest_string("age", agent.df.columns)
     state_col = closest_string("state", agent.df.columns)
     gender_col = closest_string("gender", agent.df.columns)
