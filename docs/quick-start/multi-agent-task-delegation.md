@@ -63,7 +63,7 @@ in this sequence:
 ```
 
 1. This is the default sequence in Langroid, but it can be changed by
-   overriding [`ChatAgent.entity_responders()`](../../reference/agent/base/#langroid.agent.base.Agent.entity_responders)
+   overriding [`ChatAgent.entity_responders()`][langroid.agent.base.Agent.entity_responders]
 
 When a `Task` object has subtasks, the sequence of responders tried by
 `Task.step()` consists of the above "native" responders, plus the

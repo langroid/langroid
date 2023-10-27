@@ -7,7 +7,7 @@
 
 ## Agents 
 
-A [`ChatAgent`](../../reference/agent/chat_agent) is an abstraction that 
+A [`ChatAgent`][langroid.agent.chat_agent.ChatAgent] is an abstraction that 
 wraps a few components, including:
 
 - an LLM (`ChatAgent.llm`), possibly equipped with tools/function-calling. 
@@ -24,7 +24,7 @@ str | ChatDocument -> ChatDocument
 ```
 where `ChatDocument` is a class that wraps a message content (text) and its metadata.
 There are three responder methods in `ChatAgent`, one corresponding to each 
-[responding entity](../../reference/mytypes) (`LLM`, `USER`, or `AGENT`):
+[responding entity][langroid.mytypes.Entity] (`LLM`, `USER`, or `AGENT`):
 
 - `llm_response`: returns the LLM response to the input message.
   (The input message is added to the LLM history, and so is the subsequent response.)
@@ -75,7 +75,7 @@ script, we had a loop that alternated between getting a human input and an LLM r
 This is one of the simplest possible loops, but in more complex applications, 
 we need a general way to orchestrate the agent's responder methods.
 
-The [`Task`](../../reference/agent/task) class is an abstraction around a 
+The [`Task`][langroid.agent.task.Task] class is an abstraction around a 
 `ChatAgent`, responsible for iterating over the agent's responder methods,
 as well as orchestrating delegation and hand-offs among multiple tasks.
 A `Task` is initialized with a specific `ChatAgent` instance, and some 
@@ -114,7 +114,7 @@ override methods like `valid()`, `done()`, `result()`, or even `step()`.
     *has exactly the same type-signature as any of the agent's responder methods*, 
     i.e. `str | ChatDocument -> ChatDocument`. This means that a `Task` can be
     used as a responder in another `Task`, and so on recursively. 
-    We will see this in action in the [Two Agent Chat section](two-agent-agent-chat-num.md).
+    We will see this in action in the [Two Agent Chat section](two-agent-chat-num.md).
 
 The above details were only provided to give you a glimpse into how Agents and 
 Tasks work. Unless you are creating a custom orchestration mechanism, you do not

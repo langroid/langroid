@@ -570,15 +570,12 @@ class DocChatAgent(ChatAgent):
         - create a new document for each part, preserving metadata,
 
         We may have stored a longer set of window_ids than we need.
-        We just want `neighbors` on each side of the center of window_ids.
+        We just want `self.config.n_neighbor_chunks` on each side
+        of the center of window_ids.
 
         Args:
-            docs (List[Document]): List of documents to add context window to.
-            scores (List[float]): List of match scores for each document.
-            neighbors (int, optional): Number of neighbors on "each side" of match to
-                retrieve. Defaults to 0.
-                "Each side" here means before and after the match,
-                in the original text.
+            docs_scores (List[Tuple[Document, float]]): List of pairs of documents
+                to add context windows to together with their match scores.
 
         Returns:
             List[Tuple[Document, float]]: List of (Document, score) tuples.

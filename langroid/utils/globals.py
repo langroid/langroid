@@ -1,4 +1,4 @@
-from typing import Any, Optional, Type, TypeVar
+from typing import Any, Dict, Optional, Type, TypeVar
 
 from pydantic import BaseModel
 
@@ -23,7 +23,7 @@ class GlobalState(BaseModel):
         return cls._instance
 
     @classmethod
-    def set_values(cls: Type[T], **kwargs) -> None:  # type: ignore
+    def set_values(cls: Type[T], **kwargs: Dict[str, Any]) -> None:
         """
         Set values on the global instance of the specific subclass.
 

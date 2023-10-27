@@ -25,7 +25,7 @@ pip install langroid
 
 ??? note "Optional Installs for using SQL Chat with a PostgreSQL DB"
     If you are using `SQLChatAgent`
-    (e.g. the script [`examples/data-qa/sql-chat/sql_chat.py`](examples/data-qa/sql-chat/sql_chat.py)),
+    (e.g. the script [`examples/data-qa/sql-chat/sql_chat.py`](https://github.com/langroid/langroid/blob/main/examples/data-qa/sql-chat/sql_chat.py),
     with a postgres db, you will need to:
     
     - Install PostgreSQL dev libraries for your platform, e.g.
@@ -101,7 +101,7 @@ to use specific features (as noted below).
   `GOOGLE_API_KEY` and `GOOGLE_CSE_ID` in your `.env` file.
   Full documentation on using this (and other such "stateless" tools) is coming soon, but
   in the meantime take a peek at the test
-  [`tests/main/test_google_search_tool.py`](tests/main/test_google_search_tool.py) to see how to use it.
+  [`tests/main/test_google_search_tool.py`](https://github.com/langroid/langroid/blob/main/tests/main/test_google_search_tool.py) to see how to use it.
 
 
 If you add all of these optional variables, your `.env` file should look like this:

@@ -164,8 +164,8 @@ class VectorStore(ABC):
         Now, we just want `neighbors` on each side of the center of the window_ids list.
 
         Args:
-            docs (List[Document]): List of documents to add context window to.
-            scores (List[float]): List of match scores for each document.
+            docs_scores (List[Tuple[Document, float]]): List of pairs of documents
+                to add context windows to together with their match scores.
             neighbors (int, optional): Number of neighbors on "each side" of match to
                 retrieve. Defaults to 0.
                 "Each side" here means before and after the match,

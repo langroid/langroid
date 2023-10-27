@@ -25,7 +25,7 @@ The goal we have set for the `processor_agent` implies that it
 must specify the intended recipient of 
 the number it is sending. 
 We can enforce this using a special Langroid Tool, 
-[`RecipientTool`](langroid.agent.tools.recipient_tool.RecipientTool).
+[`RecipientTool`][langroid.agent.tools.recipient_tool.RecipientTool].
 So when setting up the
 `processor_task` we include instructions to use this tool
 (whose name is `recipient_message`, the value of `RecipientTool.request`):
