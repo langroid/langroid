@@ -189,7 +189,7 @@ For local models other than Llama2, users can either:
 - write their own formatters by writing a class similar to `Llama2Formatter` and 
 then setting the `use_completion_for_chat` flag to `True` in the `LocalModelConfig` object, or
 - use an LLM server library (such as the `oobabooga` library mentioned above) that provides a chat-completion endpoint, 
-_and converts chats to single prompts under the hood,_ and sets the
+_and converts chats to single prompts under the hood,_ and set the
   `use_completion_for_chat` flag to `False` in the `LocalModelConfig` object.
 
 You can use a similar approach if you are using an LLM application framework other than Langroid.

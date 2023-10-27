@@ -33,7 +33,7 @@ and bring all of the above benefits. Some ideas on how you might use local LLMs:
 - You could run many instances of the same or different models and combine their responses.
 - Local LLMs can act as a privacy layer, to identify and handle sensitive data before passing to remote LLMs.
 - Some local LLMs have intriguing features, for example llama.cpp lets you 
-  constrain its output using grammar.
+  constrain its output using a grammar.
 
 ## Running LLMs locally
 
