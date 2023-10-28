@@ -16,7 +16,10 @@ from .table_chat_agent import (
     TableChatAgentConfig,
     RunCodeTool,
 )
-
+from .relevance_extractor_agent import (
+    RelevanceExtractorAgent,
+    RelevanceExtractorAgentConfig,
+)
 from . import sql
 from . import doc_chat_agent
 from . import recipient_validator_agent
