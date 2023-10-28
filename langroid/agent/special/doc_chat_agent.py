@@ -107,6 +107,9 @@ class DocChatAgentConfig(ChatAgentConfig):
     cache: bool = True  # cache results
     debug: bool = False
     stream: bool = True  # allow streaming where needed
+    relevance_extractor_config: RelevanceExtractorAgentConfig = (
+        RelevanceExtractorAgentConfig()
+    )
     doc_paths: List[str] = []
     default_paths: List[str] = [
         "https://news.ycombinator.com/item?id=35629033",
@@ -731,12 +734,9 @@ class DocChatAgent(ChatAgent):
         Returns:
             List[Document]: list of Documents containing extracts and metadata.
         """
-        agent_cfg = RelevanceExtractorAgentConfig(
-            use_tools=False,
-            use_functions_api=True,
-            query=query,
-            segment_length=1,
-        )
+        agent_cfg = self.config.relevance_extractor_config
+        agent_cfg.query = query
+        agent_cfg.segment_length = 1
         agent_cfg.llm.stream = False  # disable streaming for concurrent calls
 
         agent = RelevanceExtractorAgent(agent_cfg)

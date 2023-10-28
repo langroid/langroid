@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 class RelevanceExtractorAgentConfig(ChatAgentConfig):
     llm: OpenAIGPTConfig = OpenAIGPTConfig()
     segment_length: int = 1  # number of sentences per segment
-    query: str  # query for relevance extraction
+    query: str = ""  # query for relevance extraction
     system_message = """
     The user will give you a PASSAGE containing segments numbered as  
     <#1#>, <#2#>, <#3#>, etc.,
