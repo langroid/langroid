@@ -751,6 +751,8 @@ class Agent(ABC):
             if not response.cached:
                 prompt_tokens = self.num_tokens(prompt)
                 completion_tokens = self.num_tokens(response.message)
+                if response.function_call is not None:
+                    completion_tokens += self.num_tokens(str(response.function_call))
                 cost = self.compute_token_cost(prompt_tokens, completion_tokens)
             response.usage = LLMTokenUsage(
                 prompt_tokens=prompt_tokens,
