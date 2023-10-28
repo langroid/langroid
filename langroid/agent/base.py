@@ -1,3 +1,4 @@
+import asyncio
 import inspect
 import json
 import logging
@@ -74,6 +75,7 @@ class Agent(ABC):
 
     def __init__(self, config: AgentConfig):
         self.config = config
+        self.lock = asyncio.Lock()  # for async access to update self.llm.usage_cost
         self.dialog: List[Tuple[str, str]] = []  # seq of LLM (prompt, response) tuples
         self.llm_tools_map: Dict[str, Type[ToolMessage]] = {}
         self.llm_tools_handled: Set[str] = set()
@@ -419,12 +421,14 @@ class Agent(ABC):
             # If we are here, it means the response has not yet been displayed.
             cached = f"[red]{self.indent}(cached)[/red]" if response.cached else ""
             print(cached + "[green]" + response.message)
-        self.update_token_usage(
-            response,
-            prompt,
-            self.llm.get_stream(),
-            print_response_stats=self.config.show_stats and not settings.quiet,
-        )
+        async with self.lock:
+            self.update_token_usage(
+                response,
+                prompt,
+                self.llm.get_stream(),
+                chat=False,  # i.e. it's a completion model not chat model
+                print_response_stats=self.config.show_stats and not settings.quiet,
+            )
         return ChatDocument.from_LLMResponse(response, displayed=True)
 
     @no_type_check
@@ -491,6 +495,7 @@ class Agent(ABC):
             response,
             prompt,
             self.llm.get_stream(),
+            chat=False,  # i.e. it's a completion model not chat model
             print_response_stats=self.config.show_stats and not settings.quiet,
         )
         return ChatDocument.from_LLMResponse(response, displayed=True)
@@ -715,6 +720,7 @@ class Agent(ABC):
         response: LLMResponse,
         prompt: str | List[LLMMessage],
         stream: bool,
+        chat: bool = True,
         print_response_stats: bool = True,
     ) -> None:
         """
@@ -728,36 +734,46 @@ class Agent(ABC):
             prompt (str | List[LLMMessage]): prompt or list of LLMMessage objects
             stream (bool): whether to update the usage in the response object
                 if the response is not cached.
+            chat (bool): whether this is a chat model or a completion model
+            print_response_stats (bool): whether to print the response stats
         """
-        if response is not None:
-            # Note: If response was not streamed, then
-            # `response.usage` would already have been set by the API,
-            # so we only need to update in the stream case.
-            if stream:
-                # usage, cost = 0 when response is from cache
-                prompt_tokens = 0
-                completion_tokens = 0
-                cost = 0.0
-                if not response.cached:
-                    prompt_tokens = self.num_tokens(prompt)
-                    completion_tokens = self.num_tokens(response.message)
-                    cost = self.compute_token_cost(prompt_tokens, completion_tokens)
-                response.usage = LLMTokenUsage(
-                    prompt_tokens=prompt_tokens,
-                    completion_tokens=completion_tokens,
-                    cost=cost,
-                )
+        if response is None or self.llm is None:
+            return
 
-            # update total counters
-            if response.usage is not None:
-                self.total_llm_token_cost += response.usage.cost
-                self.total_llm_token_usage += response.usage.total_tokens
-                chat_length = 1 if isinstance(prompt, str) else len(prompt)
-                self.token_stats_str = self._get_response_stats(
-                    chat_length, self.total_llm_token_cost, response
-                )
-                if print_response_stats:
-                    print(self.indent + self.token_stats_str)
+        # Note: If response was not streamed, then
+        # `response.usage` would already have been set by the API,
+        # so we only need to update in the stream case.
+        if stream:
+            # usage, cost = 0 when response is from cache
+            prompt_tokens = 0
+            completion_tokens = 0
+            cost = 0.0
+            if not response.cached:
+                prompt_tokens = self.num_tokens(prompt)
+                completion_tokens = self.num_tokens(response.message)
+                cost = self.compute_token_cost(prompt_tokens, completion_tokens)
+            response.usage = LLMTokenUsage(
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                cost=cost,
+            )
+
+        # update total counters
+        if response.usage is not None:
+            self.total_llm_token_cost += response.usage.cost
+            self.total_llm_token_usage += response.usage.total_tokens
+            self.llm.update_usage_cost(
+                chat,
+                response.usage.prompt_tokens,
+                response.usage.completion_tokens,
+                response.usage.cost,
+            )
+            chat_length = 1 if isinstance(prompt, str) else len(prompt)
+            self.token_stats_str = self._get_response_stats(
+                chat_length, self.total_llm_token_cost, response
+            )
+            if print_response_stats:
+                print(self.indent + self.token_stats_str)
 
     def compute_token_cost(self, prompt: int, completion: int) -> float:
         price = cast(LanguageModel, self.llm).chat_cost()

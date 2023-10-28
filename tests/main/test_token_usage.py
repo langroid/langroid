@@ -21,7 +21,7 @@ class _TestChatAgentConfig(ChatAgentConfig):
 # Define the configurations
 config = OpenAIGPTConfig(
     cache_config=RedisCacheConfig(fake=False),
-    chat_model=OpenAIChatModel.GPT3_5_TURBO,
+    chat_model=OpenAIChatModel.GPT4,
     use_chat_for_completion=True,
 )
 
@@ -31,6 +31,7 @@ def test_agent_token_usage(stream):
     set_global(Settings(cache=False, stream=stream))
     cfg = _TestChatAgentConfig(llm=config)
     agent = ChatAgent(cfg)
+    agent.llm.reset_usage_cost()
     question = "What is the capital of Canada?"
     agent.llm_response_forget(question)
     assert agent.total_llm_token_usage != 0
@@ -54,6 +55,12 @@ def test_agent_token_usage(stream):
     print("***3rd round***")
     assert agent.total_llm_token_usage == total_tokens_after_1st_rnd * 2
     assert agent.total_llm_token_cost == total_cost_after_1st_rnd * 2
+    llm_usage = agent.llm.usage_cost_dict[agent.config.llm.chat_model]
+    assert (
+        llm_usage.prompt_tokens + llm_usage.completion_tokens
+        == agent.total_llm_token_usage
+    )
+    assert llm_usage.cost == agent.total_llm_token_cost
 
 
 @pytest.mark.asyncio
@@ -62,6 +69,7 @@ async def test_agent_token_usage_async(stream):
     set_global(Settings(cache=False, stream=stream))
     cfg = _TestChatAgentConfig(llm=config)
     agent = ChatAgent(cfg)
+    agent.llm.reset_usage_cost()
     question = "What is the capital of Canada?"
     await agent.llm_response_forget_async(question)
     assert agent.total_llm_token_usage != 0
@@ -89,3 +97,10 @@ async def test_agent_token_usage_async(stream):
 
     b = max(agent.total_llm_token_cost, total_cost_after_1st_rnd * 2)
     assert abs(agent.total_llm_token_cost - total_cost_after_1st_rnd * 2) < 0.1 * b
+
+    llm_usage = agent.llm.usage_cost_dict[agent.config.llm.chat_model]
+    assert (
+        llm_usage.prompt_tokens + llm_usage.completion_tokens
+        == agent.total_llm_token_usage
+    )
+    assert llm_usage.cost == agent.total_llm_token_cost

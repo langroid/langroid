@@ -112,6 +112,10 @@ def chat(config: DocChatAgentConfig) -> None:
     writer_task.add_sub_task(doc_task)
     writer_task.run()
 
+    # show cost summary
+    print("LLM usage, cost summary:")
+    print(writer_agent.llm.usage_cost_summary())
+
 
 @app.command()
 def main(

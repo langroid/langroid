@@ -80,6 +80,20 @@ class LLMTokenUsage(BaseModel):
     prompt_tokens: int = 0
     completion_tokens: int = 0
     cost: float = 0.0
+    calls: int = 0  # how many API calls
+
+    def reset(self) -> None:
+        self.prompt_tokens = 0
+        self.completion_tokens = 0
+        self.cost = 0.0
+        self.calls = 0
+
+    def __str__(self) -> str:
+        return (
+            f"Tokens = "
+            f"(prompt {self.prompt_tokens}, completion {self.completion_tokens}), "
+            f"Cost={self.cost}, Calls={self.calls}"
+        )
 
     @property
     def total_tokens(self) -> int:
@@ -204,6 +218,9 @@ class LanguageModel(ABC):
     """
     Abstract base class for language models.
     """
+
+    # usage cost by model, accumulates here
+    usage_cost_dict: Dict[str, LLMTokenUsage] = {}
 
     def __init__(self, config: LLMConfig):
         self.config = config
@@ -360,6 +377,43 @@ class LanguageModel(ABC):
 
     def chat_cost(self) -> Tuple[float, float]:
         return self.config.chat_cost_per_1k_tokens
+
+    def reset_usage_cost(self) -> None:
+        for mdl in [self.config.chat_model, self.config.completion_model]:
+            if mdl is None:
+                return
+            if mdl not in self.usage_cost_dict:
+                self.usage_cost_dict[mdl] = LLMTokenUsage()
+            counter = self.usage_cost_dict[mdl]
+            counter.reset()
+
+    def update_usage_cost(
+        self, chat: bool, prompts: int, completions: int, cost: float
+    ) -> None:
+        """
+        Update usage cost for this LLM.
+        Args:
+            chat (bool): whether to update for chat or completion model
+            prompts (int): number of tokens used for prompts
+            completions (int): number of tokens used for completions
+            cost (float): total token cost in USD
+        """
+        mdl = self.config.chat_model if chat else self.config.completion_model
+        if mdl is None:
+            return
+        if mdl not in self.usage_cost_dict:
+            self.usage_cost_dict[mdl] = LLMTokenUsage()
+        counter = self.usage_cost_dict[mdl]
+        counter.prompt_tokens += prompts
+        counter.completion_tokens += completions
+        counter.cost += cost
+        counter.calls += 1
+
+    def usage_cost_summary(self) -> str:
+        s = ""
+        for model, counter in self.usage_cost_dict.items():
+            s += f"{model}: {counter}\n"
+        return s
 
     def followup_to_standalone(
         self, chat_history: List[Tuple[str, str]], question: str
