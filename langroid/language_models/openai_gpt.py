@@ -172,10 +172,12 @@ class OpenAIGPT(LanguageModel):
         # if model name starts with "litellm",
         # set the actual model name by stripping the "litellm/" prefix
         # and set the litellm flag to True
-        if self.config.chat_model.startswith("litellm/"):
+        if self.config.chat_model.startswith("litellm/") or self.config.litellm:
             self.config.litellm = True
-            self.config.chat_model = self.config.chat_model.split("/", 1)[1]
             self.api_base = self.config.api_base
+            if self.config.chat_model.startswith("litellm/"):
+                # strip the "litellm/" prefix
+                self.config.chat_model = self.config.chat_model.split("/", 1)[1]
             # litellm/ollama/llama2 => ollama/llama2 for example
         elif self.config.chat_model.startswith("local/"):
             # expect this to be of the form "local/localhost:8000/v1",
