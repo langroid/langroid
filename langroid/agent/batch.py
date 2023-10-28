@@ -122,9 +122,10 @@ def run_batch_agent_method(
         return output_map(result)
 
     async def _do_all() -> List[Any]:
-        return await asyncio.gather(  # type: ignore
-            *(_do_task(input, i) for i, input in enumerate(inputs))
-        )
+        with quiet_mode():
+            return await asyncio.gather(  # type: ignore
+                *(_do_task(input, i) for i, input in enumerate(inputs))
+            )
 
     n = len(items)
     with console.status(f"[bold green]Running {n} copies of {agent_name}..."):

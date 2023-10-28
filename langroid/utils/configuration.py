@@ -74,14 +74,15 @@ def temporary_settings(temp_settings: Settings) -> Iterator[None]:
 @contextmanager
 def quiet_mode() -> Iterator[None]:
     """Temporarily set quiet=True in global settings and restore afterward."""
-    original_quiet = settings.quiet
+    original_settings = copy.deepcopy(settings)
+    temp_settings = original_settings.copy(update={"quiet": True})
 
-    set_global(Settings(quiet=True))
+    set_global(temp_settings)
 
     try:
         yield
     finally:
-        settings.quiet = original_quiet
+        settings.__dict__.update(original_settings.__dict__)
 
 
 def set_env(settings: BaseSettings) -> None:
