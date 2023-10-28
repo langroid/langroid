@@ -409,9 +409,10 @@ class LanguageModel(ABC):
         counter.cost += cost
         counter.calls += 1
 
-    def usage_cost_summary(self) -> str:
+    @classmethod
+    def usage_cost_summary(cls) -> str:
         s = ""
-        for model, counter in self.usage_cost_dict.items():
+        for model, counter in cls.usage_cost_dict.items():
             s += f"{model}: {counter}\n"
         return s
 
