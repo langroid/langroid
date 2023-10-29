@@ -1,6 +1,7 @@
 import logging
 from abc import ABC, abstractmethod
 
+import numpy as np
 from chromadb.api.types import EmbeddingFunction
 from pydantic import BaseSettings
 
@@ -41,3 +42,12 @@ class EmbeddingModel(ABC):
     @abstractmethod
     def embedding_dims(self) -> int:
         pass
+
+    def similarity(self, text1: str, text2: str) -> float:
+        """Compute cosine similarity between two texts."""
+        [emb1, emb2] = self.embedding_fn()([text1, text2])
+        return float(
+            np.array(emb1)
+            @ np.array(emb2)
+            / (np.linalg.norm(emb1) * np.linalg.norm(emb2))
+        )

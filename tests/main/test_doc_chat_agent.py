@@ -8,7 +8,10 @@ import pytest
 from langroid.agent.special.doc_chat_agent import DocChatAgent, DocChatAgentConfig
 from langroid.agent.task import Task
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
-from langroid.embedding_models.models import OpenAIEmbeddingsConfig
+from langroid.embedding_models.models import (
+    OpenAIEmbeddingsConfig,
+    SentenceTransformerEmbeddingsConfig,
+)
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
 from langroid.mytypes import DocMetaData, Document, Entity
 from langroid.parsing.parser import ParsingConfig, Splitter
@@ -192,11 +195,7 @@ class _MyDocChatAgentConfig(DocChatAgentConfig):
         collection_name="test-data",
         replace_collection=True,
         storage_path=storage_path,
-        embedding=OpenAIEmbeddingsConfig(
-            model_type="openai",
-            model_name="text-embedding-ada-002",
-            dims=1536,
-        ),
+        embedding=SentenceTransformerEmbeddingsConfig(),
     )
 
     llm: OpenAIGPTConfig = OpenAIGPTConfig(
@@ -214,9 +213,10 @@ class _MyDocChatAgentConfig(DocChatAgentConfig):
 
 
 @pytest.mark.parametrize("conv_mode", [True, False])
-def test_doc_chat_retrieval(test_settings: Settings, agent, conv_mode: bool):
+def test_doc_chat_retrieval(test_settings: Settings, conv_mode: bool):
     """
-    Test retrieval of relevant doc-chunks
+    Test window retrieval of relevant doc-chunks.
+    Check that we are retrieving 2 neighbors around each match.
     """
     agent = DocChatAgent(_MyDocChatAgentConfig())
     agent.config.conversation_mode = conv_mode
@@ -238,9 +238,68 @@ def test_doc_chat_retrieval(test_settings: Settings, agent, conv_mode: bool):
     agent.ingest_docs([Document(content=text, metadata={"source": "animals"})])
     results = agent.get_relevant_chunks("What are giraffes like?")
 
+    # All phrases except the CATS phrase should be in the results
+    # since they are all within 2 chunks of a giraffe phrase.
+    # (The CAT phrase is 3 chunks away, so it should not be in the results.)
     all_but_cats = [p for p in vars(phrases).values() if "Cats" not in p]
     # check that each phrases occurs in exactly one result
     assert (
         sum(p in r.content for p in all_but_cats for r in results)
         == len(vars(phrases)) - 1
     )
+
+
+def test_doc_chat_rerank_diversity(test_settings: Settings):
+    """
+    Test that reranking by diversity works.
+    """
+
+    cfg = _MyDocChatAgentConfig(
+        n_neighbor_chunks=0,
+    )
+    cfg.parsing.n_similar_docs = 8
+    agent = DocChatAgent(cfg)
+
+    set_global(test_settings)
+
+    phrases = SimpleNamespace(
+        g1="Giraffes are tall.",
+        g2="Giraffes are vegetarian.",
+        g3="Giraffes are strange.",
+        g4="Giraffes are fast.",
+        g5="Giraffes are known to be tall.",
+        g6="Giraffes are considered strange.",
+        g7="Giraffes move fast.",
+        g8="Giraffes are definitely vegetarian.",
+    )
+    docs = [
+        Document(content=p, metadata=DocMetaData(source="user"))
+        for p in vars(phrases).values()
+    ]
+    reranked = agent.rerank_with_diversity(docs)
+
+    # assert that each phrase tall, vegetarian, strange, fast
+    # occurs exactly once in top 4 phrases
+    for p in ["tall", "vegetarian", "strange", "fast"]:
+        assert sum(p in r.content for r in reranked[:4]) == 1
+
+
+def test_doc_chat_rerank_periphery(test_settings: Settings):
+    """
+    Test that reranking to periphery works.
+    """
+
+    cfg = _MyDocChatAgentConfig(
+        n_neighbor_chunks=0,
+    )
+    cfg.parsing.n_similar_docs = 8
+    agent = DocChatAgent(cfg)
+
+    set_global(test_settings)
+
+    docs = [
+        Document(content=str(i), metadata=DocMetaData(source="user")) for i in range(10)
+    ]
+    reranked = agent.rerank_to_periphery(docs)
+    numbers = [int(d.content) for d in reranked]
+    assert numbers == [0, 2, 4, 6, 8, 9, 7, 5, 3, 1]

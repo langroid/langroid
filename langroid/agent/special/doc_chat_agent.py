@@ -16,6 +16,7 @@ import logging
 from contextlib import ExitStack
 from typing import List, Optional, Tuple, no_type_check
 
+import numpy as np
 from rich import print
 from rich.console import Console
 from rich.prompt import Prompt
@@ -100,9 +101,12 @@ class DocChatAgentConfig(ChatAgentConfig):
     hypothetical_answer: bool = False
     n_query_rephrases: int = 0
     n_neighbor_chunks: int = 0  # how many neighbors on either side of match to retrieve
+    n_fuzzy_neighbor_words: int = 100  # num neighbor words to retrieve for fuzzy match
     use_fuzzy_match: bool = True
     use_bm25_search: bool = True
     cross_encoder_reranking_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    rerank_diversity: bool = True  # rerank to maximize diversity?
+    rerank_periphery: bool = True  # rerank to avoid Lost In the Middle effect?
     embed_batch_size: int = 500  # get embedding of at most this many at a time
     cache: bool = True  # cache results
     debug: bool = False
@@ -527,8 +531,8 @@ class DocChatAgent(ChatAgent):
                 self.chunked_docs,
                 self.chunked_docs_clean,
                 k=self.config.parsing.n_similar_docs * multiple,
-                words_before=1000,
-                words_after=1000,
+                words_before=self.config.n_fuzzy_neighbor_words,
+                words_after=self.config.n_fuzzy_neighbor_words,
             )
         return fuzzy_match_docs
 
@@ -559,6 +563,77 @@ class DocChatAgent(ChatAgent):
                 d for _, d in sorted_pairs[: self.config.parsing.n_similar_docs]
             ]
         return passages
+
+    def rerank_with_diversity(self, passages: List[Document]) -> List[Document]:
+        """
+        Rerank a list of items in such a way that each successive item is least similar
+        (on average) to the earlier items.
+
+        Args:
+        query (str): The query for which the passages are relevant.
+        passages (List[Document]): A list of Documents to be reranked.
+
+        Returns:
+        List[Documents]: A reranked list of Documents.
+        """
+
+        if self.vecdb is None:
+            logger.warning("No vecdb; cannot use rerank_with_diversity")
+            return passages
+        emb_model = self.vecdb.embedding_model
+        emb_fn = emb_model.embedding_fn()
+        embs = emb_fn([p.content for p in passages])
+        embs_arr = [np.array(e) for e in embs]
+        indices = list(range(len(passages)))
+
+        # Helper function to compute average similarity to
+        # items in the current result list.
+        def avg_similarity_to_result(i: int, result: List[int]) -> float:
+            return sum(  # type: ignore
+                (embs_arr[i] @ embs_arr[j])
+                / (np.linalg.norm(embs_arr[i]) * np.linalg.norm(embs_arr[j]))
+                for j in result
+            ) / len(result)
+
+        # copy passages to items
+        result = [indices.pop(0)]  # Start with the first item.
+
+        while indices:
+            # Find the item that has the least average similarity
+            # to items in the result list.
+            least_similar_item = min(
+                indices, key=lambda i: avg_similarity_to_result(i, result)
+            )
+            result.append(least_similar_item)
+            indices.remove(least_similar_item)
+
+        # return passages in order of result list
+        return [passages[i] for i in result]
+
+    def rerank_to_periphery(self, passages: List[Document]) -> List[Document]:
+        """
+        Rerank to avoid Lost In the Middle (LIM) problem,
+        where LLMs pay more attention to items at the ends of a list,
+        rather than the middle. So we re-rank to make the best passages
+        appear at the periphery of the list.
+        https://arxiv.org/abs/2307.03172
+
+        Example reranking:
+        1 2 3 4 5 6 7 8 9 ==> 1 3 5 7 9 8 6 4 2
+
+        Args:
+            passages (List[Document]): A list of Documents to be reranked.
+
+        Returns:
+            List[Documents]: A reranked list of Documents.
+
+        """
+        # Splitting items into odds and evens based on index, not value
+        odds = passages[::2]
+        evens = passages[1::2][::-1]
+
+        # Merging them back together
+        return odds + evens
 
     def add_context_window(
         self,
@@ -658,10 +733,20 @@ class DocChatAgent(ChatAgent):
         passages_scores = self.add_context_window(passages_scores)
         passages = [p for p, _ in passages_scores]
         # now passages can potentially have a lot of doc chunks,
-        # so we re-rank them using a cross-encoder scoring model
+        # so we re-rank them using a cross-encoder scoring model,
+        # and pick top k where k = config.parsing.n_similar_docs
         # https://www.sbert.net/examples/applications/retrieve_rerank
         if self.config.cross_encoder_reranking_model != "":
             passages = self.rerank_with_cross_encoder(query, passages)
+
+        if self.config.rerank_diversity:
+            # reorder to increase diversity among top docs
+            passages = self.rerank_with_diversity(passages)
+
+        if self.config.rerank_periphery:
+            # reorder so most important docs are at periphery
+            # (see Lost In the Middle issue).
+            passages = self.rerank_to_periphery(passages)
 
         return passages
 

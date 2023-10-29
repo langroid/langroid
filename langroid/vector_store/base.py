@@ -7,7 +7,7 @@ from typing import Dict, List, Optional, Sequence, Tuple
 import numpy as np
 from pydantic import BaseSettings
 
-from langroid.embedding_models.base import EmbeddingModelsConfig
+from langroid.embedding_models.base import EmbeddingModel, EmbeddingModelsConfig
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
 from langroid.mytypes import Document
 from langroid.utils.algorithms.graph import topological_sort
@@ -40,6 +40,7 @@ class VectorStore(ABC):
 
     def __init__(self, config: VectorStoreConfig):
         self.config = config
+        self.embedding_model = EmbeddingModel.create(config.embedding)
 
     @staticmethod
     def create(config: VectorStoreConfig) -> Optional["VectorStore"]:

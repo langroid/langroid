@@ -197,8 +197,8 @@ def get_context(
         # return entire text since we're not asked to return a bounded context
         return text, 0, 0
 
-    # make sure there is a good enough fu
-    if fuzz.partial_ratio(query, text) < 70:
+    # make sure there is a good enough match to the query
+    if fuzz.partial_ratio(query, text) < 40:
         return "", 0, 0
 
     sequence_matcher = difflib.SequenceMatcher(None, text, query)
