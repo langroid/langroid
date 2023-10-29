@@ -54,6 +54,7 @@ for ideas on what to contribute.
 <summary> <b>:fire: Updates/Releases</b></summary>
 
 - **Oct 2023:**
+  - **0.1.107:** `DocChatAgent` re-rankers: `rank_with_diversity`, `rank_to_periphery` (lost in middle).
   - **0.1.102:** `DocChatAgentConfig.n_neighbor_chunks > 0` allows returning context chunks around match. 
   - **0.1.100:** API update: all of Langroid is accessible with a single import, i.e. `import langroid as lr`. See the [documentation]("https://langroid.github.io/langroid/") for usage.
   - **0.1.99:** Convenience batch functions to run tasks, agent methods on a list of inputs concurrently in async mode. See examples in [test_batch.py](https://github.com/langroid/langroid/blob/main/tests/main/test_batch.py).
