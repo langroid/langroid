@@ -336,8 +336,8 @@ class RepoLoader:
 
         Returns:
             Tuple of (dict, List_of_Documents):
-              A dictionary containing file and directory names, with file contents, and
-              A list of Document objects for each file.
+                A dictionary containing file and directory names, with file
+                contents, and a list of Document objects for each file.
         """
         if path is None:
             if self.clone_path is None or not _has_files(self.clone_path):
@@ -382,8 +382,8 @@ class RepoLoader:
 
         Returns:
             Tuple of (dict, List_of_Documents):
-              A dictionary containing file and directory names, with file contents.
-              A list of Document objects for each file.
+                A dictionary containing file and directory names, with file contents.
+                A list of Document objects for each file.
         """
 
         folder_structure = {
@@ -543,8 +543,8 @@ class RepoLoader:
         of lines per file (if any of these are specified).
 
         Args:
-            k(int): max number of files to load, or None for all files
-            depth(int): max depth to recurse, or None for infinite depth
+            k (int): max number of files to load, or None for all files
+            depth (int): max depth to recurse, or None for infinite depth
             lines (int): max number of lines to get, from a file, or None for all lines
 
         Returns:

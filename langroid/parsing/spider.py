@@ -4,6 +4,7 @@ from urllib.parse import urlparse
 from pydispatch import dispatcher
 from scrapy import signals
 from scrapy.crawler import CrawlerRunner
+from scrapy.http import Response
 from scrapy.linkextractors import LinkExtractor
 from scrapy.spiders import CrawlSpider, Rule
 from twisted.internet import defer, reactor
@@ -30,7 +31,7 @@ class DomainSpecificSpider(CrawlSpider):  # type: ignore
         self.k = k
         self.visited_urls: Set[str] = set()
 
-    def parse_item(self, response):  # type: ignore
+    def parse_item(self, response: Response):  # type: ignore
         """Extracts URLs that are within the same domain.
 
         Args:
@@ -57,7 +58,7 @@ def scrapy_fetch_urls(url: str, k: int = 20) -> List[str]:
     """
     urls = []
 
-    def _collect_urls(spider, reason):
+    def _collect_urls(spider):
         """Handler for the spider_closed signal. Collects the visited URLs."""
         nonlocal urls
         urls.extend(list(spider.visited_urls))

@@ -17,10 +17,9 @@ To add pairs of numbers, we set up an `Adder` agent.
 
 First define a common `ChatAgentConfig` to use for both agents:
 ```python
-from langroid.agent.chat_agent import ChatAgentConfig, ChatAgent
-config = ChatAgentConfig(
-    llm = OpenAIGPTConfig(
-        chat_model=OpenAIChatModel.GPT4,
+config = lr.ChatAgentConfig(
+    llm = lr.language_models.OpenAIGPTConfig(
+        chat_model=lr.language_models.OpenAIChatModel.GPT4,
     ),
     vecdb = None, #(1)!
 )
@@ -32,8 +31,8 @@ config = ChatAgentConfig(
 Next, set up the student agent and the corresponding task:
 
 ```py
-student_agent = ChatAgent(config)
-student_task = Task(
+student_agent = lr.ChatAgent(config)
+student_task = lr.Task(
     student_agent,
     name = "Student",
     system_message="""
@@ -64,8 +63,8 @@ student_task = Task(
 Next, set up the adder agent and task:
 
 ```py
-adder_agent = ChatAgent(config)
-adder_task = Task(
+adder_agent = lr.ChatAgent(config)
+adder_task = lr.Task(
     adder_agent,
     name = "Adder", #(1)!
     system_message="""
