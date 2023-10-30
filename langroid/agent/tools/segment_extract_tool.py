@@ -31,6 +31,6 @@ class SegmentExtractTool(ToolMessage):
     @classmethod
     def instructions(cls) -> str:
         return """
-        You will use this tool/function to indicate certain segments from 
+        Use this tool/function to indicate certain segments from 
         a body of text containing numbered segments.
         """
