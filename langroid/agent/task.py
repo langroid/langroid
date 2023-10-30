@@ -295,6 +295,10 @@ class Task:
         """Synchronous version of `run_async()`.
         See `run_async()` for details."""
 
+        assert (
+            msg is None or isinstance(msg, str) or isinstance(msg, ChatDocument)
+        ), f"msg arg in Task.run() must be None, str, or ChatDocument, not {type(msg)}"
+
         if (
             isinstance(msg, ChatDocument)
             and msg.metadata.recipient != ""
