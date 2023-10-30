@@ -53,7 +53,7 @@ def run_batch_tasks(
         return output_map(result)
 
     async def _do_all() -> List[Any]:
-        with quiet_mode():
+        with quiet_mode(not settings.debug):
             return await asyncio.gather(  # type: ignore
                 *(_do_task(input, i) for i, input in enumerate(inputs))
             )
