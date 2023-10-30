@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "langroid"
-version = "0.1.107"
+version = "0.1.108"
 description = "Harness LLMs with Multi-Agent Programming"
 authors = ["Prasad Chalasani <pchalasani@gmail.com>"]
 readme = "README.md"

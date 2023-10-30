@@ -8,10 +8,7 @@ import pytest
 from langroid.agent.special.doc_chat_agent import DocChatAgent, DocChatAgentConfig
 from langroid.agent.task import Task
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
-from langroid.embedding_models.models import (
-    OpenAIEmbeddingsConfig,
-    SentenceTransformerEmbeddingsConfig,
-)
+from langroid.embedding_models.models import OpenAIEmbeddingsConfig
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
 from langroid.mytypes import DocMetaData, Document, Entity
 from langroid.parsing.parser import ParsingConfig, Splitter
@@ -195,7 +192,10 @@ class _MyDocChatAgentConfig(DocChatAgentConfig):
         collection_name="test-data",
         replace_collection=True,
         storage_path=storage_path,
-        embedding=SentenceTransformerEmbeddingsConfig(),
+        embedding=OpenAIEmbeddingsConfig(
+            model_name="text-embedding-ada-002",
+            dims=1536,
+        ),
     )
 
     llm: OpenAIGPTConfig = OpenAIGPTConfig(
