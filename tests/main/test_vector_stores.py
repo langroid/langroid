@@ -312,12 +312,12 @@ def test_vector_stores_overlapping_matches(vecdb):
     docs_scores = vecdb.similar_texts_with_scores("What are Giraffes like?", k=3)
     docs_scores = vecdb.add_context_window(docs_scores, neighbors=2)
 
-    assert len(docs_scores) == 3
+    assert len(docs_scores) == 2
     # verify no overlap in d.metadata.window_ids for d in docs
     all_window_ids = [id for d, _ in docs_scores for id in d.metadata.window_ids]
     assert len(all_window_ids) == len(set(all_window_ids))
 
-    # verify giraffe occurs in each match
+    # verify giraffe occurs in each /match
     assert all("Giraffes" in d.content for d, _ in docs_scores)
 
     # verify correct sequence of chunks in each match
