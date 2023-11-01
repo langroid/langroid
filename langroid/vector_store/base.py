@@ -1,7 +1,6 @@
 import copy
 import logging
 from abc import ABC, abstractmethod
-from math import ceil
 from typing import Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
@@ -10,7 +9,7 @@ from pydantic import BaseSettings
 from langroid.embedding_models.base import EmbeddingModel, EmbeddingModelsConfig
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
 from langroid.mytypes import Document
-from langroid.utils.algorithms.graph import topological_sort
+from langroid.utils.algorithms.graph import components, topological_sort
 from langroid.utils.configuration import settings
 from langroid.utils.output.printing import print_long_text
 
@@ -261,20 +260,10 @@ class VectorStore(ABC):
                     order[i, j] = 1  # win i is after win j
 
         # find groups of windows that overlap, like connected components in a graph
-        groups = [[0]]
-        for i in range(1, n):
-            found = False
-            for g in groups:
-                if any(order[i, j] != 0 for j in g):
-                    g.append(i)
-                    found = True
-                    break
-            if not found:
-                groups.append([i])
+        groups = components(np.abs(order))
 
         # split each group into roughly equal parts
         new_windows = []
-        max_window_len = max(len(w) for w in windows)
         for g in groups:
             # find total ordering among windows in group based on order matrix
             # (this is a topological sort)
@@ -284,12 +273,12 @@ class VectorStore(ABC):
             ordered_window_ids = [windows[i] for i in _g[ordered_window_indices]]
             flattened = [id for w in ordered_window_ids for id in w]
             flattened_deduped = list(dict.fromkeys(flattened))
-            # split into k parts where k is the smallest integer such that
-            # each part has length <= max_window_len
-            k = max(1, int(ceil(len(flattened_deduped) / max_window_len)))
-            new_windows += np.array_split(flattened_deduped, k)
+            # Note we are not going to split these, and instead we'll return
+            # larger windows from concatenating the connected groups.
+            # This ensures context is retained for LLM q/a
+            new_windows += [flattened_deduped]
 
-        return [w.tolist() for w in new_windows]
+        return new_windows
 
     @abstractmethod
     def get_all_documents(self) -> List[Document]:
