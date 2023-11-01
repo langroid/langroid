@@ -2,10 +2,9 @@ name: Pytest
 
 on:
   push:
-    paths-ignore:
-      - "docs/**"
-      - "examples/**"
-      - "mkdocs.yml"
+    paths:
+      - "langroid/**"
+      - "tests/**"
     branches:
       - main  # Replace with your default branch name 
   pull_request:

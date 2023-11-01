@@ -2,9 +2,8 @@ name: Docker Publish
 
 on:
   push:
-    paths-ignore:
-      - "docs/**"
-      - "mkdocs.yml"
+    paths:
+      - "langroid/**"
     branches:
       - main
 
