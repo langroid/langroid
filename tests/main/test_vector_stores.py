@@ -310,6 +310,11 @@ def test_vector_stores_overlapping_matches(vecdb):
 
     # Test context window retrieval
     docs_scores = vecdb.similar_texts_with_scores("What are Giraffes like?", k=3)
+    # We expect to retrieve a window of -2, +2 around each of the three Giraffe matches.
+    # The first two windows will overlap, so they form a connected component,
+    # and we topological-sort and order the chunks in these windows, resulting in a
+    # single window. The third Giraffe-match context window will not overlap with
+    # the other two, so we will have a total of 2 final docs_scores components.
     docs_scores = vecdb.add_context_window(docs_scores, neighbors=2)
 
     assert len(docs_scores) == 2
