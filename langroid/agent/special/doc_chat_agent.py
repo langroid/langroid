@@ -553,6 +553,8 @@ class DocChatAgent(ChatAgent):
 
             model = CrossEncoder(self.config.cross_encoder_reranking_model)
             scores = model.predict([(query, p.content) for p in passages])
+            # Convert to [0,1] so we might could use a cutoff later.
+            scores = 1.0 / (1 + np.exp(-np.array(scores)))
             # get top k scoring passages
             sorted_pairs = sorted(
                 zip(scores, passages),
@@ -641,15 +643,10 @@ class DocChatAgent(ChatAgent):
     ) -> List[Tuple[Document, float]]:
         """
         In each doc's metadata, there may be a window_ids field indicating
-        the ids of the chunks around the current chunk.
-        These window_ids may overlap, so we
-        - gather connected-components of overlapping windows,
-        - split each component into roughly equal parts,
-        - create a new document for each part, preserving metadata,
-
-        We may have stored a longer set of window_ids than we need.
-        We just want `self.config.n_neighbor_chunks` on each side
-        of the center of window_ids.
+        the ids of the chunks around the current chunk. We use these stored
+        window_ids to retrieve the desired number
+        (self.config.n_neighbor_chunks) of neighbors
+        on either side of the current chunk.
 
         Args:
             docs_scores (List[Tuple[Document, float]]): List of pairs of documents

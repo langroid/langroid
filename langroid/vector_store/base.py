@@ -156,8 +156,7 @@ class VectorStore(ABC):
         In each doc's metadata, there may be a window_ids field indicating
         the ids of the chunks around the current chunk.
         These window_ids may overlap, so we
-        - gather connected-components of overlapping windows,
-        - split each component into roughly equal parts,
+        - coalesce each overlapping groups into a single window (maintaining ordering),
         - create a new document for each part, preserving metadata,
 
         We may have stored a longer set of window_ids than we need during chunking.
@@ -204,7 +203,8 @@ class VectorStore(ABC):
             window_ids_list += [neighbor_ids]
 
         # window_ids could be from different docs,
-        # and they may overlap, so we first remove overlaps
+        # and they may overlap, so we coalesce overlapping groups into
+        # separate windows.
         window_ids_list = self.remove_overlaps(window_ids_list)
         final_docs = []
         final_scores = []
@@ -225,8 +225,9 @@ class VectorStore(ABC):
     def remove_overlaps(windows: List[List[str]]) -> List[List[str]]:
         """
         Given a collection of windows, where each window is a sequence of ids,
-        identify groups of overlapping windows, and for each overlapping k-group,
-        split the ids into k roughly equal sequences.
+        identify groups of overlapping windows, and for each overlapping group,
+        order the chunk-ids using topological sort so they appear in the original
+        order in the text.
 
         Args:
             windows (List[int|str]): List of windows, where each window is a
@@ -262,7 +263,7 @@ class VectorStore(ABC):
         # find groups of windows that overlap, like connected components in a graph
         groups = components(np.abs(order))
 
-        # split each group into roughly equal parts
+        # order the chunk-ids in each group using topological sort
         new_windows = []
         for g in groups:
             # find total ordering among windows in group based on order matrix
