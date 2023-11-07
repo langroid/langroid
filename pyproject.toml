@@ -75,7 +75,7 @@ docstring-parser = "^0.15"
 farm-haystack = {extras = ["ocr", "preprocessing", "file-conversion", "pdf"], version = "^1.21.1"}
 meilisearch = "^0.28.3"
 meilisearch-python-sdk = "^2.0.1"
-litellm = "^0.6.2"
+litellm = {version ="^0.6.2", optional = true}
 scrapy = "^2.11.0"
 async-generator = "^1.10"
 lancedb = "^0.3.0"
@@ -85,6 +85,7 @@ lancedb = "^0.3.0"
 hf-embeddings = ["sentence-transformers", "torch"]
 postgres = ["psycopg2", "pytest-postgresql"]
 mysql = ["pymysql", "pytest-mysql"]
+litellm = ["litellm"]
 
 
 [tool.poetry.group.dev.dependencies]

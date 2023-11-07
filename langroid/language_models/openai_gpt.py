@@ -5,10 +5,7 @@ import sys
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple, Type, Union, no_type_check
 
-import litellm
 import openai
-from litellm import acompletion as litellm_acompletion
-from litellm import completion as litellm_completion
 from pydantic import BaseModel
 from rich import print
 
@@ -35,7 +32,6 @@ from langroid.utils.configuration import settings
 from langroid.utils.constants import NO_ANSWER, Colors
 
 logging.getLogger("openai").setLevel(logging.ERROR)
-litellm.telemetry = False
 
 
 class OpenAIChatModel(str, Enum):
@@ -108,6 +104,18 @@ class OpenAIGPTConfig(LLMConfig):
         """
         if not self.litellm:
             return
+        try:
+            import litellm
+        except ImportError:
+            raise ImportError(
+                """
+                litellm not installed. Please install it via:
+                pip install litellm.
+                Or when installing langroid, install it with the `litellm` extra:
+                pip install langroid[litellm]
+                """
+            )
+        litellm.telemetry = False
         keys_dict = litellm.validate_environment(self.chat_model)
         missing_keys = keys_dict.get("missing_keys", [])
         if len(missing_keys) > 0:
@@ -594,6 +602,8 @@ class OpenAIGPT(LanguageModel):
                 if result is not None:
                     cached = True
                 else:
+                    if self.config.litellm:
+                        from litellm import acompletion as litellm_acompletion
                     acompletion_call = (
                         litellm_acompletion
                         if self.config.litellm
@@ -625,6 +635,8 @@ class OpenAIGPT(LanguageModel):
                 if result is not None:
                     cached = True
                 else:
+                    if self.config.litellm:
+                        from litellm import acompletion as litellm_acompletion
                     acompletion_call = (
                         litellm_acompletion
                         if self.config.litellm
@@ -744,6 +756,8 @@ class OpenAIGPT(LanguageModel):
             if settings.debug:
                 print("[red]CACHED[/red]")
         else:
+            if self.config.litellm:
+                from litellm import completion as litellm_completion
             # If it's not in the cache, call the API
             completion_call = (
                 litellm_completion
@@ -768,6 +782,8 @@ class OpenAIGPT(LanguageModel):
             if settings.debug:
                 print("[red]CACHED[/red]")
         else:
+            if self.config.litellm:
+                from litellm import acompletion as litellm_acompletion
             acompletion_call = (
                 litellm_acompletion
                 if self.config.litellm
