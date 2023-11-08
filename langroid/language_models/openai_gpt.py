@@ -5,7 +5,7 @@ import sys
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple, Type, Union, no_type_check
 
-import openai
+from openai import AsyncOpenAI, OpenAI
 from pydantic import BaseModel
 from rich import print
 
@@ -30,6 +30,7 @@ from langroid.language_models.utils import (
 )
 from langroid.utils.configuration import settings
 from langroid.utils.constants import NO_ANSWER, Colors
+from langroid.utils.system import friendly_error
 
 logging.getLogger("openai").setLevel(logging.ERROR)
 
@@ -78,6 +79,7 @@ class OpenAIGPTConfig(LLMConfig):
 
     type: str = "openai"
     api_key: str = ""  # CAUTION: set this ONLY via env var OPENAI_API_KEY
+    organization: str = ""
     api_base: str | None = None  # used for local or other non-OpenAI models
     litellm: bool = False  # use litellm api?
     max_output_tokens: int = 1024
@@ -204,6 +206,16 @@ class OpenAIGPT(LanguageModel):
         # Pydantic's BaseSettings will automatically pick it up from the
         # .env file
         self.api_key = config.api_key
+        self.client = OpenAI(
+            api_key=self.api_key,
+            base_url=self.api_base,
+            organization=self.config.organization,
+        )
+        self.async_client = AsyncOpenAI(
+            api_key=self.api_key,
+            organization=self.config.organization,
+            base_url=self.api_base,
+        )
 
         self.cache: MomentoCache | RedisCache
         if settings.cache_type == "momento":
@@ -287,15 +299,19 @@ class OpenAIGPT(LanguageModel):
         - function_name: name of the function
         - function_args: args of the function
         """
+        # convert event obj (of type ChatCompletionChunk) to dict so rest of code,
+        # which expects dicts, works as it did before switching to openai v1.x
+        if not isinstance(event, dict):
+            event = event.model_dump()
         event_args = ""
         event_fn_name = ""
         if chat:
             delta = event["choices"][0]["delta"]
-            if "function_call" in delta:
-                if "name" in delta.function_call:
-                    event_fn_name = delta.function_call["name"]
-                if "arguments" in delta.function_call:
-                    event_args = delta.function_call["arguments"]
+            if "function_call" in delta and delta["function_call"] is not None:
+                if "name" in delta["function_call"]:
+                    event_fn_name = delta["function_call"]["name"]
+                if "arguments" in delta["function_call"]:
+                    event_args = delta["function_call"]["arguments"]
             event_text = delta.get("content", "")
         else:
             event_text = event["choices"][0]["text"]
@@ -324,7 +340,7 @@ class OpenAIGPT(LanguageModel):
 
     def _stream_response(  # type: ignore
         self, response, chat: bool = False
-    ) -> Tuple[LLMResponse, OpenAIResponse]:
+    ) -> Tuple[LLMResponse, Dict[str, Any]]:
         """
         Grab and print streaming response from API.
         Args:
@@ -333,7 +349,7 @@ class OpenAIGPT(LanguageModel):
         Returns:
             Tuple consisting of:
                 LLMResponse object (with message, usage),
-                OpenAIResponse object (with choices, usage)
+                Dict version of OpenAIResponse object (with choices, usage)
 
         """
         completion = ""
@@ -375,7 +391,7 @@ class OpenAIGPT(LanguageModel):
 
     async def _stream_response_async(  # type: ignore
         self, response, chat: bool = False
-    ) -> Tuple[LLMResponse, OpenAIResponse]:
+    ) -> Tuple[LLMResponse, Dict[str, Any]]:
         """
         Grab and print streaming response from API.
         Args:
@@ -432,7 +448,7 @@ class OpenAIGPT(LanguageModel):
         function_args: str = "",
         function_name: str = "",
         is_async: bool = False,
-    ) -> Tuple[LLMResponse, OpenAIResponse]:
+    ) -> Tuple[LLMResponse, Dict[str, Any]]:
         # check if function_call args are valid, if not,
         # treat this as a normal msg, not a function call
         args = {}
@@ -467,7 +483,7 @@ class OpenAIGPT(LanguageModel):
             choices=[msg],
             usage=dict(total_tokens=0),
         )
-        return (  # type: ignore
+        return (
             LLMResponse(
                 message=completion,
                 cached=False,
@@ -475,6 +491,9 @@ class OpenAIGPT(LanguageModel):
             ),
             openai_response.dict(),
         )
+
+    def _cache_store(self, k: str, v: Any) -> None:
+        self.cache.store(k, v)
 
     def _cache_lookup(self, fn_name: str, **kwargs: Dict[str, Any]) -> Tuple[str, Any]:
         # Use the kwargs as the cache key
@@ -523,16 +542,12 @@ class OpenAIGPT(LanguageModel):
             return self._generate(prompt, max_tokens)
         except Exception as e:
             # capture exceptions not handled by retry, so we don't crash
-            err_msg = str(e)[:500]
-            logging.error(f"OpenAI API error: {err_msg}")
+            logging.error(friendly_error(e, "Error in OpenAIGPT.generate: "))
             return LLMResponse(message=NO_ANSWER, cached=False)
 
     def _generate(self, prompt: str, max_tokens: int) -> LLMResponse:
         if self.config.use_chat_for_completion:
             return self.chat(messages=prompt, max_tokens=max_tokens)
-        openai.api_key = self.api_key
-        if self.api_base:
-            openai.api_base = self.api_base
 
         if settings.debug:
             print(f"[red]PROMPT: {prompt}[/red]")
@@ -547,21 +562,21 @@ class OpenAIGPT(LanguageModel):
                     print("[red]CACHED[/red]")
             else:
                 # If it's not in the cache, call the API
-                result = openai.Completion.create(**kwargs)  # type: ignore
+                result = self.client.completions.create(**kwargs)
                 if self.get_stream():
                     llm_response, openai_response = self._stream_response(result)
-                    self.cache.store(hashed_key, openai_response)
+                    self._cache_store(hashed_key, openai_response)
                     return cached, hashed_key, openai_response
                 else:
-                    self.cache.store(hashed_key, result)
+                    self._cache_store(hashed_key, result.model_dump())
             return cached, hashed_key, result
 
-        key_name = "engine" if self.config.type == "azure" else "model"
+        key_name = "model"
         cached, hashed_key, response = completions_with_backoff(
             **{key_name: self.config.completion_model},
             prompt=prompt,
             max_tokens=max_tokens,  # for output/completion
-            request_timeout=self.config.timeout,
+            timeout=self.config.timeout,
             temperature=self.config.temperature,
             echo=False,
             stream=self.get_stream(),
@@ -575,14 +590,10 @@ class OpenAIGPT(LanguageModel):
             return await self._agenerate(prompt, max_tokens)
         except Exception as e:
             # capture exceptions not handled by retry, so we don't crash
-            err_msg = str(e)[:500]
-            logging.error(f"OpenAI API error: {err_msg}")
+            logging.error(friendly_error(e, "Error in OpenAIGPT.agenerate: "))
             return LLMResponse(message=NO_ANSWER, cached=False)
 
     async def _agenerate(self, prompt: str, max_tokens: int) -> LLMResponse:
-        openai.api_key = self.api_key
-        if self.api_base:
-            openai.api_base = self.api_base
         # note we typically will not have self.config.stream = True
         # when issuing several api calls concurrently/asynchronously.
         # The calling fn should use the context `with Streaming(..., False)` to
@@ -607,25 +618,29 @@ class OpenAIGPT(LanguageModel):
                     acompletion_call = (
                         litellm_acompletion
                         if self.config.litellm
-                        else openai.ChatCompletion.acreate
+                        else self.async_client.chat.completions.create
                     )
 
                     # If it's not in the cache, call the API
                     result = await acompletion_call(**kwargs)
-                    self.cache.store(hashed_key, result)
+                    self._cache_store(hashed_key, result.model_dump())
                 return cached, hashed_key, result
 
             cached, hashed_key, response = await completions_with_backoff(
                 model=self.config.chat_model,
                 messages=[m.api_dict() for m in messages],
                 max_tokens=max_tokens,
-                request_timeout=self.config.timeout,
+                timeout=self.config.timeout,
                 temperature=self.config.temperature,
                 stream=False,
             )
-            msg = response["choices"][0]["message"]["content"].strip()
+            if isinstance(response, dict):
+                response_dict = response
+            else:
+                response_dict = response.model_dump()
+            msg = response_dict["choices"][0]["message"]["content"].strip()
         else:
-            # WARNING: openai.Completion.* endpoints are deprecated,
+            # WARNING: .Completion.* endpoints are deprecated,
             # and as of Sep 2023 only legacy models will work here,
             # e.g. text-davinci-003, text-ada-001.
             @retry_with_exponential_backoff
@@ -640,18 +655,18 @@ class OpenAIGPT(LanguageModel):
                     acompletion_call = (
                         litellm_acompletion
                         if self.config.litellm
-                        else openai.Completion.acreate
+                        else self.async_client.completions.create
                     )
                     # If it's not in the cache, call the API
                     result = await acompletion_call(**kwargs)
-                    self.cache.store(hashed_key, result)
+                    self._cache_store(hashed_key, result.model_dump())
                 return cached, hashed_key, result
 
             cached, hashed_key, response = await completions_with_backoff(
                 model=self.config.completion_model,
                 prompt=prompt,
                 max_tokens=max_tokens,
-                request_timeout=self.config.timeout,
+                timeout=self.config.timeout,
                 temperature=self.config.temperature,
                 echo=False,
                 stream=False,
@@ -698,8 +713,7 @@ class OpenAIGPT(LanguageModel):
             return self._chat(messages, max_tokens, functions, function_call)
         except Exception as e:
             # capture exceptions not handled by retry, so we don't crash
-            err_msg = str(e)[:500]
-            logging.error(f"OpenAI API error: {err_msg}")
+            logging.error(friendly_error(e, "Error in OpenAIGPT.chat: "))
             return LLMResponse(message=NO_ANSWER, cached=False)
 
     async def achat(
@@ -743,8 +757,7 @@ class OpenAIGPT(LanguageModel):
             return result
         except Exception as e:
             # capture exceptions not handled by retry, so we don't crash
-            err_msg = str(e)[:500]
-            logging.error(f"OpenAI API error: {err_msg}")
+            logging.error(friendly_error(e, "Error in OpenAIGPT.achat: "))
             return LLMResponse(message=NO_ANSWER, cached=False)
 
     @retry_with_exponential_backoff
@@ -762,7 +775,7 @@ class OpenAIGPT(LanguageModel):
             completion_call = (
                 litellm_completion
                 if self.config.litellm
-                else openai.ChatCompletion.create
+                else self.client.chat.completions.create
             )
             result = completion_call(**kwargs)
             if not self.get_stream():
@@ -770,7 +783,7 @@ class OpenAIGPT(LanguageModel):
                 # since it is a generator. Instead,
                 # we hold on to the hashed_key and
                 # cache the result later
-                self.cache.store(hashed_key, result)
+                self._cache_store(hashed_key, result.model_dump())
         return cached, hashed_key, result
 
     @retry_with_exponential_backoff
@@ -787,12 +800,12 @@ class OpenAIGPT(LanguageModel):
             acompletion_call = (
                 litellm_acompletion
                 if self.config.litellm
-                else openai.ChatCompletion.acreate
+                else self.async_client.chat.completions.create
             )
             # If it's not in the cache, call the API
             result = await acompletion_call(**kwargs)
             if not self.get_stream():
-                self.cache.store(hashed_key, result)
+                self._cache_store(hashed_key, result.model_dump())
         return cached, hashed_key, result
 
     def _prep_chat_completion(
@@ -802,9 +815,6 @@ class OpenAIGPT(LanguageModel):
         functions: Optional[List[LLMFunctionSpec]] = None,
         function_call: str | Dict[str, str] = "auto",
     ) -> Dict[str, Any]:
-        openai.api_key = self.api_key
-        if self.api_base:
-            openai.api_base = self.api_base
         if isinstance(messages, str):
             llm_messages = [
                 LLMMessage(role=Role.SYSTEM, content="You are a helpful assistant."),
@@ -818,7 +828,6 @@ class OpenAIGPT(LanguageModel):
         chat_model = self.config.chat_model
         key_name = "model"
         if self.config.type == "azure":
-            key_name = "engine"
             if hasattr(self, "deployment_name"):
                 chat_model = self.deployment_name
 
@@ -829,7 +838,7 @@ class OpenAIGPT(LanguageModel):
             n=1,
             stop=None,
             temperature=self.config.temperature,
-            request_timeout=self.config.timeout,
+            timeout=self.config.timeout,
             stream=self.get_stream(),
         )
         # only include functions-related args if functions are provided
@@ -943,10 +952,13 @@ class OpenAIGPT(LanguageModel):
         cached, hashed_key, response = self._chat_completions_with_backoff(**args)
         if self.get_stream() and not cached:
             llm_response, openai_response = self._stream_response(response, chat=True)
-            self.cache.store(hashed_key, openai_response)
+            self._cache_store(hashed_key, openai_response)
             return llm_response
-
-        return self._process_chat_completion_response(cached, response)
+        if isinstance(response, dict):
+            response_dict = response
+        else:
+            response_dict = response.model_dump()
+        return self._process_chat_completion_response(cached, response_dict)
 
     async def _achat(
         self,
@@ -972,6 +984,10 @@ class OpenAIGPT(LanguageModel):
             llm_response, openai_response = await self._stream_response_async(
                 response, chat=True
             )
-            self.cache.store(hashed_key, openai_response)
+            self._cache_store(hashed_key, openai_response)
             return llm_response
-        return self._process_chat_completion_response(cached, response)
+        if isinstance(response, dict):
+            response_dict = response
+        else:
+            response_dict = response.model_dump()
+        return self._process_chat_completion_response(cached, response_dict)
