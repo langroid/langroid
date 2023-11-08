@@ -52,7 +52,8 @@ for ideas on what to contribute.
 
 # Quick glimpse of coding with Langroid
 This is just a teaser; there's much more, like function-calling/tools, 
-Multi-task Collaboration, DocChatAgent (RAG), SQLChatAgent, etc. Scroll down or see docs for more.
+Multi-Agent Collaboration, Structured Information Extraction, DocChatAgent 
+(RAG), SQLChatAgent, etc. Scroll down or see docs for more.
 
 ```python
 

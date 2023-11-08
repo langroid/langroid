@@ -40,7 +40,7 @@ class OpenAIChatModel(str, Enum):
 
     GPT3_5_TURBO = "gpt-3.5-turbo-1106"
     GPT4_NOFUNC = "gpt-4"  # before function_call API
-    GPT4 = "gpt-4",
+    GPT4 = "gpt-4"
     GPT4_TURBO = "gpt-4-1106-preview"
 
 
