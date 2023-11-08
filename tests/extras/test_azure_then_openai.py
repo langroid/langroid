@@ -2,9 +2,6 @@
 Test to chat using Azure OpenAI followed by regular OpenAI model works fine,
 i.e. config/env related to Azure does not leak into code using the regular OpenAI model.
 """
-import importlib
-
-import openai
 import pytest
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
@@ -47,4 +44,4 @@ def test_chat_agent(config):
     agent = ChatAgent(cfg)
     response = agent.llm_response("what is the capital of France?")
     assert "Paris" in response.content
-    importlib.reload(openai)
+    # importlib.reload(openai)

@@ -305,37 +305,46 @@ class OpenAIGPT(LanguageModel):
             event = event.model_dump()
         event_args = ""
         event_fn_name = ""
-        if chat:
-            delta = event["choices"][0]["delta"]
-            if "function_call" in delta and delta["function_call"] is not None:
-                if "name" in delta["function_call"]:
-                    event_fn_name = delta["function_call"]["name"]
-                if "arguments" in delta["function_call"]:
-                    event_args = delta["function_call"]["arguments"]
-            event_text = delta.get("content", "")
-        else:
-            event_text = event["choices"][0]["text"]
-        if event_text:
-            completion += event_text
-            if not is_async:
-                sys.stdout.write(Colors().GREEN + event_text)
-                sys.stdout.flush()
-        if event_fn_name:
-            function_name = event_fn_name
-            has_function = True
-            if not is_async:
-                sys.stdout.write(Colors().GREEN + "FUNC: " + event_fn_name + ": ")
-                sys.stdout.flush()
-        if event_args:
-            function_args += event_args
-            if not is_async:
-                sys.stdout.write(Colors().GREEN + event_args)
-                sys.stdout.flush()
-        if event["choices"][0].get("finish_reason", "") in ["stop", "function_call"]:
-            # for function_call, finish_reason does not necessarily
-            # contain "function_call" as mentioned in the docs.
-            # So we check for "stop" or "function_call" here.
-            return True, has_function, function_name, function_args, completion
+        event_text = ""
+        # The first two events in the stream of Azure OpenAI is useless.
+        # In the 1st: choices list is empty, in the 2nd: the dict delta has null content
+        if event["choices"]:
+            if chat:
+                delta = event["choices"][0].get("delta")
+                # Check if 'delta' is not None and then 'content' is not None
+                if delta and delta.get("content") is not None:
+                    if "function_call" in delta and delta["function_call"] is not None:
+                        if "name" in delta["function_call"]:
+                            event_fn_name = delta["function_call"]["name"]
+                        if "arguments" in delta["function_call"]:
+                            event_args = delta["function_call"]["arguments"]
+                    event_text = delta.get("content", "")
+            else:
+                event_text = event["choices"][0]["text"]
+            if event_text:
+                completion += event_text
+                if not is_async:
+                    sys.stdout.write(Colors().GREEN + event_text)
+                    sys.stdout.flush()
+            if event_fn_name:
+                function_name = event_fn_name
+                has_function = True
+                if not is_async:
+                    sys.stdout.write(Colors().GREEN + "FUNC: " + event_fn_name + ": ")
+                    sys.stdout.flush()
+            if event_args:
+                function_args += event_args
+                if not is_async:
+                    sys.stdout.write(Colors().GREEN + event_args)
+                    sys.stdout.flush()
+            if event["choices"][0].get("finish_reason", "") in [
+                "stop",
+                "function_call",
+            ]:
+                # for function_call, finish_reason does not necessarily
+                # contain "function_call" as mentioned in the docs.
+                # So we check for "stop" or "function_call" here.
+                return True, has_function, function_name, function_args, completion
         return False, has_function, function_name, function_args, completion
 
     def _stream_response(  # type: ignore
