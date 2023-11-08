@@ -106,7 +106,7 @@ def _test_context_length_error(test_settings: Settings, mode: str, max_tokens: i
     assert big_message_tokens + max_tokens > context_length
     response = None
     # TODO need to figure out what error type to expect here
-    with pytest.raises(openai.error.InvalidRequestError) as e:
+    with pytest.raises(openai.BadRequestError) as e:
         if mode == "chat":
             response = llm.chat(big_message, max_tokens=max_tokens)
         else:
