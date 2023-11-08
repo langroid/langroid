@@ -53,6 +53,10 @@ for ideas on what to contribute.
 <details>
 <summary> <b>:fire: Updates/Releases</b></summary>
 
+- **Nov 2023:**
+  - **0.1.110:** Upgrade from OpenAI v0.x to v1.1.1 (in preparation for 
+    Assistants API and more); (`litellm` temporarily disabled due to OpenAI 
+    version conflict).
 - **Oct 2023:**
   - **0.1.107:** `DocChatAgent` re-rankers: `rank_with_diversity`, `rank_to_periphery` (lost in middle).
   - **0.1.102:** `DocChatAgentConfig.n_neighbor_chunks > 0` allows returning context chunks around match.
