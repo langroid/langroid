@@ -501,9 +501,14 @@ class ChatAgent(Agent):
         if not self.llm_can_respond(message):
             return [], 0
 
-        assert (
-            message is not None or len(self.message_history) == 0
-        ), "message can be None only if message_history is empty, i.e. at start."
+        if message is None and len(self.message_history) > 0:
+            # this means agent has been used to get LLM response already,
+            # and so the last message is an "assistant" response.
+            # We delete this last assistant response and re-generate it.
+            self.clear_history(-1)
+            logger.warning(
+                "Re-generating the last assistant response since message is None"
+            )
 
         if len(self.message_history) == 0:
             # initial messages have not yet been loaded, so load them

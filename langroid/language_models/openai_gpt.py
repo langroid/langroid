@@ -38,9 +38,10 @@ logging.getLogger("openai").setLevel(logging.ERROR)
 class OpenAIChatModel(str, Enum):
     """Enum for OpenAI Chat models"""
 
-    GPT3_5_TURBO = "gpt-3.5-turbo-0613"
+    GPT3_5_TURBO = "gpt-3.5-turbo-1106"
     GPT4_NOFUNC = "gpt-4"  # before function_call API
     GPT4 = "gpt-4"
+    GPT4_TURBO = "gpt-4-1106-preview"
 
 
 class OpenAICompletionModel(str, Enum):
@@ -49,6 +50,7 @@ class OpenAICompletionModel(str, Enum):
     TEXT_DA_VINCI_003 = "text-davinci-003"  # deprecated
     TEXT_ADA_001 = "text-ada-001"  # deprecated
     GPT4 = "gpt-4"  # only works on chat-completion endpoint
+    GPT4_TURBO = "gpt-4-1106-preview"  # only works on chat-completion endpoint
 
 
 _context_length: Dict[str, int] = {
@@ -56,6 +58,7 @@ _context_length: Dict[str, int] = {
     OpenAIChatModel.GPT3_5_TURBO: 4096,
     OpenAIChatModel.GPT4: 8192,
     OpenAIChatModel.GPT4_NOFUNC: 8192,
+    OpenAIChatModel.GPT4_TURBO: 128_000,
     OpenAICompletionModel.TEXT_DA_VINCI_003: 4096,
 }
 
@@ -64,6 +67,7 @@ _cost_per_1k_tokens: Dict[str, Tuple[float, float]] = {
     # model => (prompt cost, generation cost) in USD
     OpenAIChatModel.GPT3_5_TURBO: (0.0015, 0.002),
     OpenAIChatModel.GPT4: (0.03, 0.06),  # 8K context
+    OpenAIChatModel.GPT4_TURBO: (0.01, 0.03),  # 128K context
     OpenAIChatModel.GPT4_NOFUNC: (0.03, 0.06),
 }
 
