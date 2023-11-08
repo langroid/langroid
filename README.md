@@ -385,6 +385,13 @@ For remote models, you will typically need to set API Keys etc as environment va
 You can set those based on the LiteLLM docs. 
 If any required environment variables are missing, Langroid gives a helpful error
 message indicating which ones are needed.
+Note that to use `langroid` with `litellm` you need to install the `litellm` 
+extra, i.e. either `pip install langroid[litellm]` in your virtual env,
+or if you are developing within the `langroid` repo, 
+`poetry install -E litellm`.
+```bash
+pip install langroid[litellm]
+```
 </details>
 
 <details>
