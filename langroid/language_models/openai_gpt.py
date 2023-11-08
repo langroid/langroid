@@ -50,7 +50,7 @@ class OpenAICompletionModel(str, Enum):
     TEXT_DA_VINCI_003 = "text-davinci-003"  # deprecated
     TEXT_ADA_001 = "text-ada-001"  # deprecated
     GPT4 = "gpt-4"  # only works on chat-completion endpoint
-    GPT4_TURBO = "gpt-4-1106-preview" # only works on chat-completion endpoint
+    GPT4_TURBO = "gpt-4-1106-preview"  # only works on chat-completion endpoint
 
 
 _context_length: Dict[str, int] = {

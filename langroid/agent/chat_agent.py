@@ -510,7 +510,6 @@ class ChatAgent(Agent):
                 "Re-generating the last assistant response since message is None"
             )
 
-
         if len(self.message_history) == 0:
             # initial messages have not yet been loaded, so load them
             self.message_history = [self._create_system_and_tools_message()]
