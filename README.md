@@ -63,7 +63,7 @@ from langroid import ChatAgent, ChatAgentConfig, Task
 # set up LLM
 llm_cfg = OpenAIGPTConfig(
   # ... other settings
-  chat_model=OpenAIChatModel.GPT4_TURBO, # latest OpenAI model gpt-4-1106-preview 
+  chat_model=OpenAIChatModel.GPT4_TURBO, # latest OpenAI model
 )
 # use LLM directly
 mdl = OpenAIGPT(llm_cfg)
@@ -75,7 +75,8 @@ agent_cfg = ChatAgentConfig(
   # ... other settings
 )
 agent = ChatAgent(agent_cfg)
-response = agent.llm_response("What is the capital of Canada?")
+agent.llm_response("What is the capital of China?") 
+response = agent.llm_response("And India?") # maintains conversation state 
 
 # wrap Agent in a Task to run interactive loop (REPL) with user
 task = Task(agent, name="Bot", system_message="You are a helpful assistant")
@@ -86,6 +87,8 @@ task.run("Hello") # kick off with user saying "Hello"
 <summary> <b>:fire: Updates/Releases</b></summary>
 
 - **Nov 2023:**
+  - **0.1.111:** Support latest OpenAI model: `GPT4_TURBO`
+(see [test_llm.py](tests/main/test_llm.py) for example usage)
   - **0.1.110:** Upgrade from OpenAI v0.x to v1.1.1 (in preparation for 
     Assistants API and more); (`litellm` temporarily disabled due to OpenAI 
     version conflict).

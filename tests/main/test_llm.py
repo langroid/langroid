@@ -31,7 +31,7 @@ def test_openai_gpt(test_settings: Settings, streaming, country, capital):
         chat_model=(
             OpenAIChatModel.GPT3_5_TURBO
             if test_settings.gpt3_5
-            else OpenAIChatModel.GPT4_TURBO
+            else OpenAIChatModel.GPT4  # or GPT4_TURBO
         ),
         completion_model=OpenAICompletionModel.GPT4,
         cache_config=RedisCacheConfig(fake=False),
@@ -89,7 +89,7 @@ def _test_context_length_error(test_settings: Settings, mode: str, max_tokens: i
     cfg = OpenAIGPTConfig(
         stream=False,
         max_output_tokens=max_tokens,
-        chat_model=OpenAIChatModel.GPT4_TURBO,
+        chat_model=OpenAIChatModel.GPT4,  # or GPT4_TURBO,
         completion_model=OpenAICompletionModel.TEXT_DA_VINCI_003,
         cache_config=RedisCacheConfig(fake=False),
     )
