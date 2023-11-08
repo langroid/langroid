@@ -50,6 +50,37 @@ for ideas on what to contribute.
 
 **Questions, Feedback, Ideas? Join us on [Discord](https://discord.gg/ZU36McDgDs)!**
 
+# Quick glimpse of coding with Langroid
+This is just a teaser; there's much more, like function-calling/tools, 
+Multi-task Collaboration, DocChatAgent (RAG), SQLChatAgent, etc. Scroll down or see docs for more.
+
+```python
+
+from langroid.language_models import  OpenAIGPTConfig, OpenAIChatModel, OpenAIGPT
+from langroid import ChatAgent, ChatAgentConfig, Task
+
+# set up LLM
+llm_cfg = OpenAIGPTConfig(
+  # ... other settings
+  chat_model=OpenAIChatModel.GPT4, # latest OpenAI model gpt-4-1106-preview 
+)
+# use LLM directly
+mdl = OpenAIGPT(llm_cfg)
+response = mdl.chat("What is the capital of Ontario?", max_tokens=10)
+
+# use LLM in an Agent
+agent_cfg = ChatAgentConfig(
+  llm=llm_cfg,
+  # ... other settings
+)
+agent = ChatAgent(agent_cfg)
+response = agent.llm_response("What is the capital of Canada?")
+
+# wrap Agent in a Task to run interactive loop (REPL) with user
+task = Task(agent, name="Bot", system_message="You are a helpful assistant")
+task.run("Hello") # kick off with user saying "Hello"
+```
+
 <details>
 <summary> <b>:fire: Updates/Releases</b></summary>
 
