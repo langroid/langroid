@@ -78,7 +78,7 @@ agent = ChatAgent(agent_cfg)
 agent.llm_response("What is the capital of China?") 
 response = agent.llm_response("And India?") # maintains conversation state 
 
-# wrap Agent in a Task to run interactive loop (REPL) with user
+# wrap Agent in a Task to run interactive loop with user (or other agents)
 task = Task(agent, name="Bot", system_message="You are a helpful assistant")
 task.run("Hello") # kick off with user saying "Hello"
 ```
