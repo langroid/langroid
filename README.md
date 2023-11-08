@@ -63,7 +63,7 @@ from langroid import ChatAgent, ChatAgentConfig, Task
 # set up LLM
 llm_cfg = OpenAIGPTConfig(
   # ... other settings
-  chat_model=OpenAIChatModel.GPT4_TURBO, # latest OpenAI model gpt-4-1106-preview 
+  chat_model=OpenAIChatModel.GPT4_TURBO, # latest OpenAI model
 )
 # use LLM directly
 mdl = OpenAIGPT(llm_cfg)
@@ -75,7 +75,8 @@ agent_cfg = ChatAgentConfig(
   # ... other settings
 )
 agent = ChatAgent(agent_cfg)
-response = agent.llm_response("What is the capital of Canada?")
+agent.llm_response("What is the capital of China?") 
+response = agent.llm_response("And India?") # maintains conversation state 
 
 # wrap Agent in a Task to run interactive loop (REPL) with user
 task = Task(agent, name="Bot", system_message="You are a helpful assistant")
