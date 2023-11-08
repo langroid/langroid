@@ -86,6 +86,8 @@ task.run("Hello") # kick off with user saying "Hello"
 <summary> <b>:fire: Updates/Releases</b></summary>
 
 - **Nov 2023:**
+  - **0.1.111:** Support latest OpenAI model: `GPT4_TURBO`
+(see [test_llm.py](tests/main/test_llm.py) for example usage)
   - **0.1.110:** Upgrade from OpenAI v0.x to v1.1.1 (in preparation for 
     Assistants API and more); (`litellm` temporarily disabled due to OpenAI 
     version conflict).
