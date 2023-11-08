@@ -23,11 +23,9 @@ def retry_with_exponential_backoff(
     max_retries: int = 10,
     errors: tuple = (  # type: ignore
         requests.exceptions.RequestException,
-        openai.error.Timeout,
-        openai.error.RateLimitError,
-        openai.error.APIError,
-        openai.error.ServiceUnavailableError,
-        openai.error.TryAgain,
+        openai.APITimeoutError,
+        openai.RateLimitError,
+        openai.APIError,
         aiohttp.ServerTimeoutError,
         asyncio.TimeoutError,
     ),
@@ -44,7 +42,7 @@ def retry_with_exponential_backoff(
             try:
                 return func(*args, **kwargs)
 
-            except openai.error.InvalidRequestError as e:
+            except openai.BadRequestError as e:
                 # do not retry when the request itself is invalid,
                 # e.g. when context is too long
                 logger.error(f"OpenAI API request failed with error: {e}.")
@@ -85,11 +83,9 @@ def async_retry_with_exponential_backoff(
     jitter: bool = True,
     max_retries: int = 10,
     errors: tuple = (  # type: ignore
-        openai.error.Timeout,
-        openai.error.RateLimitError,
-        openai.error.APIError,
-        openai.error.ServiceUnavailableError,
-        openai.error.TryAgain,
+        openai.APITimeoutError,
+        openai.RateLimitError,
+        openai.APIError,
         aiohttp.ServerTimeoutError,
         asyncio.TimeoutError,
     ),
@@ -107,7 +103,7 @@ def async_retry_with_exponential_backoff(
                 result = await func(*args, **kwargs)
                 return result
 
-            except openai.error.InvalidRequestError as e:
+            except openai.BadRequestError as e:
                 # do not retry when the request itself is invalid,
                 # e.g. when context is too long
                 logger.error(f"OpenAI API request failed with error: {e}.")

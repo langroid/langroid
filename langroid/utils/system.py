@@ -1,6 +1,7 @@
 import inspect
 import logging
 import shutil
+import traceback
 
 logger = logging.getLogger(__name__)
 
@@ -56,3 +57,12 @@ def caller_name() -> str:
         return ""
 
     return caller_frame.f_code.co_name
+
+
+def friendly_error(e: Exception, msg: str = "An error occurred.") -> str:
+    tb = traceback.format_exc()
+    original_error_message: str = str(e)
+    full_error_message: str = (
+        f"{msg}\nOriginal error: {original_error_message}\nTraceback:\n{tb}"
+    )
+    return full_error_message

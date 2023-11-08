@@ -205,9 +205,11 @@ In the root of the repo, copy the `.env-template` file to a new file `.env`:
 cp .env-template .env
 ```
 Then insert your OpenAI API Key. 
-Your `.env` file should look like this:
+Your `.env` file should look like this (the organization is optional 
+but may be required in some scenarios).
 ```bash
 OPENAI_API_KEY=your-key-here-without-quotes
+OPENAI_ORGANIZATION=optionally-your-organization-id
 ````
 
 Alternatively, you can set this as an environment variable in your shell
@@ -383,6 +385,13 @@ For remote models, you will typically need to set API Keys etc as environment va
 You can set those based on the LiteLLM docs. 
 If any required environment variables are missing, Langroid gives a helpful error
 message indicating which ones are needed.
+Note that to use `langroid` with `litellm` you need to install the `litellm` 
+extra, i.e. either `pip install langroid[litellm]` in your virtual env,
+or if you are developing within the `langroid` repo, 
+`poetry install -E litellm`.
+```bash
+pip install langroid[litellm]
+```
 </details>
 
 <details>

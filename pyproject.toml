@@ -31,7 +31,7 @@ trafilatura = "^1.5.0"
 halo = "^0.0.31"
 typer = "^0.9.0"
 colorlog = "^6.7.0"
-openai = "^0.27.5"
+openai = "^1.1.1"
 tiktoken = "^0.5.1"
 pygithub = "^1.58.1"
 pygments = "^2.15.1"
@@ -75,7 +75,7 @@ docstring-parser = "^0.15"
 farm-haystack = {extras = ["ocr", "preprocessing", "file-conversion", "pdf"], version = "^1.21.1"}
 meilisearch = "^0.28.3"
 meilisearch-python-sdk = "^2.0.1"
-litellm = "^0.6.2"
+#litellm = {version ="^0.6.2", optional = true}
 scrapy = "^2.11.0"
 async-generator = "^1.10"
 lancedb = "^0.3.0"
@@ -85,6 +85,7 @@ lancedb = "^0.3.0"
 hf-embeddings = ["sentence-transformers", "torch"]
 postgres = ["psycopg2", "pytest-postgresql"]
 mysql = ["pymysql", "pytest-mysql"]
+litellm = ["litellm"]
 
 
 [tool.poetry.group.dev.dependencies]
