@@ -2,8 +2,9 @@ import logging
 from abc import ABC, abstractmethod
 
 import numpy as np
-from chromadb.api.types import EmbeddingFunction
 from pydantic import BaseSettings
+
+from langroid.mytypes import EmbeddingFunction
 
 logging.getLogger("openai").setLevel(logging.ERROR)
 
