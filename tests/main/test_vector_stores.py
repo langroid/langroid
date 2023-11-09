@@ -139,7 +139,7 @@ def vecdb(request) -> VectorStore:
         ("people outside Canada", [phrases.NOT_CANADA], ["meilisearch"]),
     ],
 )
-# add "momento" when index-creation timeout error is resolved.
+# add "momento" when their API docs are ready
 @pytest.mark.parametrize(
     "vecdb",
     ["qdrant_cloud", "qdrant_local", "lancedb", "chroma"],
@@ -152,9 +152,6 @@ def test_vector_stores_search(
         # we don't expect some of these to work,
         # e.g. MeiliSearch is a text search engine, not a vector store
         return
-    if isinstance(vecdb, MomentoVI):
-        # skip due to non-deterministic search failures. Maybe need to use async?
-        return
     docs_and_scores = vecdb.similar_texts_with_scores(query, k=len(vars(phrases)))
     # first doc should be best match
     # scores are cosine similarities, so high means close
@@ -162,7 +159,7 @@ def test_vector_stores_search(
     assert set(results).issubset(set(matching_docs))
 
 
-# add "momento" when index-creation timeout error is resolved.
+# add "momento" when their API docs are ready.
 @pytest.mark.parametrize(
     "vecdb",
     ["qdrant_local", "qdrant_cloud", "lancedb", "chroma"],
@@ -171,21 +168,11 @@ def test_vector_stores_search(
 def test_vector_stores_access(vecdb):
     assert vecdb is not None
 
-    if not isinstance(vecdb, MomentoVI):
-        all_docs = vecdb.get_all_documents()
-        assert len(all_docs) == len(stored_docs)
-
     coll_name = vecdb.config.collection_name
     assert coll_name is not None
 
     vecdb.delete_collection(collection_name=coll_name)
     vecdb.create_collection(collection_name=coll_name)
-    if not isinstance(vecdb, MomentoVI):
-        all_docs = vecdb.get_all_documents()
-        assert len(all_docs) == 0
-
-    if isinstance(vecdb, MomentoVI):
-        return
 
     vecdb.add_documents(stored_docs)
     all_docs = vecdb.get_all_documents()
