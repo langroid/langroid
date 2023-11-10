@@ -1,7 +1,8 @@
 import json
 import logging
 import os
-from typing import Any, Dict, List
+from contextlib import AbstractContextManager, contextmanager
+from typing import Any, Dict, List, TypeVar
 
 import fakeredis
 import redis
@@ -10,6 +11,7 @@ from pydantic import BaseModel
 
 from langroid.cachedb.base import CacheDB
 
+T = TypeVar("T", bound="RedisCache")
 logger = logging.getLogger(__name__)
 
 
@@ -33,7 +35,7 @@ class RedisCache(CacheDB):
         load_dotenv()
 
         if self.config.fake:
-            self.client = fakeredis.FakeStrictRedis()  # type: ignore
+            self.pool = fakeredis.FakeStrictRedis()  # type: ignore
         else:
             redis_password = os.getenv("REDIS_PASSWORD")
             redis_host = os.getenv("REDIS_HOST")
@@ -43,21 +45,35 @@ class RedisCache(CacheDB):
                     """REDIS_PASSWORD, REDIS_HOST, REDIS_PORT not set in .env file,
                     using fake redis client"""
                 )
-                self.client = fakeredis.FakeStrictRedis()  # type: ignore
+                self.pool = fakeredis.FakeStrictRedis()  # type: ignore
             else:
-                self.client = redis.Redis(  # type: ignore
+                self.pool = redis.ConnectionPool(  # type: ignore
                     host=redis_host,
                     port=redis_port,
                     password=redis_password,
                 )
 
+    @contextmanager  # type: ignore
+    def redis_client(self) -> AbstractContextManager[T]:  # type: ignore
+        """Cleanly open and close a redis client, avoids max clients exceeded error"""
+        if isinstance(self.pool, fakeredis.FakeStrictRedis):
+            yield self.pool
+        else:
+            client: T = redis.Redis(connection_pool=self.pool)
+            try:
+                yield client
+            finally:
+                client.close()
+
     def clear(self) -> None:
         """Clear keys from current db."""
-        self.client.flushdb()
+        with self.redis_client() as client:  # type: ignore
+            client.flushdb()
 
     def clear_all(self) -> None:
         """Clear all keys from all dbs."""
-        self.client.flushall()
+        with self.redis_client() as client:  # type: ignore
+            client.flushall()
 
     def store(self, key: str, value: Any) -> None:
         """
@@ -67,7 +83,8 @@ class RedisCache(CacheDB):
             key (str): The key under which to store the value.
             value (Any): The value to store.
         """
-        self.client.set(key, json.dumps(value))
+        with self.redis_client() as client:  # type: ignore
+            client.set(key, json.dumps(value))
 
     def retrieve(self, key: str) -> Dict[str, Any] | str | None:
         """
@@ -79,8 +96,9 @@ class RedisCache(CacheDB):
         Returns:
             dict: The value associated with the key.
         """
-        value = self.client.get(key)
-        return json.loads(value) if value else None
+        with self.redis_client() as client:  # type: ignore
+            value = client.get(key)
+            return json.loads(value) if value else None
 
     def delete_keys(self, keys: List[str]) -> None:
         """
@@ -89,4 +107,5 @@ class RedisCache(CacheDB):
         Args:
             keys (List[str]): The keys to delete.
         """
-        self.client.delete(*keys)
+        with self.redis_client() as client:  # type: ignore
+            client.delete(*keys)
