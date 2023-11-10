@@ -65,6 +65,12 @@ class RedisCache(CacheDB):
             finally:
                 client.close()
 
+    def close_all_connections(self) -> None:
+        with self.redis_client() as client:  # type: ignore
+            clients = client.client_list()
+            for c in clients:
+                client.client_kill(c["addr"])
+
     def clear(self) -> None:
         """Clear keys from current db."""
         with self.redis_client() as client:  # type: ignore
