@@ -1,7 +1,7 @@
 import json
 import logging
 import os
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List
 
 import fakeredis
 import redis
@@ -69,7 +69,7 @@ class RedisCache(CacheDB):
         """
         self.client.set(key, json.dumps(value))
 
-    def retrieve(self, key: str) -> Optional[Dict[str, Any]]:
+    def retrieve(self, key: str) -> Dict[str, Any] | str | None:
         """
         Retrieve the value associated with a key.
 
@@ -81,3 +81,12 @@ class RedisCache(CacheDB):
         """
         value = self.client.get(key)
         return json.loads(value) if value else None
+
+    def delete_keys(self, keys: List[str]) -> None:
+        """
+        Delete the keys from the cache.
+
+        Args:
+            keys (List[str]): The keys to delete.
+        """
+        self.client.delete(*keys)

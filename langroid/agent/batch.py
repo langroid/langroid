@@ -11,6 +11,7 @@ from langroid.agent.chat_document import ChatDocument
 from langroid.agent.task import Task
 from langroid.utils.configuration import quiet_mode, settings
 from langroid.utils.logging import setup_colored_logging
+from langroid.utils.output.printing import SuppressLoggerWarnings
 
 console = Console(quiet=settings.quiet)
 
@@ -53,7 +54,7 @@ def run_batch_tasks(
         return output_map(result)
 
     async def _do_all() -> List[Any]:
-        with quiet_mode(not settings.debug):
+        with quiet_mode(not settings.debug), SuppressLoggerWarnings():
             return await asyncio.gather(  # type: ignore
                 *(_do_task(input, i) for i, input in enumerate(inputs))
             )
@@ -122,7 +123,7 @@ def run_batch_agent_method(
         return output_map(result)
 
     async def _do_all() -> List[Any]:
-        with quiet_mode():
+        with quiet_mode(), SuppressLoggerWarnings():
             return await asyncio.gather(  # type: ignore
                 *(_do_task(input, i) for i, input in enumerate(inputs))
             )

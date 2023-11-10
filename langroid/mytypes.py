@@ -1,13 +1,14 @@
 import hashlib
 import uuid
 from enum import Enum
-from typing import Any, Dict, List, Union
+from typing import Any, Callable, Dict, List, Union
 
 from pydantic import BaseModel, Extra
 
 Number = Union[int, float]
 Embedding = List[Number]
 Embeddings = List[Embedding]
+EmbeddingFunction = Callable[[List[str]], Embeddings]
 
 
 class Entity(str, Enum):
