@@ -319,13 +319,14 @@ class OpenAIGPT(LanguageModel):
         if chat:
             delta = event["choices"][0].get("delta")
             # Check if 'delta' is not None and then 'content' is not None
-            if delta and delta.get("content") is not None:
+            if delta:
+                if delta.get("content") is not None:
+                    event_text = delta.get("content", "")
                 if "function_call" in delta and delta["function_call"] is not None:
                     if "name" in delta["function_call"]:
                         event_fn_name = delta["function_call"]["name"]
                     if "arguments" in delta["function_call"]:
                         event_args = delta["function_call"]["arguments"]
-                event_text = delta.get("content", "")
         else:
             event_text = event["choices"][0]["text"]
         if event_text:
