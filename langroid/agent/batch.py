@@ -55,7 +55,7 @@ def run_batch_tasks(
 
     async def _do_all() -> List[Any]:
         with quiet_mode(not settings.debug), SuppressLoggerWarnings():
-            return await asyncio.gather(  # type: ignore
+            return await asyncio.gather(
                 *(_do_task(input, i) for i, input in enumerate(inputs))
             )
 
@@ -124,7 +124,7 @@ def run_batch_agent_method(
 
     async def _do_all() -> List[Any]:
         with quiet_mode(), SuppressLoggerWarnings():
-            return await asyncio.gather(  # type: ignore
+            return await asyncio.gather(
                 *(_do_task(input, i) for i, input in enumerate(inputs))
             )
 

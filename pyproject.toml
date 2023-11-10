@@ -21,7 +21,7 @@ onnxruntime = "1.16.1"
 fire = "^0.5.0"
 black = {extras = ["jupyter"], version = "^23.3.0"}
 flake8 = "^6.0.0"
-mypy = "^1.2.0"
+mypy = "^1.7.0"
 bs4 = "^0.0.1"
 autopep8 = "^2.0.2"
 python-dotenv = "^1.0.0"
