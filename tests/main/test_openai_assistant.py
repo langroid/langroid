@@ -1,20 +1,6 @@
-import os
-
-import pytest
-
 from langroid.agent.openai_assistant import OpenAIAssistant, OpenAIAssistantConfig
 from langroid.agent.task import Task
 from langroid.utils.configuration import Settings, set_global
-
-
-@pytest.fixture(scope="session")
-def redis_setup(redisdb):
-    # Set environment variables based on redisdb fixture
-    os.environ["REDIS_HOST"] = redisdb.connection_pool.connection_kwargs["host"]
-    os.environ["REDIS_PORT"] = str(redisdb.connection_pool.connection_kwargs["port"])
-    # Set other Redis-related environment variables as needed
-    yield
-    # Clean up / reset environment variables after tests
 
 
 def test_openai_assistant(test_settings: Settings):
