@@ -38,6 +38,8 @@ class OpenAIAssistant(ChatAgent):
     Also handles persistent storage of Assistant and Threads:
     stores their ids (for given user, org) in a cache, and
     reuses them based on config.use_cached_assistant and config.use_cached_thread.
+
+    This class can be used as a drop-in replacement for ChatAgent.
     """
 
     def __init__(self, config: OpenAIAssistantConfig):
