@@ -309,6 +309,8 @@ class OpenAIGPT(LanguageModel):
             event = event.model_dump()
 
         choices = event.get("choices", [{}])
+        if len(choices) == 0:
+            choices = [{}]
         event_args = ""
         event_fn_name = ""
 
