@@ -3,10 +3,12 @@ import asyncio
 # setup logger
 import logging
 import time
-from typing import List, Optional, no_type_check
+from enum import Enum
+from typing import Any, Dict, List, Optional, no_type_check
 
 from openai.types.beta import Assistant, Thread
 from openai.types.beta.threads import Run, ThreadMessage
+from pydantic import BaseModel
 from rich import print
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
@@ -20,13 +22,33 @@ from langroid.utils.system import generate_user_id, update_hash
 logger = logging.getLogger(__name__)
 
 
+class ToolType(str, Enum):
+    RETRIEVAL = "retrieval"
+    CODE_INTERPRETER = "code_interpreter"
+    FUNCTION = "function"
+
+
+class AssitantTool(BaseModel):
+    type: ToolType
+    function: Dict[str, Any] | None = None
+
+    def dct(self) -> Dict[str, Any]:
+        d = super().dict()
+        d["type"] = d["type"].value
+        return d
+
+
 class OpenAIAssistantConfig(ChatAgentConfig):
     use_cached_assistant: bool = True  # set in script via user dialog
+    assistant_id: str | None = None
     use_cached_thread: bool = True  # set in script via user dialog
+    thread_id: str | None = None
     # set to True once we can add Assistant msgs in threads
     cache_responses: bool = False
     timeout: int = 30  # can be different from llm.timeout
     llm = OpenAIGPTConfig()
+    tools: List[AssitantTool] = []
+    files: List[str] = []
 
 
 class OpenAIAssistant(ChatAgent):
@@ -57,12 +79,41 @@ class OpenAIAssistant(ChatAgent):
         self.assistant: Assistant | None = None
         self.run: Run | None = None
 
-        self._maybe_create_assistant()
-        self._maybe_create_thread()
+        self._maybe_create_assistant(self.config.assistant_id)
+        self._maybe_create_thread(self.config.thread_id)
         self._cache_store()
 
+        self.add_assistant_files(self.config.files)
+        self.add_assistant_tools(self.config.tools)
         # TODO remove this once OpenAI supports storing Assistant msgs in threads
         set_global(Settings(cache=False))
+
+    def add_assistant_files(self, files: List[str]) -> None:
+        """Add file_ids to assistant"""
+        if self.assistant is None:
+            raise ValueError("Assistant is None")
+        self.files = [
+            self.client.files.create(file=open(f, "rb"), purpose="assistants")
+            for f in files
+        ]
+        self.config.files = list(set(self.config.files + files))
+        self.assistants.update(
+            self.assistant.id,
+            file_ids=[f.id for f in self.files],
+        )
+
+    def add_assistant_tools(self, tools: List[AssitantTool]) -> None:
+        """Add tools to assistant"""
+        if self.assistant is None:
+            raise ValueError("Assistant is None")
+        all_tool_dicts = [t.dct() for t in self.config.tools]
+        for t in tools:
+            if t.dct() not in all_tool_dicts:
+                self.config.tools.append(t)
+        self.assistants.update(
+            self.assistant.id,
+            tools=[tool.dct() for tool in self.config.tools],  # type: ignore
+        )
 
     def _cache_thread_key(self) -> str:
         """Key to use for caching or retrieving thread id"""
@@ -120,15 +171,29 @@ class OpenAIAssistant(ChatAgent):
         assistant_key = self._cache_assistant_key()
         self.llm.cache.store(assistant_key, self.assistant.id)
 
-    def _update_messages_hash(self) -> None:
+    @staticmethod
+    def thread_msg_to_llm_msg(msg: ThreadMessage) -> LLMMessage:
+        """
+        Convert a ThreadMessage to an LLMMessage
+        """
+        return LLMMessage(
+            content=msg.content[0].text.value,  # type: ignore
+            role=msg.role,
+        )
+
+    def _update_messages_hash(self, msg: ThreadMessage | LLMMessage) -> None:
         """
         Update the hash of messages in the thread with the latest message
         """
         if self.thread is None:
             raise ValueError("Thread is None")
+        if isinstance(msg, ThreadMessage):
+            llm_msg = self.thread_msg_to_llm_msg(msg)
+        else:
+            llm_msg = msg
         hash = self.thread.metadata["hash"]  # type: ignore
-        most_recent_msg = self._get_thread_messages(n=1)[0].content
-        most_recent_role = self._get_thread_messages(n=1)[0].role
+        most_recent_msg = llm_msg.content
+        most_recent_role = llm_msg.role
         hash = update_hash(hash, f"{most_recent_role}:{most_recent_msg}")
         # TODO is this inplace?
         self.thread = self.threads.update(
@@ -139,8 +204,22 @@ class OpenAIAssistant(ChatAgent):
         )
         assert self.thread.metadata["hash"] == hash  # type: ignore
 
-    def _maybe_create_thread(self) -> None:
-        """Create a thread if one does not exist, or retrieve it from cache"""
+    def _maybe_create_thread(self, id: str | None = None) -> None:
+        """Retrieve or create a thread if one does not exist,
+        or retrieve it from cache"""
+        if id is not None:
+            try:
+                self.thread = self.threads.retrieve(thread_id=id)
+            except Exception:
+                logger.warning(
+                    f"""
+                    Could not retrieve thread with id {id}, 
+                    so creating a new one.
+                    """
+                )
+                self.thread = None
+            if self.thread is not None:
+                return
         cached = self._cache_thread_lookup()
         if cached is not None:
             if self.config.use_cached_thread:
@@ -170,8 +249,22 @@ class OpenAIAssistant(ChatAgent):
             )
             assert self.thread.metadata["hash"] == hash_hex  # type: ignore
 
-    def _maybe_create_assistant(self) -> None:
-        """Create an assistant if one does not exist, or retrieve it from cache"""
+    def _maybe_create_assistant(self, id: str | None = None) -> None:
+        """Retrieve or create an assistant if one does not exist,
+        or retrieve it from cache"""
+        if id is not None:
+            try:
+                self.assistant = self.assistants.retrieve(assistant_id=id)
+            except Exception:
+                logger.warning(
+                    f"""
+                    Could not retrieve assistant with id {id}, 
+                    so creating a new one.
+                    """
+                )
+                self.assistant = None
+            if self.assistant is not None:
+                return
         cached = self._cache_assistant_lookup()
         if cached is not None:
             if self.config.use_cached_assistant:
@@ -212,12 +305,12 @@ class OpenAIAssistant(ChatAgent):
         """
         if self.thread is None:
             raise ValueError("Thread is None")
-        self.thread_messages.create(
+        thread_msg = self.thread_messages.create(
             content=msg,
             thread_id=self.thread.id,
             role=role,  # type: ignore
         )
-        self._update_messages_hash()
+        self._update_messages_hash(thread_msg)
 
     def _get_thread_messages(self, n: int = 20) -> List[LLMMessage]:
         """
@@ -334,7 +427,7 @@ class OpenAIAssistant(ChatAgent):
             # IMPORTANT: FIRST get hash key to store result,
             # THEN update hash, since this will now include the response!
             key = self._cache_messages_key()
-            self._update_messages_hash()
+            self._update_messages_hash(messages[0])
             self.llm.cache.store(key, result)
         return result
 
@@ -358,7 +451,7 @@ class OpenAIAssistant(ChatAgent):
             if file_citation := getattr(annotation, "file_citation", None):
                 cited_file = self.client.files.retrieve(file_citation.file_id)
                 citations.append(
-                    f"[{index}] {file_citation.quote} from {cited_file.filename}"
+                    f"[{index}] '{file_citation.quote}',-- from {cited_file.filename}"
                 )
             elif file_path := getattr(annotation, "file_path", None):
                 cited_file = self.client.files.retrieve(file_path.file_id)
