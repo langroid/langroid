@@ -80,6 +80,7 @@ meilisearch-python-sdk = "^2.0.1"
 scrapy = "^2.11.0"
 async-generator = "^1.10"
 lancedb = "^0.3.0"
+pytest-redis = "^3.0.2"
 
 [tool.poetry.extras]
 # install these using `poetry install -E [...]` where [...] is one of the extras below
