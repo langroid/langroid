@@ -5,6 +5,7 @@ on:
     paths:
       - "langroid/**"
       - "tests/**"
+      - ".github/workflows/pytest.yml"
     branches:
       - main  # Replace with your default branch name 
   pull_request:
@@ -15,11 +16,6 @@ jobs:
   pytest:
     runs-on: ubuntu-latest
     services:
-      redis:
-        image: redis
-        ports:
-          - 6379:6379
-        options: --maxclients 10000 # Set max clients if needed
       meilisearch:
         image: getmeili/meilisearch:latest
         ports:
