@@ -1,3 +1,4 @@
+import logging
 import sys
 from contextlib import contextmanager
 from typing import Any, Iterator, Optional
@@ -76,3 +77,18 @@ def silence_stdout() -> Iterator[None]:
     finally:
         sys.stdout = original_stdout
         fnull.close()
+
+
+class SuppressLoggerWarnings:
+    def __init__(self, logger: str | None = None):
+        # If no logger name is given, get the root logger
+        self.logger = logging.getLogger(logger)
+        self.original_level = self.logger.getEffectiveLevel()
+
+    def __enter__(self) -> None:
+        # Set the logging level to 'ERROR' to suppress warnings
+        self.logger.setLevel(logging.ERROR)
+
+    def __exit__(self, exc_type, exc_value, traceback) -> None:  # type: ignore
+        # Reset the logging level to its original value
+        self.logger.setLevel(self.original_level)

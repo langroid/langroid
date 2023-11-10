@@ -179,6 +179,7 @@ class Task:
 
         agent_cls = type(self.agent)
         config_copy = copy.deepcopy(self.agent.config)
+        config_copy.name = f"{config_copy.name}-{i}"
         agent: ChatAgent = agent_cls(config_copy)
         return Task(
             agent,
