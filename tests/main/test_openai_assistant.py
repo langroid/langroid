@@ -156,5 +156,5 @@ def test_openai_assistant_multi(test_settings: Settings):
         system_message="When you get a number, say EVEN if it is even, else say ODD",
     )
     task.add_sub_task(student_task)
-    result = task.run(turns=5)
-    assert "DONE" in result.content
+    result = task.run()
+    assert "RIGHT" in result.content
