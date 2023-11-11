@@ -310,18 +310,25 @@ class OpenAIGPT(LanguageModel):
         # which expects dicts, works as it did before switching to openai v1.x
         if not isinstance(event, dict):
             event = event.model_dump()
+
+        choices = event.get("choices", [{}])
+        if len(choices) == 0:
+            choices = [{}]
         event_args = ""
         event_fn_name = ""
+
+        # The first two events in the stream of Azure OpenAI is useless.
+        # In the 1st: choices list is empty, in the 2nd: the dict delta has null content
         if chat:
-            delta = event["choices"][0]["delta"]
+            delta = choices[0].get("delta", {})
+            event_text = delta.get("content", "")
             if "function_call" in delta and delta["function_call"] is not None:
                 if "name" in delta["function_call"]:
                     event_fn_name = delta["function_call"]["name"]
                 if "arguments" in delta["function_call"]:
                     event_args = delta["function_call"]["arguments"]
-            event_text = delta.get("content", "")
         else:
-            event_text = event["choices"][0]["text"]
+            event_text = choices[0]["text"]
         if event_text:
             completion += event_text
             if not is_async:
@@ -338,7 +345,7 @@ class OpenAIGPT(LanguageModel):
             if not is_async:
                 sys.stdout.write(Colors().GREEN + event_args)
                 sys.stdout.flush()
-        if event["choices"][0].get("finish_reason", "") in ["stop", "function_call"]:
+        if choices[0].get("finish_reason", "") in ["stop", "function_call"]:
             # for function_call, finish_reason does not necessarily
             # contain "function_call" as mentioned in the docs.
             # So we check for "stop" or "function_call" here.
