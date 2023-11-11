@@ -6,8 +6,18 @@ from langroid.agent.openai_assistant import (
     OpenAIAssistantConfig,
 )
 from langroid.agent.task import Task
+from langroid.agent.tool_message import ToolMessage
 from langroid.language_models import OpenAIChatModel, OpenAIGPTConfig
 from langroid.utils.configuration import Settings, set_global
+
+
+class SquareTool(ToolMessage):
+    request = "square"
+    purpose = "to find the square of a number"
+    num: int
+
+    def handle(self) -> str:
+        return str(self.num**2)
 
 
 def test_openai_assistant(test_settings: Settings):
@@ -38,6 +48,38 @@ def test_openai_assistant(test_settings: Settings):
     )
     answer = task.run("What is the capital of China?")
     assert "Beijing" in answer.content
+
+
+def test_openai_assistant_fn_tool(test_settings: Settings):
+    """Test function calling"""
+
+    set_global(test_settings)
+    cfg = OpenAIAssistantConfig(
+        use_cached_assistant=False,
+        use_cached_thread=False,
+        use_functions_api=True,
+        system_message="""
+        The user will give you a number to square. 
+        Use the `square` function to square it.
+        When you receive the answer, say DONE.
+        """,
+    )
+    agent = OpenAIAssistant(cfg)
+    agent.enable_message(SquareTool)
+    response = agent.llm_response("what is the square of 5?")
+    assert response.function_call.name == "square"
+
+    # Within a task loop
+    cfg.name = "SquaringBot"
+    agent = OpenAIAssistant(cfg)
+    agent.enable_message(SquareTool)
+    task = Task(
+        agent,
+        name="SquaringBot",
+        interactive=False,
+    )
+    result = task.run("what is the square of 5?")
+    assert "25" in result.content
 
 
 def test_openai_assistant_retrieval(test_settings: Settings):

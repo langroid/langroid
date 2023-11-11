@@ -4,7 +4,7 @@ import asyncio
 import logging
 import time
 from enum import Enum
-from typing import Any, Dict, List, Optional, no_type_check
+from typing import Any, Dict, List, Optional, Type, cast, no_type_check
 
 from openai.types.beta import Assistant, Thread
 from openai.types.beta.threads import Run, ThreadMessage
@@ -12,10 +12,10 @@ from pydantic import BaseModel
 from rich import print
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
-from langroid.agent.chat_document import ChatDocMetaData, ChatDocument
-from langroid.language_models.base import LLMMessage, Role
+from langroid.agent.chat_document import ChatDocument
+from langroid.agent.tool_message import ToolMessage
+from langroid.language_models.base import LLMFunctionCall, LLMMessage, LLMResponse, Role
 from langroid.language_models.openai_gpt import OpenAIGPT, OpenAIGPTConfig
-from langroid.mytypes import Entity
 from langroid.utils.configuration import settings
 from langroid.utils.system import generate_user_id, update_hash
 
@@ -36,6 +36,24 @@ class AssitantTool(BaseModel):
         d = super().dict()
         d["type"] = d["type"].value
         return d
+
+
+class AssistantToolCall(BaseModel):
+    id: str
+    type: ToolType
+    function: LLMFunctionCall
+
+
+class RunStatus(str, Enum):
+    QUEUED = "queued"
+    IN_PROGRESS = "in_progress"
+    COMPLETED = "completed"
+    REQUIRES_ACTION = "requires_action"
+    EXPIRED = "expired"
+    CANCELLING = "cancelling"
+    CANCELLED = "cancelled"
+    FAILED = "failed"
+    TIMEOUT = "timeout"
 
 
 class OpenAIAssistantConfig(ChatAgentConfig):
@@ -113,6 +131,50 @@ class OpenAIAssistant(ChatAgent):
         self.assistants.update(
             self.assistant.id,
             tools=[tool.dct() for tool in self.config.tools],  # type: ignore
+        )
+
+    def enable_message(
+        self,
+        message_class: Optional[Type[ToolMessage]],
+        use: bool = True,
+        handle: bool = True,
+        force: bool = False,
+        require_recipient: bool = False,
+    ) -> None:
+        """Override ChatAgent's method: extract the function-related args"""
+        super().enable_message(
+            message_class,
+            use=use,
+            handle=handle,
+            force=force,
+            require_recipient=require_recipient,
+        )
+        if message_class is None or not use:
+            # no specific msg class, or
+            # we are not enabling USAGE/GENERATION of this tool/fn,
+            # then there's no need to attach the fn to the assistant
+            # (HANDLING the fn will still work via self.agent_response)
+            return
+        functions, _ = self._function_args()
+        if functions is None:
+            return
+        # add the functions to the assistant
+        # 1. retrieve assistant
+        if self.assistant is None:
+            raise ValueError("Assistant is None")
+        tools = self.assistant.tools
+        tools.extend(
+            [
+                {
+                    "type": "function",  # type: ignore
+                    "function": f.dict(),
+                }
+                for f in functions
+            ]
+        )
+        self.assistants.update(
+            self.assistant.id,
+            tools=tools,  # type: ignore
         )
 
     def _cache_thread_key(self) -> str:
@@ -341,41 +403,45 @@ class OpenAIAssistant(ChatAgent):
             for m in thread_msgs
         ]
 
-    def _wait_for_run_status(
-        self, status: str = "completed", timeout: int = 30
-    ) -> bool:
-        """Poll the run status until it has specified status, or timeout."""
+    def _wait_for_run(
+        self,
+        until_not: List[RunStatus] = [RunStatus.QUEUED, RunStatus.IN_PROGRESS],
+        until: List[RunStatus] = [],
+        timeout: int = 30,
+    ) -> RunStatus:
+        """
+        Poll the run until it either:
+        - EXITs the statuses specified in `until_not`, or
+        - ENTERs the statuses specified in `until`, or
+        """
         if self.thread is None or self.run is None:
             raise ValueError("Thread or Run is None")
         while True:
-            run = self.runs.retrieve(
-                thread_id=self.thread.id,
-                run_id=self.run.id,
-            )
-            if run.status == status:
-                return True
+            run = self._get_run()
+            if run.status not in until_not or run.status in until:
+                return cast(RunStatus, run.status)
             time.sleep(1)
             timeout -= 1
             if timeout <= 0:
-                return False
+                return cast(RunStatus, RunStatus.TIMEOUT)
 
-    async def _wait_for_run_status_async(
-        self, status: str = "completed", timeout: int = 30
-    ) -> bool:
-        """Async Poll the run status until it has specified status, or timeout."""
+    async def _wait_for_run_async(
+        self,
+        until_not: List[RunStatus] = [RunStatus.QUEUED, RunStatus.IN_PROGRESS],
+        until: List[RunStatus] = [],
+        timeout: int = 30,
+    ) -> RunStatus:
+        """Async version of _wait_for_run"""
         if self.thread is None or self.run is None:
             raise ValueError("Thread or Run is None")
         while True:
-            run = self.runs.retrieve(
-                thread_id=self.thread.id,
-                run_id=self.run.id,
-            )
-            if run.status == status:
-                return True
+            run = self._get_run()
+            if run.status not in until_not or run.status in until:
+                return cast(RunStatus, run.status)
             await asyncio.sleep(1)
             timeout -= 1
             if timeout <= 0:
-                return False
+                return cast(RunStatus, RunStatus.TIMEOUT)
 
     def set_system_message(self, msg: str) -> None:
         """
@@ -400,36 +466,91 @@ class OpenAIAssistant(ChatAgent):
             assistant_id=self.assistant.id,
         )
 
-    def _run_result(self) -> str:
+    def _run_result(self) -> LLMResponse:
         """Result from run completed on the thread."""
-        done = self._wait_for_run_status(
-            status="completed",
+        status = self._wait_for_run(
             timeout=self.config.timeout,
         )
-        return self._process_run_result(done)
+        return self._process_run_result(status)
 
-    async def _run_result_async(self) -> str:
+    async def _run_result_async(self) -> LLMResponse:
         """(Async) Result from run completed on the thread."""
-        done = await self._wait_for_run_status_async(
-            status="completed",
+        status = await self._wait_for_run_async(
             timeout=self.config.timeout,
         )
-        return self._process_run_result(done)
+        return self._process_run_result(status)
 
-    def _process_run_result(self, done: bool) -> str:
+    def _process_run_result(self, status: RunStatus) -> LLMResponse:
         """Process the result of the run."""
-        if not done:
+        function_call: LLMFunctionCall | None = None
+        response = ""
+        tool_id = ""
+        if status == RunStatus.TIMEOUT:
             logger.warning("Timeout waiting for run to complete, return empty string")
-            result = ""
-        else:
+        elif status == RunStatus.COMPLETED:
             messages = self._get_thread_messages(n=1)
-            result = messages[0].content
+            response = messages[0].content
             # IMPORTANT: FIRST get hash key to store result,
             # THEN update hash, since this will now include the response!
             key = self._cache_messages_key()
             self._update_messages_hash(messages[0])
-            self.llm.cache.store(key, result)
-        return result
+            self.llm.cache.store(key, response)
+        elif status == RunStatus.REQUIRES_ACTION:
+            tool_calls = self._parse_run_required_action()
+            # pick the FIRST tool call with type "function"
+            tool_call_fn = [t for t in tool_calls if t.type == ToolType.FUNCTION][0]
+            # TODO Handling only first tool/fn call for now
+            # revisit later: multi-tools affects the task.run() loop.
+            function_call = tool_call_fn.function
+            tool_id = tool_call_fn.id
+        return LLMResponse(
+            message=response,
+            tool_id=tool_id,
+            function_call=function_call,
+            usage=None,  # TODO
+            cached=False,  # TODO - revisit when able to insert Assistant responses
+        )
+
+    def _parse_run_required_action(self) -> List[AssistantToolCall]:
+        """
+        Parse the required_action field of the run, i.e. get the list of tool calls.
+        Currently only tool calls are supported.
+        """
+        # see https://platform.openai.com/docs/assistants/tools/function-calling
+        run = self._get_run()
+        if run.status != RunStatus.REQUIRES_ACTION:  # type: ignore
+            return []
+
+        if (action := run.required_action.type) != "submit_tool_outputs":
+            raise ValueError(f"Unexpected required_action type {action}")
+        tool_calls = run.required_action.submit_tool_outputs.tool_calls
+        return [
+            AssistantToolCall(
+                id=tool_call.id,
+                type=ToolType(tool_call.type),
+                function=LLMFunctionCall.from_dict(tool_call.function.model_dump()),
+            )
+            for tool_call in tool_calls
+        ]
+
+    def _submit_tool_outputs(self, msg: LLMMessage) -> None:
+        """
+        Submit the tool (fn) outputs to the run/thread
+        """
+        if self.run is None or self.thread is None:
+            raise ValueError("Run or Thread is None")
+        tool_outputs = [
+            {
+                "tool_call_id": msg.tool_id,
+                "output": msg.content,
+            }
+        ]
+        # run enters queued, in_progress state after this
+        self.runs.submit_tool_outputs(
+            thread_id=self.thread.id,
+            run_id=self.run.id,
+            tool_outputs=tool_outputs,  # type: ignore
+        )
 
     def process_citations(self, thread_msg: ThreadMessage) -> None:
         """
@@ -479,12 +600,16 @@ class OpenAIAssistant(ChatAgent):
         Returns:
             Optional[ChatDocument]: LLM response
         """
+        is_tool_output = False
         if message is not None:
-            message_str = (
-                message.content if (isinstance(message, ChatDocument)) else message
-            )
-            # add message to the thread
-            self._add_thread_message(message_str, role=Role.USER)
+            llm_msg = ChatDocument.to_LLMMessage(message)  # type: ignore
+            if llm_msg.role == Role.FUNCTION:
+                is_tool_output = True
+                # submit tool/fn result to the thread/run
+                self._submit_tool_outputs(llm_msg)
+            else:
+                # add message to the thread
+                self._add_thread_message(llm_msg.content, role=Role.USER)
 
         # When message is None, the thread may have no user msgs,
         # Note: system message is NOT placed in the thread by the OpenAI system.
@@ -504,31 +629,39 @@ class OpenAIAssistant(ChatAgent):
         else:
             # create a run for this assistant on this thread,
             # i.e. actually "run"
-            self._start_run()
-            result = self._run_result()
+            if not is_tool_output:
+                # DO NOT start a run if we submitted tool outputs,
+                # since submission of tool outputs resumes a run from
+                # status = "requires_action"
+                self._start_run()
+            response = self._run_result()
+
+        # code from ChatAgent.llm_response_messages
+        if response.function_call is not None:
+            response_str = str(response.function_call)
+        else:
+            response_str = response.message
         cache_str = "[red](cached)[/red]" if cached else ""
         if not settings.quiet:
-            print(f"{cache_str}[green]" + result + "[/green]")
-        return ChatDocument(
-            content=result,
-            metadata=ChatDocMetaData(
-                source=Entity.LLM,
-                sender=Entity.LLM,
-                sender_name=self.config.name,
-            ),
-        )
+            print(f"{cache_str}[green]" + response_str + "[/green]")
+        return ChatDocument.from_LLMResponse(response, displayed=False)
 
     async def llm_response_async(
         self, message: Optional[str | ChatDocument] = None
     ) -> Optional[ChatDocument]:
-        """Async version of llm_response"""
-
+        """
+        Async version of llm_response.
+        """
+        is_tool_output = False
         if message is not None:
-            message_str = (
-                message.content if (isinstance(message, ChatDocument)) else message
-            )
-            # add message to the thread
-            self._add_thread_message(message_str, role=Role.USER)
+            llm_msg = ChatDocument.to_LLMMessage(message)  # type: ignore
+            if llm_msg.role == Role.FUNCTION:
+                is_tool_output = True
+                # submit tool/fn result to the thread/run
+                self._submit_tool_outputs(llm_msg)
+            else:
+                # add message to the thread
+                self._add_thread_message(llm_msg.content, role=Role.USER)
 
         # When message is None, the thread may have no user msgs,
         # Note: system message is NOT placed in the thread by the OpenAI system.
@@ -548,16 +681,19 @@ class OpenAIAssistant(ChatAgent):
         else:
             # create a run for this assistant on this thread,
             # i.e. actually "run"
-            self._start_run()
-            result = await self._run_result_async()
+            if not is_tool_output:
+                # DO NOT start a run if we submitted tool outputs,
+                # since submission of tool outputs resumes a run from
+                # status = "requires_action"
+                self._start_run()
+            response = await self._run_result_async()
+
+        # code from ChatAgent.llm_response_messages
+        if response.function_call is not None:
+            response_str = str(response.function_call)
+        else:
+            response_str = response.message
         cache_str = "[red](cached)[/red]" if cached else ""
         if not settings.quiet:
-            print(f"{cache_str}[green]" + result + "[/green]")
-        return ChatDocument(
-            content=result,
-            metadata=ChatDocMetaData(
-                source=Entity.LLM,
-                sender=Entity.LLM,
-                sender_name=self.config.name,
-            ),
-        )
+            print(f"{cache_str}[green]" + response_str + "[/green]")
+        return ChatDocument.from_LLMResponse(response, displayed=False)

@@ -25,6 +25,7 @@ class ChatDocAttachment(BaseModel):
 class ChatDocMetaData(DocMetaData):
     parent: Optional["ChatDocument"] = None
     sender: Entity
+    tool_id: str = ""  # used by OpenAIAssistant
     # when result returns to parent, pretend message is from this entity
     parent_responder: None | Entity = None
     block: None | Entity = None
@@ -128,6 +129,7 @@ class ChatDocument(Document):
             content=message,
             function_call=response.function_call,
             metadata=ChatDocMetaData(
+                tool_id=response.tool_id,
                 source=Entity.LLM,
                 sender=Entity.LLM,
                 usage=response.usage,
@@ -168,6 +170,7 @@ class ChatDocument(Document):
         sender_name = None
         sender_role = Role.USER
         fun_call = None
+        tool_id = ""
         if isinstance(message, ChatDocument):
             content = message.content
             fun_call = message.function_call
@@ -180,6 +183,7 @@ class ChatDocument(Document):
             ):
                 sender_role = Role.FUNCTION
                 sender_name = message.metadata.parent.function_call.name
+                tool_id = message.metadata.tool_id
             elif message.metadata.sender == Entity.LLM:
                 sender_role = Role.ASSISTANT
         else:
@@ -188,6 +192,7 @@ class ChatDocument(Document):
 
         return LLMMessage(
             role=sender_role,
+            tool_id=tool_id,
             content=content,
             function_call=fun_call,
             name=sender_name,

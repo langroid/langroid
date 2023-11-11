@@ -894,14 +894,8 @@ class OpenAIGPT(LanguageModel):
         if message.get("function_call") is None:
             fun_call = None
         else:
-            fun_call = LLMFunctionCall(name=message["function_call"]["name"])
             try:
-                fun_args_str = message["function_call"]["arguments"]
-                # sometimes may be malformed with invalid indents,
-                # so we try to be safe by removing newlines.
-                fun_args_str = fun_args_str.replace("\n", "").strip()
-                fun_args = ast.literal_eval(fun_args_str)
-                fun_call.arguments = fun_args
+                fun_call = LLMFunctionCall.from_dict(message["function_call"])
             except (ValueError, SyntaxError):
                 logging.warning(
                     "Could not parse function arguments: "
