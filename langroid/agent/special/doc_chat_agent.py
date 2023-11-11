@@ -822,8 +822,7 @@ class DocChatAgent(ChatAgent):
         task = Task(
             agent,
             name="Relevance-Extractor",
-            default_human_response="",  # eliminate human response
-            only_user_quits_root=False,  # allow agent_response to quit via "DONE <msg>"
+            interactive=False,
         )
 
         extracts = run_batch_tasks(

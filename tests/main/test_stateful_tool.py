@@ -55,8 +55,7 @@ def test_stateful_tool(test_settings: Settings, fn_api: bool):
     number_game_agent.enable_message(IncrementTool)
     task = Task(
         number_game_agent,
-        default_human_response="",
-        only_user_quits_root=False,
+        interactive=False,
         system_message="""
             I have a number in mind. Your job is to keep incrementing
             it by 5 using the `increment` tool, and I will tell you the result.

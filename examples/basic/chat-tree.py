@@ -92,8 +92,7 @@ def chat() -> None:
     main_task = Task(
         main_agent,
         name="Main",
-        default_human_response="",
-        only_user_quits_root=False,
+        interactive=False,
         system_message="""
         You will receive two types of messages, to which you will respond as follows:
         

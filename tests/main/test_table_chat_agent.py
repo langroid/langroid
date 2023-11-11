@@ -86,8 +86,7 @@ def _test_table_chat_agent(
     task = Task(
         agent,
         name="TableChatAgent",
-        default_human_response="",  # avoid waiting for human response
-        only_user_quits_root=False,
+        interactive=False,
         llm_delegate=True,
         single_round=False,
     )

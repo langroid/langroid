@@ -40,8 +40,7 @@ def test_inter_agent_chat(test_settings: Settings, helper_human_response: str):
         agent,
         llm_delegate=True,
         single_round=False,
-        default_human_response="",
-        only_user_quits_root=False,
+        interactive=False,
     )
     agent_helper = ChatAgent(cfg2)
     task_helper = Task(
@@ -116,7 +115,7 @@ def test_multi_agent(test_settings: Settings):
         master,
         llm_delegate=True,
         single_round=False,
-        default_human_response="",
+        interactive=False,
         system_message=f"""
                 Your job is to ask me EXACTLY this series of exponential questions:
                 {EXPONENTIALS}
@@ -130,7 +129,6 @@ def test_multi_agent(test_settings: Settings):
                 e.g. "DONE: 243 512 729 125".
                 """,
         user_message="Start by asking me an exponential question.",
-        only_user_quits_root=False,
     )
 
     # For a given exponential computation, plans a sequence of multiplications.

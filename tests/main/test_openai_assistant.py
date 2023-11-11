@@ -135,8 +135,7 @@ def test_openai_assistant_multi(test_settings: Settings):
     # wrap Agent in a Task to run interactive loop with user (or other agents)
     task = Task(
         agent,
-        default_human_response="",
-        only_user_quits_root=False,
+        interactive=False,
         system_message="""
         Send a number. Your student will responde EVEN or ODD. 
         You say RIGHT or WRONG, then send another number, and so on.
