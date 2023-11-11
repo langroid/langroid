@@ -284,14 +284,17 @@ class Agent(ABC):
             console.print(f"[red]{self.indent}", end="")
             print(f"[red]Agent: {results}")
         sender_name = self.config.name
+        tool_id = ""
         if isinstance(msg, ChatDocument) and msg.function_call is not None:
             # if result was from handling an LLM `function_call`,
             # set sender_name to "request", i.e. name of the function_call
             sender_name = msg.function_call.name
+            tool_id = msg.metadata.tool_id
 
         return ChatDocument(
             content=results,
             metadata=ChatDocMetaData(
+                tool_id=tool_id,
                 source=Entity.AGENT,
                 sender=Entity.AGENT,
                 sender_name=sender_name,

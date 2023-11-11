@@ -62,6 +62,15 @@ jobs:
         
         poetry install
 
+    - name: Dump dependencies to file
+      run: pip freeze > requirements_github.txt
+
+    - name: Upload dependencies file
+      uses: actions/upload-artifact@v3
+      with:
+        name: github-dependencies
+        path: requirements_github.txt
+
     - name: Run tests with coverage
       run: |
         poetry run coverage run --source=langroid -m pytest tests/main

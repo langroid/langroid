@@ -198,8 +198,7 @@ from langroid.agent.task import Task
 main_task = Task(
     main_agent,
     name="Main",
-    default_human_response="", #(1)!
-    only_user_quits_root=False, #(2)!
+    interactive=False, #(1)!
     system_message="""
           You will receive two types of messages, to which you will respond as follows:
           
@@ -218,8 +217,7 @@ main_task = Task(
 )
 ```
 
-1. Don't wait for user input in each turn; 
-2. Allow LLM to quit the task when it is done.
+1. Non-interactive: don't wait for user input in each turn 
 
 There are a couple of points to highlight about the `system_message` 
 value in this task definition:

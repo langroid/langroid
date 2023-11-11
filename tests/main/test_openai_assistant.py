@@ -1,6 +1,23 @@
-from langroid.agent.openai_assistant import OpenAIAssistant, OpenAIAssistantConfig
+import tempfile
+
+from langroid.agent.openai_assistant import (
+    AssitantTool,
+    OpenAIAssistant,
+    OpenAIAssistantConfig,
+)
 from langroid.agent.task import Task
+from langroid.agent.tool_message import ToolMessage
+from langroid.language_models import OpenAIChatModel, OpenAIGPTConfig
 from langroid.utils.configuration import Settings, set_global
+
+
+class SquareTool(ToolMessage):
+    request = "square"
+    purpose = "to find the square of a number"
+    num: int
+
+    def handle(self) -> str:
+        return str(self.num**2)
 
 
 def test_openai_assistant(test_settings: Settings):
@@ -33,6 +50,75 @@ def test_openai_assistant(test_settings: Settings):
     assert "Beijing" in answer.content
 
 
+def test_openai_assistant_fn_tool(test_settings: Settings):
+    """Test function calling"""
+
+    set_global(test_settings)
+    cfg = OpenAIAssistantConfig(
+        use_cached_assistant=False,
+        use_cached_thread=False,
+        use_functions_api=True,
+        system_message="""
+        The user will give you a number to square. 
+        Use the `square` function to square it.
+        When you receive the answer, say DONE.
+        """,
+    )
+    agent = OpenAIAssistant(cfg)
+    agent.enable_message(SquareTool)
+    response = agent.llm_response("what is the square of 5?")
+    assert response.function_call.name == "square"
+
+    # Within a task loop
+    cfg.name = "SquaringBot"
+    agent = OpenAIAssistant(cfg)
+    agent.enable_message(SquareTool)
+    task = Task(
+        agent,
+        name="SquaringBot",
+        interactive=False,
+    )
+    result = task.run("what is the square of 5?")
+    assert "25" in result.content
+
+
+def test_openai_assistant_retrieval(test_settings: Settings):
+    """
+    Test that Assistant can answer question
+    based on retrieval from file.
+    """
+    set_global(test_settings)
+    cfg = OpenAIAssistantConfig(
+        llm=OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT4_TURBO),
+        use_cached_assistant=False,
+        use_cached_thread=False,
+        system_message="Answer questions based on the provided document.",
+    )
+    agent = OpenAIAssistant(cfg)
+
+    # create temp file with in-code text content
+    text = """
+    Vlad Nabrosky was born in Russia. He then emigrated to the United States,
+    where he wrote the novel Lomita. He was a professor at Purnell University.
+    """
+    # open a temp file and write text to it
+    with tempfile.NamedTemporaryFile(mode="w", delete=False) as f:
+        f.write(text)
+        f.close()
+        # get the filename
+        filename = f.name
+
+    # must enable retrieval first, then add file
+    agent.add_assistant_tools([AssitantTool(type="retrieval")])
+    agent.add_assistant_files([filename])
+
+    response = agent.llm_response("where was Vlad Nabrosky born?")
+    assert "Russia" in response.content
+
+    response = agent.llm_response("what novel did he write?")
+    assert "Lomita" in response.content
+
+
 def test_openai_assistant_multi(test_settings: Settings):
     """
     Test task delegation with OpenAIAssistant
@@ -49,11 +135,11 @@ def test_openai_assistant_multi(test_settings: Settings):
     # wrap Agent in a Task to run interactive loop with user (or other agents)
     task = Task(
         agent,
-        default_human_response="",
-        only_user_quits_root=False,
+        interactive=False,
         system_message="""
-        Send a number. Your student will responde EVEN or ODD. 
+        Send a number. Your student will respond EVEN or ODD. 
         You say RIGHT or WRONG, then send another number, and so on.
+        After getting 2 answers, say DONE.
         """,
     )
 
@@ -65,9 +151,10 @@ def test_openai_assistant_multi(test_settings: Settings):
     student_agent = OpenAIAssistant(cfg)
     student_task = Task(
         student_agent,
-        default_human_response="",
+        interactive=False,
         single_round=True,
         system_message="When you get a number, say EVEN if it is even, else say ODD",
     )
     task.add_sub_task(student_task)
-    task.run(turns=5)
+    result = task.run(turns=5)
+    assert "DONE" in result.content

@@ -5,6 +5,7 @@ import sys
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple, Type, Union, no_type_check
 
+from httpx import Timeout
 from openai import AsyncOpenAI, OpenAI
 from pydantic import BaseModel
 from rich import print
@@ -214,11 +215,13 @@ class OpenAIGPT(LanguageModel):
             api_key=self.api_key,
             base_url=self.api_base,
             organization=self.config.organization,
+            timeout=Timeout(self.config.timeout),
         )
         self.async_client = AsyncOpenAI(
             api_key=self.api_key,
             organization=self.config.organization,
             base_url=self.api_base,
+            timeout=Timeout(self.config.timeout),
         )
 
         self.cache: MomentoCache | RedisCache
@@ -580,7 +583,6 @@ class OpenAIGPT(LanguageModel):
             **{key_name: self.config.completion_model},
             prompt=prompt,
             max_tokens=max_tokens,  # for output/completion
-            timeout=self.config.timeout,
             temperature=self.config.temperature,
             echo=False,
             stream=self.get_stream(),
@@ -634,7 +636,6 @@ class OpenAIGPT(LanguageModel):
                 model=self.config.chat_model,
                 messages=[m.api_dict() for m in messages],
                 max_tokens=max_tokens,
-                timeout=self.config.timeout,
                 temperature=self.config.temperature,
                 stream=False,
             )
@@ -670,7 +671,6 @@ class OpenAIGPT(LanguageModel):
                 model=self.config.completion_model,
                 prompt=prompt,
                 max_tokens=max_tokens,
-                timeout=self.config.timeout,
                 temperature=self.config.temperature,
                 echo=False,
                 stream=False,
@@ -842,7 +842,6 @@ class OpenAIGPT(LanguageModel):
             n=1,
             stop=None,
             temperature=self.config.temperature,
-            timeout=self.config.timeout,
             stream=self.get_stream(),
         )
         # only include functions-related args if functions are provided
@@ -895,14 +894,8 @@ class OpenAIGPT(LanguageModel):
         if message.get("function_call") is None:
             fun_call = None
         else:
-            fun_call = LLMFunctionCall(name=message["function_call"]["name"])
             try:
-                fun_args_str = message["function_call"]["arguments"]
-                # sometimes may be malformed with invalid indents,
-                # so we try to be safe by removing newlines.
-                fun_args_str = fun_args_str.replace("\n", "").strip()
-                fun_args = ast.literal_eval(fun_args_str)
-                fun_call.arguments = fun_args
+                fun_call = LLMFunctionCall.from_dict(message["function_call"])
             except (ValueError, SyntaxError):
                 logging.warning(
                     "Could not parse function arguments: "

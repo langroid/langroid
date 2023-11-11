@@ -486,7 +486,9 @@ class ChatAgent(Agent):
 
     @no_type_check
     def _prep_llm_messages(
-        self, message: Optional[str | ChatDocument] = None
+        self,
+        message: Optional[str | ChatDocument] = None,
+        truncate: bool = True,
     ) -> Tuple[List[LLMMessage], int]:
         """
         Prepare messages to be sent to self.llm_response_messages,
@@ -538,7 +540,8 @@ class ChatAgent(Agent):
         hist = self.message_history
         output_len = self.config.llm.max_output_tokens
         if (
-            self.chat_num_tokens(hist)
+            truncate
+            and self.chat_num_tokens(hist)
             > self.llm.chat_context_length() - self.config.llm.max_output_tokens
         ):
             # chat + output > max context length,
@@ -604,6 +607,18 @@ class ChatAgent(Agent):
             )
         return hist, output_len
 
+    def _function_args(
+        self,
+    ) -> Tuple[Optional[List[LLMFunctionSpec]], str | Dict[str, str]]:
+        functions: Optional[List[LLMFunctionSpec]] = None
+        fun_call: str | Dict[str, str] = "none"
+        if self.config.use_functions_api and len(self.llm_functions_usable) > 0:
+            functions = [self.llm_functions_map[f] for f in self.llm_functions_usable]
+            fun_call = (
+                "auto" if self.llm_function_force is None else self.llm_function_force
+            )
+        return functions, fun_call
+
     def llm_response_messages(
         self, messages: List[LLMMessage], output_len: Optional[int] = None
     ) -> ChatDocument:
@@ -625,17 +640,7 @@ class ChatAgent(Agent):
                 stack.enter_context(cm)
             if self.llm.get_stream() and not settings.quiet:
                 console.print(f"[green]{self.indent}", end="")
-            functions: Optional[List[LLMFunctionSpec]] = None
-            fun_call: str | Dict[str, str] = "none"
-            if self.config.use_functions_api and len(self.llm_functions_usable) > 0:
-                functions = [
-                    self.llm_functions_map[f] for f in self.llm_functions_usable
-                ]
-                fun_call = (
-                    "auto"
-                    if self.llm_function_force is None
-                    else self.llm_function_force
-                )
+            functions, fun_call = self._function_args()
             assert self.llm is not None
             response = self.llm.chat(
                 messages,
