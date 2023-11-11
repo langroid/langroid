@@ -116,7 +116,7 @@ class Task:
         self.interactive = interactive
         self.message_history_idx = -1
         if not interactive:
-            self.default_human_response = ""
+            default_human_response = ""
             only_user_quits_root = False
         if default_human_response is not None:
             self.agent.default_human_response = default_human_response

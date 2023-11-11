@@ -21,6 +21,7 @@ from langroid.agent.openai_assistant import (
 )
 from langroid.parsing.url_loader import URLLoader
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
+from langroid.agent.tools.recipient_tool import RecipientTool
 from langroid.agent.task import Task
 from langroid.utils.configuration import set_global, Settings
 from langroid.utils.logging import setup_colored_logging
@@ -62,6 +63,16 @@ def chat(opts: CLIOptions) -> None:
         """,
     )
     planner_agent = OpenAIAssistant(planner_cfg)
+    planner_agent.enable_message(RecipientTool)
+
+    retriever_cfg = OpenAIAssistantConfig(
+        llm=OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT4_TURBO),
+        use_cached_assistant=False,
+        use_cached_thread=False,
+        system_message="Answer questions based on the documents provided.",
+    )
+
+    retriever_agent = OpenAIAssistant(retriever_cfg)
 
     print("[blue]Welcome to the retrieval chatbot!")
     path = Prompt.ask("Enter a URL or file path")
@@ -74,17 +85,25 @@ def chat(opts: CLIOptions) -> None:
             f.close()
             # get the filename
             path = f.name
-    planner_agent.add_assistant_tools([AssitantTool(type="retrieval")])
-    planner_agent.add_assistant_files([path])
+    retriever_agent.add_assistant_tools([AssitantTool(type="retrieval")])
+    retriever_agent.add_assistant_files([path])
 
     print("[cyan]Enter x or q to quit")
 
-    task = Task(
+    planner_task = Task(
         planner_agent,
-        llm_delegate=False,
+        name="Planner",
+        llm_delegate=True,
         single_round=False,
     )
-    task.run("Please help me with questions about the document I provided")
+    retriever_task = Task(
+        retriever_agent,
+        name="Retriever",
+        llm_delegate=False,
+        single_round=True,
+    )
+    planner_task.add_sub_task(retriever_task)
+    planner_task.run()
 
 
 if __name__ == "__main__":
