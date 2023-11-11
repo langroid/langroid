@@ -32,7 +32,7 @@ def pytest_addoption(parser) -> None:
     )
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def test_settings(request) -> Settings:
     return Settings(
         debug=request.config.getoption("--show"),

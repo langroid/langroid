@@ -16,7 +16,7 @@ from langroid.agent.chat_document import ChatDocMetaData, ChatDocument
 from langroid.language_models.base import LLMMessage, Role
 from langroid.language_models.openai_gpt import OpenAIGPT, OpenAIGPTConfig
 from langroid.mytypes import Entity
-from langroid.utils.configuration import Settings, set_global, settings
+from langroid.utils.configuration import settings
 from langroid.utils.system import generate_user_id, update_hash
 
 logger = logging.getLogger(__name__)
@@ -86,7 +86,7 @@ class OpenAIAssistant(ChatAgent):
         self.add_assistant_files(self.config.files)
         self.add_assistant_tools(self.config.tools)
         # TODO remove this once OpenAI supports storing Assistant msgs in threads
-        set_global(Settings(cache=False))
+        settings.cache = False
 
     def add_assistant_files(self, files: List[str]) -> None:
         """Add file_ids to assistant"""
@@ -507,7 +507,8 @@ class OpenAIAssistant(ChatAgent):
             self._start_run()
             result = self._run_result()
         cache_str = "[red](cached)[/red]" if cached else ""
-        print(f"{cache_str}[green]" + result + "[/green]")
+        if not settings.quiet:
+            print(f"{cache_str}[green]" + result + "[/green]")
         return ChatDocument(
             content=result,
             metadata=ChatDocMetaData(
@@ -550,7 +551,8 @@ class OpenAIAssistant(ChatAgent):
             self._start_run()
             result = await self._run_result_async()
         cache_str = "[red](cached)[/red]" if cached else ""
-        print(f"{cache_str}[green]" + result + "[/green]")
+        if not settings.quiet:
+            print(f"{cache_str}[green]" + result + "[/green]")
         return ChatDocument(
             content=result,
             metadata=ChatDocMetaData(
