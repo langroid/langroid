@@ -1,5 +1,7 @@
 import tempfile
 
+import pytest
+
 from langroid.agent.openai_assistant import (
     AssitantTool,
     OpenAIAssistant,
@@ -83,7 +85,8 @@ def test_openai_assistant_fn_tool(test_settings: Settings):
     assert "25" in result.content
 
 
-def test_openai_assistant_recipient_tool(test_settings: Settings):
+@pytest.mark.parametrize("fn_api", [False, True])
+def test_openai_assistant_recipient_tool(test_settings: Settings, fn_api: bool):
     """Test special case of fn-calling: RecipientTool"""
 
     set_global(test_settings)
@@ -91,7 +94,8 @@ def test_openai_assistant_recipient_tool(test_settings: Settings):
         name="Main",
         use_cached_assistant=False,
         use_cached_thread=False,
-        use_functions_api=True,
+        use_functions_api=fn_api,
+        use_tools=not fn_api,
         system_message="""
         The user will give you a number. You need to double it, but don't know how,
         so you send it to the "Doubler" to double it. 
