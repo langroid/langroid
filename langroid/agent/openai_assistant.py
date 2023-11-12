@@ -92,6 +92,8 @@ class OpenAIAssistant(ChatAgent):
         self.threads = self.llm.client.beta.threads
         self.thread_messages = self.llm.client.beta.threads.messages
         self.assistants = self.llm.client.beta.assistants
+        # which tool_ids are awaiting output submissions
+        self.pending_tool_ids: List[str] = []
 
         self.thread: Thread | None = None
         self.assistant: Assistant | None = None
@@ -155,11 +157,15 @@ class OpenAIAssistant(ChatAgent):
             # then there's no need to attach the fn to the assistant
             # (HANDLING the fn will still work via self.agent_response)
             return
+        if self.config.use_tools:
+            sys_msg = self._create_system_and_tools_message()
+            self.set_system_message(sys_msg.content)
+        if not self.config.use_functions_api:
+            return
         functions, _ = self._function_args()
         if functions is None:
             return
-        # add the functions to the assistant
-        # 1. retrieve assistant
+        # add the functions to the assistant:
         if self.assistant is None:
             raise ValueError("Assistant is None")
         tools = self.assistant.tools
@@ -603,10 +609,14 @@ class OpenAIAssistant(ChatAgent):
         is_tool_output = False
         if message is not None:
             llm_msg = ChatDocument.to_LLMMessage(message)  # type: ignore
-            if llm_msg.role == Role.FUNCTION:
+            tool_id = llm_msg.tool_id
+            if tool_id in self.pending_tool_ids:
+                if isinstance(message, ChatDocument):
+                    message.pop_tool_ids()
                 is_tool_output = True
                 # submit tool/fn result to the thread/run
                 self._submit_tool_outputs(llm_msg)
+                self.pending_tool_ids.remove(tool_id)
             else:
                 # add message to the thread
                 self._add_thread_message(llm_msg.content, role=Role.USER)
@@ -638,27 +648,54 @@ class OpenAIAssistant(ChatAgent):
 
         # code from ChatAgent.llm_response_messages
         if response.function_call is not None:
+            self.pending_tool_ids += [response.tool_id]
             response_str = str(response.function_call)
         else:
             response_str = response.message
         cache_str = "[red](cached)[/red]" if cached else ""
         if not settings.quiet:
             print(f"{cache_str}[green]" + response_str + "[/green]")
-        return ChatDocument.from_LLMResponse(response, displayed=False)
+        cdoc = ChatDocument.from_LLMResponse(response, displayed=False)
+        # Note message.metadata.tool_ids may have been popped above
+        tool_ids = (
+            []
+            if (message is None or isinstance(message, str))
+            else message.metadata.tool_ids
+        )
+
+        if response.tool_id != "":
+            tool_ids.append(response.tool_id)
+        cdoc.metadata.tool_ids = tool_ids
+        return cdoc
 
     async def llm_response_async(
         self, message: Optional[str | ChatDocument] = None
     ) -> Optional[ChatDocument]:
         """
-        Async version of llm_response.
+        Override ChatAgent's method: this is the main LLM response method.
+        In the ChatAgent, this updates `self.message_history` and then calls
+        `self.llm_response_messages`, but since we are relying on the Assistant API
+        to maintain conversation state, this method is simpler: Simply start a run
+        on the message-thread, and wait for it to complete.
+
+        Args:
+            message (Optional[str | ChatDocument], optional): message to respond to
+                (if absent, the LLM response will be based on the
+                instructions in the system_message). Defaults to None.
+        Returns:
+            Optional[ChatDocument]: LLM response
         """
         is_tool_output = False
         if message is not None:
             llm_msg = ChatDocument.to_LLMMessage(message)  # type: ignore
-            if llm_msg.role == Role.FUNCTION:
+            tool_id = llm_msg.tool_id
+            if tool_id in self.pending_tool_ids:
+                if isinstance(message, ChatDocument):
+                    message.pop_tool_ids()
                 is_tool_output = True
                 # submit tool/fn result to the thread/run
                 self._submit_tool_outputs(llm_msg)
+                self.pending_tool_ids.remove(tool_id)
             else:
                 # add message to the thread
                 self._add_thread_message(llm_msg.content, role=Role.USER)
@@ -690,10 +727,22 @@ class OpenAIAssistant(ChatAgent):
 
         # code from ChatAgent.llm_response_messages
         if response.function_call is not None:
+            self.pending_tool_ids += [response.tool_id]
             response_str = str(response.function_call)
         else:
             response_str = response.message
         cache_str = "[red](cached)[/red]" if cached else ""
         if not settings.quiet:
             print(f"{cache_str}[green]" + response_str + "[/green]")
-        return ChatDocument.from_LLMResponse(response, displayed=False)
+        cdoc = ChatDocument.from_LLMResponse(response, displayed=False)
+        # Note message.metadata.tool_ids may have been popped above
+        tool_ids = (
+            []
+            if (message is None or isinstance(message, str))
+            else message.metadata.tool_ids
+        )
+
+        if response.tool_id != "":
+            tool_ids.append(response.tool_id)
+        cdoc.metadata.tool_ids = tool_ids
+        return cdoc

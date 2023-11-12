@@ -25,7 +25,7 @@ class ChatDocAttachment(BaseModel):
 class ChatDocMetaData(DocMetaData):
     parent: Optional["ChatDocument"] = None
     sender: Entity
-    tool_id: str = ""  # used by OpenAIAssistant
+    tool_ids: List[str] = []  # stack of tool_ids; used by OpenAIAssistant
     # when result returns to parent, pretend message is from this entity
     parent_responder: None | Entity = None
     block: None | Entity = None
@@ -119,17 +119,31 @@ class ChatDocument(Document):
         field_values = fields.dict().values()
         return "\t".join(str(v) for v in field_values)
 
+    def pop_tool_ids(self) -> None:
+        """
+        Pop the last tool_id from the stack of tool_ids.
+        """
+        if len(self.metadata.tool_ids) > 0:
+            self.metadata.tool_ids.pop()
+
     @staticmethod
     def from_LLMResponse(
         response: LLMResponse,
         displayed: bool = False,
     ) -> "ChatDocument":
+        """
+        Convert LLMResponse to ChatDocument.
+        Args:
+            response (LLMResponse): LLMResponse to convert.
+            displayed (bool): Whether this response was displayed to the user.
+        Returns:
+            ChatDocument: ChatDocument representation of this LLMResponse.
+        """
         recipient, message = response.get_recipient_and_message()
         return ChatDocument(
             content=message,
             function_call=response.function_call,
             metadata=ChatDocMetaData(
-                tool_id=response.tool_id,
                 source=Entity.LLM,
                 sender=Entity.LLM,
                 usage=response.usage,
@@ -175,6 +189,8 @@ class ChatDocument(Document):
             content = message.content
             fun_call = message.function_call
             sender_name = message.metadata.sender_name
+            tool_ids = message.metadata.tool_ids
+            tool_id = tool_ids[-1] if len(tool_ids) > 0 else ""
             if message.metadata.sender == Entity.SYSTEM:
                 sender_role = Role.SYSTEM
             if (
@@ -183,7 +199,6 @@ class ChatDocument(Document):
             ):
                 sender_role = Role.FUNCTION
                 sender_name = message.metadata.parent.function_call.name
-                tool_id = message.metadata.tool_id
             elif message.metadata.sender == Entity.LLM:
                 sender_role = Role.ASSISTANT
         else:

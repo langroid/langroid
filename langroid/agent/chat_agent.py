@@ -464,6 +464,10 @@ class ChatAgent(Agent):
         # TODO - when response contains function_call we should include
         # that (and related fields) in the message_history
         self.message_history.append(ChatDocument.to_LLMMessage(response))
+        # Preserve trail of tool_ids for OpenAI Assistant fn-calls
+        response.metadata.tool_ids = (
+            [] if isinstance(message, str) else message.metadata.tool_ids
+        )
         return response
 
     @no_type_check
@@ -482,6 +486,10 @@ class ChatAgent(Agent):
         # TODO - when response contains function_call we should include
         # that (and related fields) in the message_history
         self.message_history.append(ChatDocument.to_LLMMessage(response))
+        # Preserve trail of tool_ids for OpenAI Assistant fn-calls
+        response.metadata.tool_ids = (
+            [] if isinstance(message, str) else message.metadata.tool_ids
+        )
         return response
 
     @no_type_check

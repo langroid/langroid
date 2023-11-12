@@ -7,6 +7,7 @@ from langroid.agent.openai_assistant import (
 )
 from langroid.agent.task import Task
 from langroid.agent.tool_message import ToolMessage
+from langroid.agent.tools.recipient_tool import RecipientTool
 from langroid.language_models import OpenAIChatModel, OpenAIGPTConfig
 from langroid.utils.configuration import Settings, set_global
 
@@ -80,6 +81,42 @@ def test_openai_assistant_fn_tool(test_settings: Settings):
     )
     result = task.run("what is the square of 5?")
     assert "25" in result.content
+
+
+def test_openai_assistant_recipient_tool(test_settings: Settings):
+    """Test special case of fn-calling: RecipientTool"""
+
+    set_global(test_settings)
+    cfg = OpenAIAssistantConfig(
+        name="Main",
+        use_cached_assistant=False,
+        use_cached_thread=False,
+        use_functions_api=True,
+        system_message="""
+        The user will give you a number. You need to double it, but don't know how,
+        so you send it to the "Doubler" to double it. 
+        When you receive the answer, say DONE and show the answer.
+        """,
+    )
+    agent = OpenAIAssistant(cfg)
+    agent.enable_message(RecipientTool)
+
+    # Within a task loop
+    doubler_confg = OpenAIAssistantConfig(
+        name="Doubler",
+        use_cached_assistant=False,
+        use_cached_thread=False,
+        system_message=""" 
+        When you receive a number, simply double it and  return the answer
+        """,
+    )
+    doubler_agent = OpenAIAssistant(doubler_confg)
+    doubler_task = Task(doubler_agent, interactive=False, single_round=True)
+
+    main_task = Task(agent, interactive=False)
+    main_task.add_sub_task(doubler_task)
+    result = main_task.run("10")
+    assert "20" in result.content
 
 
 def test_openai_assistant_retrieval(test_settings: Settings):
