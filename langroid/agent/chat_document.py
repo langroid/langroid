@@ -1,5 +1,5 @@
 import json
-from typing import List, Optional, Type
+from typing import List, Optional
 
 from pydantic import BaseModel, Extra
 
@@ -171,7 +171,7 @@ class ChatDocument(Document):
         )
 
     @staticmethod
-    def to_LLMMessage(message: str | Type["ChatDocument"]) -> LLMMessage:
+    def to_LLMMessage(message: str | "ChatDocument") -> LLMMessage:
         """
         Convert to LLMMessage for use with LLM.
 
