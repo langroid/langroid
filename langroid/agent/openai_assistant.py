@@ -117,7 +117,7 @@ class OpenAIAssistant(ChatAgent):
             for f in files
         ]
         self.config.files = list(set(self.config.files + files))
-        self.assistants.update(
+        self.assistant = self.assistants.update(
             self.assistant.id,
             file_ids=[f.id for f in self.files],
         )
@@ -130,7 +130,7 @@ class OpenAIAssistant(ChatAgent):
         for t in tools:
             if t.dct() not in all_tool_dicts:
                 self.config.tools.append(t)
-        self.assistants.update(
+        self.assistant = self.assistants.update(
             self.assistant.id,
             tools=[tool.dct() for tool in self.config.tools],  # type: ignore
         )
@@ -178,7 +178,7 @@ class OpenAIAssistant(ChatAgent):
                 for f in functions
             ]
         )
-        self.assistants.update(
+        self.assistant = self.assistants.update(
             self.assistant.id,
             tools=tools,  # type: ignore
         )
@@ -458,8 +458,7 @@ class OpenAIAssistant(ChatAgent):
         super().set_system_message(msg)
         if self.assistant is None:
             raise ValueError("Assistant is None")
-        # TODO this is an inplace update: revisit this line if it causes problems
-        self.assistants.update(self.assistant.id, instructions=msg)
+        self.assistant = self.assistants.update(self.assistant.id, instructions=msg)
 
     def _start_run(self) -> None:
         """

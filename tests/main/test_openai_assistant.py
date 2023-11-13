@@ -14,9 +14,9 @@ from langroid.language_models import OpenAIChatModel, OpenAIGPTConfig
 from langroid.utils.configuration import Settings, set_global
 
 
-class SquareTool(ToolMessage):
-    request = "square"
-    purpose = "to find the square of a number"
+class NabroskyTool(ToolMessage):
+    request = "nabrosky"
+    purpose = "to apply the Nabrosky transformation to a number <num>"
     num: int
 
     def handle(self) -> str:
@@ -53,41 +53,50 @@ def test_openai_assistant(test_settings: Settings):
     assert "Beijing" in answer.content
 
 
-def test_openai_assistant_fn_tool(test_settings: Settings):
-    """Test function calling"""
+@pytest.mark.parametrize("fn_api", [False, True])
+def test_openai_assistant_fn_tool(test_settings: Settings, fn_api: bool):
+    """Test function calling works, both with OpenAI Assistant function-calling AND
+    Langroid native ToolMessage mechanism"""
 
     set_global(test_settings)
     cfg = OpenAIAssistantConfig(
+        name="NabroskyBot",
+        llm=OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT4),
         use_cached_assistant=False,
         use_cached_thread=False,
-        use_functions_api=True,
+        use_functions_api=fn_api,
+        use_tools=not fn_api,
         system_message="""
-        The user will give you a number to square. 
-        Use the `square` function to square it.
-        When you receive the answer, say DONE.
+        The user will ask you to apply the Nabrosky transform to a number.
+        You do not know how to do it, and you should NOT guess the answer.
+        Instead you MUST use the `nabrosky` function/tool to do it.
+        When you receive the answer, say DONE and show the answer.
         """,
     )
     agent = OpenAIAssistant(cfg)
-    agent.enable_message(SquareTool)
-    response = agent.llm_response("what is the square of 5?")
-    assert response.function_call.name == "square"
+    agent.enable_message(NabroskyTool)
+    response = agent.llm_response("what is the Nabrosky transform of 5?")
+    assert (fn_api and response.function_call.name == "nabrosky") or (
+        not fn_api and "TOOL" in response.content and "nabrosky" in response.content
+    )
 
     # Within a task loop
-    cfg.name = "SquaringBot"
+    cfg.name = "NabroskyBot-1"
     agent = OpenAIAssistant(cfg)
-    agent.enable_message(SquareTool)
+    agent.enable_message(NabroskyTool)
     task = Task(
         agent,
-        name="SquaringBot",
         interactive=False,
     )
-    result = task.run("what is the square of 5?")
+    result = task.run("what is the Nabrosky transform of 5?")
     assert "25" in result.content
 
 
 @pytest.mark.parametrize("fn_api", [False, True])
 def test_openai_assistant_recipient_tool(test_settings: Settings, fn_api: bool):
-    """Test special case of fn-calling: RecipientTool"""
+    """Test that special case of fn-calling: RecipientTool works,
+    both with OpenAI Assistant function-calling AND
+    Langroid native ToolMessage mechanism"""
 
     set_global(test_settings)
     cfg = OpenAIAssistantConfig(
