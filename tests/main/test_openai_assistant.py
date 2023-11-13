@@ -59,7 +59,7 @@ def test_openai_assistant_fn_tool(test_settings: Settings, fn_api: bool):
     set_global(test_settings)
     cfg = OpenAIAssistantConfig(
         name="NabroskyBot",
-        llm=OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT4),
+        llm=OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT4_TURBO),
         use_functions_api=fn_api,
         use_tools=not fn_api,
         system_message="""
@@ -101,7 +101,7 @@ def test_openai_assistant_fn_2_level(test_settings: Settings, fn_api: bool):
     set_global(test_settings)
     cfg = OpenAIAssistantConfig(
         name="Main",
-        llm=OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT4),
+        llm=OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT4_TURBO),
         use_functions_api=fn_api,
         use_tools=not fn_api,
         system_message="""
@@ -117,7 +117,7 @@ def test_openai_assistant_fn_2_level(test_settings: Settings, fn_api: bool):
 
     nabrosky_cfg = OpenAIAssistantConfig(
         name="NabroskyBot",
-        llm=OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT4),
+        llm=OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT4_TURBO),
         use_functions_api=fn_api,
         use_tools=not fn_api,
         system_message="""

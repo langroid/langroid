@@ -16,7 +16,11 @@ from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.chat_document import ChatDocument
 from langroid.agent.tool_message import ToolMessage
 from langroid.language_models.base import LLMFunctionCall, LLMMessage, LLMResponse, Role
-from langroid.language_models.openai_gpt import OpenAIGPT, OpenAIGPTConfig
+from langroid.language_models.openai_gpt import (
+    OpenAIChatModel,
+    OpenAIGPT,
+    OpenAIGPTConfig,
+)
 from langroid.utils.configuration import settings
 from langroid.utils.system import generate_user_id, update_hash
 
@@ -65,7 +69,7 @@ class OpenAIAssistantConfig(ChatAgentConfig):
     # set to True once we can add Assistant msgs in threads
     cache_responses: bool = False
     timeout: int = 30  # can be different from llm.timeout
-    llm = OpenAIGPTConfig()
+    llm = OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT4_TURBO)
     tools: List[AssitantTool] = []
     files: List[str] = []
 
@@ -300,7 +304,14 @@ class OpenAIAssistant(ChatAgent):
                     but config.use_cached_thread = False, so deleting it.
                     """
                 )
-                self.llm.client.beta.threads.delete(thread_id=cached)
+                try:
+                    self.llm.client.beta.threads.delete(thread_id=cached)
+                except Exception:
+                    logger.warning(
+                        f"""
+                        Could not delete thread with id {cached}, ignoring. 
+                        """
+                    )
                 self.llm.cache.delete_keys([self._cache_thread_key()])
         if self.thread is None:
             if self.assistant is None:
@@ -347,7 +358,14 @@ class OpenAIAssistant(ChatAgent):
                     but config.use_cached_assistant = False, so deleting it.
                     """
                 )
-                self.llm.client.beta.assistants.delete(assistant_id=cached)
+                try:
+                    self.llm.client.beta.assistants.delete(assistant_id=cached)
+                except Exception:
+                    logger.warning(
+                        f"""
+                        Could not delete assistant with id {cached}, ignoring. 
+                        """
+                    )
                 self.llm.cache.delete_keys([self._cache_assistant_key()])
         if self.assistant is None:
             self.assistant = self.llm.client.beta.assistants.create(
