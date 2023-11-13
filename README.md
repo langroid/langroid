@@ -87,6 +87,13 @@ task.run("Hello") # kick off with user saying "Hello"
 <summary> <b>:fire: Updates/Releases</b></summary>
 
 - **Nov 2023:**
+  - **0.1.114:** Support for OpenAI Assistant API tools: Function-calling 
+    and Retriever (RAG). These work seamlessly with Langroid's 
+    task-orchestration. Tests: [`test_openai_assistant.py`](https://github.com/langroid/langroid/blob/main/tests/main/test_openai_assistant.py),
+    [`test_openai_assistant_async.py`](https://github.com/langroid/langroid/blob/main/tests/main/test_openai_assistant_async.py)
+    and retrieval example scripts: 
+    (a) [single-agent](https://github.com/langroid/langroid/blob/main/examples/docqa/oai-retrieval-assistant.py),
+    (b) [two-agent](https://github.com/langroid/langroid/blob/main/examples/docqa/oai-retrieval-2.py),    
   - **0.1.112:** [`OpenAIAssistant`](https://github.com/langroid/langroid/blob/main/langroid/agent/openai_assistant.py) is a subclass of `ChatAgent` that 
     leverages the new OpenAI Assistant API. It can be used as a drop-in 
     replacement for `ChatAgent`, and relies on the Assistant API to
