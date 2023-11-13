@@ -592,6 +592,8 @@ class Task:
             if result.metadata.parent_responder is not None and not isinstance(
                 r, Entity
             ):
+                # This code is only used by the now-deprecated RecipientValidatorAgent.
+                # (which has been deprecated in favor of using the RecipientTool).
                 # When result is from a sub-task, and `result.metadata` contains
                 # a non-null `parent_responder`, pretend this result was
                 # from the parent_responder, by setting `self.pending_sender`.
@@ -648,8 +650,6 @@ class Task:
             )
             return result
         else:
-            # Note we always use async responders, even though
-            # ultimately a synch endpoint is used.
             response_fn = self._entity_responder_map[cast(Entity, e)]
             result = response_fn(self.pending_message)
             return result
@@ -705,6 +705,7 @@ class Task:
         block = result_msg.metadata.block if result_msg else None
         recipient = result_msg.metadata.recipient if result_msg else None
         responder = result_msg.metadata.parent_responder if result_msg else None
+        tool_ids = result_msg.metadata.tool_ids if result_msg else []
 
         # regardless of which entity actually produced the result,
         # when we return the result, we set entity to USER
@@ -720,6 +721,7 @@ class Task:
                 parent_responder=responder,
                 sender_name=self.name,
                 recipient=recipient,
+                tool_ids=tool_ids,
             ),
         )
 

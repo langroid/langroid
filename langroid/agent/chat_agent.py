@@ -3,7 +3,7 @@ import json
 import logging
 import textwrap
 from contextlib import ExitStack
-from typing import Dict, List, Optional, Set, Tuple, Type, cast, no_type_check
+from typing import Dict, List, Optional, Set, Tuple, Type, cast
 
 from rich import print
 from rich.console import Console
@@ -443,7 +443,6 @@ class ChatAgent(Agent):
                 self.llm_tools_usable.discard(r)
                 self.llm_functions_usable.discard(r)
 
-    @no_type_check
     def llm_response(
         self, message: Optional[str | ChatDocument] = None
     ) -> Optional[ChatDocument]:
@@ -464,9 +463,16 @@ class ChatAgent(Agent):
         # TODO - when response contains function_call we should include
         # that (and related fields) in the message_history
         self.message_history.append(ChatDocument.to_LLMMessage(response))
+        # Preserve trail of tool_ids for OpenAI Assistant fn-calls
+        response.metadata.tool_ids = (
+            []
+            if isinstance(message, str)
+            else message.metadata.tool_ids
+            if message is not None
+            else []
+        )
         return response
 
-    @no_type_check
     async def llm_response_async(
         self, message: Optional[str | ChatDocument] = None
     ) -> Optional[ChatDocument]:
@@ -482,9 +488,16 @@ class ChatAgent(Agent):
         # TODO - when response contains function_call we should include
         # that (and related fields) in the message_history
         self.message_history.append(ChatDocument.to_LLMMessage(response))
+        # Preserve trail of tool_ids for OpenAI Assistant fn-calls
+        response.metadata.tool_ids = (
+            []
+            if isinstance(message, str)
+            else message.metadata.tool_ids
+            if message is not None
+            else []
+        )
         return response
 
-    @no_type_check
     def _prep_llm_messages(
         self,
         message: Optional[str | ChatDocument] = None,
@@ -500,7 +513,11 @@ class ChatAgent(Agent):
                 output_len = max expected number of tokens in response
         """
 
-        if not self.llm_can_respond(message):
+        if (
+            not self.llm_can_respond(message)
+            or self.config.llm is None
+            or self.llm is None
+        ):
             return [], 0
 
         if message is None and len(self.message_history) > 0:

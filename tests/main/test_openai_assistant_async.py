@@ -11,9 +11,9 @@ from langroid.agent.tool_message import ToolMessage
 from langroid.utils.configuration import Settings, set_global
 
 
-class SquareTool(ToolMessage):
-    request = "square"
-    purpose = "to find the square of a number"
+class NabroskyTool(ToolMessage):
+    request = "nabrosky"
+    purpose = "to apply the Nabrosky transformation to a number <num>"
     num: int
 
     def handle(self) -> str:
@@ -54,35 +54,41 @@ async def test_openai_assistant_async(test_settings: Settings):
 
 
 @pytest.mark.asyncio
-async def test_openai_assistant_fn_tool_async(test_settings: Settings):
-    """Test function calling"""
+@pytest.mark.parametrize("fn_api", [False, True])
+async def test_openai_assistant_fn_tool_async(test_settings: Settings, fn_api: bool):
+    """Test function calling works, both with OpenAI Assistant function-calling AND
+    Langroid native ToolMessage mechanism"""
 
     set_global(test_settings)
     cfg = OpenAIAssistantConfig(
         use_cached_assistant=False,
         use_cached_thread=False,
-        use_functions_api=True,
+        use_functions_api=fn_api,
+        use_tools=not fn_api,
         system_message="""
-        The user will give you a number to square. 
-        Use the `square` function to square it.
-        When you receive the answer, say DONE.
+        The user will ask you to apply the Nabrosky transform to a number.
+        You do not know how to do it, and you should NOT guess the answer.
+        Instead you MUST use the `nabrosky` function/tool to do it.
+        When you receive the answer, say DONE and show the answer.
         """,
     )
     agent = OpenAIAssistant(cfg)
-    agent.enable_message(SquareTool)
-    response = await agent.llm_response_async("what is the square of 5?")
-    assert response.function_call.name == "square"
+    agent.enable_message(NabroskyTool)
+    response = await agent.llm_response_async("what is the nabrosky transform of 5?")
+    assert (fn_api and response.function_call.name == "nabrosky") or (
+        not fn_api and "TOOL" in response.content and "nabrosky" in response.content
+    )
 
     # Within a task loop
-    cfg.name = "SquaringBot"
+    cfg.name = "NabroskyBot"
     agent = OpenAIAssistant(cfg)
-    agent.enable_message(SquareTool)
+    agent.enable_message(NabroskyTool)
     task = Task(
         agent,
-        name="SquaringBot",
+        name="NabroskyBot",
         interactive=False,
     )
-    result = await task.run_async("what is the square of 5?")
+    result = await task.run_async("what is the nabrosky transform of 5?")
     assert "25" in result.content
 
 

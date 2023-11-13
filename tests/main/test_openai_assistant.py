@@ -1,5 +1,7 @@
 import tempfile
 
+import pytest
+
 from langroid.agent.openai_assistant import (
     AssitantTool,
     OpenAIAssistant,
@@ -7,13 +9,14 @@ from langroid.agent.openai_assistant import (
 )
 from langroid.agent.task import Task
 from langroid.agent.tool_message import ToolMessage
+from langroid.agent.tools.recipient_tool import RecipientTool
 from langroid.language_models import OpenAIChatModel, OpenAIGPTConfig
 from langroid.utils.configuration import Settings, set_global
 
 
-class SquareTool(ToolMessage):
-    request = "square"
-    purpose = "to find the square of a number"
+class NabroskyTool(ToolMessage):
+    request = "nabrosky"
+    purpose = "to apply the Nabrosky transformation to a number <num>"
     num: int
 
     def handle(self) -> str:
@@ -50,36 +53,123 @@ def test_openai_assistant(test_settings: Settings):
     assert "Beijing" in answer.content
 
 
-def test_openai_assistant_fn_tool(test_settings: Settings):
-    """Test function calling"""
+@pytest.mark.parametrize("fn_api", [False, True])
+def test_openai_assistant_fn_tool(test_settings: Settings, fn_api: bool):
+    """Test function calling works, both with OpenAI Assistant function-calling AND
+    Langroid native ToolMessage mechanism"""
 
     set_global(test_settings)
     cfg = OpenAIAssistantConfig(
-        use_cached_assistant=False,
-        use_cached_thread=False,
-        use_functions_api=True,
+        name="NabroskyBot",
+        llm=OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT4),
+        use_functions_api=fn_api,
+        use_tools=not fn_api,
         system_message="""
-        The user will give you a number to square. 
-        Use the `square` function to square it.
-        When you receive the answer, say DONE.
+        The user will ask you to apply the Nabrosky transform to a number.
+        You do not know how to do it, and you should NOT guess the answer.
+        Instead you MUST use the `nabrosky` function/tool to do it.
+        When you receive the answer, say DONE and show the answer.
         """,
     )
     agent = OpenAIAssistant(cfg)
-    agent.enable_message(SquareTool)
-    response = agent.llm_response("what is the square of 5?")
-    assert response.function_call.name == "square"
+    agent.enable_message(NabroskyTool)
+    response = agent.llm_response("what is the Nabrosky transform of 5?")
+    assert (fn_api and response.function_call.name == "nabrosky") or (
+        not fn_api and "TOOL" in response.content and "nabrosky" in response.content
+    )
 
     # Within a task loop
-    cfg.name = "SquaringBot"
+    cfg.name = "NabroskyBot-1"
     agent = OpenAIAssistant(cfg)
-    agent.enable_message(SquareTool)
+    agent.enable_message(NabroskyTool)
     task = Task(
         agent,
-        name="SquaringBot",
         interactive=False,
     )
-    result = task.run("what is the square of 5?")
+    result = task.run("what is the Nabrosky transform of 5?")
     assert "25" in result.content
+
+
+@pytest.mark.parametrize("fn_api", [False, True])
+def test_openai_assistant_fn_2_level(test_settings: Settings, fn_api: bool):
+    """Test 2-level recursive function calling works,
+    both with OpenAI Assistant function-calling AND
+    Langroid native ToolMessage mechanism"""
+
+    set_global(test_settings)
+    cfg = OpenAIAssistantConfig(
+        name="Main",
+        llm=OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT4),
+        use_functions_api=fn_api,
+        use_tools=not fn_api,
+        system_message="""
+        The user will ask you to apply the Nabrosky transform to a number.
+        You do not know how to do it, and you should NOT guess the answer.
+        Instead you MUST use the `recipient_message` tool/function to 
+        send it to NabroskyBot who will do it for you.
+        When you receive the answer, say DONE and show the answer.
+        """,
+    )
+    agent = OpenAIAssistant(cfg)
+    agent.enable_message(RecipientTool)
+
+    nabrosky_cfg = OpenAIAssistantConfig(
+        name="NabroskyBot",
+        llm=OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT4),
+        use_functions_api=fn_api,
+        use_tools=not fn_api,
+        system_message="""
+        The user will ask you to apply the Nabrosky transform to a number.
+        You do not know how to do it, and you should NOT guess the answer.
+        Instead you MUST use the `nabrosky` function/tool to do it.
+        When you receive the answer say DONE and show the answer.
+        """,
+    )
+
+    nabrosky_agent = OpenAIAssistant(nabrosky_cfg)
+    nabrosky_agent.enable_message(NabroskyTool)
+
+    main_task = Task(agent, interactive=False, llm_delegate=True)
+    nabrosky_task = Task(nabrosky_agent, interactive=False, llm_delegate=True)
+    main_task.add_sub_task(nabrosky_task)
+    result = main_task.run("what is the Nabrosky transform of 5?")
+    assert "25" in result.content
+
+
+@pytest.mark.parametrize("fn_api", [False, True])
+def test_openai_assistant_recipient_tool(test_settings: Settings, fn_api: bool):
+    """Test that special case of fn-calling: RecipientTool works,
+    both with OpenAI Assistant function-calling AND
+    Langroid native ToolMessage mechanism"""
+
+    set_global(test_settings)
+    cfg = OpenAIAssistantConfig(
+        name="Main",
+        use_functions_api=fn_api,
+        use_tools=not fn_api,
+        system_message="""
+        The user will give you a number. You need to double it, but don't know how,
+        so you send it to the "Doubler" to double it. 
+        When you receive the answer, say DONE and show the answer.
+        """,
+    )
+    agent = OpenAIAssistant(cfg)
+    agent.enable_message(RecipientTool)
+
+    # Within a task loop
+    doubler_confg = OpenAIAssistantConfig(
+        name="Doubler",
+        system_message=""" 
+        When you receive a number, simply double it and  return the answer
+        """,
+    )
+    doubler_agent = OpenAIAssistant(doubler_confg)
+    doubler_task = Task(doubler_agent, interactive=False, single_round=True)
+
+    main_task = Task(agent, interactive=False)
+    main_task.add_sub_task(doubler_task)
+    result = main_task.run("10")
+    assert "20" in result.content
 
 
 def test_openai_assistant_retrieval(test_settings: Settings):
