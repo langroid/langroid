@@ -56,6 +56,8 @@ class URLLoader:
                         no_fallback=False,
                         favor_recall=True,
                     )
+                    if text is None and result is not None and isinstance(result, str):
+                        text = result
                     if text is not None and text != "":
                         docs.append(
                             Document(content=text, metadata=DocMetaData(source=url))

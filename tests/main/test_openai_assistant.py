@@ -25,19 +25,13 @@ class NabroskyTool(ToolMessage):
 
 def test_openai_assistant(test_settings: Settings):
     set_global(test_settings)
-    cfg = OpenAIAssistantConfig(
-        use_cached_assistant=False,
-        use_cached_thread=False,
-    )
+    cfg = OpenAIAssistantConfig()
     agent = OpenAIAssistant(cfg)
     response = agent.llm_response("what is the capital of France?")
     assert "Paris" in response.content
 
     # test that we can retrieve cached asst, thread, and it recalls the last question
-    cfg = OpenAIAssistantConfig(
-        use_cached_assistant=True,
-        use_cached_thread=True,
-    )
+    cfg = OpenAIAssistantConfig()
     agent = OpenAIAssistant(cfg)
     response = agent.llm_response("what was the last country I asked about?")
     assert "France" in response.content
@@ -180,8 +174,6 @@ def test_openai_assistant_retrieval(test_settings: Settings):
     set_global(test_settings)
     cfg = OpenAIAssistantConfig(
         llm=OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT4_TURBO),
-        use_cached_assistant=False,
-        use_cached_thread=False,
         system_message="Answer questions based on the provided document.",
     )
     agent = OpenAIAssistant(cfg)
@@ -207,6 +199,43 @@ def test_openai_assistant_retrieval(test_settings: Settings):
 
     response = agent.llm_response("what novel did he write?")
     assert "Lomita" in response.content
+
+
+def test_openai_asst_code_interpreter(test_settings: Settings):
+    """
+    Test that Assistant can answer questions using code.
+    """
+    set_global(test_settings)
+    cfg = OpenAIAssistantConfig(
+        llm=OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT4_TURBO),
+        system_message="Answer questions by running code if needed",
+    )
+    agent = OpenAIAssistant(cfg)
+
+    # create temp file with in-code text content
+    text = """
+    Vlad Nabrosky was born in Russia. He then emigrated to the United States,
+    where he wrote the novel Lomita. He was a professor at Purnell University.
+    """
+
+    # open a temp file and write text to it
+    with tempfile.NamedTemporaryFile(mode="w", delete=False) as f:
+        f.write(text)
+        f.close()
+        # get the filename
+        filename = f.name
+
+    # must enable retrieval first, then add file
+    agent.add_assistant_tools([AssitantTool(type="code_interpreter")])
+    agent.add_assistant_files([filename])
+
+    response = agent.llm_response(
+        "what is the 10th fibonacci number, when you start with 1 and 2?"
+    )
+    assert "89" in response.content
+
+    response = agent.llm_response("how many words are in the file?")
+    assert str(len(text.split())) in response.content
 
 
 def test_openai_assistant_multi(test_settings: Settings):

@@ -4,10 +4,11 @@ import asyncio
 import logging
 import time
 from enum import Enum
-from typing import Any, Dict, List, Optional, Type, cast, no_type_check
+from typing import Any, Dict, List, Optional, Tuple, Type, cast, no_type_check
 
 from openai.types.beta import Assistant, Thread
 from openai.types.beta.threads import Run, ThreadMessage
+from openai.types.beta.threads.runs import RunStep
 from pydantic import BaseModel
 from rich import print
 
@@ -364,6 +365,53 @@ class OpenAIAssistant(ChatAgent):
             raise ValueError("Thread or Run is None")
         return self.runs.retrieve(thread_id=self.thread.id, run_id=self.run.id)
 
+    def _get_run_steps(self) -> List[RunStep]:
+        if self.thread is None or self.run is None:
+            raise ValueError("Thread or Run is None")
+        result = self.runs.steps.list(thread_id=self.thread.id, run_id=self.run.id)
+        if result is None:
+            return []
+        return result.data
+
+    def _get_code_logs(self) -> List[Tuple[str, str]]:
+        """
+        Get list of input, output strings from code logs
+        """
+        run_steps = self._get_run_steps()
+        # each step may have multiple tool-calls,
+        # each tool-call may have multiple outputs
+        tool_calls = [  # list of list of tool-calls
+            s.step_details.tool_calls
+            for s in run_steps
+            if s.step_details is not None and hasattr(s.step_details, "tool_calls")
+        ]
+        code_logs = []
+        for tcl in tool_calls:  # each tool-call-list
+            for tc in tcl:
+                if tc is None or tc.type != ToolType.CODE_INTERPRETER:
+                    continue
+                io = tc.code_interpreter  # type: ignore
+                input = io.input
+                # TODO for CodeInterpreterOutputImage, there is no "logs"
+                # revisit when we handle images.
+                outputs = "\n\n".join(
+                    o.logs
+                    for o in io.outputs
+                    if o.type == "logs" and hasattr(o, "logs")
+                )
+                code_logs.append((input, outputs))
+        # return the reversed list, since they are stored in reverse chron order
+        return code_logs[::-1]
+
+    def _get_code_logs_str(self) -> str:
+        """
+        Get string representation of code logs
+        """
+        code_logs = self._get_code_logs()
+        return "\n\n".join(
+            f"INPUT:\n{input}\n\nOUTPUT:\n{output}" for input, output in code_logs
+        )
+
     def _add_thread_message(self, msg: str, role: Role) -> None:
         """
         Add a message with the given role to the thread.
@@ -653,6 +701,12 @@ class OpenAIAssistant(ChatAgent):
             response_str = response.message
         cache_str = "[red](cached)[/red]" if cached else ""
         if not settings.quiet:
+            if self._get_code_logs_str():
+                print(
+                    f"[magenta]CODE-INTERPRETER LOGS:\n"
+                    "-------------------------------\n"
+                    f"{self._get_code_logs_str()}[/magenta]"
+                )
             print(f"{cache_str}[green]" + response_str + "[/green]")
         cdoc = ChatDocument.from_LLMResponse(response, displayed=False)
         # Note message.metadata.tool_ids may have been popped above
