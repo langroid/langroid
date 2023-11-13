@@ -51,6 +51,11 @@ class RedisCache(CacheDB):
                     host=redis_host,
                     port=redis_port,
                     password=redis_password,
+                    max_connections=50,
+                    socket_timeout=5,
+                    socket_keepalive=True,
+                    retry_on_timeout=True,
+                    health_check_interval=30,
                 )
 
     @contextmanager  # type: ignore
