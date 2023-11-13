@@ -786,6 +786,12 @@ class OpenAIAssistant(ChatAgent):
             response_str = response.message
         cache_str = "[red](cached)[/red]" if cached else ""
         if not settings.quiet:
+            if self._get_code_logs_str():
+                print(
+                    f"[magenta]CODE-INTERPRETER LOGS:\n"
+                    "-------------------------------\n"
+                    f"{self._get_code_logs_str()}[/magenta]"
+                )
             print(f"{cache_str}[green]" + response_str + "[/green]")
         cdoc = ChatDocument.from_LLMResponse(response, displayed=False)
         # Note message.metadata.tool_ids may have been popped above
