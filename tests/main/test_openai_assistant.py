@@ -62,8 +62,6 @@ def test_openai_assistant_fn_tool(test_settings: Settings, fn_api: bool):
     cfg = OpenAIAssistantConfig(
         name="NabroskyBot",
         llm=OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT4),
-        use_cached_assistant=False,
-        use_cached_thread=False,
         use_functions_api=fn_api,
         use_tools=not fn_api,
         system_message="""
@@ -93,6 +91,52 @@ def test_openai_assistant_fn_tool(test_settings: Settings, fn_api: bool):
 
 
 @pytest.mark.parametrize("fn_api", [False, True])
+def test_openai_assistant_fn_2_level(test_settings: Settings, fn_api: bool):
+    """Test 2-level recursive function calling works,
+    both with OpenAI Assistant function-calling AND
+    Langroid native ToolMessage mechanism"""
+
+    set_global(test_settings)
+    cfg = OpenAIAssistantConfig(
+        name="Main",
+        llm=OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT4),
+        use_functions_api=fn_api,
+        use_tools=not fn_api,
+        system_message="""
+        The user will ask you to apply the Nabrosky transform to a number.
+        You do not know how to do it, and you should NOT guess the answer.
+        Instead you MUST use the `recipient_message` tool/function to 
+        send it to NabroskyBot who will do it for you.
+        When you receive the answer, say DONE and show the answer.
+        """,
+    )
+    agent = OpenAIAssistant(cfg)
+    agent.enable_message(RecipientTool)
+
+    nabrosky_cfg = OpenAIAssistantConfig(
+        name="NabroskyBot",
+        llm=OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT4),
+        use_functions_api=fn_api,
+        use_tools=not fn_api,
+        system_message="""
+        The user will ask you to apply the Nabrosky transform to a number.
+        You do not know how to do it, and you should NOT guess the answer.
+        Instead you MUST use the `nabrosky` function/tool to do it.
+        When you receive the answer say DONE and show the answer.
+        """,
+    )
+
+    nabrosky_agent = OpenAIAssistant(nabrosky_cfg)
+    nabrosky_agent.enable_message(NabroskyTool)
+
+    main_task = Task(agent, interactive=False, llm_delegate=True)
+    nabrosky_task = Task(nabrosky_agent, interactive=False, llm_delegate=True)
+    main_task.add_sub_task(nabrosky_task)
+    result = main_task.run("what is the Nabrosky transform of 5?")
+    assert "25" in result.content
+
+
+@pytest.mark.parametrize("fn_api", [False, True])
 def test_openai_assistant_recipient_tool(test_settings: Settings, fn_api: bool):
     """Test that special case of fn-calling: RecipientTool works,
     both with OpenAI Assistant function-calling AND
@@ -101,8 +145,6 @@ def test_openai_assistant_recipient_tool(test_settings: Settings, fn_api: bool):
     set_global(test_settings)
     cfg = OpenAIAssistantConfig(
         name="Main",
-        use_cached_assistant=False,
-        use_cached_thread=False,
         use_functions_api=fn_api,
         use_tools=not fn_api,
         system_message="""
@@ -117,8 +159,6 @@ def test_openai_assistant_recipient_tool(test_settings: Settings, fn_api: bool):
     # Within a task loop
     doubler_confg = OpenAIAssistantConfig(
         name="Doubler",
-        use_cached_assistant=False,
-        use_cached_thread=False,
         system_message=""" 
         When you receive a number, simply double it and  return the answer
         """,
