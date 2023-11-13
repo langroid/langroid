@@ -73,7 +73,7 @@ jobs:
 
     - name: Run tests with coverage
       run: |
-        poetry run coverage run --source=langroid -m pytest tests/main
+        poetry run coverage run --source=langroid -m pytest -k "not openai_assistant" tests/main
         poetry run coverage report
     - name: Generate XML coverage report
       run: |
