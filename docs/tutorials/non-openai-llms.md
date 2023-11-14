@@ -17,6 +17,10 @@ except that you will need to change the `openai.api_base` to point to the proxy 
 (this is done behind the scenes in Langroid via the `chat_model` name as shown below).
 Here are the specifics steps to use this proxy server with Langroid:
 
+!!! note "Install `litellm` extra"
+    To use `litellm` you need to install Langroid with the `litellm` extra, e.g.:
+    `pip install langroid[litellm]`
+
 First in a separate terminal window, spin up the proxy server `litellm`.
 For example to use the `anthropic.claude-instant-v1` model, you can do:
 ```bash

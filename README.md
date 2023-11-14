@@ -441,6 +441,8 @@ If the model is [supported by `liteLLM`](https://docs.litellm.ai/docs/providers)
 then no need to launch the proxy server.
 Just set the `chat_model` param above to `litellm/[provider]/[model]`, e.g. 
 `litellm/anthropic/claude-instant-1` and use the config object as above.
+Note that to use `litellm` you need to install langroid with the `litellm` extra:
+`poetry install -E litellm` or `pip install langroid[litellm]`.
 For remote models, you will typically need to set API Keys etc as environment variables.
 You can set those based on the LiteLLM docs. 
 If any required environment variables are missing, Langroid gives a helpful error
