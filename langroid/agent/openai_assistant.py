@@ -64,6 +64,8 @@ class RunStatus(str, Enum):
 class OpenAIAssistantConfig(ChatAgentConfig):
     use_cached_assistant: bool = False  # set in script via user dialog
     assistant_id: str | None = None
+    use_tools = False
+    use_functions_api = True
     use_cached_thread: bool = False  # set in script via user dialog
     thread_id: str | None = None
     # set to True once we can add Assistant msgs in threads

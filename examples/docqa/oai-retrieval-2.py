@@ -11,7 +11,6 @@ import typer
 from rich import print
 from rich.prompt import Prompt
 import os
-from pydantic import BaseSettings
 import tempfile
 
 from langroid.agent.openai_assistant import (
@@ -23,7 +22,6 @@ from langroid.parsing.url_loader import URLLoader
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
 from langroid.agent.tools.recipient_tool import RecipientTool
 from langroid.agent.task import Task
-from langroid.utils.configuration import set_global, Settings
 from langroid.utils.logging import setup_colored_logging
 
 app = typer.Typer()
@@ -32,39 +30,11 @@ setup_colored_logging()
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 
-class CLIOptions(BaseSettings):
-    debug: bool = False
-    cache: bool = True
-    tool: bool = False
-
-
 @app.command()
-def main(
-    debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
-    tool: bool = typer.Option(
-        False, "--tool", "-t", help="use Langroid ToolMessage instead of fn-call"
-    ),
-    nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
-) -> None:
-    cli_opts = CLIOptions(
-        tool=tool,
-        debug=debug,
-        cache=not nocache,
-    )
-
-    chat(cli_opts)
-
-
-def chat(opts: CLIOptions) -> None:
-    set_global(Settings(debug=opts.debug, cache=opts.cache))
-
+def chat() -> None:
     planner_cfg = OpenAIAssistantConfig(
         name="Planner",
         llm=OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT4_TURBO),
-        use_cached_assistant=False,
-        use_cached_thread=False,
-        use_functions_api=not opts.tool,
-        use_tools=opts.tool,
         system_message="""
         You will receive questions from the user about some docs, 
         but you don't have access to them, but you have a Retriever to help you, since
@@ -82,8 +52,6 @@ def chat(opts: CLIOptions) -> None:
     retriever_cfg = OpenAIAssistantConfig(
         name="Retriever",
         llm=OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT4_TURBO),
-        use_cached_assistant=False,
-        use_cached_thread=False,
         system_message="Answer questions based on the documents provided.",
     )
 
