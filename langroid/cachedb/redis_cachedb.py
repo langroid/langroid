@@ -95,7 +95,11 @@ class RedisCache(CacheDB):
             value (Any): The value to store.
         """
         with self.redis_client() as client:  # type: ignore
-            client.set(key, json.dumps(value))
+            try:
+                client.set(key, json.dumps(value))
+            except redis.exceptions.ConnectionError:
+                logger.warning("Redis connection error, not storing key/value")
+                return None
 
     def retrieve(self, key: str) -> Dict[str, Any] | str | None:
         """
@@ -108,7 +112,11 @@ class RedisCache(CacheDB):
             dict: The value associated with the key.
         """
         with self.redis_client() as client:  # type: ignore
-            value = client.get(key)
+            try:
+                value = client.get(key)
+            except redis.exceptions.ConnectionError:
+                logger.warning("Redis connection error, returning None")
+                return None
             return json.loads(value) if value else None
 
     def delete_keys(self, keys: List[str]) -> None:
@@ -119,4 +127,8 @@ class RedisCache(CacheDB):
             keys (List[str]): The keys to delete.
         """
         with self.redis_client() as client:  # type: ignore
-            client.delete(*keys)
+            try:
+                client.delete(*keys)
+            except redis.exceptions.ConnectionError:
+                logger.warning("Redis connection error, not deleting keys")
+                return None
