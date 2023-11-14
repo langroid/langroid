@@ -9,7 +9,6 @@ import typer
 from rich import print
 from rich.prompt import Prompt
 import os
-from pydantic import BaseSettings
 import tempfile
 
 from langroid.agent.openai_assistant import (
@@ -20,7 +19,6 @@ from langroid.agent.openai_assistant import (
 from langroid.parsing.url_loader import URLLoader
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
 from langroid.agent.task import Task
-from langroid.utils.configuration import set_global, Settings
 from langroid.utils.logging import setup_colored_logging
 
 app = typer.Typer()
@@ -29,31 +27,20 @@ setup_colored_logging()
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 
-class CLIOptions(BaseSettings):
-    debug: bool = False
-    cache: bool = True
-
-
 @app.command()
-def main(
-    debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
-    nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
-) -> None:
-    cli_opts = CLIOptions(
-        debug=debug,
-        cache=not nocache,
+def chat() -> None:
+    reuse = (
+        Prompt.ask(
+            "Reuse existing assistant, threads if available? (y/n)",
+            default="y",
+        )
+        == "y"
     )
-
-    chat(cli_opts)
-
-
-def chat(opts: CLIOptions) -> None:
-    set_global(Settings(debug=opts.debug, cache=opts.cache))
 
     cfg = OpenAIAssistantConfig(
         llm=OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT4_TURBO),
-        use_cached_assistant=False,
-        use_cached_thread=False,
+        use_cached_assistant=reuse,
+        use_cached_thread=reuse,
         system_message="Answer questions based on the provided document.",
     )
     agent = OpenAIAssistant(cfg)
@@ -70,7 +57,9 @@ def chat(opts: CLIOptions) -> None:
             # get the filename
             path = f.name
     agent.add_assistant_tools([AssitantTool(type="retrieval")])
-    agent.add_assistant_files([path])
+
+    if path:  # may be empty if continuing from previous session
+        agent.add_assistant_files([path])
 
     print("[cyan]Enter x or q to quit")
 

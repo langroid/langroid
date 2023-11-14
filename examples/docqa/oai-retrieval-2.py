@@ -32,9 +32,19 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 @app.command()
 def chat() -> None:
+    reuse = (
+        Prompt.ask(
+            "Reuse existing assistant, threads if available? (y/n)",
+            default="y",
+        )
+        == "y"
+    )
+
     planner_cfg = OpenAIAssistantConfig(
         name="Planner",
         llm=OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT4_TURBO),
+        use_cached_thread=reuse,
+        use_cached_assistant=reuse,
         system_message="""
         You will receive questions from the user about some docs, 
         but you don't have access to them, but you have a Retriever to help you, since
@@ -51,6 +61,8 @@ def chat() -> None:
 
     retriever_cfg = OpenAIAssistantConfig(
         name="Retriever",
+        use_cached_thread=reuse,
+        use_cached_assistant=reuse,
         llm=OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT4_TURBO),
         system_message="Answer questions based on the documents provided.",
     )
@@ -69,7 +81,8 @@ def chat() -> None:
             # get the filename
             path = f.name
     retriever_agent.add_assistant_tools([AssitantTool(type="retrieval")])
-    retriever_agent.add_assistant_files([path])
+    if path:  # path may be empty if continuing from previous session
+        retriever_agent.add_assistant_files([path])
 
     print("[cyan]Enter x or q to quit")
 
