@@ -107,6 +107,10 @@ class Task:
             if user_message:
                 agent.set_user_message(user_message)
 
+        if settings.notebook:
+            # suppress color logs when running in notebook, since these
+            # show up in the output cell instead of log file.
+            self.set_color_log(False)
         self.logger: None | RichFileLogger = None
         self.tsv_logger: None | logging.Logger = None
         self.color_log: bool = True
