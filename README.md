@@ -55,6 +55,11 @@ This is just a teaser; there's much more, like function-calling/tools,
 Multi-Agent Collaboration, Structured Information Extraction, DocChatAgent 
 (RAG), SQLChatAgent, etc. Scroll down or see docs for more.
 
+:fire: Just released! See this [Colab](https://colab.research.google.com/drive/190Tk7t4AdY1P9F_NlZ33-YEoGnHweQQ0) 
+for a walk-through of the new `OpenAIAssistant` class (with near-complete support for the new OpenAI Assistants API) 
+in a multi-agent setting.
+
+
 ```python
 from langroid.language_models import  OpenAIGPTConfig, OpenAIChatModel, OpenAIGPT
 from langroid import ChatAgent, ChatAgentConfig, Task
