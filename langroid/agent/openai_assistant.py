@@ -33,7 +33,7 @@ class ToolType(str, Enum):
     FUNCTION = "function"
 
 
-class AssitantTool(BaseModel):
+class AssistantTool(BaseModel):
     type: ToolType
     function: Dict[str, Any] | None = None
 
@@ -72,7 +72,7 @@ class OpenAIAssistantConfig(ChatAgentConfig):
     cache_responses: bool = False
     timeout: int = 30  # can be different from llm.timeout
     llm = OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT4_TURBO)
-    tools: List[AssitantTool] = []
+    tools: List[AssistantTool] = []
     files: List[str] = []
 
 
@@ -129,7 +129,7 @@ class OpenAIAssistant(ChatAgent):
             file_ids=[f.id for f in self.files],
         )
 
-    def add_assistant_tools(self, tools: List[AssitantTool]) -> None:
+    def add_assistant_tools(self, tools: List[AssistantTool]) -> None:
         """Add tools to assistant"""
         if self.assistant is None:
             raise ValueError("Assistant is None")

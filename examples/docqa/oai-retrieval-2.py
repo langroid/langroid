@@ -16,7 +16,7 @@ import tempfile
 from langroid.agent.openai_assistant import (
     OpenAIAssistantConfig,
     OpenAIAssistant,
-    AssitantTool,
+    AssistantTool,
 )
 from langroid.parsing.url_loader import URLLoader
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
@@ -80,7 +80,7 @@ def chat() -> None:
             f.close()
             # get the filename
             path = f.name
-    retriever_agent.add_assistant_tools([AssitantTool(type="retrieval")])
+    retriever_agent.add_assistant_tools([AssistantTool(type="retrieval")])
     if path:  # path may be empty if continuing from previous session
         retriever_agent.add_assistant_files([path])
 

@@ -3,7 +3,7 @@ import tempfile
 import pytest
 
 from langroid.agent.openai_assistant import (
-    AssitantTool,
+    AssistantTool,
     OpenAIAssistant,
     OpenAIAssistantConfig,
 )
@@ -201,7 +201,7 @@ def test_openai_assistant_retrieval(test_settings: Settings):
         filename = f.name
 
     # must enable retrieval first, then add file
-    agent.add_assistant_tools([AssitantTool(type="retrieval")])
+    agent.add_assistant_tools([AssistantTool(type="retrieval")])
     agent.add_assistant_files([filename])
 
     response = agent.llm_response("where was Vlad Nabrosky born?")
@@ -236,7 +236,7 @@ def test_openai_asst_code_interpreter(test_settings: Settings):
         filename = f.name
 
     # must enable retrieval first, then add file
-    agent.add_assistant_tools([AssitantTool(type="code_interpreter")])
+    agent.add_assistant_tools([AssistantTool(type="code_interpreter")])
     agent.add_assistant_files([filename])
 
     response = agent.llm_response(

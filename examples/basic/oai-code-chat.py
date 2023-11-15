@@ -15,7 +15,7 @@ import tempfile
 from langroid.agent.openai_assistant import (
     OpenAIAssistant,
     OpenAIAssistantConfig,
-    AssitantTool,
+    AssistantTool,
     ToolType,
 )
 from langroid.parsing.url_loader import URLLoader
@@ -66,7 +66,7 @@ def chat() -> None:
         llm=OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT4_TURBO),
     )
     agent = OpenAIAssistant(config)
-    agent.add_assistant_tools([AssitantTool(type=ToolType.CODE_INTERPRETER)])
+    agent.add_assistant_tools([AssistantTool(type=ToolType.CODE_INTERPRETER)])
     if path:
         agent.add_assistant_files([path])
 

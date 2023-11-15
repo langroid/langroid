@@ -20,7 +20,7 @@ import os
 from langroid.agent.openai_assistant import (
     OpenAIAssistantConfig,
     OpenAIAssistant,
-    AssitantTool,
+    AssistantTool,
 )
 
 from langroid.agent.task import Task
@@ -81,7 +81,7 @@ def chat() -> None:
     )
 
     retriever_agent = OpenAIAssistant(retriever_cfg)
-    retriever_agent.add_assistant_tools([AssitantTool(type="retrieval")])
+    retriever_agent.add_assistant_tools([AssistantTool(type="retrieval")])
     retriever_agent.add_assistant_files(["examples/docqa/lease.txt"])
 
     retriever_task = Task(
