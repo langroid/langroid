@@ -346,6 +346,7 @@ class ChatAgent(Agent):
         handle: bool = True,
         force: bool = False,
         require_recipient: bool = False,
+        include_defaults: bool = True,
     ) -> None:
         """
         Add the tool (message class) to the agent, and enable either
@@ -366,7 +367,11 @@ class ChatAgent(Agent):
                  `force` is ignored if `message_class` is None.
             require_recipient: whether to require that recipient be specified
                 when using the tool message (only applies if `use` is True).
-
+            require_defaults: whether to include fields that have default values,
+                in the "properties" section of the JSON format instructions.
+                (Normally the OpenAI completion API ignores these fields,
+                but the Assistant fn-calling seems to pay attn to these,
+                and if we don't want this, we should set this to False.)
         """
         super().enable_message_handling(message_class)  # enables handling only
         tools = self._get_tool_list(message_class)
@@ -374,7 +379,7 @@ class ChatAgent(Agent):
             if require_recipient:
                 message_class = message_class.require_recipient()
             request = message_class.default_value("request")
-            llm_function = message_class.llm_function_schema()
+            llm_function = message_class.llm_function_schema(defaults=include_defaults)
             self.llm_functions_map[request] = llm_function
             if force:
                 self.llm_function_force = dict(name=request)

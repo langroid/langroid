@@ -109,7 +109,11 @@ class ToolMessage(ABC, BaseModel):
         return properties.get(f, {}).get("default", None)
 
     @classmethod
-    def llm_function_schema(cls, request: bool = False) -> LLMFunctionSpec:
+    def llm_function_schema(
+        cls,
+        request: bool = False,
+        defaults: bool = True,
+    ) -> LLMFunctionSpec:
         """
         Clean up the schema of the Pydantic class (which can recursively contain
         other Pydantic classes), to create a version compatible with OpenAI
@@ -122,6 +126,8 @@ class ToolMessage(ABC, BaseModel):
             request: whether to include the "request" field in the schema.
                 (we set this to True when using Langroid-native TOOLs as opposed to
                 OpenAI Function calls)
+            defaults: whether to include fields with default values in the schema,
+                    in the "properties" section.
 
         Returns:
             LLMFunctionSpec: the schema as an LLMFunctionSpec
@@ -146,7 +152,7 @@ class ToolMessage(ABC, BaseModel):
         parameters["properties"] = {
             field: details
             for field, details in parameters["properties"].items()
-            if field not in excludes
+            if field not in excludes and (defaults or details.get("default") is None)
         }
         parameters["required"] = sorted(
             k

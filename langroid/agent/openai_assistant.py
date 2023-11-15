@@ -149,14 +149,21 @@ class OpenAIAssistant(ChatAgent):
         handle: bool = True,
         force: bool = False,
         require_recipient: bool = False,
+        include_defaults: bool = True,
     ) -> None:
-        """Override ChatAgent's method: extract the function-related args"""
+        """Override ChatAgent's method: extract the function-related args.
+        See that method for details. But specifically about the `include_defaults` arg:
+        Normally the OpenAI completion API ignores these fields, but the Assistant
+        fn-calling seems to pay attn to these, and if we don't want this,
+        we should set this to False.
+        """
         super().enable_message(
             message_class,
             use=use,
             handle=handle,
             force=force,
             require_recipient=require_recipient,
+            include_defaults=include_defaults,
         )
         if message_class is None or not use:
             # no specific msg class, or

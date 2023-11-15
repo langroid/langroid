@@ -56,7 +56,6 @@ Multi-Agent Collaboration, Structured Information Extraction, DocChatAgent
 (RAG), SQLChatAgent, etc. Scroll down or see docs for more.
 
 ```python
-
 from langroid.language_models import  OpenAIGPTConfig, OpenAIChatModel, OpenAIGPT
 from langroid import ChatAgent, ChatAgentConfig, Task
 
