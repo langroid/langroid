@@ -55,7 +55,7 @@ class Task:
 
     def __init__(
         self,
-        agent: Agent,
+        agent: Agent = ChatAgent(),
         name: str = "",
         llm_delegate: bool = False,
         single_round: bool = False,

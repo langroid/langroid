@@ -73,7 +73,7 @@ class Agent(ABC):
     information about any tool/function-calling messages that have been defined.
     """
 
-    def __init__(self, config: AgentConfig):
+    def __init__(self, config: AgentConfig = AgentConfig()):
         self.config = config
         self.lock = asyncio.Lock()  # for async access to update self.llm.usage_cost
         self.dialog: List[Tuple[str, str]] = []  # seq of LLM (prompt, response) tuples

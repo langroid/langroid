@@ -25,7 +25,7 @@ class ChromaDBConfig(VectorStoreConfig):
 
 
 class ChromaDB(VectorStore):
-    def __init__(self, config: ChromaDBConfig):
+    def __init__(self, config: ChromaDBConfig = ChromaDBConfig()):
         super().__init__(config)
         self.config = config
         emb_model = EmbeddingModel.create(config.embedding)

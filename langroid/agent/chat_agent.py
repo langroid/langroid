@@ -72,7 +72,9 @@ class ChatAgent(Agent):
     """
 
     def __init__(
-        self, config: ChatAgentConfig, task: Optional[List[LLMMessage]] = None
+        self,
+        config: ChatAgentConfig = ChatAgentConfig(),
+        task: Optional[List[LLMMessage]] = None,
     ):
         """
         Chat-mode agent initialized with task spec as the initial message sequence

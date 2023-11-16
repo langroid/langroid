@@ -1,9 +1,23 @@
 import ast
 import hashlib
 import logging
+import os
 import sys
+import warnings
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple, Type, Union, no_type_check
+from functools import cache
+from itertools import chain
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    List,
+    Optional,
+    Tuple,
+    Type,
+    Union,
+    no_type_check,
+)
 
 import litellm
 import openai
@@ -71,6 +85,59 @@ _cost_per_1k_tokens: Dict[str, Tuple[float, float]] = {
 }
 
 
+openAIChatModelPreferenceList = [
+    OpenAIChatModel.GPT4,
+    OpenAIChatModel.GPT3_5_TURBO,
+]
+
+openAICompletionModelPreferenceList = [
+    OpenAICompletionModel.GPT4,
+    OpenAICompletionModel.TEXT_DA_VINCI_003,
+    OpenAICompletionModel.TEXT_ADA_001,
+]
+
+
+if "OPENAI_API_KEY" in os.environ:
+    availableModels = set(map(lambda m: m["id"], openai.Model.list()["data"]))
+else:
+    availableModels = set()
+
+defaultOpenAIChatModel = next(
+    chain(
+        filter(
+            lambda m: m.value in availableModels,
+            openAIChatModelPreferenceList,
+        ),
+        [OpenAIChatModel.GPT4],
+    )
+)
+defaultOpenAICompletionModel = next(
+    chain(
+        filter(
+            lambda m: m.value in availableModels,
+            openAICompletionModelPreferenceList,
+        ),
+        [OpenAICompletionModel.GPT4],
+    )
+)
+
+
+@cache
+def gpt_3_5_warning():
+    warnings.warn(
+        """
+        GPT-4 is not available, falling back to GPT-3.5.
+        Examples may not work properly and unexpected behavior may occur.
+        Adjustments to prompts may be necessary.
+        """
+    )
+
+
+def noop():
+    """Does nothing."""
+    return None
+
+
 class OpenAIGPTConfig(LLMConfig):
     """
     Class for any LLM with an OpenAI-like API: besides the OpenAI models this includes:
@@ -90,8 +157,31 @@ class OpenAIGPTConfig(LLMConfig):
     timeout: int = 20
     temperature: float = 0.2
     # these can be any model name that is served at an OpenAI-compatible API end point
-    chat_model: str = OpenAIChatModel.GPT4
-    completion_model: str = OpenAICompletionModel.GPT4
+    chat_model: str = defaultOpenAIChatModel
+    completion_model: str = defaultOpenAICompletionModel
+    run_on_first_use: Callable[[], None] = noop
+
+    def __init__(self, **kwargs):
+        local_model = "api_base" in kwargs and kwargs["api_base"] is not None
+        nofunc = kwargs.get("nofunc", False)
+
+        warn_gpt_3_5 = (
+            "chat_model" not in kwargs.keys()
+            and not local_model
+            and defaultOpenAIChatModel == OpenAIChatModel.GPT3_5_TURBO
+            and not nofunc
+        )
+
+        if warn_gpt_3_5:
+            existing_hook = kwargs.get("run_on_first_use", noop)
+
+            def with_warning():
+                existing_hook()
+                gpt_3_5_warning()
+
+            kwargs["run_on_first_use"] = with_warning
+
+        super().__init__(**kwargs)
 
     # all of the vars above can be set via env vars,
     # by upper-casing the name and prefixing with OPENAI_, e.g.
@@ -148,13 +238,13 @@ class OpenAIResponse(BaseModel):
     usage: Dict  # type: ignore
 
 
-# Define a class for OpenAI GPT-3 that extends the base class
+# Define a class for OpenAI GPT models that extends the base class
 class OpenAIGPT(LanguageModel):
     """
     Class for OpenAI LLMs
     """
 
-    def __init__(self, config: OpenAIGPTConfig):
+    def __init__(self, config: OpenAIGPTConfig = OpenAIGPTConfig()):
         """
         Args:
             config: configuration for openai-gpt model
@@ -163,6 +253,9 @@ class OpenAIGPT(LanguageModel):
         self.config: OpenAIGPTConfig = config
         if settings.nofunc:
             self.config.chat_model = OpenAIChatModel.GPT4_NOFUNC
+
+        # Run the first time the model is used
+        self.run_on_first_use = cache(self.config.run_on_first_use)
 
         # global override of chat_model,
         # to allow quick testing with other models
@@ -511,6 +604,8 @@ class OpenAIGPT(LanguageModel):
         )
 
     def generate(self, prompt: str, max_tokens: int) -> LLMResponse:
+        self.run_on_first_use()
+
         try:
             return self._generate(prompt, max_tokens)
         except Exception as e:
@@ -563,6 +658,8 @@ class OpenAIGPT(LanguageModel):
         return LLMResponse(message=msg, cached=cached)
 
     async def agenerate(self, prompt: str, max_tokens: int) -> LLMResponse:
+        self.run_on_first_use()
+
         try:
             return await self._agenerate(prompt, max_tokens)
         except Exception as e:
@@ -573,6 +670,7 @@ class OpenAIGPT(LanguageModel):
 
     async def _agenerate(self, prompt: str, max_tokens: int) -> LLMResponse:
         openai.api_key = self.api_key
+
         if self.api_base:
             openai.api_base = self.api_base
         # note we typically will not have self.config.stream = True
@@ -654,6 +752,8 @@ class OpenAIGPT(LanguageModel):
         functions: Optional[List[LLMFunctionSpec]] = None,
         function_call: str | Dict[str, str] = "auto",
     ) -> LLMResponse:
+        self.run_on_first_use()
+
         if functions is not None and not self.is_openai_chat_model():
             raise ValueError(
                 f"""
@@ -697,6 +797,8 @@ class OpenAIGPT(LanguageModel):
         functions: Optional[List[LLMFunctionSpec]] = None,
         function_call: str | Dict[str, str] = "auto",
     ) -> LLMResponse:
+        self.run_on_first_use()
+
         if functions is not None and not self.is_openai_chat_model():
             raise ValueError(
                 f"""
@@ -942,7 +1044,6 @@ class OpenAIGPT(LanguageModel):
         """
         Async version of _chat(). See that function for details.
         """
-
         args = self._prep_chat_completion(
             messages,
             max_tokens,

@@ -222,7 +222,7 @@ class LanguageModel(ABC):
     # usage cost by model, accumulates here
     usage_cost_dict: Dict[str, LLMTokenUsage] = {}
 
-    def __init__(self, config: LLMConfig):
+    def __init__(self, config: LLMConfig = LLMConfig()):
         self.config = config
 
     @staticmethod

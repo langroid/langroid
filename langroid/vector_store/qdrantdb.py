@@ -36,7 +36,7 @@ class QdrantDBConfig(VectorStoreConfig):
 
 
 class QdrantDB(VectorStore):
-    def __init__(self, config: QdrantDBConfig):
+    def __init__(self, config: QdrantDBConfig = QdrantDBConfig()):
         super().__init__(config)
         self.config = config
         emb_model = EmbeddingModel.create(config.embedding)

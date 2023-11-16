@@ -32,7 +32,7 @@ class MeiliSearchConfig(VectorStoreConfig):
 
 
 class MeiliSearch(VectorStore):
-    def __init__(self, config: MeiliSearchConfig):
+    def __init__(self, config: MeiliSearchConfig = MeiliSearchConfig()):
         super().__init__(config)
         self.config: MeiliSearchConfig = config
         self.host = config.host
