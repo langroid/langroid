@@ -81,6 +81,7 @@ scrapy = "^2.11.0"
 async-generator = "^1.10"
 lancedb = "^0.3.0"
 pytest-redis = "^3.0.2"
+neo4j = "^5.14.1"
 
 [tool.poetry.extras]
 # install these using `poetry install -E [...]` where [...] is one of the extras below
