@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List
 
 
 class CacheDB(ABC):
@@ -17,7 +17,7 @@ class CacheDB(ABC):
         pass
 
     @abstractmethod
-    def retrieve(self, key: str) -> Optional[Dict[str, Any]]:
+    def retrieve(self, key: str) -> Dict[str, Any] | str | None:
         """
         Abstract method to retrieve the value associated with a key.
 
@@ -26,5 +26,15 @@ class CacheDB(ABC):
 
         Returns:
             dict: The value associated with the key.
+        """
+        pass
+
+    @abstractmethod
+    def delete_keys(self, keys: List[str]) -> None:
+        """
+        Delete the keys from the cache.
+
+        Args:
+            keys (List[str]): The keys to delete.
         """
         pass

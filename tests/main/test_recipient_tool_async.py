@@ -83,8 +83,7 @@ async def test_agents_with_recipient_tool(
     processor_task = Task(
         processor_agent,
         name="Processor",
-        default_human_response="",
-        only_user_quits_root=False,
+        interactive=False,
         system_message=f"""
         You are given this list of {len(INPUT_NUMBERS)} numbers:
         {INPUT_NUMBERS}. 

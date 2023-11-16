@@ -34,7 +34,7 @@ from langroid.language_models.base import (
     StreamingIfAllowed,
 )
 from langroid.language_models.openai_gpt import OpenAIGPTConfig
-from langroid.mytypes import DocMetaData, Entity
+from langroid.mytypes import Entity
 from langroid.parsing.json import extract_top_level_json
 from langroid.parsing.parser import Parser, ParsingConfig
 from langroid.prompts.prompts_config import PromptsConfig
@@ -279,6 +279,10 @@ class Agent(ABC):
         if results is None:
             return None
         if isinstance(results, ChatDocument):
+            # Preserve trail of tool_ids for OpenAI Assistant fn-calls
+            results.metadata.tool_ids = (
+                [] if isinstance(msg, str) else msg.metadata.tool_ids
+            )
             return results
         if not settings.quiet:
             console.print(f"[red]{self.indent}", end="")
@@ -295,6 +299,8 @@ class Agent(ABC):
                 source=Entity.AGENT,
                 sender=Entity.AGENT,
                 sender_name=sender_name,
+                # preserve trail of tool_ids for OpenAI Assistant fn-calls
+                tool_ids=[] if isinstance(msg, str) else msg.metadata.tool_ids,
             ),
         )
 
@@ -331,6 +337,9 @@ class Agent(ABC):
                 f"or hit enter to continue)\n{self.indent}",
             ).strip()
 
+        tool_ids = []
+        if msg is not None and isinstance(msg, ChatDocument):
+            tool_ids = msg.metadata.tool_ids
         # only return non-None result if user_msg not empty
         if not user_msg:
             return None
@@ -344,9 +353,11 @@ class Agent(ABC):
                 sender = Entity.USER
             return ChatDocument(
                 content=user_msg,
-                metadata=DocMetaData(
+                metadata=ChatDocMetaData(
                     source=source,
                     sender=sender,
+                    # preserve trail of tool_ids for OpenAI Assistant fn-calls
+                    tool_ids=tool_ids,
                 ),
             )
 
@@ -429,7 +440,10 @@ class Agent(ABC):
                 chat=False,  # i.e. it's a completion model not chat model
                 print_response_stats=self.config.show_stats and not settings.quiet,
             )
-        return ChatDocument.from_LLMResponse(response, displayed=True)
+        cdoc = ChatDocument.from_LLMResponse(response, displayed=True)
+        # Preserve trail of tool_ids for OpenAI Assistant fn-calls
+        cdoc.metadata.tool_ids = [] if isinstance(msg, str) else msg.metadata.tool_ids
+        return cdoc
 
     @no_type_check
     def llm_response(
@@ -498,7 +512,10 @@ class Agent(ABC):
             chat=False,  # i.e. it's a completion model not chat model
             print_response_stats=self.config.show_stats and not settings.quiet,
         )
-        return ChatDocument.from_LLMResponse(response, displayed=True)
+        cdoc = ChatDocument.from_LLMResponse(response, displayed=True)
+        # Preserve trail of tool_ids for OpenAI Assistant fn-calls
+        cdoc.metadata.tool_ids = [] if isinstance(msg, str) else msg.metadata.tool_ids
+        return cdoc
 
     def get_tool_messages(self, msg: str | ChatDocument) -> List[ToolMessage]:
         if isinstance(msg, str):

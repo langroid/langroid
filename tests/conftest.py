@@ -1,3 +1,5 @@
+import os
+
 import pytest
 
 from langroid.utils.configuration import Settings
@@ -30,7 +32,7 @@ def pytest_addoption(parser) -> None:
     )
 
 
-@pytest.fixture
+@pytest.fixture(scope="session")
 def test_settings(request) -> Settings:
     return Settings(
         debug=request.config.getoption("--show"),
@@ -41,3 +43,12 @@ def test_settings(request) -> Settings:
         nofunc=request.config.getoption("--nof"),
         chat_model=request.config.getoption("--m"),
     )
+
+
+@pytest.fixture(scope="session")
+def redis_setup(redisdb):
+    os.environ["REDIS_HOST"] = redisdb.connection_pool.connection_kwargs["host"]
+    os.environ["REDIS_PORT"] = str(redisdb.connection_pool.connection_kwargs["port"])
+    os.environ["REDIS_PASSWORD"] = ""  # Assuming no password for testing
+    yield
+    # Reset or clean up environment variables after tests

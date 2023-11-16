@@ -20,6 +20,7 @@ class Settings(BaseSettings):
     nofunc: bool = False  # use model without function_call? (i.e. gpt-4)
     chat_model: str = ""  # language model name, e.g. litellm/ollama/llama2
     quiet: bool = False  # quiet mode (i.e. suppress all output)?
+    notebook: bool = False  # running in a notebook?
 
     class Config:
         extra = "forbid"

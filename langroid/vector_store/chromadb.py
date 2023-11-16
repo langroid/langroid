@@ -99,6 +99,9 @@ class ChromaDB(VectorStore):
 
         """
         self.config.collection_name = collection_name
+        if collection_name in self.list_collections(empty=True) and replace:
+            logger.warning(f"Replacing existing collection {collection_name}")
+            self.client.delete_collection(collection_name)
         self.collection = self.client.create_collection(
             name=self.config.collection_name,
             embedding_function=self.embedding_fn,

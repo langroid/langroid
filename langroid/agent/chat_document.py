@@ -1,5 +1,5 @@
 import json
-from typing import List, Optional, Type
+from typing import List, Optional, Union
 
 from pydantic import BaseModel, Extra
 
@@ -25,6 +25,7 @@ class ChatDocAttachment(BaseModel):
 class ChatDocMetaData(DocMetaData):
     parent: Optional["ChatDocument"] = None
     sender: Entity
+    tool_ids: List[str] = []  # stack of tool_ids; used by OpenAIAssistant
     # when result returns to parent, pretend message is from this entity
     parent_responder: None | Entity = None
     block: None | Entity = None
@@ -118,11 +119,26 @@ class ChatDocument(Document):
         field_values = fields.dict().values()
         return "\t".join(str(v) for v in field_values)
 
+    def pop_tool_ids(self) -> None:
+        """
+        Pop the last tool_id from the stack of tool_ids.
+        """
+        if len(self.metadata.tool_ids) > 0:
+            self.metadata.tool_ids.pop()
+
     @staticmethod
     def from_LLMResponse(
         response: LLMResponse,
         displayed: bool = False,
     ) -> "ChatDocument":
+        """
+        Convert LLMResponse to ChatDocument.
+        Args:
+            response (LLMResponse): LLMResponse to convert.
+            displayed (bool): Whether this response was displayed to the user.
+        Returns:
+            ChatDocument: ChatDocument representation of this LLMResponse.
+        """
         recipient, message = response.get_recipient_and_message()
         return ChatDocument(
             content=message,
@@ -155,7 +171,7 @@ class ChatDocument(Document):
         )
 
     @staticmethod
-    def to_LLMMessage(message: str | Type["ChatDocument"]) -> LLMMessage:
+    def to_LLMMessage(message: Union[str, "ChatDocument"]) -> LLMMessage:
         """
         Convert to LLMMessage for use with LLM.
 
@@ -168,10 +184,13 @@ class ChatDocument(Document):
         sender_name = None
         sender_role = Role.USER
         fun_call = None
+        tool_id = ""
         if isinstance(message, ChatDocument):
             content = message.content
             fun_call = message.function_call
             sender_name = message.metadata.sender_name
+            tool_ids = message.metadata.tool_ids
+            tool_id = tool_ids[-1] if len(tool_ids) > 0 else ""
             if message.metadata.sender == Entity.SYSTEM:
                 sender_role = Role.SYSTEM
             if (
@@ -188,6 +207,7 @@ class ChatDocument(Document):
 
         return LLMMessage(
             role=sender_role,
+            tool_id=tool_id,
             content=content,
             function_call=fun_call,
             name=sender_name,

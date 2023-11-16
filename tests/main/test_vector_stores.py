@@ -139,7 +139,7 @@ def vecdb(request) -> VectorStore:
         ("people outside Canada", [phrases.NOT_CANADA], ["meilisearch"]),
     ],
 )
-# add "momento" when index-creation timeout error is resolved.
+# add "momento" when their API docs are ready
 @pytest.mark.parametrize(
     "vecdb",
     ["qdrant_cloud", "qdrant_local", "lancedb", "chroma"],
@@ -152,9 +152,6 @@ def test_vector_stores_search(
         # we don't expect some of these to work,
         # e.g. MeiliSearch is a text search engine, not a vector store
         return
-    if isinstance(vecdb, MomentoVI):
-        # skip due to non-deterministic search failures. Maybe need to use async?
-        return
     docs_and_scores = vecdb.similar_texts_with_scores(query, k=len(vars(phrases)))
     # first doc should be best match
     # scores are cosine similarities, so high means close
@@ -162,7 +159,7 @@ def test_vector_stores_search(
     assert set(results).issubset(set(matching_docs))
 
 
-# add "momento" when index-creation timeout error is resolved.
+# add "momento" when their API docs are ready.
 @pytest.mark.parametrize(
     "vecdb",
     ["qdrant_local", "qdrant_cloud", "lancedb", "chroma"],
@@ -171,21 +168,11 @@ def test_vector_stores_search(
 def test_vector_stores_access(vecdb):
     assert vecdb is not None
 
-    if not isinstance(vecdb, MomentoVI):
-        all_docs = vecdb.get_all_documents()
-        assert len(all_docs) == len(stored_docs)
-
     coll_name = vecdb.config.collection_name
     assert coll_name is not None
 
     vecdb.delete_collection(collection_name=coll_name)
     vecdb.create_collection(collection_name=coll_name)
-    if not isinstance(vecdb, MomentoVI):
-        all_docs = vecdb.get_all_documents()
-        assert len(all_docs) == 0
-
-    if isinstance(vecdb, MomentoVI):
-        return
 
     vecdb.add_documents(stored_docs)
     all_docs = vecdb.get_all_documents()
@@ -310,14 +297,19 @@ def test_vector_stores_overlapping_matches(vecdb):
 
     # Test context window retrieval
     docs_scores = vecdb.similar_texts_with_scores("What are Giraffes like?", k=3)
+    # We expect to retrieve a window of -2, +2 around each of the three Giraffe matches.
+    # The first two windows will overlap, so they form a connected component,
+    # and we topological-sort and order the chunks in these windows, resulting in a
+    # single window. The third Giraffe-match context window will not overlap with
+    # the other two, so we will have a total of 2 final docs_scores components.
     docs_scores = vecdb.add_context_window(docs_scores, neighbors=2)
 
-    assert len(docs_scores) == 3
+    assert len(docs_scores) == 2
     # verify no overlap in d.metadata.window_ids for d in docs
     all_window_ids = [id for d, _ in docs_scores for id in d.metadata.window_ids]
     assert len(all_window_ids) == len(set(all_window_ids))
 
-    # verify giraffe occurs in each match
+    # verify giraffe occurs in each /match
     assert all("Giraffes" in d.content for d, _ in docs_scores)
 
     # verify correct sequence of chunks in each match

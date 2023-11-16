@@ -91,9 +91,10 @@ class RecipientTool(ToolMessage):
     Used by LLM to send a message to a specific recipient.
 
     Useful in cases where an LLM is talking to 2 or more
-    agents, and needs to specify which agent (task) its message is intended for.
-    The recipient name should be the name of a task (which is normally the name of
-    the agent that the task wraps, although the task can have its own name).
+    agents (or an Agent and human user), and needs to specify which agent (task)
+    its message is intended for. The recipient name should be the name of a task
+    (which is normally the name of the agent that the task wraps, although the task
+    can have its own name).
 
     To use this tool/function-call, LLM must generate a JSON structure
     with these fields:
@@ -102,6 +103,7 @@ class RecipientTool(ToolMessage):
         "intended_recipient": <name_of_recipient_task_or_entity>,
         "content": <content>
     }
+    The effect of this is that `content` will be sent to the `intended_recipient` task.
     """
 
     request: str = "recipient_message"
@@ -181,7 +183,7 @@ class RecipientTool(ToolMessage):
             content=self.content,
             metadata=ChatDocMetaData(
                 recipient=self.intended_recipient,
-                # we are constructing this so it looks as it msg is from LLM
+                # we are constructing this so it looks as if msg is from LLM
                 sender=Entity.LLM,
             ),
         )

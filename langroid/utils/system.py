@@ -1,6 +1,10 @@
+import getpass
+import hashlib
 import inspect
 import logging
 import shutil
+import socket
+import traceback
 
 logger = logging.getLogger(__name__)
 
@@ -56,3 +60,61 @@ def caller_name() -> str:
         return ""
 
     return caller_frame.f_code.co_name
+
+
+def friendly_error(e: Exception, msg: str = "An error occurred.") -> str:
+    tb = traceback.format_exc()
+    original_error_message: str = str(e)
+    full_error_message: str = (
+        f"{msg}\nOriginal error: {original_error_message}\nTraceback:\n{tb}"
+    )
+    return full_error_message
+
+
+def generate_user_id(org: str = "") -> str:
+    """
+    Generate a unique user ID based on the username and machine name.
+    Returns:
+    """
+    # Get the username
+    username = getpass.getuser()
+
+    # Get the machine's name
+    machine_name = socket.gethostname()
+
+    org_pfx = f"{org}_" if org else ""
+
+    # Create a consistent unique ID based on the username and machine name
+    unique_string = f"{org_pfx}{username}@{machine_name}"
+
+    # Generate a SHA-256 hash of the unique string
+    user_id = hashlib.sha256(unique_string.encode()).hexdigest()
+
+    return user_id
+
+
+def update_hash(hash: str | None = None, s: str = "") -> str:
+    """
+    Takes a SHA256 hash string and a new string, updates the hash with the new string,
+    and returns the updated hash string along with the original string.
+
+    Args:
+        hash (str): A SHA256 hash string.
+        s (str): A new string to update the hash with.
+
+    Returns:
+        The updated hash in hexadecimal format.
+    """
+    # Create a new hash object if no hash is provided
+    if hash is None:
+        hash_obj = hashlib.sha256()
+    else:
+        # Convert the hexadecimal hash string to a byte object
+        hash_bytes = bytes.fromhex(hash)
+        hash_obj = hashlib.sha256(hash_bytes)
+
+    # Update the hash with the new string
+    hash_obj.update(s.encode("utf-8"))
+
+    # Return the updated hash in hexadecimal format and the original string
+    return hash_obj.hexdigest()

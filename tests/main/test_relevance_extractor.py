@@ -76,8 +76,7 @@ def test_relevance_extractor_agent(
     extractor_agent = RelevanceExtractorAgent(agent_cfg)
     extractor_task = Task(
         extractor_agent,
-        default_human_response="",  # eliminate human response
-        only_user_quits_root=False,  # allow agent_response to quit via "DONE <msg>"
+        interactive=False,
     )
 
     result = extractor_task.run(passage)
@@ -136,8 +135,7 @@ async def test_relevance_extractor_concurrent(
         task = Task(
             agent,
             name=f"Test-{i}",
-            default_human_response="",  # eliminate human response
-            only_user_quits_root=False,  # allow agent_response to quit via "DONE <msg>"
+            interactive=False,
         )
         return await task.run_async(msg=msg)
 
@@ -207,8 +205,7 @@ def test_relevance_extractor_batch(
     task = Task(
         agent,
         name="Test",
-        default_human_response="",  # eliminate human response
-        only_user_quits_root=False,  # allow agent_response to quit via "DONE <msg>"
+        interactive=False,
     )
 
     answers = run_batch_tasks(

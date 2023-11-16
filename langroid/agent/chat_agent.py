@@ -3,7 +3,7 @@ import json
 import logging
 import textwrap
 from contextlib import ExitStack
-from typing import Dict, List, Optional, Set, Tuple, Type, cast, no_type_check
+from typing import Dict, List, Optional, Set, Tuple, Type, cast
 
 from rich import print
 from rich.console import Console
@@ -348,6 +348,7 @@ class ChatAgent(Agent):
         handle: bool = True,
         force: bool = False,
         require_recipient: bool = False,
+        include_defaults: bool = True,
     ) -> None:
         """
         Add the tool (message class) to the agent, and enable either
@@ -368,7 +369,11 @@ class ChatAgent(Agent):
                  `force` is ignored if `message_class` is None.
             require_recipient: whether to require that recipient be specified
                 when using the tool message (only applies if `use` is True).
-
+            require_defaults: whether to include fields that have default values,
+                in the "properties" section of the JSON format instructions.
+                (Normally the OpenAI completion API ignores these fields,
+                but the Assistant fn-calling seems to pay attn to these,
+                and if we don't want this, we should set this to False.)
         """
         super().enable_message_handling(message_class)  # enables handling only
         tools = self._get_tool_list(message_class)
@@ -376,7 +381,7 @@ class ChatAgent(Agent):
             if require_recipient:
                 message_class = message_class.require_recipient()
             request = message_class.default_value("request")
-            llm_function = message_class.llm_function_schema()
+            llm_function = message_class.llm_function_schema(defaults=include_defaults)
             self.llm_functions_map[request] = llm_function
             if force:
                 self.llm_function_force = dict(name=request)
@@ -445,7 +450,6 @@ class ChatAgent(Agent):
                 self.llm_tools_usable.discard(r)
                 self.llm_functions_usable.discard(r)
 
-    @no_type_check
     def llm_response(
         self, message: Optional[str | ChatDocument] = None
     ) -> Optional[ChatDocument]:
@@ -466,9 +470,16 @@ class ChatAgent(Agent):
         # TODO - when response contains function_call we should include
         # that (and related fields) in the message_history
         self.message_history.append(ChatDocument.to_LLMMessage(response))
+        # Preserve trail of tool_ids for OpenAI Assistant fn-calls
+        response.metadata.tool_ids = (
+            []
+            if isinstance(message, str)
+            else message.metadata.tool_ids
+            if message is not None
+            else []
+        )
         return response
 
-    @no_type_check
     async def llm_response_async(
         self, message: Optional[str | ChatDocument] = None
     ) -> Optional[ChatDocument]:
@@ -484,11 +495,20 @@ class ChatAgent(Agent):
         # TODO - when response contains function_call we should include
         # that (and related fields) in the message_history
         self.message_history.append(ChatDocument.to_LLMMessage(response))
+        # Preserve trail of tool_ids for OpenAI Assistant fn-calls
+        response.metadata.tool_ids = (
+            []
+            if isinstance(message, str)
+            else message.metadata.tool_ids
+            if message is not None
+            else []
+        )
         return response
 
-    @no_type_check
     def _prep_llm_messages(
-        self, message: Optional[str | ChatDocument] = None
+        self,
+        message: Optional[str | ChatDocument] = None,
+        truncate: bool = True,
     ) -> Tuple[List[LLMMessage], int]:
         """
         Prepare messages to be sent to self.llm_response_messages,
@@ -500,12 +520,21 @@ class ChatAgent(Agent):
                 output_len = max expected number of tokens in response
         """
 
-        if not self.llm_can_respond(message):
+        if (
+            not self.llm_can_respond(message)
+            or self.config.llm is None
+            or self.llm is None
+        ):
             return [], 0
 
-        assert (
-            message is not None or len(self.message_history) == 0
-        ), "message can be None only if message_history is empty, i.e. at start."
+        if message is None and len(self.message_history) > 0:
+            # this means agent has been used to get LLM response already,
+            # and so the last message is an "assistant" response.
+            # We delete this last assistant response and re-generate it.
+            self.clear_history(-1)
+            logger.warning(
+                "Re-generating the last assistant response since message is None"
+            )
 
         if len(self.message_history) == 0:
             # initial messages have not yet been loaded, so load them
@@ -535,7 +564,8 @@ class ChatAgent(Agent):
         hist = self.message_history
         output_len = self.config.llm.max_output_tokens
         if (
-            self.chat_num_tokens(hist)
+            truncate
+            and self.chat_num_tokens(hist)
             > self.llm.chat_context_length() - self.config.llm.max_output_tokens
         ):
             # chat + output > max context length,
@@ -601,6 +631,18 @@ class ChatAgent(Agent):
             )
         return hist, output_len
 
+    def _function_args(
+        self,
+    ) -> Tuple[Optional[List[LLMFunctionSpec]], str | Dict[str, str]]:
+        functions: Optional[List[LLMFunctionSpec]] = None
+        fun_call: str | Dict[str, str] = "none"
+        if self.config.use_functions_api and len(self.llm_functions_usable) > 0:
+            functions = [self.llm_functions_map[f] for f in self.llm_functions_usable]
+            fun_call = (
+                "auto" if self.llm_function_force is None else self.llm_function_force
+            )
+        return functions, fun_call
+
     def llm_response_messages(
         self, messages: List[LLMMessage], output_len: Optional[int] = None
     ) -> ChatDocument:
@@ -622,17 +664,7 @@ class ChatAgent(Agent):
                 stack.enter_context(cm)
             if self.llm.get_stream() and not settings.quiet:
                 console.print(f"[green]{self.indent}", end="")
-            functions: Optional[List[LLMFunctionSpec]] = None
-            fun_call: str | Dict[str, str] = "none"
-            if self.config.use_functions_api and len(self.llm_functions_usable) > 0:
-                functions = [
-                    self.llm_functions_map[f] for f in self.llm_functions_usable
-                ]
-                fun_call = (
-                    "auto"
-                    if self.llm_function_force is None
-                    else self.llm_function_force
-                )
+            functions, fun_call = self._function_args()
             assert self.llm is not None
             response = self.llm.chat(
                 messages,

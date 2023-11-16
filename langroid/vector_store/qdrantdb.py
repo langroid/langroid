@@ -2,7 +2,6 @@ import logging
 import os
 from typing import List, Optional, Sequence, Tuple
 
-from chromadb.api.types import EmbeddingFunction
 from dotenv import load_dotenv
 from qdrant_client import QdrantClient
 from qdrant_client.conversions.common_types import ScoredPoint
@@ -20,7 +19,7 @@ from langroid.embedding_models.base import (
     EmbeddingModelsConfig,
 )
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
-from langroid.mytypes import Document
+from langroid.mytypes import Document, EmbeddingFunction
 from langroid.utils.configuration import settings
 from langroid.vector_store.base import VectorStore, VectorStoreConfig
 

@@ -31,7 +31,7 @@ def test_openai_gpt(test_settings: Settings, streaming, country, capital):
         chat_model=(
             OpenAIChatModel.GPT3_5_TURBO
             if test_settings.gpt3_5
-            else OpenAIChatModel.GPT4
+            else OpenAIChatModel.GPT4  # or GPT4_TURBO
         ),
         completion_model=OpenAICompletionModel.GPT4,
         cache_config=RedisCacheConfig(fake=False),
@@ -89,7 +89,7 @@ def _test_context_length_error(test_settings: Settings, mode: str, max_tokens: i
     cfg = OpenAIGPTConfig(
         stream=False,
         max_output_tokens=max_tokens,
-        chat_model=OpenAIChatModel.GPT4,
+        chat_model=OpenAIChatModel.GPT4,  # or GPT4_TURBO,
         completion_model=OpenAICompletionModel.TEXT_DA_VINCI_003,
         cache_config=RedisCacheConfig(fake=False),
     )
@@ -106,7 +106,7 @@ def _test_context_length_error(test_settings: Settings, mode: str, max_tokens: i
     assert big_message_tokens + max_tokens > context_length
     response = None
     # TODO need to figure out what error type to expect here
-    with pytest.raises(openai.error.InvalidRequestError) as e:
+    with pytest.raises(openai.BadRequestError) as e:
         if mode == "chat":
             response = llm.chat(big_message, max_tokens=max_tokens)
         else:

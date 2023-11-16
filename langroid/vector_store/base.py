@@ -1,7 +1,6 @@
 import copy
 import logging
 from abc import ABC, abstractmethod
-from math import ceil
 from typing import Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
@@ -10,7 +9,7 @@ from pydantic import BaseSettings
 from langroid.embedding_models.base import EmbeddingModel, EmbeddingModelsConfig
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
 from langroid.mytypes import Document
-from langroid.utils.algorithms.graph import topological_sort
+from langroid.utils.algorithms.graph import components, topological_sort
 from langroid.utils.configuration import settings
 from langroid.utils.output.printing import print_long_text
 
@@ -157,8 +156,7 @@ class VectorStore(ABC):
         In each doc's metadata, there may be a window_ids field indicating
         the ids of the chunks around the current chunk.
         These window_ids may overlap, so we
-        - gather connected-components of overlapping windows,
-        - split each component into roughly equal parts,
+        - coalesce each overlapping groups into a single window (maintaining ordering),
         - create a new document for each part, preserving metadata,
 
         We may have stored a longer set of window_ids than we need during chunking.
@@ -205,7 +203,8 @@ class VectorStore(ABC):
             window_ids_list += [neighbor_ids]
 
         # window_ids could be from different docs,
-        # and they may overlap, so we first remove overlaps
+        # and they may overlap, so we coalesce overlapping groups into
+        # separate windows.
         window_ids_list = self.remove_overlaps(window_ids_list)
         final_docs = []
         final_scores = []
@@ -226,8 +225,9 @@ class VectorStore(ABC):
     def remove_overlaps(windows: List[List[str]]) -> List[List[str]]:
         """
         Given a collection of windows, where each window is a sequence of ids,
-        identify groups of overlapping windows, and for each overlapping k-group,
-        split the ids into k roughly equal sequences.
+        identify groups of overlapping windows, and for each overlapping group,
+        order the chunk-ids using topological sort so they appear in the original
+        order in the text.
 
         Args:
             windows (List[int|str]): List of windows, where each window is a
@@ -261,20 +261,10 @@ class VectorStore(ABC):
                     order[i, j] = 1  # win i is after win j
 
         # find groups of windows that overlap, like connected components in a graph
-        groups = [[0]]
-        for i in range(1, n):
-            found = False
-            for g in groups:
-                if any(order[i, j] != 0 for j in g):
-                    g.append(i)
-                    found = True
-                    break
-            if not found:
-                groups.append([i])
+        groups = components(np.abs(order))
 
-        # split each group into roughly equal parts
+        # order the chunk-ids in each group using topological sort
         new_windows = []
-        max_window_len = max(len(w) for w in windows)
         for g in groups:
             # find total ordering among windows in group based on order matrix
             # (this is a topological sort)
@@ -284,12 +274,12 @@ class VectorStore(ABC):
             ordered_window_ids = [windows[i] for i in _g[ordered_window_indices]]
             flattened = [id for w in ordered_window_ids for id in w]
             flattened_deduped = list(dict.fromkeys(flattened))
-            # split into k parts where k is the smallest integer such that
-            # each part has length <= max_window_len
-            k = max(1, int(ceil(len(flattened_deduped) / max_window_len)))
-            new_windows += np.array_split(flattened_deduped, k)
+            # Note we are not going to split these, and instead we'll return
+            # larger windows from concatenating the connected groups.
+            # This ensures context is retained for LLM q/a
+            new_windows += [flattened_deduped]
 
-        return [w.tolist() for w in new_windows]
+        return new_windows
 
     @abstractmethod
     def get_all_documents(self) -> List[Document]:

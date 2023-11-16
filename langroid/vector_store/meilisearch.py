@@ -226,7 +226,7 @@ class MeiliSearch(VectorStore):
         async with self.client() as client:
             index = client.index(self.config.collection_name)
             documents = await asyncio.gather(*[index.get_document(id) for id in ids])
-        return documents  # type: ignore
+        return documents
 
     def get_documents_by_ids(self, ids: List[str]) -> List[Document]:
         if self.config.collection_name is None:

@@ -1,8 +1,8 @@
 import os
 from typing import Callable, List
 
-import openai
 from dotenv import load_dotenv
+from openai import OpenAI
 
 from langroid.embedding_models.base import EmbeddingModel, EmbeddingModelsConfig
 from langroid.language_models.utils import retry_with_exponential_backoff
@@ -13,6 +13,7 @@ class OpenAIEmbeddingsConfig(EmbeddingModelsConfig):
     model_type: str = "openai"
     model_name: str = "text-embedding-ada-002"
     api_key: str = ""
+    organization: str = ""
     dims: int = 1536
 
 
@@ -27,6 +28,7 @@ class OpenAIEmbeddings(EmbeddingModel):
         self.config = config
         load_dotenv()
         self.config.api_key = os.getenv("OPENAI_API_KEY", "")
+        self.config.organization = os.getenv("OPENAI_ORGANIZATION", "")
         if self.config.api_key == "":
             raise ValueError(
                 """OPENAI_API_KEY env variable must be set to use 
@@ -34,15 +36,15 @@ class OpenAIEmbeddings(EmbeddingModel):
                 in your .env file.
                 """
             )
-        openai.api_key = self.config.api_key
+        self.client = OpenAI(api_key=self.config.api_key)
 
     def embedding_fn(self) -> Callable[[List[str]], Embeddings]:
         @retry_with_exponential_backoff
         def fn(texts: List[str]) -> Embeddings:
-            result = openai.Embedding.create(  # type: ignore
+            result = self.client.embeddings.create(
                 input=texts, model=self.config.model_name
             )
-            return [d["embedding"] for d in result["data"]]
+            return [d.embedding for d in result.data]
 
         return fn
 

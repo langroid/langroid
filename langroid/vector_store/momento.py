@@ -4,10 +4,9 @@ https://docs.momentohq.com/vector-index/develop/api-reference
 """
 import logging
 import os
-from typing import List, Optional, Sequence, Tuple
+from typing import List, Optional, Sequence, Tuple, no_type_check
 
 import momento.responses.vector_index as mvi_response
-from chromadb.api.types import EmbeddingFunction
 from dotenv import load_dotenv
 from momento import (
     # PreviewVectorIndexClientAsync,
@@ -26,7 +25,7 @@ from langroid.embedding_models.base import (
     EmbeddingModelsConfig,
 )
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
-from langroid.mytypes import Document
+from langroid.mytypes import Document, EmbeddingFunction
 from langroid.utils.configuration import settings
 from langroid.utils.pydantic_utils import (
     flatten_pydantic_instance,
@@ -116,7 +115,7 @@ class MomentoVI(VectorStore):
         """
         response = self.client.list_indexes()
         if isinstance(response, mvi_response.ListIndexes.Success):
-            return response.index_names
+            return [ind.name for ind in response.indexes]
         elif isinstance(response, mvi_response.ListIndexes.Error):
             raise ValueError(f"Error listing collections: {response.message}")
         else:
@@ -217,6 +216,7 @@ class MomentoVI(VectorStore):
             """
         )
 
+    @no_type_check
     def similar_texts_with_scores(
         self,
         text: str,
@@ -244,7 +244,7 @@ class MomentoVI(VectorStore):
             logger.warning(f"Unexpected response: {response}")
             return []
 
-        scores = [match.distance for match in response.hits]
+        scores = [match.metadata["distance"] for match in response.hits]
         docs = [
             Document.parse_obj(nested_dict_from_flat(match.metadata))
             for match in response.hits

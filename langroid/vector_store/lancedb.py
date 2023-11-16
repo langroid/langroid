@@ -2,7 +2,6 @@ import logging
 from typing import Any, Dict, Generator, List, Optional, Sequence, Tuple, Type
 
 import lancedb
-from chromadb.api.types import EmbeddingFunction
 from dotenv import load_dotenv
 from lancedb.pydantic import LanceModel, Vector
 from pydantic import BaseModel, create_model
@@ -12,7 +11,7 @@ from langroid.embedding_models.base import (
     EmbeddingModelsConfig,
 )
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
-from langroid.mytypes import Document
+from langroid.mytypes import Document, EmbeddingFunction
 from langroid.utils.configuration import settings
 from langroid.utils.pydantic_utils import (
     flatten_pydantic_instance,

@@ -1,3 +1,4 @@
+import ast
 import asyncio
 import json
 import logging
@@ -60,6 +61,23 @@ class LLMFunctionCall(BaseModel):
     to: str = ""  # intended recipient
     arguments: Optional[Dict[str, Any]] = None
 
+    @staticmethod
+    def from_dict(message: Dict[str, Any]) -> "LLMFunctionCall":
+        """
+        Initialize from dictionary.
+        Args:
+            d: dictionary containing fields to initialize
+        """
+        fun_call = LLMFunctionCall(name=message["name"])
+        fun_args_str = message["arguments"]
+        # sometimes may be malformed with invalid indents,
+        # so we try to be safe by removing newlines.
+        fun_args_str = fun_args_str.replace("\n", "").strip()
+        fun_args = ast.literal_eval(fun_args_str)
+        fun_call.arguments = fun_args
+
+        return fun_call
+
     def __str__(self) -> str:
         return "FUNC: " + json.dumps(self.dict(), indent=2)
 
@@ -114,12 +132,15 @@ class LLMMessage(BaseModel):
 
     role: Role
     name: Optional[str] = None
+    tool_id: str = ""  # used by OpenAIAssistant
     content: str
     function_call: Optional[LLMFunctionCall] = None
 
     def api_dict(self) -> Dict[str, Any]:
         """
         Convert to dictionary for API request.
+        DROP the tool_id, since it is only for use in the Assistant API,
+        not the completion API.
         Returns:
             dict: dictionary representation of LLM message
         """
@@ -135,6 +156,7 @@ class LLMMessage(BaseModel):
                 dict_no_none["function_call"]["arguments"] = json.dumps(
                     dict_no_none["function_call"]["arguments"]
                 )
+        dict_no_none.pop("tool_id", None)
         return dict_no_none
 
     def __str__(self) -> str:
@@ -152,6 +174,7 @@ class LLMResponse(BaseModel):
     """
 
     message: str
+    tool_id: str = ""  # used by OpenAIAssistant
     function_call: Optional[LLMFunctionCall] = None
     usage: Optional[LLMTokenUsage]
     cached: bool = False

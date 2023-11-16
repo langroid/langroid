@@ -2,7 +2,7 @@ import json
 import logging
 import os
 from datetime import timedelta
-from typing import Any, Dict, Optional
+from typing import Any, Dict, List
 
 import momento
 from dotenv import load_dotenv
@@ -61,7 +61,7 @@ class MomentoCache(CacheDB):
         """
         self.client.set(self.config.cachename, key, json.dumps(value))
 
-    def retrieve(self, key: str) -> Optional[Dict[str, Any]]:
+    def retrieve(self, key: str) -> Dict[str, Any] | str | None:
         """
         Retrieve the value associated with a key.
 
@@ -76,3 +76,13 @@ class MomentoCache(CacheDB):
             return json.loads(value.value_string)  # type: ignore
         else:
             return None
+
+    def delete_keys(self, keys: List[str]) -> None:
+        """
+        Delete the keys from the cache.
+
+        Args:
+            keys (List[str]): The keys to delete.
+        """
+        for key in keys:
+            self.client.delete(self.config.cachename, key)

@@ -52,7 +52,7 @@ def test_agents_with_recipient(
         master,
         llm_delegate=True,
         single_round=False,
-        default_human_response="",
+        interactive=False,
         system_message=f"""
                 Your job is to ask me EXACTLY this series of exponential questions:
                 {EXPONENTIALS}
@@ -66,7 +66,6 @@ def test_agents_with_recipient(
                 e.g. "DONE: 243 512 729 125".
                 """,
         user_message="Start by asking me an exponential question.",
-        only_user_quits_root=False,
     )
 
     # For a given exponential computation, plans a sequence of multiplications.

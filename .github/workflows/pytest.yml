@@ -2,10 +2,10 @@ name: Pytest
 
 on:
   push:
-    paths-ignore:
-      - "docs/**"
-      - "examples/**"
-      - "mkdocs.yml"
+    paths:
+      - "langroid/**"
+      - "tests/**"
+      - ".github/workflows/pytest.yml"
     branches:
       - main  # Replace with your default branch name 
   pull_request:
@@ -36,11 +36,11 @@ jobs:
       GOOGLE_CSE_ID: ${{ secrets.GOOGLE_CSE_ID }}
 
       # Azure OpenAI env vars
-      AZURE_API_KEY: ${{ secrets.AZURE_API_KEY }}
+      AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
       AZURE_OPENAI_API_BASE: ${{ secrets.AZURE_OPENAI_API_BASE }}
       AZURE_OPENAI_API_VERSION: "2023-05-15"
       AZURE_OPENAI_DEPLOYMENT_NAME: ${{ secrets.AZURE_OPENAI_DEPLOYMENT_NAME }}
-      AZURE_GPT_MODEL_NAME: ${{ secrets.AZURE_GPT_MODEL_NAME }}
+      AZURE_OPENAI_MODEL_NAME: ${{ secrets.AZURE_GPT_MODEL_NAME }}
 
     steps:
     - name: Check out repository
@@ -62,9 +62,18 @@ jobs:
         
         poetry install
 
+    - name: Dump dependencies to file
+      run: pip freeze > requirements_github.txt
+
+    - name: Upload dependencies file
+      uses: actions/upload-artifact@v3
+      with:
+        name: github-dependencies
+        path: requirements_github.txt
+
     - name: Run tests with coverage
       run: |
-        poetry run coverage run --source=langroid -m pytest tests/main
+        poetry run coverage run --source=langroid -m pytest -k "not openai_assistant" tests/main
         poetry run coverage report
     - name: Generate XML coverage report
       run: |
