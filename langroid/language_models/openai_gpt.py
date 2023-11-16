@@ -125,6 +125,9 @@ defaultOpenAICompletionModel = next(
     )
 )
 
+class AccessWarning(Warning):
+    pass
+
 
 @cache
 def gpt_3_5_warning() -> None:
@@ -133,7 +136,8 @@ def gpt_3_5_warning() -> None:
         GPT-4 is not available, falling back to GPT-3.5.
         Examples may not work properly and unexpected behavior may occur.
         Adjustments to prompts may be necessary.
-        """
+        """,
+        AccessWarning 
     )
 
 
