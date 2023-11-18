@@ -132,3 +132,19 @@ class RedisCache(CacheDB):
             except redis.exceptions.ConnectionError:
                 logger.warning("Redis connection error, not deleting keys")
                 return None
+
+    def delete_keys_pattern(self, pattern: str) -> None:
+        """
+        Delete the keys matching the pattern from the cache.
+
+        Args:
+            prefix (str): The pattern to match.
+        """
+        with self.redis_client() as client:  # type: ignore
+            try:
+                keys = client.keys(pattern)
+                if len(keys) > 0:
+                    client.delete(*keys)
+            except redis.exceptions.ConnectionError:
+                logger.warning("Redis connection error, not deleting keys")
+                return None

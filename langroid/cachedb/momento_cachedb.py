@@ -86,3 +86,17 @@ class MomentoCache(CacheDB):
         """
         for key in keys:
             self.client.delete(self.config.cachename, key)
+
+    def delete_keys_pattern(self, pattern: str) -> None:
+        """
+        Delete the keys from the cache with the given pattern.
+
+        Args:
+            prefix (str): The pattern to match.
+        """
+        raise NotImplementedError(
+            """
+            MomentoCache does not support delete_keys_pattern.
+            Please use RedisCache instead.
+            """
+        )
