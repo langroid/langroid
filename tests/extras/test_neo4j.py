@@ -48,4 +48,3 @@ def test_write_then_retrieval(neo4j_client):
     for record in result:
         assert record["a.name"] == "Leonardo DiCaprio"
         assert record["m.title"] == "Inception"
-    
