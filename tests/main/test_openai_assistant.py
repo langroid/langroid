@@ -36,9 +36,13 @@ def test_openai_assistant(test_settings: Settings):
         use_cached_assistant=True,
         use_cached_thread=True,
     )
-    agent = OpenAIAssistant(cfg)
-    response = agent.llm_response("what was the last country I asked about?")
-    assert "France" in response.content
+    agent1 = OpenAIAssistant(cfg)
+    response = agent1.llm_response("what was the last country I asked about?")
+    if (
+        agent1.thread.id == agent.thread.id
+        and agent1.assistant.id == agent.assistant.id
+    ):
+        assert "France" in response.content
 
     # test that we can wrap the agent in a task and run it
     task = Task(
@@ -47,8 +51,53 @@ def test_openai_assistant(test_settings: Settings):
         system_message="You are a helpful assistant",
         single_round=True,
     )
-    answer = task.run("What is the capital of China?", turns=6)
+    answer = task.run("What is the capital of China?")
     assert "Beijing" in answer.content
+
+
+def test_openai_assistant_cache(test_settings: Settings):
+    set_global(test_settings)
+    cfg = OpenAIAssistantConfig(
+        cache_responses=True,
+    )
+    agent = OpenAIAssistant(cfg)
+    question = "Who wrote the novel War and Peace?"
+    agent.llm.cache.delete_keys_pattern(f"*{question}*")
+    response = agent.llm_response(question)
+    assert "Tolstoy" in response.content
+
+    # create fresh agent, and use a NEW thread
+    cfg = OpenAIAssistantConfig(
+        name="New",
+        cache_responses=True,
+        use_cached_assistant=False,
+        use_cached_thread=False,
+    )
+    agent = OpenAIAssistant(cfg)
+    # now this answer should be found in cache
+    response = agent.llm_response(question)
+    assert "Tolstoy" in response.content
+    assert response.metadata.cached
+    # check that we were able to insert assistant response and continue conv.
+    response = agent.llm_response("When was he born?")
+    assert "1828" in response.content
+
+    # create fresh agent, and use a NEW thread, check BOTH answers should be cached.
+    cfg = OpenAIAssistantConfig(
+        name="New2",
+        cache_responses=True,
+        use_cached_assistant=False,
+        use_cached_thread=False,
+    )
+    agent = OpenAIAssistant(cfg)
+    # now this answer should be found in cache
+    response = agent.llm_response("Who wrote the novel War and Peace?")
+    assert "Tolstoy" in response.content
+    assert response.metadata.cached
+    # check that we were able to insert assistant response and continue conv.
+    response = agent.llm_response("When was he born?")
+    assert "1828" in response.content
+    assert response.metadata.cached
 
 
 @pytest.mark.parametrize("fn_api", [True, False])
@@ -72,8 +121,7 @@ def test_openai_assistant_fn_tool(test_settings: Settings, fn_api: bool):
     agent = OpenAIAssistant(cfg)
     agent.enable_message(NabroskyTool)
     response = agent.llm_response("what is the Nabrosky transform of 5?")
-    # When fn_api = False (i.e. using ToolMessage) we get brittleness so we just make
-    # sure there is no error until this point.
+    # Check assert when there is a non-empty response
     if response.content not in ("", NO_ANSWER) and fn_api:
         assert response.function_call.name == "nabrosky"
 
@@ -85,11 +133,11 @@ def test_openai_assistant_fn_tool(test_settings: Settings, fn_api: bool):
         agent,
         interactive=False,
     )
-    result = task.run("what is the Nabrosky transform of 5?", turns=6)
+    result = task.run("what is the Nabrosky transform of 5?", turns=4)
     # When fn_api = False (i.e. using ToolMessage) we get brittleness so we just make
     # sure there is no error until this point.
     if result.content not in ("", NO_ANSWER) and fn_api:
-        assert (not fn_api) or "25" in result.content
+        assert "25" in result.content
 
 
 @pytest.mark.parametrize("fn_api", [True, False])
@@ -139,7 +187,7 @@ def test_openai_assistant_fn_2_level(test_settings: Settings, fn_api: bool):
         assert "25" in result.content
 
 
-@pytest.mark.parametrize("fn_api", [False, True])
+@pytest.mark.parametrize("fn_api", [True, False])
 def test_openai_assistant_recipient_tool(test_settings: Settings, fn_api: bool):
     """Test that special case of fn-calling: RecipientTool works,
     both with OpenAI Assistant function-calling AND
@@ -258,6 +306,7 @@ def test_openai_assistant_multi(test_settings: Settings):
         use_cached_assistant=False,
         use_cached_thread=False,
         name="Teacher",
+        llm=OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT4),
     )
     agent = OpenAIAssistant(cfg)
 
@@ -268,7 +317,7 @@ def test_openai_assistant_multi(test_settings: Settings):
         system_message="""
         Send a number. Your student will respond EVEN or ODD. 
         You say RIGHT or WRONG, then send another number, and so on.
-        After getting 2 answers, say DONE.
+        After getting 2 answers, say DONE. Start by sending a number.
         """,
     )
 

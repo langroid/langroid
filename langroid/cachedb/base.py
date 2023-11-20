@@ -38,3 +38,13 @@ class CacheDB(ABC):
             keys (List[str]): The keys to delete.
         """
         pass
+
+    @abstractmethod
+    def delete_keys_pattern(self, pattern: str) -> None:
+        """
+        Delete all keys with the given pattern
+
+        Args:
+            prefix (str): The pattern to match.
+        """
+        pass

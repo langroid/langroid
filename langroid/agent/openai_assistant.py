@@ -1,4 +1,5 @@
 import asyncio
+import json
 
 # setup logger
 import logging
@@ -69,7 +70,7 @@ class OpenAIAssistantConfig(ChatAgentConfig):
     use_cached_thread: bool = False  # set in script via user dialog
     thread_id: str | None = None
     # set to True once we can add Assistant msgs in threads
-    cache_responses: bool = False
+    cache_responses: bool = True
     timeout: int = 30  # can be different from llm.timeout
     llm = OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT4_TURBO)
     tools: List[AssistantTool] = []
@@ -101,6 +102,7 @@ class OpenAIAssistant(ChatAgent):
         self.assistants = self.llm.client.beta.assistants
         # which tool_ids are awaiting output submissions
         self.pending_tool_ids: List[str] = []
+        self.cached_tool_ids: List[str] = []
 
         self.thread: Thread | None = None
         self.assistant: Assistant | None = None
@@ -112,8 +114,6 @@ class OpenAIAssistant(ChatAgent):
 
         self.add_assistant_files(self.config.files)
         self.add_assistant_tools(self.config.tools)
-        # TODO remove this once OpenAI supports storing Assistant msgs in threads
-        settings.cache = False
 
     def add_assistant_files(self, files: List[str]) -> None:
         """Add file_ids to assistant"""
@@ -233,12 +233,15 @@ class OpenAIAssistant(ChatAgent):
         return self.llm.cache.retrieve(key)
 
     @no_type_check
-    def _cache_messages_lookup(self) -> str | None:
+    def _cache_messages_lookup(self) -> LLMResponse | None:
         """Try to retrieve cached response for the message-list-hash"""
         if not settings.cache:
             return None
         key = self._cache_messages_key()
-        return self.llm.cache.retrieve(key)
+        cached_dict = self.llm.cache.retrieve(key)
+        if cached_dict is None:
+            return None
+        return LLMResponse.parse_obj(cached_dict)
 
     def _cache_store(self) -> None:
         """
@@ -265,7 +268,7 @@ class OpenAIAssistant(ChatAgent):
 
     def _update_messages_hash(self, msg: ThreadMessage | LLMMessage) -> None:
         """
-        Update the hash of messages in the thread with the latest message
+        Update the hash-state in the thread with the given message.
         """
         if self.thread is None:
             raise ValueError("Thread is None")
@@ -326,10 +329,12 @@ class OpenAIAssistant(ChatAgent):
             if self.assistant is None:
                 raise ValueError("Assistant is None")
             self.thread = self.llm.client.beta.threads.create()
-            hash_hex = update_hash(
-                None,
-                s=self.assistant.instructions or "",
+            hash_key_str = (
+                (self.assistant.instructions or "")
+                + str(self.config.use_tools)
+                + str(self.config.use_functions_api)
             )
+            hash_hex = update_hash(None, s=hash_key_str)
             self.thread = self.threads.update(
                 self.thread.id,
                 metadata={
@@ -448,10 +453,17 @@ class OpenAIAssistant(ChatAgent):
         """
         if self.thread is None:
             raise ValueError("Thread is None")
+        # CACHING TRICK! Since the API only allows inserting USER messages,
+        # we prepend the role to the message, so that we can store ASSISTANT msgs
+        # as well! When the LLM sees the thread messages, they will contain
+        # the right sequence of alternating roles, so that it has no trouble
+        # responding when it is its turn.
+        msg = f"{role.value.upper()}: {msg}"
         thread_msg = self.thread_messages.create(
             content=msg,
             thread_id=self.thread.id,
-            role=role,  # type: ignore
+            # We ALWAYS store user role since only user role allowed currently
+            role=Role.USER.value,
         )
         self._update_messages_hash(thread_msg)
 
@@ -565,16 +577,16 @@ class OpenAIAssistant(ChatAgent):
         function_call: LLMFunctionCall | None = None
         response = ""
         tool_id = ""
+        # IMPORTANT: FIRST save hash key to store result,
+        # before it gets updated with the response
+        key = self._cache_messages_key()
         if status == RunStatus.TIMEOUT:
             logger.warning("Timeout waiting for run to complete, return empty string")
         elif status == RunStatus.COMPLETED:
             messages = self._get_thread_messages(n=1)
             response = messages[0].content
-            # IMPORTANT: FIRST get hash key to store result,
-            # THEN update hash, since this will now include the response!
-            key = self._cache_messages_key()
+            # update hash to include the response.
             self._update_messages_hash(messages[0])
-            self.llm.cache.store(key, response)
         elif status == RunStatus.REQUIRES_ACTION:
             tool_calls = self._parse_run_required_action()
             # pick the FIRST tool call with type "function"
@@ -583,13 +595,15 @@ class OpenAIAssistant(ChatAgent):
             # revisit later: multi-tools affects the task.run() loop.
             function_call = tool_call_fn.function
             tool_id = tool_call_fn.id
-        return LLMResponse(
+        result = LLMResponse(
             message=response,
             tool_id=tool_id,
             function_call=function_call,
             usage=None,  # TODO
             cached=False,  # TODO - revisit when able to insert Assistant responses
         )
+        self.llm.cache.store(key, result.dict())
+        return result
 
     def _parse_run_required_action(self) -> List[AssistantToolCall]:
         """
@@ -663,6 +677,103 @@ class OpenAIAssistant(ChatAgent):
         sep = "\n" if len(citations) > 0 else ""
         annotated_content.value += sep + "\n".join(citations)
 
+    def _llm_response_preprocess(
+        self,
+        message: Optional[str | ChatDocument] = None,
+    ) -> LLMResponse | None:
+        """
+        Preprocess message and return response if found in cache, else None.
+        """
+        is_tool_output = False
+        if message is not None:
+            llm_msg = ChatDocument.to_LLMMessage(message)
+            tool_id = llm_msg.tool_id
+            if tool_id in self.pending_tool_ids:
+                if isinstance(message, ChatDocument):
+                    message.pop_tool_ids()
+                result_msg = f"Result for Tool_id {tool_id}: {llm_msg.content}"
+                if tool_id in self.cached_tool_ids:
+                    self.cached_tool_ids.remove(tool_id)
+                    # add actual result of cached fn-call
+                    self._add_thread_message(result_msg, role=Role.USER)
+                else:
+                    is_tool_output = True
+                    # submit tool/fn result to the thread/run
+                    self._submit_tool_outputs(llm_msg)
+                    # We cannot ACTUALLY add this result to thread now
+                    # since run is in `action_required` state,
+                    # so we just update the message hash
+                    self._update_messages_hash(
+                        LLMMessage(content=result_msg, role=Role.USER)
+                    )
+                self.pending_tool_ids.remove(tool_id)
+            else:
+                # add message to the thread
+                self._add_thread_message(llm_msg.content, role=Role.USER)
+
+        # When message is None, the thread may have no user msgs,
+        # Note: system message is NOT placed in the thread by the OpenAI system.
+
+        # check if we have cached the response.
+        # TODO: handle the case of structured result (fn-call, tool, etc)
+        response = self._cache_messages_lookup()
+        if response is not None:
+            response.cached = True
+            # store the result in the thread so
+            # it looks like assistant produced it
+            if self.config.cache_responses:
+                self._add_thread_message(
+                    json.dumps(response.dict()), role=Role.ASSISTANT
+                )
+            return response  # type: ignore
+        else:
+            # create a run for this assistant on this thread,
+            # i.e. actually "run"
+            if not is_tool_output:
+                # DO NOT start a run if we submitted tool outputs,
+                # since submission of tool outputs resumes a run from
+                # status = "requires_action"
+                self._start_run()
+            return None
+
+    def _llm_response_postprocess(
+        self,
+        response: LLMResponse,
+        cached: bool,
+        message: Optional[str | ChatDocument] = None,
+    ) -> Optional[ChatDocument]:
+        # code from ChatAgent.llm_response_messages
+        if response.function_call is not None:
+            self.pending_tool_ids += [response.tool_id]
+            if cached:
+                # add to cached tools list so we don't create an Assistant run
+                # in _llm_response_preprocess
+                self.cached_tool_ids += [response.tool_id]
+            response_str = str(response.function_call)
+        else:
+            response_str = response.message
+        cache_str = "[red](cached)[/red]" if cached else ""
+        if not settings.quiet:
+            if not cached and self._get_code_logs_str():
+                print(
+                    f"[magenta]CODE-INTERPRETER LOGS:\n"
+                    "-------------------------------\n"
+                    f"{self._get_code_logs_str()}[/magenta]"
+                )
+            print(f"{cache_str}[green]" + response_str + "[/green]")
+        cdoc = ChatDocument.from_LLMResponse(response, displayed=False)
+        # Note message.metadata.tool_ids may have been popped above
+        tool_ids = (
+            []
+            if (message is None or isinstance(message, str))
+            else message.metadata.tool_ids
+        )
+
+        if response.tool_id != "":
+            tool_ids.append(response.tool_id)
+        cdoc.metadata.tool_ids = tool_ids
+        return cdoc
+
     def llm_response(
         self, message: Optional[str | ChatDocument] = None
     ) -> Optional[ChatDocument]:
@@ -680,155 +791,42 @@ class OpenAIAssistant(ChatAgent):
         Returns:
             Optional[ChatDocument]: LLM response
         """
-        is_tool_output = False
-        if message is not None:
-            llm_msg = ChatDocument.to_LLMMessage(message)
-            tool_id = llm_msg.tool_id
-            if tool_id in self.pending_tool_ids:
-                if isinstance(message, ChatDocument):
-                    message.pop_tool_ids()
-                is_tool_output = True
-                # submit tool/fn result to the thread/run
-                self._submit_tool_outputs(llm_msg)
-                self.pending_tool_ids.remove(tool_id)
-            else:
-                # add message to the thread
-                self._add_thread_message(llm_msg.content, role=Role.USER)
-
-        # When message is None, the thread may have no user msgs,
-        # Note: system message is NOT placed in the thread by the OpenAI system.
-
-        # check if we have cached the response.
-        # TODO: handle the case of structured result (fn-call, tool, etc)
-        result = self._cache_messages_lookup()
-        cached = False
-        if result is not None:
-            cached = True
-            # store the result in the thread so
-            # it looks like assistant produced it
-            # TODO Adding an Assistant msg is currently NOT supported by the API,
-            # so we cannot use it until it is.
-            if self.config.cache_responses:
-                self._add_thread_message(result, role=Role.ASSISTANT)
-        else:
-            # create a run for this assistant on this thread,
-            # i.e. actually "run"
-            if not is_tool_output:
-                # DO NOT start a run if we submitted tool outputs,
-                # since submission of tool outputs resumes a run from
-                # status = "requires_action"
-                self._start_run()
+        response = self._llm_response_preprocess(message)
+        cached = True
+        if response is None:
+            cached = False
             response = self._run_result()
-
-        # code from ChatAgent.llm_response_messages
-        if response.function_call is not None:
-            self.pending_tool_ids += [response.tool_id]
-            response_str = str(response.function_call)
-        else:
-            response_str = response.message
-        cache_str = "[red](cached)[/red]" if cached else ""
-        if not settings.quiet:
-            if self._get_code_logs_str():
-                print(
-                    f"[magenta]CODE-INTERPRETER LOGS:\n"
-                    "-------------------------------\n"
-                    f"{self._get_code_logs_str()}[/magenta]"
-                )
-            print(f"{cache_str}[green]" + response_str + "[/green]")
-        cdoc = ChatDocument.from_LLMResponse(response, displayed=False)
-        # Note message.metadata.tool_ids may have been popped above
-        tool_ids = (
-            []
-            if (message is None or isinstance(message, str))
-            else message.metadata.tool_ids
-        )
-
-        if response.tool_id != "":
-            tool_ids.append(response.tool_id)
-        cdoc.metadata.tool_ids = tool_ids
-        return cdoc
+        return self._llm_response_postprocess(response, cached=cached, message=message)
 
     async def llm_response_async(
         self, message: Optional[str | ChatDocument] = None
     ) -> Optional[ChatDocument]:
         """
-        Override ChatAgent's method: this is the main LLM response method.
-        In the ChatAgent, this updates `self.message_history` and then calls
-        `self.llm_response_messages`, but since we are relying on the Assistant API
-        to maintain conversation state, this method is simpler: Simply start a run
-        on the message-thread, and wait for it to complete.
-
-        Args:
-            message (Optional[str | ChatDocument], optional): message to respond to
-                (if absent, the LLM response will be based on the
-                instructions in the system_message). Defaults to None.
-        Returns:
-            Optional[ChatDocument]: LLM response
+        Async version of llm_response.
         """
-        is_tool_output = False
-        if message is not None:
-            llm_msg = ChatDocument.to_LLMMessage(message)
-            tool_id = llm_msg.tool_id
-            if tool_id in self.pending_tool_ids:
-                if isinstance(message, ChatDocument):
-                    message.pop_tool_ids()
-                is_tool_output = True
-                # submit tool/fn result to the thread/run
-                self._submit_tool_outputs(llm_msg)
-                self.pending_tool_ids.remove(tool_id)
-            else:
-                # add message to the thread
-                self._add_thread_message(llm_msg.content, role=Role.USER)
-
-        # When message is None, the thread may have no user msgs,
-        # Note: system message is NOT placed in the thread by the OpenAI system.
-
-        # check if we have cached the response.
-        # TODO: handle the case of structured result (fn-call, tool, etc)
-        result = self._cache_messages_lookup()
-        cached = False
-        if result is not None:
-            cached = True
-            # store the result in the thread so
-            # it looks like assistant produced it
-            # TODO Adding an Assistant msg is currently NOT supported by the API,
-            # so we cannot use it until it is.
-            if self.config.cache_responses:
-                self._add_thread_message(result, role=Role.ASSISTANT)
-        else:
-            # create a run for this assistant on this thread,
-            # i.e. actually "run"
-            if not is_tool_output:
-                # DO NOT start a run if we submitted tool outputs,
-                # since submission of tool outputs resumes a run from
-                # status = "requires_action"
-                self._start_run()
+        response = self._llm_response_preprocess(message)
+        cached = True
+        if response is None:
+            cached = False
             response = await self._run_result_async()
+        return self._llm_response_postprocess(response, cached=cached, message=message)
 
-        # code from ChatAgent.llm_response_messages
-        if response.function_call is not None:
-            self.pending_tool_ids += [response.tool_id]
-            response_str = str(response.function_call)
-        else:
-            response_str = response.message
-        cache_str = "[red](cached)[/red]" if cached else ""
-        if not settings.quiet:
-            if self._get_code_logs_str():
-                print(
-                    f"[magenta]CODE-INTERPRETER LOGS:\n"
-                    "-------------------------------\n"
-                    f"{self._get_code_logs_str()}[/magenta]"
-                )
-            print(f"{cache_str}[green]" + response_str + "[/green]")
-        cdoc = ChatDocument.from_LLMResponse(response, displayed=False)
-        # Note message.metadata.tool_ids may have been popped above
-        tool_ids = (
-            []
-            if (message is None or isinstance(message, str))
-            else message.metadata.tool_ids
-        )
-
-        if response.tool_id != "":
-            tool_ids.append(response.tool_id)
-        cdoc.metadata.tool_ids = tool_ids
-        return cdoc
+    def agent_response(
+        self,
+        msg: Optional[str | ChatDocument] = None,
+    ) -> Optional[ChatDocument]:
+        response = super().agent_response(msg)
+        if msg is None:
+            return response
+        if response is None:
+            return None
+        try:
+            # When the agent response is to a tool message,
+            # we prefix it with "TOOL Result: " so that it is clear to the
+            # LLM that this is the result of the last TOOL;
+            # This ensures our caching trick works.
+            if self.config.use_tools and len(self.get_tool_messages(msg)) > 0:
+                response.content = "TOOL Result: " + response.content
+            return response
+        except Exception:
+            return response
