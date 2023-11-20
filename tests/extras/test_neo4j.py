@@ -27,7 +27,7 @@ def neo4j_client():
     client.close()
 
 
-def test_write_query(neo4j_client):
+def test_write_then_retrieval(neo4j_client):
     write_query = """
     CREATE (m:Movie {title: 'Inception', releaseYear: 2010})
     CREATE (a:Actor {name: 'Leonardo DiCaprio'})
@@ -37,16 +37,15 @@ def test_write_query(neo4j_client):
     result = neo4j_client.execute_write_query(write_query)
     assert result is True
 
-
-def test_fetch_query(neo4j_client):
-    fetch_query = """
+    retrieval_query = """
     MATCH (a:Actor)-[r:ACTED_IN]->(m:Movie)
     WHERE a.name = 'Leonardo DiCaprio' AND m.title = 'Inception'
     RETURN a.name, m.title, m.releaseYear, type(r) AS relationship
     """
-    result = neo4j_client.run_query(fetch_query)
+    result = neo4j_client.run_query(retrieval_query)
     assert result is not None
     assert len(result) > 0
     for record in result:
         assert record["a.name"] == "Leonardo DiCaprio"
         assert record["m.title"] == "Inception"
+    
