@@ -36,7 +36,7 @@
 `Langroid` is an intuitive, lightweight, extensible and principled
 Python framework to easily build LLM-powered applications. 
 You set up Agents, equip them with optional components (LLM, 
-vector-store and methods), assign them tasks, and have them 
+vector-store and tools/functions), assign them tasks, and have them 
 collaboratively solve a problem by exchanging messages. 
 This Multi-Agent paradigm is inspired by the
 [Actor Framework](https://en.wikipedia.org/wiki/Actor_model)
