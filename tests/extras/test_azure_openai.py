@@ -70,3 +70,16 @@ def test_chat_agent(test_settings: Settings):
     agent = ChatAgent(cfg)
     response = agent.llm_response("what is the capital of France?")
     assert "Paris" in response.content
+
+
+@pytest.mark.asyncio
+async def test_azure_openai_async(test_settings: Settings):
+    set_global(test_settings)
+    llm_cfg = AzureConfig(
+        max_output_tokens=100,
+        min_output_tokens=10,
+        cache_config=RedisCacheConfig(fake=False),
+    )
+    llm = AzureGPT(config=llm_cfg)
+    response = await llm.achat("What is the capital of Ontario?", max_tokens=10)
+    assert "Toronto" in response.message
