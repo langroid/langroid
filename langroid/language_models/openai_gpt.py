@@ -51,6 +51,7 @@ class OpenAICompletionModel(str, Enum):
     TEXT_DA_VINCI_003 = "text-davinci-003"  # deprecated
     GPT3_5_TURBO_INSTRUCT = "gpt-3.5-turbo-instruct"
 
+
 _context_length: Dict[str, int] = {
     # can add other non-openAI models here
     OpenAIChatModel.GPT3_5_TURBO: 4096,
@@ -200,7 +201,7 @@ class OpenAIGPT(LanguageModel):
             # so we can just use `openai.*` methods directly,
             # and don't need a adaptor library like litellm
             self.config.litellm = False
-            self.config.seed = None # some models raise an error when seed is set
+            self.config.seed = None  # some models raise an error when seed is set
             # Extract the api_base from the model name after the "local/" prefix
             self.api_base = "http://" + self.config.chat_model.split("/", 1)[1]
         else:
