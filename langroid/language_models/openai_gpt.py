@@ -49,10 +49,7 @@ class OpenAICompletionModel(str, Enum):
     """Enum for OpenAI Completion models"""
 
     TEXT_DA_VINCI_003 = "text-davinci-003"  # deprecated
-    TEXT_ADA_001 = "text-ada-001"  # deprecated
-    GPT4 = "gpt-4"  # only works on chat-completion endpoint
-    GPT4_TURBO = "gpt-4-1106-preview"  # only works on chat-completion endpoint
-
+    GPT3_5_TURBO_INSTRUCT = "gpt-3.5-turbo-instruct"
 
 _context_length: Dict[str, int] = {
     # can add other non-openAI models here
@@ -92,9 +89,10 @@ class OpenAIGPTConfig(LLMConfig):
     use_chat_for_completion = True  # do not change this, for OpenAI models!
     timeout: int = 20
     temperature: float = 0.2
+    seed: int | None = 42
     # these can be any model name that is served at an OpenAI-compatible API end point
     chat_model: str = OpenAIChatModel.GPT4
-    completion_model: str = OpenAICompletionModel.GPT4
+    completion_model: str = OpenAICompletionModel.GPT3_5_TURBO_INSTRUCT
 
     # all of the vars above can be set via env vars,
     # by upper-casing the name and prefixing with OPENAI_, e.g.
@@ -123,6 +121,7 @@ class OpenAIGPTConfig(LLMConfig):
                 """
             )
         litellm.telemetry = False
+        self.seed = None  # some local mdls don't support seed
         keys_dict = litellm.validate_environment(self.chat_model)
         missing_keys = keys_dict.get("missing_keys", [])
         if len(missing_keys) > 0:
@@ -201,6 +200,7 @@ class OpenAIGPT(LanguageModel):
             # so we can just use `openai.*` methods directly,
             # and don't need a adaptor library like litellm
             self.config.litellm = False
+            self.config.seed = None # some models raise an error when seed is set
             # Extract the api_base from the model name after the "local/" prefix
             self.api_base = "http://" + self.config.chat_model.split("/", 1)[1]
         else:
@@ -551,7 +551,7 @@ class OpenAIGPT(LanguageModel):
             prompt_tokens=prompt_tokens, completion_tokens=completion_tokens, cost=cost
         )
 
-    def generate(self, prompt: str, max_tokens: int) -> LLMResponse:
+    def generate(self, prompt: str, max_tokens: int = 200) -> LLMResponse:
         try:
             return self._generate(prompt, max_tokens)
         except Exception as e:
@@ -598,7 +598,7 @@ class OpenAIGPT(LanguageModel):
         msg = response["choices"][0]["text"].strip()
         return LLMResponse(message=msg, cached=cached)
 
-    async def agenerate(self, prompt: str, max_tokens: int) -> LLMResponse:
+    async def agenerate(self, prompt: str, max_tokens: int = 200) -> LLMResponse:
         try:
             return await self._agenerate(prompt, max_tokens)
         except Exception as e:
@@ -688,7 +688,7 @@ class OpenAIGPT(LanguageModel):
     def chat(
         self,
         messages: Union[str, List[LLMMessage]],
-        max_tokens: int,
+        max_tokens: int = 200,
         functions: Optional[List[LLMFunctionSpec]] = None,
         function_call: str | Dict[str, str] = "auto",
     ) -> LLMResponse:
@@ -730,7 +730,7 @@ class OpenAIGPT(LanguageModel):
     async def achat(
         self,
         messages: Union[str, List[LLMMessage]],
-        max_tokens: int,
+        max_tokens: int = 200,
         functions: Optional[List[LLMFunctionSpec]] = None,
         function_call: str | Dict[str, str] = "auto",
     ) -> LLMResponse:
@@ -851,6 +851,8 @@ class OpenAIGPT(LanguageModel):
             temperature=self.config.temperature,
             stream=self.get_stream(),
         )
+        if self.config.seed is not None:
+            args.update(dict(seed=self.config.seed))
         # only include functions-related args if functions are provided
         # since the OpenAI API will throw an error if `functions` is None or []
         if functions is not None:
@@ -858,6 +860,7 @@ class OpenAIGPT(LanguageModel):
                 dict(
                     functions=[f.dict() for f in functions],
                     function_call=function_call,
+                    response_format={"type": "json_object"},
                 )
             )
         return args

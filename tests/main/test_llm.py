@@ -33,7 +33,7 @@ def test_openai_gpt(test_settings: Settings, streaming, country, capital):
             if test_settings.gpt3_5
             else OpenAIChatModel.GPT4  # or GPT4_TURBO
         ),
-        completion_model=OpenAICompletionModel.GPT4,
+        completion_model=OpenAICompletionModel.GPT3_5_TURBO_INSTRUCT,
         cache_config=RedisCacheConfig(fake=False),
     )
 
