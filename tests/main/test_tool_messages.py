@@ -6,8 +6,10 @@ import pytest
 from pydantic import Field
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
+from langroid.agent.task import Task
 from langroid.agent.tool_message import ToolMessage
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
+from langroid.language_models.azure_openai import AzureConfig
 from langroid.language_models.openai_gpt import (
     OpenAIChatModel,
     OpenAIGPTConfig,
@@ -328,3 +330,87 @@ def test_llm_non_tool(test_settings: Settings):
     ).content
     agent_result = agent.handle_message(llm_msg)
     assert agent_result is None
+
+
+alloy_spec = """
+    sig Book {
+    authors: set Author
+    }
+
+    sig Author {
+        books: set Book
+    }
+
+    fact {
+        // Each author of a book is listed in the book's authors.
+        all b: Book, a: Author | a in b.authors iff b in a.books
+    }
+
+    assert NoAuthorWithoutBook {
+        // There shouldn't be an author who hasn't authored any book.
+        no a: Author | a.books = none
+    }
+
+    check NoAuthorWithoutBook
+"""
+
+
+class VerifierMessage(ToolMessage):
+    request: str = "run_alloy_analyzer"
+    purpose: str = """
+        To show a <specification> to the user. Use this tool whenever you
+        want to SHOW or VALIDATE the fixed <specification>. NEVER list out a
+        <specification> without using this tool. 
+    """
+    specification: str
+
+    @classmethod
+    def examples(cls) -> List["VerifierMessage"]:
+        return [
+            cls(
+                specification=f"""{alloy_spec}""",
+            ),
+        ]
+
+
+class AlloyAnalzerAgent(ChatAgent):
+    def run_alloy_analyzer(self, message: VerifierMessage) -> str:
+        return "Triggered VerifierMessage tool"
+
+
+sys_instructions = """
+        You will be presented with Alloy Specifications. 
+        Use the tool `run_alloy_analyzer`
+        to show the specification to the user.
+        """
+
+
+def test_verifier_message():
+    llm_config = AzureConfig(
+        chat_model=OpenAIChatModel.GPT4, timeout=50, stream=True, temperature=0.2
+    )
+    alloy_agent = AlloyAnalzerAgent(
+        config=ChatAgentConfig(
+            name="SpecificationRepair",
+            use_tools=True,
+            use_functions_api=False,
+            vecdb=None,
+            llm=llm_config,
+            user_message=f"Here is the initial Specification: \n{alloy_spec}",
+        )
+    )
+
+    alloy_agent.system_message = sys_instructions
+    alloy_agent.enable_message(VerifierMessage)
+    alloy_agent._get_tool_list(VerifierMessage)
+
+    task = Task(
+        alloy_agent,
+        name="SpecificationRepairTask",
+        llm_delegate=True,
+        single_round=False,
+        default_human_response="",
+        interactive=False,
+        only_user_quits_root=False,
+    )
+    task.run(turns=4)
