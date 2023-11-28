@@ -414,4 +414,5 @@ def test_verifier_message():
         interactive=False,
         only_user_quits_root=False,
     )
-    task.run(turns=4)
+    task.run(turns=8)
+    print("number of turns")
