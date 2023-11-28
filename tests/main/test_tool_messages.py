@@ -375,7 +375,9 @@ class VerifierMessage(ToolMessage):
 
 class AlloyAnalzerAgent(ChatAgent):
     def run_alloy_analyzer(self, message: VerifierMessage) -> str:
-        return "Triggered VerifierMessage tool"
+        return """send me the specifications again. DONT forget to use the tool
+        `run_alloy_analyzer` to show the specification to the user.
+        """
 
 
 sys_instructions = """
