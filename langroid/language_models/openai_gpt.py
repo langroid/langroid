@@ -51,6 +51,7 @@ class OpenAICompletionModel(str, Enum):
     TEXT_DA_VINCI_003 = "text-davinci-003"  # deprecated
     GPT3_5_TURBO_INSTRUCT = "gpt-3.5-turbo-instruct"
 
+
 _context_length: Dict[str, int] = {
     # can add other non-openAI models here
     OpenAIChatModel.GPT3_5_TURBO: 4096,

@@ -822,6 +822,7 @@ If you are looking to build LLM applications,
 Prasad Chalasani is available for consulting (advisory or development): 
 pchalasani at gmail dot com.
 
+
 Sponsorship is also accepted via [GitHub Sponsors](https://github.com/sponsors/langroid)
 
 
