@@ -404,7 +404,6 @@ def test_verifier_message():
 
     alloy_agent.system_message = sys_instructions
     alloy_agent.enable_message(VerifierMessage)
-    alloy_agent._get_tool_list(VerifierMessage)
 
     task = Task(
         alloy_agent,
