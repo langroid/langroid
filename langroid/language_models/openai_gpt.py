@@ -861,7 +861,6 @@ class OpenAIGPT(LanguageModel):
                 dict(
                     functions=[f.dict() for f in functions],
                     function_call=function_call,
-                    response_format={"type": "json_object"},
                 )
             )
         return args
