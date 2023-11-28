@@ -48,6 +48,12 @@ into simplifying the developer experience; it does not use `Langchain`.
 We welcome contributions -- See the [contributions](./CONTRIBUTING.md) document
 for ideas on what to contribute.
 
+
+Building LLM Applications? Prasad Chalasani is available for consulting
+(advisory/development): pchalasani at gmail dot com.
+
+Sponsorship is also accepted via [GitHub Sponsors](https://github.com/sponsors/langroid)
+
 **Questions, Feedback, Ideas? Join us on [Discord](https://discord.gg/ZU36McDgDs)!**
 
 # Quick glimpse of coding with Langroid
@@ -813,19 +819,7 @@ If you like this project, please give it a star ⭐ and 📢 spread the word in 
 [![Share on Hacker News](https://img.shields.io/badge/-Share%20on%20Hacker%20News-orange)](https://news.ycombinator.com/submitlink?u=https%3A%2F%2Fgithub.com%2Flangroid%2Flangroid&t=Harness%20LLMs%20with%20Multi-Agent%20Programming)
 [![Share on Reddit](https://img.shields.io/badge/-Share%20on%20Reddit-blue)](https://www.reddit.com/submit?url=https%3A%2F%2Fgithub.com%2Flangroid%2Flangroid&title=Harness%20LLMs%20with%20Multi-Agent%20Programming)
 
-
-
-
 Your support will help build Langroid's momentum and community.
-
-If you are looking to build LLM applications, 
-Prasad Chalasani is available for consulting (advisory or development): 
-pchalasani at gmail dot com.
-
-
-Sponsorship is also accepted via [GitHub Sponsors](https://github.com/sponsors/langroid)
-
-
 
 # Langroid Co-Founders
 
