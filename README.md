@@ -384,7 +384,9 @@ Please follow these steps to setup the container:
 wget -O .env https://raw.githubusercontent.com/langroid/langroid/main/.env-template
 
 # Edit the .env file with your favorite editor (here nano), 
-# and add API keys as explained above
+# and add API keys as explained above. Make sure you either provide key or remove those
+# API keys and setting that you will not use. For example, if you are not going to use 
+# `REDIS`, remove its corresponding `REDIS_PASSWORD`, `REDIS_HOST`, and `REDIS_PORT`
 nano .env
 
 # launch the container
