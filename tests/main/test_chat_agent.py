@@ -150,3 +150,36 @@ def test_task(test_settings: Settings):
 
     assert task.pending_message.metadata.sender == Entity.LLM
     assert "London" in task.pending_message.content
+
+
+def test_simple_task(test_settings: Settings):
+    set_global(test_settings)
+    cfg = _TestChatAgentConfig()
+    agent = ChatAgent(cfg)
+    task = Task(
+        agent,
+        interactive=False,
+        single_round=True,
+        system_message="""
+        User will give you a number, respond with the square of the number.
+        """,
+    )
+
+    response = task.run(msg="5")
+    assert "25" in response.content
+
+    # create new task with SAME agent, and restart=True,
+    # verify that this works fine, i.e. does not use previous state of agent
+
+    task = Task(
+        agent,
+        interactive=False,
+        single_round=True,
+        restart=True,
+        system_message="""
+        User will give you a number, respond with the square of the number.
+        """,
+    )
+
+    response = task.run(msg="7")
+    assert "49" in response.content

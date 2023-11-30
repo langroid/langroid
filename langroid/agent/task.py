@@ -61,7 +61,7 @@ class Task:
         single_round: bool = False,
         system_message: str = "",
         user_message: str | None = "",
-        restart: bool = False,
+        restart: bool = True,
         default_human_response: Optional[str] = None,
         interactive: bool = True,
         only_user_quits_root: bool = True,
