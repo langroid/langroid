@@ -387,14 +387,14 @@ Please follow these steps to setup the container:
 
 ```bash
 # get the .env file template from `langroid` repo
-wget https://github.com/langroid/langroid/blob/main/.env-template .env
+wget -O .env https://raw.githubusercontent.com/langroid/langroid/main/.env-template
 
 # Edit the .env file with your favorite editor (here nano), 
 # and add API keys as explained above
 nano .env
 
 # launch the container
-docker run -it  -v ./.env:/.env langroid/langroid
+docker run -it --rm  -v ./.env:/langroid/.env langroid/langroid
 
 # Use this command to run any of the scripts in the `examples` directory
 python examples/<Path/To/Example.py> 
