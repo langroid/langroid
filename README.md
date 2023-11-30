@@ -389,8 +389,7 @@ Please follow these steps to setup the container:
 # get the .env file template from `langroid` repo
 wget -O .env https://raw.githubusercontent.com/langroid/langroid/main/.env-template
 
-# Edit the .env file with your favorite editor (here nano), 
-# and add API keys as explained above
+# Edit the .env file with your favorite editor (here nano), and remove any un-used settings. E.g. there are "dummy" values like "your-redis-port" etc -- if you are not using them, you MUST remove them.
 nano .env
 
 # launch the container
