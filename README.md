@@ -175,7 +175,7 @@ See [this test](tests/main/test_recipient_tool.py) for example usage.
   - **Example:** [Answer questions](examples/docqa/chat-search.py) using Google Search + vecdb-retrieval from URL contents. 
   - **0.1.39:** [`GoogleSearchTool`](langroid/agent/tools/google_search_tool.py) to enable Agents (their LLM) to do Google searches via function-calling/tools.
     See [this chat example](examples/basic/chat-search.py) for how easy it is to add this tool to an agent.
-  - **Colab notebook** to try the quick-start examples: [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/langroid/langroid/blob/main/examples/langroid_quick_examples.ipynb) 
+  - **Colab notebook** to try the quick-start examples: [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/langroid/langroid/blob/main/examples/langroid_quick_start.ipynb) 
   - **0.1.37:** Added [`SQLChatAgent`](langroid/agent/special/sql_chat_agent.py) -- thanks to our latest contributor [Rithwik Babu](https://github.com/rithwikbabu)!
   - Multi-agent Example: [Autocorrect chat](examples/basic/autocorrect.py)
 - **July 2023:** 
@@ -426,7 +426,7 @@ for a detailed tutorial.
 
 Click to expand any of the code examples below.
 All of these can be run in a Colab notebook:
-[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/langroid/langroid/blob/main/examples/langroid_quick_examples.ipynb)
+[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/langroid/langroid/blob/main/examples/langroid_quick_start.ipynb)
 
 <details>
 <summary> <b> Direct interaction with OpenAI LLM </b> </summary>
