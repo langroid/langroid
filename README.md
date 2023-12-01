@@ -11,7 +11,7 @@
 [![Multi-Architecture DockerHub](https://github.com/langroid/langroid/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/langroid/langroid/actions/workflows/docker-publish.yml)
 
 [![Static Badge](https://img.shields.io/badge/Documentation-blue?link=https%3A%2F%2Flangroid.github.io%2Flangroid%2F&link=https%3A%2F%2Flangroid.github.io%2Flangroid%2F)](https://langroid.github.io/langroid)
-[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/langroid/langroid/blob/main/examples/langroid_quick_start.ipynb)
+[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/langroid/langroid/blob/main/examples/Langroid_quick_start.ipynb)
 [![Discord](https://img.shields.io/badge/Discord-%235865F2.svg?style=flat&logo=discord&logoColor=white)](https://discord.gg/ZU36McDgDs)
 [![Substack](https://img.shields.io/badge/Substack-%23006f5c.svg?style=flat&logo=substack&logoColor=FF6719)](https://langroid.substack.com/p/langroid-harness-llms-with-multi-agent-programming)
 </div>
@@ -49,7 +49,7 @@ We welcome contributions -- See the [contributions](./CONTRIBUTING.md) document
 for ideas on what to contribute.
 
 
-Building LLM Applications? Prasad Chalasani is available for consulting
+Building LLM Applications? [Prasad Chalasani](https://www.linkedin.com/in/pchalasani/) is available for consulting
 (advisory/development): pchalasani at gmail dot com.
 
 Sponsorship is also accepted via [GitHub Sponsors](https://github.com/sponsors/langroid)
@@ -59,12 +59,12 @@ Sponsorship is also accepted via [GitHub Sponsors](https://github.com/sponsors/l
 # Quick glimpse of coding with Langroid
 This is just a teaser; there's much more, like function-calling/tools, 
 Multi-Agent Collaboration, Structured Information Extraction, DocChatAgent 
-(RAG), SQLChatAgent, etc. Scroll down or see docs for more.
+(RAG), SQLChatAgent, non-OpenAI local/remote LLMs, etc. Scroll down or see docs for more.
 
-:fire: Just released! See this [Colab](https://colab.research.google.com/drive/190Tk7t4AdY1P9F_NlZ33-YEoGnHweQQ0) 
-for a walk-through of the new `OpenAIAssistant` class (with near-complete support for the new OpenAI Assistants API) 
-in a multi-agent setting.
-
+:fire: Just released! Updated Langroid Quick-Start [Colab](https://colab.research.google.com/github/langroid/langroid/blob/main/examples/Langroid_quick_start.ipynb)
+that builds up to a 2-agent chat example using the OpenAI ChatCompletion API. 
+See also this [version](https://colab.research.google.com/drive/190Tk7t4AdY1P9F_NlZ33-YEoGnHweQQ0) 
+that uses the OpenAI Assistants API instead.
 
 ```python
 from langroid.language_models import  OpenAIGPTConfig, OpenAIChatModel, OpenAIGPT
@@ -175,7 +175,7 @@ See [this test](tests/main/test_recipient_tool.py) for example usage.
   - **Example:** [Answer questions](examples/docqa/chat-search.py) using Google Search + vecdb-retrieval from URL contents. 
   - **0.1.39:** [`GoogleSearchTool`](langroid/agent/tools/google_search_tool.py) to enable Agents (their LLM) to do Google searches via function-calling/tools.
     See [this chat example](examples/basic/chat-search.py) for how easy it is to add this tool to an agent.
-  - **Colab notebook** to try the quick-start examples: [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/langroid/langroid/blob/main/examples/langroid_quick_start.ipynb) 
+  - **Colab notebook** to try the quick-start examples: [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/langroid/langroid/blob/main/examples/Langroid_quick_start.ipynb) 
   - **0.1.37:** Added [`SQLChatAgent`](langroid/agent/special/sql_chat_agent.py) -- thanks to our latest contributor [Rithwik Babu](https://github.com/rithwikbabu)!
   - Multi-agent Example: [Autocorrect chat](examples/basic/autocorrect.py)
 - **July 2023:** 
@@ -426,7 +426,7 @@ for a detailed tutorial.
 
 Click to expand any of the code examples below.
 All of these can be run in a Colab notebook:
-[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/langroid/langroid/blob/main/examples/langroid_quick_start.ipynb)
+[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/langroid/langroid/blob/main/examples/Langroid_quick_start.ipynb)
 
 <details>
 <summary> <b> Direct interaction with OpenAI LLM </b> </summary>
