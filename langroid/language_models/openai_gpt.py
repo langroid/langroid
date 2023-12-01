@@ -233,13 +233,21 @@ class OpenAIGPT(LanguageModel):
                 # switch to fresh momento config if needed
                 config.cache_config = MomentoCacheConfig()
             self.cache = MomentoCache(config.cache_config)
-        else:
+        elif "redis" in settings.cache_type:
             if config.cache_config is None or isinstance(
                 config.cache_config, MomentoCacheConfig
             ):
                 # switch to fresh redis config if needed
-                config.cache_config = RedisCacheConfig()
+                config.cache_config = RedisCacheConfig(
+                    fake="fake" in settings.cache_type
+                )
             self.cache = RedisCache(config.cache_config)
+            config.cache_config.fake = "fake" in settings.cache_type
+        else:
+            raise ValueError(
+                f"Invalid cache type {settings.cache_type}. "
+                "Valid types are momento, redis, fakeredis"
+            )
 
         self.config._validate_litellm()
 
