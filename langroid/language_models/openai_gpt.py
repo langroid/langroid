@@ -227,10 +227,18 @@ class OpenAIGPT(LanguageModel):
 
         self.cache: MomentoCache | RedisCache
         if settings.cache_type == "momento":
-            config.cache_config = MomentoCacheConfig()
+            if config.cache_config is None or isinstance(
+                config.cache_config, RedisCacheConfig
+            ):
+                # switch to fresh momento config if needed
+                config.cache_config = MomentoCacheConfig()
             self.cache = MomentoCache(config.cache_config)
         else:
-            config.cache_config = RedisCacheConfig()
+            if config.cache_config is None or isinstance(
+                config.cache_config, MomentoCacheConfig
+            ):
+                # switch to fresh redis config if needed
+                config.cache_config = RedisCacheConfig()
             self.cache = RedisCache(config.cache_config)
 
         self.config._validate_litellm()
