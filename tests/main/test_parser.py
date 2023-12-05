@@ -8,15 +8,19 @@ CHUNK_SIZE = 100
 
 
 @pytest.mark.parametrize(
-    "chunk_size, max_chunks, min_chunk_chars, discard_chunk_chars",
+    "splitter, chunk_size, max_chunks, min_chunk_chars, discard_chunk_chars",
     [
-        # (200, 10_000, 35, 5),
-        (10, 100, 35, 2),
-        # (200, 1000, 300, 10),
+        (Splitter.TOKENS, 10, 100, 35, 2),
+        (Splitter.PARA_SENTENCE, 10, 100, 35, 2),
+        (Splitter.SIMPLE, 10, 100, 35, 2),
     ],
 )
 def test_parser(
-    chunk_size: int, max_chunks: int, min_chunk_chars: int, discard_chunk_chars: int
+    splitter: Splitter,
+    chunk_size: int,
+    max_chunks: int,
+    min_chunk_chars: int,
+    discard_chunk_chars: int
 ):
     cfg = ParsingConfig(
         splitter=Splitter.TOKENS,
@@ -61,7 +65,7 @@ def length_fn(text):
         (200, 1000, 300, 10),
     ],
 )
-def test_text_chunking(
+def test_text_token_chunking(
     chunk_size: int, max_chunks: int, min_chunk_chars: int, discard_chunk_chars: int
 ):
     cfg = ParsingConfig(
