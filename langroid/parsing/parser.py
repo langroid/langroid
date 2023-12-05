@@ -52,13 +52,14 @@ class Parser:
         return len(tokens)
 
     def add_window_ids(self, chunks: List[Document]) -> None:
-        """Chunks are consecutive parts of a single original document.
-        Add window_ids in metadata"""
+        """Chunks may belong to multiple docs, but for each doc,
+        they appear consecutively. Add window_ids in metadata"""
 
         # The original metadata.id (if any) is ignored since it will be same for all
         # chunks and is useless. We want a distinct id for each chunk.
         orig_ids = [c.metadata.id for c in chunks]
         ids = [Document.hash_id(str(c)) for c in chunks]
+        id2chunk = {id: c for id, c in zip(ids, chunks)}
 
         # group the ids by orig_id
         orig_id_to_ids: Dict[str, List[str]] = {}
@@ -71,9 +72,11 @@ class Parser:
 
         k = self.config.n_neighbor_ids
         for orig, ids in orig_id_to_ids.items():
+            # ids are consecutive chunks in a single doc
             n = len(ids)
             window_ids = [ids[max(0, i - k) : min(n, i + k + 1)] for i in range(n)]
-            for i, c in enumerate(chunks):
+            for i, _ in enumerate(ids):
+                c = id2chunk[ids[i]]
                 if c.content.strip() == "":
                     continue
                 c.metadata.window_ids = window_ids[i]
@@ -103,27 +106,30 @@ class Parser:
     def split_para_sentence(self, docs: List[Document]) -> List[Document]:
         chunks = docs
         while True:
+            un_splittables = 0
             split_chunks = []
             for c in chunks:
                 if c.content.strip() == "":
                     continue
                 if self.num_tokens(c.content) <= 1.3 * self.config.chunk_size:
+                    # small chunk: no need to split
                     split_chunks.append(c)
                     continue
                 splits = self._split_para_sentence_once([c])
+                un_splittables += len(splits) == 1
                 split_chunks += splits
-            chunks = split_chunks.copy()
-
             if len(split_chunks) == len(chunks):
-                max_len = max([self.num_tokens(p.content) for p in chunks])
-                logger.warning(
-                    f"""
-                    Unable to split some long chunks
-                    using chunk_size = {self.config.chunk_size}.
-                    Max chunk size is {max_len} tokens.
-                    """
-                )
+                if un_splittables > 0:
+                    max_len = max([self.num_tokens(p.content) for p in chunks])
+                    logger.warning(
+                        f"""
+                        Unable to split {un_splittables} chunks
+                        using chunk_size = {self.config.chunk_size}.
+                        Max chunk size is {max_len} tokens.
+                        """
+                    )
                 break  # we won't be able to shorten them with current settings
+            chunks = split_chunks.copy()
 
         self.add_window_ids(chunks)
         return chunks
