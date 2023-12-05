@@ -1,6 +1,6 @@
 import logging
 from enum import Enum
-from typing import List
+from typing import Dict, List
 
 import tiktoken
 from pydantic import BaseSettings
@@ -57,22 +57,34 @@ class Parser:
 
         # The original metadata.id (if any) is ignored since it will be same for all
         # chunks and is useless. We want a distinct id for each chunk.
+        orig_ids = [c.metadata.id for c in chunks]
         ids = [Document.hash_id(str(c)) for c in chunks]
 
+        # group the ids by orig_id
+        orig_id_to_ids: Dict[str, List[str]] = {}
+        for orig_id, id in zip(orig_ids, ids):
+            if orig_id not in orig_id_to_ids:
+                orig_id_to_ids[orig_id] = []  # type: ignore
+            orig_id_to_ids[orig_id].append(id)  # type: ignore
+
+        # now each orig_id maps to a sequence of ids within a single doc
+
         k = self.config.n_neighbor_ids
-        n = len(ids)
-        window_ids = [ids[max(0, i - k) : min(n, i + k + 1)] for i in range(n)]
-        for i, c in enumerate(chunks):
-            if c.content.strip() == "":
-                continue
-            c.metadata.window_ids = window_ids[i]
-            c.metadata.id = ids[i]
-            c.metadata.is_chunk = True
+        for orig, ids in orig_id_to_ids.items():
+            n = len(ids)
+            window_ids = [ids[max(0, i - k) : min(n, i + k + 1)] for i in range(n)]
+            for i, c in enumerate(chunks):
+                if c.content.strip() == "":
+                    continue
+                c.metadata.window_ids = window_ids[i]
+                c.metadata.id = ids[i]
+                c.metadata.is_chunk = True
 
     def split_simple(self, docs: List[Document]) -> List[Document]:
         if len(self.config.separators) == 0:
             raise ValueError("Must have at least one separator")
         final_docs = []
+
         for d in docs:
             if d.content.strip() == "":
                 continue
@@ -240,6 +252,11 @@ class Parser:
     def split(self, docs: List[Document]) -> List[Document]:
         if len(docs) == 0:
             return []
+        # create ids in metadata of docs if absent:
+        # we need this to distinguish docs later in add_window_ids
+        for d in docs:
+            if d.metadata.id is None:
+                d.metadata.id = d.id()
         # some docs are already splits, so don't split them further!
         chunked_docs = [d for d in docs if d.metadata.is_chunk]
         big_docs = [d for d in docs if not d.metadata.is_chunk]
