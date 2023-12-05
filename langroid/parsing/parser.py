@@ -101,35 +101,32 @@ class Parser:
         return final_docs
 
     def split_para_sentence(self, docs: List[Document]) -> List[Document]:
-        final_chunks = []
         chunks = docs
         while True:
-            long_chunks = [
-                p
-                for p in chunks
-                if self.num_tokens(p.content) > 1.3 * self.config.chunk_size
-            ]
-            if len(long_chunks) == 0:
-                break
-            short_chunks = [
-                p
-                for p in chunks
-                if self.num_tokens(p.content) <= 1.3 * self.config.chunk_size
-            ]
-            final_chunks += short_chunks
-            chunks = self._split_para_sentence_once(long_chunks)
-            if len(chunks) == len(long_chunks):
-                max_len = max([self.num_tokens(p.content) for p in long_chunks])
+            split_chunks = []
+            for c in chunks:
+                if c.content.strip() == "":
+                    continue
+                if self.num_tokens(c.content) <= 1.3 * self.config.chunk_size:
+                    split_chunks.append(c)
+                    continue
+                splits = self._split_para_sentence_once([c])
+                split_chunks += splits
+            chunks = split_chunks.copy()
+
+            if len(split_chunks) == len(chunks):
+                max_len = max([self.num_tokens(p.content) for p in chunks])
                 logger.warning(
                     f"""
-                    Unable to split {len(long_chunks)} long chunks
+                    Unable to split some long chunks
                     using chunk_size = {self.config.chunk_size}.
                     Max chunk size is {max_len} tokens.
                     """
                 )
                 break  # we won't be able to shorten them with current settings
 
-        return final_chunks + chunks
+        self.add_window_ids(chunks)
+        return chunks
 
     def _split_para_sentence_once(self, docs: List[Document]) -> List[Document]:
         final_chunks = []
@@ -144,7 +141,6 @@ class Parser:
                 for c in chunks
                 if c.strip() != ""
             ]
-            self.add_window_ids(chunk_docs)
             final_chunks += chunk_docs
 
         return final_chunks
