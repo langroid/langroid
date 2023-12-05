@@ -20,7 +20,7 @@ def test_parser(
     chunk_size: int,
     max_chunks: int,
     min_chunk_chars: int,
-    discard_chunk_chars: int
+    discard_chunk_chars: int,
 ):
     cfg = ParsingConfig(
         splitter=Splitter.TOKENS,
