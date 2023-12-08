@@ -143,6 +143,9 @@ class Agent(ABC):
     def get_dialog(self) -> List[Tuple[str, str]]:
         return self.dialog
 
+    def clear_dialog(self) -> None:
+        self.dialog = []
+
     def _get_tool_list(
         self, message_class: Optional[Type[ToolMessage]] = None
     ) -> List[str]:

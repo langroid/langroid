@@ -61,7 +61,7 @@ class Task:
         single_round: bool = False,
         system_message: str = "",
         user_message: str | None = "",
-        restart: bool = False,
+        restart: bool = True,
         default_human_response: Optional[str] = None,
         interactive: bool = True,
         only_user_quits_root: bool = True,
@@ -103,6 +103,7 @@ class Task:
         if isinstance(agent, ChatAgent) and len(agent.message_history) == 0 or restart:
             agent = cast(ChatAgent, agent)
             agent.clear_history(0)
+            agent.clear_dialog()
             # possibly change the system and user messages
             if system_message:
                 # we always have at least 1 task_message

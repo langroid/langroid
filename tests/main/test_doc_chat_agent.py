@@ -212,13 +212,25 @@ class _MyDocChatAgentConfig(DocChatAgentConfig):
     )
 
 
+@pytest.mark.parametrize(
+    "splitter", [Splitter.PARA_SENTENCE, Splitter.SIMPLE, Splitter.TOKENS]
+)
 @pytest.mark.parametrize("conv_mode", [True, False])
-def test_doc_chat_retrieval(test_settings: Settings, conv_mode: bool):
+def test_doc_chat_retrieval(
+    test_settings: Settings, splitter: Splitter, conv_mode: bool
+):
     """
     Test window retrieval of relevant doc-chunks.
     Check that we are retrieving 2 neighbors around each match.
     """
-    agent = DocChatAgent(_MyDocChatAgentConfig())
+    agent = DocChatAgent(
+        _MyDocChatAgentConfig(
+            parsing=ParsingConfig(
+                splitter=splitter,
+                n_similar_docs=3,
+            )
+        )
+    )
     agent.config.conversation_mode = conv_mode
 
     set_global(test_settings)

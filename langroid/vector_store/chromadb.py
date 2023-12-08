@@ -144,9 +144,10 @@ class ChromaDB(VectorStore):
     def similar_texts_with_scores(
         self, text: str, k: int = 1, where: Optional[str] = None
     ) -> List[Tuple[Document, float]]:
+        n = self.collection.count()
         results = self.collection.query(
             query_texts=[text],
-            n_results=k,
+            n_results=min(n, k),
             where=where,
             include=["documents", "distances", "metadatas"],
         )

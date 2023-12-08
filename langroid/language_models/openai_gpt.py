@@ -63,9 +63,7 @@ class OpenAICompletionModel(str, Enum):
     """Enum for OpenAI Completion models"""
 
     TEXT_DA_VINCI_003 = "text-davinci-003"  # deprecated
-    TEXT_ADA_001 = "text-ada-001"  # deprecated
-    GPT4 = "gpt-4"  # only works on chat-completion endpoint
-    GPT4_TURBO = "gpt-4-1106-preview"  # only works on chat-completion endpoint
+    GPT3_5_TURBO_INSTRUCT = "gpt-3.5-turbo-instruct"
 
 
 _context_length: Dict[str, int] = {
@@ -94,10 +92,8 @@ openAIChatModelPreferenceList = [
 ]
 
 openAICompletionModelPreferenceList = [
-    OpenAICompletionModel.GPT4_TURBO,
-    OpenAICompletionModel.GPT4,
+    OpenAICompletionModel.GPT3_5_TURBO_INSTRUCT,
     OpenAICompletionModel.TEXT_DA_VINCI_003,
-    OpenAICompletionModel.TEXT_ADA_001,
 ]
 
 
@@ -121,9 +117,10 @@ defaultOpenAICompletionModel = next(
             lambda m: m.value in availableModels,
             openAICompletionModelPreferenceList,
         ),
-        [OpenAICompletionModel.GPT4_TURBO],
+        [OpenAICompletionModel.GPT3_5_TURBO_INSTRUCT],
     )
 )
+
 
 class AccessWarning(Warning):
     pass
@@ -137,7 +134,7 @@ def gpt_3_5_warning() -> None:
         Examples may not work properly and unexpected behavior may occur.
         Adjustments to prompts may be necessary.
         """,
-        AccessWarning 
+        AccessWarning,
     )
 
 
@@ -165,6 +162,7 @@ class OpenAIGPTConfig(LLMConfig):
     use_chat_for_completion = True  # do not change this, for OpenAI models!
     timeout: int = 20
     temperature: float = 0.2
+    seed: int | None = 42
     # these can be any model name that is served at an OpenAI-compatible API end point
     chat_model: str = defaultOpenAIChatModel
     completion_model: str = defaultOpenAICompletionModel
@@ -172,13 +170,15 @@ class OpenAIGPTConfig(LLMConfig):
 
     def __init__(self, **kwargs) -> None:  # type: ignore
         local_model = "api_base" in kwargs and kwargs["api_base"] is not None
-        nofunc = kwargs.get("nofunc", False)
+
+        chat_model = kwargs.get("chat_model", "")
+        if chat_model.startswith("litellm") or chat_model.startswith("local"):
+            local_model = True
 
         warn_gpt_3_5 = (
             "chat_model" not in kwargs.keys()
             and not local_model
             and defaultOpenAIChatModel == OpenAIChatModel.GPT3_5_TURBO
-            and not nofunc
         )
 
         if warn_gpt_3_5:
@@ -219,6 +219,7 @@ class OpenAIGPTConfig(LLMConfig):
                 """
             )
         litellm.telemetry = False
+        self.seed = None  # some local mdls don't support seed
         keys_dict = litellm.validate_environment(self.chat_model)
         missing_keys = keys_dict.get("missing_keys", [])
         if len(missing_keys) > 0:
@@ -300,6 +301,7 @@ class OpenAIGPT(LanguageModel):
             # so we can just use `openai.*` methods directly,
             # and don't need a adaptor library like litellm
             self.config.litellm = False
+            self.config.seed = None  # some models raise an error when seed is set
             # Extract the api_base from the model name after the "local/" prefix
             self.api_base = "http://" + self.config.chat_model.split("/", 1)[1]
         else:
@@ -309,7 +311,7 @@ class OpenAIGPT(LanguageModel):
         # an explicit `export OPENAI_API_KEY=xxx` or `setenv OPENAI_API_KEY xxx`
         # Pydantic's BaseSettings will automatically pick it up from the
         # .env file
-        self.api_key = config.api_key
+        self.api_key = config.api_key or "xxx"
         self.client = OpenAI(
             api_key=self.api_key,
             base_url=self.api_base,
@@ -325,11 +327,27 @@ class OpenAIGPT(LanguageModel):
 
         self.cache: MomentoCache | RedisCache
         if settings.cache_type == "momento":
-            config.cache_config = MomentoCacheConfig()
+            if config.cache_config is None or isinstance(
+                config.cache_config, RedisCacheConfig
+            ):
+                # switch to fresh momento config if needed
+                config.cache_config = MomentoCacheConfig()
             self.cache = MomentoCache(config.cache_config)
-        else:
-            config.cache_config = RedisCacheConfig()
+        elif "redis" in settings.cache_type:
+            if config.cache_config is None or isinstance(
+                config.cache_config, MomentoCacheConfig
+            ):
+                # switch to fresh redis config if needed
+                config.cache_config = RedisCacheConfig(
+                    fake="fake" in settings.cache_type
+                )
             self.cache = RedisCache(config.cache_config)
+            config.cache_config.fake = "fake" in settings.cache_type
+        else:
+            raise ValueError(
+                f"Invalid cache type {settings.cache_type}. "
+                "Valid types are momento, redis, fakeredis"
+            )
 
         self.config._validate_litellm()
 
@@ -650,7 +668,7 @@ class OpenAIGPT(LanguageModel):
             prompt_tokens=prompt_tokens, completion_tokens=completion_tokens, cost=cost
         )
 
-    def generate(self, prompt: str, max_tokens: int) -> LLMResponse:
+    def generate(self, prompt: str, max_tokens: int = 200) -> LLMResponse:
         self.run_on_first_use()
 
         try:
@@ -699,7 +717,7 @@ class OpenAIGPT(LanguageModel):
         msg = response["choices"][0]["text"].strip()
         return LLMResponse(message=msg, cached=cached)
 
-    async def agenerate(self, prompt: str, max_tokens: int) -> LLMResponse:
+    async def agenerate(self, prompt: str, max_tokens: int = 200) -> LLMResponse:
         self.run_on_first_use()
 
         try:
@@ -791,7 +809,7 @@ class OpenAIGPT(LanguageModel):
     def chat(
         self,
         messages: Union[str, List[LLMMessage]],
-        max_tokens: int,
+        max_tokens: int = 200,
         functions: Optional[List[LLMFunctionSpec]] = None,
         function_call: str | Dict[str, str] = "auto",
     ) -> LLMResponse:
@@ -835,7 +853,7 @@ class OpenAIGPT(LanguageModel):
     async def achat(
         self,
         messages: Union[str, List[LLMMessage]],
-        max_tokens: int,
+        max_tokens: int = 200,
         functions: Optional[List[LLMFunctionSpec]] = None,
         function_call: str | Dict[str, str] = "auto",
     ) -> LLMResponse:
@@ -958,6 +976,8 @@ class OpenAIGPT(LanguageModel):
             temperature=self.config.temperature,
             stream=self.get_stream(),
         )
+        if self.config.seed is not None:
+            args.update(dict(seed=self.config.seed))
         # only include functions-related args if functions are provided
         # since the OpenAI API will throw an error if `functions` is None or []
         if functions is not None:

@@ -11,7 +11,7 @@
 [![Multi-Architecture DockerHub](https://github.com/langroid/langroid/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/langroid/langroid/actions/workflows/docker-publish.yml)
 
 [![Static Badge](https://img.shields.io/badge/Documentation-blue?link=https%3A%2F%2Flangroid.github.io%2Flangroid%2F&link=https%3A%2F%2Flangroid.github.io%2Flangroid%2F)](https://langroid.github.io/langroid)
-[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/langroid/langroid/blob/main/examples/langroid_quick_examples.ipynb)
+[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/langroid/langroid/blob/main/examples/Langroid_quick_start.ipynb)
 [![Discord](https://img.shields.io/badge/Discord-%235865F2.svg?style=flat&logo=discord&logoColor=white)](https://discord.gg/ZU36McDgDs)
 [![Substack](https://img.shields.io/badge/Substack-%23006f5c.svg?style=flat&logo=substack&logoColor=FF6719)](https://langroid.substack.com/p/langroid-harness-llms-with-multi-agent-programming)
 </div>
@@ -34,9 +34,9 @@
 </h3>
 
 `Langroid` is an intuitive, lightweight, extensible and principled
-Python framework to easily build LLM-powered applications. 
+Python framework to easily build LLM-powered applications, from ex-CMU and UW-Madison researchers. 
 You set up Agents, equip them with optional components (LLM, 
-vector-store and methods), assign them tasks, and have them 
+vector-store and tools/functions), assign them tasks, and have them 
 collaboratively solve a problem by exchanging messages. 
 This Multi-Agent paradigm is inspired by the
 [Actor Framework](https://en.wikipedia.org/wiki/Actor_model)
@@ -48,17 +48,23 @@ into simplifying the developer experience; it does not use `Langchain`.
 We welcome contributions -- See the [contributions](./CONTRIBUTING.md) document
 for ideas on what to contribute.
 
+
+Building LLM Applications? [Prasad Chalasani](https://www.linkedin.com/in/pchalasani/) is available for consulting
+(advisory/development): pchalasani at gmail dot com.
+
+Sponsorship is also accepted via [GitHub Sponsors](https://github.com/sponsors/langroid)
+
 **Questions, Feedback, Ideas? Join us on [Discord](https://discord.gg/ZU36McDgDs)!**
 
 # Quick glimpse of coding with Langroid
 This is just a teaser; there's much more, like function-calling/tools, 
 Multi-Agent Collaboration, Structured Information Extraction, DocChatAgent 
-(RAG), SQLChatAgent, etc. Scroll down or see docs for more.
+(RAG), SQLChatAgent, non-OpenAI local/remote LLMs, etc. Scroll down or see docs for more.
 
-:fire: Just released! See this [Colab](https://colab.research.google.com/drive/190Tk7t4AdY1P9F_NlZ33-YEoGnHweQQ0) 
-for a walk-through of the new `OpenAIAssistant` class (with near-complete support for the new OpenAI Assistants API) 
-in a multi-agent setting.
-
+:fire: Just released! Updated Langroid Quick-Start [Colab](https://colab.research.google.com/github/langroid/langroid/blob/main/examples/Langroid_quick_start.ipynb)
+that builds up to a 2-agent chat example using the OpenAI ChatCompletion API. 
+See also this [version](https://colab.research.google.com/drive/190Tk7t4AdY1P9F_NlZ33-YEoGnHweQQ0) 
+that uses the OpenAI Assistants API instead.
 
 ```python
 import langroid as lr
@@ -107,6 +113,7 @@ teacher_task.run()
 <summary> <b>:fire: Updates/Releases</b></summary>
 
 - **Nov 2023:**
+  - **0.1.126:** OpenAIAssistant agent: Caching Support. See [release notes](https://github.com/langroid/langroid/releases/tag/0.1.126).
   - **0.1.117:** Support for OpenAI Assistant API tools: Function-calling, 
     Code-intepreter, and Retriever (RAG), file uploads. These work seamlessly 
     with Langroid's task-orchestration.
@@ -168,7 +175,7 @@ See [this test](tests/main/test_recipient_tool.py) for example usage.
   - **Example:** [Answer questions](examples/docqa/chat-search.py) using Google Search + vecdb-retrieval from URL contents. 
   - **0.1.39:** [`GoogleSearchTool`](langroid/agent/tools/google_search_tool.py) to enable Agents (their LLM) to do Google searches via function-calling/tools.
     See [this chat example](examples/basic/chat-search.py) for how easy it is to add this tool to an agent.
-  - **Colab notebook** to try the quick-start examples: [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/langroid/langroid/blob/main/examples/langroid_quick_examples.ipynb) 
+  - **Colab notebook** to try the quick-start examples: [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/langroid/langroid/blob/main/examples/Langroid_quick_start.ipynb) 
   - **0.1.37:** Added [`SQLChatAgent`](langroid/agent/special/sql_chat_agent.py) -- thanks to our latest contributor [Rithwik Babu](https://github.com/rithwikbabu)!
   - Multi-agent Example: [Autocorrect chat](examples/basic/autocorrect.py)
 - **July 2023:** 
@@ -380,14 +387,13 @@ Please follow these steps to setup the container:
 
 ```bash
 # get the .env file template from `langroid` repo
-wget https://github.com/langroid/langroid/blob/main/.env-template .env
+wget -O .env https://raw.githubusercontent.com/langroid/langroid/main/.env-template
 
-# Edit the .env file with your favorite editor (here nano), 
-# and add API keys as explained above
+# Edit the .env file with your favorite editor (here nano), and remove any un-used settings. E.g. there are "dummy" values like "your-redis-port" etc -- if you are not using them, you MUST remove them.
 nano .env
 
 # launch the container
-docker run -it  -v ./.env:/.env langroid/langroid
+docker run -it --rm  -v ./.env:/langroid/.env langroid/langroid
 
 # Use this command to run any of the scripts in the `examples` directory
 python examples/<Path/To/Example.py> 
@@ -420,7 +426,7 @@ for a detailed tutorial.
 
 Click to expand any of the code examples below.
 All of these can be run in a Colab notebook:
-[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/langroid/langroid/blob/main/examples/langroid_quick_examples.ipynb)
+[![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/langroid/langroid/blob/main/examples/Langroid_quick_start.ipynb)
 
 <details>
 <summary> <b> Direct interaction with OpenAI LLM </b> </summary>
@@ -776,13 +782,7 @@ If you like this project, please give it a star ⭐ and 📢 spread the word in 
 [![Share on Hacker News](https://img.shields.io/badge/-Share%20on%20Hacker%20News-orange)](https://news.ycombinator.com/submitlink?u=https%3A%2F%2Fgithub.com%2Flangroid%2Flangroid&t=Harness%20LLMs%20with%20Multi-Agent%20Programming)
 [![Share on Reddit](https://img.shields.io/badge/-Share%20on%20Reddit-blue)](https://www.reddit.com/submit?url=https%3A%2F%2Fgithub.com%2Flangroid%2Flangroid&title=Harness%20LLMs%20with%20Multi-Agent%20Programming)
 
-
-
-
 Your support will help build Langroid's momentum and community.
-
-
-
 
 # Langroid Co-Founders
 
