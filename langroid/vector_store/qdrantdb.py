@@ -112,8 +112,8 @@ class QdrantDB(VectorStore):
         n_non_empty_deletes = 0
         for name in coll_names:
             info = self.client.get_collection(collection_name=name)
-            n_empty_deletes += info.points_count == 0
-            n_non_empty_deletes += info.points_count > 0
+            n_empty_deletes += (info.points_count or 0) == 0
+            n_non_empty_deletes += (info.points_count or 0) > 0
             self.client.delete_collection(collection_name=name)
         logger.warning(
             f"""
@@ -143,7 +143,7 @@ class QdrantDB(VectorStore):
             except Exception:
                 logger.warning(f"Error getting collection {coll.name}")
                 counts.append(0)
-        return [coll.name for coll, count in zip(colls, counts) if count > 0]
+        return [coll.name for coll, count in zip(colls, counts) if (count or 0) > 0]
 
     def create_collection(self, collection_name: str, replace: bool = False) -> None:
         """
@@ -158,7 +158,7 @@ class QdrantDB(VectorStore):
         collections = self.list_collections()
         if collection_name in collections:
             coll = self.client.get_collection(collection_name=collection_name)
-            if coll.status == CollectionStatus.GREEN and coll.points_count > 0:
+            if coll.status == CollectionStatus.GREEN and (coll.points_count or 0) > 0:
                 logger.warning(f"Non-empty Collection {collection_name} already exists")
                 if not replace:
                     logger.warning("Not replacing collection")
