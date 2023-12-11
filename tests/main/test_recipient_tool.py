@@ -140,8 +140,9 @@ def test_agents_with_recipient_tool(
         default_human_response="",
         system_message="""
         You will be given a number. 
-        If it is not a multiple of 10, and even, 
-        divide by 2 and say the result, nothing else.
+        If it is even and not a multiple of 10:
+            simply return HALF of that number, 
+            WITHOUT using any tools/functions; say nothing else.
         Otherwise, say -10
         """,
         single_round=True,  # task done after 1 step() with valid response
