@@ -475,7 +475,7 @@ class Task:
                     sender_name=Entity.AGENT,
                 ),
             )
-            self.pending_message = error_doc
+            self._process_responder_result(Entity.AGENT, parent, error_doc)
             return error_doc
 
         responders: List[Responder] = self.non_human_responders.copy()
@@ -545,7 +545,7 @@ class Task:
                     sender_name=Entity.AGENT,
                 ),
             )
-            self.pending_message = error_doc
+            self._process_responder_result(Entity.AGENT, parent, error_doc)
             return error_doc
 
         responders: List[Responder] = self.non_human_responders_async.copy()
