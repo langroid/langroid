@@ -15,48 +15,26 @@ from langroid.parsing.parser import ParsingConfig, Splitter
 from langroid.parsing.utils import generate_random_text
 from langroid.prompts.prompts_config import PromptsConfig
 from langroid.utils.configuration import Settings, set_global
-from langroid.vector_store.base import VectorStoreConfig
-from langroid.vector_store.qdrantdb import QdrantDBConfig
+from langroid.utils.system import rmdir
+from langroid.vector_store.base import VectorStore, VectorStoreConfig
+from langroid.vector_store.chromadb import ChromaDB, ChromaDBConfig
+from langroid.vector_store.lancedb import LanceDB, LanceDBConfig
+from langroid.vector_store.qdrantdb import QdrantDB, QdrantDBConfig
 
-storage_path = ":memory:"
-
-
-class _TestDocChatAgentConfig(DocChatAgentConfig):
-    cross_encoder_reranking_model = ""
-    n_query_rephrases = 0
-    debug: bool = False
-    stream: bool = True  # allow streaming where needed
-    conversation_mode = True
-    vecdb: VectorStoreConfig = QdrantDBConfig(
-        collection_name="test-data",
-        replace_collection=True,
-        storage_path=storage_path,
-        embedding=OpenAIEmbeddingsConfig(
-            model_type="openai",
-            model_name="text-embedding-ada-002",
-            dims=1536,
-        ),
-    )
-
-    llm: OpenAIGPTConfig = OpenAIGPTConfig(
-        stream=True,
-        cache_config=RedisCacheConfig(fake=False),
-        chat_model=OpenAIChatModel.GPT4,
-        use_chat_for_completion=True,
-    )
-
-    parsing: ParsingConfig = ParsingConfig(
-        splitter=Splitter.SIMPLE,
-        n_similar_docs=3,
-    )
-
-    prompts: PromptsConfig = PromptsConfig(
-        max_tokens=1000,
-    )
+embed_cfg = OpenAIEmbeddingsConfig(
+    model_type="openai",
+)
 
 
-config = _TestDocChatAgentConfig()
-set_global(Settings(cache=True))  # allow cacheing
+class MyDocMetaData(DocMetaData):
+    id: str
+
+
+class MyDoc(Document):
+    content: str
+    metadata: MyDocMetaData
+
+
 documents: List[Document] = (
     [
         Document(
@@ -99,9 +77,91 @@ documents: List[Document] = (
 )
 
 
-@pytest.fixture
-def agent():
+@pytest.fixture(scope="function")
+def vecdb(request) -> VectorStore:
+    if request.param == "qdrant_local":
+        qd_dir = ":memory:"
+        qd_cfg = QdrantDBConfig(
+            cloud=False,
+            collection_name="test-" + embed_cfg.model_type,
+            storage_path=qd_dir,
+            embedding=embed_cfg,
+        )
+        qd = QdrantDB(qd_cfg)
+        yield qd
+        return
+
+    if request.param == "chroma":
+        cd_dir = ".chroma/" + embed_cfg.model_type
+        rmdir(cd_dir)
+        cd_cfg = ChromaDBConfig(
+            collection_name="test-" + embed_cfg.model_type,
+            storage_path=cd_dir,
+            embedding=embed_cfg,
+        )
+        cd = ChromaDB(cd_cfg)
+        yield cd
+        rmdir(cd_dir)
+        return
+
+    if request.param == "lancedb":
+        ldb_dir = ".lancedb/data/" + embed_cfg.model_type
+        rmdir(ldb_dir)
+        ldb_cfg = LanceDBConfig(
+            cloud=False,
+            collection_name="test-" + embed_cfg.model_type,
+            storage_path=ldb_dir,
+            embedding=embed_cfg,
+            document_class=MyDoc,  # IMPORTANT, to ensure table has full schema!
+        )
+        ldb = LanceDB(ldb_cfg)
+        yield ldb
+        rmdir(ldb_dir)
+        return
+
+
+class _TestDocChatAgentConfig(DocChatAgentConfig):
+    cross_encoder_reranking_model = ""
+    n_query_rephrases = 0
+    debug: bool = False
+    stream: bool = True  # allow streaming where needed
+    conversation_mode = True
+    # vecdb: VectorStoreConfig = QdrantDBConfig(
+    #     collection_name="test-data",
+    #     replace_collection=True,
+    #     storage_path=storage_path,
+    #     embedding=OpenAIEmbeddingsConfig(
+    #         model_type="openai",
+    #         model_name="text-embedding-ada-002",
+    #         dims=1536,
+    #     ),
+    # )
+
+    llm: OpenAIGPTConfig = OpenAIGPTConfig(
+        stream=True,
+        cache_config=RedisCacheConfig(fake=False),
+        chat_model=OpenAIChatModel.GPT4,
+        use_chat_for_completion=True,
+    )
+
+    parsing: ParsingConfig = ParsingConfig(
+        splitter=Splitter.SIMPLE,
+        n_similar_docs=3,
+    )
+
+    prompts: PromptsConfig = PromptsConfig(
+        max_tokens=1000,
+    )
+
+
+config = _TestDocChatAgentConfig()
+set_global(Settings(cache=True))  # allow cacheing
+
+
+@pytest.fixture(scope="function")
+def agent(vecdb) -> DocChatAgent:
     agent = DocChatAgent(config)
+    agent.vecdb = vecdb
     agent.ingest_docs(documents)
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
     return agent
@@ -124,6 +184,7 @@ QUERY_EXPECTED_PAIRS = [
 ]
 
 
+@pytest.mark.parametrize("vecdb", ["qdrant_local", "chroma", "lancedb"], indirect=True)
 @pytest.mark.parametrize("query, expected", QUERY_EXPECTED_PAIRS)
 def test_doc_chat_agent_llm(test_settings: Settings, agent, query: str, expected: str):
     """
@@ -139,6 +200,7 @@ def test_doc_chat_agent_llm(test_settings: Settings, agent, query: str, expected
     assert all([e in ans for e in expected])
 
 
+@pytest.mark.parametrize("vecdb", ["qdrant_local", "chroma", "lancedb"], indirect=True)
 def test_doc_chat_agent_task(test_settings: Settings, agent):
     """
     Test DocChatAgent wrapped in a Task.
@@ -159,6 +221,7 @@ def test_doc_chat_agent_task(test_settings: Settings, agent):
         assert task.pending_message.metadata.sender == Entity.LLM
 
 
+@pytest.mark.parametrize("vecdb", ["qdrant_local", "chroma", "lancedb"], indirect=True)
 @pytest.mark.parametrize("conv_mode", [True, False])
 def test_doc_chat_followup(test_settings: Settings, agent, conv_mode: bool):
     """
@@ -191,7 +254,7 @@ class _MyDocChatAgentConfig(DocChatAgentConfig):
     vecdb: VectorStoreConfig = QdrantDBConfig(
         collection_name="test-data",
         replace_collection=True,
-        storage_path=storage_path,
+        storage_path=":memory:",
         embedding=OpenAIEmbeddingsConfig(
             model_name="text-embedding-ada-002",
             dims=1536,
@@ -212,12 +275,13 @@ class _MyDocChatAgentConfig(DocChatAgentConfig):
     )
 
 
+@pytest.mark.parametrize("vecdb", ["chroma", "qdrant_local", "lancedb"], indirect=True)
 @pytest.mark.parametrize(
     "splitter", [Splitter.PARA_SENTENCE, Splitter.SIMPLE, Splitter.TOKENS]
 )
 @pytest.mark.parametrize("conv_mode", [True, False])
 def test_doc_chat_retrieval(
-    test_settings: Settings, splitter: Splitter, conv_mode: bool
+    test_settings: Settings, vecdb, splitter: Splitter, conv_mode: bool
 ):
     """
     Test window retrieval of relevant doc-chunks.
@@ -232,6 +296,7 @@ def test_doc_chat_retrieval(
         )
     )
     agent.config.conversation_mode = conv_mode
+    agent.vecdb = vecdb
 
     set_global(test_settings)
 
@@ -261,7 +326,8 @@ def test_doc_chat_retrieval(
     )
 
 
-def test_doc_chat_rerank_diversity(test_settings: Settings):
+@pytest.mark.parametrize("vecdb", ["qdrant_local", "chroma", "lancedb"], indirect=True)
+def test_doc_chat_rerank_diversity(test_settings: Settings, vecdb):
     """
     Test that reranking by diversity works.
     """
@@ -271,6 +337,7 @@ def test_doc_chat_rerank_diversity(test_settings: Settings):
     )
     cfg.parsing.n_similar_docs = 8
     agent = DocChatAgent(cfg)
+    agent.vecdb = vecdb
 
     set_global(test_settings)
 
@@ -296,7 +363,8 @@ def test_doc_chat_rerank_diversity(test_settings: Settings):
         assert sum(p in r.content for r in reranked[:4]) == 1
 
 
-def test_doc_chat_rerank_periphery(test_settings: Settings):
+@pytest.mark.parametrize("vecdb", ["qdrant_local", "chroma", "lancedb"], indirect=True)
+def test_doc_chat_rerank_periphery(test_settings: Settings, vecdb):
     """
     Test that reranking to periphery works.
     """
@@ -306,6 +374,7 @@ def test_doc_chat_rerank_periphery(test_settings: Settings):
     )
     cfg.parsing.n_similar_docs = 8
     agent = DocChatAgent(cfg)
+    agent.vecdb = vecdb
 
     set_global(test_settings)
 

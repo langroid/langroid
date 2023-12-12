@@ -77,7 +77,11 @@ class Document(BaseModel):
         return self.hash_id(str(self))
 
     def id(self) -> str:
-        if hasattr(self.metadata, "id") and self.metadata.id is not None:
+        if (
+            hasattr(self.metadata, "id")
+            and self.metadata.id is not None
+            and self.metadata.id != ""
+        ):
             return self.metadata.id
         else:
             return self._unique_hash_id()

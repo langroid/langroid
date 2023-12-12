@@ -257,8 +257,8 @@ class Parser:
         # create ids in metadata of docs if absent:
         # we need this to distinguish docs later in add_window_ids
         for d in docs:
-            if d.metadata.id is None:
-                d.metadata.id = d.id()
+            if d.metadata.id in [None, ""]:
+                d.metadata.id = d._unique_hash_id()
         # some docs are already splits, so don't split them further!
         chunked_docs = [d for d in docs if d.metadata.is_chunk]
         big_docs = [d for d in docs if not d.metadata.is_chunk]

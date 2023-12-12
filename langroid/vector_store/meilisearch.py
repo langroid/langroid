@@ -171,6 +171,7 @@ class MeiliSearch(VectorStore):
             )
 
     def add_documents(self, documents: Sequence[Document]) -> None:
+        super().maybe_add_ids(documents)
         if len(documents) == 0:
             return
         colls = self._list_all_collections()

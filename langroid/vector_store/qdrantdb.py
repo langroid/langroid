@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 class QdrantDBConfig(VectorStoreConfig):
     cloud: bool = True
-    collection_name: str | None = None
+    collection_name: str | None = "temp"
     storage_path: str = ".qdrant/data"
     embedding: EmbeddingModelsConfig = OpenAIEmbeddingsConfig()
     distance: str = Distance.COSINE
@@ -182,6 +182,7 @@ class QdrantDB(VectorStore):
             logger.setLevel(level)
 
     def add_documents(self, documents: Sequence[Document]) -> None:
+        super().maybe_add_ids(documents)
         colls = self.list_collections(empty=True)
         if len(documents) == 0:
             return
