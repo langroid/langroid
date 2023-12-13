@@ -1,6 +1,6 @@
 import logging
 import os
-from typing import List, Optional, Sequence, Tuple
+from typing import List, Optional, Sequence, Tuple, TypeVar
 
 from dotenv import load_dotenv
 from qdrant_client import QdrantClient
@@ -24,6 +24,16 @@ from langroid.utils.configuration import settings
 from langroid.vector_store.base import VectorStore, VectorStoreConfig
 
 logger = logging.getLogger(__name__)
+
+
+T = TypeVar("T")
+
+
+def from_optional(x: Optional[T], default: T) -> T:
+    if x is None:
+        return default
+
+    return x
 
 
 class QdrantDBConfig(VectorStoreConfig):
@@ -113,7 +123,7 @@ class QdrantDB(VectorStore):
         for name in coll_names:
             info = self.client.get_collection(collection_name=name)
             n_empty_deletes += info.points_count == 0
-            n_non_empty_deletes += info.points_count > 0
+            n_non_empty_deletes += from_optional(info.points_count, 0) > 0
             self.client.delete_collection(collection_name=name)
         logger.warning(
             f"""
@@ -138,7 +148,12 @@ class QdrantDB(VectorStore):
         for coll in colls:
             try:
                 counts.append(
-                    self.client.get_collection(collection_name=coll.name).points_count
+                    from_optional(
+                        self.client.get_collection(
+                            collection_name=coll.name
+                        ).points_count,
+                        0,
+                    )
                 )
             except Exception:
                 logger.warning(f"Error getting collection {coll.name}")
@@ -158,7 +173,10 @@ class QdrantDB(VectorStore):
         collections = self.list_collections()
         if collection_name in collections:
             coll = self.client.get_collection(collection_name=collection_name)
-            if coll.status == CollectionStatus.GREEN and coll.points_count > 0:
+            if (
+                coll.status == CollectionStatus.GREEN
+                and from_optional(coll.points_count, 0) > 0
+            ):
                 logger.warning(f"Non-empty Collection {collection_name} already exists")
                 if not replace:
                     logger.warning("Not replacing collection")

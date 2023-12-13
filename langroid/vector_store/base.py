@@ -37,7 +37,7 @@ class VectorStore(ABC):
     Abstract base class for a vector store.
     """
 
-    def __init__(self, config: VectorStoreConfig = VectorStoreConfig()):
+    def __init__(self, config: VectorStoreConfig):
         self.config = config
         self.embedding_model = EmbeddingModel.create(config.embedding)
 
