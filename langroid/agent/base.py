@@ -727,11 +727,17 @@ class Agent(ABC):
             assert isinstance(self.llm, LanguageModel)
             context_length = self.llm.chat_context_length()
             max_out = self.config.llm.max_output_tokens
+
+            llm_model = (
+                "no-LLM" if self.config.llm is None else self.config.llm.chat_model
+            )
+
             return (
-                f"[bold]Stats:[/bold] [magenta] N_MSG={chat_length}, "
+                f"[bold]Stats:[/bold] [magenta]N_MSG={chat_length}, "
                 f"TOKENS: in={in_tokens}, out={out_tokens}, "
                 f"max={max_out}, ctx={context_length}, "
-                f"COST: now=${llm_response_cost}, cumul=${cumul_cost}[/magenta]"
+                f"COST: now=${llm_response_cost}, cumul=${cumul_cost} "
+                f"[bold]({llm_model})[/bold][/magenta]"
             )
         return ""
 
