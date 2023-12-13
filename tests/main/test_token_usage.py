@@ -9,9 +9,10 @@ from langroid.prompts.prompts_config import PromptsConfig
 from langroid.utils.configuration import Settings, set_global
 from langroid.vector_store.base import VectorStoreConfig
 
+MAX_OUTPUT_TOKENS = 30
+
 
 class _TestChatAgentConfig(ChatAgentConfig):
-    max_tokens: int = 200
     vecdb: VectorStoreConfig = None
     parsing: ParsingConfig = ParsingConfig()
     prompts: PromptsConfig = PromptsConfig(
@@ -31,6 +32,8 @@ config = OpenAIGPTConfig(
     cache_config=RedisCacheConfig(fake=False),
     chat_model=OpenAIChatModel.GPT4,
     use_chat_for_completion=True,
+    max_output_tokens=MAX_OUTPUT_TOKENS,
+    min_output_tokens=1,
 )
 
 
@@ -41,6 +44,7 @@ def test_agent_token_usage(stream):
     agent = ChatAgent(cfg)
     agent.llm.reset_usage_cost()
     question = "What is the capital of Canada?"
+    q_tokens = agent.num_tokens(question)
     agent.llm_response_forget(question)
     assert agent.total_llm_token_usage != 0
     assert agent.total_llm_token_cost != 0
@@ -50,17 +54,25 @@ def test_agent_token_usage(stream):
 
     set_global(Settings(cache=True, stream=stream))
     # this convo shouldn't change the cost and tokens because `cache` is `True`
-    agent.llm_response_forget(question)
+    response0 = agent.llm_response_forget(question)
     assert total_cost_after_1st_rnd == agent.total_llm_token_cost
     assert agent.total_llm_token_usage == total_tokens_after_1st_rnd
 
-    # this convo should change the cost because `cache` is `False`
-    # number of accumulated tokens should be doubled because the question/response pair
-    # is the same
+    # This convo should change the cost because `cache` is `False`:
+    # IF the response is identical to before, then the
+    # number of accumulated tokens should be doubled, but
+    # we allow for variation in the response
     set_global(Settings(cache=False, stream=stream))
     response1 = agent.llm_response(question)
-    assert agent.total_llm_token_usage == total_tokens_after_1st_rnd * 2
-    assert agent.total_llm_token_cost == total_cost_after_1st_rnd * 2
+    assert (
+        agent.total_llm_token_usage
+        == 2 * total_tokens_after_1st_rnd
+        + agent.num_tokens(response1.content)
+        - agent.num_tokens(response0.content)
+    )
+    assert agent.total_llm_token_cost > total_cost_after_1st_rnd * 1.1
+
+    # check that cost/usage accumulation in agent matches that in llm
     llm_usage = agent.llm.usage_cost_dict[agent.config.llm.chat_model]
     assert (
         llm_usage.prompt_tokens + llm_usage.completion_tokens
@@ -74,7 +86,7 @@ def test_agent_token_usage(stream):
         response2.metadata.usage.prompt_tokens
         >= response1.metadata.usage.prompt_tokens
         + response1.metadata.usage.completion_tokens
-        + agent.num_tokens(question)
+        + q_tokens
     )
 
 
@@ -123,7 +135,7 @@ async def test_agent_token_usage_async(stream):
     set_global(Settings(cache=True, stream=stream))
     print("***2nd round***")
     # this convo shouldn't change the cost and tokens because `cache` is `True`
-    await agent.llm_response_forget_async(question)
+    response0 = await agent.llm_response_forget_async(question)
     assert total_cost_after_1st_rnd == agent.total_llm_token_cost
     assert agent.total_llm_token_usage == total_tokens_after_1st_rnd
 
@@ -131,14 +143,16 @@ async def test_agent_token_usage_async(stream):
     # number of accumulated tokens should be doubled because the question/response pair
     # is the same
     set_global(Settings(cache=False, stream=stream))
-    await agent.llm_response_async(question)
+    response1 = await agent.llm_response_async(question)
     print("***3rd round***")
 
-    b = max(agent.total_llm_token_usage, total_tokens_after_1st_rnd * 2)
-    assert abs(agent.total_llm_token_usage - total_tokens_after_1st_rnd * 2) < 0.1 * b
-
-    b = max(agent.total_llm_token_cost, total_cost_after_1st_rnd * 2)
-    assert abs(agent.total_llm_token_cost - total_cost_after_1st_rnd * 2) < 0.1 * b
+    assert (
+        agent.total_llm_token_usage
+        == 2 * total_tokens_after_1st_rnd
+        + agent.num_tokens(response1.content)
+        - agent.num_tokens(response0.content)
+    )
+    assert agent.total_llm_token_cost > total_cost_after_1st_rnd * 1.1
 
     llm_usage = agent.llm.usage_cost_dict[agent.config.llm.chat_model]
     assert (
