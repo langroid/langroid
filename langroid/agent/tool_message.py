@@ -45,7 +45,6 @@ class ToolMessage(ABC, BaseModel):
     request: str
     purpose: str
     result: str = ""
-    recipient: str = ""  # default is empty string, so it is optional
 
     class Config:
         arbitrary_types_allowed = False

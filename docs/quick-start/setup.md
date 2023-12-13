@@ -74,11 +74,9 @@ All of the following environment variable settings are optional, and some are on
 to use specific features (as noted below).
 
 - **Qdrant** Vector Store API Key, URL. This is only required if you want to use Qdrant cloud.
-  You can sign up for a free 1GB account at [Qdrant cloud](https://cloud.qdrant.io).
-  If you skip setting up these, Langroid will use Qdrant in local-storage mode.
+  Langroid uses LanceDB as the default vector store in its `DocChatAgent` class (for RAG).
   Alternatively [Chroma](https://docs.trychroma.com/) is also currently supported.
   We use the local-storage version of Chroma, so there is no need for an API key.
-  Langroid uses Qdrant by default.
 - **Redis** Password, host, port: This is optional, and only needed to cache LLM API responses
   using Redis Cloud. Redis [offers](https://redis.com/try-free/) a free 30MB Redis account
   which is more than sufficient to try out Langroid and even beyond.

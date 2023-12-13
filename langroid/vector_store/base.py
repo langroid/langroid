@@ -18,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 class VectorStoreConfig(BaseSettings):
     type: str = ""  # deprecated, keeping it for backward compatibility
-    collection_name: str | None = None
+    collection_name: str | None = "temp"
     replace_collection: bool = False  # replace collection if it already exists
     storage_path: str = ".qdrant/data"
     cloud: bool = False
@@ -126,6 +126,13 @@ class VectorStore(ABC):
     @abstractmethod
     def add_documents(self, documents: Sequence[Document]) -> None:
         pass
+
+    def maybe_add_ids(self, documents: Sequence[Document]) -> None:
+        """Add ids to metadata if absent, since some
+        vecdbs don't like having blank ids."""
+        for d in documents:
+            if d.metadata.id in [None, ""]:
+                d.metadata.id = d._unique_hash_id()
 
     @abstractmethod
     def similar_texts_with_scores(

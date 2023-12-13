@@ -38,7 +38,7 @@ def from_optional(x: Optional[T], default: T) -> T:
 
 class QdrantDBConfig(VectorStoreConfig):
     cloud: bool = True
-    collection_name: str | None = None
+    collection_name: str | None = "temp"
     storage_path: str = ".qdrant/data"
     embedding: EmbeddingModelsConfig = OpenAIEmbeddingsConfig()
     distance: str = Distance.COSINE
@@ -122,8 +122,10 @@ class QdrantDB(VectorStore):
         n_non_empty_deletes = 0
         for name in coll_names:
             info = self.client.get_collection(collection_name=name)
-            n_empty_deletes += info.points_count == 0
-            n_non_empty_deletes += from_optional(info.points_count, 0) > 0
+            points_count = from_optional(info.points_count, 0)
+
+            n_empty_deletes += points_count == 0
+            n_non_empty_deletes += points_count > 0
             self.client.delete_collection(collection_name=name)
         logger.warning(
             f"""
@@ -158,7 +160,7 @@ class QdrantDB(VectorStore):
             except Exception:
                 logger.warning(f"Error getting collection {coll.name}")
                 counts.append(0)
-        return [coll.name for coll, count in zip(colls, counts) if count > 0]
+        return [coll.name for coll, count in zip(colls, counts) if (count or 0) > 0]
 
     def create_collection(self, collection_name: str, replace: bool = False) -> None:
         """
@@ -200,6 +202,7 @@ class QdrantDB(VectorStore):
             logger.setLevel(level)
 
     def add_documents(self, documents: Sequence[Document]) -> None:
+        super().maybe_add_ids(documents)
         colls = self.list_collections(empty=True)
         if len(documents) == 0:
             return

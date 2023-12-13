@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 class ChromaDBConfig(VectorStoreConfig):
-    collection_name: str = "chroma-langroid"
+    collection_name: str = "temp"
     storage_path: str = ".chroma/data"
     embedding: EmbeddingModelsConfig = OpenAIEmbeddingsConfig()
     host: str = "127.0.0.1"
@@ -108,7 +108,8 @@ class ChromaDB(VectorStore):
             get_or_create=not replace,
         )
 
-    def add_documents(self, documents: Optional[Sequence[Document]] = None) -> None:
+    def add_documents(self, documents: Sequence[Document]) -> None:
+        super().maybe_add_ids(documents)
         if documents is None:
             return
         contents: List[str] = [document.content for document in documents]

@@ -229,7 +229,7 @@ providers (local/open or remote/commercial) via proxy libraries and local model 
 such as [LiteLLM](https://docs.litellm.ai/docs/providers) that in effect mimic the OpenAI API. 
 - **Caching of LLM responses:** Langroid supports [Redis](https://redis.com/try-free/) and 
   [Momento](https://www.gomomento.com/) to cache LLM responses.
-- **Vector-stores**: [Qdrant](https://qdrant.tech/) and [Chroma](https://www.trychroma.com/) are currently supported.
+- **Vector-stores**: [LanceDB](https://github.com/lancedb/lancedb), [Qdrant](https://qdrant.tech/), [Chroma](https://www.trychroma.com/) are currently supported.
   Vector stores allow for Retrieval-Augmented-Generation (RAG).
 - **Grounding and source-citation:** Access to external documents via vector-stores 
    allows for grounding and source-citation.
@@ -313,11 +313,10 @@ All of the following environment variable settings are optional, and some are on
 to use specific features (as noted below).
 
 - **Qdrant** Vector Store API Key, URL. This is only required if you want to use Qdrant cloud.
-  You can sign up for a free 1GB account at [Qdrant cloud](https://cloud.qdrant.io).
-  If you skip setting up these, Langroid will use Qdrant in local-storage mode.
+  The default vector store in our RAG agent (`DocChatAgent`) is LanceDB which uses file storage,
+  and you do not need to set up any environment variables for that.
   Alternatively [Chroma](https://docs.trychroma.com/) is also currently supported. 
   We use the local-storage version of Chroma, so there is no need for an API key.
-  Langroid uses Qdrant by default.
 - **Redis** Password, host, port: This is optional, and only needed to cache LLM API responses
   using Redis Cloud. Redis [offers](https://redis.com/try-free/) a free 30MB Redis account
   which is more than sufficient to try out Langroid and even beyond.
@@ -690,9 +689,7 @@ config = DocChatAgentConfig(
     "https://en.wikipedia.org/wiki/N-gram_language_model",
     "/path/to/my/notes-on-language-models.txt",
   ],
-  vecdb=lr.vector_store.QdrantDBConfig(
-    collection="doc-chat-example",
-  ),
+  vecdb=lr.vector_store.LanceDBConfig(),
 )
 ```
 
