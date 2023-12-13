@@ -112,11 +112,12 @@ teacher_task.run()
 <details>
 <summary> <b>:fire: Updates/Releases</b></summary>
 
+- **Dec 2023:**
+  - **[0.1.141](https://github.com/langroid/langroid/releases/tag/0.1.141):**
+    API Simplifications to reduce boilerplate:
+    auto-select an available OpenAI model (preferring gpt-4-turbo), simplifies defaults.
+    Simpler `Task` initialization with default `ChatAgent`.
 - **Nov 2023:**
-  - **[0.1.141](https://github.com/langroid/langroid/releases/tag/0.1.141):** 
-     API Simplifications to reduce boilerplate: 
-     auto-select an available OpenAI model (preferring gpt-4-turbo), simplifies defaults.
-     Simpler `Task` initialization with default `ChatAgent`. 
   - **[0.1.126](https://github.com/langroid/langroid/releases/tag/0.1.126):**
      OpenAIAssistant agent: Caching Support. 
   - **0.1.117:** Support for OpenAI Assistant API tools: Function-calling, 
