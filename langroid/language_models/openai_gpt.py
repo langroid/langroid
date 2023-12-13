@@ -86,8 +86,8 @@ _cost_per_1k_tokens: Dict[str, Tuple[float, float]] = {
 
 
 openAIChatModelPreferenceList = [
-    OpenAIChatModel.GPT4,
     OpenAIChatModel.GPT4_TURBO,
+    OpenAIChatModel.GPT4,
     OpenAIChatModel.GPT3_5_TURBO,
 ]
 
