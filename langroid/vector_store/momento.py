@@ -44,7 +44,7 @@ class MomentoVIConfig(VectorStoreConfig):
 
 
 class MomentoVI(VectorStore):
-    def __init__(self, config: MomentoVIConfig):
+    def __init__(self, config: MomentoVIConfig = MomentoVIConfig()):
         super().__init__(config)
         self.config: MomentoVIConfig = config
         emb_model = EmbeddingModel.create(config.embedding)

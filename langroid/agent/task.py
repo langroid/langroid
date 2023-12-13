@@ -55,7 +55,7 @@ class Task:
 
     def __init__(
         self,
-        agent: Agent,
+        agent: Optional[Agent] = None,
         name: str = "",
         llm_delegate: bool = False,
         single_round: bool = False,
@@ -97,6 +97,9 @@ class Task:
                 Note: erasing can reduce prompt sizes, but results in repetitive
                 sub-task delegation.
         """
+        if agent is None:
+            agent = ChatAgent()
+
         if isinstance(agent, ChatAgent) and len(agent.message_history) == 0 or restart:
             agent = cast(ChatAgent, agent)
             agent.clear_history(0)

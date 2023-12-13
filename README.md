@@ -67,39 +67,39 @@ See also this [version](https://colab.research.google.com/drive/190Tk7t4AdY1P9F_
 that uses the OpenAI Assistants API instead.
 
 ```python
-from langroid.language_models import  OpenAIGPTConfig, OpenAIChatModel, OpenAIGPT
-from langroid import ChatAgent, ChatAgentConfig, Task
+import langroid as lr
+import langroid.language_models as lm
 
 # set up LLM
-llm_cfg = OpenAIGPTConfig( # or OpenAIAssistant to use Assistant API 
+llm_cfg = lm.OpenAIGPTConfig( # or OpenAIAssistant to use Assistant API 
   # any model served via an OpenAI-compatible API
-  chat_model=OpenAIChatModel.GPT4_TURBO, # or, e.g., "local/ollama/mistral"
+  chat_model=lm.OpenAIChatModel.GPT4_TURBO, # or, e.g., "local/ollama/mistral"
 )
 # use LLM directly
-mdl = OpenAIGPT(llm_cfg)
+mdl = lm.OpenAIGPT(llm_cfg)
 response = mdl.chat("What is the capital of Ontario?", max_tokens=10)
 
 # use LLM in an Agent
-agent_cfg = ChatAgentConfig(llm=llm_cfg)
-agent = ChatAgent(agent_cfg)
+agent_cfg = lr.ChatAgentConfig(llm=llm_cfg)
+agent = lr.ChatAgent(agent_cfg)
 agent.llm_response("What is the capital of China?") 
 response = agent.llm_response("And India?") # maintains conversation state 
 
 # wrap Agent in a Task to run interactive loop with user (or other agents)
-task = Task(agent, name="Bot", system_message="You are a helpful assistant")
+task = lr.Task(agent, name="Bot", system_message="You are a helpful assistant")
 task.run("Hello") # kick off with user saying "Hello"
 
 # 2-Agent chat loop: Teacher Agent asks questions to Student Agent
-teacher_agent = ChatAgent(agent_cfg)
-teacher_task = Task(
+teacher_agent = lr.ChatAgent(agent_cfg)
+teacher_task = lr.Task(
   teacher_agent, name="Teacher",
   system_message="""
     Ask your student concise numbers questions, and give feedback. 
     Start with a question.
     """
 )
-student_agent = ChatAgent(agent_cfg)
-student_task = Task(
+student_agent = lr.ChatAgent(agent_cfg)
+student_task = lr.Task(
   student_agent, name="Student",
   system_message="Concisely answer the teacher's questions.",
   single_round=True,
@@ -431,19 +431,15 @@ All of these can be run in a Colab notebook:
 <summary> <b> Direct interaction with OpenAI LLM </b> </summary>
 
 ```python
-from langroid.language_models.openai_gpt import ( 
-        OpenAIGPTConfig, OpenAIChatModel, OpenAIGPT,
-)
-from langroid.language_models.base import LLMMessage, Role
+import langroid.language_models as lm
 
-cfg = OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT4)
-
-mdl = OpenAIGPT(cfg)
+mdl = lm.OpenAIGPT()
 
 messages = [
-  LLMMessage(content="You are a helpful assistant",  role=Role.SYSTEM), 
-  LLMMessage(content="What is the capital of Ontario?",  role=Role.USER),
+  lm.LLMMessage(content="You are a helpful assistant",  role=lm.Role.SYSTEM), 
+  lm.LLMMessage(content="What is the capital of Ontario?",  role=lm.Role.USER),
 ]
+
 response = mdl.chat(messages, max_tokens=200)
 print(response.message)
 ```
@@ -454,11 +450,11 @@ print(response.message)
 Local model: if model is served at `http://localhost:8000`:
 
 ```python
-cfg = OpenAIGPTConfig(
+cfg = lm.OpenAIGPTConfig(
   chat_model="local/localhost:8000", 
   chat_context_length=4096
 )
-mdl = OpenAIGPT(cfg)
+mdl = lm.OpenAIGPT(cfg)
 # now interact with it as above, or create an Agent + Task as shown below.
 ```
 
@@ -485,21 +481,14 @@ pip install langroid[litellm]
 <summary> <b> Define an agent, set up a task, and run it </b> </summary>
 
 ```python
-from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
-from langroid.agent.task import Task
-from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
+import langroid as lr
 
-config = ChatAgentConfig(
-    llm = OpenAIGPTConfig(
-        chat_model=OpenAIChatModel.GPT4,
-    ),
-    vecdb=None, # no vector store
-)
-agent = ChatAgent(config)
+agent = lr.ChatAgent()
+
 # get response from agent's LLM, and put this in an interactive loop...
 # answer = agent.llm_response("What is the capital of Ontario?")
   # ... OR instead, set up a task (which has a built-in loop) and run it
-task = Task(agent, name="Bot") 
+task = lr.Task(agent, name="Bot") 
 task.run() # ... a loop seeking response from LLM or User at each turn
 ```
 </details>
@@ -508,26 +497,17 @@ task.run() # ... a loop seeking response from LLM or User at each turn
 <summary><b> Three communicating agents </b></summary>
 
 A toy numbers game, where when given a number `n`:
-- `repeater_agent`'s LLM simply returns `n`,
-- `even_agent`'s LLM returns `n/2` if `n` is even, else says "DO-NOT-KNOW"
-- `odd_agent`'s LLM returns `3*n+1` if `n` is odd, else says "DO-NOT-KNOW"
+- `repeater_task`'s LLM simply returns `n`,
+- `even_task`'s LLM returns `n/2` if `n` is even, else says "DO-NOT-KNOW"
+- `odd_task`'s LLM returns `3*n+1` if `n` is odd, else says "DO-NOT-KNOW"
 
-First define the 3 agents, and set up their tasks with instructions:
+Each of these `Task`s automatically configures a default `ChatAgent`.
 
 ```python
+import langroid as lr
 from langroid.utils.constants import NO_ANSWER
-from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
-from langroid.agent.task import Task
-from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
-config = ChatAgentConfig(
-    llm = OpenAIGPTConfig(
-        chat_model=OpenAIChatModel.GPT4,
-    ),
-    vecdb = None,
-)
-repeater_agent = ChatAgent(config)
-repeater_task = Task(
-    repeater_agent,
+
+repeater_task = lr.Task(
     name = "Repeater",
     system_message="""
     Your job is to repeat whatever number you receive.
@@ -535,9 +515,8 @@ repeater_task = Task(
     llm_delegate=True, # LLM takes charge of task
     single_round=False, 
 )
-even_agent = ChatAgent(config)
-even_task = Task(
-    even_agent,
+
+even_task = lr.Task(
     name = "EvenHandler",
     system_message=f"""
     You will be given a number. 
@@ -547,9 +526,7 @@ even_task = Task(
     single_round=True,  # task done after 1 step() with valid response
 )
 
-odd_agent = ChatAgent(config)
-odd_task = Task(
-    odd_agent,
+odd_task = lr.Task(
     name = "OddHandler",
     system_message=f"""
     You will be given a number n. 
@@ -588,8 +565,9 @@ First define the tool using Langroid's `ToolMessage` class:
 
 
 ```python
-from langroid.agent.tool_message import ToolMessage
-class ProbeTool(ToolMessage):
+import langroid as lr
+
+class ProbeTool(lr.agent.ToolMessage):
   request: str = "probe" # specifies which agent method handles this tool
   purpose: str = """
         To find how many numbers in my list are less than or equal to  
@@ -602,9 +580,8 @@ Then define a `SpyGameAgent` as a subclass of `ChatAgent`,
 with a method `probe` that handles this tool:
 
 ```python
-from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
-class SpyGameAgent(ChatAgent):
-  def __init__(self, config: ChatAgentConfig):
+class SpyGameAgent(lr.ChatAgent):
+  def __init__(self, config: lr.ChatAgentConfig):
     super().__init__(config)
     self.numbers = [3, 4, 8, 11, 15, 25, 40, 80, 90]
 
@@ -616,13 +593,9 @@ class SpyGameAgent(ChatAgent):
 We then instantiate the agent and enable it to use and respond to the tool:
 
 ```python
-from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
 spy_game_agent = SpyGameAgent(
-    ChatAgentConfig(
+    lr.ChatAgentConfig(
         name="Spy",
-        llm = OpenAIGPTConfig(
-            chat_model=OpenAIChatModel.GPT4,
-        ),
         vecdb=None,
         use_tools=False, #  don't use Langroid native tool
         use_functions_api=True, # use OpenAI function-call API
@@ -664,7 +637,9 @@ Then define the `LeaseMessage` tool as a subclass of Langroid's `ToolMessage`.
 Note the tool has a required argument `terms` of type `Lease`:
 
 ```python
-class LeaseMessage(ToolMessage):
+import langroid as lr
+
+class LeaseMessage(lr.agent.ToolMessage):
     request: str = "lease_info"
     purpose: str = """
         Collect information about a Commercial Lease.
@@ -676,7 +651,7 @@ Then define a `LeaseExtractorAgent` with a method `lease_info` that handles this
 instantiate the agent, and enable it to use and respond to this tool:
 
 ```python
-class LeaseExtractorAgent(ChatAgent):
+class LeaseExtractorAgent(lr.ChatAgent):
     def lease_info(self, message: LeaseMessage) -> str:
         print(
             f"""
@@ -686,13 +661,7 @@ class LeaseExtractorAgent(ChatAgent):
         )
         return json.dumps(message.terms.dict())
     
-lease_extractor_agent = LeaseExtractorAgent(
-  ChatAgentConfig(
-    llm=OpenAIGPTConfig(),
-    use_functions_api=False,
-    use_tools=True,
-  )
-)
+lease_extractor_agent = LeaseExtractorAgent()
 lease_extractor_agent.enable_message(LeaseMessage)
 ```
 
@@ -711,18 +680,16 @@ First create a `DocChatAgentConfig` instance, with a
 `doc_paths` field that specifies the documents to chat with.
 
 ```python
-from langroid.agent.doc_chat_agent import DocChatAgentConfig
-from langroid.vector_store.lancedb import LanceDBConfig
+import langroid as lr
+from langroid.agent.special import DocChatAgentConfig, DocChatAgent
+
 config = DocChatAgentConfig(
   doc_paths = [
     "https://en.wikipedia.org/wiki/Language_model",
     "https://en.wikipedia.org/wiki/N-gram_language_model",
     "/path/to/my/notes-on-language-models.txt",
-  ]
-  llm = OpenAIGPTConfig(
-    chat_model=OpenAIChatModel.GPT4,
-  ),
-  vecdb=LanceDBConfig(),
+  ],
+  vecdb=lr.vector_store.LanceDBConfig(),
 )
 ```
 
@@ -733,12 +700,11 @@ agent = DocChatAgent(config)
 ```
 Then we can either ask the agent one-off questions,
 ```python
-agent.chat("What is a language model?")
+agent.llm_response("What is a language model?")
 ```
 or wrap it in a `Task` and run an interactive loop with the user:
 ```python
-from langroid.task import Task
-task = Task(agent)
+task = lr.Task(agent)
 task.run()
 ```
 
@@ -758,9 +724,8 @@ executes the code and returns the answer.
 Here is how you can do this:
 
 ```python
-from langroid.agent.special.table_chat_agent import TableChatAgent, TableChatAgentConfig
-from langroid.agent.task import Task
-from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
+import langroid as lr
+from langroid.agent.special import TableChatAgent, TableChatAgentConfig
 ```
 
 Set up a `TableChatAgent` for a data file, URL or dataframe
@@ -771,17 +736,14 @@ dataset =  "https://archive.ics.uci.edu/ml/machine-learning-databases/wine-quali
 # or dataset = pd.read_csv("/path/to/my/data.csv")
 agent = TableChatAgent(
     config=TableChatAgentConfig(
-        data=dataset,  
-        llm=OpenAIGPTConfig(
-            chat_model=OpenAIChatModel.GPT4,
-        ),
+        data=dataset,
     )
 )
 ```
 Set up a task, and ask one-off questions like this: 
 
 ```python
-task = Task(
+task = lr.Task(
   agent, 
   name = "DataAssistant",
   default_human_response="", # to avoid waiting for user input
@@ -795,7 +757,7 @@ print(result.content)
 Or alternatively, set up a task and run it in an interactive loop with the user:
 
 ```python
-task = Task(agent, name="DataAssistant")
+task = lr.Task(agent, name="DataAssistant")
 task.run()
 ``` 
 

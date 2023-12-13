@@ -26,3 +26,8 @@ from .agent.chat_agent import (
 )
 
 from .agent.task import Task
+
+from .mytypes import (
+    DocMetaData,
+    Document,
+)

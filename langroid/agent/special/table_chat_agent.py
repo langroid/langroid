@@ -72,7 +72,7 @@ def dataframe_summary(df: pd.DataFrame) -> str:
     )
 
     # Numerical data summary
-    num_summary = df.describe().applymap(lambda x: "{:.2f}".format(x))
+    num_summary = df.describe().map(lambda x: "{:.2f}".format(x))
     num_str = "Numerical Column Summary:\n" + num_summary.to_string() + "\n\n"
 
     # Categorical data summary

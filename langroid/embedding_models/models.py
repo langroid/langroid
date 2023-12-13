@@ -23,7 +23,7 @@ class SentenceTransformerEmbeddingsConfig(EmbeddingModelsConfig):
 
 
 class OpenAIEmbeddings(EmbeddingModel):
-    def __init__(self, config: OpenAIEmbeddingsConfig):
+    def __init__(self, config: OpenAIEmbeddingsConfig = OpenAIEmbeddingsConfig()):
         super().__init__()
         self.config = config
         load_dotenv()
@@ -53,8 +53,11 @@ class OpenAIEmbeddings(EmbeddingModel):
         return self.config.dims
 
 
+STEC = SentenceTransformerEmbeddingsConfig
+
+
 class SentenceTransformerEmbeddings(EmbeddingModel):
-    def __init__(self, config: SentenceTransformerEmbeddingsConfig):
+    def __init__(self, config: STEC = STEC()):
         # this is an "extra" optional dependency, so we import it here
         try:
             from sentence_transformers import SentenceTransformer

@@ -33,7 +33,7 @@ class LanceDBConfig(VectorStoreConfig):
 
 
 class LanceDB(VectorStore):
-    def __init__(self, config: LanceDBConfig):
+    def __init__(self, config: LanceDBConfig = LanceDBConfig()):
         super().__init__(config)
         self.config: LanceDBConfig = config
         emb_model = EmbeddingModel.create(config.embedding)
