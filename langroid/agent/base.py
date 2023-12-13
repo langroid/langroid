@@ -702,7 +702,13 @@ class Agent(ABC):
         if isinstance(prompt, str):
             return self.parser.num_tokens(prompt)
         else:
-            return sum([self.parser.num_tokens(m.content) for m in prompt])
+            return sum(
+                [
+                    self.parser.num_tokens(m.content)
+                    + self.parser.num_tokens(str(m.function_call or ""))
+                    for m in prompt
+                ]
+            )
 
     def _get_response_stats(
         self, chat_length: int, tot_cost: float, response: LLMResponse
