@@ -573,7 +573,7 @@ class Agent(ABC):
         """
         tool_name = cast(ToolMessage, ve.model).default_value("request")
         bad_field_errors = "\n".join(
-            [f"{e['loc'][0]}: {e['msg']}" for e in ve.errors() if "loc" in e]
+            [f"{e['loc']}: {e['msg']}" for e in ve.errors() if "loc" in e]
         )
         return f"""
         There were one or more errors in your attempt to use the 
