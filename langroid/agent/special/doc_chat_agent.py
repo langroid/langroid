@@ -659,6 +659,26 @@ class DocChatAgent(ChatAgent):
             return docs_scores
         return self.vecdb.add_context_window(docs_scores, self.config.n_neighbor_chunks)
 
+    def get_semantic_search_results(
+        self,
+        query: str,
+        k: int = 10,
+    ) -> List[Tuple[Document, float]]:
+        """
+        Get semantic search results from vecdb.
+        Note: This method can be overridden in a subclass of DocChatAgent,
+            for example to add a `where` filter in
+            self.vecdb.similar_texts_with_scores(..., where=...).
+        Args:
+            query (str): query to search for
+            k (int): number of results to return
+        Returns:
+            List[Tuple[Document, float]]: List of (Document, score) tuples.
+        """
+        if self.vecdb is None:
+            raise ValueError("VecDB not set")
+        return self.vecdb.similar_texts_with_scores(query, k=k)
+
     def get_relevant_chunks(
         self, query: str, query_proxies: List[str] = []
     ) -> List[Document]:
@@ -698,7 +718,7 @@ class DocChatAgent(ChatAgent):
         with console.status("[cyan]Searching VecDB for relevant doc passages..."):
             docs_and_scores: List[Tuple[Document, float]] = []
             for q in [query] + query_proxies:
-                docs_and_scores += self.vecdb.similar_texts_with_scores(
+                docs_and_scores += self.get_semantic_search_results(
                     q,
                     k=self.config.parsing.n_similar_docs * retrieval_multiple,
                 )
