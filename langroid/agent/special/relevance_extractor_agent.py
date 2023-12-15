@@ -102,7 +102,7 @@ class RelevanceExtractorAgent(ChatAgent):
         spec = msg.segment_list
         if len(self.message_history) == 0:
             return NO_ANSWER
-        if spec is None or spec.strip() == "":
+        if spec is None or spec.strip() in ["", NO_ANSWER]:
             return NO_ANSWER
         assert self.numbered_passage is not None, "No numbered passage"
         # assume this has numbered segments

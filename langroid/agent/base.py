@@ -632,12 +632,6 @@ class Agent(ABC):
 
         str_doc_results = [r for r in results_list if isinstance(r, str)]
         final = "\n".join(str_doc_results)
-        if final == "":
-            logger.warning(
-                """final result from a tool handler should not be empty str, since  
-             it would be considered an invalid result and other responders 
-             will be tried, and we may not necessarily want that"""
-            )
         return final
 
     def handle_message_fallback(
