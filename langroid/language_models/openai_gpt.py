@@ -469,6 +469,7 @@ class OpenAIGPT(LanguageModel):
             return True, has_function, function_name, function_args, completion
         return False, has_function, function_name, function_args, completion
 
+    @retry_with_exponential_backoff
     def _stream_response(  # type: ignore
         self, response, chat: bool = False
     ) -> Tuple[LLMResponse, Dict[str, Any]]:
@@ -520,6 +521,7 @@ class OpenAIGPT(LanguageModel):
             is_async=False,
         )
 
+    @async_retry_with_exponential_backoff
     async def _stream_response_async(  # type: ignore
         self, response, chat: bool = False
     ) -> Tuple[LLMResponse, Dict[str, Any]]:
