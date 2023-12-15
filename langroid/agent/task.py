@@ -115,6 +115,8 @@ class Task:
         self.tsv_logger: None | logging.Logger = None
         self.color_log: bool = False if settings.notebook else True
         self.agent = agent
+        self.step_progress = False
+        self.task_progress = False
         self.name = name or agent.config.name
         self.default_human_response = default_human_response
         self.interactive = interactive
@@ -300,7 +302,7 @@ class Task:
     ) -> Optional[ChatDocument]:
         """Synchronous version of `run_async()`.
         See `run_async()` for details."""
-
+        self.task_progress = False
         assert (
             msg is None or isinstance(msg, str) or isinstance(msg, ChatDocument)
         ), f"msg arg in Task.run() must be None, str, or ChatDocument, not {type(msg)}"
@@ -364,7 +366,7 @@ class Task:
         # have come from another LLM), as far as this agent is concerned, the initial
         # message can be considered to be from the USER
         # (from the POV of this agent's LLM).
-
+        self.task_progress = False
         if (
             isinstance(msg, ChatDocument)
             and msg.metadata.recipient != ""
@@ -463,6 +465,7 @@ class Task:
         Synchronous version of `step_async()`. See `step_async()` for details.
         """
         result = None
+        self.step_progress = False
         parent = self.pending_message
         recipient = (
             ""
@@ -533,6 +536,7 @@ class Task:
                 different context.
         """
         result = None
+        self.step_progress = False
         parent = self.pending_message
         recipient = (
             ""
@@ -615,18 +619,27 @@ class Task:
             if result.attachment is None:
                 self.pending_message.attachment = old_attachment
             self.log_message(self.pending_sender, result, mark=True)
+            self.step_progress = True
+            self.task_progress = True
             return True
         else:
             self.log_message(r, result)
             return False
 
     def _process_invalid_step_result(self, parent: ChatDocument | None) -> None:
-        responder = Entity.LLM if self.pending_sender == Entity.USER else Entity.USER
-        self.pending_message = ChatDocument(
-            content=NO_ANSWER,
-            metadata=ChatDocMetaData(sender=responder, parent=parent),
-        )
-        self.pending_sender = responder
+        if not self.task_progress:
+            # There has been no progress at all in this task, so we
+            # update the pending_message to a dummy NO_ANSWER msg
+            # from the entity 'opposite' to the current pending_sender,
+            # so we show "progress" and avoid getting stuck in an infinite loop.
+            responder = (
+                Entity.LLM if self.pending_sender == Entity.USER else Entity.USER
+            )
+            self.pending_message = ChatDocument(
+                content=NO_ANSWER,
+                metadata=ChatDocMetaData(sender=responder, parent=parent),
+            )
+            self.pending_sender = responder
         self.log_message(self.pending_sender, self.pending_message, mark=True)
 
     def _show_pending_message_if_debug(self) -> None:
@@ -744,6 +757,15 @@ class Task:
         if self._level == 0 and self.only_user_quits_root:
             # for top-level task, only user can quit out
             return user_quit
+
+        if (
+            not self.step_progress
+            and self.pending_sender == Entity.LLM
+            and not self.llm_delegate
+        ):
+            # LLM is NOT driving the task, and no progress in latest step,
+            # and it is NOT the LLM's turn to respond, so we are done.
+            return True
 
         return (
             # no valid response from any entity/agent in current turn
