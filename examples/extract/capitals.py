@@ -8,24 +8,29 @@ python3 examples/extract/capitals.py
 from rich import print
 from pydantic import BaseModel
 from typing import List
+import langroid as lr
+
 
 class City(BaseModel):
     name: str
     country: str
     population: int
 
+
 class CitiesData(BaseModel):
     cities: List[City]
+
 
 PASSAGE = """
 Berlin is the capital of Germany. It has a population of 3,850,809. 
 Paris, France's capital, has 2.161 million residents. 
 Lisbon is the capital and the largest city of Portugal with the population of 504,718.
 """
-import langroid as lr
+
 
 class CitiesMessage(lr.agent.ToolMessage):
     """Tool/function to use to extract/present structured capitals info"""
+
     request: str = "capital_info"
     purpose: str = "Collect information about city <capitals> from a passage"
     capitals: List[CitiesData]
@@ -34,7 +39,8 @@ class CitiesMessage(lr.agent.ToolMessage):
         """Tool handler: Print the info about the capitals.
         Any format errors are intercepted by Langroid and passed to the LLM to fix."""
         print(f"Correctly extracted Capitals Info: {self.capitals}")
-        return "DONE" # terminates task
+        return "DONE"  # terminates task
+
 
 agent = lr.ChatAgent(
     lr.ChatAgentConfig(
@@ -60,9 +66,3 @@ task = lr.Task(
 )
 
 task.run()
-
-
-
-
-
-
