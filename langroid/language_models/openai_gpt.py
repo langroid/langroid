@@ -1086,7 +1086,7 @@ class OpenAIGPT(LanguageModel):
         if self.get_stream() and not cached:
             llm_response, openai_response = self._stream_response(response, chat=True)
             self._cache_store(hashed_key, openai_response)
-            return llm_response
+            return llm_response  # type: ignore
         if isinstance(response, dict):
             response_dict = response
         else:
@@ -1117,7 +1117,7 @@ class OpenAIGPT(LanguageModel):
                 response, chat=True
             )
             self._cache_store(hashed_key, openai_response)
-            return llm_response
+            return llm_response  # type: ignore
         if isinstance(response, dict):
             response_dict = response
         else:
