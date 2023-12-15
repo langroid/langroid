@@ -48,8 +48,9 @@ into simplifying the developer experience; it does not use `Langchain`.
 We welcome contributions -- See the [contributions](./CONTRIBUTING.md) document
 for ideas on what to contribute.
 
-
-Building LLM Applications? [Prasad Chalasani](https://www.linkedin.com/in/pchalasani/) is available for consulting
+Are you building LLM Applications, or want help with Langroid for your company, 
+or want to prioritize Langroid features for your company use-cases? 
+[Prasad Chalasani](https://www.linkedin.com/in/pchalasani/) is available for consulting
 (advisory/development): pchalasani at gmail dot com.
 
 Sponsorship is also accepted via [GitHub Sponsors](https://github.com/sponsors/langroid)

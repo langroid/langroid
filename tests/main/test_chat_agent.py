@@ -88,12 +88,12 @@ def test_process_messages(test_settings: Settings):
     assert task.pending_message.metadata.sender == Entity.LLM
 
     # It's Human's turn; they say nothing,
-    # and this does NOT update the self.pending_message
+    # and this is reflected in `self.pending_message` as NO_ANSWER
     agent.default_human_response = ""
     # Human says ''
     task.step()
-    assert "London" in task.pending_message.content
-    assert task.pending_message.metadata.sender == Entity.LLM
+    assert NO_ANSWER in task.pending_message.content
+    assert task.pending_message.metadata.sender == Entity.USER
 
     # Since chat was user-initiated, LLM can still respond to NO_ANSWER
     # with something like "How can I help?"

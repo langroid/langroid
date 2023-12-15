@@ -66,6 +66,7 @@ class Task:
         interactive: bool = True,
         only_user_quits_root: bool = True,
         erase_substeps: bool = False,
+        allow_null_result: bool = True,
     ):
         """
         A task to be performed by an agent.
@@ -96,6 +97,9 @@ class Task:
                 erase all subtask agents' `message_history`.
                 Note: erasing can reduce prompt sizes, but results in repetitive
                 sub-task delegation.
+            allow_null_result (bool): if true, allow null (empty or NO_ANSWER)
+                as the result of a step or overall task result.
+                Optional, default is True.
         """
         if agent is None:
             agent = ChatAgent()
@@ -131,6 +135,7 @@ class Task:
         # just the first outgoing message and last incoming message.
         # Note this also completely erases sub-task agents' message_history.
         self.erase_substeps = erase_substeps
+        self.allow_null_result = allow_null_result
 
         agent_entity_responders = agent.entity_responders()
         agent_entity_responders_async = agent.entity_responders_async()
@@ -627,7 +632,14 @@ class Task:
             return False
 
     def _process_invalid_step_result(self, parent: ChatDocument | None) -> None:
-        if not self.task_progress:
+        """
+        Since step had no valid result, decide whether to update the
+        self.pending_message to a NO_ANSWER message from the opposite entity,
+        or leave it as is.
+        Args:
+            parent (ChatDocument|None): parent message of the current message
+        """
+        if not self.task_progress or self.allow_null_result:
             # There has been no progress at all in this task, so we
             # update the pending_message to a dummy NO_ANSWER msg
             # from the entity 'opposite' to the current pending_sender,

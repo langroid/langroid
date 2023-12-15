@@ -88,12 +88,12 @@ async def test_task_step_async(test_settings: Settings):
     assert task.pending_message.metadata.sender == Entity.LLM
 
     # It's Human's turn; they say nothing,
-    # and self.pending_message is NOT updated
+    # and this is reflected in `self.pending_message` as NO_ANSWER
     agent.default_human_response = ""
     # Human says ''
     await task.step_async()
-    assert "London" in task.pending_message.content
-    assert task.pending_message.metadata.sender == Entity.LLM
+    assert NO_ANSWER in task.pending_message.content
+    assert task.pending_message.metadata.sender == Entity.USER
 
     # Since chat was user-initiated, LLM can still respond to NO_ANSWER
     # with something like "How can I help?"
