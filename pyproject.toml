@@ -75,7 +75,7 @@ pytest-asyncio = "^0.21.1"
 docstring-parser = "^0.15"
 farm-haystack = {extras = ["ocr", "preprocessing", "file-conversion", "pdf"], version = "^1.21.1"}
 meilisearch = "^0.28.3"
-meilisearch-python-sdk = "^2.0.1"
+meilisearch-python-sdk = "^2.2.3"
 litellm = {version = "^1.0.0", optional = true}
 scrapy = "^2.11.0"
 async-generator = "^1.10"

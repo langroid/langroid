@@ -165,7 +165,7 @@ class MeiliSearch(VectorStore):
         async with self.client() as client:
             index = client.index(collection_name)
             await index.add_documents_in_batches(
-                documents=documents,  # type: ignore
+                documents=documents,
                 batch_size=self.config.batch_size,
                 primary_key=self.config.primary_key,
             )
