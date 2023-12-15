@@ -793,8 +793,8 @@ class ChatAgent(Agent):
             response = cast(ChatDocument, ChatAgent.llm_response(self, message))
         # clear the last two messages, which are the
         # user message and the assistant response
-        self.message_history.pop()
-        self.message_history.pop()
+        self.message_history.pop() if len(self.message_history) > 0 else None
+        self.message_history.pop() if len(self.message_history) > 0 else None
         return response
 
     async def llm_response_forget_async(self, message: str) -> ChatDocument:
@@ -809,8 +809,8 @@ class ChatAgent(Agent):
             )
         # clear the last two messages, which are the
         # user message and the assistant response
-        self.message_history.pop()
-        self.message_history.pop()
+        self.message_history.pop() if len(self.message_history) > 0 else None
+        self.message_history.pop() if len(self.message_history) > 0 else None
         return response
 
     def chat_num_tokens(self, messages: Optional[List[LLMMessage]] = None) -> int:
