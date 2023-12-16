@@ -789,12 +789,14 @@ class ChatAgent(Agent):
         """
         # explicitly call THIS class's respond method,
         # not a derived class's (or else there would be infinite recursion!)
+        n_msgs = len(self.message_history)
         with StreamingIfAllowed(self.llm, self.llm.get_stream()):  # type: ignore
             response = cast(ChatDocument, ChatAgent.llm_response(self, message))
-        # clear the last two messages, which are the
-        # user message and the assistant response
-        self.message_history.pop() if len(self.message_history) > 0 else None
-        self.message_history.pop() if len(self.message_history) > 0 else None
+        # If there is a response, then we will have two additional
+        # messages in the message history, i.e. the user message and the
+        # assistant response. We want to (carefully) remove these two messages.
+        self.message_history.pop() if len(self.message_history) > n_msgs else None
+        self.message_history.pop() if len(self.message_history) > n_msgs else None
         return response
 
     async def llm_response_forget_async(self, message: str) -> ChatDocument:
@@ -803,14 +805,16 @@ class ChatAgent(Agent):
         """
         # explicitly call THIS class's respond method,
         # not a derived class's (or else there would be infinite recursion!)
+        n_msgs = len(self.message_history)
         with StreamingIfAllowed(self.llm, self.llm.get_stream()):  # type: ignore
             response = cast(
                 ChatDocument, await ChatAgent.llm_response_async(self, message)
             )
-        # clear the last two messages, which are the
-        # user message and the assistant response
-        self.message_history.pop() if len(self.message_history) > 0 else None
-        self.message_history.pop() if len(self.message_history) > 0 else None
+        # If there is a response, then we will have two additional
+        # messages in the message history, i.e. the user message and the
+        # assistant response. We want to (carefully) remove these two messages.
+        self.message_history.pop() if len(self.message_history) > n_msgs else None
+        self.message_history.pop() if len(self.message_history) > n_msgs else None
         return response
 
     def chat_num_tokens(self, messages: Optional[List[LLMMessage]] = None) -> int:
