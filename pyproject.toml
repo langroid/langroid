@@ -79,7 +79,7 @@ meilisearch-python-sdk = "^2.2.3"
 litellm = {version = "^1.0.0", optional = true}
 scrapy = "^2.11.0"
 async-generator = "^1.10"
-lancedb = "^0.3.0"
+lancedb = "^0.3.6"
 pytest-redis = "^3.0.2"
 
 [tool.poetry.extras]

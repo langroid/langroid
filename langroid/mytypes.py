@@ -27,12 +27,12 @@ class DocMetaData(BaseModel):
 
     source: str = "context"
     is_chunk: bool = False  # if it is a chunk, don't split
-    id: str | None = None  # unique id for the document
+    id: str = ""  # unique id for the document
     window_ids: List[str] = []  # for RAG: ids of chunks around this one
 
-    def dict(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
+    def dict_bool_int(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
         """
-        Override dict method to convert bool fields to int, to appease some
+        Special dict method to convert bool fields to int, to appease some
         downstream libraries,  e.g. Chroma which complains about bool fields in
         metadata.
         """
