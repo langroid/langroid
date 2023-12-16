@@ -32,7 +32,7 @@ class MeiliSearchConfig(VectorStoreConfig):
 
 
 class MeiliSearch(VectorStore):
-    def __init__(self, config: MeiliSearchConfig):
+    def __init__(self, config: MeiliSearchConfig = MeiliSearchConfig()):
         super().__init__(config)
         self.config: MeiliSearchConfig = config
         self.host = config.host
@@ -165,12 +165,13 @@ class MeiliSearch(VectorStore):
         async with self.client() as client:
             index = client.index(collection_name)
             await index.add_documents_in_batches(
-                documents=documents,  # type: ignore
+                documents=documents,
                 batch_size=self.config.batch_size,
                 primary_key=self.config.primary_key,
             )
 
     def add_documents(self, documents: Sequence[Document]) -> None:
+        super().maybe_add_ids(documents)
         if len(documents) == 0:
             return
         colls = self._list_all_collections()

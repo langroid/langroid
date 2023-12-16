@@ -62,7 +62,10 @@ class AddRecipientTool(ToolMessage):
             (ChatDocument): with content set to self.content and
                 metadata.recipient set to self.recipient.
         """
-        print(f"[red]RecipientTool: Added recipient {self.recipient} to message.")
+        print(
+            "[red]RecipientTool: "
+            f"Added recipient {self.intended_recipient} to message."
+        )
         if self.__class__.saved_content == "":
             recipient_request_name = RecipientTool.default_value("request")
             raise ValueError(

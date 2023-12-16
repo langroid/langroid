@@ -38,13 +38,13 @@ logger = logging.getLogger(__name__)
 
 class MomentoVIConfig(VectorStoreConfig):
     cloud: bool = True
-    collection_name: str | None = None
+    collection_name: str | None = "temp"
     embedding: EmbeddingModelsConfig = OpenAIEmbeddingsConfig()
     distance: SimilarityMetric = SimilarityMetric.COSINE_SIMILARITY
 
 
 class MomentoVI(VectorStore):
-    def __init__(self, config: MomentoVIConfig):
+    def __init__(self, config: MomentoVIConfig = MomentoVIConfig()):
         super().__init__(config)
         self.config: MomentoVIConfig = config
         emb_model = EmbeddingModel.create(config.embedding)
@@ -151,6 +151,7 @@ class MomentoVI(VectorStore):
             logger.setLevel(level)
 
     def add_documents(self, documents: Sequence[Document]) -> None:
+        super().maybe_add_ids(documents)
         if len(documents) == 0:
             return
         embedding_vecs = self.embedding_fn([doc.content for doc in documents])

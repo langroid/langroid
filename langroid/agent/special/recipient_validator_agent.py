@@ -63,6 +63,13 @@ class RecipientValidator(ChatAgent):
         self.config: RecipientValidatorConfig = config
         self.llm = None
         self.vecdb = None
+        logger.warning(
+            """
+            RecipientValidator is deprecated. Use RecipientTool instead:
+            See code at langroid/agent/tools/recipient_tool.py, and usage examples in
+            tests/main/test_multi_agent_complex.py and
+            """
+        )
 
     def user_response(
         self,

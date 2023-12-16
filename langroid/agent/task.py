@@ -55,17 +55,18 @@ class Task:
 
     def __init__(
         self,
-        agent: Agent,
+        agent: Optional[Agent] = None,
         name: str = "",
         llm_delegate: bool = False,
         single_round: bool = False,
         system_message: str = "",
         user_message: str | None = "",
-        restart: bool = False,
+        restart: bool = True,
         default_human_response: Optional[str] = None,
         interactive: bool = True,
         only_user_quits_root: bool = True,
         erase_substeps: bool = False,
+        allow_null_result: bool = True,
     ):
         """
         A task to be performed by an agent.
@@ -96,10 +97,17 @@ class Task:
                 erase all subtask agents' `message_history`.
                 Note: erasing can reduce prompt sizes, but results in repetitive
                 sub-task delegation.
+            allow_null_result (bool): if true, allow null (empty or NO_ANSWER)
+                as the result of a step or overall task result.
+                Optional, default is True.
         """
+        if agent is None:
+            agent = ChatAgent()
+
         if isinstance(agent, ChatAgent) and len(agent.message_history) == 0 or restart:
             agent = cast(ChatAgent, agent)
             agent.clear_history(0)
+            agent.clear_dialog()
             # possibly change the system and user messages
             if system_message:
                 # we always have at least 1 task_message
@@ -111,6 +119,8 @@ class Task:
         self.tsv_logger: None | logging.Logger = None
         self.color_log: bool = False if settings.notebook else True
         self.agent = agent
+        self.step_progress = False
+        self.task_progress = False
         self.name = name or agent.config.name
         self.default_human_response = default_human_response
         self.interactive = interactive
@@ -125,6 +135,7 @@ class Task:
         # just the first outgoing message and last incoming message.
         # Note this also completely erases sub-task agents' message_history.
         self.erase_substeps = erase_substeps
+        self.allow_null_result = allow_null_result
 
         agent_entity_responders = agent.entity_responders()
         agent_entity_responders_async = agent.entity_responders_async()
@@ -296,7 +307,7 @@ class Task:
     ) -> Optional[ChatDocument]:
         """Synchronous version of `run_async()`.
         See `run_async()` for details."""
-
+        self.task_progress = False
         assert (
             msg is None or isinstance(msg, str) or isinstance(msg, ChatDocument)
         ), f"msg arg in Task.run() must be None, str, or ChatDocument, not {type(msg)}"
@@ -360,7 +371,7 @@ class Task:
         # have come from another LLM), as far as this agent is concerned, the initial
         # message can be considered to be from the USER
         # (from the POV of this agent's LLM).
-
+        self.task_progress = False
         if (
             isinstance(msg, ChatDocument)
             and msg.metadata.recipient != ""
@@ -459,6 +470,7 @@ class Task:
         Synchronous version of `step_async()`. See `step_async()` for details.
         """
         result = None
+        self.step_progress = False
         parent = self.pending_message
         recipient = (
             ""
@@ -474,7 +486,7 @@ class Task:
                     sender_name=Entity.AGENT,
                 ),
             )
-            self.pending_message = error_doc
+            self._process_responder_result(Entity.AGENT, parent, error_doc)
             return error_doc
 
         responders: List[Responder] = self.non_human_responders.copy()
@@ -529,6 +541,7 @@ class Task:
                 different context.
         """
         result = None
+        self.step_progress = False
         parent = self.pending_message
         recipient = (
             ""
@@ -544,7 +557,7 @@ class Task:
                     sender_name=Entity.AGENT,
                 ),
             )
-            self.pending_message = error_doc
+            self._process_responder_result(Entity.AGENT, parent, error_doc)
             return error_doc
 
         responders: List[Responder] = self.non_human_responders_async.copy()
@@ -611,18 +624,34 @@ class Task:
             if result.attachment is None:
                 self.pending_message.attachment = old_attachment
             self.log_message(self.pending_sender, result, mark=True)
+            self.step_progress = True
+            self.task_progress = True
             return True
         else:
             self.log_message(r, result)
             return False
 
     def _process_invalid_step_result(self, parent: ChatDocument | None) -> None:
-        responder = Entity.LLM if self.pending_sender == Entity.USER else Entity.USER
-        self.pending_message = ChatDocument(
-            content=NO_ANSWER,
-            metadata=ChatDocMetaData(sender=responder, parent=parent),
-        )
-        self.pending_sender = responder
+        """
+        Since step had no valid result, decide whether to update the
+        self.pending_message to a NO_ANSWER message from the opposite entity,
+        or leave it as is.
+        Args:
+            parent (ChatDocument|None): parent message of the current message
+        """
+        if not self.task_progress or self.allow_null_result:
+            # There has been no progress at all in this task, so we
+            # update the pending_message to a dummy NO_ANSWER msg
+            # from the entity 'opposite' to the current pending_sender,
+            # so we show "progress" and avoid getting stuck in an infinite loop.
+            responder = (
+                Entity.LLM if self.pending_sender == Entity.USER else Entity.USER
+            )
+            self.pending_message = ChatDocument(
+                content=NO_ANSWER,
+                metadata=ChatDocMetaData(sender=responder, parent=parent),
+            )
+            self.pending_sender = responder
         self.log_message(self.pending_sender, self.pending_message, mark=True)
 
     def _show_pending_message_if_debug(self) -> None:
@@ -740,6 +769,15 @@ class Task:
         if self._level == 0 and self.only_user_quits_root:
             # for top-level task, only user can quit out
             return user_quit
+
+        if (
+            not self.step_progress
+            and self.pending_sender == Entity.LLM
+            and not self.llm_delegate
+        ):
+            # LLM is NOT driving the task, and no progress in latest step,
+            # and it is NOT the LLM's turn to respond, so we are done.
+            return True
 
         return (
             # no valid response from any entity/agent in current turn

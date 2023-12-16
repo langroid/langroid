@@ -1,5 +1,6 @@
 from dotenv import load_dotenv
-from openai import AzureOpenAI
+from httpx import Timeout
+from openai import AsyncAzureOpenAI, AzureOpenAI
 
 from langroid.language_models.openai_gpt import (
     OpenAIChatModel,
@@ -98,4 +99,11 @@ class AzureGPT(OpenAIGPT):
             azure_endpoint=self.config.api_base,
             api_version=self.config.api_version,
             azure_deployment=self.config.deployment_name,
+        )
+        self.async_client = AsyncAzureOpenAI(
+            api_key=self.config.api_key,
+            azure_endpoint=self.config.api_base,
+            api_version=self.config.api_version,
+            azure_deployment=self.config.deployment_name,
+            timeout=Timeout(self.config.timeout),
         )

@@ -155,7 +155,7 @@ def test_table_chat_agent_file_blanks(
 @pytest.mark.parametrize("fn_api", [True, False])
 def test_table_chat_agent_url(test_settings: Settings, fn_api: bool) -> None:
     """
-    Test the TableChatAgent with a dataframe as data source
+    Test the TableChatAgent with a URL of a csv file as data source
     """
     set_global(test_settings)
     URL = "https://raw.githubusercontent.com/plotly/datasets/master/2011_us_ag_exports.csv"

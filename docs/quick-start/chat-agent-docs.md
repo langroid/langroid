@@ -73,7 +73,7 @@ using Langroid's [`Document`][langroid.mytypes.Document] class:
 
 ```py
 documents =[
-    lr.mytypes.Document(
+    lr.Document(
         content="""
             In the year 2050, GPT10 was released. 
             
@@ -88,9 +88,9 @@ documents =[
             
             There was one more ice age in 2040.
             """,
-        metadata=lr.mytypes.DocMetaData(source="wikipedia-2063"),
+        metadata=lr.DocMetaData(source="wikipedia-2063"),
     ),
-    lr.mytypes.Document(
+    lr.Document(
         content="""
             We are living in an alternate universe 
             where Germany has occupied the USA, and the capital of USA is Berlin.
@@ -98,7 +98,7 @@ documents =[
             Charlie Chaplin was a great comedian.
             In 2050, all Asian merged into Indonesia.
             """,
-        metadata=lr.mytypes.DocMetaData(source="Almanac"),
+        metadata=lr.DocMetaData(source="Almanac"),
     ),
 ]
 ```
@@ -112,7 +112,9 @@ Following the pattern in Langroid, we first set up a [`DocChatAgentConfig`][lang
 and then instantiate a [`DocChatAgent`][langroid.agent.special.doc_chat_agent.DocChatAgent] from it.
 
 ```py
-config = lr.agent.special.DocChatAgentConfig(
+from langroid.agent.special import DocChatAgent, DocChatAgentConfig
+
+config = DocChatAgentConfig(
     llm = lr.language_models.OpenAIGPTConfig(
         chat_model=lr.language_models.OpenAIChatModel.GPT4,
     ),
@@ -126,7 +128,7 @@ config = lr.agent.special.DocChatAgentConfig(
         n_similar_docs=2, #(3)!
     )
 )
-agent = lr.agent.special.DocChatAgent(config)
+agent = DocChatAgent(config)
 ```
 
 1. Specifies that each time we run the code, we create a fresh collection, 
@@ -175,7 +177,7 @@ of those URLS?
 First include the URLs in the [`DocChatAgentConfig`][langroid.agent.special.doc_chat_agent.DocChatAgentConfig] object:
 
 ```py
-config = lr.agent.special.DocChatAgentConfig(
+config = DocChatAgentConfig(
   doc_paths = [
     "https://cthiriet.com/articles/scaling-laws",
     "https://www.jasonwei.net/blog/emergence",

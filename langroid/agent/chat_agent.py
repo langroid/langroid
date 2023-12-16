@@ -72,7 +72,9 @@ class ChatAgent(Agent):
     """
 
     def __init__(
-        self, config: ChatAgentConfig, task: Optional[List[LLMMessage]] = None
+        self,
+        config: ChatAgentConfig = ChatAgentConfig(),
+        task: Optional[List[LLMMessage]] = None,
     ):
         """
         Chat-mode agent initialized with task spec as the initial message sequence
@@ -463,6 +465,8 @@ class ChatAgent(Agent):
         if self.llm is None:
             return None
         hist, output_len = self._prep_llm_messages(message)
+        if len(hist) == 0:
+            return None
         with StreamingIfAllowed(self.llm, self.llm.get_stream()):
             response = self.llm_response_messages(hist, output_len)
         # TODO - when response contains function_call we should include

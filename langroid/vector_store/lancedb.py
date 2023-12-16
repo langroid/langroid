@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 class LanceDBConfig(VectorStoreConfig):
     cloud: bool = False
-    collection_name: str | None = None
+    collection_name: str | None = "temp"
     storage_path: str = ".lancedb/data"
     embedding: EmbeddingModelsConfig = OpenAIEmbeddingsConfig()
     distance: str = "cosine"
@@ -33,7 +33,7 @@ class LanceDBConfig(VectorStoreConfig):
 
 
 class LanceDB(VectorStore):
-    def __init__(self, config: LanceDBConfig):
+    def __init__(self, config: LanceDBConfig = LanceDBConfig()):
         super().__init__(config)
         self.config: LanceDBConfig = config
         emb_model = EmbeddingModel.create(config.embedding)
@@ -200,6 +200,7 @@ class LanceDB(VectorStore):
             logger.setLevel(level)
 
     def add_documents(self, documents: Sequence[Document]) -> None:
+        super().maybe_add_ids(documents)
         colls = self.list_collections(empty=True)
         if len(documents) == 0:
             return

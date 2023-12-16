@@ -50,7 +50,7 @@ from langroid.utils.configuration import settings
 from langroid.utils.constants import NO_ANSWER
 from langroid.utils.output.printing import show_if_debug
 from langroid.vector_store.base import VectorStoreConfig
-from langroid.vector_store.qdrantdb import QdrantDBConfig
+from langroid.vector_store.lancedb import LanceDBConfig
 
 logger = logging.getLogger(__name__)
 
@@ -65,10 +65,6 @@ about them, or summarize them into coherent answers.
 DEFAULT_DOC_CHAT_SYSTEM_MESSAGE = """
 You are a helpful assistant, helping me understand a collection of documents.
 """
-
-
-class DocChunkMetqdata(DocMetaData):
-    id: str
 
 
 class DocChatAgentConfig(ChatAgentConfig):
@@ -156,9 +152,10 @@ class DocChatAgentConfig(ChatAgentConfig):
         dims=1536,
     )
 
-    vecdb: VectorStoreConfig = QdrantDBConfig(
-        collection_name=None,
-        storage_path=".qdrant/data/",
+    vecdb: VectorStoreConfig = LanceDBConfig(
+        collection_name="doc-chat-lancedb",
+        replace_collection=True,
+        storage_path=".lancedb/data/",
         embedding=hf_embed_config,
     )
     llm: OpenAIGPTConfig = OpenAIGPTConfig(
@@ -246,6 +243,9 @@ class DocChatAgent(ChatAgent):
         self.original_docs = docs
         if self.parser is None:
             raise ValueError("Parser not set")
+        for d in docs:
+            if d.metadata.id in [None, ""]:
+                d.metadata.id = d._unique_hash_id()
         docs = self.parser.split(docs)
         self.chunked_docs = docs
         self.chunked_docs_clean = [
@@ -329,7 +329,7 @@ class DocChatAgent(ChatAgent):
             is_new_collection = True
             collection_name = Prompt.ask(
                 "What would you like to name the NEW collection?",
-                default="doc-chat-2",
+                default="doc-chat",
             )
 
         self.vecdb.set_collection(collection_name, replace=replace_collection)
@@ -659,6 +659,26 @@ class DocChatAgent(ChatAgent):
             return docs_scores
         return self.vecdb.add_context_window(docs_scores, self.config.n_neighbor_chunks)
 
+    def get_semantic_search_results(
+        self,
+        query: str,
+        k: int = 10,
+    ) -> List[Tuple[Document, float]]:
+        """
+        Get semantic search results from vecdb.
+        Note: This method can be overridden in a subclass of DocChatAgent,
+            for example to add a `where` filter in
+            self.vecdb.similar_texts_with_scores(..., where=...).
+        Args:
+            query (str): query to search for
+            k (int): number of results to return
+        Returns:
+            List[Tuple[Document, float]]: List of (Document, score) tuples.
+        """
+        if self.vecdb is None:
+            raise ValueError("VecDB not set")
+        return self.vecdb.similar_texts_with_scores(query, k=k)
+
     def get_relevant_chunks(
         self, query: str, query_proxies: List[str] = []
     ) -> List[Document]:
@@ -698,7 +718,7 @@ class DocChatAgent(ChatAgent):
         with console.status("[cyan]Searching VecDB for relevant doc passages..."):
             docs_and_scores: List[Tuple[Document, float]] = []
             for q in [query] + query_proxies:
-                docs_and_scores += self.vecdb.similar_texts_with_scores(
+                docs_and_scores += self.get_semantic_search_results(
                     q,
                     k=self.config.parsing.n_similar_docs * retrieval_multiple,
                 )

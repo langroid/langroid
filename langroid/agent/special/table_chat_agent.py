@@ -49,6 +49,8 @@ Once you have the answer to the question, say DONE and show me the answer.
 If you receive an error message, try using the `run_code` tool/function 
 again with the corrected code. 
 
+VERY IMPORTANT: When using the `run_code` tool/function, DO NOT EXPLAIN ANYTHING,
+   SIMPLY USE THE TOOL, with the CODE.
 Start by asking me what I want to know about the data.
 """
 
@@ -72,7 +74,7 @@ def dataframe_summary(df: pd.DataFrame) -> str:
     )
 
     # Numerical data summary
-    num_summary = df.describe().applymap(lambda x: "{:.2f}".format(x))
+    num_summary = df.describe().map(lambda x: "{:.2f}".format(x))
     num_str = "Numerical Column Summary:\n" + num_summary.to_string() + "\n\n"
 
     # Categorical data summary

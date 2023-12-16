@@ -2,6 +2,7 @@ import os
 
 import pytest
 
+from langroid.language_models import OpenAIChatModel
 from langroid.utils.configuration import Settings
 
 
@@ -18,7 +19,7 @@ def pytest_addoption(parser) -> None:
     parser.addoption("--ct", default="redis", help="redis or momento")
     parser.addoption(
         "--m",
-        default="",
+        default=OpenAIChatModel.GPT4,
         help="""
         language model name, e.g. litellm/ollama/llama2, or 
         local or localhost:8000 or localhost:8000/v1
@@ -34,6 +35,10 @@ def pytest_addoption(parser) -> None:
 
 @pytest.fixture(scope="session")
 def test_settings(request) -> Settings:
+    chat_model = request.config.getoption("--m")
+    if request.config.getoption("--3"):
+        chat_model = OpenAIChatModel.GPT3_5_TURBO
+
     return Settings(
         debug=request.config.getoption("--show"),
         cache=not request.config.getoption("--nc"),
@@ -41,7 +46,7 @@ def test_settings(request) -> Settings:
         gpt3_5=request.config.getoption("--3"),
         stream=not request.config.getoption("--ns"),
         nofunc=request.config.getoption("--nof"),
-        chat_model=request.config.getoption("--m"),
+        chat_model=chat_model,
     )
 
 

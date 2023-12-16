@@ -73,7 +73,7 @@ class Agent(ABC):
     information about any tool/function-calling messages that have been defined.
     """
 
-    def __init__(self, config: AgentConfig):
+    def __init__(self, config: AgentConfig = AgentConfig()):
         self.config = config
         self.lock = asyncio.Lock()  # for async access to update self.llm.usage_cost
         self.dialog: List[Tuple[str, str]] = []  # seq of LLM (prompt, response) tuples
@@ -142,6 +142,9 @@ class Agent(ABC):
 
     def get_dialog(self) -> List[Tuple[str, str]]:
         return self.dialog
+
+    def clear_dialog(self) -> None:
+        self.dialog = []
 
     def _get_tool_list(
         self, message_class: Optional[Type[ToolMessage]] = None
@@ -570,7 +573,7 @@ class Agent(ABC):
         """
         tool_name = cast(ToolMessage, ve.model).default_value("request")
         bad_field_errors = "\n".join(
-            [f"{e['loc'][0]}: {e['msg']}" for e in ve.errors() if "loc" in e]
+            [f"{e['loc']}: {e['msg']}" for e in ve.errors() if "loc" in e]
         )
         return f"""
         There were one or more errors in your attempt to use the 
@@ -629,12 +632,6 @@ class Agent(ABC):
 
         str_doc_results = [r for r in results_list if isinstance(r, str)]
         final = "\n".join(str_doc_results)
-        if final == "":
-            logger.warning(
-                """final result from a tool handler should not be empty str, since  
-             it would be considered an invalid result and other responders 
-             will be tried, and we may not necessarily want that"""
-            )
         return final
 
     def handle_message_fallback(
@@ -699,7 +696,13 @@ class Agent(ABC):
         if isinstance(prompt, str):
             return self.parser.num_tokens(prompt)
         else:
-            return sum([self.parser.num_tokens(m.content) for m in prompt])
+            return sum(
+                [
+                    self.parser.num_tokens(m.content)
+                    + self.parser.num_tokens(str(m.function_call or ""))
+                    for m in prompt
+                ]
+            )
 
     def _get_response_stats(
         self, chat_length: int, tot_cost: float, response: LLMResponse
@@ -724,11 +727,17 @@ class Agent(ABC):
             assert isinstance(self.llm, LanguageModel)
             context_length = self.llm.chat_context_length()
             max_out = self.config.llm.max_output_tokens
+
+            llm_model = (
+                "no-LLM" if self.config.llm is None else self.config.llm.chat_model
+            )
+
             return (
-                f"[bold]Stats:[/bold] [magenta] N_MSG={chat_length}, "
+                f"[bold]Stats:[/bold] [magenta]N_MSG={chat_length}, "
                 f"TOKENS: in={in_tokens}, out={out_tokens}, "
                 f"max={max_out}, ctx={context_length}, "
-                f"COST: now=${llm_response_cost}, cumul=${cumul_cost}[/magenta]"
+                f"COST: now=${llm_response_cost}, cumul=${cumul_cost} "
+                f"[bold]({llm_model})[/bold][/magenta]"
             )
         return ""
 

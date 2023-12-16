@@ -245,7 +245,7 @@ class LanguageModel(ABC):
     # usage cost by model, accumulates here
     usage_cost_dict: Dict[str, LLMTokenUsage] = {}
 
-    def __init__(self, config: LLMConfig):
+    def __init__(self, config: LLMConfig = LLMConfig()):
         self.config = config
 
     @staticmethod
@@ -362,18 +362,18 @@ class LanguageModel(ABC):
         pass
 
     @abstractmethod
-    def generate(self, prompt: str, max_tokens: int) -> LLMResponse:
+    def generate(self, prompt: str, max_tokens: int = 200) -> LLMResponse:
         pass
 
     @abstractmethod
-    async def agenerate(self, prompt: str, max_tokens: int) -> LLMResponse:
+    async def agenerate(self, prompt: str, max_tokens: int = 200) -> LLMResponse:
         pass
 
     @abstractmethod
     def chat(
         self,
         messages: Union[str, List[LLMMessage]],
-        max_tokens: int,
+        max_tokens: int = 200,
         functions: Optional[List[LLMFunctionSpec]] = None,
         function_call: str | Dict[str, str] = "auto",
     ) -> LLMResponse:
@@ -383,7 +383,7 @@ class LanguageModel(ABC):
     async def achat(
         self,
         messages: Union[str, List[LLMMessage]],
-        max_tokens: int,
+        max_tokens: int = 200,
         functions: Optional[List[LLMFunctionSpec]] = None,
         function_call: str | Dict[str, str] = "auto",
     ) -> LLMResponse:

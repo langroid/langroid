@@ -17,7 +17,7 @@ logger = logging.getLogger(__name__)
 
 
 class ChromaDBConfig(VectorStoreConfig):
-    collection_name: str = "chroma-langroid"
+    collection_name: str = "temp"
     storage_path: str = ".chroma/data"
     embedding: EmbeddingModelsConfig = OpenAIEmbeddingsConfig()
     host: str = "127.0.0.1"
@@ -25,7 +25,7 @@ class ChromaDBConfig(VectorStoreConfig):
 
 
 class ChromaDB(VectorStore):
-    def __init__(self, config: ChromaDBConfig):
+    def __init__(self, config: ChromaDBConfig = ChromaDBConfig()):
         super().__init__(config)
         self.config = config
         emb_model = EmbeddingModel.create(config.embedding)
@@ -108,7 +108,8 @@ class ChromaDB(VectorStore):
             get_or_create=not replace,
         )
 
-    def add_documents(self, documents: Optional[Sequence[Document]] = None) -> None:
+    def add_documents(self, documents: Sequence[Document]) -> None:
+        super().maybe_add_ids(documents)
         if documents is None:
             return
         contents: List[str] = [document.content for document in documents]
@@ -144,9 +145,10 @@ class ChromaDB(VectorStore):
     def similar_texts_with_scores(
         self, text: str, k: int = 1, where: Optional[str] = None
     ) -> List[Tuple[Document, float]]:
+        n = self.collection.count()
         results = self.collection.query(
             query_texts=[text],
-            n_results=k,
+            n_results=min(n, k),
             where=where,
             include=["documents", "distances", "metadatas"],
         )
