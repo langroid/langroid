@@ -14,9 +14,7 @@ from langroid.embedding_models.models import OpenAIEmbeddingsConfig
 from langroid.mytypes import Document, EmbeddingFunction
 from langroid.utils.configuration import settings
 from langroid.utils.pydantic_utils import (
-    flatten_pydantic_instance,
     flatten_pydantic_model,
-    nested_dict_from_flat,
 )
 from langroid.vector_store.base import VectorStore, VectorStoreConfig
 
@@ -191,7 +189,7 @@ class LanceDB(VectorStore):
                 else:
                     logger.warning("Recreating fresh collection")
         tbl = self.client.create_table(
-            collection_name, schema=self.flat_schema, mode="overwrite"
+            collection_name, schema=self.schema, mode="overwrite"
         )
         if settings.debug:
             level = logger.getEffectiveLevel()
@@ -217,12 +215,10 @@ class LanceDB(VectorStore):
         def make_batches() -> Generator[List[Dict[str, Any]], None, None]:
             for i in range(0, len(ids), b):
                 yield [
-                    flatten_pydantic_instance(
-                        self.schema(
-                            id=ids[i],
-                            vector=embedding_vecs[i],
-                            payload=doc,
-                        )
+                    self.schema(  # type: ignore
+                        id=ids[i],
+                        vector=embedding_vecs[i],
+                        payload=doc,
                     )
                     for i, doc in enumerate(documents[i : i + b])
                 ]
@@ -238,12 +234,8 @@ class LanceDB(VectorStore):
             raise ValueError("No collection name set, cannot retrieve docs")
         tbl = self.client.open_table(self.config.collection_name)
         records = tbl.search(None).to_arrow().to_pylist()
-        docs = [
-            self.config.document_class(
-                **(nested_dict_from_flat(rec, sub_dict="payload"))
-            )
-            for rec in records
-        ]
+        doc_cls = self.config.document_class
+        docs = [doc_cls(**rec["payload"]) for rec in records]
         return docs
 
     def get_documents_by_ids(self, ids: List[str]) -> List[Document]:
@@ -256,10 +248,7 @@ class LanceDB(VectorStore):
             for _id in _ids
         ]
         doc_cls = self.config.document_class
-        docs = [
-            doc_cls(**(nested_dict_from_flat(rec, sub_dict="payload")))
-            for rec in records
-        ]
+        docs = [doc_cls(**rec["payload"]) for rec in records]
         return docs
 
     def similar_texts_with_scores(
@@ -281,12 +270,7 @@ class LanceDB(VectorStore):
 
         # note _distance is 1 - cosine
         scores = [1 - rec["_distance"] for rec in records]
-        docs = [
-            self.config.document_class(
-                **(nested_dict_from_flat(rec, sub_dict="payload"))
-            )
-            for rec in records
-        ]
+        docs = [self.config.document_class(**rec["payload"]) for rec in records]
         if len(docs) == 0:
             logger.warning(f"No matches found for {text}")
             return []

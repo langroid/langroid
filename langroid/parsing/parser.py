@@ -65,8 +65,8 @@ class Parser:
         orig_id_to_ids: Dict[str, List[str]] = {}
         for orig_id, id in zip(orig_ids, ids):
             if orig_id not in orig_id_to_ids:
-                orig_id_to_ids[orig_id] = []  # type: ignore
-            orig_id_to_ids[orig_id].append(id)  # type: ignore
+                orig_id_to_ids[orig_id] = []
+            orig_id_to_ids[orig_id].append(id)
 
         # now each orig_id maps to a sequence of ids within a single doc
 

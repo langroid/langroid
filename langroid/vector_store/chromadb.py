@@ -114,7 +114,9 @@ class ChromaDB(VectorStore):
             return
         contents: List[str] = [document.content for document in documents]
         # convert metadatas to dicts so chroma can handle them
-        metadata_dicts: List[dict[str, Any]] = [d.metadata.dict() for d in documents]
+        metadata_dicts: List[dict[str, Any]] = [
+            d.metadata.dict_bool_int() for d in documents
+        ]
         for m in metadata_dicts:
             # chroma does not handle non-atomic types in metadata
             m["window_ids"] = ",".join(m["window_ids"])
