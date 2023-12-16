@@ -1,13 +1,6 @@
 import logging
 from typing import List, Optional
 
-from neo4j import GraphDatabase, Record
-from neo4j.exceptions import (
-    AuthError,
-    ConfigurationError,
-    Neo4jError,
-    ServiceUnavailable,
-)
 from pydantic import BaseSettings
 
 logger = logging.getLogger(__name__)
@@ -25,27 +18,41 @@ class Neo4j:
         self.config = config
         self.driver = None
         try:
-            self.driver = GraphDatabase.driver(
-                self.config.uri, auth=(self.config.username, self.config.password)
-            )
-        except ServiceUnavailable:
-            logging.warning(
-                """Unable to connect to the database. Please check if the 
-                            Neo4j service is running."""
-            )
-        except AuthError:
-            logging.warning(
-                """Authentication failed. Please check your 
-                            username and password."""
-            )
-        except ConfigurationError as e:
-            logging.warning(
-                f"""
-                There was a configuration error:, {e}
+            import neo4j
+
+            self.neo4j = neo4j
+        except ImportError:
+            raise ImportError(
+                """
+                neo4j not installed. Please install it via:
+                pip install neo4j.
+                Or when installing langroid, install it with the `neo4j` extra:
+                pip install langroid[neo4j]
                 """
             )
+
+        try:
+            self.driver = self.neo4j.GraphDatabase.driver(
+                self.config.uri, auth=(self.config.username, self.config.password)
+            )
+        except ImportError:
+            logging.warning(
+                "Neo4j module is not installed. Please install it before proceeding."
+            )
+            return
+        except self.neo4j.ServiceUnavailable:
+            logging.warning(
+                """Unable to connect to the database. Please check if the Neo4j service 
+                is running."""
+            )
+        except self.neo4j.AuthError:
+            logging.warning(
+                "Authentication failed. Please check your username and password."
+            )
+        except self.neo4j.ConfigurationError as e:
+            logging.warning(f"There was a configuration error: {e}")
         except Exception as e:
-            logging.warning(f"An unexpected error occurred:, {e}")
+            logging.warning(f"An unexpected error occurred: {e}")
 
     def close(self) -> None:
         """close the connection"""
@@ -55,7 +62,7 @@ class Neo4j:
     # TODO: test under enterprise edition because community edition doesn't allow
     # database creation/deletion
 
-    def run_query(self, query: str) -> Optional[List[Record]]:
+    def run_query(self, query: str) -> Optional[List["Neo4j.Record"]]:
         """
         Executes a read query on the Neo4j database.
 
@@ -86,7 +93,7 @@ class Neo4j:
             with self.driver.session(database=self.config.database) as session:
                 result = session.run(query)
                 return [record for record in result] if result.peek() else None
-        except Neo4jError as e:
+        except self.neo4j.Neo4jError as e:
             logging.warning(
                 f"""
                 An error occurred while executing the Cypher query:, {e}
@@ -128,7 +135,7 @@ class Neo4j:
             with self.driver.session(database=self.config.database) as session:
                 session.write_transaction(lambda tx: tx.run(query))
                 return True
-        except Neo4jError as e:
+        except self.neo4j.Neo4jError as e:
             logging.warning(
                 f"""
                 An error occurred while executing the write query:,{e}

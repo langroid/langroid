@@ -81,7 +81,7 @@ scrapy = "^2.11.0"
 async-generator = "^1.10"
 lancedb = "^0.3.0"
 pytest-redis = "^3.0.2"
-neo4j = "^5.14.1"
+neo4j = {version = "^5.14.1", optional = true}
 
 [tool.poetry.extras]
 # install these using `poetry install -E [...]` where [...] is one of the extras below
@@ -89,6 +89,7 @@ hf-embeddings = ["sentence-transformers", "torch"]
 postgres = ["psycopg2", "pytest-postgresql"]
 mysql = ["pymysql", "pytest-mysql"]
 litellm = ["litellm"]
+neo4j = ["neo4j"]
 
 
 [tool.poetry.group.dev.dependencies]
