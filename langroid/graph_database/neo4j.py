@@ -1,5 +1,5 @@
 import logging
-from typing import List, Optional
+from typing import Any, Dict, List, Optional
 
 from pydantic import BaseSettings
 
@@ -62,7 +62,7 @@ class Neo4j:
     # TODO: test under enterprise edition because community edition doesn't allow
     # database creation/deletion
 
-    def run_query(self, query: str) -> Optional[List["Neo4j.Record"]]:
+    def run_query(self, query: str) -> Optional[List[Dict[str, Any]]]:
         """
         Executes a read query on the Neo4j database.
 
@@ -92,7 +92,8 @@ class Neo4j:
         try:
             with self.driver.session(database=self.config.database) as session:
                 result = session.run(query)
-                return [record for record in result] if result.peek() else None
+                # return [record for record in result] if result.peek() else None
+                return [record.data() for record in result] if result.peek() else None
         except self.neo4j.Neo4jError as e:
             logging.warning(
                 f"""
