@@ -107,7 +107,7 @@ class DocChatAgentConfig(ChatAgentConfig):
     cache: bool = True  # cache results
     debug: bool = False
     stream: bool = True  # allow streaming where needed
-    relevance_extractor_config: RelevanceExtractorAgentConfig = (
+    relevance_extractor_config: None | RelevanceExtractorAgentConfig = (
         RelevanceExtractorAgentConfig()
     )
     doc_paths: List[str] = []
@@ -834,6 +834,10 @@ class DocChatAgent(ChatAgent):
             List[Document]: list of Documents containing extracts and metadata.
         """
         agent_cfg = self.config.relevance_extractor_config
+        if agent_cfg is None:
+            # no relevance extraction: simply return passages
+            return passages
+
         agent_cfg.query = query
         agent_cfg.segment_length = 1
         agent_cfg.llm.stream = False  # disable streaming for concurrent calls
