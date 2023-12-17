@@ -313,6 +313,7 @@ class Task:
         """Synchronous version of `run_async()`.
         See `run_async()` for details."""
         self.task_progress = False
+        self.n_stalled_steps = 0
         assert (
             msg is None or isinstance(msg, str) or isinstance(msg, ChatDocument)
         ), f"msg arg in Task.run() must be None, str, or ChatDocument, not {type(msg)}"
