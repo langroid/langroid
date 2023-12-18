@@ -28,7 +28,7 @@ logger = logging.getLogger(__name__)
 
 
 class RecordMetadata(DocMetaData):
-    id: None | str = None
+    id: str = ""
 
 
 class RecordDoc(Document):

@@ -67,6 +67,7 @@ class Task:
         only_user_quits_root: bool = True,
         erase_substeps: bool = False,
         allow_null_result: bool = True,
+        max_stalled_steps: int = 3,
     ):
         """
         A task to be performed by an agent.
@@ -100,6 +101,8 @@ class Task:
             allow_null_result (bool): if true, allow null (empty or NO_ANSWER)
                 as the result of a step or overall task result.
                 Optional, default is True.
+            max_stalled_steps (int): task considered done after this many consecutive
+                steps with no progress. Default is 3.
         """
         if agent is None:
             agent = ChatAgent()
@@ -119,8 +122,10 @@ class Task:
         self.tsv_logger: None | logging.Logger = None
         self.color_log: bool = False if settings.notebook else True
         self.agent = agent
-        self.step_progress = False
-        self.task_progress = False
+        self.step_progress = False  # progress in current step?
+        self.n_stalled_steps = 0  # how many consecutive steps with no progress?
+        self.max_stalled_steps = max_stalled_steps
+        self.task_progress = False  # progress in current task (since run or run_async)?
         self.name = name or agent.config.name
         self.default_human_response = default_human_response
         self.interactive = interactive
@@ -308,6 +313,7 @@ class Task:
         """Synchronous version of `run_async()`.
         See `run_async()` for details."""
         self.task_progress = False
+        self.n_stalled_steps = 0
         assert (
             msg is None or isinstance(msg, str) or isinstance(msg, ChatDocument)
         ), f"msg arg in Task.run() must be None, str, or ChatDocument, not {type(msg)}"
@@ -626,6 +632,7 @@ class Task:
             self.log_message(self.pending_sender, result, mark=True)
             self.step_progress = True
             self.task_progress = True
+            self.n_stalled_steps = 0  # reset stuck counter since we made progress
             return True
         else:
             self.log_message(r, result)
@@ -639,6 +646,7 @@ class Task:
         Args:
             parent (ChatDocument|None): parent message of the current message
         """
+        self.n_stalled_steps += 1
         if not self.task_progress or self.allow_null_result:
             # There has been no progress at all in this task, so we
             # update the pending_message to a dummy NO_ANSWER msg
@@ -770,13 +778,18 @@ class Task:
             # for top-level task, only user can quit out
             return user_quit
 
+        if self.n_stalled_steps >= self.max_stalled_steps:
+            # we are stuck, so bail to avoid infinite loop
+            return True
         if (
             not self.step_progress
             and self.pending_sender == Entity.LLM
-            and not self.llm_delegate
+            and (not self.llm_delegate or not self._can_respond(Entity.LLM))
         ):
-            # LLM is NOT driving the task, and no progress in latest step,
-            # and it is NOT the LLM's turn to respond, so we are done.
+            # no progress in latest step, and pending msg is from LLM, and
+            # EITHER LLM is not driving the task,
+            # OR LLM IS driving the task, but CANNOT respond
+            #   (e.g. b/c the pending message is a function call)
             return True
 
         return (

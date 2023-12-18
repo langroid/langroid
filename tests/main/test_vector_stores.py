@@ -142,7 +142,7 @@ def vecdb(request) -> VectorStore:
 # add "momento" when their API docs are ready
 @pytest.mark.parametrize(
     "vecdb",
-    ["qdrant_cloud", "qdrant_local", "lancedb", "chroma"],
+    ["lancedb", "qdrant_cloud", "qdrant_local", "chroma"],
     indirect=True,
 )
 def test_vector_stores_search(
@@ -162,7 +162,7 @@ def test_vector_stores_search(
 # add "momento" when their API docs are ready.
 @pytest.mark.parametrize(
     "vecdb",
-    ["qdrant_local", "qdrant_cloud", "lancedb", "chroma"],
+    ["lancedb", "qdrant_local", "qdrant_cloud", "chroma"],
     indirect=True,
 )
 def test_vector_stores_access(vecdb):
@@ -194,7 +194,7 @@ def test_vector_stores_access(vecdb):
 
 @pytest.mark.parametrize(
     "vecdb",
-    ["chroma", "qdrant_cloud", "qdrant_local", "lancedb"],
+    ["lancedb", "chroma", "qdrant_cloud", "qdrant_local"],
     indirect=True,
 )
 def test_vector_stores_context_window(vecdb):
@@ -252,7 +252,7 @@ def test_vector_stores_context_window(vecdb):
 
 @pytest.mark.parametrize(
     "vecdb",
-    ["chroma", "qdrant_cloud", "qdrant_local", "lancedb"],
+    ["lancedb", "chroma", "qdrant_cloud", "qdrant_local"],
     indirect=True,
 )
 def test_vector_stores_overlapping_matches(vecdb):
