@@ -1,5 +1,8 @@
 import logging
-from typing import Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional
+
+if TYPE_CHECKING:
+    import neo4j
 
 from pydantic import BaseSettings
 
@@ -21,8 +24,8 @@ class Neo4j:
         self._initialize_connection()
 
     def _import_neo4j(self) -> None:
+        global neo4j
         try:
-            global neo4j
             import neo4j
         except ImportError:
             raise ImportError(

@@ -117,7 +117,7 @@ def chat(opts: CLIOptions) -> None:
         uri="",
         username="",
         password="",
-        database="",
+        database="neo4j",
     )
 
     client = Neo4j(config=neo4j_cfg)
