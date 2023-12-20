@@ -1,3 +1,4 @@
+import json
 import logging
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
@@ -129,8 +130,12 @@ class ChromaDB(VectorStore):
             ids=ids,
         )
 
-    def get_all_documents(self) -> List[Document]:
-        results = self.collection.get(include=["documents", "metadatas"])
+    def get_all_documents(self, where: str = "") -> List[Document]:
+        filter = json.loads(where) if where else None
+        results = self.collection.get(
+            include=["documents", "metadatas"],
+            where=filter,
+        )
         results["documents"] = [results["documents"]]
         results["metadatas"] = [results["metadatas"]]
         return self._docs_from_results(results)
@@ -148,10 +153,11 @@ class ChromaDB(VectorStore):
         self, text: str, k: int = 1, where: Optional[str] = None
     ) -> List[Tuple[Document, float]]:
         n = self.collection.count()
+        filter = json.loads(where) if where else None
         results = self.collection.query(
             query_texts=[text],
             n_results=min(n, k),
-            where=where,
+            where=filter,
             include=["documents", "distances", "metadatas"],
         )
         docs = self._docs_from_results(results)

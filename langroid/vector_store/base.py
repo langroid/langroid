@@ -289,9 +289,9 @@ class VectorStore(ABC):
         return new_windows
 
     @abstractmethod
-    def get_all_documents(self) -> List[Document]:
+    def get_all_documents(self, where: str = "") -> List[Document]:
         """
-        Get all documents in the current collection.
+        Get all documents in the current collection, possibly filtered by `where`.
         """
         pass
 

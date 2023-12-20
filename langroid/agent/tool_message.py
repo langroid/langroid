@@ -14,16 +14,7 @@ from docstring_parser import parse
 from pydantic import BaseModel
 
 from langroid.language_models.base import LLMFunctionSpec
-
-
-def _recursive_purge_dict_key(d: Dict[str, Any], k: str) -> None:
-    """Remove a key from a dictionary recursively"""
-    if isinstance(d, dict):
-        for key in list(d.keys()):
-            if key == k and "type" in d.keys():
-                del d[key]
-            else:
-                _recursive_purge_dict_key(d[key], k)
+from langroid.utils.pydantic_utils import _recursive_purge_dict_key
 
 
 class ToolMessage(ABC, BaseModel):

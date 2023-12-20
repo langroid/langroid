@@ -780,6 +780,9 @@ class Task:
 
         if self.n_stalled_steps >= self.max_stalled_steps:
             # we are stuck, so bail to avoid infinite loop
+            logger.warning(
+                f"Task {self.name} stuck for {self.max_stalled_steps} steps; exiting."
+            )
             return True
         if (
             not self.step_progress

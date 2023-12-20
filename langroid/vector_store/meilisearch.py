@@ -198,18 +198,19 @@ class MeiliSearch(VectorStore):
         except ValueError:
             return id
 
-    async def _async_get_documents(self) -> DocumentsInfo:
+    async def _async_get_documents(self, where: str = "") -> DocumentsInfo:
         if self.config.collection_name is None:
             raise ValueError("No collection name set, cannot retrieve docs")
+        filter = [] if where is None else where
         async with self.client() as client:
             index = client.index(self.config.collection_name)
-            documents = await index.get_documents(limit=10_000)
+            documents = await index.get_documents(limit=10_000, filter=filter)
         return documents
 
-    def get_all_documents(self) -> List[Document]:
+    def get_all_documents(self, where: str = "") -> List[Document]:
         if self.config.collection_name is None:
             raise ValueError("No collection name set, cannot retrieve docs")
-        docs = asyncio.run(self._async_get_documents())
+        docs = asyncio.run(self._async_get_documents(where))
         if docs is None:
             return []
         doc_results = docs.results
