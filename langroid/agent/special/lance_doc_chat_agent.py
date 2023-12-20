@@ -155,6 +155,10 @@ class LanceDocChatAgent(DocChatAgent):
         if not self.vecdb.config.flatten:
             # in this case we can't use FTS since we don't have
             # access to the payload fields.
+            #TODO: get rid of this and the below checks
+            # when LanceDB supports nested fields:
+            # https://github.com/lancedb/lance/issues/1739
+            # PR pending: https://github.com/lancedb/lancedb/pull/723
             return super().get_similar_chunks_bm25(query, multiple)
         tbl = self.vecdb.client.open_table(self.vecdb.config.collection_name)
         payload_content = "payload__content"
