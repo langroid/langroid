@@ -201,7 +201,7 @@ class MomentoVI(VectorStore):
         except ValueError:
             return id
 
-    def get_all_documents(self) -> List[Document]:
+    def get_all_documents(self, where: str = "") -> List[Document]:
         raise NotImplementedError(
             """
             MomentoVI does not support get_all_documents().
