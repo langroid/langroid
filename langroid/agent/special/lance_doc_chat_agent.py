@@ -4,6 +4,14 @@ Version of DocChatAgent that uses LanceDB as a vector store:
     to be used in the LanceDB table search as a `where` clause.
 - overrides the get_similar_chunks_bm25() to use LanceDB FTS (Full Text Search).
 
+The LanceRAGTaskCreator.new() method creates a 2-Task system that uses this agent:
+- FilterTask (LanceFilterAgent) to decide if a filter is needed, and if so, what filter,
+    along with a possibly rephrased query.
+- RAGTask (LanceDocChatAgent) to answer the query using the filter and the documents.
+
+Langroid's built-in task loops will ensure that the LanceFilterAgent automatically
+retries with a different filter if the RAGTask returns an empty answer.
+
 For usage see `tests/main/test_lance_doc_chat_agent.py`.
 
 """
@@ -155,7 +163,7 @@ class LanceDocChatAgent(DocChatAgent):
         if not self.vecdb.config.flatten:
             # in this case we can't use FTS since we don't have
             # access to the payload fields.
-            #TODO: get rid of this and the below checks
+            # TODO: get rid of this and the below checks
             # when LanceDB supports nested fields:
             # https://github.com/lancedb/lance/issues/1739
             # PR pending: https://github.com/lancedb/lancedb/pull/723
