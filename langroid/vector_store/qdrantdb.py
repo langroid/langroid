@@ -1,3 +1,4 @@
+import json
 import logging
 import os
 from typing import List, Optional, Sequence, Tuple, TypeVar
@@ -239,7 +240,7 @@ class QdrantDB(VectorStore):
             raise ValueError("No collection name set, cannot retrieve docs")
         docs = []
         offset = 0
-        filter = Filter() if where is None else Filter.from_json(where)  # type: ignore
+        filter = Filter() if where == "" else Filter.parse_obj(json.loads(where))
         while True:
             results, next_page_offset = self.client.scroll(
                 collection_name=self.config.collection_name,
@@ -281,7 +282,10 @@ class QdrantDB(VectorStore):
     ) -> List[Tuple[Document, float]]:
         embedding = self.embedding_fn([text])[0]
         # TODO filter may not work yet
-        filter = Filter() if where is None else Filter.from_json(where)  # type: ignore
+        if where is None or where == "":
+            filter = Filter()
+        else:
+            filter = Filter.parse_obj(json.loads(where))
         if self.config.collection_name is None:
             raise ValueError("No collection name set, cannot search")
         search_result: List[ScoredPoint] = self.client.search(
