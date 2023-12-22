@@ -33,7 +33,7 @@ from langroid.agent.task import Task
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
 from langroid.language_models.base import StreamingIfAllowed
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
-from langroid.mytypes import DocMetaData, Document, Entity
+from langroid.mytypes import Document, Entity
 from langroid.parsing.parser import Parser, ParsingConfig, PdfParsingConfig, Splitter
 from langroid.parsing.repo_loader import RepoLoader
 from langroid.parsing.search import (
@@ -83,6 +83,9 @@ class DocChatAgentConfig(ChatAgentConfig):
     system_message: str = DEFAULT_DOC_CHAT_SYSTEM_MESSAGE
     user_message: str = DEFAULT_DOC_CHAT_INSTRUCTIONS
     summarize_prompt: str = SUMMARY_ANSWER_PROMPT_GPT4
+    filter: str | None = (
+        None  # filter condition for various lexical/semantic search fns
+    )
     max_context_tokens: int = 1000
     conversation_mode: bool = True
     # In assistant mode, DocChatAgent receives questions from another Agent,
@@ -204,12 +207,7 @@ class DocChatAgent(ChatAgent):
             # do keyword and other non-vector searches
             if self.vecdb is None:
                 raise ValueError("VecDB not set")
-            self.chunked_docs = self.vecdb.get_all_documents()
-            # used for lexical similarity e.g. keyword search (bm25 etc)
-            self.chunked_docs_clean = [
-                Document(content=preprocess_text(d.content), metadata=d.metadata)
-                for d in self.chunked_docs
-            ]
+            self.setup_documents(filter=self.config.filter)
             return
         urls, paths = get_urls_and_paths(self.config.doc_paths)
         docs: List[Document] = []
@@ -236,9 +234,14 @@ class DocChatAgent(ChatAgent):
         print("\n".join(urls))
         print("\n".join(paths))
 
-    def ingest_docs(self, docs: List[Document]) -> int:
+    def ingest_docs(self, docs: List[Document], split: bool = True) -> int:
         """
         Chunk docs into pieces, map each chunk to vec-embedding, store in vec-db
+
+        Args:
+            docs: List of Document objects
+            split: Whether to split docs into chunks. Default is True.
+                If False, docs are treated as "chunks" and are not split.
         """
         self.original_docs = docs
         if self.parser is None:
@@ -246,12 +249,12 @@ class DocChatAgent(ChatAgent):
         for d in docs:
             if d.metadata.id in [None, ""]:
                 d.metadata.id = d._unique_hash_id()
-        docs = self.parser.split(docs)
-        self.chunked_docs = docs
-        self.chunked_docs_clean = [
-            Document(content=preprocess_text(d.content), metadata=d.metadata)
-            for d in self.chunked_docs
-        ]
+        if split:
+            docs = self.parser.split(docs)
+        else:
+            # treat each doc as a chunk
+            for d in docs:
+                d.metadata.is_chunk = True
         if self.vecdb is None:
             raise ValueError("VecDB not set")
         # add embeddings in batches, to stay under limit of embeddings API
@@ -259,7 +262,37 @@ class DocChatAgent(ChatAgent):
         for batch in batches:
             self.vecdb.add_documents(batch)
         self.original_docs_length = self.doc_length(docs)
+        self.setup_documents(docs, filter=self.config.filter)
         return len(docs)
+
+    def setup_documents(
+        self,
+        docs: List[Document] = [],
+        filter: str | None = None,
+    ) -> None:
+        """
+        Setup `self.chunked_docs` and `self.chunked_docs_clean`
+        based on possible filter.
+        These will be used in various non-vector-based search functions,
+        e.g. self.get_similar_chunks_bm25(), self.get_fuzzy_matches(), etc.
+
+        Args:
+            docs: List of Document objects. This is empty when we are calling this
+                method after initial doc ingestion.
+            filter: Filter condition for various lexical/semantic search fns.
+        """
+        if filter is None and len(docs) > 0:
+            # no filter, so just use the docs passed in
+            self.chunked_docs = docs
+        else:
+            if self.vecdb is None:
+                raise ValueError("VecDB not set")
+            self.chunked_docs = self.vecdb.get_all_documents(where=filter or "")
+
+        self.chunked_docs_clean = [
+            Document(content=preprocess_text(d.content), metadata=d.metadata)
+            for d in self.chunked_docs
+        ]
 
     def doc_length(self, docs: List[Document]) -> int:
         """
@@ -345,7 +378,6 @@ class DocChatAgent(ChatAgent):
         self.config.doc_paths = inputs
         self.ingest()
 
-    @no_type_check
     def llm_response(
         self,
         query: None | str | ChatDocument = None,
@@ -365,7 +397,9 @@ class DocChatAgent(ChatAgent):
             with StreamingIfAllowed(self.llm):
                 response = super().llm_response(query_str)
             if query_str is not None:
-                self.update_dialog(query_str, response.content)
+                self.update_dialog(
+                    query_str, "" if response is None else response.content
+                )
             return response
         if query_str == "":
             return None
@@ -407,7 +441,9 @@ class DocChatAgent(ChatAgent):
             ]
         )
 
-    def get_summary_answer(self, question: str, passages: List[Document]) -> Document:
+    def get_summary_answer(
+        self, question: str, passages: List[Document]
+    ) -> ChatDocument:
         """
         Given a question and a list of (possibly) doc snippets,
         generate an answer if possible
@@ -435,9 +471,6 @@ class DocChatAgent(ChatAgent):
         # 2 new LLMMessage objects:
         # one for `final_prompt`, and one for the LLM response
 
-        # TODO need to "forget" last two messages in message_history
-        # if we are not in conversation mode
-
         if self.config.conversation_mode:
             # respond with temporary context
             answer_doc = super()._llm_response_temp_context(question, final_prompt)
@@ -453,9 +486,9 @@ class DocChatAgent(ChatAgent):
         else:
             content = final_answer
             sources = ""
-        return Document(
+        return ChatDocument(
             content=content,
-            metadata=DocMetaData(
+            metadata=ChatDocMetaData(
                 source="SOURCE: " + sources,
                 sender=Entity.LLM,
                 cached=getattr(answer_doc.metadata, "cached", False),
@@ -666,9 +699,6 @@ class DocChatAgent(ChatAgent):
     ) -> List[Tuple[Document, float]]:
         """
         Get semantic search results from vecdb.
-        Note: This method can be overridden in a subclass of DocChatAgent,
-            for example to add a `where` filter in
-            self.vecdb.similar_texts_with_scores(..., where=...).
         Args:
             query (str): query to search for
             k (int): number of results to return
@@ -677,7 +707,20 @@ class DocChatAgent(ChatAgent):
         """
         if self.vecdb is None:
             raise ValueError("VecDB not set")
-        return self.vecdb.similar_texts_with_scores(query, k=k)
+        # Note: for dynamic filtering based on a query, users can
+        # use the `temp_update` context-manager to pass in a `filter` to self.config,
+        # e.g.:
+        # with temp_update(self.config, filter="metadata.source=='source1'"):
+        #     docs_scores = self.get_semantic_search_results(query, k=k)
+        # This avoids having pass the `filter` argument to every function call
+        # upstream of this one.
+        # The `temp_update` context manager is defined in
+        # `langroid/utils/pydantic_utils.py`
+        return self.vecdb.similar_texts_with_scores(
+            query,
+            k=k,
+            where=self.config.filter,
+        )
 
     def get_relevant_chunks(
         self, query: str, query_proxies: List[str] = []
@@ -863,8 +906,7 @@ class DocChatAgent(ChatAgent):
             if (e != NO_ANSWER and len(e) > 0)
         ]
 
-    @no_type_check
-    def answer_from_docs(self, query: str) -> Document:
+    def answer_from_docs(self, query: str) -> ChatDocument:
         """
         Answer query based on relevant docs from the VecDB
 
@@ -874,16 +916,19 @@ class DocChatAgent(ChatAgent):
         Returns:
             Document: answer
         """
-        response = Document(
+        response = ChatDocument(
             content=NO_ANSWER,
-            metadata=DocMetaData(
+            metadata=ChatDocMetaData(
                 source="None",
+                sender=Entity.LLM,
             ),
         )
         # query may be updated to a stand-alone version
         query, extracts = self.get_relevant_extracts(query)
         if len(extracts) == 0:
             return response
+        if self.llm is None:
+            raise ValueError("LLM not set")
         with ExitStack() as stack:
             # conditionally use Streaming or rich console context
             cm = (
@@ -891,7 +936,7 @@ class DocChatAgent(ChatAgent):
                 if settings.stream
                 else (console.status("LLM Generating final answer..."))
             )
-            stack.enter_context(cm)
+            stack.enter_context(cm)  # type: ignore
             response = self.get_summary_answer(query, extracts)
 
         self.update_dialog(query, response.content)
@@ -940,13 +985,14 @@ class DocChatAgent(ChatAgent):
             summary = Agent.llm_response(self, prompt)
             return summary  # type: ignore
 
-    def justify_response(self) -> None:
+    def justify_response(self) -> ChatDocument | None:
         """Show evidence for last response"""
         if self.response is None:
             print("[magenta]No response yet")
-            return
+            return None
         source = self.response.metadata.source
         if len(source) > 0:
             print("[magenta]" + source)
         else:
             print("[magenta]No source found")
+        return None

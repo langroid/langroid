@@ -14,7 +14,9 @@ from langroid.embedding_models.models import OpenAIEmbeddingsConfig
 from langroid.mytypes import Document, EmbeddingFunction
 from langroid.utils.configuration import settings
 from langroid.utils.pydantic_utils import (
+    flatten_pydantic_instance,
     flatten_pydantic_model,
+    nested_dict_from_flat,
 )
 from langroid.vector_store.base import VectorStore, VectorStoreConfig
 
@@ -28,6 +30,7 @@ class LanceDBConfig(VectorStoreConfig):
     embedding: EmbeddingModelsConfig = OpenAIEmbeddingsConfig()
     distance: str = "cosine"
     document_class: Type[Document] = Document
+    flatten: bool = False  # flatten Document class into LanceSchema ?
 
 
 class LanceDB(VectorStore):
@@ -39,8 +42,13 @@ class LanceDB(VectorStore):
         self.embedding_dim = emb_model.embedding_dims
         self.host = config.host
         self.port = config.port
-        self.schema = self._create_lance_schema(self.config.document_class)
-        self.flat_schema = self._create_flat_lance_schema(self.config.document_class)
+        self.unflattened_schema = self._create_lance_schema(self.config.document_class)
+        self.schema = (
+            self._create_flat_lance_schema(self.config.document_class)
+            if self.config.flatten
+            else self.unflattened_schema
+        )
+
         load_dotenv()
         if self.config.cloud:
             logger.warning(
@@ -212,16 +220,22 @@ class LanceDB(VectorStore):
         # else we get an API error
         b = self.config.batch_size
 
-        def make_batches() -> Generator[List[Dict[str, Any]], None, None]:
+        def make_batches() -> Generator[List[BaseModel], None, None]:
             for i in range(0, len(ids), b):
-                yield [
-                    self.schema(  # type: ignore
+                batch = [
+                    self.unflattened_schema(
                         id=ids[i],
                         vector=embedding_vecs[i],
                         payload=doc,
                     )
                     for i, doc in enumerate(documents[i : i + b])
                 ]
+                if self.config.flatten:
+                    batch = [
+                        flatten_pydantic_instance(instance)  # type: ignore
+                        for instance in batch
+                    ]
+                yield batch
 
         tbl = self.client.open_table(self.config.collection_name)
         tbl.add(make_batches())
@@ -229,14 +243,23 @@ class LanceDB(VectorStore):
     def delete_collection(self, collection_name: str) -> None:
         self.client.drop_table(collection_name)
 
-    def get_all_documents(self) -> List[Document]:
+    def _records_to_docs(self, records: List[Dict[str, Any]]) -> List[Document]:
+        doc_cls = self.config.document_class
+        if self.config.flatten:
+            docs = [
+                doc_cls(**(nested_dict_from_flat(rec, sub_dict="payload")))
+                for rec in records
+            ]
+        else:
+            docs = [doc_cls(**rec["payload"]) for rec in records]
+        return docs
+
+    def get_all_documents(self, where: str = "") -> List[Document]:
         if self.config.collection_name is None:
             raise ValueError("No collection name set, cannot retrieve docs")
         tbl = self.client.open_table(self.config.collection_name)
-        records = tbl.search(None).to_arrow().to_pylist()
-        doc_cls = self.config.document_class
-        docs = [doc_cls(**rec["payload"]) for rec in records]
-        return docs
+        records = tbl.search(None).where(where or None).to_arrow().to_pylist()
+        return self._records_to_docs(records)
 
     def get_documents_by_ids(self, ids: List[str]) -> List[Document]:
         if self.config.collection_name is None:
@@ -247,9 +270,7 @@ class LanceDB(VectorStore):
             tbl.search().where(f"id == '{_id}'").to_arrow().to_pylist()[0]
             for _id in _ids
         ]
-        doc_cls = self.config.document_class
-        docs = [doc_cls(**rec["payload"]) for rec in records]
-        return docs
+        return self._records_to_docs(records)
 
     def similar_texts_with_scores(
         self,
@@ -270,7 +291,7 @@ class LanceDB(VectorStore):
 
         # note _distance is 1 - cosine
         scores = [1 - rec["_distance"] for rec in records]
-        docs = [self.config.document_class(**rec["payload"]) for rec in records]
+        docs = self._records_to_docs(records)
         if len(docs) == 0:
             logger.warning(f"No matches found for {text}")
             return []

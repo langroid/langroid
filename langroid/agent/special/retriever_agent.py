@@ -95,7 +95,7 @@ class RetrieverAgent(DocChatAgent, ABC):
         if not self.llm_can_respond(query):
             return None
         if query is None:
-            return super().llm_response(None)  # type: ignore
+            return super().llm_response(None)
         if isinstance(query, ChatDocument):
             query_str = query.content
         else:

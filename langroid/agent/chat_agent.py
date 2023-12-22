@@ -303,7 +303,7 @@ class ChatAgent(Agent):
         Useful when we want to replace a long user prompt, that may contain context
         documents plus a question, with just the question.
         Args:
-            message (str): user message
+            message (str): new message to replace with
             role (str): role of message to replace
         """
         if len(self.message_history) == 0:
