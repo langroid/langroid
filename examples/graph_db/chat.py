@@ -6,7 +6,7 @@ User specifies package name -> make inquiry to the KG
 This example relies on neo4j Database. The easiest way to get access to neo4j is by 
 creating a cloud account at `https://neo4j.com/cloud/platform/aura-graph-database/`
 
-Upon creating the account successfully, neo4j will creat a text file contains 
+Upon creating the account successfully, neo4j will create a text file contains 
 account settings, please provide the following information (uri, username, password),
 while creating the constructor `Neo4jConfig`.
 
