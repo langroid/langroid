@@ -4,6 +4,7 @@ from typing import TYPE_CHECKING, Any, Dict, List, Optional
 if TYPE_CHECKING:
     import neo4j
 
+from neo4j import Driver
 from pydantic import BaseSettings
 
 logger = logging.getLogger(__name__)
@@ -19,7 +20,7 @@ class Neo4jConfig(BaseSettings):
 class Neo4j:
     def __init__(self, config: Neo4jConfig):
         self.config = config
-        self.driver = None
+        self.driver: Optional[Driver] = None
         self._import_neo4j()
         self._initialize_connection()
 
