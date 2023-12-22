@@ -43,7 +43,7 @@ class CLIOptions(BaseSettings):
 
 
 def create_db(client, project, version) -> None:
-    #with "pypi" as system, "langroid" as name, "0.1.147" as version
+    # with "pypi" as system, "langroid" as name, "0.1.147" as version
     crawl_project = f"""
     with "pypi" as system, "{project}" as name, "{version}" as version
 
@@ -136,9 +136,9 @@ def chat(opts: CLIOptions) -> None:
     load_dotenv()
 
     neo4j_cfg = Neo4jConfig(
-        uri="neo4j+s://927d9aab.databases.neo4j.io",
+        uri="",
         username="neo4j",
-        password="N7UfdMmtjfWQhAAmf42q1FdBzXB5F2m-Nleey1pmv20",
+        password="",
         database="neo4j",
     )
 
@@ -160,7 +160,7 @@ def chat(opts: CLIOptions) -> None:
       https://deps.dev/pypi/{project_name} to find the version.
     """
     )
-    
+
     create_db(client, project_name, project_version)
 
     pkg_name = Prompt.ask(
@@ -189,7 +189,8 @@ def chat(opts: CLIOptions) -> None:
 
     # check if the user wants to delete the database
     if Prompt.ask("[blue] Do you want to delete the database? (y/n)") == "y":
-        remove_database(client, "neo4j")    
+        remove_database(client, "neo4j")
+
 
 @app.command()
 def main(
