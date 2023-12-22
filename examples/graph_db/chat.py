@@ -42,21 +42,22 @@ class CLIOptions(BaseSettings):
         env_prefix = ""
 
 
-def create_db(client) -> None:
-    cypher_script = """
-    with "pypi" as system, "langroid" as name, "0.1.147" as version
+def create_db(client, project, version) -> None:
+    #with "pypi" as system, "langroid" as name, "0.1.147" as version
+    crawl_project = f"""
+    with "pypi" as system, "{project}" as name, "{version}" as version
 
     call apoc.load.json("https://api.deps.dev/v3alpha/systems/"+system+"/packages/"
                         +name+"/versions/"+version+":dependencies")
     yield value as r
-    // create nodes
+    """
+    build_project_graph = """
     call { with r
             unwind r.nodes as package
             merge (p:Package:PyPi {name:package.versionKey.name}) on create set 
             p.version = package.versionKey.version
             return collect(p) as packages
     }
-    // create relationships by linking nodes
     call { with r, packages
         unwind r.edges as edge
         with packages[edge.fromNode] as from, packages[edge.toNode] as to, edge
@@ -87,7 +88,17 @@ def create_db(client) -> None:
     return size(packages) as numPackages, numRels
     """
 
-    client.execute_write_query(cypher_script)
+    check_db_exist = "MATCH (n) RETURN n LIMIT 1"
+    if client.run_query(check_db_exist):
+        return True
+    else:
+        construct_dependency_graph = crawl_project + build_project_graph
+        if client.execute_write_query(construct_dependency_graph):
+            print("[green]Database is created!")
+            return True
+        else:
+            print("[red]Database is not created!")
+            return False
 
 
 def inquiry(client, package_name: str):
@@ -103,10 +114,21 @@ def inquiry(client, package_name: str):
         return []
 
 
+def remove_database(client, db_name):
+    delete_query = """
+            MATCH (n)
+            DETACH DELETE n
+        """
+    if client.execute_write_query(delete_query):
+        print("[green]Database is deleted!")
+    else:
+        print("[red]Database is not deleted!")
+
+
 def chat(opts: CLIOptions) -> None:
     print(
         """
-        [blue]Welcome to Langroid Dependencies chatbot!
+        [blue]Welcome to Dependency Analysis chatbot!
         Enter x or q to quit at any point.
         """
     )
@@ -114,17 +136,37 @@ def chat(opts: CLIOptions) -> None:
     load_dotenv()
 
     neo4j_cfg = Neo4jConfig(
-        uri="",
-        username="",
-        password="",
+        uri="neo4j+s://927d9aab.databases.neo4j.io",
+        username="neo4j",
+        password="N7UfdMmtjfWQhAAmf42q1FdBzXB5F2m-Nleey1pmv20",
         database="neo4j",
     )
 
     client = Neo4j(config=neo4j_cfg)
-    create_db(client)
-    pkg_name = Prompt.ask(
+
+    project_name = Prompt.ask(
         """
-    [blue] Tell me the package name that you want to check...
+    [blue] Tell me the python library or project name that you want to check 
+    its dependencies...
+    If you are not sure, check this website: https://deps.dev/, and search for 
+    pypi projects.
+    """
+    )
+
+    project_version = Prompt.ask(
+        f"""
+    [blue] Tell me the version of {project_name}...
+    If this project {project_name} exists, check this website:
+      https://deps.dev/pypi/{project_name} to find the version.
+    """
+    )
+    
+    create_db(client, project_name, project_version)
+
+    pkg_name = Prompt.ask(
+        f"""
+    [blue] Tell me the package name that you want to check in the project
+      {project_name}...
     """
     )
     result = inquiry(client, pkg_name)
@@ -140,11 +182,14 @@ def chat(opts: CLIOptions) -> None:
     task = Task(
         agent,
         llm_delegate=False,
-        single_round=True,
+        single_round=False,
         system_message="Tell me about the following packages: " + inline_result,
     )
     task.run()
 
+    # check if the user wants to delete the database
+    if Prompt.ask("[blue] Do you want to delete the database? (y/n)") == "y":
+        remove_database(client, "neo4j")    
 
 @app.command()
 def main(
