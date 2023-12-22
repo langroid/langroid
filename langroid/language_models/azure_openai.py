@@ -91,6 +91,8 @@ class AzureGPT(OpenAIGPT):
         # when you deployed a model
         if "35-turbo" in self.config.model_name:
             self.config.chat_model = OpenAIChatModel.GPT3_5_TURBO
+        elif self.config.model_name == "gpt-4":
+            self.config.chat_model = OpenAIChatModel.GPT4_TURBO
         else:
             self.config.chat_model = OpenAIChatModel.GPT4
 
