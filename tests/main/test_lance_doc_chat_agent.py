@@ -1,3 +1,7 @@
+import gzip
+import json
+
+import pandas as pd
 import pytest
 from pydantic import Field
 
@@ -21,7 +25,6 @@ class MovieMetadata(DocMetaData):
     )
     genre: str = Field(..., description="The genre of the movie.")
     rating: float = Field(..., description="The rating of the movie.")
-    metadata: DocMetaData = DocMetaData()
 
 
 class MovieDoc(Document):
@@ -94,7 +97,7 @@ def test_lance_doc_chat_agent(test_settings: Settings, flatten: bool):
     )
     agent = LanceDocChatAgent(cfg)
     agent.ingest_docs(movie_docs, split=False)
-    task = LanceRAGTaskCreator.new(agent)
+    task = LanceRAGTaskCreator.new(agent, interactive=False)
 
     # question on filtered docs
     query = "Which Crime movie had a rating over 9?"
@@ -111,3 +114,155 @@ def test_lance_doc_chat_agent(test_settings: Settings, flatten: bool):
     query = "Which Science Fiction movie was directed by Winkowski?"
     result = task.run(query)
     assert "The Vector" in result.content
+
+
+# dummy pandas dataframe from text
+df = pd.DataFrame(
+    {
+        "content": [
+            "The Vector is a 1999 science fiction action film written "
+            "and directed by Jomes Winkowski.",
+            "Sparse Odyssey is a 1968 science fiction film produced "
+            "and directed by Stanley Hendrick.",
+            "The Godfeather is a 1972 American crime " "film directed by Frank Copula.",
+            "The Lamb Shank Redemption is a 1994 American drama "
+            "film directed by Garth Brook.",
+        ],
+        "year": [1999, 1968, 1972, 1994],
+        "director": [
+            "Jomes Winkowski",
+            "Stanley Hendrick",
+            "Frank Copula",
+            "Garth Brook",
+        ],
+        "genre": ["Science Fiction", "Science Fiction", "Crime", "Drama"],
+        "rating": [8.7, 8.9, 9.2, 9.3],
+    }
+)
+
+
+class FlatMovieDoc(Document):
+    content: str = Field(..., description="A short description of the movie.")
+    year: int = Field(..., description="The year the movie was released.")
+    director: str = Field(
+        ..., description="The Full Name of the director of the movie."
+    )
+    genre: str = Field(..., description="The genre of the movie.")
+    rating: float = Field(..., description="The rating of the movie.")
+    metadata: DocMetaData = DocMetaData()
+
+
+@pytest.mark.parametrize("flatten", [True, False])
+def test_lance_doc_chat_agent_df(test_settings: Settings, flatten: bool):
+    set_global(test_settings)
+
+    ldb_dir = ".lancedb/data/test-2"
+    rmdir(ldb_dir)
+    ldb_cfg = LanceDBConfig(
+        cloud=False,
+        collection_name="test-lance-2",
+        storage_path=ldb_dir,
+        embedding=embed_cfg,
+        document_class=FlatMovieDoc,
+        flatten=flatten,
+    )
+
+    cfg = DocChatAgentConfig(
+        vecdb=ldb_cfg,
+    )
+    agent = LanceDocChatAgent(cfg)
+
+    # convert df to list of dicts
+    doc_dicts = df.to_dict(orient="records")
+    # convert doc_dicts to list of FlatMovieDocs
+    docs = [FlatMovieDoc(**d) for d in doc_dicts]
+    agent.ingest_docs(docs, split=False)
+
+    task = LanceRAGTaskCreator.new(agent, interactive=True)
+
+    # question on filtered docs
+    query = "Which Crime movie had a rating over 9?"
+    result = task.run(query)
+    assert "Godfeather" in result.content
+
+    # question on filtered docs
+    query = "What was the Science Fiction movie directed by Stanley Hendrick?"
+    result = task.run(query)
+    assert "Sparse Odyssey" in result.content
+
+    # ask with only director first name, then initial filter may be wrong
+    # but the LLM should re-try with an approximate match.
+    query = "Which Science Fiction movie was directed by Winkowski?"
+    result = task.run(query)
+    assert "The Vector" in result.content
+
+
+def parse_gz(path):
+    g = gzip.open(path, "rb")
+    for x in g:
+        yield json.loads(x)
+
+
+def getDF_gz(path):
+    i = 0
+    df = {}
+    for d in parse_gz(path):
+        df[i] = d
+        i += 1
+    return pd.DataFrame.from_dict(df, orient="index")
+
+
+def parse(path):
+    with open(path, "r") as file:
+        for line in file:
+            try:
+                dct = json.loads(line)
+                if dct.get("style") is None:
+                    dct["style"] = {}
+                if dct.get("image") is None:
+                    dct["image"] = []
+                if isinstance(dct.get("vote", "0"), str):
+                    dct["vote"] = int(dct.get("vote", "0").replace(",", ""))
+                yield dct
+            except json.JSONDecodeError:
+                pass
+
+
+def getDF(path):
+    i = 0
+    df = {}
+    for d in parse(path):
+        df[i] = d
+        i += 1
+    return pd.DataFrame.from_dict(df, orient="index")
+
+
+def test_lance_doc_chat_df_direct(test_settings: Settings):
+    set_global(test_settings)
+
+    ldb_dir = ".lancedb/data/test-2"
+    rmdir(ldb_dir)
+    ldb_cfg = LanceDBConfig(
+        cloud=False,
+        collection_name="test-lance-2",
+        storage_path=ldb_dir,
+        embedding=embed_cfg,
+    )
+
+    cfg = DocChatAgentConfig(
+        vecdb=ldb_cfg,
+    )
+    agent = LanceDocChatAgent(cfg)
+
+    df = getDF("tests/main/data/amazon-reviews-appliances-100.txt")
+    df.drop(columns=["style", "image"], inplace=True)
+    agent.ingest_dataframe(df[:100], content="reviewText")
+    asin = "B0014CN8Y8"
+    task = LanceRAGTaskCreator.new(agent, interactive=False)
+    result = task.run(
+        f"""
+        Among the reviews with asin='{asin}' and overall rating over 4,
+        is there a mention of "dryer"?
+        """
+    )
+    assert result is not None

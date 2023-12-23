@@ -194,7 +194,7 @@ def test_vector_stores_access(vecdb):
 
 @pytest.mark.parametrize(
     "vecdb",
-    ["lancedb", "chroma", "qdrant_cloud", "qdrant_local"],
+    ["qdrant_cloud", "lancedb", "chroma", "qdrant_local"],
     indirect=True,
 )
 def test_vector_stores_context_window(vecdb):

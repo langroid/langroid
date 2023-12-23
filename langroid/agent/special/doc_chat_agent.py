@@ -17,6 +17,7 @@ from contextlib import ExitStack
 from typing import List, Optional, Tuple, no_type_check
 
 import numpy as np
+import pandas as pd
 from rich import print
 from rich.console import Console
 from rich.prompt import Prompt
@@ -49,6 +50,7 @@ from langroid.prompts.templates import SUMMARY_ANSWER_PROMPT_GPT4
 from langroid.utils.configuration import settings
 from langroid.utils.constants import NO_ANSWER
 from langroid.utils.output.printing import show_if_debug
+from langroid.utils.pydantic_utils import dataframe_to_documents
 from langroid.vector_store.base import VectorStoreConfig
 from langroid.vector_store.lancedb import LanceDBConfig
 
@@ -264,6 +266,23 @@ class DocChatAgent(ChatAgent):
         self.original_docs_length = self.doc_length(docs)
         self.setup_documents(docs, filter=self.config.filter)
         return len(docs)
+
+    def ingest_dataframe(
+        self,
+        df: pd.DataFrame,
+        content: str = "content",
+        metadata: List[str] = [],
+    ) -> int:
+        """
+        Ingest a dataframe into vecdb.
+        """
+        docs = dataframe_to_documents(df, content=content, metadata=metadata)
+        # When ingesting a dataframe we will no longer do any chunking,
+        # so we mark each doc as a chunk.
+        # TODO - revisit this since we may still want to chunk large text columns
+        for d in docs:
+            d.metadata.is_chunk = True
+        return self.ingest_docs(docs)
 
     def setup_documents(
         self,
@@ -535,10 +554,10 @@ class DocChatAgent(ChatAgent):
         # find similar docs using bm25 similarity:
         # these may sometimes be more likely to contain a relevant verbatim extract
         with console.status("[cyan]Searching for similar chunks using bm25..."):
-            if self.chunked_docs is None:
+            if self.chunked_docs is None or len(self.chunked_docs) == 0:
                 logger.warning("No chunked docs; cannot use bm25-similarity")
                 return []
-            if self.chunked_docs_clean is None:
+            if self.chunked_docs_clean is None or len(self.chunked_docs_clean) == 0:
                 logger.warning("No cleaned chunked docs; cannot use bm25-similarity")
                 return []
             docs_scores = find_closest_matches_with_bm25(
