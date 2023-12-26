@@ -1,6 +1,7 @@
 import os
 from typing import Callable, List
 
+import tiktoken
 from dotenv import load_dotenv
 from openai import OpenAI
 
@@ -15,11 +16,13 @@ class OpenAIEmbeddingsConfig(EmbeddingModelsConfig):
     api_key: str = ""
     organization: str = ""
     dims: int = 1536
+    context_length: int = 8192
 
 
 class SentenceTransformerEmbeddingsConfig(EmbeddingModelsConfig):
     model_type: str = "sentence-transformer"
     model_name: str = "BAAI/bge-large-en-v1.5"
+    context_length: int = 512
 
 
 class OpenAIEmbeddings(EmbeddingModel):
@@ -37,12 +40,26 @@ class OpenAIEmbeddings(EmbeddingModel):
                 """
             )
         self.client = OpenAI(api_key=self.config.api_key)
+        self.tokenizer = tiktoken.encoding_for_model(self.config.model_name)
+
+    def truncate_texts(self, texts: List[str]) -> List[List[int]]:
+        """
+        Truncate texts to the embedding model's context length.
+        TODO: Maybe we should show warning, and consider doing T5 summarization?
+        """
+        return [
+            self.tokenizer.encode(text, disallowed_special=())[
+                : self.config.context_length
+            ]
+            for text in texts
+        ]
 
     def embedding_fn(self) -> Callable[[List[str]], Embeddings]:
         @retry_with_exponential_backoff
         def fn(texts: List[str]) -> Embeddings:
+            tokenized_texts = self.truncate_texts(texts)
             result = self.client.embeddings.create(
-                input=texts, model=self.config.model_name
+                input=tokenized_texts, model=self.config.model_name
             )
             return [d.embedding for d in result.data]
 
@@ -61,6 +78,7 @@ class SentenceTransformerEmbeddings(EmbeddingModel):
         # this is an "extra" optional dependency, so we import it here
         try:
             from sentence_transformers import SentenceTransformer
+            from transformers import AutoTokenizer
         except ImportError:
             raise ImportError(
                 """
@@ -73,6 +91,8 @@ class SentenceTransformerEmbeddings(EmbeddingModel):
         super().__init__()
         self.config = config
         self.model = SentenceTransformer(self.config.model_name)
+        self.tokenizer = AutoTokenizer.from_pretrained(self.config.model_name)
+        self.config.context_length = self.tokenizer.model_max_length
 
     def embedding_fn(self) -> Callable[[List[str]], Embeddings]:
         def fn(texts: List[str]) -> Embeddings:
