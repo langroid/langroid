@@ -315,6 +315,7 @@ class LanceDB(VectorStore):
                 df,
                 content=content,
                 metadata=actual_metadata,
+                exclude=["vector"],
             )
             self.config.document_class = doc_cls  # type: ignore
             self._setup_schemas(doc_cls)  # type: ignore

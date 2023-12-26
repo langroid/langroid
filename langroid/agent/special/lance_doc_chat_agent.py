@@ -180,8 +180,9 @@ class LanceDocChatAgent(DocChatAgent):
         metadata: List[str] = [],
     ) -> int:
         n = df.shape[0]
-        self.vecdb.add_dataframe(df, content=content, metadata=metadata)
-        docs = dataframe_to_documents(df, content=content, metadata=metadata)
+        df, metadata = DocChatAgent.document_compatible_dataframe(df, content, metadata)
+        self.vecdb.add_dataframe(df, content="content", metadata=metadata)
+        docs = dataframe_to_documents(df, content="content", metadata=metadata)
         self.setup_documents(docs)
         return n  # type: ignore
 

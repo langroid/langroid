@@ -310,7 +310,10 @@ def dataframe_to_pydantic_objects(df: pd.DataFrame) -> List[BaseModel]:
 
 
 def dataframe_to_document_model(
-    df: pd.DataFrame, content: str = "content", metadata: List[str] = []
+    df: pd.DataFrame,
+    content: str = "content",
+    metadata: List[str] = [],
+    exclude: List[str] = [],
 ) -> Type[BaseModel]:
     """
     Make a subclass of Document from a dataframe.
@@ -321,11 +324,15 @@ def dataframe_to_document_model(
             which will map to the Document.content field.
         metadata (List[str]): A list of column names containing metadata;
             these will be included in the Document.metadata field.
+        exclude (List[str]): A list of column names to exclude from the model.
+            (e.g. "vector" when lance is used to add an embedding vector to the df)
 
     Returns:
         Type[BaseModel]: A pydantic model subclassing Document.
     """
 
+    # Remove excluded columns
+    df = df.drop(columns=exclude, inplace=False)
     # Check if metadata_cols is empty
 
     if metadata:
@@ -374,10 +381,7 @@ def dataframe_to_document_model(
             col: row[col] for col in additional_fields if col in row and col != content
         }
         metadata = DynamicMetaData(**metadata_values)
-        try:
-            return cls(content=content_val, metadata=metadata, **additional_values)
-        except ValidationError:
-            return None
+        return cls(content=content_val, metadata=metadata, **additional_values)
 
     # Bind the method to the class
     DynamicDocument.from_df_row = classmethod(from_df_row)

@@ -12,6 +12,7 @@ from langroid.agent.special.lance_doc_chat_agent import (
 )
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
 from langroid.mytypes import DocMetaData, Document
+from langroid.parsing.repo_loader import RepoLoader
 from langroid.utils.configuration import Settings, set_global
 from langroid.utils.system import rmdir
 from langroid.vector_store.lancedb import LanceDBConfig
@@ -258,11 +259,11 @@ def getDF(path):
 def test_lance_doc_chat_df_direct(test_settings: Settings):
     set_global(test_settings)
 
-    ldb_dir = ".lancedb/data/test-2"
+    ldb_dir = ".lancedb/data/gh-issues"
     rmdir(ldb_dir)
     ldb_cfg = LanceDBConfig(
         cloud=False,
-        collection_name="test-lance-2",
+        collection_name="test-lance-gh-issues",
         storage_path=ldb_dir,
         embedding=embed_cfg,
     )
@@ -272,15 +273,18 @@ def test_lance_doc_chat_df_direct(test_settings: Settings):
     )
     agent = LanceDocChatAgent(cfg)
 
-    df = getDF("tests/main/data/amazon-reviews-appliances-100.txt")
-    df.drop(columns=["style", "image"], inplace=True)
-    agent.ingest_dataframe(df[:100], content="reviewText")
-    asin = "B0014CN8Y8"
+    # load github issues from a repo
+    repo_loader = RepoLoader("jmorganca/ollama")
+    issues = repo_loader.get_issues(k=100)
+    issue_dicts = [iss.dict() for iss in issues]
+    df = pd.DataFrame(issue_dicts)
+    # metadata is all columns except "text"
+    metadata_cols = [c for c in df.columns if c != "text"]
+    agent.ingest_dataframe(df, content="text", metadata=metadata_cols)
     task = LanceRAGTaskCreator.new(agent, interactive=False)
     result = task.run(
-        f"""
-        Among the reviews with asin='{asin}' and overall rating over 4,
-        is there a mention of "dryer"?
+        """
+        Tell me about some open issues related to JSON
         """
     )
-    assert result is not None
+    assert result is not None and "JSON" in result.content

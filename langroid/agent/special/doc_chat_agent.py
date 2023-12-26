@@ -267,6 +267,42 @@ class DocChatAgent(ChatAgent):
         self.setup_documents(docs, filter=self.config.filter)
         return len(docs)
 
+    @staticmethod
+    def document_compatible_dataframe(
+        df: pd.DataFrame,
+        content: str = "content",
+        metadata: List[str] = [],
+    ) -> Tuple[pd.DataFrame, List[str]]:
+        """
+        Convert dataframe so it is compatible with Document class:
+        - has "content" column
+        - has an "id" column to be used as Document.metadata.id
+
+        Args:
+            df: dataframe to convert
+            content: name of content column
+            metadata: list of metadata column names
+
+        Returns:
+            Tuple[pd.DataFrame, List[str]]: dataframe, metadata
+                - dataframe: dataframe with "content" column and "id" column
+                - metadata: list of metadata column names, including "id"
+        """
+        if content != "content":
+            # rename content column to "content", leave existing column intact
+            df = df.rename(columns={content: "content"}, inplace=False)
+
+        actual_metadata = metadata.copy()
+        if "id" not in df.columns:
+            docs = dataframe_to_documents(df, content="content", metadata=metadata)
+            ids = [str(d.id()) for d in docs]
+            df["id"] = ids
+
+        if "id" not in actual_metadata:
+            actual_metadata += ["id"]
+
+        return df, actual_metadata
+
     def ingest_dataframe(
         self,
         df: pd.DataFrame,
@@ -276,7 +312,8 @@ class DocChatAgent(ChatAgent):
         """
         Ingest a dataframe into vecdb.
         """
-        docs = dataframe_to_documents(df, content=content, metadata=metadata)
+        df, metadata = DocChatAgent.document_compatible_dataframe(df, content, metadata)
+        docs = dataframe_to_documents(df, content="content", metadata=metadata)
         # When ingesting a dataframe we will no longer do any chunking,
         # so we mark each doc as a chunk.
         # TODO - revisit this since we may still want to chunk large text columns
