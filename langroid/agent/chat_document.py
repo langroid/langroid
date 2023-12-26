@@ -103,6 +103,8 @@ class ChatDocument(Document):
         content = self.content
         sender_entity = self.metadata.sender
         sender_name = self.metadata.sender_name
+        if tool_type == "FUNC":
+            content += str(self.function_call)
         return ChatDocLoggerFields(
             sender_entity=sender_entity,
             sender_name=sender_name,

@@ -63,11 +63,8 @@ def chat() -> None:
 
     print("[cyan]Enter x or q to quit")
 
-    task = Task(
-        agent,
-        llm_delegate=False,
-        single_round=False,
-    )
+    task = Task(agent)
+
     task.run("Please help me with questions about the document I provided")
 
 

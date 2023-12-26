@@ -63,9 +63,6 @@ async def test_task_step_async(test_settings: Settings):
     task = Task(
         agent,
         name="Test",
-        llm_delegate=False,
-        single_round=False,
-        only_user_quits_root=False,
     )
     msg = "What is the capital of France?"
     task.init(msg)
@@ -107,10 +104,7 @@ async def test_task_step_async(test_settings: Settings):
         name="Test",
         system_message=f""" Your job is to always say "{NO_ANSWER}" """,
         user_message=question,
-        llm_delegate=False,
-        single_round=False,
         restart=True,
-        only_user_quits_root=False,
     )
     # LLM responds with NO_ANSWER
     task.init()
@@ -127,8 +121,6 @@ async def test_task(test_settings: Settings):
     task = Task(
         agent,
         name="Test",
-        llm_delegate=False,
-        single_round=False,
     )
     question = "What is the capital of France?"
     agent.default_human_response = question
@@ -189,8 +181,8 @@ async def test_task_concurrent(test_settings: Settings):
         task = Task(
             agent,
             name="Test",
-            llm_delegate=False,
-            single_round=True,
+            interactive=False,
+            done_if_response=[Entity.LLM],
             default_human_response="",
         )
         return await task.run_async(msg=msg)

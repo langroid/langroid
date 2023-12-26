@@ -15,7 +15,7 @@ from langroid.agent.chat_document import (
 )
 from langroid.mytypes import Entity
 from langroid.utils.configuration import settings
-from langroid.utils.constants import DONE, NO_ANSWER, USER_QUIT
+from langroid.utils.constants import DONE, NO_ANSWER, PASS, USER_QUIT
 from langroid.utils.logging import RichFileLogger, setup_file_logger
 
 logger = logging.getLogger(__name__)
@@ -68,6 +68,8 @@ class Task:
         erase_substeps: bool = False,
         allow_null_result: bool = True,
         max_stalled_steps: int = 3,
+        done_if_no_response: List[Responder] = [],
+        done_if_response: List[Responder] = [],
     ):
         """
         A task to be performed by an agent.
@@ -103,6 +105,10 @@ class Task:
                 Optional, default is True.
             max_stalled_steps (int): task considered done after this many consecutive
                 steps with no progress. Default is 3.
+            done_if_no_response (List[Responder]): consider task done if NULL
+                response from any of these responders. Default is empty list.
+            done_if_response (List[Responder]): consider task done if NON-NULL
+                response from any of these responders. Default is empty list.
         """
         if agent is None:
             agent = ChatAgent()
@@ -125,13 +131,17 @@ class Task:
         self.step_progress = False  # progress in current step?
         self.n_stalled_steps = 0  # how many consecutive steps with no progress?
         self.max_stalled_steps = max_stalled_steps
+        self.done_if_response = [str(r) for r in done_if_response]
+        self.done_if_no_response = [str(r) for r in done_if_no_response]
+        self.is_done = False  # is task done (based on response)?
+        self.is_pass_thru = False  # is current response a pass-thru?
         self.task_progress = False  # progress in current task (since run or run_async)?
         self.name = name or agent.config.name
         self.default_human_response = default_human_response
         self.interactive = interactive
         self.message_history_idx = -1
         if not interactive:
-            default_human_response = ""
+            default_human_response = default_human_response or ""
             only_user_quits_root = False
         if default_human_response is not None:
             self.agent.default_human_response = default_human_response
@@ -474,8 +484,10 @@ class Task:
     def step(self, turns: int = -1) -> ChatDocument | None:
         """
         Synchronous version of `step_async()`. See `step_async()` for details.
+        TODO: Except for the self.response() calls, this fn should be identical to
+        `step_async()`. Consider refactoring to avoid duplication.
         """
-        result = None
+        self.is_done = False
         self.step_progress = False
         parent = self.pending_message
         recipient = (
@@ -492,7 +504,7 @@ class Task:
                     sender_name=Entity.AGENT,
                 ),
             )
-            self._process_responder_result(Entity.AGENT, parent, error_doc)
+            self._process_valid_responder_result(Entity.AGENT, parent, error_doc)
             return error_doc
 
         responders: List[Responder] = self.non_human_responders.copy()
@@ -501,7 +513,9 @@ class Task:
             # ensures human gets chance at each turn.
             responders.insert(0, Entity.USER)
 
+        found_response = False
         for r in responders:
+            self.is_pass_thru = False
             if not self._can_respond(r):
                 # create dummy msg for logging
                 log_doc = ChatDocument(
@@ -517,10 +531,19 @@ class Task:
                 continue
             self.human_tried = r == Entity.USER
             result = self.response(r, turns)
-            is_break = self._process_responder_result(r, parent, result)
-            if is_break:
+            self.is_done = self._is_done_response(result, r)
+            self.is_pass_thru = PASS in result.content if result else False
+            if self.valid(result, r):
+                found_response = True
+                assert result is not None
+                self._process_valid_responder_result(r, parent, result)
                 break
-        if not self.valid(result):
+            else:
+                self.log_message(r, result)
+            if self.is_done:
+                # skip trying other responders in this step
+                break
+        if not found_response:
             self._process_invalid_step_result(parent)
         self._show_pending_message_if_debug()
         return self.pending_message
@@ -546,7 +569,7 @@ class Task:
                 other use-cases, e.g. where we want to run a task step by step in a
                 different context.
         """
-        result = None
+        self.is_done = False
         self.step_progress = False
         parent = self.pending_message
         recipient = (
@@ -563,7 +586,7 @@ class Task:
                     sender_name=Entity.AGENT,
                 ),
             )
-            self._process_responder_result(Entity.AGENT, parent, error_doc)
+            self._process_valid_responder_result(Entity.AGENT, parent, error_doc)
             return error_doc
 
         responders: List[Responder] = self.non_human_responders_async.copy()
@@ -572,6 +595,7 @@ class Task:
             # ensures human gets chance at each turn.
             responders.insert(0, Entity.USER)
 
+        found_response = False
         for r in responders:
             if not self._can_respond(r):
                 # create dummy msg for logging
@@ -588,66 +612,84 @@ class Task:
                 continue
             self.human_tried = r == Entity.USER
             result = await self.response_async(r, turns)
-            is_break = self._process_responder_result(r, parent, result)
-            if is_break:
+            self.is_done = self._is_done_response(result, r)
+            self.is_pass_thru = PASS in result.content if result else False
+            if self.valid(result, r):
+                found_response = True
+                assert result is not None
+                self._process_valid_responder_result(r, parent, result)
                 break
-        if not self.valid(result):
+            else:
+                self.log_message(r, result)
+            if self.is_done:
+                # skip trying other responders in this step
+                break
+        if not found_response:
             self._process_invalid_step_result(parent)
         self._show_pending_message_if_debug()
         return self.pending_message
 
-    def _process_responder_result(
+    def _process_valid_responder_result(
         self,
         r: Responder,
         parent: ChatDocument | None,
-        result: ChatDocument | None,
-    ) -> bool:
-        """Processes result and returns whether to break out
-        of the loop in `step` or `step_async`."""
+        result: ChatDocument,
+    ) -> None:
+        """Processes valid result from a responder, during a step"""
 
-        if self.valid(result):
-            assert result is not None
+        # pending_sender is of type Responder,
+        # i.e. it is either one of the agent's entities
+        # OR a sub-task, that has produced a valid response.
+        # Contrast this with self.pending_message.metadata.sender, which is an ENTITY
+        # of this agent, or a sub-task's agent.
+        if not self.is_pass_thru:
             self.pending_sender = r
-            if result.metadata.parent_responder is not None and not isinstance(
-                r, Entity
-            ):
-                # This code is only used by the now-deprecated RecipientValidatorAgent.
-                # (which has been deprecated in favor of using the RecipientTool).
-                # When result is from a sub-task, and `result.metadata` contains
-                # a non-null `parent_responder`, pretend this result was
-                # from the parent_responder, by setting `self.pending_sender`.
-                self.pending_sender = result.metadata.parent_responder
-                # Since we've just used the "pretend responder",
-                # clear out the pretend responder in metadata
-                # (so that it doesn't get used again)
-                result.metadata.parent_responder = None
-            result.metadata.parent = parent
-            old_attachment = (
-                self.pending_message.attachment if self.pending_message else None
-            )
+        if result.metadata.parent_responder is not None and not isinstance(r, Entity):
+            # This code is only used by the now-deprecated RecipientValidatorAgent.
+            # (which has been deprecated in favor of using the RecipientTool).
+            # When result is from a sub-task, and `result.metadata` contains
+            # a non-null `parent_responder`, pretend this result was
+            # from the parent_responder, by setting `self.pending_sender`.
+            self.pending_sender = result.metadata.parent_responder
+            # Since we've just used the "pretend responder",
+            # clear out the pretend responder in metadata
+            # (so that it doesn't get used again)
+            result.metadata.parent_responder = None
+        result.metadata.parent = parent
+        old_attachment = (
+            self.pending_message.attachment if self.pending_message else None
+        )
+        if not self.is_pass_thru:
             self.pending_message = result
-            # if result has no attachment, preserve the old attachment
-            if result.attachment is None:
-                self.pending_message.attachment = old_attachment
-            self.log_message(self.pending_sender, result, mark=True)
-            self.step_progress = True
-            self.task_progress = True
-            self.n_stalled_steps = 0  # reset stuck counter since we made progress
-            return True
+        # if result has no attachment, preserve the old attachment
+        # (attachment-related code is specific to the
+        # depcreated RecipientValidatorAgent and can be ignored if you are
+        # not using that agent)
+        if (
+            result is not None
+            and result.attachment is None
+            and self.pending_message is not None
+        ):
+            self.pending_message.attachment = old_attachment
+        self.log_message(self.pending_sender, result, mark=True)
+        self.step_progress = True
+        self.task_progress = True
+        if self.is_pass_thru:
+            self.n_stalled_steps += 1
         else:
-            self.log_message(r, result)
-            return False
+            # reset stuck counter since we made progress
+            self.n_stalled_steps = 0
 
     def _process_invalid_step_result(self, parent: ChatDocument | None) -> None:
         """
-        Since step had no valid result, decide whether to update the
+        Since step had no valid result from any responder, decide whether to update the
         self.pending_message to a NO_ANSWER message from the opposite entity,
         or leave it as is.
         Args:
             parent (ChatDocument|None): parent message of the current message
         """
         self.n_stalled_steps += 1
-        if not self.task_progress or self.allow_null_result:
+        if (not self.task_progress or self.allow_null_result) and not self.is_pass_thru:
             # There has been no progress at all in this task, so we
             # update the pending_message to a dummy NO_ANSWER msg
             # from the entity 'opposite' to the current pending_sender,
@@ -762,17 +804,65 @@ class Task:
             ),
         )
 
-    def done(self) -> bool:
+    def _is_empty_message(self, msg: str | ChatDocument | None) -> bool:
+        """
+        Check if msg is empty or None
+        Args:
+            msg (str|ChatDocument|None): message to check
+        Returns:
+            bool: True if msg is (equivalent to) empty or None, False otherwise
+        """
+        return (
+            msg is None
+            or (isinstance(msg, str) and msg.strip() in [PASS, ""])
+            or (
+                isinstance(msg, ChatDocument)
+                and msg.content.strip() in [PASS, ""]
+                and msg.function_call is None
+            )
+        )
+
+    def _is_done_response(
+        self, result: str | None | ChatDocument, responder: Responder
+    ) -> bool:
+        """Is the task done based on the response from the given responder?"""
+
+        response_says_done = result is not None and (
+            (isinstance(result, str) and DONE in result)
+            or (isinstance(result, ChatDocument) and DONE in result.content)
+        )
+        return (
+            (
+                str(responder) in self.done_if_response
+                and not self._is_empty_message(result)
+            )
+            or (
+                str(responder) in self.done_if_no_response
+                and self._is_empty_message(result)
+            )
+            or (not self._is_empty_message(result) and response_says_done)
+        )
+
+    def done(
+        self, result: ChatDocument | None = None, r: Responder | None = None
+    ) -> bool:
         """
         Check if task is done. This is the default behavior.
         Derived classes can override this.
+        Args:
+            result (ChatDocument|None): result from a responder
+            r (Responder|None): responder that produced the result
         Returns:
             bool: True if task is done, False otherwise
         """
+        result = result or self.pending_message
+        r = r or self.pending_sender
+        if self.is_done:
+            return True
         user_quit = (
-            self.pending_message is not None
-            and self.pending_message.content in USER_QUIT
-            and self.pending_message.metadata.sender == Entity.USER
+            result is not None
+            and result.content in USER_QUIT
+            and result.metadata.sender == Entity.USER
         )
         if self._level == 0 and self.only_user_quits_root:
             # for top-level task, only user can quit out
@@ -784,47 +874,56 @@ class Task:
                 f"Task {self.name} stuck for {self.max_stalled_steps} steps; exiting."
             )
             return True
-        if (
-            not self.step_progress
-            and self.pending_sender == Entity.LLM
-            and (not self.llm_delegate or not self._can_respond(Entity.LLM))
-        ):
-            # no progress in latest step, and pending msg is from LLM, and
-            # EITHER LLM is not driving the task,
-            # OR LLM IS driving the task, but CANNOT respond
-            #   (e.g. b/c the pending message is a function call)
-            return True
+        # if (
+        #     not self.step_progress
+        #     and r == Entity.LLM
+        #     and (not self.llm_delegate or not self._can_respond(Entity.LLM))
+        # ):
+        #     # no progress in latest step, and pending msg is from LLM, and
+        #     # EITHER LLM is not driving the task,
+        #     # OR LLM IS driving the task, but CANNOT respond
+        #     #   (e.g. b/c the pending message is a function call)
+        #     return True
 
         return (
             # no valid response from any entity/agent in current turn
-            self.pending_message is None
-            # LLM decided task is done
-            or DONE in self.pending_message.content
+            result is None
+            # An entity decided task is done
+            or DONE in result.content
             or (  # current task is addressing message to caller task
                 self.caller is not None
                 and self.caller.name != ""
-                and self.pending_message.metadata.recipient == self.caller.name
+                and result.metadata.recipient == self.caller.name
             )
             or (
                 # Task controller is "stuck", has nothing to say
-                NO_ANSWER in self.pending_message.content
-                and self.pending_message.metadata.sender == self.controller
+                NO_ANSWER in result.content
+                and result.metadata.sender == self.controller
             )
             or user_quit
         )
 
-    def valid(self, result: Optional[ChatDocument]) -> bool:
+    def valid(
+        self,
+        result: Optional[ChatDocument],
+        r: Responder,
+    ) -> bool:
         """
-        Is the result from an entity or sub-task such that we can stop searching
-        for responses for this turn?
+        Is the result from a Responder (i.e. an entity or sub-task)
+        such that we can stop searching for responses in this step?
         """
         # TODO caution we should ensure that no handler method (tool) returns simply
         # an empty string (e.g when showing contents of an empty file), since that
         # would be considered an invalid response, and other responders will wrongly
         # be given a chance to respond.
+
+        # if task would be considered done given responder r's `result`,
+        # then consider the result valid.
+        if result is not None and self.done(result, r):
+            return True
         return (
             result is not None
-            and (result.content != "" or result.function_call is not None)
+            and (not self._is_empty_message(result) or result.function_call is not None)
             and (  # if NO_ANSWER is from controller, then it means
                 # controller is stuck and we are done with task loop
                 NO_ANSWER not in result.content
@@ -906,28 +1005,29 @@ class Task:
         """
         Is the recipient explicitly specified and does not match responder "e" ?
         """
-        if self.pending_message is None:
-            return False
-        recipient = self.pending_message.metadata.recipient
-        if recipient == "":
-            return False
-        # LLM-specified recipient could be an entity such as USER or AGENT,
-        # or the name of another task.
-        return recipient not in (e.name, self.name)
+        # Note that recipient could be specified as an Entity or a Task name
+        return (
+            self.pending_message is not None
+            and (recipient := self.pending_message.metadata.recipient) != ""
+            and recipient not in (e.name, self.name)
+        )
 
     def _can_respond(self, e: Responder) -> bool:
         if self.pending_sender == e:
+            # Responder cannot respond to its own message
             return False
         if self.pending_message is None:
             return True
         if self.pending_message.metadata.block == e:
-            # the entity should only be blocked at the first try;
-            # Remove the block so it does not block the entity forever
+            # This code is only used in the deprecated RecipientValidatorAgent.
+            # The entity should only be blocked at the first try;
+            # Remove the block so it does not block the entity forever.
             self.pending_message.metadata.block = None
             return False
         if self._recipient_mismatch(e):
+            # Cannot respond if not addressed to this entity
             return False
-        return self.pending_message is None or self.pending_message.metadata.block != e
+        return self.pending_message.metadata.block != e
 
     def set_color_log(self, enable: bool = True) -> None:
         """

@@ -664,7 +664,16 @@ class OpenAIAssistant(ChatAgent):
             )
             # Gather citations based on annotation attributes
             if file_citation := getattr(annotation, "file_citation", None):
-                cited_file = self.client.files.retrieve(file_citation.file_id)
+                try:
+                    cited_file = self.client.files.retrieve(file_citation.file_id)
+                except Exception:
+                    logger.warning(
+                        f"""
+                        Could not retrieve cited file with id {file_citation.file_id}, 
+                        ignoring. 
+                        """
+                    )
+                    continue
                 citations.append(
                     f"[{index}] '{file_citation.quote}',-- from {cited_file.filename}"
                 )

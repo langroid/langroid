@@ -158,11 +158,7 @@ def chat(opts: CLIOptions) -> None:
 
     agent.vecdb.set_collection(collection_name, replace=replace)
 
-    task = Task(
-        agent,
-        llm_delegate=False,
-        single_round=False,
-    )
+    task = Task(agent)
     task.run()
 
 
