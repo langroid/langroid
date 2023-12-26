@@ -149,7 +149,7 @@ def chat(opts: CLIOptions) -> None:
     lease_task = Task(
         lease_extractor_agent,
         name="LeaseExtractorAgent",
-        interactive=False, # set to True to slow it down (hit enter to progress)
+        interactive=False,  # set to True to slow it down (hit enter to progress)
         system_message=f"""
         You have to collect some information about a Commercial Lease, but you do not 
         have access to the lease itself. 

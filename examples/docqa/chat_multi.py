@@ -52,8 +52,8 @@ def chat(config: DocChatAgentConfig) -> None:
     doc_task = Task(
         doc_agent,
         name="DocAgent",
-        done_if_no_response=[Entity.LLM], # done if null response from LLM
-        done_if_response=[Entity.LLM], # done if non-null response from LLM
+        done_if_no_response=[Entity.LLM],  # done if null response from LLM
+        done_if_response=[Entity.LLM],  # done if non-null response from LLM
         system_message="""You will receive various questions about some documents, and
         your job is to answer them concisely in at most 2 sentences, citing sources.
         """,

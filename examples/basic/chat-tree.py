@@ -39,7 +39,7 @@ from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
 from langroid.utils.globals import GlobalState
 from langroid.utils.configuration import set_global, Settings
 from langroid.utils.logging import setup_colored_logging
-from langroid.utils.constants import NO_ANSWER, PASS, DONE
+from langroid.utils.constants import DONE
 
 app = typer.Typer()
 
