@@ -11,7 +11,8 @@ from langroid.agent.task import Task
 from langroid.agent.tool_message import ToolMessage
 from langroid.agent.tools.recipient_tool import RecipientTool
 from langroid.language_models import OpenAIChatModel, OpenAIGPTConfig
-from langroid.utils.configuration import Settings, set_global
+from langroid.mytypes import Entity
+from langroid.utils.configuration import Settings, set_global, settings
 from langroid.utils.constants import NO_ANSWER
 
 
@@ -49,7 +50,7 @@ def test_openai_assistant(test_settings: Settings):
         agent,
         name="Bot",
         system_message="You are a helpful assistant",
-        single_round=True,
+        done_if_response=[Entity.LLM],
     )
     answer = task.run("What is the capital of China?")
     assert "Beijing" in answer.content
@@ -179,8 +180,8 @@ def test_openai_assistant_fn_2_level(test_settings: Settings, fn_api: bool):
     nabrosky_agent = OpenAIAssistant(nabrosky_cfg)
     nabrosky_agent.enable_message(NabroskyTool)
 
-    main_task = Task(agent, interactive=False, llm_delegate=True)
-    nabrosky_task = Task(nabrosky_agent, interactive=False, llm_delegate=True)
+    main_task = Task(agent, interactive=False)
+    nabrosky_task = Task(nabrosky_agent, interactive=False)
     main_task.add_sub_task(nabrosky_task)
     result = main_task.run("what is the Nabrosky transform of 5?", turns=6)
     if fn_api and result.content not in ("", NO_ANSWER):
@@ -215,7 +216,11 @@ def test_openai_assistant_recipient_tool(test_settings: Settings, fn_api: bool):
         """,
     )
     doubler_agent = OpenAIAssistant(doubler_confg)
-    doubler_task = Task(doubler_agent, interactive=False, single_round=True)
+    doubler_task = Task(
+        doubler_agent,
+        interactive=False,
+        done_if_response=[Entity.LLM],
+    )
 
     main_task = Task(agent, interactive=False)
     main_task.add_sub_task(doubler_task)
@@ -230,6 +235,9 @@ def test_openai_assistant_retrieval(test_settings: Settings):
     based on retrieval from file.
     """
     set_global(test_settings)
+    # in tests/main/conftest.py we enforce gpt-4, overriding the default gpt4-turbo,
+    # but in case of OpenAIAssistant when using retrieval, we must use gpt4-turbo
+    settings.chat_model = OpenAIChatModel.GPT4_TURBO
     cfg = OpenAIAssistantConfig(
         llm=OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT4_TURBO),
         system_message="Answer questions based on the provided document.",
@@ -330,7 +338,7 @@ def test_openai_assistant_multi(test_settings: Settings):
     student_task = Task(
         student_agent,
         interactive=False,
-        single_round=True,
+        done_if_response=[Entity.LLM],
         system_message="When you get a number, say EVEN if it is even, else say ODD",
     )
     task.add_sub_task(student_task)

@@ -38,14 +38,11 @@ def test_inter_agent_chat(test_settings: Settings, helper_human_response: str):
     agent = ChatAgent(cfg1)
     task = Task(
         agent,
-        llm_delegate=True,
-        single_round=False,
         interactive=False,
     )
     agent_helper = ChatAgent(cfg2)
     task_helper = Task(
         agent_helper,
-        llm_delegate=False,
         single_round=True,
         default_human_response=helper_human_response,
     )
@@ -113,8 +110,6 @@ def test_multi_agent(test_settings: Settings):
     master = _MasterAgent(master_cfg)
     task_master = Task(
         master,
-        llm_delegate=True,
-        single_round=False,
         interactive=False,
         system_message=f"""
                 Your job is to ask me EXACTLY this series of exponential questions:
@@ -135,9 +130,7 @@ def test_multi_agent(test_settings: Settings):
     planner = _PlannerAgent(planner_cfg)
     task_planner = Task(
         planner,
-        llm_delegate=True,
-        single_round=False,
-        default_human_response="",
+        interactive=False,
         system_message="""
                 You understand exponentials, but you do not know how to multiply.
                 You will be given an exponential to compute, and you have to ask a 
@@ -153,9 +146,8 @@ def test_multi_agent(test_settings: Settings):
     multiplier = _MultiplierAgent(multiplier_cfg)
     task_multiplier = Task(
         multiplier,
-        llm_delegate=False,
-        single_round=True,
-        default_human_response="",
+        interactive=False,
+        done_if_response=[Entity.LLM],
         system_message="""
                 You are a calculator. You will be given a multiplication problem. 
                 You simply reply with the answer, say nothing else.
@@ -196,7 +188,7 @@ def test_multi_agent_directed(test_settings: Settings):
 
     task_a = Task(
         agent_a,
-        default_human_response="",
+        interactive=False,
         system_message="""
         You are talking to two people B and C, and 
         your job is to pick B or C and ask that person 'Who are you?'.
@@ -219,8 +211,8 @@ def test_multi_agent_directed(test_settings: Settings):
     task_c = Task(
         agent_c,
         system_message=f"your job is to always say '{C_RESPONSE}'",
-        default_human_response="",
-        single_round=True,
+        interactive=False,
+        done_if_response=[Entity.LLM],
     )
 
     task_a.add_sub_task([task_b, task_c])
@@ -258,7 +250,7 @@ def test_multi_agent_no_answer(test_settings: Settings):
 
     task_a = Task(
         agent_a,
-        default_human_response="",
+        interactive=False,
         system_message="""
         You are talking to two people B and C, and 
         your job is to pick B or C and ask that person 'Who are you?'.
@@ -272,15 +264,15 @@ def test_multi_agent_no_answer(test_settings: Settings):
     task_b = Task(
         agent_b,
         system_message=f"your job is to always say '{NO_ANSWER}'",
-        default_human_response="",
-        single_round=True,
+        interactive=False,
+        done_if_response=[Entity.LLM],
     )
 
     task_c = Task(
         agent_c,
         system_message=f"your job is to always say '{NO_ANSWER}'",
-        default_human_response="",
-        single_round=True,
+        interactive=False,
+        done_if_response=[Entity.LLM],
     )
 
     task_a.add_sub_task([task_b, task_c])

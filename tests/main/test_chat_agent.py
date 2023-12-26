@@ -63,9 +63,6 @@ def test_process_messages(test_settings: Settings):
     task = Task(
         agent,
         name="Test",
-        llm_delegate=False,
-        single_round=False,
-        only_user_quits_root=False,
     )
     msg = "What is the capital of France?"
     task.init(msg)
@@ -107,10 +104,7 @@ def test_process_messages(test_settings: Settings):
         name="Test",
         system_message=f""" Your job is to always say "{NO_ANSWER}" """,
         user_message=question,
-        llm_delegate=False,
-        single_round=False,
         restart=True,
-        only_user_quits_root=False,
     )
     # LLM responds with NO_ANSWER
     task.init()
@@ -123,7 +117,7 @@ def test_task(test_settings: Settings):
     set_global(test_settings)
     cfg = _TestChatAgentConfig()
     agent = ChatAgent(cfg)
-    task = Task(agent, name="Test", llm_delegate=False, single_round=False)
+    task = Task(agent, name="Test")
     question = "What is the capital of France?"
     agent.default_human_response = question
 
@@ -159,7 +153,7 @@ def test_simple_task(test_settings: Settings):
     task = Task(
         agent,
         interactive=False,
-        single_round=True,
+        done_if_response=[Entity.LLM],
         system_message="""
         User will give you a number, respond with the square of the number.
         """,
@@ -174,7 +168,7 @@ def test_simple_task(test_settings: Settings):
     task = Task(
         agent,
         interactive=False,
-        single_round=True,
+        done_if_response=[Entity.LLM],
         restart=True,
         system_message="""
         User will give you a number, respond with the square of the number.

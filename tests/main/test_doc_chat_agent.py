@@ -235,7 +235,8 @@ def test_doc_chat_followup(test_settings: Settings, agent, conv_mode: bool):
         agent,
         default_human_response="",
         restart=True,
-        single_round=True,
+        done_if_response=[Entity.LLM],
+        done_if_no_response=[Entity.LLM],
     )
     result = task.run("Who was Charlie Chaplin?")
     assert "comedian" in result.content.lower()
