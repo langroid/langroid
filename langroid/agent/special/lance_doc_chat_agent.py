@@ -22,18 +22,17 @@ For usage see:
 """
 import json
 import logging
-from typing import List, Optional, Tuple
+from typing import List, Tuple
 
 import pandas as pd
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
-from langroid.agent.chat_document import ChatDocument
 from langroid.agent.special.doc_chat_agent import DocChatAgent, DocChatAgentConfig
 from langroid.agent.task import Task
 from langroid.agent.tool_message import ToolMessage
 from langroid.language_models.openai_gpt import OpenAIGPT
-from langroid.mytypes import Document
-from langroid.utils.constants import NO_ANSWER
+from langroid.mytypes import Document, Entity
+from langroid.utils.constants import DONE, NO_ANSWER, PASS
 from langroid.utils.pydantic_utils import (
     clean_schema,
     dataframe_to_documents,
@@ -75,8 +74,7 @@ class LanceFilterAgentConfig(ChatAgentConfig):
     The FILTER must be a SQL-like condition, e.g. 
     "year > 2000 AND genre = 'ScienceFiction'".
     To ensure you get useful results, you should make your FILTER 
-    NOT TOO STRICT, e.g. look for approximate match using LIKE, and
-    allow non-case-sensitive matching (e.g. convert to lower-case using SQL).
+    NOT TOO STRICT, e.g. look for approximate match using LIKE, etc.
         
     You must present the FILTER and (POSSIBLY rephrased QUERY)
     using the `add_filter` tool. Use dot notation to refer to nested fields, 
@@ -87,7 +85,9 @@ class LanceFilterAgentConfig(ChatAgentConfig):
     If you receive an answer that is an empty-string or {NO_ANSWER}, 
     try a NEW FILTER, i.e. an empty or broader or better filter.
     
-    When you receive a satisfactory answer, say "DONE" and nothing else.
+    When you receive a satisfactory answer,
+    or if you're still getting NO_ANSWER after trying a few filters, 
+    say {DONE} {PASS} and nothing else.
     
     If there is no query, ask the user what they want to know.
     """
@@ -97,9 +97,9 @@ class LanceFilterAgent(ChatAgent):
     def __init__(self, config: LanceFilterAgentConfig):
         super().__init__(config)
         self.config: LanceFilterAgentConfig = config
-        # This agent should only generate the FilterTool, not handle it;
-        # the LanceDocChatAgent will handle it.
-        self.enable_message(FilterTool, use=True, handle=False)
+        # This agent should generate the FilterTool,
+        # as well as handle it for validation
+        self.enable_message(FilterTool, use=True, handle=True)
         is_openai_llm = (
             isinstance(self.llm, OpenAIGPT) and self.llm.is_openai_chat_model()
         )
@@ -109,23 +109,27 @@ class LanceFilterAgent(ChatAgent):
             doc_schema=self.config.vecdb_schema,
         )
 
-    def llm_response(
-        self, message: Optional[str | ChatDocument] = None
-    ) -> Optional[ChatDocument]:
-        result = super().llm_response(message)
-        # IF LLM says "DONE", then use the content of the incoming message as
-        # the content of the result.
-        # This works because in the above system_message, we instructed the LLM
-        # to simply say "DONE" when it receives an answer.
+    def add_filter(self, msg: FilterTool) -> str:
+        """Valid, so pass it on to sub-task"""
+        return PASS
 
-        if (
-            result is not None
-            and message is not None
-            and result.content in ["DONE", "DONE.", "DONE!", "DONE"]
-        ):
-            content = message if isinstance(message, str) else message.content
-            result.content = "DONE " + content
-        return result
+    # def llm_response(
+    #     self, message: Optional[str | ChatDocument] = None
+    # ) -> Optional[ChatDocument]:
+    #     result = super().llm_response(message)
+    #     # IF LLM says "DONE", then use the content of the incoming message as
+    #     # the content of the result.
+    #     # This works because in the above system_message, we instructed the LLM
+    #     # to simply say "DONE" when it receives an answer.
+    #
+    #     if (
+    #         result is not None
+    #         and message is not None
+    #         and result.content in ["DONE", "DONE.", "DONE!", "DONE"]
+    #     ):
+    #         content = message if isinstance(message, str) else message.content
+    #         result.content = "DONE " + content
+    #     return result
 
 
 class LanceDocChatAgent(DocChatAgent):
@@ -149,7 +153,12 @@ class LanceDocChatAgent(DocChatAgent):
         Temporarily set the config filter and invoke the DocChatAgent.llm_response()
         """
         # create document-subset based on this filter
-        self.setup_documents(filter=msg.filter or None)
+        try:
+            self.setup_documents(filter=msg.filter or None)
+        except Exception as e:
+            logger.error(f"Error setting up documents: {e}")
+            # say DONE with err msg so it goes back to LanceFilterAgent
+            return f"{DONE} Possible Filter Error:\n {e}"
         # update the filter so it is used in the DocChatAgent
         self.config.filter = msg.filter or None
         # pass on the query so LLM can handle it
@@ -222,18 +231,15 @@ class LanceRAGTaskCreator:
         filter_agent = LanceFilterAgent(filter_agent_cfg)
         filter_task = Task(
             filter_agent,
-            llm_delegate=True,
-            single_round=False,
             interactive=interactive,
-            allow_null_result=True,
+            llm_delegate=True,
         )
         rag_task = Task(
             agent,
             name="LanceRAG",
-            llm_delegate=False,
-            single_round=False,
             interactive=False,
-            allow_null_result=True,
+            done_if_response=[Entity.LLM],
+            done_if_no_response=[Entity.LLM],
         )
         filter_task.add_sub_task(rag_task)
         return filter_task

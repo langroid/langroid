@@ -75,8 +75,30 @@ movie_docs = [
 embed_cfg = OpenAIEmbeddingsConfig()
 
 
+@pytest.mark.parametrize(
+    "query, expected",
+    [
+        (
+            "Which Crime movie had a rating over 9?",
+            "Godfeather",
+        ),
+        (
+            "What was the Science Fiction movie directed by Stanley Hendrick?",
+            "Sparse Odyssey",
+        ),
+        (
+            "Which Science Fiction movie was directed by Winkowski?",
+            "The Vector",
+        ),
+    ],
+)
 @pytest.mark.parametrize("flatten", [True, False])
-def test_lance_doc_chat_agent(test_settings: Settings, flatten: bool):
+def test_lance_doc_chat_agent(
+    test_settings: Settings,
+    flatten: bool,
+    query: str,
+    expected: str,
+):
     # note that the (query, ans) pairs are accumulated into the
     # internal dialog history of the agent.
     set_global(test_settings)
@@ -99,21 +121,8 @@ def test_lance_doc_chat_agent(test_settings: Settings, flatten: bool):
     agent.ingest_docs(movie_docs, split=False)
     task = LanceRAGTaskCreator.new(agent, interactive=False)
 
-    # question on filtered docs
-    query = "Which Crime movie had a rating over 9?"
     result = task.run(query)
-    assert "Godfeather" in result.content
-
-    # question on filtered docs
-    query = "What was the Science Fiction movie directed by Stanley Hendrick?"
-    result = task.run(query)
-    assert "Sparse Odyssey" in result.content
-
-    # ask with only director first name, then initial filter may be wrong
-    # but the LLM should re-try with an approximate match.
-    query = "Which Science Fiction movie was directed by Winkowski?"
-    result = task.run(query)
-    assert "The Vector" in result.content
+    assert expected in result.content
 
 
 # dummy pandas dataframe from text
@@ -152,8 +161,30 @@ class FlatMovieDoc(Document):
     metadata: DocMetaData = DocMetaData()
 
 
+@pytest.mark.parametrize(
+    "query, expected",
+    [
+        (
+            "Which Crime movie had a rating over 9?",
+            "Godfeather",
+        ),
+        (
+            "What was the Science Fiction movie directed by Stanley Hendrick?",
+            "Sparse Odyssey",
+        ),
+        (
+            "Which Science Fiction movie was directed by Winkowski?",
+            "The Vector",
+        ),
+    ],
+)
 @pytest.mark.parametrize("flatten", [True, False])
-def test_lance_doc_chat_agent_df(test_settings: Settings, flatten: bool):
+def test_lance_doc_chat_agent_df(
+    test_settings: Settings,
+    flatten: bool,
+    query: str,
+    expected: str,
+):
     set_global(test_settings)
 
     ldb_dir = ".lancedb/data/test-2"
@@ -178,23 +209,10 @@ def test_lance_doc_chat_agent_df(test_settings: Settings, flatten: bool):
     docs = [FlatMovieDoc(**d) for d in doc_dicts]
     agent.ingest_docs(docs, split=False)
 
-    task = LanceRAGTaskCreator.new(agent, interactive=True)
+    task = LanceRAGTaskCreator.new(agent, interactive=False)
 
-    # question on filtered docs
-    query = "Which Crime movie had a rating over 9?"
     result = task.run(query)
-    assert "Godfeather" in result.content
-
-    # question on filtered docs
-    query = "What was the Science Fiction movie directed by Stanley Hendrick?"
-    result = task.run(query)
-    assert "Sparse Odyssey" in result.content
-
-    # ask with only director first name, then initial filter may be wrong
-    # but the LLM should re-try with an approximate match.
-    query = "Which Science Fiction movie was directed by Winkowski?"
-    result = task.run(query)
-    assert "The Vector" in result.content
+    assert expected in result.content
 
 
 def parse_gz(path):
