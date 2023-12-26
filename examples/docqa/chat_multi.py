@@ -13,6 +13,7 @@ from langroid.agent.special.doc_chat_agent import (
     DocChatAgent,
     DocChatAgentConfig,
 )
+from langroid.mytypes import Entity
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
 from langroid.parsing.urls import get_list_from_user
@@ -51,8 +52,8 @@ def chat(config: DocChatAgentConfig) -> None:
     doc_task = Task(
         doc_agent,
         name="DocAgent",
-        llm_delegate=False,
-        single_round=True,
+        done_if_no_response=[Entity.LLM], # done if null response from LLM
+        done_if_response=[Entity.LLM], # done if non-null response from LLM
         system_message="""You will receive various questions about some documents, and
         your job is to answer them concisely in at most 2 sentences, citing sources.
         """,
@@ -66,9 +67,9 @@ def chat(config: DocChatAgentConfig) -> None:
     )
     writer_task = Task(
         writer_agent,
+        # SET interactive to True to slow it down, but keep hitting enter to progress
+        interactive=False,
         name="WriterAgent",
-        llm_delegate=True,
-        single_round=False,
         system_message=f"""
         You have to collect some information from some documents, on these topics:
         {topics}
