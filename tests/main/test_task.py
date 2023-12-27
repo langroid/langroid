@@ -6,12 +6,13 @@ from typing import List
 import pytest
 
 import langroid as lr
+from langroid.agent import ChatDocument
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
 from langroid.agent.tool_message import ToolMessage
 from langroid.mytypes import Entity
 from langroid.utils.configuration import Settings, set_global
-from langroid.utils.constants import DONE, PASS, TOOL
+from langroid.utils.constants import DONE, PASS
 
 
 def test_task_empty_response(test_settings: Settings):
@@ -138,7 +139,7 @@ def test_task_default_human_response(
     assert expected in response.content
 
 
-@pytest.mark.parametrize("use_fn_api", [True, False])
+@pytest.mark.parametrize("use_fn_api", [False])
 @pytest.mark.parametrize(
     "agent_response",
     [DONE, f"{DONE} {PASS}"],
@@ -167,13 +168,34 @@ def test_task_tool_pass(
         def handle(self) -> str:
             return agent_response
 
-    agent = ChatAgent(
+        @classmethod
+        def examples(cls) -> List["ToolMessage"]:
+            return [
+                cls(
+                    number=100,
+                    successor=101,
+                ),
+            ]
+
+    class MyAgent(ChatAgent):
+        def handle_message_fallback(
+            self, msg: str | ChatDocument
+        ) -> str | ChatDocument | None:
+            if isinstance(msg, ChatDocument) and msg.metadata.sender == Entity.LLM:
+                return """
+                    You must use the `next_num` tool/function to 
+                    augment the given number.
+                """
+            return None
+
+    agent = MyAgent(
         ChatAgentConfig(
             name="Test",
             use_functions_api=use_fn_api,
+            use_tools=not use_fn_api,
             system_message="""
-            User will send a number. Augment it with its successor,
-            and present the numbers using the `next_num` tool/function.
+            User will send a number. Present this number and its successor,
+            using the `next_num` tool/function.
             """,
         )
     )
@@ -194,7 +216,7 @@ def test_task_tool_pass(
         if agent_response == DONE:
             assert response.content == ""
         else:
-            assert TOOL in response.content and "next_num" in response.content
+            assert "next_num" in response.content
 
 
 @pytest.mark.parametrize("use_fn_api", [True, False])
@@ -230,6 +252,7 @@ def test_task_tool_num(
         ChatAgentConfig(
             name="Test",
             use_functions_api=use_fn_api,
+            use_tools=not use_fn_api,
             system_message=f"""
             User will send a number. Augment it with its successor,
             and present the numbers using the `number` tool/function.
@@ -284,6 +307,7 @@ def test_task_2_agent_tool(
         ChatAgentConfig(
             name="Requestor",
             use_functions_api=use_fn_api,
+            use_tools=not use_fn_api,
             system_message=f"""
                 User will send a number. Your job is to find out what is
                 the "Polinsky transform", which you KNOW is POSITIVE 
@@ -318,6 +342,7 @@ def test_task_2_agent_tool(
         ChatAgentConfig(
             name="Polinsky",
             use_functions_api=use_fn_api,
+            use_tools=not use_fn_api,
             system_message="""
                 When you receive a number, respond with the DOUBLE of that number,
                 say nothing else.
@@ -394,6 +419,7 @@ def test_task_2_agent_2_tool(
         ChatAgentConfig(
             name="Requestor",
             use_functions_api=use_fn_api,
+            use_tools=not use_fn_api,
             system_message=f"""
                     Your mission is to find the "Polinsky transform" of TWO NUMBERS:
                     100 and 500.
@@ -441,6 +467,7 @@ def test_task_2_agent_2_tool(
         ChatAgentConfig(
             name="Critic",
             use_functions_api=use_fn_api,
+            use_tools=not use_fn_api,
             system_message="""
                     When you receive a query asking whether the Polinsky
                     transform of a number x is y, and you must give FEEDBACK

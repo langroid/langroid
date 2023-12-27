@@ -644,33 +644,9 @@ class Task:
         # of this agent, or a sub-task's agent.
         if not self.is_pass_thru:
             self.pending_sender = r
-        if result.metadata.parent_responder is not None and not isinstance(r, Entity):
-            # This code is only used by the now-deprecated RecipientValidatorAgent.
-            # (which has been deprecated in favor of using the RecipientTool).
-            # When result is from a sub-task, and `result.metadata` contains
-            # a non-null `parent_responder`, pretend this result was
-            # from the parent_responder, by setting `self.pending_sender`.
-            self.pending_sender = result.metadata.parent_responder
-            # Since we've just used the "pretend responder",
-            # clear out the pretend responder in metadata
-            # (so that it doesn't get used again)
-            result.metadata.parent_responder = None
         result.metadata.parent = parent
-        old_attachment = (
-            self.pending_message.attachment if self.pending_message else None
-        )
         if not self.is_pass_thru:
             self.pending_message = result
-        # if result has no attachment, preserve the old attachment
-        # (attachment-related code is specific to the
-        # depcreated RecipientValidatorAgent and can be ignored if you are
-        # not using that agent)
-        if (
-            result is not None
-            and result.attachment is None
-            and self.pending_message is not None
-        ):
-            self.pending_message.attachment = old_attachment
         self.log_message(self.pending_sender, result, mark=True)
         self.step_progress = True
         self.task_progress = True
@@ -780,7 +756,6 @@ class Task:
             # assuming it is of the form "DONE: <content>"
             content = content.replace(DONE, "").strip()
         fun_call = result_msg.function_call if result_msg else None
-        attachment = result_msg.attachment if result_msg else None
         block = result_msg.metadata.block if result_msg else None
         recipient = result_msg.metadata.recipient if result_msg else None
         responder = result_msg.metadata.parent_responder if result_msg else None
@@ -792,7 +767,6 @@ class Task:
         return ChatDocument(
             content=content,
             function_call=fun_call,
-            attachment=attachment,
             metadata=ChatDocMetaData(
                 source=Entity.USER,
                 sender=Entity.USER,
@@ -852,11 +826,11 @@ class Task:
         Args:
             result (ChatDocument|None): result from a responder
             r (Responder|None): responder that produced the result
+                Not used here, but could be used by derived classes.
         Returns:
             bool: True if task is done, False otherwise
         """
         result = result or self.pending_message
-        r = r or self.pending_sender
         if self.is_done:
             return True
         user_quit = (
@@ -874,16 +848,6 @@ class Task:
                 f"Task {self.name} stuck for {self.max_stalled_steps} steps; exiting."
             )
             return True
-        # if (
-        #     not self.step_progress
-        #     and r == Entity.LLM
-        #     and (not self.llm_delegate or not self._can_respond(Entity.LLM))
-        # ):
-        #     # no progress in latest step, and pending msg is from LLM, and
-        #     # EITHER LLM is not driving the task,
-        #     # OR LLM IS driving the task, but CANNOT respond
-        #     #   (e.g. b/c the pending message is a function call)
-        #     return True
 
         return (
             # no valid response from any entity/agent in current turn
@@ -895,11 +859,11 @@ class Task:
                 and self.caller.name != ""
                 and result.metadata.recipient == self.caller.name
             )
-            or (
-                # Task controller is "stuck", has nothing to say
-                NO_ANSWER in result.content
-                and result.metadata.sender == self.controller
-            )
+            # or (
+            #     # Task controller is "stuck", has nothing to say
+            #     NO_ANSWER in result.content
+            #     and result.metadata.sender == self.controller
+            # )
             or user_quit
         )
 
@@ -923,12 +887,12 @@ class Task:
             return True
         return (
             result is not None
-            and (not self._is_empty_message(result) or result.function_call is not None)
-            and (  # if NO_ANSWER is from controller, then it means
-                # controller is stuck and we are done with task loop
-                NO_ANSWER not in result.content
-                or result.metadata.sender == self.controller
-            )
+            and not self._is_empty_message(result)
+            # and (  # if NO_ANSWER is from controller, then it means
+            #     # controller is stuck and we are done with task loop
+            #     NO_ANSWER not in result.content
+            #     or result.metadata.sender == self.controller
+            # )
         )
 
     def log_message(
@@ -1018,12 +982,6 @@ class Task:
             return False
         if self.pending_message is None:
             return True
-        if self.pending_message.metadata.block == e:
-            # This code is only used in the deprecated RecipientValidatorAgent.
-            # The entity should only be blocked at the first try;
-            # Remove the block so it does not block the entity forever.
-            self.pending_message.metadata.block = None
-            return False
         if self._recipient_mismatch(e):
             # Cannot respond if not addressed to this entity
             return False

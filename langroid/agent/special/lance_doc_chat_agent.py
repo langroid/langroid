@@ -27,10 +27,10 @@ from typing import List, Tuple
 import pandas as pd
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
+from langroid.agent.chat_document import ChatDocument
 from langroid.agent.special.doc_chat_agent import DocChatAgent, DocChatAgentConfig
 from langroid.agent.task import Task
 from langroid.agent.tool_message import ToolMessage
-from langroid.language_models.openai_gpt import OpenAIGPT
 from langroid.mytypes import Document, Entity
 from langroid.utils.constants import DONE, NO_ANSWER, PASS
 from langroid.utils.pydantic_utils import (
@@ -55,9 +55,9 @@ class FilterTool(ToolMessage):
 
 class LanceFilterAgentConfig(ChatAgentConfig):
     name = "LanceFilter"
-    vecdb_schema: str
     use_tools = False
     use_functions_api = True
+    vecdb_schema: str = ""
     system_message = f"""
     You will receive a QUERY, to be answered based on some documents you DO NOT have 
     access to. However you know that these documents have this SCHEMA:
@@ -89,7 +89,7 @@ class LanceFilterAgentConfig(ChatAgentConfig):
     or if you're still getting NO_ANSWER after trying a few filters, 
     say {DONE} {PASS} and nothing else.
     
-    If there is no query, ask the user what they want to know.
+    At the BEGINNING if there is no query, ASK the user what they want to know.
     """
 
 
@@ -100,11 +100,13 @@ class LanceFilterAgent(ChatAgent):
         # This agent should generate the FilterTool,
         # as well as handle it for validation
         self.enable_message(FilterTool, use=True, handle=True)
-        is_openai_llm = (
-            isinstance(self.llm, OpenAIGPT) and self.llm.is_openai_chat_model()
-        )
-        self.config.use_tools = not is_openai_llm
-        self.config.use_functions_api = is_openai_llm
+        if (self.config.vecdb_schema or None) is None:
+            raise ValueError(
+                """
+                LanceFilterAgentConfig.vecdb_schema must be non-empty,
+                otherwise LanceFilterAgent cannot be used.
+                """
+            )
         self.system_message = self.config.system_message.format(
             doc_schema=self.config.vecdb_schema,
         )
@@ -113,23 +115,16 @@ class LanceFilterAgent(ChatAgent):
         """Valid, so pass it on to sub-task"""
         return PASS
 
-    # def llm_response(
-    #     self, message: Optional[str | ChatDocument] = None
-    # ) -> Optional[ChatDocument]:
-    #     result = super().llm_response(message)
-    #     # IF LLM says "DONE", then use the content of the incoming message as
-    #     # the content of the result.
-    #     # This works because in the above system_message, we instructed the LLM
-    #     # to simply say "DONE" when it receives an answer.
-    #
-    #     if (
-    #         result is not None
-    #         and message is not None
-    #         and result.content in ["DONE", "DONE.", "DONE!", "DONE"]
-    #     ):
-    #         content = message if isinstance(message, str) else message.content
-    #         result.content = "DONE " + content
-    #     return result
+    def handle_message_fallback(
+        self, msg: str | ChatDocument
+    ) -> str | ChatDocument | None:
+        """When this agent receives answer from RAGTask, the LLM
+        may forget to say DONE PASS, and simply re-state answer,
+        in that case this fallback method will say DONE PASS
+        so the task ends rather than going to the RAGTask"""
+        if isinstance(msg, ChatDocument) and msg.metadata.sender == Entity.LLM:
+            return f"{DONE} {PASS}"
+        return None
 
 
 class LanceDocChatAgent(DocChatAgent):
@@ -220,20 +215,22 @@ class LanceDocChatAgent(DocChatAgent):
 
 class LanceRAGTaskCreator:
     @staticmethod
-    def new(agent: LanceDocChatAgent, interactive: bool = True) -> Task:
+    def new(
+        agent: LanceDocChatAgent,
+        filter_agent_config: LanceFilterAgentConfig = LanceFilterAgentConfig(),
+        interactive: bool = True,
+    ) -> Task:
         """
         Add a LanceFilterAgent to the LanceDocChatAgent,
         set up the corresponding Tasks, connect them,
         and return the top-level filter_task.
         """
-        filter_agent_cfg = LanceFilterAgentConfig(
-            vecdb_schema=agent._get_clean_vecdb_schema(),
-        )
-        filter_agent = LanceFilterAgent(filter_agent_cfg)
+        filter_agent_config.vecdb_schema = agent._get_clean_vecdb_schema()
+
+        filter_agent = LanceFilterAgent(filter_agent_config)
         filter_task = Task(
             filter_agent,
             interactive=interactive,
-            llm_delegate=True,
         )
         rag_task = Task(
             agent,

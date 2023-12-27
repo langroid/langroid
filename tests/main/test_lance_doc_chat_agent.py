@@ -80,16 +80,16 @@ embed_cfg = OpenAIEmbeddingsConfig()
     "query, expected",
     [
         (
+            "Which Science Fiction movie was directed by Winkowski?",
+            "The Vector",
+        ),
+        (
             "Which Crime movie had a rating over 9?",
             "Godfeather",
         ),
         (
             "What was the Science Fiction movie directed by Stanley Hendrick?",
             "Sparse Odyssey",
-        ),
-        (
-            "Which Science Fiction movie was directed by Winkowski?",
-            "The Vector",
         ),
     ],
 )
