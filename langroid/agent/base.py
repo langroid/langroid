@@ -648,7 +648,7 @@ class Agent(ABC):
         self, msg: str | ChatDocument
     ) -> str | ChatDocument | None:
         """
-        Fallback method to handle possible "tool" msg if not other method applies
+        Fallback method to handle possible "tool" msg if no other method applies
         or if an error is thrown.
         This method can be overridden by subclasses.
 
