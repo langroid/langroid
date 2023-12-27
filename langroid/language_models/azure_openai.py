@@ -23,7 +23,7 @@ class AzureConfig(OpenAIGPTConfig):
         model_name (str): can be set in the ``.env`` file as ``AZURE_GPT_MODEL_NAME``
             and should be based on the model name chosen during setup.
         model_version (str): can be set in the ``.env`` file as
-          ``AZURE_OPENAI_MODEL_VERSION`` and should be based on the model name 
+          ``AZURE_OPENAI_MODEL_VERSION`` and should be based on the model name
           chosen during setup.
     """
 
@@ -109,14 +109,14 @@ class AzureGPT(OpenAIGPT):
             azure_deployment=self.config.deployment_name,
             timeout=Timeout(self.config.timeout),
         )
-    
-    def set_chat_model(self):
+
+    def set_chat_model(self) -> None:
         """
-        Sets the chat model configuration based on the model name specified in the 
-        ``.env``. This function checks the `model_name` in the configuration and sets 
-        the appropriate chat model in the `config.chat_model`. It supports handling for 
-        '35-turbo' and 'gpt-4' models. For 'gpt-4', it further delegates the handling 
-        to `handle_gpt4_model` method. If the model name does not match any predefined 
+        Sets the chat model configuration based on the model name specified in the
+        ``.env``. This function checks the `model_name` in the configuration and sets
+        the appropriate chat model in the `config.chat_model`. It supports handling for
+        '35-turbo' and 'gpt-4' models. For 'gpt-4', it further delegates the handling
+        to `handle_gpt4_model` method. If the model name does not match any predefined
         models, it defaults to `OpenAIChatModel.GPT4`.
         """
         MODEL_35_TURBO = "35-turbo"
@@ -129,13 +129,13 @@ class AzureGPT(OpenAIGPT):
         else:
             self.config.chat_model = OpenAIChatModel.GPT4
 
-    def handle_gpt4_model(self):
+    def handle_gpt4_model(self) -> None:
         """
         Handles the setting of the GPT-4 model in the configuration.
-        This function checks the `model_version` in the configuration. 
-        If the version is not set, it raises a ValueError indicating that the model 
-        version needs to be specified in the ``.env`` file. 
-        It sets `OpenAIChatModel.GPT4_TURBO` if the version is 
+        This function checks the `model_version` in the configuration.
+        If the version is not set, it raises a ValueError indicating that the model
+        version needs to be specified in the ``.env`` file.
+        It sets `OpenAIChatModel.GPT4_TURBO` if the version is
         '1106-Preview', otherwise, it defaults to setting `OpenAIChatModel.GPT4`.
         """
         VERSION_1106_PREVIEW = "1106-Preview"
