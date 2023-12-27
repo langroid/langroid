@@ -18,6 +18,7 @@ from langroid.agent.openai_assistant import (
     OpenAIAssistant,
     AssistantTool,
 )
+from langroid.mytypes import Entity
 from langroid.parsing.url_loader import URLLoader
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
 from langroid.agent.tools.recipient_tool import RecipientTool
@@ -51,7 +52,7 @@ def chat() -> None:
         they have access to the docs. For each question I send you, decide how you want 
         to ask the Retriever: you can rephrase, decompose or simplify the question and 
         send it to the retriever. Once you think you have the info I need, then send 
-        me (the User) a message with your answer.    
+        me (the User) a message with your consolidated answer, starting with "ANSWER:"    
         
         Start by greeting the user and asking what they want to know.     
         """,
@@ -86,15 +87,13 @@ def chat() -> None:
 
     print("[cyan]Enter x or q to quit")
 
-    planner_task = Task(
-        planner_agent,
-        llm_delegate=True,
-        single_round=False,
-    )
+    planner_task = Task(planner_agent, interactive=True)
+
     retriever_task = Task(
         retriever_agent,
-        llm_delegate=False,
-        single_round=True,
+        interactive=False,
+        done_if_response=[Entity.LLM],
+        done_if_no_response=[Entity.LLM],
     )
     planner_task.add_sub_task(retriever_task)
     planner_task.run("")

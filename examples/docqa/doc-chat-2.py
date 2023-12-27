@@ -16,6 +16,7 @@ from langroid.agent.special.doc_chat_agent import (
     DocChatAgent,
     DocChatAgentConfig,
 )
+from langroid.mytypes import Entity
 from langroid.parsing.parser import ParsingConfig, PdfParsingConfig, Splitter
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
@@ -38,9 +39,10 @@ def chat(config: DocChatAgentConfig) -> None:
     print("[cyan]Enter x or q to quit, or ? for evidence")
     doc_task = Task(
         doc_agent,
+        interactive=False,
         name="DocAgent",
-        llm_delegate=False,
-        single_round=True,
+        done_if_no_response=[Entity.LLM],  # done if null response from LLM
+        done_if_response=[Entity.LLM],  # done if non-null response from LLM
     )
 
     writer_agent = ChatAgent(
@@ -54,8 +56,7 @@ def chat(config: DocChatAgentConfig) -> None:
     writer_task = Task(
         writer_agent,
         name="WriterAgent",
-        llm_delegate=True,
-        single_round=False,
+        interactive=True,
         system_message=f"""
         You are tenacious, creative and resourceful when given a question to 
         find an answer for. You will receive questions from a user, which you will 
@@ -67,8 +68,8 @@ def chat(config: DocChatAgentConfig) -> None:
         (a) when the question is complex or has multiple parts, break it into small 
          parts and/or steps and send them to DocAgent
         (b) if DocAgent says {NO_ANSWER} or gives no answer, try asking in other ways.
-        (c) Once you collect all parts of the answer, you can say DONE and give me 
-            the final answer. 
+        (c) Once you collect all parts of the answer, say "ANSWER:" and 
+            show me the consolidated final answer. 
         (d) DocAgent has no memory of previous dialog, so you must ensure your 
             questions are stand-alone questions that don't refer to entities mentioned 
             earlier in the dialog.
