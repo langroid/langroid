@@ -166,7 +166,7 @@ class FlatMovieDoc(Document):
     "query, expected",
     [
         (
-            "Which Crime movie had a rating over 9?",
+            "Tell me about a Crime movie rated over 9",
             "Godfeather",
         ),
         (
