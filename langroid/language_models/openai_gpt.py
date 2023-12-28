@@ -342,7 +342,7 @@ class OpenAIGPT(LanguageModel):
                     fake="fake" in settings.cache_type
                 )
             if "fake" in settings.cache_type:
-                # force use of rake redis if global cache_type is "fakeredis"
+                # force use of fake redis if global cache_type is "fakeredis"
                 config.cache_config.fake = True
             self.cache = RedisCache(config.cache_config)
         else:

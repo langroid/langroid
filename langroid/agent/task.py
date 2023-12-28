@@ -893,11 +893,11 @@ class Task:
                 and self.caller.name != ""
                 and result.metadata.recipient == self.caller.name
             )
-            # or (
-            #     # Task controller is "stuck", has nothing to say
-            #     NO_ANSWER in result.content
-            #     and result.metadata.sender == self.controller
-            # )
+            or (
+                # Task controller is "stuck", has nothing to say
+                NO_ANSWER in result.content
+                and result.metadata.sender == self.controller
+            )
             or user_quit
         )
 
