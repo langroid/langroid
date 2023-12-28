@@ -41,8 +41,8 @@ class ChatAgentConfig(AgentConfig):
 
     system_message: str = "You are a helpful assistant."
     user_message: Optional[str] = None
-    use_tools: bool = True
-    use_functions_api: bool = False
+    use_tools: bool = False
+    use_functions_api: bool = True
 
     def _set_fn_or_tools(self, fn_available: bool) -> None:
         """

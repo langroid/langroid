@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import logging
+from collections import Counter
 from typing import Any, Callable, Coroutine, Dict, List, Optional, Set, Type, cast
 
 from rich import print
@@ -67,7 +68,7 @@ class Task:
         only_user_quits_root: bool = True,
         erase_substeps: bool = False,
         allow_null_result: bool = True,
-        max_stalled_steps: int = 3,
+        max_stalled_steps: int = 5,
         done_if_no_response: List[Responder] = [],
         done_if_response: List[Responder] = [],
     ):
@@ -644,33 +645,9 @@ class Task:
         # of this agent, or a sub-task's agent.
         if not self.is_pass_thru:
             self.pending_sender = r
-        if result.metadata.parent_responder is not None and not isinstance(r, Entity):
-            # This code is only used by the now-deprecated RecipientValidatorAgent.
-            # (which has been deprecated in favor of using the RecipientTool).
-            # When result is from a sub-task, and `result.metadata` contains
-            # a non-null `parent_responder`, pretend this result was
-            # from the parent_responder, by setting `self.pending_sender`.
-            self.pending_sender = result.metadata.parent_responder
-            # Since we've just used the "pretend responder",
-            # clear out the pretend responder in metadata
-            # (so that it doesn't get used again)
-            result.metadata.parent_responder = None
         result.metadata.parent = parent
-        old_attachment = (
-            self.pending_message.attachment if self.pending_message else None
-        )
         if not self.is_pass_thru:
             self.pending_message = result
-        # if result has no attachment, preserve the old attachment
-        # (attachment-related code is specific to the
-        # depcreated RecipientValidatorAgent and can be ignored if you are
-        # not using that agent)
-        if (
-            result is not None
-            and result.attachment is None
-            and self.pending_message is not None
-        ):
-            self.pending_message.attachment = old_attachment
         self.log_message(self.pending_sender, result, mark=True)
         self.step_progress = True
         self.task_progress = True
@@ -780,7 +757,6 @@ class Task:
             # assuming it is of the form "DONE: <content>"
             content = content.replace(DONE, "").strip()
         fun_call = result_msg.function_call if result_msg else None
-        attachment = result_msg.attachment if result_msg else None
         block = result_msg.metadata.block if result_msg else None
         recipient = result_msg.metadata.recipient if result_msg else None
         responder = result_msg.metadata.parent_responder if result_msg else None
@@ -792,7 +768,6 @@ class Task:
         return ChatDocument(
             content=content,
             function_call=fun_call,
-            attachment=attachment,
             metadata=ChatDocMetaData(
                 source=Entity.USER,
                 sender=Entity.USER,
@@ -843,6 +818,39 @@ class Task:
             or (not self._is_empty_message(result) and response_says_done)
         )
 
+    def _maybe_infinite_loop(self, history: int = 10) -> bool:
+        """
+        TODO Not currently used, until we figure out best way.
+        Check if {NO_ANSWER}, empty answer, or a specific non-LLM msg occurs too
+        often in history of pending messages -- this can be an indicator of a possible
+        multi-step infinite loop that we should exit.
+        (A single-step infinite loop is where individual steps don't show progress
+        and are easy to detect via n_stalled_steps, but a multi-step infinite loop
+        could show "progress" at each step, but can still be an infinite loop, e.g.
+        if the steps are just alternating between two messages).
+        """
+        p = self.pending_message
+        n_no_answers = 0
+        n_empty_answers = 0
+        counter: Counter[str] = Counter()
+        # count number of NO_ANSWER and empty answers in last up to 10 messages
+        # in ancestors of self.pending_message
+        for _ in range(history):
+            if p is None:
+                break
+            n_no_answers += NO_ANSWER in p.content
+            n_empty_answers += p.content.strip() == "" and p.function_call is None
+            if p.metadata.sender != Entity.LLM and PASS not in p.content:
+                counter.update([p.metadata.sender + ":" + p.content])
+            p = p.metadata.parent
+
+        # freq of most common message in history
+        high_freq = (counter.most_common(1) or [("", 0)])[0][1]
+        # We deem this a potential infinite loop if:
+        # - a specific non-LLM msg occurs too often, or
+        # - a NO_ANSWER or empty answer occurs too often
+        return max(high_freq, n_no_answers) > self.max_stalled_steps
+
     def done(
         self, result: ChatDocument | None = None, r: Responder | None = None
     ) -> bool:
@@ -852,11 +860,11 @@ class Task:
         Args:
             result (ChatDocument|None): result from a responder
             r (Responder|None): responder that produced the result
+                Not used here, but could be used by derived classes.
         Returns:
             bool: True if task is done, False otherwise
         """
         result = result or self.pending_message
-        r = r or self.pending_sender
         if self.is_done:
             return True
         user_quit = (
@@ -874,16 +882,6 @@ class Task:
                 f"Task {self.name} stuck for {self.max_stalled_steps} steps; exiting."
             )
             return True
-        # if (
-        #     not self.step_progress
-        #     and r == Entity.LLM
-        #     and (not self.llm_delegate or not self._can_respond(Entity.LLM))
-        # ):
-        #     # no progress in latest step, and pending msg is from LLM, and
-        #     # EITHER LLM is not driving the task,
-        #     # OR LLM IS driving the task, but CANNOT respond
-        #     #   (e.g. b/c the pending message is a function call)
-        #     return True
 
         return (
             # no valid response from any entity/agent in current turn
@@ -895,11 +893,11 @@ class Task:
                 and self.caller.name != ""
                 and result.metadata.recipient == self.caller.name
             )
-            or (
-                # Task controller is "stuck", has nothing to say
-                NO_ANSWER in result.content
-                and result.metadata.sender == self.controller
-            )
+            # or (
+            #     # Task controller is "stuck", has nothing to say
+            #     NO_ANSWER in result.content
+            #     and result.metadata.sender == self.controller
+            # )
             or user_quit
         )
 
@@ -923,12 +921,12 @@ class Task:
             return True
         return (
             result is not None
-            and (not self._is_empty_message(result) or result.function_call is not None)
-            and (  # if NO_ANSWER is from controller, then it means
-                # controller is stuck and we are done with task loop
-                NO_ANSWER not in result.content
-                or result.metadata.sender == self.controller
-            )
+            and not self._is_empty_message(result)
+            # and (  # if NO_ANSWER is from controller, then it means
+            #     # controller is stuck and we are done with task loop
+            #     NO_ANSWER not in result.content
+            #     or result.metadata.sender == self.controller
+            # )
         )
 
     def log_message(
@@ -1018,12 +1016,6 @@ class Task:
             return False
         if self.pending_message is None:
             return True
-        if self.pending_message.metadata.block == e:
-            # This code is only used in the deprecated RecipientValidatorAgent.
-            # The entity should only be blocked at the first try;
-            # Remove the block so it does not block the entity forever.
-            self.pending_message.metadata.block = None
-            return False
         if self._recipient_mismatch(e):
             # Cannot respond if not addressed to this entity
             return False

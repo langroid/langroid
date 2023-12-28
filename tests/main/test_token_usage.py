@@ -29,7 +29,7 @@ class CapitalTool(ToolMessage):
 
 # Define the configurations
 config = OpenAIGPTConfig(
-    cache_config=RedisCacheConfig(fake=False),
+    cache_config=RedisCacheConfig(fake=True),
     chat_model=OpenAIChatModel.GPT4,
     use_chat_for_completion=True,
     max_output_tokens=MAX_OUTPUT_TOKENS,
