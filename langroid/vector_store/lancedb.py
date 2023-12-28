@@ -150,7 +150,7 @@ class LanceDB(VectorStore):
          - Vector field that has dims equal to
             the embedding dimension of the embedding model, and a data field of type
             DocClass.
-         - payload of type `doc_cls`
+         - other fields from doc_cls
 
         Args:
             doc_cls (Type[Document]): A Pydantic model which should be a subclass of
@@ -176,7 +176,9 @@ class LanceDB(VectorStore):
             fields[field_name] = (field.outer_type_, field.default)
 
         # Create the new model with dynamic fields
-        NewModel = create_model("NewModel", __base__=LanceModel, **fields)  # type: ignore
+        NewModel = create_model(
+            "NewModel", __base__=LanceModel, **fields
+        )  # type: ignore
         return NewModel  # type: ignore
 
     def _create_flat_lance_schema(self, doc_cls: Type[Document]) -> Type[BaseModel]:

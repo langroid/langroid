@@ -42,6 +42,7 @@ from langroid.parsing.search import (
     find_fuzzy_matches_in_docs,
     preprocess_text,
 )
+from langroid.parsing.table_loader import describe_dataframe
 from langroid.parsing.url_loader import URLLoader
 from langroid.parsing.urls import get_list_from_user, get_urls_and_paths
 from langroid.parsing.utils import batched
@@ -187,6 +188,8 @@ class DocChatAgent(ChatAgent):
         self.config: DocChatAgentConfig = config
         self.original_docs: None | List[Document] = None
         self.original_docs_length = 0
+        self.from_dataframe = False
+        self.df_description = ""
         self.chunked_docs: None | List[Document] = None
         self.chunked_docs_clean: None | List[Document] = None
         self.response: None | Document = None
@@ -288,6 +291,15 @@ class DocChatAgent(ChatAgent):
                 - dataframe: dataframe with "content" column and "id" column
                 - metadata: list of metadata column names, including "id"
         """
+        if content not in df.columns:
+            raise ValueError(
+                f"""
+                Content column {content} not in dataframe, 
+                so we cannot ingest into the DocChatAgent.
+                Please specify the `content` parameter as a suitable
+                text-based column in the dataframe.
+                """
+            )
         if content != "content":
             # rename content column to "content", leave existing column intact
             df = df.rename(columns={content: "content"}, inplace=False)
@@ -312,6 +324,8 @@ class DocChatAgent(ChatAgent):
         """
         Ingest a dataframe into vecdb.
         """
+        self.from_dataframe = True
+        self.df_description = describe_dataframe(df, sample_size=3)
         df, metadata = DocChatAgent.document_compatible_dataframe(df, content, metadata)
         docs = dataframe_to_documents(df, content="content", metadata=metadata)
         # When ingesting a dataframe we will no longer do any chunking,

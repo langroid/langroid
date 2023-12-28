@@ -278,8 +278,7 @@ def test_lance_doc_chat_df_direct(test_settings: Settings):
     issues = repo_loader.get_issues(k=100)
     issue_dicts = [iss.dict() for iss in issues]
     df = pd.DataFrame(issue_dicts)
-    # metadata is all columns except "text"
-    metadata_cols = [c for c in df.columns if c != "text"]
+    metadata_cols = []
     agent.ingest_dataframe(df, content="text", metadata=metadata_cols)
     task = LanceRAGTaskCreator.new(agent, interactive=False)
     result = task.run(

@@ -410,6 +410,7 @@ def dataframe_to_documents(
     """
     Model = doc_cls or dataframe_to_document_model(df, content, metadata)
     docs = [
-        Model.from_df_row(row, content, metadata) for _, row in df.iterrows()  # type: ignore
+        Model.from_df_row(row, content, metadata)  # type: ignore
+        for _, row in df.iterrows()
     ]
     return [m for m in docs if m is not None]

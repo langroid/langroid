@@ -8,6 +8,7 @@ from openai import OpenAI
 from langroid.embedding_models.base import EmbeddingModel, EmbeddingModelsConfig
 from langroid.language_models.utils import retry_with_exponential_backoff
 from langroid.mytypes import Embeddings
+from langroid.parsing.utils import batched
 
 
 class OpenAIEmbeddingsConfig(EmbeddingModelsConfig):
@@ -58,10 +59,14 @@ class OpenAIEmbeddings(EmbeddingModel):
         @retry_with_exponential_backoff
         def fn(texts: List[str]) -> Embeddings:
             tokenized_texts = self.truncate_texts(texts)
-            result = self.client.embeddings.create(
-                input=tokenized_texts, model=self.config.model_name
-            )
-            return [d.embedding for d in result.data]
+            embeds = []
+            for batch in batched(tokenized_texts, 500):
+                result = self.client.embeddings.create(
+                    input=batch, model=self.config.model_name
+                )
+                batch_embeds = [d.embedding for d in result.data]
+                embeds.extend(batch_embeds)
+            return embeds
 
         return fn
 
@@ -96,9 +101,11 @@ class SentenceTransformerEmbeddings(EmbeddingModel):
 
     def embedding_fn(self) -> Callable[[List[str]], Embeddings]:
         def fn(texts: List[str]) -> Embeddings:
-            return self.model.encode(  # type: ignore
-                texts, convert_to_numpy=True
-            ).tolist()
+            embeds = []
+            for batch in batched(texts, 500):
+                batch_embeds = self.model.encode(batch, convert_to_numpy=True).tolist()
+                embeds.extend(batch_embeds)
+            return embeds
 
         return fn
 

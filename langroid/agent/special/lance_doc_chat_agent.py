@@ -32,6 +32,7 @@ from langroid.agent.special.doc_chat_agent import DocChatAgent, DocChatAgentConf
 from langroid.agent.task import Task
 from langroid.agent.tool_message import ToolMessage
 from langroid.mytypes import Document, Entity
+from langroid.parsing.table_loader import describe_dataframe
 from langroid.utils.constants import DONE, NO_ANSWER, PASS
 from langroid.utils.pydantic_utils import (
     clean_schema,
@@ -59,27 +60,41 @@ class LanceFilterAgentConfig(ChatAgentConfig):
     use_functions_api = True
     vecdb_schema: str = ""
     system_message = f"""
-    You will receive a QUERY, to be answered based on some documents you DO NOT have 
-    access to. However you know that these documents have this SCHEMA:
+    You will receive a QUERY, to be answered based on an EXTREMELY LARGE collection
+    of documents you DO NOT have access to. However you know that these documents have 
+    this SCHEMA:
+    
     {{doc_schema}}
-    Note that in the schema, the "type" of each field is given, and a "descripton".
     
     The SCHEMA fields can be used as a FILTER on the documents. 
 
     Based on the QUERY and the SCHEMA, your ONLY task is to decide:
-    - whether applying a FILTER to the QUERY would help to answer it.
+    - whether applying a FILTER would help to answer it.
     - whether the QUERY needs to be REPHRASED to be answerable given the FILTER.
-    (for example, the rephrased QUERY should NOT refer to fields used in the FILTER) 
-        
+    
+    The (possibly rephrased) QUERY should be answerable by your assistant
+    who DOES have access to the documents, and they will FIRST APPLY the FILTER
+    before answering the QUERY. 
+
+    KEEP THIS IN MIND: The FILTER narrows the set of matching documents,
+    and the QUERY must make sense in the context of the FILTER.
+    
+    Example:
+    ------- 
+    ORIGINAL QUERY: Tell me about crime movies rated over 8 made in 2023.
+    FILTER: genre = 'Crime' AND rating > 8 AND year = 2023
+    REPHRASED QUERY: Tell me about the movies. 
+        [NOTE how the REPHRASED QUERY does NOT mention crime, rating, or year,
+        since those are already taken care of by the FILTER.]
+    
     The FILTER must be a SQL-like condition, e.g. 
     "year > 2000 AND genre = 'ScienceFiction'".
     To ensure you get useful results, you should make your FILTER 
     NOT TOO STRICT, e.g. look for approximate match using LIKE, etc.
         
     You must present the FILTER and (POSSIBLY rephrased QUERY)
-    using the `add_filter` tool. Use dot notation to refer to nested fields, 
-    e.g. "payload.metadata.year" or "metadata.author".
-    
+    using the `add_filter` tool. Use dot notation to refer to nested fields. 
+        
     If you think no FILTER would help, you can leave the `filter` field empty.
     
     If you receive an answer that is an empty-string or {NO_ANSWER}, 
@@ -136,6 +151,8 @@ class LanceDocChatAgent(DocChatAgent):
         self.enable_message(FilterTool, use=False, handle=True)
 
     def _get_clean_vecdb_schema(self) -> str:
+        if self.from_dataframe:
+            return self.df_description
         schema_dict = clean_schema(
             self.vecdb.schema,
             excludes=["id", "vector"],
@@ -161,11 +178,10 @@ class LanceDocChatAgent(DocChatAgent):
 
     def ingest_docs(self, docs: List[Document], split: bool = True) -> int:
         n = super().ingest_docs(docs, split)
-        if self.vecdb.config.flatten:
-            tbl = self.vecdb.client.open_table(self.vecdb.config.collection_name)
-            payload_content = "payload__content"
-            if payload_content in tbl.schema.names:
-                tbl.create_fts_index(payload_content)
+        tbl = self.vecdb.client.open_table(self.vecdb.config.collection_name)
+        # We assume "content" is available as top-level field
+        if "content" in tbl.schema.names:
+            tbl.create_fts_index("content")
         return n
 
     def ingest_dataframe(
@@ -174,32 +190,41 @@ class LanceDocChatAgent(DocChatAgent):
         content: str = "content",
         metadata: List[str] = [],
     ) -> int:
+        self.from_dataframe = True
+        if df.shape[0] == 0:
+            raise ValueError(
+                """
+                LanceDocChatAgent.ingest_dataframe() received an empty dataframe.
+                """
+            )
         n = df.shape[0]
         df, metadata = DocChatAgent.document_compatible_dataframe(df, content, metadata)
+        self.df_description = describe_dataframe(df, sample_size=3)
         self.vecdb.add_dataframe(df, content="content", metadata=metadata)
+
+        tbl = self.vecdb.client.open_table(self.vecdb.config.collection_name)
+        # We assume "content" is available as top-level field
+        if "content" in tbl.schema.names:
+            tbl.create_fts_index("content")
+        # We still need to do the below so that
+        # other types of searches in DocChatAgent
+        # can work, as they require Document objects
         docs = dataframe_to_documents(df, content="content", metadata=metadata)
         self.setup_documents(docs)
+        # mark each doc as already-chunked so we don't try to split them further
+        # TODO later we may want to split large text-columns
+        for d in docs:
+            d.metadata.is_chunk = True
         return n  # type: ignore
 
-    def _get_similar_chunks_bm25_(
+    def _get_similar_chunks_bm25(
         self, query: str, multiple: int
     ) -> List[Tuple[Document, float]]:
         """
         Override the DocChatAgent.get_similar_chunks_bm25()
         to use LanceDB FTS (Full Text Search).
         """
-        if not self.vecdb.config.flatten:
-            # in this case we can't use FTS since we don't have
-            # access to the payload fields.
-            # TODO: get rid of this and the below checks
-            # when LanceDB supports nested fields:
-            # https://github.com/lancedb/lance/issues/1739
-            # PR pending: https://github.com/lancedb/lancedb/pull/723
-            return super().get_similar_chunks_bm25(query, multiple)
         tbl = self.vecdb.client.open_table(self.vecdb.config.collection_name)
-        payload_content = "payload__content"
-        if payload_content not in tbl.schema.names:
-            return super().get_similar_chunks_bm25(query, multiple)
         columns = tbl.schema.names
         results = (
             tbl.search(query)
@@ -236,8 +261,8 @@ class LanceRAGTaskCreator:
             agent,
             name="LanceRAG",
             interactive=False,
-            done_if_response=[Entity.LLM],
-            done_if_no_response=[Entity.LLM],
+            done_if_response=[Entity.LLM],  # done when non-null response from LLM
+            done_if_no_response=[Entity.LLM],  # done when null response from LLM
         )
         filter_task.add_sub_task(rag_task)
         return filter_task
