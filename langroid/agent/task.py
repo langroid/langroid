@@ -820,8 +820,8 @@ class Task:
 
     def _maybe_infinite_loop(self, history: int = 10) -> bool:
         """
-        Check if {NO_ANSWER}, empty answer, or a specific msg occurs too often in
-        history of pending messages -- this can be an indicator of a possible
+        Check if {NO_ANSWER}, empty answer, or a specific non-LLM msg occurs too
+        often in history of pending messages -- this can be an indicator of a possible
         multi-step infinite loop that we should exit.
         (A single-step infinite loop is where individual steps don't show progress
         and are easy to detect via n_stalled_steps, but a multi-step infinite loop
@@ -838,14 +838,15 @@ class Task:
             if p is None:
                 break
             n_no_answers += NO_ANSWER in p.content
-            n_empty_answers += p.content.strip() == ""
-            counter.update([p.content])
+            n_empty_answers += p.content.strip() == "" and p.function_call is None
+            if p.metadata.sender != Entity.LLM:
+                counter.update([p.content])
             p = p.metadata.parent
 
         # freq of most common message in history
-        high_freq = counter.most_common(1)[0][1]
+        high_freq = (counter.most_common(1) or [("", 0)])[0][1]
         # We deem this a potential infinite loop if:
-        # - a specific msg occurs too often, or
+        # - a specific non-LLM msg occurs too often, or
         # - a NO_ANSWER or empty answer occurs too often
         return max(high_freq, n_no_answers, n_empty_answers) > self.max_stalled_steps
 
