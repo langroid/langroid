@@ -22,7 +22,7 @@ For usage see:
 """
 import json
 import logging
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 
 import pandas as pd
 
@@ -140,6 +140,30 @@ class LanceFilterAgent(ChatAgent):
         if isinstance(msg, ChatDocument) and msg.metadata.sender == Entity.LLM:
             return f"{DONE} {PASS}"
         return None
+
+    def llm_response(
+        self,
+        query: None | str | ChatDocument = None,
+    ) -> Optional[ChatDocument]:
+        """Replace DONE with DONE PASS in case LLM says DONE without PASS"""
+        response = super().llm_response(query)
+        if response is None:
+            return None
+        if DONE in response.content and PASS not in response.content:
+            response.content = response.content.replace(DONE, f"{DONE} {PASS}")
+        return response
+
+    async def llm_response_async(
+        self,
+        query: None | str | ChatDocument = None,
+    ) -> Optional[ChatDocument]:
+        """Replace DONE with DONE PASS in case LLM says DONE without PASS"""
+        response = await super().llm_response_async(query)
+        if response is None:
+            return None
+        if DONE in response.content and PASS not in response.content:
+            response.content = response.content.replace(DONE, f"{DONE} {PASS}")
+        return response
 
 
 class LanceDocChatAgent(DocChatAgent):
