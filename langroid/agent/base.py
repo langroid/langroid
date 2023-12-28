@@ -627,7 +627,7 @@ class Agent(ABC):
 
         results_list = [r for r in results if r is not None]
         if len(results_list) == 0:
-            return self.handle_message_fallback(msg)
+            return None  # self.handle_message_fallback(msg)
         # there was a non-None result
         chat_doc_results = [r for r in results_list if isinstance(r, ChatDocument)]
         if len(chat_doc_results) > 1:
