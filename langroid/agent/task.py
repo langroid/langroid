@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import logging
+from collections import Counter
 from typing import Any, Callable, Coroutine, Dict, List, Optional, Set, Type, cast
 
 from rich import print
@@ -817,6 +818,37 @@ class Task:
             or (not self._is_empty_message(result) and response_says_done)
         )
 
+    def _maybe_infinite_loop(self, history: int = 10) -> bool:
+        """
+        Check if {NO_ANSWER}, empty answer, or a specific msg occurs too often in
+        history of pending messages -- this can be an indicator of a possible
+        multi-step infinite loop that we should exit.
+        (A single-step infinite loop is where individual steps don't show progress
+        and are easy to detect via n_stalled_steps, but a multi-step infinite loop
+        could show "progress" at each step, but can still be an infinite loop, e.g.
+        if the steps are just alternating between two messages).
+        """
+        p = self.pending_message
+        n_no_answers = 0
+        n_empty_answers = 0
+        counter: Counter[str] = Counter()
+        # count number of NO_ANSWER and empty answers in last up to 10 messages
+        # in ancestors of self.pending_message
+        for _ in range(history):
+            if p is None:
+                break
+            n_no_answers += NO_ANSWER in p.content
+            n_empty_answers += p.content.strip() == ""
+            counter.update([p.content])
+            p = p.metadata.parent
+
+        # freq of most common message in history
+        high_freq = counter.most_common(1)[0][1]
+        # We deem this a potential infinite loop if:
+        # - a specific msg occurs too often, or
+        # - a NO_ANSWER or empty answer occurs too often
+        return max(high_freq, n_no_answers, n_empty_answers) > self.max_stalled_steps
+
     def done(
         self, result: ChatDocument | None = None, r: Responder | None = None
     ) -> bool:
@@ -841,6 +873,11 @@ class Task:
         if self._level == 0 and self.only_user_quits_root:
             # for top-level task, only user can quit out
             return user_quit
+
+        if self._maybe_infinite_loop(self.max_stalled_steps * 5):
+            # we are stuck, so bail to avoid infinite loop
+            logger.warning(f"Task {self.name} seems stuck; exiting.")
+            return True
 
         if self.n_stalled_steps >= self.max_stalled_steps:
             # we are stuck, so bail to avoid infinite loop

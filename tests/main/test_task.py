@@ -12,7 +12,7 @@ from langroid.agent.task import Task
 from langroid.agent.tool_message import ToolMessage
 from langroid.mytypes import Entity
 from langroid.utils.configuration import Settings, set_global
-from langroid.utils.constants import DONE, PASS
+from langroid.utils.constants import DONE, NO_ANSWER, PASS
 
 
 def test_task_empty_response(test_settings: Settings):
@@ -139,12 +139,12 @@ def test_task_default_human_response(
     assert expected in response.content
 
 
-@pytest.mark.parametrize("use_fn_api", [False])
+@pytest.mark.parametrize("use_fn_api", [True, False])
 @pytest.mark.parametrize(
     "agent_response",
-    [DONE, f"{DONE} {PASS}"],
+    [PASS, f"{DONE} {PASS}", NO_ANSWER, "", None, DONE],
 )
-def test_task_tool_pass(
+def test_task_tool_agent_response(
     test_settings: Settings,
     use_fn_api: bool,
     agent_response: str,
@@ -153,7 +153,7 @@ def test_task_tool_pass(
     Test loop within single agent, where this cycle repeats:
         [ LLM --Tool--> Agent[Tool] ---> (User) ]*
 
-    The Agent responds to the tool with a PASS or PASS DONE.
+    Test expected behavior for various Agent-tool-handler responses.
     """
     set_global(test_settings)
 
@@ -177,18 +177,18 @@ def test_task_tool_pass(
                 ),
             ]
 
-    class MyAgent(ChatAgent):
+        @staticmethod
         def handle_message_fallback(
-            self, msg: str | ChatDocument
+            agent, msg: str | ChatDocument
         ) -> str | ChatDocument | None:
             if isinstance(msg, ChatDocument) and msg.metadata.sender == Entity.LLM:
                 return """
                     You must use the `next_num` tool/function to 
                     augment the given number.
-                """
+                    """
             return None
 
-    agent = MyAgent(
+    agent = ChatAgent(
         ChatAgentConfig(
             name="Test",
             use_functions_api=use_fn_api,
@@ -200,23 +200,29 @@ def test_task_tool_pass(
         )
     )
     agent.enable_message(AugmentTool)
-    task = Task(
-        agent,
-        default_human_response=PASS,
-        interactive=False,
-    )
+    task = Task(agent, interactive=False, max_stalled_steps=2)
 
     response = task.run("100")
-    if use_fn_api:
-        if agent_response == DONE:
-            assert response.content == ""
-        else:
-            assert response.function_call.name == "next_num"
-    else:
-        if agent_response == DONE:
-            assert response.content == ""
-        else:
-            assert "next_num" in response.content
+
+    def content_empty():
+        return response.content == ""
+
+    def fn_call_valid():
+        return response.function_call.name == "next_num"
+
+    def tool_valid():
+        return "next_num" in response.content
+
+    def fn_or_tool_valid():
+        return fn_call_valid() if use_fn_api else tool_valid()
+
+    match agent_response:
+        case x if x in [NO_ANSWER, PASS, ""]:
+            assert True  # successful exit from inf loop
+        case x if x == DONE:
+            assert content_empty()
+        case x if x == f"{DONE} {PASS}":
+            assert fn_or_tool_valid()
 
 
 @pytest.mark.parametrize("use_fn_api", [True, False])
