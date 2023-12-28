@@ -17,6 +17,7 @@ Optional arguments:
 import typer
 import pandas as pd
 from rich import print
+from rich.prompt import Prompt
 import langroid.language_models as lm
 from langroid.agent.special.doc_chat_agent import DocChatAgentConfig
 from langroid.agent.special.lance_doc_chat_agent import (
@@ -69,13 +70,40 @@ def main(
 
     print(
         """
-        [blue]Welcome to the IMDB reviews chatbot!
-        This dataset has 129K movie reviews, with these columns:
+        [blue]Welcome to the IMDB Movies chatbot!
+        This dataset has around 130,000 movie reviews, with these columns:
+        
         movie, genre, runtime, certificate, rating, stars, 
         description, votes, director.
         
-        You can ask questions about these movies.
+        To keep things speedy, we'll restrict the dataset to movies
+        of a specific genre that you can choose.
         """
+    )
+    genre = Prompt.ask(
+        "Which of these genres would you like to focus on?",
+        default="Crime",
+        choices=[
+            "Action",
+            "Adventure",
+            "Biography",
+            "Comedy",
+            "Crime",
+            "Documentary",
+            "Drama",
+            "Fantasy",
+            "History",
+            "Horror",
+            "Music",
+            "Musical",
+            "Mystery",
+            "Romance",
+            "Sci-Fi",
+            "Sport",
+            "Thriller",
+            "War",
+            "Western",
+        ],
     )
     cfg = DocChatAgentConfig(
         vecdb=ldb_cfg,
@@ -90,7 +118,7 @@ def main(
         # Remove commas and convert to integer, if fails return 0
         try:
             return int(value.replace(",", ""))
-        except:
+        except ValueError:
             return 0
 
     # Clean the 'votes' column
@@ -103,6 +131,14 @@ def main(
     df.fillna("??", inplace=True)
     df["description"].replace("", "unknown", inplace=True)
 
+    # get the rows where 'Crime' is in the genre column
+    df = df[df["genre"].str.contains(genre)]
+
+    print(
+        f"""
+    [blue]There are {df.shape[0]} movies in {genre} genre, hang on while I load them...
+    """
+    )
     # sample 1000 rows for faster testing
     df = df.sample(1000)
 
@@ -116,7 +152,7 @@ def main(
         interactive=True,
     )
 
-    task.run("Can you help with some questions about movies?")
+    task.run("Can you help with some questions about these movies?")
 
 
 if __name__ == "__main__":
