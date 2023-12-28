@@ -12,7 +12,7 @@ from langroid.agent.task import Task
 from langroid.agent.tool_message import ToolMessage
 from langroid.mytypes import Entity
 from langroid.utils.configuration import Settings, set_global
-from langroid.utils.constants import DONE, NO_ANSWER, PASS
+from langroid.utils.constants import DONE, PASS
 
 
 def test_task_empty_response(test_settings: Settings):
@@ -142,7 +142,7 @@ def test_task_default_human_response(
 @pytest.mark.parametrize("use_fn_api", [True, False])
 @pytest.mark.parametrize(
     "agent_response",
-    [PASS, f"{DONE} {PASS}", NO_ANSWER, "", None, DONE],
+    [f"{DONE} {PASS}", DONE],
 )
 def test_task_tool_agent_response(
     test_settings: Settings,
@@ -200,7 +200,7 @@ def test_task_tool_agent_response(
         )
     )
     agent.enable_message(AugmentTool)
-    task = Task(agent, interactive=False, max_stalled_steps=2)
+    task = Task(agent, interactive=False)
 
     response = task.run("100")
 
@@ -217,8 +217,6 @@ def test_task_tool_agent_response(
         return fn_call_valid() if use_fn_api else tool_valid()
 
     match agent_response:
-        case x if x in [NO_ANSWER, PASS, ""]:
-            assert True  # successful exit from inf loop
         case x if x == DONE:
             assert content_empty()
         case x if x == f"{DONE} {PASS}":

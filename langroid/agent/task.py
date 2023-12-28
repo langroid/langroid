@@ -68,7 +68,7 @@ class Task:
         only_user_quits_root: bool = True,
         erase_substeps: bool = False,
         allow_null_result: bool = True,
-        max_stalled_steps: int = 3,
+        max_stalled_steps: int = 5,
         done_if_no_response: List[Responder] = [],
         done_if_response: List[Responder] = [],
     ):
@@ -820,6 +820,7 @@ class Task:
 
     def _maybe_infinite_loop(self, history: int = 10) -> bool:
         """
+        TODO Not currently used, until we figure out best way.
         Check if {NO_ANSWER}, empty answer, or a specific non-LLM msg occurs too
         often in history of pending messages -- this can be an indicator of a possible
         multi-step infinite loop that we should exit.
@@ -839,8 +840,8 @@ class Task:
                 break
             n_no_answers += NO_ANSWER in p.content
             n_empty_answers += p.content.strip() == "" and p.function_call is None
-            if p.metadata.sender != Entity.LLM:
-                counter.update([p.content])
+            if p.metadata.sender != Entity.LLM and PASS not in p.content:
+                counter.update([p.metadata.sender + ":" + p.content])
             p = p.metadata.parent
 
         # freq of most common message in history
@@ -848,7 +849,7 @@ class Task:
         # We deem this a potential infinite loop if:
         # - a specific non-LLM msg occurs too often, or
         # - a NO_ANSWER or empty answer occurs too often
-        return max(high_freq, n_no_answers, n_empty_answers) > self.max_stalled_steps
+        return max(high_freq, n_no_answers) > self.max_stalled_steps
 
     def done(
         self, result: ChatDocument | None = None, r: Responder | None = None
@@ -874,11 +875,6 @@ class Task:
         if self._level == 0 and self.only_user_quits_root:
             # for top-level task, only user can quit out
             return user_quit
-
-        if self._maybe_infinite_loop(self.max_stalled_steps * 5):
-            # we are stuck, so bail to avoid infinite loop
-            logger.warning(f"Task {self.name} seems stuck; exiting.")
-            return True
 
         if self.n_stalled_steps >= self.max_stalled_steps:
             # we are stuck, so bail to avoid infinite loop
