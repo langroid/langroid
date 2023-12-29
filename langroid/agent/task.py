@@ -140,12 +140,13 @@ class Task:
         self.step_progress = False  # progress in current step?
         self.n_stalled_steps = 0  # how many consecutive steps with no progress?
         self.max_stalled_steps = max_stalled_steps
-        self.done_if_response = [str(r) for r in done_if_response]
-        self.done_if_no_response = [str(r) for r in done_if_no_response]
+        self.done_if_response = [r.value for r in done_if_response]
+        self.done_if_no_response = [r.value for r in done_if_no_response]
         self.is_done = False  # is task done (based on response)?
         self.is_pass_thru = False  # is current response a pass-thru?
         self.task_progress = False  # progress in current task (since run or run_async)?
         self.name = name or agent.config.name
+        self.value = self.name
         self.default_human_response = default_human_response
         self.interactive = interactive
         self.message_history_idx = -1
@@ -231,8 +232,8 @@ class Task:
             erase_substeps=self.erase_substeps,
             allow_null_result=self.allow_null_result,
             max_stalled_steps=self.max_stalled_steps,
-            done_if_no_response=[Entity[s] for s in self.done_if_no_response],
-            done_if_response=[Entity[s] for s in self.done_if_response],
+            done_if_no_response=[Entity(s) for s in self.done_if_no_response],
+            done_if_response=[Entity(s) for s in self.done_if_response],
         )
 
     def __repr__(self) -> str:
@@ -820,11 +821,11 @@ class Task:
         )
         return (
             (
-                str(responder) in self.done_if_response
+                responder.value in self.done_if_response
                 and not self._is_empty_message(result)
             )
             or (
-                str(responder) in self.done_if_no_response
+                responder.value in self.done_if_no_response
                 and self._is_empty_message(result)
             )
             or (not self._is_empty_message(result) and response_says_done)
