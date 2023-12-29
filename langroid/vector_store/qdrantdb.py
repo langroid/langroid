@@ -1,6 +1,8 @@
+import hashlib
 import json
 import logging
 import os
+import uuid
 from typing import List, Optional, Sequence, Tuple, TypeVar
 
 from dotenv import load_dotenv
@@ -35,6 +37,23 @@ def from_optional(x: Optional[T], default: T) -> T:
         return default
 
     return x
+
+
+def is_valid_uuid(uuid_to_test: str) -> bool:
+    """
+    Check if a given string is a valid UUID.
+    """
+    try:
+        uuid_obj = uuid.UUID(uuid_to_test)
+        return str(uuid_obj) == uuid_to_test
+    except Exception:
+        pass
+    # Check for valid unsigned 64-bit integer
+    try:
+        int_value = int(uuid_to_test)
+        return 0 <= int_value <= 18446744073709551615
+    except ValueError:
+        return False
 
 
 class QdrantDBConfig(VectorStoreConfig):
@@ -203,7 +222,11 @@ class QdrantDB(VectorStore):
             logger.setLevel(level)
 
     def add_documents(self, documents: Sequence[Document]) -> None:
+        # Add id to metadata if not already present
         super().maybe_add_ids(documents)
+        # Fix the ids due to qdrant finickiness
+        for doc in documents:
+            doc.metadata.id = str(self._to_int_or_uuid(doc.metadata.id))
         colls = self.list_collections(empty=True)
         if len(documents) == 0:
             return
@@ -231,9 +254,31 @@ class QdrantDB(VectorStore):
 
     def _to_int_or_uuid(self, id: str) -> int | str:
         try:
-            return int(id)
+            int_val = int(id)
+            if is_valid_uuid(id):
+                return int_val
         except ValueError:
+            pass
+
+        # If doc_id is already a valid UUID, return it as is
+        if isinstance(id, str) and is_valid_uuid(id):
             return id
+
+        # Otherwise, generate a UUID from the doc_id
+        # Convert doc_id to string if it's not already
+        id_str = str(id)
+
+        # Hash the document ID using SHA-1
+        hash_object = hashlib.sha1(id_str.encode())
+        hash_digest = hash_object.hexdigest()
+
+        # Truncate or manipulate the hash to fit into a UUID (128 bits)
+        uuid_str = hash_digest[:32]
+
+        # Format this string into a UUID format
+        formatted_uuid = uuid.UUID(uuid_str)
+
+        return str(formatted_uuid)
 
     def get_all_documents(self, where: str = "") -> List[Document]:
         if self.config.collection_name is None:

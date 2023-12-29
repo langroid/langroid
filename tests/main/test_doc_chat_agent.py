@@ -3,9 +3,11 @@ import warnings
 from types import SimpleNamespace
 from typing import List
 
+import pandas as pd
 import pytest
 
 from langroid.agent.special.doc_chat_agent import DocChatAgent, DocChatAgentConfig
+from langroid.agent.special.lance_doc_chat_agent import LanceDocChatAgent
 from langroid.agent.task import Task
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
@@ -233,7 +235,8 @@ def test_doc_chat_followup(test_settings: Settings, agent, conv_mode: bool):
         agent,
         default_human_response="",
         restart=True,
-        single_round=True,
+        done_if_response=[Entity.LLM],
+        done_if_no_response=[Entity.LLM],
     )
     result = task.run("Who was Charlie Chaplin?")
     assert "comedian" in result.content.lower()
@@ -384,3 +387,60 @@ def test_doc_chat_rerank_periphery(test_settings: Settings, vecdb):
     reranked = agent.rerank_to_periphery(docs)
     numbers = [int(d.content) for d in reranked]
     assert numbers == [0, 2, 4, 6, 8, 9, 7, 5, 3, 1]
+
+
+data = {
+    "id": ["A100", "B200", "C300", "D400", "E500"],
+    "year": [1955, 1977, 1989, 2001, 2015],
+    "author": [
+        "Isaac Asimov",
+        "J.K. Rowling",
+        "George Orwell",
+        "J.R.R. Tolkien",
+        "H.G. Wells",
+    ],
+    "title": [
+        "The Last Question",
+        "Harry Potter",
+        "1984",
+        "The Lord of the Rings",
+        "The Time Machine",
+    ],
+    "summary": [
+        "A story exploring the concept of entropy and the end of the universe.",
+        "The adventures of a young wizard and his friends at a magical school.",
+        "A dystopian novel about a totalitarian regime and the concept of freedom.",
+        "An epic fantasy tale of a quest to destroy a powerful ring.",
+        "A science fiction novel about time travel and its consequences.",
+    ],
+}
+
+df = pd.DataFrame(data)
+
+
+@pytest.mark.parametrize("metadata", [[], ["id", "year"], ["year"]])
+@pytest.mark.parametrize("vecdb", ["lancedb", "qdrant_local", "chroma"], indirect=True)
+def test_doc_chat_ingest_df(
+    test_settings: Settings,
+    vecdb,
+    metadata,
+):
+    """Check we can ingest from a dataframe and run queries."""
+    set_global(test_settings)
+
+    sys_msg = "You will be asked to answer questions based on short movie descriptions."
+    agent_cfg = DocChatAgentConfig(
+        system_message=sys_msg,
+    )
+    if isinstance(vecdb, LanceDB):
+        agent = LanceDocChatAgent(agent_cfg)
+    else:
+        agent = DocChatAgent(agent_cfg)
+    agent.vecdb = vecdb
+    agent.ingest_dataframe(df, content="summary", metadata=metadata)
+    response = agent.llm_response(
+        """
+        What concept does the movie dealing with the end of the universe explore?
+        """
+    )
+    assert "entropy" in response.content.lower()

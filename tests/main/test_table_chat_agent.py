@@ -87,8 +87,6 @@ def _test_table_chat_agent(
         agent,
         name="TableChatAgent",
         interactive=False,
-        llm_delegate=True,
-        single_round=False,
     )
 
     # run until LLM says DONE and shows answer,
@@ -172,8 +170,6 @@ def test_table_chat_agent_url(test_settings: Settings, fn_api: bool) -> None:
         agent,
         name="TableChatAgent",
         interactive=False,
-        llm_delegate=True,
-        single_round=False,
     )
 
     # run until LLM says DONE and shows answer,

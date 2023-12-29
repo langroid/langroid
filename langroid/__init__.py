@@ -30,4 +30,5 @@ from .agent.task import Task
 from .mytypes import (
     DocMetaData,
     Document,
+    Entity,
 )

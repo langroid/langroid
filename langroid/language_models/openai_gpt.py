@@ -341,8 +341,10 @@ class OpenAIGPT(LanguageModel):
                 config.cache_config = RedisCacheConfig(
                     fake="fake" in settings.cache_type
                 )
+            if "fake" in settings.cache_type:
+                # force use of fake redis if global cache_type is "fakeredis"
+                config.cache_config.fake = True
             self.cache = RedisCache(config.cache_config)
-            config.cache_config.fake = "fake" in settings.cache_type
         else:
             raise ValueError(
                 f"Invalid cache type {settings.cache_type}. "

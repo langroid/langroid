@@ -1,7 +1,7 @@
 import json
-from typing import Any, List
+from typing import Any, Iterator, List
 
-import regex
+from pyparsing import nestedExpr, originalTextFor
 
 
 def is_valid_json(json_str: str) -> bool:
@@ -20,6 +20,30 @@ def is_valid_json(json_str: str) -> bool:
         return False
 
 
+def flatten(nested_list) -> Iterator[str]:  # type: ignore
+    """Flatten a nested list into a single list of strings"""
+    for item in nested_list:
+        if isinstance(item, (list, tuple)):
+            for subitem in flatten(item):
+                yield subitem
+        else:
+            yield item
+
+
+def get_json_candidates(s: str) -> List[str]:
+    """Get top-level JSON candidates, i.e. strings between curly braces."""
+    # Define the grammar for matching curly braces
+    curly_braces = originalTextFor(nestedExpr("{", "}"))
+
+    # Parse the string
+    try:
+        results = curly_braces.searchString(s)
+        # Properly convert nested lists to strings
+        return [r[0] for r in results]
+    except Exception:
+        return []
+
+
 def extract_top_level_json(s: str) -> List[str]:
     """Extract all top-level JSON-formatted substrings from a given string.
 
@@ -30,10 +54,14 @@ def extract_top_level_json(s: str) -> List[str]:
         List[str]: A list of top-level JSON-formatted substrings.
     """
     # Find JSON object and array candidates using regular expressions
-    json_candidates = regex.findall(r"(?<!\\)(?:\\\\)*\{(?:[^{}]|(?R))*\}", s)
+    json_candidates = get_json_candidates(s)
 
+    normalized_candidates = [
+        candidate.replace("\\{", "{").replace("\\}", "}")
+        for candidate in json_candidates
+    ]
     top_level_jsons = [
-        candidate for candidate in json_candidates if is_valid_json(candidate)
+        candidate for candidate in normalized_candidates if is_valid_json(candidate)
     ]
 
     return top_level_jsons

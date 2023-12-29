@@ -41,18 +41,36 @@ class ChatAgentConfig(AgentConfig):
 
     system_message: str = "You are a helpful assistant."
     user_message: Optional[str] = None
-    use_tools: bool = True
-    use_functions_api: bool = False
+    use_tools: bool = False
+    use_functions_api: bool = True
 
-    def _switch_fn_to_tools(self) -> None:
+    def _set_fn_or_tools(self, fn_available: bool) -> None:
         """
-        Switch to using our own ToolMessage mechanism,
-        in case the LLM is not an OpenAI model.
+        Enable Langroid Tool or OpenAI-like fn-calling,
+        depending on config settings and availability of fn-calling.
         """
-        if not self.use_functions_api:
+        if self.use_functions_api and not fn_available:
+            logger.warning(
+                """
+                You have enabled `use_functions_api` but the LLM does not support it.
+                So we will enable `use_tools` instead, so we can use 
+                Langroid's ToolMessage mechanism.
+                """
+            )
+            self.use_functions_api = False
+            self.use_tools = True
+
+        if not self.use_functions_api or not self.use_tools:
             return
-        self.use_functions_api = False
-        self.use_tools = True
+        if self.use_functions_api and self.use_tools:
+            logger.warning(
+                """
+                You have enabled both `use_tools` and `use_functions_api`.
+                Turning off `use_tools`, since the LLM supports function-calling.
+                """
+            )
+            self.use_tools = False
+            self.use_functions_api = True
 
 
 class ChatAgent(Agent):
@@ -84,23 +102,7 @@ class ChatAgent(Agent):
         """
         super().__init__(config)
         self.config: ChatAgentConfig = config
-        if (
-            self.llm is not None
-            and (
-                not isinstance(self.llm, OpenAIGPT)
-                or not self.llm.is_openai_chat_model()
-            )
-            and self.config.use_functions_api
-        ):
-            # for non-OpenAI models, use Langroid Tool instead of Function-calling
-            logger.warning(
-                f"""
-                Function calling not available for {self.llm.config.chat_model},
-                switching to Langroid Tools instead.
-                """
-            )
-            self.config._switch_fn_to_tools()
-
+        self.config._set_fn_or_tools(self._fn_call_available())
         self.message_history: List[LLMMessage] = []
         self.tool_instructions_added: bool = False
         # An agent's "task" is defined by a system msg and an optional user msg;
@@ -131,6 +133,14 @@ class ChatAgent(Agent):
         self.llm_functions_handled: Set[str] = set()
         self.llm_functions_usable: Set[str] = set()
         self.llm_function_force: Optional[Dict[str, str]] = None
+
+    def _fn_call_available(self) -> bool:
+        """Does this agent's LLM support function calling?"""
+        return (
+            self.llm is not None
+            and isinstance(self.llm, OpenAIGPT)
+            and self.llm.is_openai_chat_model()
+        )
 
     def set_system_message(self, msg: str) -> None:
         self.system_message = msg

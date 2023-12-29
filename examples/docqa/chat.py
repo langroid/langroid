@@ -44,8 +44,6 @@ def chat(config: DocChatAgentConfig) -> None:
     system_msg = re.sub("you are", "", system_msg, flags=re.IGNORECASE)
     task = Task(
         agent,
-        llm_delegate=False,
-        single_round=False,
         system_message="You are " + system_msg,
     )
     task.run()

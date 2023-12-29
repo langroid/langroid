@@ -31,7 +31,9 @@ from langroid.agent.task import Task
 from langroid.agent.tool_message import ToolMessage
 from langroid.agent.tools.recipient_tool import RecipientTool
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
+from langroid.mytypes import Entity
 from langroid.utils.configuration import Settings, set_global
+from langroid.utils.constants import DONE
 
 INPUT_NUMBERS = [1, 100, 12]
 TRANSFORMED_NUMBERS = [4, 10000, 6]
@@ -46,9 +48,9 @@ class SquareTool(ToolMessage):
     # without having to define a `square` method in the agent.
     def handle(self) -> str:
         if self.number % 10 == 0:
-            return str(self.number**2)
+            return DONE + str(self.number**2)
         else:
-            return "-1"
+            return DONE + "-1"
 
 
 @pytest.mark.asyncio
@@ -124,8 +126,6 @@ async def test_agents_with_recipient_tool(
         Start by requesting a transformation for the first number.
         Be very concise in your messages, do not say anything unnecessary.
         """,
-        llm_delegate=True,
-        single_round=False,
     )
     even_agent = ChatAgent(config)
     even_agent.enable_message(
@@ -137,7 +137,8 @@ async def test_agents_with_recipient_tool(
     even_task = Task(
         even_agent,
         name="EvenHandler",
-        default_human_response="",
+        interactive=False,
+        done_if_response=[Entity.LLM],  # done as soon as LLM responds
         system_message="""
         You will be given a number. 
         If it is even and not a multiple of 10:
@@ -145,20 +146,19 @@ async def test_agents_with_recipient_tool(
             WITHOUT using any tools/functions; say nothing else.
         Otherwise, say -10
         """,
-        single_round=True,  # task done after 1 step() with valid response
     )
 
     odd_agent = ChatAgent(config)
     odd_task = Task(
         odd_agent,
         name="OddHandler",
-        default_human_response="",
+        interactive=False,
+        done_if_response=[Entity.LLM],  # done as soon as LLM responds
         system_message="""
         You will be given a number n. 
         If it is odd, return (n*3+1), say nothing else. 
         If it is even, say -10
         """,
-        single_round=True,  # task done after 1 step() with valid response
     )
 
     processor_task.add_sub_task([even_task, odd_task])

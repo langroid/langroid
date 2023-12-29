@@ -22,12 +22,12 @@ from langroid.agent.openai_assistant import (
     OpenAIAssistant,
     AssistantTool,
 )
-
+import langroid as lr
 from langroid.agent.task import Task
 from langroid.agent.tool_message import ToolMessage
 from langroid.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
 from langroid.utils.logging import setup_colored_logging
-from langroid.utils.constants import NO_ANSWER
+from langroid.utils.constants import NO_ANSWER, DONE
 
 app = typer.Typer()
 
@@ -69,7 +69,7 @@ class LeaseMessage(ToolMessage):
         as a method with name `lease_info`.
         """
         print(f"DONE! Successfully extracted Lease Info:" f"{self.terms}")
-        return json.dumps(self.terms.dict())
+        return DONE + " " + json.dumps(self.terms.dict())
 
 
 @app.command()
@@ -86,8 +86,9 @@ def chat() -> None:
 
     retriever_task = Task(
         retriever_agent,
-        llm_delegate=False,
-        single_round=True,
+        interactive=False,
+        done_if_response=[lr.Entity.LLM],
+        done_if_no_response=[lr.Entity.LLM],
     )
 
     extractor_cfg = OpenAIAssistantConfig(
@@ -96,7 +97,8 @@ def chat() -> None:
         system_message=f"""
         You have to collect information about a Commercial Lease from a 
         lease contract which you don't have access to. You need to ask
-        questions to get this information. Once you have all the REQUIRED fields, 
+        questions ONE BY ONE to get this information. 
+        Once you have all the REQUIRED fields, 
         you have to present it to me using the `lease_info` 
         function/tool (fill in {NO_ANSWER} for slots that you are unable to fill).
         """,
@@ -104,11 +106,7 @@ def chat() -> None:
     extractor_agent = OpenAIAssistant(extractor_cfg)
     extractor_agent.enable_message(LeaseMessage, include_defaults=False)
 
-    extractor_task = Task(
-        extractor_agent,
-        llm_delegate=True,
-        single_round=False,
-    )
+    extractor_task = Task(extractor_agent, interactive=False)
     extractor_task.add_sub_task(retriever_task)
     extractor_task.run()
 

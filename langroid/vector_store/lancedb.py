@@ -2,8 +2,10 @@ import logging
 from typing import Any, Dict, Generator, List, Optional, Sequence, Tuple, Type
 
 import lancedb
+import pandas as pd
 from dotenv import load_dotenv
 from lancedb.pydantic import LanceModel, Vector
+from lancedb.query import LanceVectorQueryBuilder
 from pydantic import BaseModel, create_model
 
 from langroid.embedding_models.base import (
@@ -14,6 +16,8 @@ from langroid.embedding_models.models import OpenAIEmbeddingsConfig
 from langroid.mytypes import Document, EmbeddingFunction
 from langroid.utils.configuration import settings
 from langroid.utils.pydantic_utils import (
+    dataframe_to_document_model,
+    dataframe_to_documents,
     flatten_pydantic_instance,
     flatten_pydantic_model,
     nested_dict_from_flat,
@@ -42,12 +46,9 @@ class LanceDB(VectorStore):
         self.embedding_dim = emb_model.embedding_dims
         self.host = config.host
         self.port = config.port
-        self.unflattened_schema = self._create_lance_schema(self.config.document_class)
-        self.schema = (
-            self._create_flat_lance_schema(self.config.document_class)
-            if self.config.flatten
-            else self.unflattened_schema
-        )
+        self.is_from_dataframe = False  # were docs ingested from a dataframe?
+        self.df_metadata_columns: List[str] = []  # metadata columns from dataframe
+        self._setup_schemas(config.document_class)
 
         load_dotenv()
         if self.config.cloud:
@@ -80,6 +81,15 @@ class LanceDB(VectorStore):
             self.create_collection(
                 config.collection_name, replace=config.replace_collection
             )
+
+    def _setup_schemas(self, doc_cls: Type[Document] | None) -> None:
+        doc_cls = doc_cls or self.config.document_class
+        self.unflattened_schema = self._create_lance_schema(doc_cls)
+        self.schema = (
+            self._create_flat_lance_schema(doc_cls)
+            if self.config.flatten
+            else self.unflattened_schema
+        )
 
     def clear_empty_collections(self) -> int:
         coll_names = self.list_collections()
@@ -140,7 +150,7 @@ class LanceDB(VectorStore):
          - Vector field that has dims equal to
             the embedding dimension of the embedding model, and a data field of type
             DocClass.
-         - payload of type `doc_cls`
+         - other fields from doc_cls
 
         Args:
             doc_cls (Type[Document]): A Pydantic model which should be a subclass of
@@ -158,13 +168,17 @@ class LanceDB(VectorStore):
 
         n = self.embedding_dim
 
+        # Prepare fields for the new model
+        fields = {"id": (str, ...), "vector": (Vector(n), ...)}
+
+        # Add both statically and dynamically defined fields from doc_cls
+        for field_name, field in doc_cls.__fields__.items():
+            fields[field_name] = (field.outer_type_, field.default)
+
+        # Create the new model with dynamic fields
         NewModel = create_model(
-            "NewModel",
-            __base__=LanceModel,
-            id=(str, ...),
-            vector=(Vector(n), ...),
-            payload=(doc_cls, ...),
-        )
+            "NewModel", __base__=LanceModel, **fields
+        )  # type: ignore
         return NewModel  # type: ignore
 
     def _create_flat_lance_schema(self, doc_cls: Type[Document]) -> Type[BaseModel]:
@@ -211,10 +225,20 @@ class LanceDB(VectorStore):
         if len(documents) == 0:
             return
         embedding_vecs = self.embedding_fn([doc.content for doc in documents])
-        if self.config.collection_name is None:
+        coll_name = self.config.collection_name
+        if coll_name is None:
             raise ValueError("No collection name set, cannot ingest docs")
-        if self.config.collection_name not in colls:
-            self.create_collection(self.config.collection_name, replace=True)
+        if (
+            coll_name not in colls
+            or self.client.open_table(coll_name).head(1).shape[0] == 0
+        ):
+            # collection either doesn't exist or is empty, so replace it,
+            # possibly with a new schema
+            doc_cls = type(documents[0])
+            self.config.document_class = doc_cls
+            self._setup_schemas(doc_cls)
+            self.create_collection(coll_name, replace=True)
+
         ids = [str(d.id()) for d in documents]
         # don't insert all at once, batch in chunks of b,
         # else we get an API error
@@ -226,7 +250,7 @@ class LanceDB(VectorStore):
                     self.unflattened_schema(
                         id=ids[i],
                         vector=embedding_vecs[i],
-                        payload=doc,
+                        **doc.dict(),
                     )
                     for i, doc in enumerate(documents[i : i + b])
                 ]
@@ -240,37 +264,120 @@ class LanceDB(VectorStore):
         tbl = self.client.open_table(self.config.collection_name)
         tbl.add(make_batches())
 
+    def add_dataframe(
+        self,
+        df: pd.DataFrame,
+        content: str = "content",
+        metadata: List[str] = [],
+    ) -> None:
+        """
+        Add a dataframe to the collection.
+        Args:
+            df (pd.DataFrame): A dataframe
+            content (str): The name of the column in the dataframe that contains the
+                text content to be embedded using the embedding model.
+            metadata (List[str]): A list of column names in the dataframe that contain
+                metadata to be stored in the database. Defaults to [].
+        """
+        self.is_from_dataframe = True
+        actual_metadata = metadata.copy()
+        self.df_metadata_columns = actual_metadata  # could be updated below
+        # get content column
+        content_values = df[content].values.tolist()
+        embedding_vecs = self.embedding_fn(content_values)
+
+        # add vector column
+        df["vector"] = embedding_vecs
+        if content != "content":
+            # rename content column to "content", leave existing column intact
+            df = df.rename(columns={content: "content"}, inplace=False)
+
+        if "id" not in df.columns:
+            docs = dataframe_to_documents(df, content="content", metadata=metadata)
+            ids = [str(d.id()) for d in docs]
+            df["id"] = ids
+
+        if "id" not in actual_metadata:
+            actual_metadata += ["id"]
+
+        colls = self.list_collections(empty=True)
+        coll_name = self.config.collection_name
+        if (
+            coll_name not in colls
+            or self.client.open_table(coll_name).head(1).shape[0] == 0
+        ):
+            # collection either doesn't exist or is empty, so replace it
+            # and set new schema from df
+            self.client.create_table(
+                self.config.collection_name,
+                data=df,
+                mode="overwrite",
+            )
+            doc_cls = dataframe_to_document_model(
+                df,
+                content=content,
+                metadata=actual_metadata,
+                exclude=["vector"],
+            )
+            self.config.document_class = doc_cls  # type: ignore
+            self._setup_schemas(doc_cls)  # type: ignore
+        else:
+            # collection exists and is not empty, so append to it
+            tbl = self.client.open_table(self.config.collection_name)
+            tbl.add(df)
+
     def delete_collection(self, collection_name: str) -> None:
         self.client.drop_table(collection_name)
 
+    def _lance_result_to_docs(self, result: LanceVectorQueryBuilder) -> List[Document]:
+        if self.is_from_dataframe:
+            df = result.to_pandas()
+            return dataframe_to_documents(
+                df,
+                content="content",
+                metadata=self.df_metadata_columns,
+                doc_cls=self.config.document_class,
+            )
+        else:
+            records = result.to_arrow().to_pylist()
+            return self._records_to_docs(records)
+
     def _records_to_docs(self, records: List[Dict[str, Any]]) -> List[Document]:
-        doc_cls = self.config.document_class
         if self.config.flatten:
             docs = [
-                doc_cls(**(nested_dict_from_flat(rec, sub_dict="payload")))
-                for rec in records
+                self.unflattened_schema(**nested_dict_from_flat(rec)) for rec in records
             ]
         else:
-            docs = [doc_cls(**rec["payload"]) for rec in records]
-        return docs
+            docs = [self.schema(**rec) for rec in records]
+        doc_cls = self.config.document_class
+        doc_cls_field_names = doc_cls.__fields__.keys()
+        return [
+            doc_cls(
+                **{
+                    field_name: getattr(doc, field_name)
+                    for field_name in doc_cls_field_names
+                }
+            )
+            for doc in docs
+        ]
 
     def get_all_documents(self, where: str = "") -> List[Document]:
         if self.config.collection_name is None:
             raise ValueError("No collection name set, cannot retrieve docs")
         tbl = self.client.open_table(self.config.collection_name)
-        records = tbl.search(None).where(where or None).to_arrow().to_pylist()
-        return self._records_to_docs(records)
+        pre_result = tbl.search(None).where(where or None)
+        return self._lance_result_to_docs(pre_result)
 
     def get_documents_by_ids(self, ids: List[str]) -> List[Document]:
         if self.config.collection_name is None:
             raise ValueError("No collection name set, cannot retrieve docs")
         _ids = [str(id) for id in ids]
         tbl = self.client.open_table(self.config.collection_name)
-        records = [
-            tbl.search().where(f"id == '{_id}'").to_arrow().to_pylist()[0]
+        docs = [
+            self._lance_result_to_docs(tbl.search().where(f"id == '{_id}'"))[0]
             for _id in _ids
         ]
-        return self._records_to_docs(records)
+        return docs
 
     def similar_texts_with_scores(
         self,
@@ -280,18 +387,17 @@ class LanceDB(VectorStore):
     ) -> List[Tuple[Document, float]]:
         embedding = self.embedding_fn([text])[0]
         tbl = self.client.open_table(self.config.collection_name)
-        records = (
-            tbl.search(embedding)
-            .metric(self.config.distance)
-            .where(where)
-            .limit(k)
-            .to_arrow()
-            .to_pylist()
+        result = (
+            tbl.search(embedding).metric(self.config.distance).where(where).limit(k)
         )
-
+        docs = self._lance_result_to_docs(result)
         # note _distance is 1 - cosine
-        scores = [1 - rec["_distance"] for rec in records]
-        docs = self._records_to_docs(records)
+        if self.is_from_dataframe:
+            scores = [
+                1 - rec["_distance"] for rec in result.to_pandas().to_dict("records")
+            ]
+        else:
+            scores = [1 - rec["_distance"] for rec in result.to_arrow().to_pylist()]
         if len(docs) == 0:
             logger.warning(f"No matches found for {text}")
             return []

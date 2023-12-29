@@ -48,3 +48,34 @@ def read_tabular_data(path_or_url: str, sep: None | str = None) -> pd.DataFrame:
             "Unable to read data. "
             "Please ensure it is correctly formatted. Error: " + str(e)
         )
+
+
+def describe_dataframe(df: pd.DataFrame, sample_size: int = 5) -> str:
+    """
+    Generates a description of the columns in the dataframe, along with typical values.
+    Intended to be used to insert into an LLM context so it can generate
+    appropriate queries or filters on the df.
+
+    Args:
+        df (pd.DataFrame): The dataframe to describe.
+        sample_size (int): The number of sample values to show for each column.
+
+    Returns:
+        str: A description of the dataframe.
+    """
+    description = []
+    for column in df.columns:
+        sample_values = df[column].dropna().head(sample_size).tolist()
+        if len(sample_values) > 0 and isinstance(sample_values[0], str):
+            # truncate to 100 chars
+            sample_values = [v[:100] for v in sample_values]
+        col_type = "string" if df[column].dtype == "object" else df[column].dtype
+        col_desc = f"* {column} ({col_type}): {sample_values}"
+        description.append(col_desc)
+
+    all_cols = "\n".join(description)
+
+    return f"""
+        Name of each field, its type and some typical values:
+        {all_cols}
+        """

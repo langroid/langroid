@@ -64,8 +64,6 @@ agent.enable_message(CitiesMessage)
 task = lr.Task(
     agent,
     interactive=False,
-    llm_delegate=True,
-    single_round=False,
 )
 
 task.run()
