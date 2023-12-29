@@ -8,6 +8,7 @@ from langroid.agent.batch import (
 from langroid.agent.openai_assistant import OpenAIAssistant, OpenAIAssistantConfig
 from langroid.agent.task import Task
 from langroid.agent.tool_message import ToolMessage
+from langroid.mytypes import Entity
 from langroid.utils.configuration import Settings, set_global
 from langroid.utils.constants import NO_ANSWER
 
@@ -45,7 +46,8 @@ async def test_openai_assistant_async(test_settings: Settings):
         agent,
         name="Bot",
         system_message="You are a helpful assistant",
-        single_round=True,
+        done_if_no_response=[Entity.LLM],
+        done_if_response=[Entity.LLM],
     )
     answer = await task.run_async("What is the capital of China?", turns=6)
     assert "Beijing" in answer.content
@@ -134,9 +136,9 @@ def test_openai_asst_task_batch(test_settings: Settings):
     task = Task(
         agent,
         name="Test",
-        llm_delegate=False,
-        single_round=True,
-        default_human_response="",
+        interactive=False,
+        done_if_no_response=[Entity.LLM],
+        done_if_response=[Entity.LLM],
     )
 
     # run clones of this task on these inputs

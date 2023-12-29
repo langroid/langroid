@@ -139,9 +139,7 @@ def _test_sql_chat_agent(
     task = Task(
         agent,
         name="SQLChatAgent",
-        default_human_response="",  # avoid waiting for human response
-        llm_delegate=False,
-        single_round=False,
+        interactive=False,
     )
 
     # run for 3 turns:

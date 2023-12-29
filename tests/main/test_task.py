@@ -128,7 +128,6 @@ def test_task_default_human_response(
     task = Task(
         agent,
         interactive=False,
-        single_round=False,
         done_if_response=[Entity.LLM],
         done_if_no_response=[Entity.LLM],
         default_human_response=default_human_response,
@@ -486,9 +485,6 @@ def test_task_2_agent_2_tool(
     critic_task = Task(
         critic_agent,
         interactive=False,
-        # below ensure that task returns to requestor_task when LLM responds
-        done_if_no_response=[Entity.LLM],
-        done_if_response=[Entity.LLM],
     )
 
     # connect the two agents

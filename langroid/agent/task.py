@@ -78,12 +78,17 @@ class Task:
         Args:
             agent (Agent): agent associated with the task
             name (str): name of the task
-            llm_delegate (bool): whether to delegate control to LLM; conceptually,
+            llm_delegate (bool):
+                [Deprecated, not used; use `done_if_response`, `done_if_no_response`
+                instead]
+                Whether to delegate control to LLM; conceptually,
                 the "controlling entity" is the one "seeking" responses to its queries,
                 and has a goal it is aiming to achieve. The "controlling entity" is
                 either the LLM or the USER. (Note within a Task there is just one
                 LLM, and all other entities are proxies of the "User" entity).
-            single_round (bool): If true, task runs until one message by controller,
+            single_round (bool):
+                [Deprecated: Use `done_if_response`, `done_if_no_response` instead].
+                If true, task runs until one message by controller,
                 and subsequent response by non-controller. If false, runs for the
                 specified number of turns in `run`, or until `done()` is true.
                 One run of step() is considered a "turn".
@@ -92,16 +97,19 @@ class Task:
             restart (bool): if true, resets the agent's message history
             default_human_response (str): default response from user; useful for
                 testing, to avoid interactive input from user.
+                [Instead of this, setting `interactive` usually suffices]
             interactive (bool): if true, wait for human input after each non-human
                 response (prevents infinite loop of non-human responses).
                 Default is true. If false, then `default_human_response` is set to ""
             only_user_quits_root (bool): if true, only user can quit the root task.
+                [Instead of this, setting `interactive` usually suffices]
             erase_substeps (bool): if true, when task completes, erase intermediate
                 conversation with subtasks from this agent's `message_history`, and also
                 erase all subtask agents' `message_history`.
                 Note: erasing can reduce prompt sizes, but results in repetitive
                 sub-task delegation.
-            allow_null_result (bool): if true, allow null (empty or NO_ANSWER)
+            allow_null_result (bool): [Deprecated, may be removed in future.]
+                If true, allow null (empty or NO_ANSWER)
                 as the result of a step or overall task result.
                 Optional, default is True.
             max_stalled_steps (int): task considered done after this many consecutive
@@ -221,6 +229,10 @@ class Task:
             interactive=self.interactive,
             only_user_quits_root=self.only_user_quits_root,
             erase_substeps=self.erase_substeps,
+            allow_null_result=self.allow_null_result,
+            max_stalled_steps=self.max_stalled_steps,
+            done_if_no_response=[Entity[s] for s in self.done_if_no_response],
+            done_if_response=[Entity[s] for s in self.done_if_response],
         )
 
     def __repr__(self) -> str:

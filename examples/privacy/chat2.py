@@ -43,6 +43,7 @@ from rich import print
 from pydantic import BaseSettings
 from dotenv import load_dotenv
 
+from langroid.mytypes import Entity
 from examples.privacy.privacy_annotator import PrivacyAnnotator, PrivacyAnnotatorConfig
 from examples.privacy.privacy_agent import PrivacyAgent, PrivacyAgentConfig
 from langroid.agent.task import Task
@@ -110,8 +111,8 @@ def chat(opts: CLIOptions) -> None:
     annotator_agent = PrivacyAnnotator(annotator_config)
     annotator_task = Task(
         annotator_agent,
-        llm_delegate=False,
-        single_round=True,
+        done_if_response=[Entity.LLM],
+        done_if_no_response=[Entity.LLM],
     )
 
     privacy_config = PrivacyAgentConfig(
@@ -121,8 +122,6 @@ def chat(opts: CLIOptions) -> None:
     privacy_agent = PrivacyAgent(privacy_config)
     privacy_task = Task(
         privacy_agent,
-        llm_delegate=True,
-        single_round=False,
     )
     privacy_task.add_sub_task(annotator_task)
 

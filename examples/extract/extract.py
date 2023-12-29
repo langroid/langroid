@@ -117,8 +117,6 @@ def chat(config: ExtractorConfig) -> None:
         Don't add any methods not mentioned in the solution description.
         Call the methods_list function or Tool to accomplish this.
         """,
-        llm_delegate=False,
-        single_round=False,
     )
     task.run(kaggle_description)
 
