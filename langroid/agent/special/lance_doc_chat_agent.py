@@ -241,24 +241,24 @@ class LanceDocChatAgent(DocChatAgent):
             d.metadata.is_chunk = True
         return n  # type: ignore
 
-    def _get_similar_chunks_bm25(
+    def get_similar_chunks_bm25(
         self, query: str, multiple: int
     ) -> List[Tuple[Document, float]]:
         """
         Override the DocChatAgent.get_similar_chunks_bm25()
         to use LanceDB FTS (Full Text Search).
         """
+        # replace all newlines with spaces in query
+        query_clean = query.replace("\n", " ")
+
         tbl = self.vecdb.client.open_table(self.vecdb.config.collection_name)
-        columns = tbl.schema.names
-        results = (
-            tbl.search(query)
+        result = (
+            tbl.search(query_clean)
             .where(self.config.filter or None)
             .limit(self.config.parsing.n_similar_docs * multiple)
-            .to_list()
         )
-        scores = [r["score"] for r in results]
-        non_scores = [{c: r[c] for c in columns} for r in results]
-        docs = self.vecdb._records_to_docs(non_scores)
+        docs = self.vecdb._lance_result_to_docs(result)
+        scores = [r["score"] for r in result.to_list()]
         return list(zip(docs, scores))
 
 

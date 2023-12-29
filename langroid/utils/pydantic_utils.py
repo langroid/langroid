@@ -309,6 +309,14 @@ def dataframe_to_pydantic_objects(df: pd.DataFrame) -> List[BaseModel]:
     return [Model(**row.to_dict()) for index, row in df.iterrows()]
 
 
+def first_non_null(series: pd.Series) -> Any | None:
+    """Find the first non-null item in a pandas Series."""
+    for item in series:
+        if item is not None:
+            return item
+    return None
+
+
 def dataframe_to_document_model(
     df: pd.DataFrame,
     content: str = "content",
@@ -339,8 +347,8 @@ def dataframe_to_document_model(
         # Define fields for the dynamic subclass of DocMetaData
         metadata_fields = {
             col: (
-                numpy_to_python_type(type(df[col].iloc[0])),
-                Optional[numpy_to_python_type(type(df[col].iloc[0]))],
+                Optional[numpy_to_python_type(type(first_non_null(df[col])))],
+                None,  # Optional[numpy_to_python_type(type(first_non_null(df[col])))],
             )
             for col in metadata
         }
@@ -353,7 +361,10 @@ def dataframe_to_document_model(
 
     # Define additional top-level fields for DynamicDocument
     additional_fields = {
-        col: (numpy_to_python_type(type(df[col].iloc[0])), ...)
+        col: (
+            Optional[numpy_to_python_type(type(first_non_null(df[col])))],
+            None,  # Optional[numpy_to_python_type(type(first_non_null(df[col])))],
+        )
         for col in df.columns
         if col not in metadata and col != content
     }
