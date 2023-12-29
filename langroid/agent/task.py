@@ -146,7 +146,7 @@ class Task:
         self.is_pass_thru = False  # is current response a pass-thru?
         self.task_progress = False  # progress in current task (since run or run_async)?
         self.name = name or agent.config.name
-        self.value = self.name
+        self.value: str = self.name
         self.default_human_response = default_human_response
         self.interactive = interactive
         self.message_history_idx = -1
