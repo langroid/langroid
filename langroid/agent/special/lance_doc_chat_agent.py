@@ -61,23 +61,22 @@ class LanceFilterAgentConfig(ChatAgentConfig):
     vecdb_schema: str = ""
     system_message = f"""
     You will receive a QUERY, to be answered based on an EXTREMELY LARGE collection
-    of documents you DO NOT have access to. However you know that these documents have 
-    this SCHEMA:
+    of documents you DO NOT have access to, but your ASSISTANT does.
+    You only know that these documents have this SCHEMA:
     
     {{doc_schema}}
     
-    The SCHEMA fields can be used as a FILTER on the documents. 
+    The SCHEMA fields can be used as a FILTER on the documents.
+    Your ASSISTANT only knows how to answer questions based on some documents,
+    so they will NOT be aware of any of these FILTER fields. 
 
     Based on the QUERY and the SCHEMA, your ONLY task is to decide:
-    - whether applying a FILTER would help to answer it.
+    - whether applying a FILTER would help the ASSISTANT to answer it.
     - whether the QUERY needs to be REPHRASED to be answerable given the FILTER.
     
-    The (possibly rephrased) QUERY should be answerable by your assistant
-    who DOES have access to the documents, and they will FIRST APPLY the FILTER
-    before answering the QUERY. 
-
-    KEEP THIS IN MIND: The FILTER narrows the set of matching documents,
-    and the QUERY must make sense in the context of the FILTER.
+    You must CAREFULLY REPHRASE the QUERY keepig in mind that the ASSISTANT
+    does NOT know anything about the FILTER fields, and ONLY knows how to answer
+    questions based on a set of (extracts from) documents.
     
     Example:
     ------- 
@@ -85,7 +84,8 @@ class LanceFilterAgentConfig(ChatAgentConfig):
     FILTER: genre = 'Crime' AND rating > 8 AND year = 2023
     REPHRASED QUERY: Tell me about the movies. 
         [NOTE how the REPHRASED QUERY does NOT mention crime, rating, or year,
-        since those are already taken care of by the FILTER.]
+        since those FILTER fields are not accessible to the ASSISTANT, and 
+        the REPHRASED QUERY makes sense for any set of documents]
     
     The FILTER must be a SQL-like condition, e.g. 
     "year > 2000 AND genre = 'ScienceFiction'".
@@ -98,7 +98,7 @@ class LanceFilterAgentConfig(ChatAgentConfig):
     If you think no FILTER would help, you can leave the `filter` field empty.
     
     If you receive an answer that is an empty-string or {NO_ANSWER}, 
-    try a NEW FILTER, i.e. an empty or broader or better filter.
+    try a NEW FILTER, i.e. an empty or broader (e.g. using LIKE) or better filter.
     
     When you receive a satisfactory answer,
     or if you're still getting NO_ANSWER after trying a few filters, 
