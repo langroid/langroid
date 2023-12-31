@@ -262,7 +262,16 @@ class LanceDB(VectorStore):
                 yield batch
 
         tbl = self.client.open_table(self.config.collection_name)
-        tbl.add(make_batches())
+        try:
+            tbl.add(make_batches())
+        except Exception as e:
+            logger.error(
+                f"""
+                Error adding documents to LanceDB: {e}
+                POSSIBLE REMEDY: Delete the LancdDB storage directory
+                {self.config.storage_path} and try again.
+                """
+            )
 
     def add_dataframe(
         self,

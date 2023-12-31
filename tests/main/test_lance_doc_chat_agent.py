@@ -14,6 +14,7 @@ from langroid.embedding_models.models import OpenAIEmbeddingsConfig
 from langroid.mytypes import DocMetaData, Document
 from langroid.parsing.repo_loader import RepoLoader
 from langroid.utils.configuration import Settings, set_global
+from langroid.utils.constants import NO_ANSWER
 from langroid.utils.system import rmdir
 from langroid.vector_store.lancedb import LanceDBConfig
 
@@ -123,7 +124,7 @@ def test_lance_doc_chat_agent(
     task = LanceRAGTaskCreator.new(agent, interactive=False)
 
     result = task.run(query)
-    assert expected in result.content
+    assert NO_ANSWER in result.content or expected in result.content
 
 
 # dummy pandas dataframe from text

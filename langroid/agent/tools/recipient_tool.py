@@ -50,17 +50,16 @@ class AddRecipientTool(ToolMessage):
         )
         if self.__class__.saved_content == "":
             recipient_request_name = RecipientTool.default_value("request")
-            raise ValueError(
-                f"""
+            content = f"""
                 Recipient specified but content is empty!
                 This could be because the `{self.request}` tool/function was used 
                 before using `{recipient_request_name}` tool/function.
                 Resend the message using `{recipient_request_name}` tool/function.
                 """
-            )
-        content = self.__class__.saved_content  # use class-level attrib value
-        # erase content since we just used it.
-        self.__class__.saved_content = ""
+        else:
+            content = self.__class__.saved_content  # use class-level attrib value
+            # erase content since we just used it.
+            self.__class__.saved_content = ""
         return ChatDocument(
             content=content,
             metadata=ChatDocMetaData(
