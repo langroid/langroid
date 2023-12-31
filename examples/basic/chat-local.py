@@ -15,7 +15,7 @@ Then run this script as follows:
 import langroid as lr
 import langroid.language_models as lm
 
-
+# assume you've run `ollama pull mistral` to spin up `mistral` locally
 llm_config = lm.OpenAIGPTConfig(
     chat_model="litellm/ollama/mistral",
     chat_context_length=2048,  # adjust based on your local LLM params
