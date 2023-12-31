@@ -110,10 +110,20 @@ teacher_task.add_sub_task(student_task)
 teacher_task.run()
 ```
 
+# :fire: Updates/Releases
+
 <details>
-<summary> <b>:fire: Updates/Releases</b></summary>
+<summary> <b>Click to expand</b></summary>
 
 - **Dec 2023:**
+  - **0.1.154:** (For details see release notes of [0.1.149](https://github.com/langroid/langroid/releases/tag/0.1.149)
+      and [0.1.154](https://github.com/langroid/langroid/releases/tag/0.1.154)). 
+    - `DocChatAgent`: Ingest Pandas dataframes and filtering.
+    - `LanceDocChatAgent` leverages `LanceDB` vector-db for efficient vector search
+     and full-text search and filtering.
+    - Improved task and multi-agent control mechanisms
+    - `LanceRAGTaskCreator` to create a 2-agent system consisting of a `LanceFilterAgent` that
+      decides a filter and rephrase query to send to a RAG agent.
   - **[0.1.141](https://github.com/langroid/langroid/releases/tag/0.1.141):**
     API Simplifications to reduce boilerplate:
     auto-select an available OpenAI model (preferring gpt-4-turbo), simplifies defaults.

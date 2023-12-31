@@ -93,7 +93,8 @@ class LanceFilterAgentConfig(ChatAgentConfig):
     NOT TOO STRICT, e.g. look for approximate match using LIKE, etc.
         
     You must present the FILTER and (POSSIBLY rephrased QUERY)
-    using the `add_filter` tool. Use dot notation to refer to nested fields. 
+    using the `add_filter` tool. 
+    Use DOT NOTATION to refer to nested fields, e.g. `metadata.year`, etc. 
         
     If you think no FILTER would help, you can leave the `filter` field empty.
     
