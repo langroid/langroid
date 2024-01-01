@@ -38,7 +38,6 @@ class RecordDoc(Document):
 class RetrieverAgentConfig(DocChatAgentConfig):
     n_matches: int = 3
     debug: bool = False
-    max_context_tokens = 500
     conversation_mode = True
     cache: bool = True  # cache results
     gpt4: bool = True  # use GPT-4

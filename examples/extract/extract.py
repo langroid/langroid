@@ -74,7 +74,6 @@ class ExtractorAgent(ChatAgent):
 class ExtractorConfig(ChatAgentConfig):
     name = "Extractor"
     debug: bool = False
-    max_context_tokens = 500
     conversation_mode = True
     cache: bool = True  # cache results
     gpt4: bool = False  # use GPT-4?
