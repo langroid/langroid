@@ -71,14 +71,13 @@ You are a helpful assistant, helping me understand a collection of documents.
 
 
 class DocChatAgentConfig(ChatAgentConfig):
-
     system_message: str = DEFAULT_DOC_CHAT_SYSTEM_MESSAGE
     user_message: str = DEFAULT_DOC_CHAT_INSTRUCTIONS
     summarize_prompt: str = SUMMARY_ANSWER_PROMPT_GPT4
     filter: str | None = (
         None  # filter condition for various lexical/semantic search fns
     )
-    conversation_mode: bool = True # accumulate message history?
+    conversation_mode: bool = True  # accumulate message history?
     # In assistant mode, DocChatAgent receives questions from another Agent,
     # and those will already be in stand-alone form, so in this mode
     # there is no need to convert them to stand-alone form.
