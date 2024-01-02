@@ -103,7 +103,6 @@ def dataframe_summary(df: pd.DataFrame) -> str:
 class TableChatAgentConfig(ChatAgentConfig):
     system_message: str = DEFAULT_TABLE_CHAT_SYSTEM_MESSAGE
     user_message: None | str = None
-    max_context_tokens: int = 1000
     cache: bool = True  # cache results
     debug: bool = False
     stream: bool = True  # allow streaming where needed

@@ -71,26 +71,13 @@ You are a helpful assistant, helping me understand a collection of documents.
 
 
 class DocChatAgentConfig(ChatAgentConfig):
-    """
-    Attributes:
-        max_context_tokens (int): threshold to use for various steps, e.g.
-            if we are able to fit the current stage of doc processing into
-            this many tokens, we skip additional compression steps, and
-            use the current docs as-is in the context
-        conversation_mode (bool): if True, we will accumulate message history,
-            and pass entire history to LLM at each round.
-            If False, each request to LLM will consist only of the
-            initial task messages plus the current query.
-    """
-
     system_message: str = DEFAULT_DOC_CHAT_SYSTEM_MESSAGE
     user_message: str = DEFAULT_DOC_CHAT_INSTRUCTIONS
     summarize_prompt: str = SUMMARY_ANSWER_PROMPT_GPT4
     filter: str | None = (
         None  # filter condition for various lexical/semantic search fns
     )
-    max_context_tokens: int = 1000
-    conversation_mode: bool = True
+    conversation_mode: bool = True  # accumulate message history?
     # In assistant mode, DocChatAgent receives questions from another Agent,
     # and those will already be in stand-alone form, so in this mode
     # there is no need to convert them to stand-alone form.

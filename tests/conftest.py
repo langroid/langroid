@@ -45,7 +45,6 @@ def test_settings(request) -> Settings:
         cache_type=request.config.getoption("--ct"),
         gpt3_5=request.config.getoption("--3"),
         stream=not request.config.getoption("--ns"),
-        nofunc=request.config.getoption("--nof"),
         chat_model=chat_model,
     )
 

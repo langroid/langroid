@@ -54,7 +54,6 @@ class OpenAIChatModel(str, Enum):
     """Enum for OpenAI Chat models"""
 
     GPT3_5_TURBO = "gpt-3.5-turbo-1106"
-    GPT4_NOFUNC = "gpt-4"  # before function_call API
     GPT4 = "gpt-4"
     GPT4_TURBO = "gpt-4-1106-preview"
 
@@ -70,7 +69,6 @@ _context_length: Dict[str, int] = {
     # can add other non-openAI models here
     OpenAIChatModel.GPT3_5_TURBO: 4096,
     OpenAIChatModel.GPT4: 8192,
-    OpenAIChatModel.GPT4_NOFUNC: 8192,
     OpenAIChatModel.GPT4_TURBO: 128_000,
     OpenAICompletionModel.TEXT_DA_VINCI_003: 4096,
 }
@@ -81,7 +79,6 @@ _cost_per_1k_tokens: Dict[str, Tuple[float, float]] = {
     OpenAIChatModel.GPT3_5_TURBO: (0.0015, 0.002),
     OpenAIChatModel.GPT4: (0.03, 0.06),  # 8K context
     OpenAIChatModel.GPT4_TURBO: (0.01, 0.03),  # 128K context
-    OpenAIChatModel.GPT4_NOFUNC: (0.03, 0.06),
 }
 
 
@@ -273,8 +270,6 @@ class OpenAIGPT(LanguageModel):
         """
         super().__init__(config)
         self.config: OpenAIGPTConfig = config
-        if settings.nofunc:
-            self.config.chat_model = OpenAIChatModel.GPT4_NOFUNC
 
         # Run the first time the model is used
         self.run_on_first_use = cache(self.config.run_on_first_use)

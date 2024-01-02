@@ -67,7 +67,6 @@ SQL_ERROR_MSG = "There was an error in your SQL Query"
 class SQLChatAgentConfig(ChatAgentConfig):
     system_message: str = DEFAULT_SQL_CHAT_SYSTEM_MESSAGE
     user_message: None | str = None
-    max_context_tokens: int = 1000
     cache: bool = True  # cache results
     debug: bool = False
     stream: bool = True  # allow streaming where needed
