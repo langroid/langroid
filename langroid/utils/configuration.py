@@ -17,7 +17,6 @@ class Settings(BaseSettings):
     cache_type: Literal["redis", "fakeredis", "momento"] = "redis"  # cache type
     interactive: bool = True  # interactive mode?
     gpt3_5: bool = True  # use GPT-3.5?
-    nofunc: bool = False  # use model without function_call? (i.e. gpt-4)
     chat_model: str = ""  # language model name, e.g. litellm/ollama/llama2
     quiet: bool = False  # quiet mode (i.e. suppress all output)?
     notebook: bool = False  # running in a notebook?
