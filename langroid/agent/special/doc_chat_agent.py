@@ -74,6 +74,8 @@ class DocChatAgentConfig(ChatAgentConfig):
     system_message: str = DEFAULT_DOC_CHAT_SYSTEM_MESSAGE
     user_message: str = DEFAULT_DOC_CHAT_INSTRUCTIONS
     summarize_prompt: str = SUMMARY_ANSWER_PROMPT_GPT4
+    retrieve_only: bool = False  # only retr relevant extracts, don't gen summary answer
+    extraction_granularity: int = 1  # granularity (in sentences) for relev extraction
     filter: str | None = (
         None  # filter condition for various lexical/semantic search fns
     )
@@ -939,7 +941,7 @@ class DocChatAgent(ChatAgent):
             return passages
 
         agent_cfg.query = query
-        agent_cfg.segment_length = 1
+        agent_cfg.segment_length = self.config.extraction_granularity
         agent_cfg.llm.stream = False  # disable streaming for concurrent calls
 
         agent = RelevanceExtractorAgent(agent_cfg)
@@ -986,6 +988,17 @@ class DocChatAgent(ChatAgent):
             return response
         if self.llm is None:
             raise ValueError("LLM not set")
+        if self.config.retrieve_only:
+            # only return extracts, skip LLM-based summary answer
+            meta = dict(
+                sender=Entity.LLM,
+            )
+            # copy metadata from first doc, unclear what to do here.
+            meta.update(extracts[0].metadata)
+            return ChatDocument(
+                content="\n\n".join([e.content for e in extracts]),
+                metadata=ChatDocMetaData(**meta),
+            )
         with ExitStack() as stack:
             # conditionally use Streaming or rich console context
             cm = (

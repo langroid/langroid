@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from typing import Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
+import pandas as pd
 from pydantic import BaseSettings
 
 from langroid.embedding_models.base import EmbeddingModel, EmbeddingModelsConfig
@@ -126,6 +127,29 @@ class VectorStore(ABC):
     @abstractmethod
     def add_documents(self, documents: Sequence[Document]) -> None:
         pass
+
+    def compute_on_docs(self, docs: List[Document], calc: str) -> str:
+        """Compute a result on a set of documents,
+        using a calc string like `df.groupby('state')['income'].mean()`.
+        """
+        # docs may be missing some fields since they may have come from
+        # DocChatAgent retrieval, so we use the ids to get the full docs
+        ids = [str(doc.id()) for doc in docs]
+        docs = self.get_documents_by_ids(ids)
+        dicts = [doc.dict() for doc in docs]
+        df = pd.DataFrame(dicts)
+
+        try:
+            result = pd.eval(  # safer than eval but limited to single expression
+                calc,
+                engine="python",
+                parser="pandas",
+                local_dict={"df": df},
+            )
+        except Exception as e:
+            # return error message so LLM can fix the calc string if needed
+            return str(e)
+        return str(result)
 
     def maybe_add_ids(self, documents: Sequence[Document]) -> None:
         """Add ids to metadata if absent, since some

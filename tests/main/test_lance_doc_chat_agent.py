@@ -147,7 +147,7 @@ df = pd.DataFrame(
             "Garth Brook",
         ],
         "genre": ["Science Fiction", "Science Fiction", "Crime", "Drama"],
-        "rating": [8.7, 8.9, 9.2, 9.3],
+        "rating": [8, 10, 9.2, 9.3],
     }
 )
 
@@ -166,6 +166,14 @@ class FlatMovieDoc(Document):
 @pytest.mark.parametrize(
     "query, expected",
     [
+        (
+            "Highest rated Science Fiction movie?",
+            "Odyssey",
+        ),
+        (
+            "Average rating of Science Fiction movies?",
+            "9",
+        ),
         (
             "Tell me about a Crime movie rated over 9",
             "Godfeather",

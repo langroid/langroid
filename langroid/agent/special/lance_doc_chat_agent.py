@@ -48,10 +48,12 @@ class FilterTool(ToolMessage):
     purpose = """
     Given a query, determine if a <filter> condition is needed, and present
     the <filter> (which can be emptry string '' if no filter is needed), 
-    and a possibly rephrased <query>.
+    with a possibly rephrased <query>, and possibly a <dataframe_calc> string
+    like "df["height"].mean()" that can be used to calculate the answer.
     """
     filter: str
     query: str
+    dataframe_calc: str = ""
 
 
 class LanceFilterAgentConfig(ChatAgentConfig):
@@ -73,6 +75,7 @@ class LanceFilterAgentConfig(ChatAgentConfig):
     Based on the QUERY and the SCHEMA, your ONLY task is to decide:
     - whether applying a FILTER would help the ASSISTANT to answer it.
     - whether the QUERY needs to be REPHRASED to be answerable given the FILTER.
+    - whether a Pandas-dataframe calculation/aggregation is needed
     
     You must CAREFULLY REPHRASE the QUERY keepig in mind that the ASSISTANT
     does NOT know anything about the FILTER fields, and ONLY knows how to answer
@@ -80,9 +83,10 @@ class LanceFilterAgentConfig(ChatAgentConfig):
     
     Example:
     ------- 
-    ORIGINAL QUERY: Tell me about crime movies rated over 8 made in 2023.
-    FILTER: genre = 'Crime' AND rating > 8 AND year = 2023
-    REPHRASED QUERY: Tell me about the movies. 
+    ORIGINAL QUERY: Average rating of Crime movies made in 2023.
+    FILTER: genre = 'Crime' AND year = 2023
+    REPHRASED QUERY: Tell me about the movies.
+    DATAFRAME CALCULATION: "df["rating"].mean()" [MUST be based on `df`]
         [NOTE how the REPHRASED QUERY does NOT mention crime, rating, or year,
         since those FILTER fields are not accessible to the ASSISTANT, and 
         the REPHRASED QUERY makes sense for any set of documents]
@@ -97,6 +101,8 @@ class LanceFilterAgentConfig(ChatAgentConfig):
     Use DOT NOTATION to refer to nested fields, e.g. `metadata.year`, etc. 
         
     If you think no FILTER would help, you can leave the `filter` field empty.
+    If you think no DATAFRAME CALCULATION is needed, you can leave the 
+        `dataframe_calc` field empty.
     
     If you receive an answer that is an empty-string or {NO_ANSWER}, 
     try a NEW FILTER, i.e. an empty or broader (e.g. using LIKE) or better filter.
@@ -198,8 +204,19 @@ class LanceDocChatAgent(DocChatAgent):
             return f"{DONE} Possible Filter Error:\n {e}"
         # update the filter so it is used in the DocChatAgent
         self.config.filter = msg.filter or None
-        # pass on the query so LLM can handle it
-        return msg.query
+        if msg.dataframe_calc:
+            # we just get relevant docs then do the calculation
+            # TODO if calc causes err, it is captured in result,
+            # and LLM can correct the calc based on the err,
+            # and this will cause retrieval all over again,
+            # which may be wasteful if only the calc part is wrong.
+            # The calc step can later be done with a separate Agent/Tool.
+            _, docs = self.get_relevant_extracts(msg.query)
+            result = self.vecdb.compute_on_docs(docs, msg.dataframe_calc)
+            return DONE + " " + result
+        else:
+            # pass on the query so LLM can handle it
+            return msg.query
 
     def ingest_docs(self, docs: List[Document], split: bool = True) -> int:
         n = super().ingest_docs(docs, split)
