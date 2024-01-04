@@ -77,6 +77,16 @@ def main(
     metadata_cols = []
     agent.ingest_dataframe(df, content="text", metadata=metadata_cols)
 
+    df_description = agent.df_description
+
+    # inform user about the df_description, in blue
+    print(
+        f"""
+    [blue]Here's a description of the DataFrame that was ingested:
+    {df_description}
+    """
+    )
+
     task = LanceRAGTaskCreator.new(agent, interactive=True)
 
     task.run("Can you help with some questions?")

@@ -115,6 +115,9 @@ teacher_task.run()
 <details>
 <summary> <b>Click to expand</b></summary>
 
+- **Jan 2024:**
+  - **[0.1.156](https://github.com/langroid/langroid/releases/tag/0.1.156):** New Task control signals
+     PASS_TO, SEND_TO; VectorStore: Compute Pandas expression on documents; LanceRAGTaskCreator creates 3-agent RAG system with Query Planner, Critic and RAG Agent.
 - **Dec 2023:**
   - **0.1.154:** (For details see release notes of [0.1.149](https://github.com/langroid/langroid/releases/tag/0.1.149)
       and [0.1.154](https://github.com/langroid/langroid/releases/tag/0.1.154)). 
