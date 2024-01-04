@@ -145,18 +145,21 @@ class LanceQueryPlanAgent(ChatAgent):
             and msg.metadata.sender_name == self.config.doc_agent_name
             and msg.metadata.parent is not None
         ):
-            self.result = (
-                msg.content
-            )  # save result, to be used in query_plan_feedback()
-            # insert result into current QueryPlanTool
+            # save result, to be used in query_plan_feedback()
+            self.result = msg.content
+
+            # Parent of this msg must have used the QueryPlanTool, so find it
             parent_doc = msg.metadata.parent.copy()  # contains QueryPlanTool
             tools = [
                 t for t in parent_doc.tool_messages if isinstance(t, QueryPlanTool)
             ]
+
             if len(tools) > 0:
+                # insert result into current QueryPlanTool
                 query_plan_tool = tools[0]
                 query_plan_tool.result = self.result
                 parent_doc.tool_messages = [query_plan_tool]
+            # and set recipient to Critic so it can give feedback
             parent_doc.metadata.recipient = self.config.critic_name
             return parent_doc
         return None
