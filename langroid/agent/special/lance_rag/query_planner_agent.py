@@ -1,3 +1,19 @@
+"""
+LanceQueryPlanAgent is a ChatAgent created with a specific document schema.
+Given a QUERY, the LLM constructs a Query Plan consisting of:
+- filter condition if needed (or empty string if no filter is needed)
+- query - a possibly rephrased query that can be used to match the `content` field
+- dataframe_calc - a Pandas-dataframe calculation/aggregation string, possibly empty
+- original_query - the original query for reference
+
+This agent has access to two tools:
+- QueryPlanTool, which is used to generate the Query Plan, and the handler of
+    this tool simply passes it on to the RAG agent named in config.doc_agent_name.
+- QueryPlanFeedbackTool, which is used to handle feedback on the Query Plan and
+  Result from the RAG agent. The QueryPlanFeedbackTool is used by
+  the QueryPlanCritic, who inserts feedback into the `feedback` field
+"""
+
 import logging
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig

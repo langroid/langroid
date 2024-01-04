@@ -1,3 +1,20 @@
+"""
+QueryPlanCritic is a ChatAgent that is created with a specific document schema.
+
+Its role is to provide feedback on a Query Plan, which consists of:
+- filter condition if needed (or empty string if no filter is needed)
+- query - a possibly rephrased query that can be used to match the `content` field
+- dataframe_calc - a Pandas-dataframe calculation/aggregation string, possibly empty
+- original_query - the original query for reference
+- result - the answer received from an assistant that used this QUERY PLAN.
+
+This agent has access to two tools:
+- QueryPlanTool: The handler method for this tool re-writes the query plan
+  in plain text (non-JSON) so the LLM can provide its feedback using the
+  QueryPlanFeedbackTool.
+- QueryPlanFeedbackTool: LLM uses this tool to provide feedback on the Query Plan
+"""
+
 import logging
 
 from langroid.agent.chat_agent import ChatAgent
