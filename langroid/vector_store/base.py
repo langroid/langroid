@@ -128,7 +128,7 @@ class VectorStore(ABC):
     def add_documents(self, documents: Sequence[Document]) -> None:
         pass
 
-    def compute_on_docs(self, docs: List[Document], calc: str) -> str:
+    def compute_from_docs(self, docs: List[Document], calc: str) -> str:
         """Compute a result on a set of documents,
         using a calc string like `df.groupby('state')['income'].mean()`.
         """
@@ -148,7 +148,17 @@ class VectorStore(ABC):
             )
         except Exception as e:
             # return error message so LLM can fix the calc string if needed
-            return str(e)
+            err = f"""
+            Error encountered in pandas eval: {str(e)}
+            """
+            if isinstance(e, KeyError) and "not in index" in str(e):
+                # Pd.eval sometimes fails on a perfectly valid exprn like
+                # df.loc[..., 'column'] with a KeyError.
+                err += """
+                Maybe try a different way, e.g. 
+                instead of df.loc[..., 'column'], try df.loc[...]['column']
+                """
+            return err
         return str(result)
 
     def maybe_add_ids(self, documents: Sequence[Document]) -> None:
