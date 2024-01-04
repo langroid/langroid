@@ -3,6 +3,7 @@ from typing import List, Optional, Union
 
 from pydantic import BaseModel, Extra
 
+from langroid.agent.tool_message import ToolMessage
 from langroid.language_models.base import (
     LLMFunctionCall,
     LLMMessage,
@@ -53,6 +54,7 @@ class ChatDocLoggerFields(BaseModel):
 
 class ChatDocument(Document):
     function_call: Optional[LLMFunctionCall] = None
+    tool_messages: List[ToolMessage] = []
     metadata: ChatDocMetaData
     attachment: None | ChatDocAttachment = None
 
