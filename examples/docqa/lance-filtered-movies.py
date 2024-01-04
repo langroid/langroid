@@ -137,7 +137,6 @@ def main(
 
     task = LanceRAGTaskCreator.new(agent, interactive=True)
 
-
     task.run("Can you help with some questions about these movies?")
 
 
