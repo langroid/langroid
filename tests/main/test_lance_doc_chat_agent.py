@@ -10,7 +10,6 @@ from langroid.agent.special.lance_doc_chat_agent import LanceDocChatAgent
 from langroid.agent.special.lance_rag.lance_rag_task import LanceRAGTaskCreator
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
 from langroid.mytypes import DocMetaData, Document
-from langroid.parsing.repo_loader import RepoLoader
 from langroid.utils.configuration import Settings, set_global
 from langroid.utils.constants import NO_ANSWER
 from langroid.utils.system import rmdir
@@ -288,11 +287,10 @@ def test_lance_doc_chat_df_direct(test_settings: Settings):
     )
     agent = LanceDocChatAgent(cfg)
 
-    # load github issues from a repo
-    repo_loader = RepoLoader("jmorganca/ollama")
-    issues = repo_loader.get_issues(k=100)
-    issue_dicts = [iss.dict() for iss in issues]
-    df = pd.DataFrame(issue_dicts)
+    df = pd.read_csv("tests/main/data/github-issues.csv")
+    # drop columns that have "metadata" in the name
+    metadata_cols = [c for c in df.columns if "metadata" in c]
+    df.drop(columns=metadata_cols, inplace=True)
     metadata_cols = []
     agent.ingest_dataframe(df, content="text", metadata=metadata_cols)
     task = LanceRAGTaskCreator.new(agent, interactive=False)
