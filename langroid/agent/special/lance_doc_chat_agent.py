@@ -4,17 +4,6 @@ LanceDocChatAgent is a subclass of DocChatAgent that uses LanceDB as a vector st
     (a sql string) in the `where` clause to do filtered vector search.
 - Overrides the get_similar_chunks_bm25() to use LanceDB FTS (Full Text Search).
 
-The LanceRAGTaskCreator.new() method creates a 2-Agent system that uses this agent.
-It takes a LanceDocChatAgent instance as argument, and:
-- creates a LanceFilterAgent, which is given the LanceDB schema in LanceDocChatAgent,
-  and based on this schema decides for a user query, whether a filter can help,
-  and if so, what filter, along with a possibly rephrased query.
-- sets up the LanceFilterAgent's task as the "main" task interacting with the user,
-     and adds the LanceDocChatAgent's task as sub-task.
-
-Langroid's built-in task loops will ensure that the LanceFilterAgent automatically
-retries with a different filter if the RAGTask returns an empty answer.
-
 For usage see:
  - `tests/main/test_lance_doc_chat_agent.py`.
  - example script `examples/docqa/lance_rag.py`.
@@ -22,18 +11,15 @@ For usage see:
 """
 import json
 import logging
-from typing import List, Optional, Tuple
+from typing import List, Tuple
 
 import pandas as pd
 
-from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
-from langroid.agent.chat_document import ChatDocument
 from langroid.agent.special.doc_chat_agent import DocChatAgent, DocChatAgentConfig
-from langroid.agent.task import Task
-from langroid.agent.tool_message import ToolMessage
-from langroid.mytypes import Document, Entity
+from langroid.agent.special.lance_rag.lance_tools import QueryPlanTool
+from langroid.mytypes import Document
 from langroid.parsing.table_loader import describe_dataframe
-from langroid.utils.constants import DONE, NO_ANSWER, PASS
+from langroid.utils.constants import DONE, NO_ANSWER
 from langroid.utils.pydantic_utils import (
     clean_schema,
     dataframe_to_documents,
@@ -43,143 +29,13 @@ from langroid.vector_store.lancedb import LanceDB
 logger = logging.getLogger(__name__)
 
 
-class FilterTool(ToolMessage):
-    request = "add_filter"  # the agent method name that handles this tool
-    purpose = """
-    Given a query, determine if a <filter> condition is needed, and present
-    the <filter> (which can be emptry string '' if no filter is needed), 
-    with a possibly rephrased <query>, and possibly a <dataframe_calc> string
-    like "df["height"].mean()" that can be used to calculate the answer.
-    """
-    filter: str
-    query: str
-    dataframe_calc: str = ""
-
-
-class LanceFilterAgentConfig(ChatAgentConfig):
-    name = "LanceFilter"
-    use_tools = False
-    use_functions_api = True
-    vecdb_schema: str = ""
-    system_message = f"""
-    You will receive a QUERY, to be answered based on an EXTREMELY LARGE collection
-    of documents you DO NOT have access to, but your ASSISTANT does.
-    You only know that these documents have this SCHEMA:
-    
-    {{doc_schema}}
-    
-    The SCHEMA fields can be used as a FILTER on the documents.
-    Your ASSISTANT only knows how to answer questions based on some documents,
-    so they will NOT be aware of any of these FILTER fields. 
-
-    Based on the QUERY and the SCHEMA, your ONLY task is to decide:
-    - whether applying a FILTER would help the ASSISTANT to answer it.
-    - whether the QUERY needs to be REPHRASED to be answerable given the FILTER.
-    - whether a Pandas-dataframe calculation/aggregation is needed
-    
-    You must CAREFULLY REPHRASE the QUERY keepig in mind that the ASSISTANT
-    does NOT know anything about the FILTER fields, and ONLY knows how to answer
-    questions based on a set of (extracts from) documents.
-    
-    Example:
-    ------- 
-    ORIGINAL QUERY: Average rating of Crime movies made in 2023.
-    FILTER: genre = 'Crime' AND year = 2023
-    REPHRASED QUERY: Tell me about the movies.
-    DATAFRAME CALCULATION: "df["rating"].mean()" [MUST be based on `df`]
-        [NOTE how the REPHRASED QUERY does NOT mention crime, rating, or year,
-        since those FILTER fields are not accessible to the ASSISTANT, and 
-        the REPHRASED QUERY makes sense for any set of documents]
-    
-    The FILTER must be a SQL-like condition, e.g. 
-    "year > 2000 AND genre = 'ScienceFiction'".
-    To ensure you get useful results, you should make your FILTER 
-    NOT TOO STRICT, e.g. look for approximate match using LIKE, etc.
-        
-    You must present the FILTER and (POSSIBLY rephrased QUERY)
-    using the `add_filter` tool. 
-    Use DOT NOTATION to refer to nested fields, e.g. `metadata.year`, etc. 
-        
-    If you think no FILTER would help, you can leave the `filter` field empty.
-    If you think no DATAFRAME CALCULATION is needed, you can leave the 
-        `dataframe_calc` field empty.
-    
-    If you receive an answer that is an empty-string or {NO_ANSWER}, 
-    try a NEW FILTER, i.e. an empty or broader (e.g. using LIKE) or better filter.
-    
-    When you receive a satisfactory answer,
-    or if you're still getting NO_ANSWER after trying a few filters, 
-    say {DONE} {PASS} and nothing else.
-    
-    At the BEGINNING if there is no query, ASK the user what they want to know.
-    """
-
-
-class LanceFilterAgent(ChatAgent):
-    def __init__(self, config: LanceFilterAgentConfig):
-        super().__init__(config)
-        self.config: LanceFilterAgentConfig = config
-        # This agent should generate the FilterTool,
-        # as well as handle it for validation
-        self.enable_message(FilterTool, use=True, handle=True)
-        if (self.config.vecdb_schema or None) is None:
-            raise ValueError(
-                """
-                LanceFilterAgentConfig.vecdb_schema must be non-empty,
-                otherwise LanceFilterAgent cannot be used.
-                """
-            )
-        self.system_message = self.config.system_message.format(
-            doc_schema=self.config.vecdb_schema,
-        )
-
-    def add_filter(self, msg: FilterTool) -> str:
-        """Valid, so pass it on to sub-task"""
-        return PASS
-
-    def handle_message_fallback(
-        self, msg: str | ChatDocument
-    ) -> str | ChatDocument | None:
-        """When this agent receives answer from RAGTask, the LLM
-        may forget to say DONE PASS, and simply re-state answer,
-        in that case this fallback method will say DONE PASS
-        so the task ends rather than going to the RAGTask"""
-        if isinstance(msg, ChatDocument) and msg.metadata.sender == Entity.LLM:
-            return f"{DONE} {PASS}"
-        return None
-
-    def llm_response(
-        self,
-        query: None | str | ChatDocument = None,
-    ) -> Optional[ChatDocument]:
-        """Replace DONE with DONE PASS in case LLM says DONE without PASS"""
-        response = super().llm_response(query)
-        if response is None:
-            return None
-        if DONE in response.content and PASS not in response.content:
-            response.content = response.content.replace(DONE, f"{DONE} {PASS}")
-        return response
-
-    async def llm_response_async(
-        self,
-        query: None | str | ChatDocument = None,
-    ) -> Optional[ChatDocument]:
-        """Replace DONE with DONE PASS in case LLM says DONE without PASS"""
-        response = await super().llm_response_async(query)
-        if response is None:
-            return None
-        if DONE in response.content and PASS not in response.content:
-            response.content = response.content.replace(DONE, f"{DONE} {PASS}")
-        return response
-
-
 class LanceDocChatAgent(DocChatAgent):
     vecdb: LanceDB
 
     def __init__(self, cfg: DocChatAgentConfig):
         super().__init__(cfg)
         self.config: DocChatAgentConfig = cfg
-        self.enable_message(FilterTool, use=False, handle=True)
+        self.enable_message(QueryPlanTool, use=False, handle=True)
 
     def _get_clean_vecdb_schema(self) -> str:
         if self.from_dataframe:
@@ -190,7 +46,7 @@ class LanceDocChatAgent(DocChatAgent):
         )
         return json.dumps(schema_dict, indent=4)
 
-    def add_filter(self, msg: FilterTool) -> str:
+    def query_plan(self, msg: QueryPlanTool) -> str:
         """
         Handle the LLM's use of the FilterTool.
         Temporarily set the config filter and invoke the DocChatAgent.llm_response()
@@ -212,7 +68,9 @@ class LanceDocChatAgent(DocChatAgent):
             # which may be wasteful if only the calc part is wrong.
             # The calc step can later be done with a separate Agent/Tool.
             _, docs = self.get_relevant_extracts(msg.query)
-            result = self.vecdb.compute_on_docs(docs, msg.dataframe_calc)
+            if len(docs) == 0:
+                return DONE + " " + NO_ANSWER
+            result = self.vecdb.compute_from_docs(docs, msg.dataframe_calc)
             return DONE + " " + result
         else:
             # pass on the query so LLM can handle it
@@ -268,6 +126,11 @@ class LanceDocChatAgent(DocChatAgent):
         """
         # replace all newlines with spaces in query
         query_clean = query.replace("\n", " ")
+        # force special search keywords to lower case
+        # so it's not interpreted as search syntax
+        query_clean = (
+            query_clean.replace("AND", "and").replace("OR", "or").replace("NOT", "not")
+        )
 
         tbl = self.vecdb.client.open_table(self.vecdb.config.collection_name)
         result = (
@@ -278,33 +141,3 @@ class LanceDocChatAgent(DocChatAgent):
         docs = self.vecdb._lance_result_to_docs(result)
         scores = [r["score"] for r in result.to_list()]
         return list(zip(docs, scores))
-
-
-class LanceRAGTaskCreator:
-    @staticmethod
-    def new(
-        agent: LanceDocChatAgent,
-        filter_agent_config: LanceFilterAgentConfig = LanceFilterAgentConfig(),
-        interactive: bool = True,
-    ) -> Task:
-        """
-        Add a LanceFilterAgent to the LanceDocChatAgent,
-        set up the corresponding Tasks, connect them,
-        and return the top-level filter_task.
-        """
-        filter_agent_config.vecdb_schema = agent._get_clean_vecdb_schema()
-
-        filter_agent = LanceFilterAgent(filter_agent_config)
-        filter_task = Task(
-            filter_agent,
-            interactive=interactive,
-        )
-        rag_task = Task(
-            agent,
-            name="LanceRAG",
-            interactive=False,
-            done_if_response=[Entity.LLM],  # done when non-null response from LLM
-            done_if_no_response=[Entity.LLM],  # done when null response from LLM
-        )
-        filter_task.add_sub_task(rag_task)
-        return filter_task
