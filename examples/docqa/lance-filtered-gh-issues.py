@@ -18,13 +18,10 @@ import typer
 import pandas as pd
 from rich.prompt import Prompt
 from langroid.parsing.repo_loader import RepoLoader
-import langroid.language_models as lm
 from langroid.agent.special.doc_chat_agent import DocChatAgentConfig
-from langroid.agent.special.lance_doc_chat_agent import (
-    LanceFilterAgentConfig,
-    LanceDocChatAgent,
-    LanceRAGTaskCreator,
-)
+from langroid.agent.special.lance_doc_chat_agent import LanceDocChatAgent
+from langroid.agent.special.lance_rag.lance_rag_task import LanceRAGTaskCreator
+
 
 from langroid.utils.configuration import set_global, Settings
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
@@ -50,13 +47,6 @@ def main(
 
     # Configs
     embed_cfg = OpenAIEmbeddingsConfig()
-    llm_cfg = lm.OpenAIGPTConfig(
-        chat_model=model or lm.OpenAIChatModel.GPT4,
-    )
-
-    filter_agent_cfg = LanceFilterAgentConfig(
-        llm=llm_cfg,
-    )
 
     # Get hithub issues
     ldb_dir = ".lancedb/data/gh-issues"
@@ -87,11 +77,7 @@ def main(
     metadata_cols = []
     agent.ingest_dataframe(df, content="text", metadata=metadata_cols)
 
-    task = LanceRAGTaskCreator.new(
-        agent,
-        filter_agent_config=filter_agent_cfg,
-        interactive=True,
-    )
+    task = LanceRAGTaskCreator.new(agent, interactive=True)
 
     task.run("Can you help with some questions?")
 

@@ -377,13 +377,6 @@ class Agent(ABC):
         if self.llm is None:
             return False
 
-        if isinstance(message, ChatDocument) and message.function_call is not None:
-            # LLM should not handle `function_call` messages,
-            # EVEN if message.function_call is not a legit function_call
-            # The OpenAI API raises error if there is a message in history
-            # from a non-Assistant role, with a `function_call` in it
-            return False
-
         if message is not None and len(self.get_tool_messages(message)) > 0:
             # if there is a valid "tool" message (either JSON or via `function_call`)
             # then LLM cannot respond to it
@@ -523,14 +516,22 @@ class Agent(ABC):
     def get_tool_messages(self, msg: str | ChatDocument) -> List[ToolMessage]:
         if isinstance(msg, str):
             return self.get_json_tool_messages(msg)
+        if len(msg.tool_messages) > 0:
+            # We've already found tool_messages
+            # (either via OpenAI Fn-call or Langroid-native ToolMessage)
+            return msg.tool_messages
         assert isinstance(msg, ChatDocument)
         # when `content` is non-empty, we assume there will be no `function_call`
         if msg.content != "":
-            return self.get_json_tool_messages(msg.content)
+            tools = self.get_json_tool_messages(msg.content)
+            msg.tool_messages = tools
+            return tools
 
         # otherwise, we look for a `function_call`
         fun_call_cls = self.get_function_call_class(msg)
-        return [fun_call_cls] if fun_call_cls is not None else []
+        tools = [fun_call_cls] if fun_call_cls is not None else []
+        msg.tool_messages = tools
+        return tools
 
     def get_json_tool_messages(self, input_str: str) -> List[ToolMessage]:
         """
@@ -564,7 +565,7 @@ class Agent(ABC):
                 or you need to enable this agent to handle this fn-call.
                 """
             )
-            raise ValueError(f"{tool_name} is not a valid function_call!")
+            return None
         tool_class = self.llm_tools_map[tool_name]
         tool_msg.update(dict(request=tool_name))
         tool = tool_class.parse_obj(tool_msg)

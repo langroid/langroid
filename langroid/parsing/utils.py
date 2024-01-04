@@ -109,6 +109,8 @@ def number_segments(s: str, len: int = 1) -> str:
     Args:
         s (str): The input text.
         len (int): The number of sentences in a segment.
+            If this is -1, then the entire text is treated as a single segment,
+            and is numbered as <#1#>.
 
     Returns:
         str: The text with segments numbered in the style <#1#>, <#2#> etc.
@@ -117,6 +119,8 @@ def number_segments(s: str, len: int = 1) -> str:
         >>> number_segments("Hello world! How are you? Have a good day.")
         '<#1#> Hello world! <#2#> How are you? <#3#> Have a good day.'
     """
+    if len < 0:
+        return "<#1#> " + s
     numbered_text = []
     count = 0
 
