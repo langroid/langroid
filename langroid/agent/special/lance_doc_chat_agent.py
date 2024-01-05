@@ -99,6 +99,20 @@ class LanceDocChatAgent(DocChatAgent):
                 """
             )
         n = df.shape[0]
+
+        # If any additional fields need to be added to content,
+        # add them as key=value pairs, into the `content` field for all rows.
+        # This helps retrieval for table-like data.
+        # Note we need to do this at stage so that the embeddings
+        # are computed on the full content with these additional fields.
+        if len(fields := self.config.add_fields_to_content) > 0:
+            df[content] = df.apply(
+                lambda row: (",".join(f"{f}={row[f]}" for f in fields))
+                + ", content="
+                + row[content],
+                axis=1,
+            )
+
         df, metadata = DocChatAgent.document_compatible_dataframe(df, content, metadata)
         self.df_description = describe_dataframe(df, sample_size=3)
         self.vecdb.add_dataframe(df, content="content", metadata=metadata)
