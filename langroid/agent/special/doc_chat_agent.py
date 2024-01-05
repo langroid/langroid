@@ -261,13 +261,17 @@ class DocChatAgent(ChatAgent):
         # Note we need to do this at stage so that the embeddings
         # are computed on the full content with these additional fields.
         if len(self.config.add_fields_to_content) > 0:
-            for d in docs:
-                key_vals = extract_fields(d, self.config.add_fields_to_content)
-                d.content = (
-                    ",".join(f"{k}={v}" for k, v in key_vals.items())
-                    + ",content="
-                    + d.content
-                )
+            fields = [
+                f for f in extract_fields(docs[0], self.config.add_fields_to_content)
+            ]
+            if len(fields) > 0:
+                for d in docs:
+                    key_vals = extract_fields(d, fields)
+                    d.content = (
+                        ",".join(f"{k}={v}" for k, v in key_vals.items())
+                        + ",content="
+                        + d.content
+                    )
         # add embeddings in batches, to stay under limit of embeddings API
         batches = list(batched(docs, self.config.embed_batch_size))
         for batch in batches:

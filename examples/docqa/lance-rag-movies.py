@@ -96,6 +96,7 @@ def main(
     )
     cfg = DocChatAgentConfig(
         vecdb=ldb_cfg,
+        add_fields_to_content=["movie", "genre", "certificate", "stars", "rating"],
     )
     agent = LanceDocChatAgent(cfg)
 
