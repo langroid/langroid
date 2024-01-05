@@ -263,7 +263,11 @@ class DocChatAgent(ChatAgent):
         if len(self.config.add_fields_to_content) > 0:
             for d in docs:
                 key_vals = extract_fields(d, self.config.add_fields_to_content)
-                d.content = ",".join(key_vals) + "\ncontent:\n" + d.content
+                d.content = (
+                    ",".join(f"{k}={v}" for k, v in key_vals.items())
+                    + ",content="
+                    + d.content
+                )
         # add embeddings in batches, to stay under limit of embeddings API
         batches = list(batched(docs, self.config.embed_batch_size))
         for batch in batches:

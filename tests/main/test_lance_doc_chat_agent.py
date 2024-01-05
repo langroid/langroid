@@ -215,6 +215,7 @@ def test_lance_doc_chat_agent_df(
 
     cfg = DocChatAgentConfig(
         vecdb=ldb_cfg,
+        add_fields_to_content=["year", "director", "genre"],
     )
     agent = LanceDocChatAgent(cfg)
 
@@ -284,19 +285,18 @@ def test_lance_doc_chat_df_direct(test_settings: Settings):
 
     cfg = DocChatAgentConfig(
         vecdb=ldb_cfg,
+        add_fields_to_content=["state", "year"],
     )
     agent = LanceDocChatAgent(cfg)
 
     df = pd.read_csv("tests/main/data/github-issues.csv")
-    # drop columns that have "metadata" in the name
-    metadata_cols = [c for c in df.columns if "metadata" in c]
-    df.drop(columns=metadata_cols, inplace=True)
-    metadata_cols = []
-    agent.ingest_dataframe(df, content="text", metadata=metadata_cols)
+    # only get year, state, text columns
+    df = df[["year", "state", "text"]]
+    agent.ingest_dataframe(df, content="text", metadata=[])
     task = LanceRAGTaskCreator.new(agent, interactive=False)
     result = task.run(
         """
-        Tell me about some open issues related to JSON
+        Tell me about some open issues from year 2023 related to JSON
         """
     )
     # check there is non-empty response content

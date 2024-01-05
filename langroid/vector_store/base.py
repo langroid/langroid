@@ -13,6 +13,7 @@ from langroid.mytypes import Document
 from langroid.utils.algorithms.graph import components, topological_sort
 from langroid.utils.configuration import settings
 from langroid.utils.output.printing import print_long_text
+from langroid.utils.pandas_utils import stringify
 
 logger = logging.getLogger(__name__)
 
@@ -130,7 +131,7 @@ class VectorStore(ABC):
 
     def compute_from_docs(self, docs: List[Document], calc: str) -> str:
         """Compute a result on a set of documents,
-        using a calc string like `df.groupby('state')['income'].mean()`.
+        using a dataframe calc string like `df.groupby('state')['income'].mean()`.
         """
         # docs may be missing some fields since they may have come from
         # DocChatAgent retrieval, so we use the ids to get the full docs
@@ -159,7 +160,7 @@ class VectorStore(ABC):
                 instead of df.loc[..., 'column'], try df.loc[...]['column']
                 """
             return err
-        return str(result)
+        return stringify(result)
 
     def maybe_add_ids(self, documents: Sequence[Document]) -> None:
         """Add ids to metadata if absent, since some
