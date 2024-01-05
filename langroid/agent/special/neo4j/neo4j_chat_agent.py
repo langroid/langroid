@@ -27,6 +27,14 @@ console = Console()
 
 NEO4J_ERROR_MSG = "There was an error in your Cypher Query"
 
+empty_nodes = "'nodes': []"
+empty_relationships = "'relationships': []"
+not_valid_query_response = [
+    empty_nodes,
+    empty_relationships,
+    NEO4J_ERROR_MSG,
+]
+
 
 class Neo4jChatAgentConfig(ChatAgentConfig):
     system_message: str = DEFAULT_NEO4J_CHAT_SYSTEM_MESSAGE
@@ -35,6 +43,7 @@ class Neo4jChatAgentConfig(ChatAgentConfig):
     password: str
     database: str
     kg_schema: Optional[List[Dict[str, Any]]]
+    database_created: bool = False
     use_schema_tools: bool = False
     llm: OpenAIGPTConfig = OpenAIGPTConfig(
         type="openai",
@@ -114,13 +123,16 @@ class Neo4jChatAgent(ChatAgent):
 
         return error_message_template
 
-    def read_query(self, query: str, parameters: dict = None) -> str:
+    def read_query(
+        self, query: str, parameters: Optional[Dict[Any, Any]] = None
+    ) -> str:
         """
         Executes a given Cypher query with parameters on the Neo4j database.
 
         Args:
             query (str): The Cypher query string to be executed.
-            parameters (dict): A dictionary of parameters for the query.
+            parameters (Optional[Dict[Any, Any]]): A dictionary of parameters for the
+            query. Defaults to None.
 
         Returns:
             str: The result of executing the Cypher query.
@@ -176,7 +188,7 @@ class Neo4jChatAgent(ChatAgent):
 
     # TODO: test under enterprise edition because community edition doesn't allow
     # database creation/deletion
-    def remove_database(self):
+    def remove_database(self) -> None:
         """Deletes all nodes and relationships from the current Neo4j database."""
         delete_query = """
                 MATCH (n)
@@ -208,16 +220,9 @@ class Neo4jChatAgent(ChatAgent):
     # The current query works well. But we could use the queries here:
     # https://github.com/neo4j/NaLLM/blob/1af09cd117ba0777d81075c597a5081583568f9f/api/
     # src/driver/neo4j.py#L30
-    def get_schema(self, msg: GraphDatabaseSchema) -> str:
+    def get_schema(self, msg: GraphDatabaseSchema | None) -> str:
         """
         Retrieves the schema of a Neo4j graph database.
-
-        This function executes a Neo4j query to fetch the visualization of the database
-        schema. It checks if the schema contains any nodes or relationships.
-        If the schema is empty or contains any errors
-        (as defined in the 'not_valid_schema' list), it returns a message indicating
-        that the database schema does not have any nodes or relationships.
-        Otherwise, it returns the actual schema.
 
         Args:
             msg (GraphDatabaseSchema): An instance of GraphDatabaseSchema, typically
@@ -232,15 +237,8 @@ class Neo4jChatAgent(ChatAgent):
             behavior of 'self.read_query' method, which might raise exceptions related
              to database connectivity or query execution.
         """
-        empty_nodes = "'nodes': []"
-        empty_relationships = "'relationships': []"
-        not_valid_schema = [
-            empty_nodes,
-            empty_relationships,
-            NEO4J_ERROR_MSG,
-        ]
         schema = self.read_query("CALL db.schema.visualization()")
-        if not any(element in schema for element in not_valid_schema):
+        if not any(element in schema for element in not_valid_query_response):
             return schema
         else:
             return "The database schema does not have any nodes or relationships."
@@ -258,7 +256,7 @@ class Neo4jChatAgent(ChatAgent):
             raise ValueError("Database driver None")
 
         return (
-            SCHEMA_TOOLS_SYS_MSG.format(schema=self.get_schema())
+            SCHEMA_TOOLS_SYS_MSG.format(schema=self.get_schema(None))
             if self.config.use_schema_tools
             else DEFAULT_SYS_MSG
         )

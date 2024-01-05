@@ -57,7 +57,7 @@ class GetPackageInfo(ToolMessage):
     request = "construct_dependency_graph"
     purpose = f"""Get package <package_version>, <package_type>, and <package_name>.
     For the <package_version>, obtain the recent version and should be a number. 
-    For the <package_type>, return if the package is npm, Go, Maven, PyPI, NuGet, or Cargo.
+    For the <package_type>, return if the package is PyPI or not.
       Otherwise, return {NO_ANSWER}.
     For the <package_name>, return the package name provided by the user.
     ALL strings are in small letter. 
@@ -91,7 +91,9 @@ class DependencyGraphAgent(Neo4jChatAgent):
 
     def construct_dependency_graph(self, msg: GetPackageInfo) -> None:
         check_db_exist = "MATCH (n) WHERE n.name = $name RETURN n LIMIT 1"
-        if self.read_query(check_db_exist, {"name": msg.package_name}):
+        response = self.read_query(check_db_exist, {"name": msg.package_name})
+        if "No records found" not in response:
+            self.config.database_created = True
             return "Database Exists"
         else:
             construct_dependency_graph = CONSTRUCT_DEPENDENCY_GRAPH.format(
@@ -100,6 +102,7 @@ class DependencyGraphAgent(Neo4jChatAgent):
                 package_version=msg.package_version,
             )
             if self.write_query(construct_dependency_graph):
+                self.config.database_created = True
                 return "Database is created!"
             else:
                 return f"""
@@ -129,9 +132,9 @@ def chat(opts: CLIOptions) -> None:
 
     dependency_agent = DependencyGraphAgent(
         config=Neo4jChatAgentConfig(
-            uri="neo4j+s://927d9aab.databases.neo4j.io",
+            uri="",
             username="neo4j",
-            password="N7UfdMmtjfWQhAAmf42q1FdBzXB5F2m-Nleey1pmv21",
+            password="",
             database="neo4j",
             use_tools=opts.fn_api,
             use_functions_api=not opts.fn_api,
@@ -195,8 +198,9 @@ def chat(opts: CLIOptions) -> None:
 
     # check if the user wants to delete the database
     # TODO: add a falg to check the database was created before asking the user
-    if Prompt.ask("[blue] Do you want to delete the database? (y/n)") == "y":
-        dependency_agent.remove_database()
+    if dependency_agent.config.database_created:
+        if Prompt.ask("[blue] Do you want to delete the database? (y/n)") == "y":
+            dependency_agent.remove_database()
 
 
 @app.command()
