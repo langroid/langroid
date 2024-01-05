@@ -253,6 +253,10 @@ class Agent(ABC):
         ]
         return "\n\n".join(sample_convo)
 
+    def agent_response_template(self) -> ChatDocument:
+        """Template for agent_response."""
+        return self._response_template(Entity.AGENT)
+
     async def agent_response_async(
         self,
         msg: Optional[str | ChatDocument] = None,
@@ -306,6 +310,20 @@ class Agent(ABC):
                 tool_ids=[] if isinstance(msg, str) else msg.metadata.tool_ids,
             ),
         )
+
+    def _response_template(self, e: Entity) -> ChatDocument:
+        """Template for response from entity `e`."""
+        return ChatDocument(
+            content="",
+            tool_messages=[],
+            metadata=ChatDocMetaData(
+                source=e, sender=e, sender_name=self.config.name, tool_ids=[]
+            ),
+        )
+
+    def user_response_template(self) -> ChatDocument:
+        """Template for user_response."""
+        return self._response_template(Entity.USER)
 
     async def user_response_async(
         self,
@@ -383,6 +401,10 @@ class Agent(ABC):
             return False
 
         return True
+
+    def llm_response_template(self) -> ChatDocument:
+        """Template for llm_response."""
+        return self._response_template(Entity.LLM)
 
     @no_type_check
     async def llm_response_async(
