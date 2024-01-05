@@ -110,10 +110,23 @@ teacher_task.add_sub_task(student_task)
 teacher_task.run()
 ```
 
-<details>
-<summary> <b>:fire: Updates/Releases</b></summary>
+# :fire: Updates/Releases
 
+<details>
+<summary> <b>Click to expand</b></summary>
+
+- **Jan 2024:**
+  - **[0.1.156](https://github.com/langroid/langroid/releases/tag/0.1.156):** New Task control signals
+     PASS_TO, SEND_TO; VectorStore: Compute Pandas expression on documents; LanceRAGTaskCreator creates 3-agent RAG system with Query Planner, Critic and RAG Agent.
 - **Dec 2023:**
+  - **0.1.154:** (For details see release notes of [0.1.149](https://github.com/langroid/langroid/releases/tag/0.1.149)
+      and [0.1.154](https://github.com/langroid/langroid/releases/tag/0.1.154)). 
+    - `DocChatAgent`: Ingest Pandas dataframes and filtering.
+    - `LanceDocChatAgent` leverages `LanceDB` vector-db for efficient vector search
+     and full-text search and filtering.
+    - Improved task and multi-agent control mechanisms
+    - `LanceRAGTaskCreator` to create a 2-agent system consisting of a `LanceFilterAgent` that
+      decides a filter and rephrase query to send to a RAG agent.
   - **[0.1.141](https://github.com/langroid/langroid/releases/tag/0.1.141):**
     API Simplifications to reduce boilerplate:
     auto-select an available OpenAI model (preferring gpt-4-turbo), simplifies defaults.

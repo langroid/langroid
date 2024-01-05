@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from typing import Dict, List, Optional, Sequence, Tuple
 
 import numpy as np
+import pandas as pd
 from pydantic import BaseSettings
 
 from langroid.embedding_models.base import EmbeddingModel, EmbeddingModelsConfig
@@ -12,6 +13,7 @@ from langroid.mytypes import Document
 from langroid.utils.algorithms.graph import components, topological_sort
 from langroid.utils.configuration import settings
 from langroid.utils.output.printing import print_long_text
+from langroid.utils.pandas_utils import stringify
 
 logger = logging.getLogger(__name__)
 
@@ -126,6 +128,39 @@ class VectorStore(ABC):
     @abstractmethod
     def add_documents(self, documents: Sequence[Document]) -> None:
         pass
+
+    def compute_from_docs(self, docs: List[Document], calc: str) -> str:
+        """Compute a result on a set of documents,
+        using a dataframe calc string like `df.groupby('state')['income'].mean()`.
+        """
+        # docs may be missing some fields since they may have come from
+        # DocChatAgent retrieval, so we use the ids to get the full docs
+        ids = [str(doc.id()) for doc in docs]
+        docs = self.get_documents_by_ids(ids)
+        dicts = [doc.dict() for doc in docs]
+        df = pd.DataFrame(dicts)
+
+        try:
+            result = pd.eval(  # safer than eval but limited to single expression
+                calc,
+                engine="python",
+                parser="pandas",
+                local_dict={"df": df},
+            )
+        except Exception as e:
+            # return error message so LLM can fix the calc string if needed
+            err = f"""
+            Error encountered in pandas eval: {str(e)}
+            """
+            if isinstance(e, KeyError) and "not in index" in str(e):
+                # Pd.eval sometimes fails on a perfectly valid exprn like
+                # df.loc[..., 'column'] with a KeyError.
+                err += """
+                Maybe try a different way, e.g. 
+                instead of df.loc[..., 'column'], try df.loc[...]['column']
+                """
+            return err
+        return stringify(result)
 
     def maybe_add_ids(self, documents: Sequence[Document]) -> None:
         """Add ids to metadata if absent, since some

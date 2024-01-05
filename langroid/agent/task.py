@@ -3,7 +3,18 @@ from __future__ import annotations
 import copy
 import logging
 from collections import Counter
-from typing import Any, Callable, Coroutine, Dict, List, Optional, Set, Type, cast
+from typing import (
+    Any,
+    Callable,
+    Coroutine,
+    Dict,
+    List,
+    Optional,
+    Set,
+    Tuple,
+    Type,
+    cast,
+)
 
 from rich import print
 
@@ -16,7 +27,7 @@ from langroid.agent.chat_document import (
 )
 from langroid.mytypes import Entity
 from langroid.utils.configuration import settings
-from langroid.utils.constants import DONE, NO_ANSWER, PASS, USER_QUIT
+from langroid.utils.constants import DONE, NO_ANSWER, PASS, PASS_TO, SEND_TO, USER_QUIT
 from langroid.utils.logging import RichFileLogger, setup_file_logger
 
 logger = logging.getLogger(__name__)
@@ -150,7 +161,9 @@ class Task:
         self.default_human_response = default_human_response
         self.interactive = interactive
         self.message_history_idx = -1
-        if not interactive:
+        if interactive:
+            only_user_quits_root = True
+        else:
             default_human_response = default_human_response or ""
             only_user_quits_root = False
         if default_human_response is not None:
@@ -702,6 +715,39 @@ class Task:
             msg_str = str(self.pending_message)
             print(f"[red][{sender_str}]{msg_str}")
 
+    def _parse_routing(self, msg: ChatDocument | str) -> Tuple[bool | None, str | None]:
+        """
+        Parse routing instruction if any, of the form:
+        PASS:<recipient>  (pass current pending msg to recipient)
+        SEND:<recipient> <content> (send content to recipient)
+        Args:
+            msg (ChatDocument|str|None): message to parse
+        Returns:
+            Tuple[bool,str|None]:
+                bool: true=PASS, false=SEND, or None if neither
+                str: recipient, or None
+        """
+        # handle routing instruction in result if any,
+        # of the form PASS=<recipient>
+        content = msg.content if isinstance(msg, ChatDocument) else msg
+        if PASS in content and PASS_TO not in content:
+            return True, None
+        if PASS_TO in content and content.split(":")[1] != "":
+            return True, content.split(":")[1]
+        if SEND_TO in content and content.split(":")[1] != "":
+            recipient = content.split(":")[1]
+            # get content to send, clean out routing instruction, and
+            # start from 1 char after SEND_TO:<recipient>,
+            # because we expect there is either a blank or some other separator
+            # after the recipient
+            content_to_send = content.replace(f"{SEND_TO}:{recipient}", "").strip()[1:]
+            # if no content then treat same as PASS_TO
+            if content_to_send == "":
+                return True, recipient
+            else:
+                return False, recipient
+        return None, None
+
     def response(
         self,
         e: Responder,
@@ -717,10 +763,39 @@ class Task:
                 turns=actual_turns,
                 caller=self,
             )
-            return result
         else:
             response_fn = self._entity_responder_map[cast(Entity, e)]
             result = response_fn(self.pending_message)
+
+        # process result in case there is a routing instruction
+        if result is None:
+            return None
+        is_pass, recipient = self._parse_routing(result)
+        if is_pass is None:  # no routing, i.e. neither PASS nor SEND
+            return result
+        if is_pass:
+            if recipient is None or self.pending_message is None:
+                # Just PASS, no recipient
+                # This means pass on self.pending_message to the next responder
+                # in the default sequence of responders.
+                # So leave result intact since we handle "PASS" in step()
+                return result
+            # set recipient in self.pending_message
+            self.pending_message.metadata.recipient = recipient
+            # clear out recipient, replace with just PASS
+            result.content = result.content.replace(
+                f"{PASS_TO}:{recipient}", PASS
+            ).strip()
+            return result
+        elif recipient is not None:
+            # we are sending non-empty content to non-null recipient
+            # clean up result.content, set metadata.recipient and return
+            result.content = result.content.replace(
+                f"{SEND_TO}:{recipient}", ""
+            ).strip()
+            result.metadata.recipient = recipient
+            return result
+        else:
             return result
 
     async def response_async(
@@ -770,6 +845,7 @@ class Task:
             # assuming it is of the form "DONE: <content>"
             content = content.replace(DONE, "").strip()
         fun_call = result_msg.function_call if result_msg else None
+        tool_messages = result_msg.tool_messages if result_msg else []
         block = result_msg.metadata.block if result_msg else None
         recipient = result_msg.metadata.recipient if result_msg else None
         responder = result_msg.metadata.parent_responder if result_msg else None
@@ -781,6 +857,7 @@ class Task:
         return ChatDocument(
             content=content,
             function_call=fun_call,
+            tool_messages=tool_messages,
             metadata=ChatDocMetaData(
                 source=Entity.USER,
                 sender=Entity.USER,
@@ -807,6 +884,7 @@ class Task:
                 isinstance(msg, ChatDocument)
                 and msg.content.strip() in [PASS, ""]
                 and msg.function_call is None
+                and msg.tool_messages == []
             )
         )
 
