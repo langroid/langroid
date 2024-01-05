@@ -7,6 +7,16 @@ Run like this:
 
     python3 examples/docqa/chat-search.py
 
+Optional args:
+    -nc : turn off caching (i.e. don't retrieve cached LLM responses)
+    -d: debug mode, to show all intermediate results
+    -f: use OpenAI functions api instead of tools
+    -m <model_name>:  (e.g. -m litellm/ollama/mistral:7b-instruct-v0.2-q4_K_M)
+    (defaults to GPT4-Turbo if blank)
+
+(See here for guide to using non-OpenAI LLMs:
+https://langroid.github.io/langroid/tutorials/non-openai-llms/)
+
 NOTE: running this example requires setting the GOOGLE_API_KEY and GOOGLE_CSE_ID
 environment variables in your `.env` file, as explained in the
 [README](https://github.com/langroid/langroid#gear-installation-and-setup).
@@ -18,6 +28,8 @@ from rich import print
 from rich.prompt import Prompt
 
 from pydantic import BaseSettings
+import langroid as lr
+import langroid.language_models as lm
 from langroid.agent.tool_message import ToolMessage
 from langroid.agent.chat_agent import ChatAgent, ChatDocument
 from langroid.agent.special.doc_chat_agent import (
@@ -107,9 +119,23 @@ def chat(opts: CLIOptions) -> None:
     )
     system_msg = re.sub("you are", "", system_msg, flags=re.IGNORECASE)
 
+    llm_config = lm.OpenAIGPTConfig(
+        chat_model=opts.model or lm.OpenAIChatModel.GPT4_TURBO,
+        # or, other possibilities for example:
+        # "litellm/bedrock/anthropic.claude-instant-v1"
+        # "litellm/ollama/llama2"
+        # "local/localhost:8000/v1"
+        # "local/localhost:8000"
+        chat_context_length=2048,  # adjust based on model
+    )
+
     config = DocChatAgentConfig(
         use_functions_api=opts.fn_api,
         use_tools=not opts.fn_api,
+        llm=llm_config,
+        relevance_extractor_config=lr.agent.special.RelevanceExtractorAgentConfig(
+            llm=llm_config
+        ),
         system_message=f"""
         {system_msg} You will try your best to answer my questions,
         in this order of preference:
@@ -159,7 +185,7 @@ def chat(opts: CLIOptions) -> None:
     agent.vecdb.set_collection(collection_name, replace=replace)
 
     task = Task(agent)
-    task.run()
+    task.run("Can you help me answer some questions, possibly using web search?")
 
 
 @app.command()
@@ -168,9 +194,6 @@ def main(
     nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
     model: str = typer.Option("", "--model", "-m", help="model name"),
     fn_api: bool = typer.Option(False, "--fn_api", "-f", help="use functions api"),
-    cache_type: str = typer.Option(
-        "redis", "--cachetype", "-ct", help="redis or momento"
-    ),
 ) -> None:
     cli_opts = CLIOptions(
         fn_api=fn_api,
@@ -181,7 +204,6 @@ def main(
         Settings(
             debug=debug,
             cache=not nocache,
-            cache_type=cache_type,
         )
     )
     chat(cli_opts)
