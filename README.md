@@ -116,6 +116,9 @@ teacher_task.run()
 <summary> <b>Click to expand</b></summary>
 
 - **Jan 2024:**
+  - **[0.1.157](https://github.com/langroid/langroid/releases/tag/0.1.157):** `DocChatAgentConfig` 
+     has a new param: `add_fields_to_content`, to specify additional document fields to insert into 
+     the main `content` field, to help improve retrieval.
   - **[0.1.156](https://github.com/langroid/langroid/releases/tag/0.1.156):** New Task control signals
      PASS_TO, SEND_TO; VectorStore: Compute Pandas expression on documents; LanceRAGTaskCreator creates 3-agent RAG system with Query Planner, Critic and RAG Agent.
 - **Dec 2023:**
