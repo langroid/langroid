@@ -1,6 +1,9 @@
 import pytest
 
-from langroid.graph_database.neo4j import Neo4j, Neo4jConfig
+from langroid.agent.special.neo4j.neo4j_chat_agent import (
+    Neo4jChatAgent,
+    Neo4jChatAgentConfig,
+)
 
 """
 Before running this test case, make sure you run neo4j container using
@@ -15,22 +18,20 @@ OR
 You can sign-up a free account at Neo4j Aura to create neo4j DB on the cloud.
 """
 
-neo4j_cfg = Neo4jConfig(
-    uri="neo4j://localhost:7687",
-    username="neo4j",
-    password="password",
-    database="neo4j",
-)
-
 
 @pytest.fixture
-def neo4j_client():
-    client = Neo4j(config=neo4j_cfg)
-    yield client
-    client.close()
+def agent():
+    return Neo4jChatAgent(
+        Neo4jChatAgentConfig(
+            uri="neo4j://localhost:7687",
+            username="neo4j",
+            password="password",
+            database="neo4j",
+        )
+    )
 
 
-def test_write_then_retrieval(neo4j_client):
+def test_write_then_retrieval(agent):
     try:
         write_query = """
         CREATE (m:Movie {title: 'Inception', releaseYear: 2010})
@@ -38,20 +39,19 @@ def test_write_then_retrieval(neo4j_client):
         MERGE (a)-[:ACTED_IN]->(m)
         RETURN m, a
         """
-        result = neo4j_client.execute_write_query(write_query)
-        assert result is True
-
+        write_result = agent.write_query(write_query)
+        assert write_result is True
         retrieval_query = """
         MATCH (a:Actor)-[r:ACTED_IN]->(m:Movie)
         WHERE a.name = 'Leonardo DiCaprio' AND m.title = 'Inception'
         RETURN a.name, m.title, m.releaseYear, type(r) AS relationship
         """
-        result = neo4j_client.run_query(retrieval_query)
-        assert result is not None
-        assert len(result) == 1
-        for record in result:
-            assert record["a.name"] == "Leonardo DiCaprio"
-            assert record["m.title"] == "Inception"
+        read_result = agent.read_query(retrieval_query)
+        name_record = "'a.name': 'Leonardo DiCaprio'"
+        title_record = "'m.title': 'Inception'"
+        assert name_record in read_result
+        assert title_record in read_result
+
     finally:
         # Cleanup - Remove the created records
         cleanup_query = """
@@ -59,4 +59,4 @@ def test_write_then_retrieval(neo4j_client):
         (m:Movie {title: 'Inception'})
         DELETE r, a, m
         """
-        neo4j_client.execute_write_query(cleanup_query)
+        agent.write_query(cleanup_query)
