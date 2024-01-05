@@ -19,6 +19,8 @@ import logging
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.chat_document import ChatDocument
 from langroid.agent.special.lance_rag.lance_tools import (
+    QueryPlan,
+    QueryPlanAnswerTool,
     QueryPlanFeedbackTool,
     QueryPlanTool,
 )
@@ -82,6 +84,7 @@ class LanceQueryPlanAgentConfig(ChatAgentConfig):
     Use DOT NOTATION to refer to nested fields, e.g. `metadata.year`, etc. 
         
     You must FIRST present the QUERY PLAN using the `query_plan` tool/function.
+    This will be handled by your document assistant, who will produce an ANSWER.
             
     You may receive FEEDBACK on your QUERY PLAN and received ANSWER,
     from the 'QueryPlanCritic' who may offer suggestions for
@@ -103,6 +106,7 @@ class LanceQueryPlanAgent(ChatAgent):
     def __init__(self, config: LanceQueryPlanAgentConfig):
         super().__init__(config)
         self.config: LanceQueryPlanAgentConfig = config
+        self.curr_query_plan: QueryPlan | None = None
         self.result: str = ""  # answer received from LanceRAG
         # This agent should generate the QueryPlanTool
         # as well as handle it for validation
@@ -111,7 +115,8 @@ class LanceQueryPlanAgent(ChatAgent):
 
     def query_plan(self, msg: QueryPlanTool) -> str:
         """Valid, forward to RAG Agent"""
-        self.curr_query_plan = msg
+        # save, to be used to assemble QueryPlanResultTool
+        self.curr_query_plan = msg.plan
         return PASS_TO + self.config.doc_agent_name
 
     def query_plan_feedback(self, msg: QueryPlanFeedbackTool) -> str:
@@ -137,9 +142,12 @@ class LanceQueryPlanAgent(ChatAgent):
     ) -> str | ChatDocument | None:
         """
         Process answer received from RAG Agent:
-         Insert it into `result` field of current QueryPlanTool,
+         Construct a QueryPlanAnswerTool with the answer,
          and forward to Critic for feedback.
         """
+        # TODO we don't need to use this fallback method. instead we can
+        # first call result = super().agent_response(), and if result is None,
+        # then we know there was no tool, so we run below code
         if (
             isinstance(msg, ChatDocument)
             and msg.metadata.sender_name == self.config.doc_agent_name
@@ -147,19 +155,16 @@ class LanceQueryPlanAgent(ChatAgent):
         ):
             # save result, to be used in query_plan_feedback()
             self.result = msg.content
-
-            # Parent of this msg must have used the QueryPlanTool, so find it
-            parent_doc = msg.metadata.parent.copy()  # contains QueryPlanTool
-            tools = [
-                t for t in parent_doc.tool_messages if isinstance(t, QueryPlanTool)
-            ]
-
-            if len(tools) > 0:
-                # insert result into current QueryPlanTool
-                query_plan_tool = tools[0]
-                query_plan_tool.result = self.result
-                parent_doc.tool_messages = [query_plan_tool]
-            # and set recipient to Critic so it can give feedback
-            parent_doc.metadata.recipient = self.config.critic_name
-            return parent_doc
+            # assemble QueryPlanAnswerTool...
+            query_plan_answer_tool = QueryPlanAnswerTool(
+                plan=self.curr_query_plan,
+                answer=self.result,
+            )
+            response_tmpl = self.agent_response_template()
+            # ... add the QueryPlanAnswerTool to the response
+            # (Notice how the Agent is directly sending a tool, not the LLM)
+            response_tmpl.tool_messages = [query_plan_answer_tool]
+            # set the recipient to the Critic so it can give feedback
+            response_tmpl.metadata.recipient = self.config.critic_name
+            return response_tmpl
         return None

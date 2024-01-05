@@ -20,8 +20,8 @@ import logging
 from langroid.agent.chat_agent import ChatAgent
 from langroid.agent.chat_document import ChatDocument
 from langroid.agent.special.lance_rag.lance_tools import (
+    QueryPlanAnswerTool,
     QueryPlanFeedbackTool,
-    QueryPlanTool,
 )
 from langroid.agent.special.lance_rag.query_planner_agent import (
     LanceQueryPlanAgentConfig,
@@ -43,15 +43,15 @@ class QueryPlanCriticConfig(LanceQueryPlanAgentConfig):
     
     You will receive a QUERY PLAN consisting of a 
     ORIGINAL QUERY, SQL-Like FILTER, REPHRASED QUERY, 
-    a DATAFRAME CALCULATION, and a "result" field which is the 
+    a DATAFRAME CALCULATION, and an ANSWER which is the 
     answer received from an assistant that used this QUERY PLAN.
     
     Your job is to act as a CRITIC and provide feedback, 
     ONLY using the `query_plan_feedback` tool, and DO NOT SAY ANYTHING ELSE.
-    You must take `result` field into account
+    You must take `answer` field into account
     and judge whether it is a reasonable answer, and accordingly give your feedback.
     
-    VERY IMPORTANT: IF THE RESULT (ANSWER) seems reasonable, then you should consider
+    VERY IMPORTANT: IF THE ANSWER seems reasonable, then you should consider
     the query plan to be fine, and only ask for a revision if you notice 
     something obviously wrong with the query plan.
     Typically, when there is a non-empty answer, 
@@ -84,33 +84,32 @@ class QueryPlanCriticConfig(LanceQueryPlanAgentConfig):
     """
 
 
-def plain_text_query_plan(msg: QueryPlanTool) -> str:
+def plain_text_query_plan(msg: QueryPlanAnswerTool) -> str:
     plan = f"""
-    OriginalQuery: {msg.original_query}
-    Filter: {msg.filter}
-    Query: {msg.query}
-    DataframeCalc: {msg.dataframe_calc}
+    OriginalQuery: {msg.plan.original_query}
+    Filter: {msg.plan.filter}
+    Query: {msg.plan.query}
+    DataframeCalc: {msg.plan.dataframe_calc}
+    Answer: {msg.answer}
     """
-    if msg.result is not None and msg.result != "":
-        plan += f"\nResult: {msg.result}"
     return plan
 
 
 class QueryPlanCritic(ChatAgent):
     """
-    Critic for LanceFilterAgent.
+    Critic for LanceQueryPlanAgent, provides feedback on
+    query plan + answer.
     """
 
     def __init__(self, cfg: LanceQueryPlanAgentConfig):
         super().__init__(cfg)
         self.config = cfg
-        self.curr_query_plan: QueryPlanTool | None = None
-        self.enable_message(QueryPlanTool, use=False, handle=True)
+        self.enable_message(QueryPlanAnswerTool, use=False, handle=True)
         self.enable_message(QueryPlanFeedbackTool, use=True, handle=True)
 
-    def query_plan(self, msg: QueryPlanTool) -> str:
-        """Present query plan in plain text (not JSON) so LLM can give feedback"""
-        self.curr_query_plan = msg
+    def query_plan_answer(self, msg: QueryPlanAnswerTool) -> str:
+        """Present query plan + answer in plain text (not JSON)
+        so LLM can give feedback"""
         return plain_text_query_plan(msg)
 
     def query_plan_feedback(self, msg: QueryPlanFeedbackTool) -> str:
@@ -121,22 +120,10 @@ class QueryPlanCritic(ChatAgent):
         self, msg: str | ChatDocument
     ) -> str | ChatDocument | None:
         """Create QueryPlanFeedbackTool since LLM forgot"""
-        if isinstance(msg, ChatDocument):
-            if msg.metadata.sender == Entity.LLM:
-                # our LLM forgot to use the QueryPlanFeedbackTool
-                feedback = QueryPlanFeedbackTool(feedback=msg.content)
-                msg.tool_messages = [feedback]
-                msg.content = DONE
-                return msg
-            elif msg.metadata.sender == Entity.USER:
-                # parent task forgot to use the QueryPlanTool
-                # so make a special QueryPlanFeedbackTool
-                feedback = QueryPlanFeedbackTool(
-                    feedback="""
-                    You forgot to send a query plan using the `query_plan` tool.
-                    """
-                )
-                msg.tool_messages = [feedback]
-                msg.content = DONE
-                return msg
+        if isinstance(msg, ChatDocument) and msg.metadata.sender == Entity.LLM:
+            # our LLM forgot to use the QueryPlanFeedbackTool
+            feedback = QueryPlanFeedbackTool(feedback=msg.content)
+            msg.tool_messages = [feedback]
+            msg.content = DONE
+            return msg
         return None

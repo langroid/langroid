@@ -52,29 +52,30 @@ class LanceDocChatAgent(DocChatAgent):
         Temporarily set the config filter and invoke the DocChatAgent.llm_response()
         """
         # create document-subset based on this filter
+        plan = msg.plan
         try:
-            self.setup_documents(filter=msg.filter or None)
+            self.setup_documents(filter=plan.filter or None)
         except Exception as e:
             logger.error(f"Error setting up documents: {e}")
             # say DONE with err msg so it goes back to LanceFilterAgent
             return f"{DONE} Possible Filter Error:\n {e}"
         # update the filter so it is used in the DocChatAgent
-        self.config.filter = msg.filter or None
-        if msg.dataframe_calc:
+        self.config.filter = plan.filter or None
+        if plan.dataframe_calc:
             # we just get relevant docs then do the calculation
             # TODO if calc causes err, it is captured in result,
             # and LLM can correct the calc based on the err,
             # and this will cause retrieval all over again,
             # which may be wasteful if only the calc part is wrong.
             # The calc step can later be done with a separate Agent/Tool.
-            _, docs = self.get_relevant_extracts(msg.query)
+            _, docs = self.get_relevant_extracts(plan.query)
             if len(docs) == 0:
                 return DONE + " " + NO_ANSWER
-            result = self.vecdb.compute_from_docs(docs, msg.dataframe_calc)
+            result = self.vecdb.compute_from_docs(docs, plan.dataframe_calc)
             return DONE + " " + result
         else:
             # pass on the query so LLM can handle it
-            return msg.query
+            return plan.query
 
     def ingest_docs(self, docs: List[Document], split: bool = True) -> int:
         n = super().ingest_docs(docs, split)
