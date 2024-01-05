@@ -23,6 +23,8 @@ environment variables in your `.env` file, as explained in the
 """
 
 import re
+from typing import List
+
 import typer
 from rich import print
 from rich.prompt import Prompt
@@ -52,12 +54,39 @@ class RelevantExtractsTool(ToolMessage):
     purpose = "Get docs/extracts relevant to the <query>"
     query: str
 
+    @classmethod
+    def examples(cls) -> List["ToolMessage"]:
+        return [
+            cls(query="when was the Mistral LLM released?"),
+        ]
+
+    @classmethod
+    def instructions(cls) -> str:
+        return """
+        IMPORTANT: You must include an ACTUAL query in the `query` field,
+        """
+
 
 class RelevantSearchExtractsTool(ToolMessage):
     request = "relevant_search_extracts"
     purpose = "Get docs/extracts relevant to the <query> from a web search"
     query: str
     num_results: int = 3
+
+    @classmethod
+    def examples(cls) -> List["ToolMessage"]:
+        return [
+            cls(
+                query="when was the Mistral LLM released?",
+                num_results=3,
+            ),
+        ]
+
+    @classmethod
+    def instructions(cls) -> str:
+        return """
+        IMPORTANT: You must include an ACTUAL query in the `query` field,
+        """
 
 
 class GoogleSearchDocChatAgent(DocChatAgent):
@@ -75,7 +104,10 @@ class GoogleSearchDocChatAgent(DocChatAgent):
         query = msg.query
         _, extracts = self.get_relevant_extracts(query)
         if len(extracts) == 0:
-            return NO_ANSWER
+            return f"""
+            No extracts found! You can try doing a web search with the
+            `relevant_search_extracts` tool/function-call.
+            """
         return "\n".join(str(e) for e in extracts)
 
     def relevant_search_extracts(self, msg: RelevantSearchExtractsTool) -> str:
@@ -111,7 +143,8 @@ def chat(opts: CLIOptions) -> None:
 
     system_msg = Prompt.ask(
         """
-    [blue] Tell me who I am; complete this sentence: You are...
+    [blue] Tell me who I am (give me a role) by completing this sentence: 
+    You are...
     [or hit enter for default]
     [blue] Human
     """,
@@ -173,7 +206,7 @@ def chat(opts: CLIOptions) -> None:
     )
     replace = (
         Prompt.ask(
-            "Would you like to replace this collection?",
+            "Would you like to replace (i.e. erase) this collection?",
             choices=["y", "n"],
             default="n",
         )
