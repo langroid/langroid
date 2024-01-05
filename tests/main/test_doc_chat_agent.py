@@ -393,16 +393,16 @@ data = {
     "id": ["A100", "B200", "C300", "D400", "E500"],
     "year": [1955, 1977, 1989, 2001, 2015],
     "author": [
-        "Isaac Asimov",
-        "J.K. Rowling",
-        "George Orwell",
-        "J.R.R. Tolkien",
-        "H.G. Wells",
+        "Isaac Maximov",
+        "J.K. Bowling",
+        "George Morewell",
+        "J.R.R. Bolshine",
+        "Hugo Wellington",
     ],
     "title": [
         "The Last Question",
         "Harry Potter",
-        "1984",
+        "2084",
         "The Lord of the Rings",
         "The Time Machine",
     ],
@@ -428,7 +428,7 @@ def test_doc_chat_ingest_df(
     """Check we can ingest from a dataframe and run queries."""
     set_global(test_settings)
 
-    sys_msg = "You will be asked to answer questions based on short movie descriptions."
+    sys_msg = "You will be asked to answer questions based on short book descriptions."
     agent_cfg = DocChatAgentConfig(
         system_message=sys_msg,
     )
@@ -440,7 +440,39 @@ def test_doc_chat_ingest_df(
     agent.ingest_dataframe(df, content="summary", metadata=metadata)
     response = agent.llm_response(
         """
-        What concept does the movie dealing with the end of the universe explore?
+        What concept does the book dealing with the end of the universe explore?
         """
     )
     assert "entropy" in response.content.lower()
+
+
+@pytest.mark.parametrize("metadata", [[], ["id", "year"], ["year"]])
+@pytest.mark.parametrize("vecdb", ["lancedb", "qdrant_local", "chroma"], indirect=True)
+def test_doc_chat_add_content_fields(
+    test_settings: Settings,
+    vecdb,
+    metadata,
+):
+    """Check we can ingest from a dataframe,
+    with additional fields inserted into content,
+    and run queries that refer to those fields."""
+
+    set_global(test_settings)
+
+    sys_msg = "You will be asked to answer questions based on short movie descriptions."
+    agent_cfg = DocChatAgentConfig(
+        system_message=sys_msg,
+        add_fields_to_content=["year", "author", "title"],
+    )
+    if isinstance(vecdb, LanceDB):
+        agent = LanceDocChatAgent(agent_cfg)
+    else:
+        agent = DocChatAgent(agent_cfg)
+    agent.vecdb = vecdb
+    agent.ingest_dataframe(df, content="summary", metadata=metadata)
+    response = agent.llm_response(
+        """
+        What was the title of the George Morewell book and when was it written?
+        """
+    )
+    assert "2084" in response.content and "1989" in response.content

@@ -51,7 +51,7 @@ from langroid.prompts.templates import SUMMARY_ANSWER_PROMPT_GPT4
 from langroid.utils.configuration import settings
 from langroid.utils.constants import NO_ANSWER
 from langroid.utils.output.printing import show_if_debug
-from langroid.utils.pydantic_utils import dataframe_to_documents
+from langroid.utils.pydantic_utils import dataframe_to_documents, extract_fields
 from langroid.vector_store.base import VectorStoreConfig
 from langroid.vector_store.lancedb import LanceDBConfig
 
@@ -74,6 +74,9 @@ class DocChatAgentConfig(ChatAgentConfig):
     system_message: str = DEFAULT_DOC_CHAT_SYSTEM_MESSAGE
     user_message: str = DEFAULT_DOC_CHAT_INSTRUCTIONS
     summarize_prompt: str = SUMMARY_ANSWER_PROMPT_GPT4
+    # extra fields to include in content as key=value pairs
+    # (helps retrieval for table-like data)
+    add_fields_to_content: List[str] = []
     retrieve_only: bool = False  # only retr relevant extracts, don't gen summary answer
     extraction_granularity: int = 1  # granularity (in sentences) for relev extraction
     filter: str | None = (
@@ -251,6 +254,24 @@ class DocChatAgent(ChatAgent):
                 d.metadata.is_chunk = True
         if self.vecdb is None:
             raise ValueError("VecDB not set")
+
+        # If any additional fields need to be added to content,
+        # add them as key=value pairs for all docs, before batching.
+        # This helps retrieval for table-like data.
+        # Note we need to do this at stage so that the embeddings
+        # are computed on the full content with these additional fields.
+        if len(self.config.add_fields_to_content) > 0:
+            fields = [
+                f for f in extract_fields(docs[0], self.config.add_fields_to_content)
+            ]
+            if len(fields) > 0:
+                for d in docs:
+                    key_vals = extract_fields(d, fields)
+                    d.content = (
+                        ",".join(f"{k}={v}" for k, v in key_vals.items())
+                        + ",content="
+                        + d.content
+                    )
         # add embeddings in batches, to stay under limit of embeddings API
         batches = list(batched(docs, self.config.embed_batch_size))
         for batch in batches:

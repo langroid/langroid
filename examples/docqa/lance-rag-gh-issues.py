@@ -60,6 +60,7 @@ def main(
 
     cfg = DocChatAgentConfig(
         vecdb=ldb_cfg,
+        add_fields_to_content=["state", "year", "month", "assignee", "size"],
     )
     agent = LanceDocChatAgent(cfg)
     repo = Prompt.ask(
@@ -73,7 +74,6 @@ def main(
     issues = repo_loader.get_issues(k=int(n_issues))
     issue_dicts = [iss.dict() for iss in issues]
     df = pd.DataFrame(issue_dicts)
-
     metadata_cols = []
     agent.ingest_dataframe(df, content="text", metadata=metadata_cols)
 

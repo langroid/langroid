@@ -167,6 +167,62 @@ def flatten_pydantic_instance(
     return flat_data
 
 
+def extract_fields(doc: BaseModel, fields: List[str]) -> Dict[str, Any]:
+    """
+    Extract specified fields from a Pydantic object.
+    Supports dotted field names, e.g. "metadata.author".
+    Dotted fields are matched exactly according to the corresponding path.
+    Non-dotted fields are matched against the last part of the path.
+    Clashes ignored.
+    Args:
+        doc (BaseModel): The Pydantic object.
+        fields (List[str]): The list of fields to extract.
+
+    Returns:
+        Dict[str, Any]: A dictionary of field names and values.
+
+    """
+
+    def get_value(obj: BaseModel, path: str) -> Any | None:
+        for part in path.split("."):
+            if hasattr(obj, part):
+                obj = getattr(obj, part)
+            else:
+                return None
+        return obj
+
+    def traverse(obj: BaseModel, result: Dict[str, Any], prefix: str = "") -> None:
+        for k, v in obj.__dict__.items():
+            key = f"{prefix}.{k}" if prefix else k
+            if isinstance(v, BaseModel):
+                traverse(v, result, key)
+            else:
+                result[key] = v
+
+    result: Dict[str, Any] = {}
+
+    # Extract values for dotted field names and use last part as key
+    for field in fields:
+        if "." in field:
+            value = get_value(doc, field)
+            if value is not None:
+                key = field.split(".")[-1]
+                result[key] = value
+
+    # Traverse the object to get non-dotted fields
+    all_fields: Dict[str, Any] = {}
+    traverse(doc, all_fields)
+
+    # Add non-dotted fields to the result,
+    # avoid overwriting if already present from dotted names
+    for field in [f for f in fields if "." not in f]:
+        for key, value in all_fields.items():
+            if key.split(".")[-1] == field and field not in result:
+                result[field] = value
+
+    return result
+
+
 def nested_dict_from_flat(
     flat_data: Dict[str, Any],
     sub_dict: str = "",

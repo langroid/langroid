@@ -44,7 +44,14 @@ class LanceDocChatAgent(DocChatAgent):
             self.vecdb.schema,
             excludes=["id", "vector"],
         )
-        return json.dumps(schema_dict, indent=4)
+        schema = json.dumps(schema_dict, indent=4)
+        if len(fields := self.config.add_fields_to_content) > 0:
+            schema += f"""
+            Additional fields added to `content` as key=value pairs:
+            NOTE That CAN Help with matching queries!
+            {fields}
+            """
+        return schema
 
     def query_plan(self, msg: QueryPlanTool) -> str:
         """
@@ -99,6 +106,21 @@ class LanceDocChatAgent(DocChatAgent):
                 """
             )
         n = df.shape[0]
+
+        # If any additional fields need to be added to content,
+        # add them as key=value pairs, into the `content` field for all rows.
+        # This helps retrieval for table-like data.
+        # Note we need to do this at stage so that the embeddings
+        # are computed on the full content with these additional fields.
+        fields = [f for f in self.config.add_fields_to_content if f in df.columns]
+        if len(fields) > 0:
+            df[content] = df.apply(
+                lambda row: (",".join(f"{f}={row[f]}" for f in fields))
+                + ", content="
+                + row[content],
+                axis=1,
+            )
+
         df, metadata = DocChatAgent.document_compatible_dataframe(df, content, metadata)
         self.df_description = describe_dataframe(df, sample_size=3)
         self.vecdb.add_dataframe(df, content="content", metadata=metadata)
