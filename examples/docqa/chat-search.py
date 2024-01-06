@@ -104,7 +104,7 @@ class GoogleSearchDocChatAgent(DocChatAgent):
         query = msg.query
         _, extracts = self.get_relevant_extracts(query)
         if len(extracts) == 0:
-            return f"""
+            return """
             No extracts found! You can try doing a web search with the
             `relevant_search_extracts` tool/function-call.
             """

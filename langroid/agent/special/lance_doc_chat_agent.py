@@ -44,6 +44,24 @@ class LanceDocChatAgent(DocChatAgent):
             self.vecdb.schema,
             excludes=["id", "vector"],
         )
+        # intersect config.filter_fields with schema_dict.keys() in case
+        # there are extraneous fields in config.filter_fields
+        filter_fields_set = set(
+            self.config.filter_fields or schema_dict.keys()
+        ).intersection(schema_dict.keys())
+        filter_fields = [f for f in filter_fields_set if f != "content"]
+        # possible values of filterable fields
+        filter_field_values = self.get_field_values(filter_fields)
+
+        # add field values to schema_dict as another field `values` for each field
+        for field, values in filter_field_values.items():
+            if field in schema_dict:
+                schema_dict[field]["values"] = values
+        # if self.config.filter_fields is set, restrict to these:
+        if len(self.config.filter_fields) > 0:
+            schema_dict = {
+                k: v for k, v in schema_dict.items() if k in self.config.filter_fields
+            }
         schema = json.dumps(schema_dict, indent=4)
         if len(fields := self.config.add_fields_to_content) > 0:
             schema += f"""
@@ -122,7 +140,11 @@ class LanceDocChatAgent(DocChatAgent):
             )
 
         df, metadata = DocChatAgent.document_compatible_dataframe(df, content, metadata)
-        self.df_description = describe_dataframe(df, sample_size=3)
+        self.df_description = describe_dataframe(
+            df,
+            filter_fields=self.config.filter_fields,
+            n_vals=10,
+        )
         self.vecdb.add_dataframe(df, content="content", metadata=metadata)
 
         tbl = self.vecdb.client.open_table(self.vecdb.config.collection_name)

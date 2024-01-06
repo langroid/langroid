@@ -80,6 +80,8 @@ class QueryPlanCriticConfig(LanceQueryPlanAgentConfig):
     
     ALWAYS use `query_plan_feedback` tool/fn to present your feedback!
     and DO NOT SAY ANYTHING ELSE OUTSIDE THE TOOL/FN.
+    IF NO REVISION NEEDED, simply give EMPTY FEEBACK, SAY NOTHING ELSE
+    and DO NOT EXPLAIN YOURSELF.
         
     """
 

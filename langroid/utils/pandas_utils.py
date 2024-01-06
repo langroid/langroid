@@ -8,7 +8,7 @@ def stringify(x: Any) -> str:
     if isinstance(x, pd.Series):
         df = x.to_frame()
     elif not isinstance(x, pd.DataFrame):
-        df = pd.DataFrame([x], columns=["Result"])
+        return str(x)
     else:
         df = x
 
