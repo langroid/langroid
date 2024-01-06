@@ -227,8 +227,10 @@ class SQLChatAgent(ChatAgent):
         if isinstance(msg, ChatDocument) and msg.function_call is not None:
             sender_name = msg.function_call.name
 
+        content = results.content if isinstance(results, ChatDocument) else results
+
         return ChatDocument(
-            content=results,
+            content=content,
             metadata=ChatDocMetaData(
                 source=Entity.AGENT,
                 sender=Entity.AGENT,
