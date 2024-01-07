@@ -10,19 +10,18 @@ environment variables in your `.env` file, as explained in the
 """
 
 import typer
+from dotenv import load_dotenv
+from pydantic import BaseSettings
 from rich import print
 from rich.prompt import Prompt
-from pydantic import BaseSettings
-from dotenv import load_dotenv
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
-from langroid.agent.tools.sciphi_search_rag_tool import SciPhiSearchRAGTool
 from langroid.agent.tools.google_search_tool import GoogleSearchTool
+from langroid.agent.tools.sciphi_search_rag_tool import SciPhiSearchRAGTool
 from langroid.language_models.openai_gpt import OpenAIGPTConfig
-from langroid.utils.configuration import set_global, Settings
+from langroid.utils.configuration import Settings, set_global
 from langroid.utils.logging import setup_colored_logging
-
 
 app = typer.Typer()
 
@@ -130,7 +129,7 @@ def main(
     debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
     model: str = typer.Option("", "--model", "-m", help="model name"),
     provider: str = typer.Option(
-        "sciphi", "--provider", "-m", help="search provider name (Google, SciPhi)"
+        "sciphi", "--provider", "-p", help="search provider name (Google, SciPhi)"
     ),
     no_stream: bool = typer.Option(False, "--nostream", "-ns", help="no streaming"),
     nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
