@@ -17,6 +17,7 @@ from dotenv import load_dotenv
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
+from langroid.agent.tools.sciphi_search_rag_tool import SciPhiSearchRAGTool
 from langroid.agent.tools.google_search_tool import GoogleSearchTool
 from langroid.language_models.openai_gpt import OpenAIGPTConfig
 from langroid.utils.configuration import set_global, Settings
@@ -50,6 +51,7 @@ ooba_config = OobaConfig(
 
 class CLIOptions(BaseSettings):
     model: str = ""
+    provider: str = "google"
 
     class Config:
         extra = "forbid"
@@ -88,7 +90,14 @@ def chat(opts: CLIOptions) -> None:
         vecdb=None,
     )
     agent = ChatAgent(config)
-    agent.enable_message(GoogleSearchTool)
+
+    if opts.provider == "google":
+        agent.enable_message(GoogleSearchTool)
+    elif opts.provider == "sciphi":
+        agent.enable_message(SciPhiSearchRAGTool)
+    else:
+        raise ValueError(f"Unsupported search provider {opts.provider} specified.")
+
     task = Task(
         agent,
         system_message="""
