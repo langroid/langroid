@@ -17,7 +17,7 @@ def test_get_docx_file(docxlib: str):
 
     # Check the results
     assert isinstance(doc.content, str)
-    assert len(doc.content) > 0  # assuming the PDF is not empty
+    assert len(doc.content) > 0  # assuming the docx is not empty
     assert doc.metadata.source == path
 
     # parser = Parser(ParsingConfig())
