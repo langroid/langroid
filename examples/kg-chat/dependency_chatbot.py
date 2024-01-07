@@ -27,16 +27,12 @@ from langroid.agent.special.neo4j.neo4j_chat_agent import (
 )
 from langroid.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
 from langroid.utils.constants import NO_ANSWER
-from langroid.agent.chat_agent import ChatAgent, ChatDocument
-from langroid.agent.special.doc_chat_agent import (
-    DocChatAgent,
-    DocChatAgentConfig,
-)
+from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.utils.configuration import set_global, Settings
 from langroid.utils.logging import setup_colored_logging
 from langroid.agent.tool_message import ToolMessage
-from langroid.agent.tools.recipient_tool import RecipientTool
-from langroid.parsing.web_search import google_search
+from langroid.agent.tools.google_search_tool import GoogleSearchTool
+
 from langroid.agent.task import Task
 from cypher_message import CONSTRUCT_DEPENDENCY_GRAPH
 
@@ -44,13 +40,6 @@ from cypher_message import CONSTRUCT_DEPENDENCY_GRAPH
 app = typer.Typer()
 
 setup_colored_logging()
-
-
-class RelevantSearchExtractsTool(ToolMessage):
-    request = "relevant_search_extracts"
-    purpose = """Get docs/extracts relevant to the <query> from a web search."""
-    query: str
-    num_results: int = 2
 
 
 class GetPackageInfo(ToolMessage):
@@ -65,25 +54,6 @@ class GetPackageInfo(ToolMessage):
     package_version: str
     package_type: str
     package_name: str
-
-
-class GoogleSearchChatAgent(DocChatAgent):
-    def llm_response(
-        self,
-        query: None | str | ChatDocument = None,
-    ) -> ChatDocument | None:
-        return ChatAgent.llm_response(self, query)
-
-    def relevant_search_extracts(self, msg: RelevantSearchExtractsTool) -> str:
-        """Get docs/extracts relevant to the query, from a web search."""
-        query = msg.query
-        num_results = msg.num_results
-        results = google_search(query, num_results)
-        links = [r.link for r in results]
-        self.config.doc_paths = links
-        self.ingest()
-        _, extracts = self.get_relevant_extracts(query)
-        return "\n".join(str(e) for e in extracts) + "DONE"
 
 
 class DependencyGraphAgent(Neo4jChatAgent):
@@ -171,33 +141,49 @@ def chat(opts: CLIOptions) -> None:
         system_message=system_message,
     )
 
-    config = DocChatAgentConfig(
-        use_tools=True,
-        use_functions_api=False,
-        user_message="",
+    config = ChatAgentConfig(
+        system_message="You are a helpful assistant",
+        llm=OpenAIGPTConfig(
+            chat_model=OpenAIChatModel.GPT4_TURBO,
+        ),
+        vecdb=None,
+        use_tools=opts.fn_api,
+        use_functions_api=not opts.fn_api,
     )
-    google_agent = GoogleSearchChatAgent(config)
 
+    google_agent = ChatAgent(config)
+    google_agent.enable_message(GoogleSearchTool)
     google_task = Task(
         google_agent,
         name="GoogleSearchAgent",
+        system_message="""
+        You are a helpful assistant. You will try your best to answer my questions.
+        You can use up to 5 results from the `web_search` tool/function-call to
+          help you with answering the question.
+        Be very concise in your responses, use no more than 1-2 sentences.
+        When you answer based on a web search, First show me your answer, 
+        and then show me the SOURCE(s) and EXTRACT(s) to justify your answer,
+        in this format:
+        
+        <your answer here>
+        SOURCE: https://www.wikihow.com/Be-a-Good-Assistant-Manager
+        EXTRACT: Be a Good Assistant ... requires good leadership skills.
+        
+        SOURCE: ...
+        EXTRACT: ...
+        
+        For the EXTRACT, ONLY show up to first 3 words, and last 3 words.
+        SEND **DONE** after providing the answer or if you don't know the answer.
+        """,
         interactive=False,
     )
 
-    google_agent.vecdb.set_collection("dependency-chatbot-collection", replace=True)
-
-    # enable tools
-    google_agent.enable_message(RelevantSearchExtractsTool)
-    dependency_agent.enable_message(
-        RecipientTool.create(recipients=["GoogleSearchAgent"])
-    )
     dependency_agent.enable_message(GetPackageInfo)
 
     task.add_sub_task(google_task)
     task.run()
 
     # check if the user wants to delete the database
-    # TODO: add a falg to check the database was created before asking the user
     if dependency_agent.config.database_created:
         if Prompt.ask("[blue] Do you want to delete the database? (y/n)") == "y":
             dependency_agent.remove_database()
