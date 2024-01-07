@@ -72,12 +72,9 @@ def setup_file_logger(
     propagate: bool = False,
 ) -> logging.Logger:
     os.makedirs(os.path.dirname(filename), exist_ok=True)
-    if not append:
-        if os.path.exists(filename):
-            os.remove(filename)
-
+    file_mode = "a" if append else "w"
     logger = setup_logger(name)
-    handler = logging.FileHandler(filename)
+    handler = logging.FileHandler(filename, mode=file_mode)
     handler.setLevel(logging.INFO)
     if log_format:
         formatter = logging.Formatter(

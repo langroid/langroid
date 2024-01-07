@@ -169,7 +169,7 @@ class OpenAIGPTConfig(LLMConfig):
         local_model = "api_base" in kwargs and kwargs["api_base"] is not None
 
         chat_model = kwargs.get("chat_model", "")
-        if chat_model.startswith("litellm") or chat_model.startswith("local"):
+        if chat_model.startswith("litellm/") or chat_model.startswith("local/"):
             local_model = True
 
         warn_gpt_3_5 = (
