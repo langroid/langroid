@@ -1,6 +1,6 @@
 import logging
 from enum import Enum
-from typing import Dict, List
+from typing import Dict, List, Literal
 
 import tiktoken
 from pydantic import BaseSettings
@@ -19,11 +19,13 @@ class Splitter(str, Enum):
 
 
 class PdfParsingConfig(BaseSettings):
-    library: str = "pdfplumber"
+    library: Literal[
+        "fitz", "pdfplumber", "pypdf", "unstructured", "haystack"
+    ] = "pdfplumber"
 
 
 class DocxParsingConfig(BaseSettings):
-    library: str = "unstructured"
+    library: Literal["python-docx", "unstructured"] = "unstructured"
 
 
 class ParsingConfig(BaseSettings):

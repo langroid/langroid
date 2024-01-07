@@ -167,12 +167,12 @@ class FlatMovieDoc(Document):
     "query, expected",
     [
         (
-            "Which Science Fiction movie is rated highest?",
-            "Odyssey",
-        ),
-        (
             "Which movie about about incarceration or jails is rated highest?",
             "Alcoona",
+        ),
+        (
+            "Which Science Fiction movie is rated highest?",
+            "Odyssey",
         ),
         (
             "Average rating of Science Fiction movies?",
@@ -216,6 +216,7 @@ def test_lance_doc_chat_agent_df(
     cfg = DocChatAgentConfig(
         vecdb=ldb_cfg,
         add_fields_to_content=["year", "director", "genre"],
+        filter_fields=["year", "director", "genre", "rating"],
     )
     agent = LanceDocChatAgent(cfg)
 
@@ -286,6 +287,7 @@ def test_lance_doc_chat_df_direct(test_settings: Settings):
     cfg = DocChatAgentConfig(
         vecdb=ldb_cfg,
         add_fields_to_content=["state", "year"],
+        filter_fields=["state", "year"],
     )
     agent = LanceDocChatAgent(cfg)
 

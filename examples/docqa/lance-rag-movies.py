@@ -1,13 +1,22 @@
 """
-2-Agent system for flexible querying of documents using LanceDb for combined
-semantic (vector) search, sql-filtering and full-text search,
-applied to a collection of GitHub issues from any repo.
+Chat with dataset of IMDB movies.
 
-The issues (descriptions and metadata) are collected into a dataframe and
-directly ingested into LanceDocChatAgent.
+LanceRAGTaskCreator.new(agent) takes a LanceDocChatAgent and sets up a
+3-agent system with 2 additional agents:
+- QueryPlanner that decides a filter, possibly rephrased query, and
+  possibly also dataframe-like calculation to answer things like ("highest rated...")
+
+- QueryPlanAnswerCritic: this looks at the QueryPlan and the answer from the RAG agent
+  and suggests changes to the QueryPlan if the answer does not look satisfactory
+
+This system combines:
+- filtering using LanceDB (sql-like filtering on document fields
+- semantic search using LanceDB (vector search on document content)
+- Full Text Search using LanceDB (search on document content)
+- Pandas-like dataframe calculations (e.g. "highest rated", "most votes", etc.)
 
 Run like this:
-    python examples/docqa/lance-filtered-gh-issues.py
+    python examples/docqa/lance-rag-movies.py
 
 Optional arguments:
 -nc : turn off caching (i.e. don't retrieve cached LLM responses)
@@ -97,6 +106,7 @@ def main(
     cfg = DocChatAgentConfig(
         vecdb=ldb_cfg,
         add_fields_to_content=["movie", "genre", "certificate", "stars", "rating"],
+        filter_fields=["genre", "certificate", "rating"],
     )
     agent = LanceDocChatAgent(cfg)
 
