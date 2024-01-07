@@ -62,6 +62,8 @@ class DocumentParser(Parser):
         elif DocumentParser._document_type(source) == DocumentType.DOCX:
             if config.docx.library == "unstructured":
                 return UnstructuredDocxParser(source, config)
+            elif config.docx.library == "python-docx":
+                return PythonDocxParser(source, config)
             else:
                 raise ValueError(
                     f"Unsupported DOCX library specified: {config.docx.library}"
@@ -436,3 +438,34 @@ class UnstructuredDocxParser(DocumentParser):
         """
         text = " ".join(el.text for el in page)
         return self.fix_text(text)
+
+
+class PythonDocxParser(DocumentParser):
+    """
+    Parser for processing DOCX files using the `python-docx` library.
+    """
+
+    def iterate_pages(self) -> Generator[Tuple[int, Any], None, None]:
+        """
+        Simulate iterating through pages.
+        In a DOCX file, pages are not explicitly defined,
+        so we consider each paragraph as a separate 'page' for simplicity.
+        """
+        import docx
+
+        doc = docx.Document(self.doc_bytes)
+        for i, para in enumerate(doc.paragraphs, start=1):
+            yield i, [para]
+
+    def extract_text_from_page(self, page: Any) -> str:
+        """
+        Extract text from a given 'page', which in this case is a single paragraph.
+
+        Args:
+            page (list): A list containing a single Paragraph object.
+
+        Returns:
+            str: Extracted text from the paragraph.
+        """
+        paragraph = page[0]
+        return self.fix_text(paragraph.text)
