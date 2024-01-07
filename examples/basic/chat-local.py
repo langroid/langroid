@@ -24,6 +24,7 @@ import langroid.language_models as lm
 
 llm_config = lm.OpenAIGPTConfig(
     chat_model="litellm/ollama/mistral",
+    max_output_tokens=200,
     chat_context_length=2048,  # adjust based on your local LLM params
 )
 
@@ -38,6 +39,7 @@ llm_config = lm.OpenAIGPTConfig(
 
 agent_config = lr.ChatAgentConfig(
     llm=llm_config,
+    system_message="""Be helpful but very very concise""",
 )
 
 agent = lr.ChatAgent(agent_config)

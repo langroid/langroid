@@ -167,12 +167,12 @@ class FlatMovieDoc(Document):
     "query, expected",
     [
         (
-            "Which Science Fiction movie is rated highest?",
-            "Odyssey",
-        ),
-        (
             "Which movie about about incarceration or jails is rated highest?",
             "Alcoona",
+        ),
+        (
+            "Which Science Fiction movie is rated highest?",
+            "Odyssey",
         ),
         (
             "Average rating of Science Fiction movies?",

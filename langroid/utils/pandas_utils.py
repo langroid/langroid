@@ -16,7 +16,9 @@ def stringify(x: Any) -> str:
     for col in df.columns:
         if df[col].dtype == object:
             df[col] = df[col].apply(
-                lambda text: (text[:1000] + "...") if len(text) > 1000 else text
+                lambda item: (item[:1000] + "...")
+                if isinstance(item, str) and len(item) > 1000
+                else item
             )
 
     # Limit to 10 rows

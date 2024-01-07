@@ -49,9 +49,9 @@ class LanceDocChatAgent(DocChatAgent):
         filter_fields_set = set(
             self.config.filter_fields or schema_dict.keys()
         ).intersection(schema_dict.keys())
-        filter_fields = [f for f in filter_fields_set if f != "content"]
+
         # possible values of filterable fields
-        filter_field_values = self.get_field_values(filter_fields)
+        filter_field_values = self.get_field_values(list(filter_fields_set))
 
         # add field values to schema_dict as another field `values` for each field
         for field, values in filter_field_values.items():

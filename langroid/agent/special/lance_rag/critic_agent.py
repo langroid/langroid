@@ -27,56 +27,61 @@ from langroid.agent.special.lance_rag.query_planner_agent import (
     LanceQueryPlanAgentConfig,
 )
 from langroid.mytypes import Entity
-from langroid.utils.constants import DONE, PASS
+from langroid.utils.constants import DONE, NO_ANSWER, PASS
 
 logger = logging.getLogger(__name__)
 
 
 class QueryPlanCriticConfig(LanceQueryPlanAgentConfig):
     name = "QueryPlanCritic"
-    system_message = """
+    system_message = f"""
     You are an expert at carefully planning a query that needs to be answered
     based on a large collection of documents. These docs have a special `content` field
     and additional FILTERABLE fields in the SCHEMA below:
     
-    {doc_schema}
+    {{doc_schema}}
     
-    You will receive a QUERY PLAN consisting of a 
-    ORIGINAL QUERY, SQL-Like FILTER, REPHRASED QUERY, 
-    a DATAFRAME CALCULATION, and an ANSWER which is the 
-    answer received from an assistant that used this QUERY PLAN.
-    
+    You will receive a QUERY PLAN consisting of:
+    - ORIGINAL QUERY, 
+    - SQL-Like FILTER, WHICH CAN BE EMPTY (and it's fine if results sound reasonable)
+      FILTER SHOULD ONLY BE USED IF EXPLICITLY REQUIRED BY THE QUERY.
+    - REPHRASED QUERY that will be used to match against the CONTENT (not filterable)
+         of the documents.
+      In general the REPHRASED QUERY should be relied upon to match the CONTENT 
+      of the docs. Thus the REPHRASED QUERY itself acts like a 
+      SEMANTIC/LEXICAL/FUZZY FILTER since the Assistant is able to use it to match 
+      the CONTENT of the docs in various ways (semantic, lexical, fuzzy, etc.).
+         
+    - DATAFRAME CALCULATION, and 
+    - ANSWER recieved from an assistant that used this QUERY PLAN.
+
+    In addition to the above SCHEMA fields there is a `content` field which:
+    - CANNOT appear in a FILTER, 
+    - CAN appear in the DATAFRAME CALCULATION.
+    THERE ARE NO OTHER FIELDS IN THE DOCUMENTS or in the RESULTING DATAFRAME.
+        
     Your job is to act as a CRITIC and provide feedback, 
     ONLY using the `query_plan_feedback` tool, and DO NOT SAY ANYTHING ELSE.
-    You must take `answer` field into account
-    and judge whether it is a reasonable answer, and accordingly give your feedback.
     
-    VERY IMPORTANT: IF THE ANSWER seems reasonable, then you should consider
-    the query plan to be fine, and only ask for a revision if you notice 
-    something obviously wrong with the query plan.
-    Typically, when there is a non-empty answer, 
-    you SHOULD NOT ASK FOR A REVISION (i.e. set `feedback` field as empty string),
-    unless there is some glaring problem.
-    
-    OTHERWISE:
-        
-    When giving feedback, SUGGEST CHANGES TO:
-    - the FILTER, if it appears too restrictive, e.g. prefer "LIKE" over "=", 
-        e.g. "CEO LIKE '%Jobs%'" instead of "CEO = 'Steve Jobs'" 
-    - the QUERY (i.e. possibly REPHRASED QUERY), and/or 
-    - the DATAFRAME CALCULATION, if any
+    Here is how you must examine the QUERY PLAN + ANSWER:
+    - If the ANSWER is in the expected form, then the QUERY PLAN is likely VALID,
+      and your feedback should be EMPTY.
+    - If the ANSWER is {NO_ANSWER} or of the wrong form, 
+      then try to DIAGNOSE the problem IN THE FOLLOWING ORDER:
+      - DATAFRAME CALCULATION -- is it doing the right thing?
+        Is it finding the Index of a row instead of the value in a column?
+        Or another example: mmaybe it is finding the maximum population
+           rather than the CITY with the maximum population?
+        If you notice a problem with the DATAFRAME CALCULATION, then
+        ONLY SUBMIT FEEDBACK ON THE DATAFRAME CALCULATION, and DO NOT
+        SUGGEST ANYTHING ELSE.
+      - If the DATAFRAME CALCULATION looks correct, then check if 
+        the REPHRASED QUERY makes sense given the ORIGINAL QUERY and FILTER.
+        If this is the problem, then ONLY SUBMIT FEEDBACK ON THE REPHRASED QUERY,
+        and DO NOT SUGGEST ANYTHING ELSE.
+      - If the REPHRASED QUERY looks correct, then check if the FILTER makes sense.
+        REMEMBER: A filter should ONLY be used if EXPLICITLY REQUIRED BY THE QUERY.
      
-    Keep these in mind:
-    * The FILTER must only use fields in the SCHEMA above, EXCEPT `content`
-    * The FILTER can be improved by RELAXING it, e.g. using "LIKE" instead of "=",
-        e.g. "CEO LIKE '%Jobs%'" instead of "CEO = 'Steve Jobs'" 
-    * The DATAFRAME CALCULATION must only use fields in the SCHEMA above. 
-    * The REPHRASED QUERY should NOT refer to any FILTER fields, and should
-        make sense with respect to the intended purpose, i.e. to be used to 
-        MATCH the CONTENT of the docs.
-    * The ASSISTANT does NOT know anything about the FILTER fields
-    * The DATAFRAME CALCULATION, if any, should be suitable to answer 
-       the user's ORIGINAL QUERY.
     
     ALWAYS use `query_plan_feedback` tool/fn to present your feedback!
     and DO NOT SAY ANYTHING ELSE OUTSIDE THE TOOL/FN.
