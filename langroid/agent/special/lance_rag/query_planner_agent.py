@@ -50,6 +50,7 @@ class LanceQueryPlanAgentConfig(ChatAgentConfig):
     -  a FILTER (can be empty string) that would help the ASSISTANT to answer the query.
         Remember the FILTER can only refer ANY fields in the above SCHEMA
         EXCEPT the `content` field of the documents. 
+        ONLY USE A FILTER IF EXPLICITLY MENTIONED IN THE QUERY.
         TO get good results, for STRING MATCHES, consider using LIKE instead of =, e.g.
         "CEO LIKE '%Jobs%'" instead of "CEO = 'Steve Jobs'"
     - a possibly REPHRASED QUERY to be answerable given the FILTER.

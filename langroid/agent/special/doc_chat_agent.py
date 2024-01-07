@@ -14,7 +14,7 @@ pip install "langroid[hf-embeddings]"
 """
 import logging
 from contextlib import ExitStack
-from typing import List, Optional, Tuple, no_type_check
+from typing import Dict, List, Optional, Set, Tuple, no_type_check
 
 import numpy as np
 import pandas as pd
@@ -77,6 +77,7 @@ class DocChatAgentConfig(ChatAgentConfig):
     # extra fields to include in content as key=value pairs
     # (helps retrieval for table-like data)
     add_fields_to_content: List[str] = []
+    filter_fields: List[str] = []  # fields usable in filter
     retrieve_only: bool = False  # only retr relevant extracts, don't gen summary answer
     extraction_granularity: int = 1  # granularity (in sentences) for relev extraction
     filter: str | None = (
@@ -335,7 +336,9 @@ class DocChatAgent(ChatAgent):
         Ingest a dataframe into vecdb.
         """
         self.from_dataframe = True
-        self.df_description = describe_dataframe(df, sample_size=3)
+        self.df_description = describe_dataframe(
+            df, filter_fields=self.config.filter_fields, n_vals=5
+        )
         df, metadata = DocChatAgent.document_compatible_dataframe(df, content, metadata)
         docs = dataframe_to_documents(df, content="content", metadata=metadata)
         # When ingesting a dataframe we will no longer do any chunking,
@@ -373,6 +376,42 @@ class DocChatAgent(ChatAgent):
             Document(content=preprocess_text(d.content), metadata=d.metadata)
             for d in self.chunked_docs
         ]
+
+    def get_field_values(self, fields: list[str]) -> Dict[str, str]:
+        """Get string-listing of possible values of each filterable field,
+        e.g.
+        {
+            "genre": "crime, drama, mystery, ... (10 more)",
+            "certificate": "R, PG-13, PG, R",
+        }
+        """
+        field_values: Dict[str, Set[str]] = {}
+        # make empty set for each field
+        for f in fields:
+            field_values[f] = set()
+        if self.vecdb is None:
+            raise ValueError("VecDB not set")
+        # get all documents and accumulate possible values of each field until 10
+        docs = self.vecdb.get_all_documents()  # only works for vecdbs that support this
+        for d in docs:
+            # extract fields from d
+            doc_field_vals = extract_fields(d, fields)
+            for field, val in doc_field_vals.items():
+                field_values[field].add(val)
+        # For each field make a string showing list of possible values,
+        # truncate to 20 values, and if there are more, indicate how many
+        # more there are, e.g. Genre: crime, drama, mystery, ... (20 more)
+        field_values_list = {}
+        for f in fields:
+            vals = list(field_values[f])
+            n = len(vals)
+            remaining = n - 20
+            vals = vals[:20]
+            if n > 20:
+                vals.append(f"(...{remaining} more)")
+            # make a string of the values, ensure they are strings
+            field_values_list[f] = ", ".join(str(v) for v in vals)
+        return field_values_list
 
     def doc_length(self, docs: List[Document]) -> int:
         """
