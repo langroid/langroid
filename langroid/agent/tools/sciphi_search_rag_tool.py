@@ -22,6 +22,9 @@ NOTE: Using this tool requires getting an API key from sciphi.ai.
 Setup is as simple as shown below
 # Get a free API key at https://www.sciphi.ai/account
 # export SCIPHI_API_KEY=$MY_SCIPHI_API_KEY
+
+For more information, please refer to the official docs:
+https://agent-search.readthedocs.io/en/latest/
 """
 
 from agent_search import SciPhi
@@ -37,11 +40,21 @@ class SciPhiSearchRAGTool(ToolMessage):
             """
     query: str
     search_provider: str = "bing"  # bing or agent-search
+    include_related_queries: bool = True
     llm_model: str = "SciPhi/Sensei-7B-V1"
+    recursive_mode: bool = True
 
     def handle(self) -> str:
-        return SciPhi().get_search_rag_response(
+        rag_response = SciPhi().get_search_rag_response(
             query=self.query,
             search_provider=self.search_provider,
             llm_model=self.llm_model,
-        )["response"]
+        )
+        result = rag_response["response"]
+        if self.include_related_queries:
+            result = (
+                f"### RAG Response:\n{result}\n\n"
+                + "### Related Queries:\n"
+                + "\n".join(rag_response["related_queries"])
+            )
+        return result

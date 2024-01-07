@@ -61,9 +61,9 @@ class CLIOptions(BaseSettings):
 def chat(opts: CLIOptions) -> None:
     print(
         """
-        [blue]Welcome to the Google Search chatbot!
+        [blue]Welcome to the Web Search chatbot!
         I will try to answer your questions, relying on (summaries of links from) 
-        Google Search when needed.
+        Search when needed.
         
         Enter x or q to quit at any point.
         """
@@ -103,7 +103,7 @@ def chat(opts: CLIOptions) -> None:
         system_message="""
         You are a helpful assistant. You will try your best to answer my questions.
         If you cannot answer from your own knowledge, you can use up to 5 
-        results from the `web_search` tool/function-call to help you with 
+        results from the `web_search` or `web_search_rag` tool/function-call to help you with 
         answering the question.
         Be very concise in your responses, use no more than 1-2 sentences.
         When you answer based on a web search, First show me your answer, 
@@ -129,6 +129,9 @@ def chat(opts: CLIOptions) -> None:
 def main(
     debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
     model: str = typer.Option("", "--model", "-m", help="model name"),
+    provider: str = typer.Option(
+        "sciphi", "--provider", "-m", help="search provider name (Google, SciPhi)"
+    ),
     no_stream: bool = typer.Option(False, "--nostream", "-ns", help="no streaming"),
     nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
     cache_type: str = typer.Option(
@@ -143,7 +146,7 @@ def main(
             cache_type=cache_type,
         )
     )
-    opts = CLIOptions(model=model)
+    opts = CLIOptions(model=model, provider=provider)
     chat(opts)
 
 
