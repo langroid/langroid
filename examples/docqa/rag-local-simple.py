@@ -54,6 +54,8 @@ llm_config = lm.OpenAIGPTConfig(
 # task.run("Concisely answer some questions")
 
 config = DocChatAgentConfig(
+    # default vector-db is LanceDB,
+    # using SentenceTransformers/BAAI/bge-large-en-v1.5 embedding model
     llm=llm_config,
     doc_paths=[
         # can be URLS, file-paths, or Folders.
@@ -61,8 +63,7 @@ config = DocChatAgentConfig(
         "https://arxiv.org/pdf/2312.17238.pdf",
     ],
     system_message="""
-    Answer some questions about docs. Be concise. 
-    Start by asking me what I want to know
+    Concisely answer my questions about docs. Start by asking me what I want to know.
     """,
 )
 
