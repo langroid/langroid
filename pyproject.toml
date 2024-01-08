@@ -47,7 +47,7 @@ types-requests = "^2.31.0.1"
 pyparsing = "^3.0.9"
 nltk = "^3.8.1"
 qdrant-client = "^1.7.0"
-pydantic = "1.10.11"
+pydantic = "1.10.13"
 pypdf = "^3.12.2"
 momento = "^1.10.2"
 pandas = "^2.0.3"
@@ -81,6 +81,7 @@ scrapy = "^2.11.0"
 async-generator = "^1.10"
 lancedb = "^0.4.1"
 pytest-redis = "^3.0.2"
+agent-search = {version = "^0.0.7", optional = true}
 python-docx = "^1.1.0"
 
 [tool.poetry.extras]
@@ -89,6 +90,7 @@ hf-embeddings = ["sentence-transformers", "torch"]
 postgres = ["psycopg2", "pytest-postgresql"]
 mysql = ["pymysql", "pytest-mysql"]
 litellm = ["litellm"]
+sciphi = ["agent-search"]
 
 
 [tool.poetry.group.dev.dependencies]

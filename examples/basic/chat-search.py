@@ -1,27 +1,45 @@
 """
-This is a basic example of a chatbot that uses the GoogleSearchTool:
-when the LLM doesn't know the answer to a question, it will use the tool to
+This is a basic example of a chatbot that uses the GoogleSearchTool
+or SciPhiSearchRAGTool to answer questions.
+When the LLM doesn't know the answer to a question, it will use the tool to
 search the web for relevant results, and then use the results to answer the
 question.
 
-NOTE: running this example requires setting the GOOGLE_API_KEY and GOOGLE_CSE_ID
+Run like this:
+
+python3 examples/basic/chat-search.py
+
+You can specify which search provider to use with this optional flag:
+
+-p or --provider: google or sciphi (default: google)
+
+
+NOTE:
+(a) If using Google Search, you must have GOOGLE_API_KEY and GOOGLE_CSE_ID
 environment variables in your `.env` file, as explained in the
 [README](https://github.com/langroid/langroid#gear-installation-and-setup).
+
+(b) Alternatively, you can use the SciPhiSearchRAGTool, you need to have the
+SCIPHI_API_KEY environment variable in your `.env` file.
+See here for more info: https://www.sciphi.ai/
+This tool requires installing langroid with the `sciphi` extra, e.g.
+`pip install langroid[sciphi]` or `poetry add langroid[sciphi]`
+(it installs the `agent-search` package from pypi).
 """
 
 import typer
+from dotenv import load_dotenv
+from pydantic import BaseSettings
 from rich import print
 from rich.prompt import Prompt
-from pydantic import BaseSettings
-from dotenv import load_dotenv
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
 from langroid.agent.tools.google_search_tool import GoogleSearchTool
+from langroid.agent.tools.sciphi_search_rag_tool import SciPhiSearchRAGTool
 from langroid.language_models.openai_gpt import OpenAIGPTConfig
-from langroid.utils.configuration import set_global, Settings
+from langroid.utils.configuration import Settings, set_global
 from langroid.utils.logging import setup_colored_logging
-
 
 app = typer.Typer()
 
@@ -50,6 +68,7 @@ ooba_config = OobaConfig(
 
 class CLIOptions(BaseSettings):
     model: str = ""
+    provider: str = "google"
 
     class Config:
         extra = "forbid"
@@ -59,9 +78,9 @@ class CLIOptions(BaseSettings):
 def chat(opts: CLIOptions) -> None:
     print(
         """
-        [blue]Welcome to the Google Search chatbot!
+        [blue]Welcome to the Web Search chatbot!
         I will try to answer your questions, relying on (summaries of links from) 
-        Google Search when needed.
+        Search when needed.
         
         Enter x or q to quit at any point.
         """
@@ -88,14 +107,25 @@ def chat(opts: CLIOptions) -> None:
         vecdb=None,
     )
     agent = ChatAgent(config)
-    agent.enable_message(GoogleSearchTool)
+
+    match opts.provider:
+        case "google":
+            search_tool_class = GoogleSearchTool
+        case "sciphi":
+            search_tool_class = SciPhiSearchRAGTool
+        case _:
+            raise ValueError(f"Unsupported provider {opts.provider} specified.")
+
+    agent.enable_message(search_tool_class)
+    search_tool_handler_method = search_tool_class.default_value("request")
+
     task = Task(
         agent,
-        system_message="""
+        system_message=f"""
         You are a helpful assistant. You will try your best to answer my questions.
         If you cannot answer from your own knowledge, you can use up to 5 
-        results from the `web_search` tool/function-call to help you with 
-        answering the question.
+        results from the {search_tool_handler_method} tool/function-call to help 
+        you with answering the question.
         Be very concise in your responses, use no more than 1-2 sentences.
         When you answer based on a web search, First show me your answer, 
         and then show me the SOURCE(s) and EXTRACT(s) to justify your answer,
@@ -120,6 +150,9 @@ def chat(opts: CLIOptions) -> None:
 def main(
     debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
     model: str = typer.Option("", "--model", "-m", help="model name"),
+    provider: str = typer.Option(
+        "google", "--provider", "-p", help="search provider name (Google, SciPhi)"
+    ),
     no_stream: bool = typer.Option(False, "--nostream", "-ns", help="no streaming"),
     nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
     cache_type: str = typer.Option(
@@ -134,7 +167,7 @@ def main(
             cache_type=cache_type,
         )
     )
-    opts = CLIOptions(model=model)
+    opts = CLIOptions(model=model, provider=provider)
     chat(opts)
 
 
