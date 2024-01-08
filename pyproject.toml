@@ -81,7 +81,7 @@ scrapy = "^2.11.0"
 async-generator = "^1.10"
 lancedb = "^0.4.1"
 pytest-redis = "^3.0.2"
-agent-search = "^0.0.7"
+agent-search = {version = "^0.0.7", optional = true}
 python-docx = "^1.1.0"
 
 [tool.poetry.extras]
@@ -90,6 +90,7 @@ hf-embeddings = ["sentence-transformers", "torch"]
 postgres = ["psycopg2", "pytest-postgresql"]
 mysql = ["pymysql", "pytest-mysql"]
 litellm = ["litellm"]
+sciphi = ["agent-search"]
 
 
 [tool.poetry.group.dev.dependencies]

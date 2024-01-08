@@ -1,12 +1,30 @@
 """
-This is a basic example of a chatbot that uses the GoogleSearchTool:
-when the LLM doesn't know the answer to a question, it will use the tool to
+This is a basic example of a chatbot that uses the GoogleSearchTool
+or SciPhiSearchRAGTool to answer questions.
+When the LLM doesn't know the answer to a question, it will use the tool to
 search the web for relevant results, and then use the results to answer the
 question.
 
-NOTE: running this example requires setting the GOOGLE_API_KEY and GOOGLE_CSE_ID
+Run like this:
+
+python3 examples/basic/chat-search.py
+
+You can specify which search provider to use with this optional flag:
+
+-p or --provider: google or sciphi (default: google)
+
+
+NOTE:
+(a) If using Google Search, you must have GOOGLE_API_KEY and GOOGLE_CSE_ID
 environment variables in your `.env` file, as explained in the
 [README](https://github.com/langroid/langroid#gear-installation-and-setup).
+
+(b) Alternatively, you can use the SciPhiSearchRAGTool, you need to have the
+SCIPHI_API_KEY environment variable in your `.env` file.
+See here for more info: https://www.sciphi.ai/
+This tool requires installing langroid with the `sciphi` extra, e.g.
+`pip install langroid[sciphi]` or `poetry add langroid[sciphi]`
+(it installs the `agent-search` package from pypi).
 """
 
 import typer
@@ -17,7 +35,6 @@ from rich.prompt import Prompt
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
-from langroid.agent.tool_message import ToolMessage
 from langroid.agent.tools.google_search_tool import GoogleSearchTool
 from langroid.agent.tools.sciphi_search_rag_tool import SciPhiSearchRAGTool
 from langroid.language_models.openai_gpt import OpenAIGPTConfig

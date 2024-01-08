@@ -27,11 +27,23 @@ Setup is as simple as shown below
 # export SCIPHI_API_KEY=$MY_SCIPHI_API_KEY before running the agent
 # OR add SCIPHI_API_KEY=$MY_SCIPHI_API_KEY to your .env file
 
+This tool requires installing langroid with the `sciphi` extra, e.g.
+`pip install langroid[sciphi]` or `poetry add langroid[sciphi]`
+(it installs the `agent-search` package from pypi).
+
 For more information, please refer to the official docs:
 https://agent-search.readthedocs.io/en/latest/
 """
 
-from agent_search import SciPhi
+try:
+    from agent_search import SciPhi
+except ImportError:
+    raise ImportError(
+        "You are attempting to use the `agent-search` library;"
+        "To use it, please install langroid with the `sciphi` extra, e.g. "
+        "`pip install langroid[sciphi]` or `poetry add langroid[sciphi]` "
+        "(it installs the `agent-search` package from pypi)."
+    )
 
 from langroid.agent.tool_message import ToolMessage
 
