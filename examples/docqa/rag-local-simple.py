@@ -28,7 +28,7 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 # chat_model="local/localhost:8000/v1"
 # Similarly if your endpoint is `http://128.0.4.5:8000/v1`, then you must set
 # chat_model="local/128.0.4.5:8000/v1"
-llm = lm.OpenAIGPTConfig(
+llm_config = lm.OpenAIGPTConfig(
     chat_model="litellm/ollama/mistral:7b-instruct-v0.2-q4_K_M",
     chat_context_length=4096,  # set this based on model
     max_output_tokens=100,
@@ -58,17 +58,9 @@ hf_embed_config = lr.embedding_models.SentenceTransformerEmbeddingsConfig(
 )
 
 config = DocChatAgentConfig(
-    default_paths=[],
-    show_stats=False,  # no token cost stats
-    use_tools=True,  # use langroid-native tools
-    use_functions_api=False,  # don't use open-ai fn-calling
-    conversation_mode=True,
-    llm=llm,
+    llm=llm_config,
     relevance_extractor_config=lr.agent.special.RelevanceExtractorAgentConfig(
-        use_tools=True, use_functions_api=False, llm=llm
-    ),
-    vecdb=lr.vector_store.QdrantDBConfig(
-        collection_name="test1", replace_collection=True, embedding=hf_embed_config
+        llm=llm_config
     ),
     doc_paths=[
         # can be URLS, file-paths, or Folders.
