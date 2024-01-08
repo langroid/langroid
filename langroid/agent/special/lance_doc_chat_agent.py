@@ -84,6 +84,12 @@ class LanceDocChatAgent(DocChatAgent):
             logger.error(f"Error setting up documents: {e}")
             # say DONE with err msg so it goes back to LanceFilterAgent
             return f"{DONE} Possible Filter Error:\n {e}"
+        if plan.query is None or plan.query.strip() == "":
+            # Empty query, say DONE with a message to parent's LLM to try again
+            return """DONE
+                   Rephrased query in QueryPlan cannot be empty.
+                   Please try again.
+                   """
         # update the filter so it is used in the DocChatAgent
         self.config.filter = plan.filter or None
         if plan.dataframe_calc:
