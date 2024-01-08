@@ -11,6 +11,7 @@ from rich.console import Console
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.chat_document import ChatDocument
 from langroid.agent.tools.segment_extract_tool import SegmentExtractTool
+from langroid.language_models.base import LLMConfig
 from langroid.language_models.openai_gpt import OpenAIGPTConfig
 from langroid.mytypes import Entity
 from langroid.parsing.utils import extract_numbered_segments, number_segments
@@ -21,7 +22,7 @@ logger = logging.getLogger(__name__)
 
 
 class RelevanceExtractorAgentConfig(ChatAgentConfig):
-    llm: OpenAIGPTConfig = OpenAIGPTConfig()
+    llm: LLMConfig | None = OpenAIGPTConfig()
     segment_length: int = 1  # number of sentences per segment
     query: str = ""  # query for relevance extraction
     system_message = """

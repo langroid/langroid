@@ -319,6 +319,7 @@ class OpenAIGPT(LanguageModel):
         # an explicit `export OPENAI_API_KEY=xxx` or `setenv OPENAI_API_KEY xxx`
         # Pydantic's BaseSettings will automatically pick it up from the
         # .env file
+        # The config.api_key is ignored when not using an OpenAI model
         self.api_key = config.api_key if self.is_openai_chat_model() else "xxx"
         self.client = OpenAI(
             api_key=self.api_key,
