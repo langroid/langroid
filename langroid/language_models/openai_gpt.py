@@ -19,6 +19,7 @@ from typing import (
     no_type_check,
 )
 
+import openai
 from httpx import Timeout
 from openai import AsyncOpenAI, OpenAI
 from pydantic import BaseModel
@@ -95,7 +96,19 @@ openAICompletionModelPreferenceList = [
 
 
 if "OPENAI_API_KEY" in os.environ:
-    availableModels = set(map(lambda m: m.id, OpenAI().models.list()))
+    try:
+        availableModels = set(map(lambda m: m.id, OpenAI().models.list()))
+    except openai.AuthenticationError as e:
+        if settings.debug:
+            logging.warning(
+                f"""
+            OpenAI Authentication Error: {e}.
+            ---
+            If you intended to use an OpenAI Model, you should fix this,
+            otherwise you can ignore this warning.
+            """
+            )
+        availableModels = set()
 else:
     availableModels = set()
 
@@ -306,7 +319,7 @@ class OpenAIGPT(LanguageModel):
         # an explicit `export OPENAI_API_KEY=xxx` or `setenv OPENAI_API_KEY xxx`
         # Pydantic's BaseSettings will automatically pick it up from the
         # .env file
-        self.api_key = config.api_key or "xxx"
+        self.api_key = config.api_key if self.is_openai_chat_model() else "xxx"
         self.client = OpenAI(
             api_key=self.api_key,
             base_url=self.api_base,
@@ -351,10 +364,6 @@ class OpenAIGPT(LanguageModel):
     def is_openai_chat_model(self) -> bool:
         openai_chat_models = [e.value for e in OpenAIChatModel]
         return self.config.chat_model in openai_chat_models
-
-    def _is_openai_completion_model(self) -> bool:
-        openai_completion_models = [e.value for e in OpenAICompletionModel]
-        return self.config.completion_model in openai_completion_models
 
     def chat_context_length(self) -> int:
         """

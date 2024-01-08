@@ -210,13 +210,10 @@ class LanceDB(VectorStore):
                     return
                 else:
                     logger.warning("Recreating fresh collection")
-        tbl = self.client.create_table(
-            collection_name, schema=self.schema, mode="overwrite"
-        )
+        self.client.create_table(collection_name, schema=self.schema, mode="overwrite")
         if settings.debug:
             level = logger.getEffectiveLevel()
             logger.setLevel(logging.INFO)
-            logger.info(tbl.schema)
             logger.setLevel(level)
 
     def add_documents(self, documents: Sequence[Document]) -> None:
