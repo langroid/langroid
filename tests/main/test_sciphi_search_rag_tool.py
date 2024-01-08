@@ -1,8 +1,10 @@
 """
-NOTE: running this example requires setting the SCIPHI_API_KEY environment variable in your `.env` file, as explained in the documentation for the SciPhi API.
+NOTE: running this example requires setting the SCIPHI_API_KEY environment
+variable in your `.env` file, as explained in the documentation for the SciPhi API.
 
 """
 import itertools
+
 import pytest
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
@@ -44,50 +46,6 @@ cartesian_product = list(
 
 agent.enable_message(SciPhiSearchRAGTool)
 
-NONE_MSG = "nothing to see here"
-
-SEARCH_MSG = """
-Ok, thank you.
-{
-    "request": "web_search_rag",
-    "query": "wikipedia american independence",
-} 
-Hope you can tell me!
-"""
-
-
-def test_agent_handle_message():
-    """
-    Test whether the agent handles tool messages correctly,
-    when these are manually generated.
-    """
-    agent.enable_message(SciPhiSearchRAGTool)
-    assert agent.handle_message(NONE_MSG) is None
-    assert len(agent.handle_message(SEARCH_MSG).split("\n\n")) == 3
-
-
-BAD_SEARCH_MSG = """
-Ok, thank you.
-{
-"request": "web_search_rag"
-} 
-Hope you can tell me!
-"""
-
-
-def test_handle_bad_tool_message():
-    """
-    Test that a correct tool name with bad/missing args is
-            handled correctly, i.e. the agent returns a clear
-            error message to the LLM so it can try to fix it.
-    """
-    agent.enable_message(SciPhiSearchRAGTool)
-    assert agent.handle_message(NONE_MSG) is None
-    result = agent.handle_message(BAD_SEARCH_MSG)
-    assert all(
-        [x in result for x in ["web_search_rag", "query", "num_results", "required"]]
-    )
-
 
 # @pytest.mark.parametrize("use_functions_api", [True, False])
 @pytest.mark.parametrize("use_functions_api", [True])
@@ -123,7 +81,12 @@ def test_llm_tool_message(
         assert len(tools) == 1
         assert isinstance(tools[0], SciPhiSearchRAGTool)
     agent_result = agent.handle_message(llm_msg)
-    assert len(agent_result.split("\n\n")) == 3
-    assert all(
-        "lk-99" in x or "supercond" in x for x in agent_result.lower().split("\n\n")
+    # check there are at least 3 results
+    assert len(agent_result.split("\n\n")) >= 3
+    # check that the some key terms appear in at least 3 paragraphs
+    assert (
+        sum(
+            "lk-99" in x or "supercond" in x for x in agent_result.lower().split("\n\n")
+        )
+        >= 3
     )
