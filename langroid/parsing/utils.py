@@ -101,14 +101,33 @@ def split_paragraphs(text: str) -> List[str]:
     return [para.strip() for para in paras if para.strip()]
 
 
-def number_segments(s: str, len: int = 1) -> str:
+def split_newlines(text: str) -> List[str]:
+    """
+    Split the input text into lines using "\n" as the delimiter.
+
+    Args:
+        text (str): The input text.
+
+    Returns:
+        list: A list of lines.
+    """
+    lines = re.split(r"\n", text)
+    return [line.strip() for line in lines if line.strip()]
+
+
+def number_segments(s: str, granularity: int = 1) -> str:
     """
     Number the segments in a given text, preserving paragraph structure.
-    A segment is a sequence of `len` consecutive sentences.
+    A segment is a sequence of `len` consecutive "sentences", where a "sentence"
+    is either a normal sentence, or if there isn't enough punctuation to properly
+    identify sentences, then we use a pseudo-sentence via heuristics (split by newline
+    or failing that, just split every 40 words). The goal here is simply to number
+    segments at a reasonable granularity so the LLM can identify relevant segments,
+    in the RelevanceExtractorAgent.
 
     Args:
         s (str): The input text.
-        len (int): The number of sentences in a segment.
+        granularity (int): The number of sentences in a segment.
             If this is -1, then the entire text is treated as a single segment,
             and is numbered as <#1#>.
 
@@ -119,7 +138,7 @@ def number_segments(s: str, len: int = 1) -> str:
         >>> number_segments("Hello world! How are you? Have a good day.")
         '<#1#> Hello world! <#2#> How are you? <#3#> Have a good day.'
     """
-    if len < 0:
+    if granularity < 0:
         return "<#1#> " + s
     numbered_text = []
     count = 0
@@ -127,9 +146,34 @@ def number_segments(s: str, len: int = 1) -> str:
     paragraphs = split_paragraphs(s)
     for paragraph in paragraphs:
         sentences = nltk.sent_tokenize(paragraph)
+        # Some docs are problematic (e.g. resumes) and have no (or too few) periods,
+        # so we can't split usefully into sentences.
+        # We try a series of heuristics to split into sentences,
+        # until the avg num words per sentence is less than 40.
+        avg_words_per_sentence = sum(
+            len(nltk.word_tokenize(sentence)) for sentence in sentences
+        ) / len(sentences)
+        if avg_words_per_sentence > 40:
+            sentences = split_newlines(paragraph)
+        avg_words_per_sentence = sum(
+            len(nltk.word_tokenize(sentence)) for sentence in sentences
+        ) / len(sentences)
+        if avg_words_per_sentence > 40:
+            # Still too long, just split on every 40 words
+            sentences = []
+            for sentence in nltk.sent_tokenize(paragraph):
+                words = nltk.word_tokenize(sentence)
+                for i in range(0, len(words), 40):
+                    # if there are less than 20 words left after this,
+                    # just add them to the last sentence and break
+                    if len(words) - i < 20:
+                        sentences.append(" ".join(words[i:]))
+                        break
+                    else:
+                        sentences.append(" ".join(words[i : i + 40]))
         for i, sentence in enumerate(sentences):
-            num = count // len + 1
-            number_prefix = f"<#{num}#>" if count % len == 0 else ""
+            num = count // granularity + 1
+            number_prefix = f"<#{num}#>" if count % granularity == 0 else ""
             sentence = f"{number_prefix} {sentence}"
             count += 1
             sentences[i] = sentence
@@ -140,7 +184,7 @@ def number_segments(s: str, len: int = 1) -> str:
 
 
 def number_sentences(s: str) -> str:
-    return number_segments(s, len=1)
+    return number_segments(s, granularity=1)
 
 
 def parse_number_range_list(specs: str) -> List[int]:

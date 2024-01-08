@@ -23,6 +23,7 @@ from typing import List
 
 from pydantic import BaseModel, Field
 import langroid as lr
+from langroid.agent.tool_message import ToolMessage
 import langroid.language_models as lm
 from langroid.agent.chat_document import ChatDocument
 
