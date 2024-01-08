@@ -107,7 +107,9 @@ class DocChatAgentConfig(ChatAgentConfig):
     debug: bool = False
     stream: bool = True  # allow streaming where needed
     relevance_extractor_config: None | RelevanceExtractorAgentConfig = (
-        RelevanceExtractorAgentConfig()
+        RelevanceExtractorAgentConfig(
+            llm=None  # use the parent's llm unless explicitly set here
+        )
     )
     doc_paths: List[str] = []
     default_paths: List[str] = [
@@ -999,7 +1001,10 @@ class DocChatAgent(ChatAgent):
         if agent_cfg is None:
             # no relevance extraction: simply return passages
             return passages
-
+        if agent_cfg.llm is None:
+            # Use main DocChatAgent's LLM if not provided explicitly:
+            # this reduces setup burden on the user
+            agent_cfg.llm = self.config.llm
         agent_cfg.query = query
         agent_cfg.segment_length = self.config.extraction_granularity
         agent_cfg.llm.stream = False  # disable streaming for concurrent calls

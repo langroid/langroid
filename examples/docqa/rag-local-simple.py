@@ -29,6 +29,7 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 # Similarly if your endpoint is `http://128.0.4.5:8000/v1`, then you must set
 # chat_model="local/128.0.4.5:8000/v1"
 llm_config = lm.OpenAIGPTConfig(
+    # if you comment out `chat_model`, it will default to OpenAI GPT4-turbo
     chat_model="litellm/ollama/mistral:7b-instruct-v0.2-q4_K_M",
     chat_context_length=4096,  # set this based on model
     max_output_tokens=100,
@@ -52,16 +53,8 @@ llm_config = lm.OpenAIGPTConfig(
 # verify you can interact with this in a chat loop on cmd line:
 # task.run("Concisely answer some questions")
 
-hf_embed_config = lr.embedding_models.SentenceTransformerEmbeddingsConfig(
-    model_type="sentence-transformer",
-    model_name="BAAI/bge-large-en-v1.5",
-)
-
 config = DocChatAgentConfig(
     llm=llm_config,
-    relevance_extractor_config=lr.agent.special.RelevanceExtractorAgentConfig(
-        llm=llm_config
-    ),
     doc_paths=[
         # can be URLS, file-paths, or Folders.
         # File-types: most web-pages, and local pdf, txt, docx
