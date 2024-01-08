@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "langroid"
-version = "0.1.158"
+version = "0.1.160"
 description = "Harness LLMs with Multi-Agent Programming"
 authors = ["Prasad Chalasani <pchalasani@gmail.com>"]
 readme = "README.md"
@@ -82,6 +82,7 @@ async-generator = "^1.10"
 lancedb = "^0.4.1"
 pytest-redis = "^3.0.2"
 agent-search = "^0.0.7"
+python-docx = "^1.1.0"
 
 [tool.poetry.extras]
 # install these using `poetry install -E [...]` where [...] is one of the extras below

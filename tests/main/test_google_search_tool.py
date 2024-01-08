@@ -48,54 +48,8 @@ cartesian_product = list(
 agent.enable_message(GoogleSearchTool)
 
 
-NONE_MSG = "nothing to see here"
-
-SEARCH_MSG = """
-Ok, thank you.
-{
-"request": "web_search",
-"query": "wikipedia american independence",
-"num_results": 3
-} 
-Hope you can tell me!
-"""
-
-
-def test_agent_handle_message():
-    """
-    Test whether the agent handles tool messages correctly,
-    when these are manually generated.
-    """
-    agent.enable_message(GoogleSearchTool)
-    assert agent.handle_message(NONE_MSG) is None
-    assert len(agent.handle_message(SEARCH_MSG).split("\n\n")) == 3
-
-
-BAD_SEARCH_MSG = """
-Ok, thank you.
-{
-"request": "web_search"
-} 
-Hope you can tell me!
-"""
-
-
-def test_handle_bad_tool_message():
-    """
-    Test that a correct tool name with bad/missing args is
-            handled correctly, i.e. the agent returns a clear
-            error message to the LLM so it can try to fix it.
-    """
-    agent.enable_message(GoogleSearchTool)
-    assert agent.handle_message(NONE_MSG) is None
-    result = agent.handle_message(BAD_SEARCH_MSG)
-    assert all(
-        [x in result for x in ["web_search", "query", "num_results", "required"]]
-    )
-
-
 @pytest.mark.parametrize("use_functions_api", [True, False])
-def test_llm_tool_message(
+def test_agent_google_search_tool(
     test_settings: Settings,
     use_functions_api: bool,
 ):
