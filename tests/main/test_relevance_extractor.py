@@ -80,7 +80,7 @@ def test_relevance_extractor_agent(
     )
 
     result = extractor_task.run(passage)
-    numbered_passage = number_segments(passage, len=agent_cfg.segment_length)
+    numbered_passage = number_segments(passage, granularity=agent_cfg.segment_length)
     expected_sentences = extract_numbered_segments(numbered_passage, expected)
     # the result should be the expected sentences, modulo whitespace
     assert set(nltk.sent_tokenize(result.content)) == set(
@@ -153,7 +153,7 @@ async def test_relevance_extractor_concurrent(
         for passg, exp in zip(passages, expected)
         for s in nltk.sent_tokenize(
             extract_numbered_segments(
-                number_segments(passg, len=agent_cfg.segment_length),
+                number_segments(passg, granularity=agent_cfg.segment_length),
                 exp,
             )
         )
@@ -225,7 +225,7 @@ def test_relevance_extractor_batch(
         for passg, exp in zip(passages, expected)
         for s in nltk.sent_tokenize(
             extract_numbered_segments(
-                number_segments(passg, len=agent_cfg.segment_length),
+                number_segments(passg, granularity=agent_cfg.segment_length),
                 exp,
             )
         )
