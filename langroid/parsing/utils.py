@@ -118,7 +118,12 @@ def split_newlines(text: str) -> List[str]:
 def number_segments(s: str, granularity: int = 1) -> str:
     """
     Number the segments in a given text, preserving paragraph structure.
-    A segment is a sequence of `len` consecutive sentences.
+    A segment is a sequence of `len` consecutive "sentences", where a "sentence"
+    is either a normal sentence, or if there isn't enough punctuation to properly
+    identify sentences, then we use a pseudo-sentence via heuristics (split by newline
+    or failing that, just split every 40 words). The goal here is simply to number
+    segments at a reasonable granularity so the LLM can identify relevant segments,
+    in the RelevanceExtractorAgent.
 
     Args:
         s (str): The input text.
@@ -154,7 +159,7 @@ def number_segments(s: str, granularity: int = 1) -> str:
             len(nltk.word_tokenize(sentence)) for sentence in sentences
         ) / len(sentences)
         if avg_words_per_sentence > 40:
-            # Still too long, just split on every 30 words
+            # Still too long, just split on every 40 words
             sentences = []
             for sentence in nltk.sent_tokenize(paragraph):
                 words = nltk.word_tokenize(sentence)
