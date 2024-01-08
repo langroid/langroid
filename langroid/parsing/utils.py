@@ -143,9 +143,8 @@ def number_segments(s: str, granularity: int = 1) -> str:
         sentences = nltk.sent_tokenize(paragraph)
         # Some docs are problematic (e.g. resumes) and have no (or too few) periods,
         # so we can't split usefully into sentences.
-        # We try to detect this and split on newlines instead.
-        # Heuristic: if sentences are "long" relative to paragraph length.
-        # Get avg num words per sentence
+        # We try a series of heuristics to split into sentences,
+        # until the avg num words per sentence is less than 40.
         avg_words_per_sentence = sum(
             len(nltk.word_tokenize(sentence)) for sentence in sentences
         ) / len(sentences)
