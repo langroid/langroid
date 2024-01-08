@@ -17,6 +17,7 @@ from rich.prompt import Prompt
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
+from langroid.agent.tool_message import ToolMessage
 from langroid.agent.tools.google_search_tool import GoogleSearchTool
 from langroid.agent.tools.sciphi_search_rag_tool import SciPhiSearchRAGTool
 from langroid.language_models.openai_gpt import OpenAIGPTConfig
@@ -90,20 +91,24 @@ def chat(opts: CLIOptions) -> None:
     )
     agent = ChatAgent(config)
 
-    if opts.provider == "google":
-        agent.enable_message(GoogleSearchTool)
-    elif opts.provider == "sciphi":
-        agent.enable_message(SciPhiSearchRAGTool)
-    else:
-        raise ValueError(f"Unsupported search provider {opts.provider} specified.")
+    match opts.provider:
+        case "google":
+            search_tool_class = GoogleSearchTool
+        case "sciphi":
+            search_tool_class = SciPhiSearchRAGTool
+        case _:
+            raise ValueError(f"Unsupported provider {opts.provider} specified.")
+
+    agent.enable_message(search_tool_class)
+    search_tool_handler_method = search_tool_class.default_value("request")
 
     task = Task(
         agent,
-        system_message="""
+        system_message=f"""
         You are a helpful assistant. You will try your best to answer my questions.
         If you cannot answer from your own knowledge, you can use up to 5 
-        results from the `web_search` or `web_search_rag` tool/function-call to help you with 
-        answering the question.
+        results from the {search_tool_handler_method} tool/function-call to help 
+        you with answering the question.
         Be very concise in your responses, use no more than 1-2 sentences.
         When you answer based on a web search, First show me your answer, 
         and then show me the SOURCE(s) and EXTRACT(s) to justify your answer,
@@ -129,7 +134,7 @@ def main(
     debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
     model: str = typer.Option("", "--model", "-m", help="model name"),
     provider: str = typer.Option(
-        "sciphi", "--provider", "-p", help="search provider name (Google, SciPhi)"
+        "google", "--provider", "-p", help="search provider name (Google, SciPhi)"
     ),
     no_stream: bool = typer.Option(False, "--nostream", "-ns", help="no streaming"),
     nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
