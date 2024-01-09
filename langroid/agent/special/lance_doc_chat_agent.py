@@ -84,12 +84,6 @@ class LanceDocChatAgent(DocChatAgent):
             logger.error(f"Error setting up documents: {e}")
             # say DONE with err msg so it goes back to LanceFilterAgent
             return f"{DONE} Possible Filter Error:\n {e}"
-        if plan.query is None or plan.query.strip() == "":
-            # Empty query, say DONE with a message to parent's LLM to try again
-            return """DONE
-                   Rephrased query in QueryPlan cannot be empty.
-                   Please try again.
-                   """
         # update the filter so it is used in the DocChatAgent
         self.config.filter = plan.filter or None
         if plan.dataframe_calc:
@@ -99,7 +93,17 @@ class LanceDocChatAgent(DocChatAgent):
             # and this will cause retrieval all over again,
             # which may be wasteful if only the calc part is wrong.
             # The calc step can later be done with a separate Agent/Tool.
-            _, docs = self.get_relevant_extracts(plan.query)
+            if plan.query is None or plan.query.strip() == "":
+                if plan.filter is None or plan.filter.strip() == "":
+                    return """DONE
+                    Cannot execute Query Plan since filter as well as 
+                    rephrased query are empty.
+                    """
+                else:
+                    # no query to match, so just get all docs matching filter
+                    docs = self.vecdb.get_all_documents(plan.filter)
+            else:
+                _, docs = self.get_relevant_extracts(plan.query)
             if len(docs) == 0:
                 return DONE + " " + NO_ANSWER
             result = self.vecdb.compute_from_docs(docs, plan.dataframe_calc)
@@ -175,12 +179,16 @@ class LanceDocChatAgent(DocChatAgent):
         Override the DocChatAgent.get_similar_chunks_bm25()
         to use LanceDB FTS (Full Text Search).
         """
-        # replace all newlines with spaces in query
-        query_clean = query.replace("\n", " ")
-        # force special search keywords to lower case
+        # Clean up query: replace all newlines with spaces in query,
+        # force special search keywords to lower case, remove quotes,
         # so it's not interpreted as search syntax
         query_clean = (
-            query_clean.replace("AND", "and").replace("OR", "or").replace("NOT", "not")
+            query.replace("\n", " ")
+            .replace("AND", "and")
+            .replace("OR", "or")
+            .replace("NOT", "not")
+            .replace("'", "")
+            .replace('"', "")
         )
 
         tbl = self.vecdb.client.open_table(self.vecdb.config.collection_name)
