@@ -1,6 +1,3 @@
-import gzip
-import json
-
 import pandas as pd
 import pytest
 from pydantic import Field
@@ -146,7 +143,7 @@ df = pd.DataFrame(
             "Garth Brook",
             "Dan Seagull",
         ],
-        "genre": ["Science Fiction", "Science Fiction", "Crime", "Drama", "Action"],
+        "genre": ["Science Fiction", "Science Fiction", "Crime", "Crime", "Crime"],
         "rating": [8, 10, 9.2, 8.7, 9.0],
     }
 )
@@ -192,7 +189,7 @@ class FlatMovieDoc(Document):
         ),
     ],
 )
-@pytest.mark.parametrize("flatten", [True, False])
+@pytest.mark.parametrize("flatten", [False, True])
 def test_lance_doc_chat_agent_df(
     test_settings: Settings,
     flatten: bool,
@@ -230,46 +227,6 @@ def test_lance_doc_chat_agent_df(
 
     result = task.run(query)
     assert NO_ANSWER in result.content or expected in result.content
-
-
-def parse_gz(path):
-    g = gzip.open(path, "rb")
-    for x in g:
-        yield json.loads(x)
-
-
-def getDF_gz(path):
-    i = 0
-    df = {}
-    for d in parse_gz(path):
-        df[i] = d
-        i += 1
-    return pd.DataFrame.from_dict(df, orient="index")
-
-
-def parse(path):
-    with open(path, "r") as file:
-        for line in file:
-            try:
-                dct = json.loads(line)
-                if dct.get("style") is None:
-                    dct["style"] = {}
-                if dct.get("image") is None:
-                    dct["image"] = []
-                if isinstance(dct.get("vote", "0"), str):
-                    dct["vote"] = int(dct.get("vote", "0").replace(",", ""))
-                yield dct
-            except json.JSONDecodeError:
-                pass
-
-
-def getDF(path):
-    i = 0
-    df = {}
-    for d in parse(path):
-        df[i] = d
-        i += 1
-    return pd.DataFrame.from_dict(df, orient="index")
 
 
 def test_lance_doc_chat_df_direct(test_settings: Settings):
