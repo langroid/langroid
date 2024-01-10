@@ -13,7 +13,7 @@ Use -f option to use OpenAI function calling API instead of Langroid tool.
 """
 import typer
 from rich import print
-from pydantic import BaseModel, BaseSettings
+from pydantic import BaseModel
 from typing import List
 import json
 import os
