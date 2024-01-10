@@ -52,7 +52,7 @@ llm_cfg = lm.OpenAIGPTConfig(
 #
 # agent = lr.ChatAgent(
 #     lr.ChatAgentConfig(
-#         llm=llm
+#         llm=llm_cfg,
 #     )
 # )
 #
