@@ -35,9 +35,7 @@ from langroid.agent.special.sql.utils.tools import (
     GetTableSchemaTool,
     RunQueryTool,
 )
-from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
 from langroid.mytypes import Entity
-from langroid.prompts.prompts_config import PromptsConfig
 from langroid.vector_store.base import VectorStoreConfig
 
 logger = logging.getLogger(__name__)
@@ -107,15 +105,6 @@ class SQLChatAgentConfig(ChatAgentConfig):
         }
     }
     """
-
-    llm: OpenAIGPTConfig = OpenAIGPTConfig(
-        type="openai",
-        chat_model=OpenAIChatModel.GPT4,
-        completion_model=OpenAIChatModel.GPT4,
-    )
-    prompts: PromptsConfig = PromptsConfig(
-        max_tokens=1000,
-    )
 
 
 class SQLChatAgent(ChatAgent):
