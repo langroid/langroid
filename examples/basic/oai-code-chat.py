@@ -4,7 +4,7 @@ powered by the OpenAI Assistant API's code-interpreter tool.
 
 Run like this:
 
-python3 examples/basic/oai-asst-chat.py
+python3 examples/basic/oai-code-chat.py
 """
 import typer
 from rich import print

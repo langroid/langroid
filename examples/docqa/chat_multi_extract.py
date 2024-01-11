@@ -27,12 +27,10 @@ from langroid.agent.task import Task
 from langroid.agent.tool_message import ToolMessage
 from langroid.language_models.openai_gpt import OpenAIGPTConfig
 from langroid.utils.configuration import set_global, Settings
-from langroid.utils.logging import setup_colored_logging
 from langroid.utils.constants import NO_ANSWER
 
 app = typer.Typer()
 
-setup_colored_logging()
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 
@@ -117,6 +115,7 @@ def main(
     )
     llm_cfg = OpenAIGPTConfig(
         chat_model=model or lm.OpenAIChatModel.GPT4_TURBO,
+        chat_context_length=4096,
     )
     doc_agent = DocChatAgent(
         DocChatAgentConfig(
@@ -124,7 +123,7 @@ def main(
             parsing=ParsingConfig(
                 chunk_size=100,
                 overlap=20,
-                n_similar_docs=4,
+                n_similar_docs=2,
             ),
             cross_encoder_reranking_model="",
         )
