@@ -18,7 +18,6 @@ from langroid.agent.special.neo4j.utils.tools import (
     GenerateCypherQueries,
     GraphDatabaseSchema,
 )
-from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
 from langroid.mytypes import Entity
 
 logger = logging.getLogger(__name__)
@@ -45,11 +44,6 @@ class Neo4jChatAgentConfig(ChatAgentConfig):
     kg_schema: Optional[List[Dict[str, Any]]]
     database_created: bool = False
     use_schema_tools: bool = False
-    llm: OpenAIGPTConfig = OpenAIGPTConfig(
-        type="openai",
-        chat_model=OpenAIChatModel.GPT4,
-        completion_model=OpenAIChatModel.GPT4,
-    )
 
 
 class Neo4jChatAgent(ChatAgent):
@@ -159,15 +153,16 @@ class Neo4jChatAgent(ChatAgent):
 
         return response_message
 
-    def write_query(self, query: str) -> bool:
+    def write_query(
+        self, query: str, parameters: Optional[Dict[Any, Any]] = None
+    ) -> bool:
         """
         Executes a write transaction using a given Cypher query on the Neo4j database.
-
-        This method should be used for queries that modify the database, such as CREATE,
-        UPDATE, or DELETE operations.
+        This method should be used for queries that modify the database.
 
         Args:
             query (str): The Cypher query string to be executed.
+            parameters (dict, optional): A dict of parameters for the Cypher query
 
         Returns:
             bool: True if the query was executed successfully, False otherwise.
@@ -178,7 +173,7 @@ class Neo4jChatAgent(ChatAgent):
         try:
             with self.driver.session(database=self.config.database) as session:
                 # Execute the query within a write transaction
-                session.write_transaction(lambda tx: tx.run(query))
+                session.write_transaction(lambda tx: tx.run(query, parameters))
                 return True
         except Exception as e:
             logging.warning(

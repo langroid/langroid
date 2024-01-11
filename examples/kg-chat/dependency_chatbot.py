@@ -1,5 +1,5 @@
 """
-Single agent to use to chat with a Retrieval-augmented LLM.
+Multi agent to use to chat with a Retrieval-augmented LLM.
 User specifies package name -> make inquiry to the KG
                             -> LLM provides details about the packages.
 
