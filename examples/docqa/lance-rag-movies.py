@@ -56,7 +56,7 @@ def main(
     # Configs
     embed_cfg = OpenAIEmbeddingsConfig()
 
-    # Get hithub issues
+    # Get movies data
     ldb_dir = ".lancedb/data/imdb-reviews"
     rmdir(ldb_dir)
     ldb_cfg = LanceDBConfig(
@@ -111,7 +111,7 @@ def main(
     agent = LanceDocChatAgent(cfg)
 
     # READ IN AND CLEAN THE DATA
-    df = pd.read_csv("examples/docqa/data/movies/IMBD.csv")
+    df = pd.read_csv("examples/docqa/data/movies/IMDB.csv")
 
     def clean_votes(value):
         """Clean the votes column"""

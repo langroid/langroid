@@ -13,11 +13,12 @@ Use -f option to use OpenAI function calling API instead of Langroid tool.
 """
 import typer
 from rich import print
-from pydantic import BaseModel, BaseSettings
+from pydantic import BaseModel
 from typing import List
 import json
 import os
 
+import langroid.language_models as lm
 from langroid.mytypes import Entity
 from langroid.agent.special.doc_chat_agent import DocChatAgent, DocChatAgentConfig
 from langroid.parsing.parser import ParsingConfig
@@ -26,12 +27,10 @@ from langroid.agent.task import Task
 from langroid.agent.tool_message import ToolMessage
 from langroid.language_models.openai_gpt import OpenAIGPTConfig
 from langroid.utils.configuration import set_global, Settings
-from langroid.utils.logging import setup_colored_logging
 from langroid.utils.constants import NO_ANSWER
 
 app = typer.Typer()
 
-setup_colored_logging()
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 
@@ -102,19 +101,29 @@ class LeaseExtractorAgent(ChatAgent):
         return "DONE " + json.dumps(message.terms.dict())
 
 
-class CLIOptions(BaseSettings):
-    debug: bool = False
-    fn_api: bool = False
-    cache: bool = True
-
-
-def chat(opts: CLIOptions) -> None:
+@app.command()
+def main(
+    debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
+    model: str = typer.Option("", "--model", "-m", help="model name"),
+    nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
+) -> None:
+    set_global(
+        Settings(
+            debug=debug,
+            cache=not nocache,
+        )
+    )
+    llm_cfg = OpenAIGPTConfig(
+        chat_model=model or lm.OpenAIChatModel.GPT4_TURBO,
+        chat_context_length=4096,
+    )
     doc_agent = DocChatAgent(
         DocChatAgentConfig(
+            llm=llm_cfg,
             parsing=ParsingConfig(
                 chunk_size=100,
                 overlap=20,
-                n_similar_docs=4,
+                n_similar_docs=2,
             ),
             cross_encoder_reranking_model="",
         )
@@ -138,9 +147,7 @@ def chat(opts: CLIOptions) -> None:
 
     lease_extractor_agent = LeaseExtractorAgent(
         ChatAgentConfig(
-            llm=OpenAIGPTConfig(),
-            use_functions_api=opts.fn_api,
-            use_tools=not opts.fn_api,
+            llm=llm_cfg,
             vecdb=None,
         )
     )
@@ -151,42 +158,25 @@ def chat(opts: CLIOptions) -> None:
         name="LeaseExtractorAgent",
         interactive=False,  # set to True to slow it down (hit enter to progress)
         system_message=f"""
-        You have to collect some information about a Commercial Lease, but you do not 
-        have access to the lease itself. 
+        You have to collect some SPECIFIC STRUCTURED information 
+        about a Commercial Lease, as specified in the `lease_info` function/tool. 
+        But you do not have access to the lease itself. 
         You can ask me questions about the lease, ONE AT A TIME, I will answer each 
-        question. You only need to collect info corresponding to the fields in this 
-        specified structure. 
+        question. You only need to collect info to fill the fields in the 
+        `field_info` function/tool. 
         If I am unable to answer your question initially, try asking me 
         differently. If I am still unable to answer after 3 tries, fill in 
         {NO_ANSWER} for that field.
         When you have collected this info, present it to me using the 
         'lease_info' function/tool.
+        DO NOT USE THIS Function/tool UNTIL YOU HAVE ASKED QUESTIONS 
+        TO FILL IN ALL THE FIELDS.
+        
+        Start by asking me for the start date of the lease.
         """,
     )
     lease_task.add_sub_task(doc_task)
     lease_task.run()
-
-
-@app.command()
-def main(
-    debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
-    nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
-    fn_api: bool = typer.Option(False, "--fn_api", "-f", help="use functions api"),
-    cache_type: str = typer.Option(
-        "redis", "--cachetype", "-ct", help="redis or momento"
-    ),
-) -> None:
-    cli_opts = CLIOptions(
-        fn_api=fn_api,
-    )
-    set_global(
-        Settings(
-            debug=debug,
-            cache=not nocache,
-            cache_type=cache_type,
-        )
-    )
-    chat(cli_opts)
 
 
 if __name__ == "__main__":

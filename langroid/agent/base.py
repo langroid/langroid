@@ -686,7 +686,11 @@ class Agent(ABC):
     def _get_one_tool_message(self, json_str: str) -> Optional[ToolMessage]:
         json_data = json.loads(json_str)
         request = json_data.get("request")
-        if request is None or request not in self.llm_tools_handled:
+        if (
+            request is None
+            or not (isinstance(request, str))
+            or request not in self.llm_tools_handled
+        ):
             return None
 
         message_class = self.llm_tools_map.get(request)

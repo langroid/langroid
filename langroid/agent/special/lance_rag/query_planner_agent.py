@@ -48,7 +48,7 @@ class LanceQueryPlanAgentConfig(ChatAgentConfig):
     Based on the QUERY and the above SCHEMA, your task is to determine a QUERY PLAN,
     consisting of:
     -  a FILTER (can be empty string) that would help the ASSISTANT to answer the query.
-        Remember the FILTER can only refer ANY fields in the above SCHEMA
+        Remember the FILTER can refer to ANY fields in the above SCHEMA
         EXCEPT the `content` field of the documents. 
         ONLY USE A FILTER IF EXPLICITLY MENTIONED IN THE QUERY.
         TO get good results, for STRING MATCHES, consider using LIKE instead of =, e.g.
@@ -64,12 +64,18 @@ class LanceQueryPlanAgentConfig(ChatAgentConfig):
         is needed. The dataframe calc CAN refer to the `content` field. 
     
     
-    Example:
+    EXAMPLE:
     ------- 
     Suppose there is a document-set about crime reports, where:
      CONTENT = crime report,
-     Filterable SCHEMA consists of City, Year, num_deaths
-    ORIGINAL QUERY: Total deaths in shoplifting crimes in Los Angeles in 2023
+     Filterable SCHEMA consists of City, Year, num_deaths.
+    
+    Then given this ORIGINAL QUERY: 
+    
+        Total deaths in shoplifting crimes in Los Angeles in 2023?
+    
+    A POSSIBLE QUERY PLAN could be:
+    
     FILTER: "City LIKE '%Los Angeles%' AND Year = 2023"
     REPHRASED QUERY: "shoplifting crime" --> this will be used to MATCH content of docs
          [NOTE: we dropped the FILTER fields City and Year since the 
@@ -77,6 +83,8 @@ class LanceQueryPlanAgentConfig(ChatAgentConfig):
          match the CONTENT of the docs.]
     DATAFRAME CALCULATION: "df["num_deaths"].sum()"
 
+    ------------- END OF EXAMPLE ----------------
+    
     The FILTER must be a SQL-like condition, e.g. 
     "year > 2000 AND genre = 'ScienceFiction'".
     To ensure you get useful results, you should make your FILTER 
