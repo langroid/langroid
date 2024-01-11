@@ -204,6 +204,9 @@ def parse_number_range_list(specs: str) -> List[int]:
     """
     spec_indices = set()  # type: ignore
     for part in specs.split(","):
+        # some weak LLMs may generate <#1#> instead of 1, so extract just the digits
+        # or the "-"
+        part = ''.join(char for char in part if char.isdigit() or char == "-")
         if "-" in part:
             start, end = map(int, part.split("-"))
             spec_indices.update(range(start, end + 1))

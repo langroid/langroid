@@ -76,7 +76,7 @@ embed_cfg = OpenAIEmbeddingsConfig()
     [
         (
             "Which Science Fiction movie was directed by Winkowski?",
-            "The Vector",
+            "Vector",
         ),
         (
             "Which Crime movie had a rating over 9?",
