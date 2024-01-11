@@ -30,6 +30,7 @@ import typer
 from rich import print
 import os
 
+import langroid as lr
 import langroid.language_models.base
 from langroid.agent.special.doc_chat_agent import (
     DocChatAgent,
@@ -59,8 +60,8 @@ def chat(config: DocChatAgentConfig) -> None:
     doc_task = Task(
         doc_agent,
         name="DocAgent",
-        llm_delegate=False,
-        single_round=True,
+        done_if_no_response=[lr.Entity.LLM],
+        done_if_response=[lr.Entity.LLM],
     )
 
     writer_agent = ChatAgent(
@@ -74,8 +75,6 @@ def chat(config: DocChatAgentConfig) -> None:
     writer_task = Task(
         writer_agent,
         name="WriterAgent",
-        llm_delegate=True,
-        single_round=False,
         system_message=f"""
         You are tenacious, creative and resourceful when given a question to 
         find an answer for. You will receive questions from a user, which you will 

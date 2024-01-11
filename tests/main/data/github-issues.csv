@@ -1,0 +1,710 @@
+state,year,month,day,assignee,size,text
+closed,2024,1,5,,,"- allow cancelling gguf model update pull
+- additional information is now available in show response, use this to pull gguf before running"
+open,2024,1,5,,,"Hi,
+
+I have 3x3090 and I want to run Ollama Instance only on a dedicated GPU. The reason for this: To have 3xOllama Instances (with different ports)  for using with Autogen. 
+I also tried the ""Docker Ollama"" without luck. 
+Or is there an other solution?
+
+Let me know...
+
+Thanks in advance
+
+Steve"
+open,2024,1,5,BruceMacD,,"See: https://github.com/jmorganca/ollama/issues/1800#issuecomment-1878955910
+
+Feel free to pull out the stuff from that thread - it's only in there as I did quite a lot of research on this to try to figure out the OOM errors."
+open,2024,1,5,,,this example shows one possible way to use llava models 
+closed,2024,1,5,,,This patch file no longer exists.
+open,2024,1,5,,,"For example on this file https://github.com/jmorganca/ollama/blob/main/parser/parser.go
+
+_Warning: I did not validate my code, I did it blind._
+
+```go
+package main
+
+import (
+    ""strings""
+    ""testing""
+)
+
+func TestParser(t *testing.T) {
+    input :=
+    `
+      FROM model1
+      ADAPTER adapter1
+      LICENSE MIT
+      PARAMETER param1 value1
+      PARAMETER param2 value2
+      TEMPLATE template1
+    `
+
+    reader := strings.NewReader(input)
+
+    commands, err := Parse(reader)
+
+    if err != nil {
+        t.Errorf(""Error parsing commands: %v"", err)
+    }
+
+    expectedCommands := []Command{
+        {Name: ""model"", Args: ""model1""},
+        {Name: ""adapter"", Args: ""adapter1""},
+        {Name: ""license"", Args: ""MIT""},
+        {Name: ""parameter"", Args: ""param1 value1""},
+        {Name: ""parameter"", Args: ""param2 value2""},
+        {Name: ""template"", Args: ""template1""},
+    }
+
+    if !compareCommands(commands, expectedCommands) {
+        t.Errorf(""Parsed commands do not match expected commands."")
+    }
+}
+```"
+open,2024,1,5,,,"Hi, maintainers!
+
+[Haystack](https://github.com/deepset-ai/haystack) is a quite popular open-source LLM orchestration framework.
+We recently developed an integration with Ollama.
+
+This PR is to add Haystack to the Community integrations.
+
+If you agree, we would also like to add one or two simple examples [here](https://github.com/jmorganca/ollama/tree/main/examples) (to be done in other PRs).
+
+Thanks for this great project!
+
+"
+open,2024,1,5,,,"I think it would be interesting to have different templates (.github/**/*.md) for various purposes within your repo. Templates can significantly enhance efficiency and clarity in communication, especially when dealing with different aspects of your code/repo. Imagine having specific templates tailored for bug reports, allowing users to succinctly detail the issue they encountered, including steps to reproduce. This standardized format would streamline the debugging process, making it more organized and time-effective.
+
+Similarly, having a dedicated template for reporting issues can help users express concerns or suggestions in a structured manner. Users could provide essential details, such as the nature of the problem, its impact, and any relevant markdown/screenshots, making it easier for the team to comprehend and address their concerns promptly.
+
+Moreover, the inclusion of a feature request template could be a valuable addition. Users often have innovative ideas or specific functionalities they'd like to see implemented. A feature request template could guide users in articulating their suggestions comprehensively, specifying the intended benefits and potential use cases. This structured approach would empower your development team to better understand and evaluate the feasibility and significance of each proposed feature.
+
+In conclusion, introducing different templates for bug reports, issue reports, and feature requests can enhance the overall user experience by promoting clear and concise communication. This, in turn, facilitates more efficient problem resolution, ensuring that your platform remains responsive to user needs and continually evolves with valuable user input.
+
+What do you think ?"
+open,2024,1,5,,,Would it be possible to add a metrics switch to show net generation time and output time with tokens/seconds. This would make comparing the performance of LLMs easier. 
+open,2024,1,5,,,"Hi,
+
+I'm using a standard setup `ollama serve & ` `ollama run llama2`.
+
+Unfortunately the prompt answer to `what's the root of 256256?` is always wrong.
+
+Already tried `what's the squared root of 256256?`, `what's the squared root of 256'256?` and in other languages than English as well.
+
+`ollama run mistral` comes up with a answer 507.2115253906348. Horrible...
+
+What I need as preferred risk is an answer 506.217344625804, `16*sqrt(7*11*13)` or anything like that."
+open,2024,1,5,,,"Dolphin phi and (probably phi code indent):
+
+![image](https://github.com/jmorganca/ollama/assets/23272429/6efbf418-0cbd-46bf-abf3-005db9e2fc3d)
+
+![image](https://github.com/jmorganca/ollama/assets/23272429/5d0a658f-ffd8-44f2-b3f5-992b722d3c37)
+
+Phi, indents but has no code view:
+
+![image](https://github.com/jmorganca/ollama/assets/23272429/9cefc3b5-5bf5-4620-af2b-a9259c036c94)
+
+Can someone probably do something to improve these models as they are the only models that run very fast on smaller GPUs.
+
+Or perhaps, maybe someone would train phi-code:instruct.
+
+Thanks.
+"
+open,2024,1,5,,,"Hi,
+
+I'm Lay, a very friendly guy.
+
+What is the smallest uncensored model you have that can write decent content? Preferably something similar to dolphin. I tried dolphin-mixtral but it takes hours on my server to write a story. I'd like a tiny one.
+
+Also, please create a discussion group for ollama on Github."
+closed,2024,1,5,,,No issue description body.
+closed,2024,1,5,,,there is a link that should point to dockerhub which is the best place to understand docker
+open,2024,1,5,BruceMacD,,"I thought I'd post this here in case it helps others suffering from OOM errors as I searched and can see no mention of either ""num_batch"" or ""n_batch"" anywhere here.
+
+I've been having endless problems with OOM errors when I try to run models with a context length of 16k like ""deepseek-coder:33b-instruct"" and originally thought it was due to this:
+
+```
+// 75% of the absolute max number of layers we can fit in available VRAM, off-loading too many layers to the GPU can cause OOM errors
+layers := int(info.FreeMemory/bytesPerLayer) * 3 / 4
+```
+
+But whatever I set that to (even tiny fractions like 1 / 100), I would still eventually get an OOM error after inputting a lot of data to the 16k models... I could actually see the VRAM use go up using nvidia-smi in Linux until it hit the 24GB of my 4090 and then crash.
+
+So next I tried ""num_gpu=0"" and this did work (I  still got the benefit of the cuBLAS for the prompt evaluation, but otherwise very slow generation...). As soon as I set this to even ""num_gpu =1"" then I would get an OOM error after inputting a lot of data (but still way less than 16k tokens) to the 16k models.
+
+So I then went into the Ollama source and found there are some hidden ""PARAMETER"" settings not mentioned in ""/docs/modelfile.md "" that can be found in ""api/types.go"" and one of these is ""num_batch"" (which corresponds to ""n_batch"" in llama.cpp) and it turns out this is was the solution. The default value is 512 (which is inherited from llama.cpp) and I found that reducing it finally solved the OOT crash problem.
+
+It looks like there may even be a relationship that it needs to be decreased by num_ctx/4096 (= 4 for the 16k context models), and this in turn could possibly have something to do with the 3 / 4 magic number in the code above and/or the fact tbat 4096 is a very common default context size?? Anyway, setting to 128 *almost* worked unless I deliberately fed in a file I have created that I know deepseek-coder:33b-instruct will tokenize into 16216 tokens... So I then reduced to 64 and have since fed this same file in 4-5 times using the chat completion API so the complete conversation is > 64k tokens and it still hasn't crashed yet  (the poor thing had a meltdown after 64k tokens and just replied ""I'm sorry, but I can't assist with that"" though lol).
+
+I suspect I could get even closer to 128 as it did almost work but atm I'm just leaving it at 64 to see how I get on...
+
+It should be noted that num_batch has to be >=32 (as per the llama.cpp docs) or otherwise it won't use the cuBLAS kernels for prompt evaluations at all.
+
+I suggest anybody suffering from similar OOM errors add this to their modelfiles, starting at 32:
+
+```PARAMETER num_batch 32```
+
+and keep doubling it until you get the OOM errors again."
+open,2024,1,5,,,"I attempted to install Ollama on an AWS g5g instance with Ubuntu2204. but failed on that point.
+The link for Nvidia driver uses 'arm64' instead of 'aarch64'"
+open,2024,1,5,,,"In my HPC system, I have to use apptainer instead of docker to run ollama. In the pulling process, I have encountered the following certificate issue. I was wondering if this could be addressed from ollama side.
+
+``` sh
+Apptainer> ollama serve &
+[1] 2914729
+Apptainer> 2024/01/04 15:51:13 images.go:737: total blobs: 0
+2024/01/04 15:51:13 images.go:744: total unused blobs removed: 0
+2024/01/04 15:51:13 routes.go:895: Listening on [::]:11434 (version 0.1.17)
+ollama pull llama2
+[GIN] 2024/01/04 - 15:51:24 | 200 |      54.686µs |       127.0.0.1 | HEAD     ""/""
+2024/01/04 15:51:24 images.go:1066: request failed: Get https://registry.ollama.ai/v2/library/llama2/manifests/latest: tls: failed to verify certificate: x509: certificate signed by unknown authority
+[GIN] 2024/01/04 - 15:51:24 | 200 |   19.314959ms |       127.0.0.1 | POST     ""/api/pull""
+pulling manifest 
+Error: pull model manifest: Get https://registry.ollama.ai/v2/library/llama2/manifests/latest: tls: failed to verify certificate: x509: certificate signed by unknown authority
+Apptainer> 
+```"
+open,2024,1,5,,,No issue description body.
+closed,2024,1,5,,,The main [readme](https://github.com/jmorganca/ollama/blob/main/docs/README.md) refers to https://github.com/jmorganca/ollama/blob/main/docs/docker.md which gives a 404. Is docker still supported?
+open,2024,1,5,,,"**What this is  about:**
+Add OAuth2 and basic authentication to the langchain Ollama libraries as well as flexible URLs and ports.
+
+**Why:**
+Not everyone runs Ollama on the local machine. As for me I run it on Kubernetes and use it always with its langchain library. For that proper authentication is required.
+
+**How:**
+I propose to keep Ollma ""as-is"" and let the wrapping platform define the authentication. That way, only the langchain components need enhancement to offer OAuth or basic authentication through parameters ("".env""). 
+
+**Status:**
+I've already enhanced the Ollma libraries to use OAuth2 with Client Credentials. I'm happy to add Basic to it as well if there is interest to add the code to the main langchain libraries.
+I'm talking about these classes:
+
+- ChatOllama
+- Ollama
+- OllamaEmbeddings
+
+Let me know if/ how I can contribute my code to it. 
+
+ "
+open,2024,1,5,,,"I have compiled the ollama as a native windows binary and have been able to load and run models.
+
+When running llava model. I get an error.
+
+```bat
+ollama run llava
+```
+
+```
+>>> describe this image c:\download.jpeg
+describe this image D:\code\download.jpeg
+This model requires you to add a jpeg, png, or
+svg image.
+```
+"
+closed,2024,1,5,,,"This change splits up the interactive generation part of the CLI into its own file, and also fixes some issues with the way the `show` command works.
+
+There is a new `/show info` command in the REPL which can show details about the model, and also `/show modelfile` will combine any parameters set in the REPL so that it creates the correct modelfile."
+open,2024,1,5,,,No issue description body.
+closed,2024,1,4,,,No issue description body.
+closed,2024,1,4,,,"If the tree has a stale submodule, make sure we clean it up first"
+open,2024,1,4,,,"failed to build on Azure Containers
+
+2024-01-04 16:33:33.786 [info] Step 6/21 : ADD https://dl.google.com/go/go1.21.3.linux-$TARGETARCH.tar.gz /tmp/go1.21.3.tar.gz
+2024-01-04 16:33:33.786 [info] ADD failed: failed to GET https://dl.google.com/go/go1.21.3.linux-.tar.gz with status 404 Not Found: <!DOCTYPE html>
+2024-01-04 16:33:33.787 [info] <html lang=en>
+2024-01-04 16:33:33.787 [info]   <meta charset=utf-8>
+2024-01-04 16:33:33.787 [info]   <meta name=viewport content=""initial-scale=1, minimum-scale=1, width=device-width"">
+2024-01-04 16:33:33.787 [info]   <title>Error 404 (Not Found)!!1</title>
+2024-01-04 16:33:33.787 [info]   <style>
+2024-01-04 16:33:33.787 [info]     *{margin:0;padding:0}html,code{font:15px/22px arial,sans-serif}html{background:#fff;color:#222;padding:15px}body{margin:7% auto 0;max-width:390px;"
+closed,2024,1,4,,,"Now that we only submodule llama.cpp once, we can tidy up the paths a bit.
+
+This also moves the ext_server c++ code to a distinct directory to solve the go test glitch.
+
+```
+% go test ./...
+# github.com/jmorganca/ollama/llm
+cgo-gcc-prolog:153:33: warning: unused variable '_cgo_a' [-Wunused-variable]
+cgo-gcc-prolog:165:33: warning: unused variable '_cgo_a' [-Wunused-variable]
+?       github.com/jmorganca/ollama     [no test files]
+?       github.com/jmorganca/ollama/cmd [no test files]
+?       github.com/jmorganca/ollama/examples/golang-simplegenerate      [no test files]
+?       github.com/jmorganca/ollama/llm [no test files]
+?       github.com/jmorganca/ollama/llm/generate        [no test files]
+?       github.com/jmorganca/ollama/parser      [no test files]
+?       github.com/jmorganca/ollama/progress    [no test files]
+?       github.com/jmorganca/ollama/readline    [no test files]
+ok      github.com/jmorganca/ollama/api 0.317s
+ok      github.com/jmorganca/ollama/format      0.212s
+?       github.com/jmorganca/ollama/version     [no test files]
+ok      github.com/jmorganca/ollama/gpu 0.211s
+ok      github.com/jmorganca/ollama/server      0.203s
+```"
+open,2024,1,4,,,No issue description body.
+open,2024,1,4,,,This adds a short faq to describe quantization and context.
+closed,2024,1,4,,,"On linux, we link the CPU library in to the Go app and fall back to it when no GPU match is found. On windows we do not link in the CPU library so that we can better control our dependencies for the CLI.  This fixes the logic so we correctly fallback to the dynamic CPU library on windows."
+open,2024,1,4,,,"Hi, I was wondering if the current Ollama system grabs any system information regarding CPU and RAM capacities. Especially since a majority of users are on Mac, there's a finite # of hardware specs for Ollama to recognize. Then, Ollama can automatically recommend which models will run best on the user's Mac. 
+
+I think this would be easier for first-time users, and promote Ollama's accessibility for non-technicals (average MacOS users). 
+
+If this doesn't exist, I would be more than happy to make a branch with my suggestion. If the underlying CLI/code to recognize device GPU/CPU limitations already exists, I'd love to take a stab at incorporating it into the UI. I'd appreciate any direction for which part of the codebase to observe. "
+closed,2024,1,4,,,"I'm hosting Ollama on an Ubuntu server and then trying to connect to the instance via chatbox on another (Arch) device. 
+
+I've run both `ollama run llama2` and `ollama pull llama2`. I then ran `OLLAMA_HOST=0.0.0.0:8070 ollama serve` in a separate shell as described in the setup procedure, but I'm unable to chat via chatbox. In the SSH session where I run `ollama run llama2`, the chat works perfectly: I'm able to have a fluent conversation. When running chatbox, however, I get an `API Error: Status Code 404, {""error"":""model 'llama2' not found, try pulling it first""}`. If I use curl for the generate or show endpoints on the Arch device, I get the same error. If I run `ollama list` on the Ubuntu machine, however, the llama2 entry is listed. Is there a network configuration step or something similar that I missed? Any help is appreciated."
+open,2024,1,4,,,"Greeting, I have modified the ollama/server/routes.go to set the following variable:
+
+```go
+var defaultSessionDuration = 1440 * time.Minute
+```
+
+However when running the ollama, it kept unloading the **exact same** model over and over for every single API invocation for /api/generate endpoint and this is visible from nvtop CLI where I can observe the Host Memory climbing first and then GPU finally have the model loaded.
+
+This makes Ollama very impractical for production environment when it takes significant amount of time to load the model for each and every API invocation. It should be noted that this is **NOT** running from docker as it is an intentional decision.
+
+Is there an alternative recommendation to workaround this?
+
+Please and thank you."
+closed,2024,1,4,,,"Go embed doesn't like when there's no matching files, so put a dummy placeholder in to allow building without any GPU support If no ""server"" library is found, it's safely ignored at runtime."
+closed,2024,1,4,,,No issue description body.
+closed,2024,1,3,,,This moves the list of AMD GPUs to an easier to maintain list which should make it easier to update over time.
+closed,2024,1,3,,,"This prevents users from accidentally installing on WSL1 with instructions guiding how to upgrade their WSL instance to version 2.  Once running WSL2 if you have an NVIDIA card, you can follow their instructions to set up GPU passthrough and run models on the GPU.  This is not possible on WSL1.
+
+
+Example output.
+
+WSL1
+```
+daniel@DESKTOP-PUNI632:/mnt/c/Users/Daniel$ ./install.sh
+ERROR WSL1 is not currently supported - please upgrade to WSL2 with 'wsl --set-version <distro> 2'
+daniel@DESKTOP-PUNI632:/mnt/c/Users/Daniel$ uname -r
+4.4.0-19041-Microsoft
+```
+
+WSL2
+```
+root@DESKTOP-PUNI632:/mnt/c/Users/Daniel# ./install.sh
+>>> Downloading ollama...
+################################################################################################################# 100.0% 
+...
+root@DESKTOP-PUNI632:/mnt/c/Users/Daniel# uname -r
+5.15.133.1-microsoft-standard-WSL2
+```
+"
+closed,2024,1,3,,,"Reverting to the old flags as in [this](https://github.com/pkgxdev/pantry/pull/4710/files) seems to fix it for me (as far as our automated testing goes).
+
+No fix: https://github.com/pkgxdev/pantry/actions/runs/7400916216/job/20135652033
+Fix: https://github.com/pkgxdev/pantry/actions/runs/7402435273/job/20140385965"
+closed,2024,1,3,,,"For the ROCm libraries to access the driver, we need to add the ollama user to the render group.
+
+Note: the script will need more work to fully support radeon cards, but this will at least make the installation functional.  Without this change, the server sits in a crash-loop due to lack of permissions to access the driver."
+open,2024,1,3,,,No issue description body.
+closed,2024,1,3,,,"I created a bug here when accounting for the ""pull parent model"" case when pull gguf models on deprecated ggml models. In the case of a Modelfile like this:
+```
+FROM orca-mini
+SYSTEM ""you are mario""
+```
+where orca-mini is a `ggml` library model there is no `ParentModel` and the model itself should be pulled.
+
+This handles both:
+```
+FROM orca-mini
+SYSTEM ""you are mario""
+```
+and a child:
+```
+FROM mario
+PARAMETER temperature 0
+```
+correctly and will pull the root model for both cases."
+closed,2024,1,3,,,"The API is missing the embeddings point, so this adds it. "
+closed,2024,1,3,,,"Would it be possible to add some metadata to the model indicating that it is multimodal? This will help to select the right model in applications that are built on top of the API to support multimodal architecture. I believe this will also help to search through models at https://ollama.ai/library and filter based on multimodal support. 
+"
+closed,2024,1,3,,,No issue description body.
+closed,2024,1,3,,,"Hello Everyone, 
+
+I have problem with pulling manifest, while running ""ollama run dolphin-mixtral:latest"" for the first time I've got ""Error: max retries exceeded: unexpected EOF"" and now I am unable to restart download getting ""Error: pull model manifest: file does not exist"". 
+
+I am grateful for all help or any kind of advice what to do next or how to deal with this"
+closed,2024,1,3,,,"It takes a few minutes and sometimes it never starts the model when trying to run it. The problem is with all models i am using, also with small ones like tinyllama. After model has loaded after a few minutes everything works fine and i am getting fast chat responses.
+
+I am using Windows with WSL2 and Docker Desktop. Ollama is installed in wsl2 and the models are also placed there by mounting(bin mount) them with docker volumes in the wsl2 file system. "
+closed,2024,1,3,,,"1)The API - http://127.0.0.1:11434/api doesn't work. Are there any additional steps for http://127.0.0.1:11434/api to work correctly?
+
+Doesn't work on my mac and EC2 as well. 
+"
+open,2024,1,3,,,"ShellOracle is a new ZSH Line Editor widget that uses Ollama for intelligent shell command generation! Ollama rocks!
+
+![ShellOracle](https://i.imgur.com/QM2LkAf.gif)"
+closed,2024,1,3,,,fix quickstart spelling
+closed,2024,1,3,,,"Hi, I created Modelfile: 
+<code>FROM /models/phi-2.Q4_0.gguf
+TEMPLATE ""[INST] {{ .Prompt }} [/INST]""
+PARAMETER temperature 0
+PARAMETER num_ctx 2048
+PARAMETER num_thread 6
+PARAMETER top_k 40
+PARAMETER top_p 0.95
+</code>
+when i use command to create my custom model <code>ollama create phi2-SC -f ./models/modelfiles/Modelfile</code>, i get this error: Error: pull model manifest: Get ""https://v2/models/phi-2.Q4_0.gguf/manifests/latest"": dial tcp: lookup v2 on 172.20.80.1:53: server misbehaving"
+closed,2024,1,3,,,This change adds some help in the REPL for using the keyboard shortcut commands.
+open,2024,1,2,,,"If I start to pull a model via `/api/pull` and then abort the request at let's say 2% and re-request it, it will not resume and start from 0%.
+If I do it via `ollama pull model` it correctly resumes....
+
+Did some more testing:
+Start via `/api/pull`, go to 2%, abort -> run `ollama pull model`, no resume...
+Start via `ollama pull model`, go to 2%, abort -> hit `/api/pull`, it resumes...
+
+latest version, macos"
+open,2024,1,2,,,"![image](https://github.com/jmorganca/ollama/assets/31376673/7b4f060d-22a1-4992-9251-b479c0178779)
+"
+closed,2024,1,2,,,"- options from the loaded llm were being used regardless of the requested options
+
+Only the options set from the request that initially loaded the model were being used as of the most recent llama.cpp update. Fix this by relaying the resolved options when options are checked during load time."
+closed,2024,1,2,,,"It just had to happen. After running ollama, any attempt to type out a message fails, with the program acting like you have not pressed a single key on the keyboard. I am using a Unicomp New Model M, which is an industry-standard ANSI/ASCII QWERTY 108 key keyboard, and this ""program"" just doesn't want to touch it's output even with a 10-foot pole. I then tried a quick and dirty hack involving VcXsrv and XFCE4, and that still didn't fix the issue. I am about ready to just ditch WSL1 and use a VM like Virtualbox. I am using Ubuntu 22.04.3 LTS.
+
+I did get these warnings, prob because Microsoft was too lazy to add proper PCI bus emulation:
+```
+pcilib: Cannot open /proc/bus/pci
+lspci: Cannot find any working access method.
+```
+
+PS: I cannot use WSL2 as my system appears to have bizzare chipset and BIOS quirks that completely break WSL2 (ie WSL2 will complain that Virtualization and the Virtual Machine platform is not enabled, despite the fact they are)"
+open,2024,1,2,,,"TinyGPT-V: Efficient Multimodal Large Language Model via Small Backbones
+
+Github: https://github.com/DLYuanGod/TinyGPT-V
+HuggingFace: https://huggingface.co/Tyrannosaurus/TinyGPT-V
+
+It stands out because it only requires a 24G GPU for training, and just an 8G GPU or CPU for inference. TinyGPT-V is based on Phi-2, combining an effective language backbone with pre-trained visual modules from BLIP-2 or CLIP."
+open,2024,1,2,,,"# ❔ About
+
+Sometimes, me may only need to validate than we can compile a model with `ollama`...without having to download the whole base model.
+
+**👉 In  a few words, this would help telling, very fast and very easily is a `ollama` modelfile could be used. 👈** 
+
+# 💡 Feature request
+
+Implement `ollama --verify` which exits with success if:
+
+- ✔️ the file is well formated
+- ✔️ the base image exists
+
+# 💰 Benefits
+
+- **Make it possible to implement code validation with CI**... and then protect source code
+- **Save resources (storage, CPU)** while trying to validate a `ollama` modelfile (especially on GH Actions)
+
+# 🔖 Related stuff
+
+- https://github.com/jmorganca/ollama/issues/1473"
+closed,2024,1,1,,,No issue description body.
+open,2024,1,1,,,"I recently put together an (old) physical machine with an Nvidia K80, which is only supported up to CUDA 11.4 and Nvidia driver 470.  All my previous experiments with Ollama were with more modern GPU's.
+
+I found that Ollama doesn't use the GPU at all.  I cannot find any documentation on the minimum required CUDA version, and if it is possible to run on older CUDA versions (e.g. Nvidia K80, V100 are still present on cloud, e.g. G2 and P2 on AWS) and there's lots of K80's all over ebay.
+
+EDIT: looking through the logs, it appears that the GPU's are being seen:
+
+Jan  1 20:22:43 thinkstation-s30 ollama[911]: 2024/01/01 20:22:43 llama.go:300: 24762 MB VRAM available, loading up to 162 GPU layers
+Jan  1 20:22:43 thinkstation-s30 ollama[911]: 2024/01/01 20:22:43 llama.go:436: starting llama runner
+Jan  1 20:22:43 thinkstation-s30 ollama[911]: 2024/01/01 20:22:43 llama.go:494: waiting for llama runner to start responding
+Jan  1 20:22:43 thinkstation-s30 ollama[911]: ggml_init_cublas: GGML_CUDA_FORCE_MMQ:   no
+Jan  1 20:22:43 thinkstation-s30 ollama[911]: ggml_init_cublas: CUDA_USE_TENSOR_CORES: yes
+Jan  1 20:22:43 thinkstation-s30 ollama[911]: ggml_init_cublas: found 3 CUDA devices:
+Jan  1 20:22:43 thinkstation-s30 ollama[911]:   Device 0: Tesla K80, compute capability 3.7
+Jan  1 20:22:43 thinkstation-s30 ollama[911]:   Device 1: Tesla K80, compute capability 3.7
+Jan  1 20:22:43 thinkstation-s30 ollama[911]:   Device 2: NVIDIA GeForce GT 730, compute capability 3.5
+
+and
+
+Jan  1 20:34:20 thinkstation-s30 ollama[911]: llm_load_tensors: ggml ctx size =    0.11 MiB
+Jan  1 20:34:20 thinkstation-s30 ollama[911]: llm_load_tensors: using CUDA for GPU acceleration
+Jan  1 20:34:20 thinkstation-s30 ollama[911]: llm_load_tensors: mem required  =   70.46 MiB
+Jan  1 20:34:20 thinkstation-s30 ollama[911]: llm_load_tensors: offloading 32 repeating layers to GPU
+Jan  1 20:34:20 thinkstation-s30 ollama[911]: llm_load_tensors: offloading non-repeating layers to GPU
+Jan  1 20:34:20 thinkstation-s30 ollama[911]: llm_load_tensors: offloaded 33/33 layers to GPU
+Jan  1 20:34:20 thinkstation-s30 ollama[911]: llm_load_tensors: VRAM used: 3577.61 MiB
+
+
+but....
+
+Jan  1 20:34:21 thinkstation-s30 ollama[911]: CUDA error 209 at /go/src/github.com/jmorganca/ollama/llm/llama.cpp/gguf/ggml-cuda.cu:7801: no kernel image is available for execution on the device
+Jan  1 20:34:21 thinkstation-s30 ollama[911]: current device: 0
+Jan  1 20:34:21 thinkstation-s30 ollama[911]: GGML_ASSERT: /go/src/github.com/jmorganca/ollama/llm/llama.cpp/gguf/ggml-cuda.cu:7801: !""CUDA error""
+Jan  1 20:34:22 thinkstation-s30 ollama[911]: 2024/01/01 20:34:22 llama.go:451: 209 at /go/src/github.com/jmorganca/ollama/llm/llama.cpp/gguf/ggml-cuda.cu:7801: no kernel image is available for execution on the device
+Jan  1 20:34:22 thinkstation-s30 ollama[911]: current device: 0
+Jan  1 20:34:22 thinkstation-s30 ollama[911]: GGML_ASSERT: /go/src/github.com/jmorganca/ollama/llm/llama.cpp/gguf/ggml-cuda.cu:7801: !""CUDA error""
+Jan  1 20:34:22 thinkstation-s30 ollama[911]: 2024/01/01 20:34:22 llama.go:459: error starting llama runner: llama runner process has terminated"
+closed,2024,1,1,,,"Llama2 and mistral base model are quite poor in embedding compared to sentence tranformer models like bert.
+
+Why not integrate [bert.cpp](https://github.com/skeskinen/bert.cpp) or [sentence-transformers](https://sbert.net/) for `api/embeddings` endpoint so we can have the best of both architectures?
+
+"
+closed,2024,1,1,,,I have some fine-tuned models saved on Huggingface. How to add or convert any custome LLM to ollama fitted version?
+open,2024,1,1,,,"It would be nice if you could have a `Modelfile` that had an OpenAI model as a base. Then Ollama inference would call the OpenAI APIs instead of local inference with the built parameters. I know it seems like maybe it sorta defeats the point but I really like having the ""Ollama facade"" available. I use the March version of GPT-4 heavily but have to type ""Let's think step by step"" and all those other things all the time 😵‍💫 
+
+I could look at making a PR for this if there is interest. @jmorganca @mchiang0610 "
+closed,2023,12,31,,,"It is quite strange. 
+I have deployed the container of ollama and I can access to the bash shell and load models and chat with them. But when I install Ollama in the local system (the same that is running the docker container), when I try to chat with the same model (explored: tinyllama and mistral), it says: 
+
+`Error: llama runner exited, you may not have enough available memory to run this model`"
+open,2023,12,31,pdevine,,"While chatting with the model, you necessarily do not need to have the context, or you just want a new chat. Well,  there are no options for this, rather than just cancelling this chat and restarting it.
+
+So, similar to the `/bye` option, there can be other options for the ease of using llm.
+* `/clear_context` or `/no_context`: to not use the above context
+*  `/new_chat` : to initialize new chat
+
+or any other option that may be useful for the user."
+closed,2023,12,31,,,"Hey, 
+
+In Ubuntu 23.10,
+Previously, Ollama used to download the models into the root directory.
+Now, it is downloading in the Home directory.  How do you control this?
+
+I suggest a directory flag to let the user decide in which folder the model is supposed to go.
+
+ "
+open,2023,12,30,BruceMacD,,"I am using a seed (int 1) for prompt generation with a mistral model, and it works not reliable. Instead, I get some interesting results with a pattern:
+
+EDIT: It seems like this behavior is independent of the seed choice and the seeds are not working at all?
+
+When freshly start `ollama serve` and send the exact same prompt together with a seed to ""/api/generate"" (stream: false) I always get three times the same reply. The fourth and all following replies are then different!
+
+When I switch the model and make the same prompt to that, it also gives three of the same and then varying results!
+
+As a workaround, I actually switch to another very small model and create a minimal embedding (is faster than doing an inference prompt) before doing the actual prompt and this gives me reliable results. Even if that actually works and is quite fast in my case, I think there is a problem that needs to be fixed.
+
+I am on the current main [2a2fa3c](https://github.com/jmorganca/ollama/commit/2a2fa3c3298194f4f3790aade78df2f53d170d8e)"
+open,2023,12,30,,,"This pull request adds the ability to include a custom header to every request made by the Go API Client. The custom header is set using a new `Header` field in the `Client` struct.
+
+This allows for more flexibility and customization when making requests to the API. My use case is setting an `Authorization` header to authenticate at my API proxy."
+closed,2023,12,30,,,No issue description body.
+open,2023,12,30,,,"Motivation - From the issue, https://github.com/jmorganca/ollama/issues/1594 where a user got confused due to the warning message and has asked questions like ""_can i force it to just run on my cpu?_"" which calls for clarity in the warning message and better instructions for non-NVIDIA GPU users.
+
+This PR improves the warning message shown to non-NVIDIA GPU users when running `ollama serve`. Additionally, added 
+ guidance in the `readme.md`
+
+## Changes
+- Modified the `errNvidiaSMI` error message to provide the information that ollama will use CPU.
+- Added a line in `readme.md` to inform the users to disregard the message.
+
+resolves #1594 "
+open,2023,12,30,,,"I'm not sure how fixable this is, but I thought I'd still create an issue!
+
+<img width=""509"" alt=""Screenshot 2023-12-30 at 12 28 43 PM"" src=""https://github.com/jmorganca/ollama/assets/251292/ac1e779f-7fc4-4471-ae38-035681bf78a2"">
+
+
+Source: https://x.com/LucasChatGPT/status/1741091234507276632?s=20
+"
+open,2023,12,30,,,"Hello @jmorganca.
+
+First of all, thank you for your amazing work! 🤩 I have been using Ollama for a while now and I'm really enjoying it.
+
+I was wondering if we could introduce a API documentation website (right from GitHub using GH Pages). Along with this we could also have a GitHub action workflow setup to auto-build and deploy the API documentation when a release is created.
+
+I think it would be greatly helpful for someone to get started with basics (including setup, how and why Ollama is used, etc) and then progressively navigate through the documentation to explore more and try more advanced stuff via a more user-friendly UI.
+
+I was thinking if I could setup a skeleton structure for the documentation using [docusaurus](https://docusaurus.io/). That way, we can have well structured comprehensive API documentation such as [this](https://amithkoujalgi.github.io/ollama4j/docs/intro).
+
+Let me know what you think. Thanks!"
+open,2023,12,30,,,"Please add the following models: 
+
+- https://huggingface.co/ai-forever/ruGPT-3.5-13B
+- https://huggingface.co/ai-forever/mGPT-13B"
+closed,2023,12,30,,,"I have a 12GB RTX 3060 that can easily run 7B models, but fails on the larger ones. Does ollama have a low-vram mode? Any way to move model layers from VRAM to system RAM? I would really like to try out larger LLM's without having to rent a cloud compute server or buy a new GPU, even if it is much slower due to inference optimizations.
+
+I am not very knowledgeable on the subject, but maybe using DeepSpeed for boosting inference performance is a possibility?
+"
+open,2023,12,29,,,"An error occurs when using WebUI and wizardlm-uncensored:latest
+
+https://pastebin.com/cdvxsEQ7
+
+![image](https://github.com/jmorganca/ollama/assets/15097064/a67a51e3-9a0f-4dc9-9db1-8fcfa81a9fdb)
+
+
+mangaro linux
+RTX 4090"
+closed,2023,12,29,,,"I keep seeing posts about powerinfer https://github.com/SJTU-IPADS/PowerInfer which (if I understand it) keeps often used terms in gpu memory and seldom used terms in cpu memory. This results in an 11x speed up. 
+
+It looks like models need to be updated to use this, so it's a pain. BUT.... 11x speed up.  
+
+I wonder if the model could be updated automatically so after download it revises it, and stores it. 
+
+Anyways, just for interest sake. **11X speed up!!!**
+
+"
+open,2023,12,29,,,"# :grey_question: About
+
+I've started to prepare a collection of [ready-to-use `ollama` models](https://github.com/adriens/ollama-models) and I am starting to think about the maintenance phase, ie:
+
+:point_right: How to stay up-to-date with the models I rely on :point_left: 
+
+For now, there are two manual ways to be aware of new releases:
+
+- Follow news on [twitter](https://twitter.com/jmorgan/status/1740703457953321144)
+- Get kind comments on a [given issue](https://github.com/adriens/ollama-models/issues/1)
+- Frequently refresh the [`ollama` library](https://ollama.ai/library) and search new tags
+
+# :bulb: Idea
+
+The main idea would to be able to configure a GH Ation, like a Dependabot that would be able to make PRs on the model files of a repo and push new versions on the `FROM` part of any ollama model file.
+
+At the end, we would get that kind of PR:
+- https://github.com/adriens/ollama-models/pull/2
+
+# :moneybag: Benefits
+
+- Stay up-to-date w/ model files at scale but effortless
+- Take the most out of `ollama` library
+- Automation rules :sloth: 
+
+# :bookmark: Related stuff
+
+Below some related stuff that are connected to this topic:
+
+- https://github.com/jmorganca/ollama/issues/1473
+- https://github.com/adriens/ollama-models/issues/1#issuecomment-1872328521"
+open,2023,12,29,,,"Could you tell me more about the scope of Ollama,  you guys build it around the llama.cpp stack and added an API and other tools on top of that.
+
+GGUF is pretty stable  but there are some other formats on the horizon. 
+I would like to add EXL2 formatting to my app but since this is a companion app for ollama I was actually questioning where to add this functionality. It would be pretty easy to just add support for it on my end with some local code. 
+
+But to be honest, I wouldn't mind building this within Ollama. P
+
+So my question is would you be interested if I added transformers/c-transformers to Ollama. 
+
+I'm very interested in your answer and what your long term goals would be for Ollama.
+
+Happy holidays! "
+open,2023,12,29,,,"I was under the impression that ollama stores the models locally however, when I run ollama on a different address with 
+`OLLAMA_HOST=0.0.0.0 ollama serve`, ollama list says I do not have any models installed and I need to pull again.
+
+This issue occurs every time I change the IP/port
+
+I have also performed the steps given in the docs
+
+```
+mkdir -p /etc/systemd/system/ollama.service.d
+echo '[Service]' >>/etc/systemd/system/ollama.service.d/environment.conf
+echo 'Environment=""OLLAMA_HOST=0.0.0.0:11434""' >>/etc/systemd/system/ollama.service.d/environment.conf
+```
+
+running `ollama serve` in itself still listens only on localhost:11434, where I have models and manually changing it with `OLLAMA_HOST=0.0.0.0 ollama serve`, makes the models disappear"
+open,2023,12,29,,,"For every model I've downloaded, the speed saturates my bandwidth (~13MB/sec) until it hits 98/99%. Then the download slows to a few tens of KB/s and takes hour(s) to finish.
+
+<img width=""884"" alt=""image"" src=""https://github.com/jmorganca/ollama/assets/286180/e47037e1-aea8-4a13-a6fc-7841baa0db6c"">
+
+I've tried multiple models and this behavior happens each time. Happy to debug, but I'm not sure what to try.
+
+I'm in Australia, in case that matters."
+closed,2023,12,28,,,"I think this might be a problem recently introduced in v0.1.17 but I'm not 100% sure.
+
+`ollama serve` doesn't listen on `0.0.0.0` and therefore doesn't make itself available on all interfaces. This causes problems when trying to connect to it via an interface other than `localhost`.
+
+A (hopefully temporary) workaround is using a utility like `socat`, e.g. to listen on all interfaces on port `8888` and relay traffic to port `11434`:
+
+```
+$ socat TCP-LISTEN:8888,reuseaddr,fork TCP:localhost:11434
+```"
+closed,2023,12,28,,,"Trying to run Llava model using WSL2 on Windows10.  Ollama version is 0.1.16
+
+Got this error message. 
+
+![llava](https://github.com/jmorganca/ollama/assets/27547776/9ff50318-7c45-4ff8-9f2a-34184af29d56)
+
+How do I fix this?  
+
+Thanks"
+closed,2023,12,28,,,"Is it feasible for precompile multiple binaries for AVX1, AVX2, AVX512 and Openblas just like https://github.com/ggerganov/llama.cpp/releases
+The install.sh can detect the platform not only CPU architecture but also the grep cpuinfo to download most suitable binaries. 
+I hope it is an elegant solution for https://github.com/jmorganca/ollama/issues/644"
+open,2023,12,28,,,"- Added a feature to be able to fetch the model library from ollama.ai/library
+- This makes it easier to determine which models are available to pull without leaving the command line world
+- using goquery to make the HTML parsing a bit more manageable, added error handling to improve the error reporting in case the html changes
+- I realize that parsing the html is a bit hacky, this can be improved in the future by hosting a models.json and then using this to feed the html list (as well as being easier to fetch and parse from the cli) - but this method should be durable provided that the current library page structure remains intact
+"
+open,2023,12,28,,,"To reproduce, pull with little disk space lefT:
+
+```
+$ ollama run deepseek-coder:33b
+pulling manifest 
+Error: write /usr/share/ollama/.ollama/models/blobs/sha256:065b9a7416ba28634cd4efc2cd3024d4755731c1275dc0286b81b01793185fbb-partial-0: no space left on device
+```
+
+Even with more space, future `ollama pull` commands fail until Ollama restarted:
+
+```
+$ ollama run deepseek-coder:33b
+pulling manifest 
+Error: EOF
+```"
+open,2023,12,27,,,Can ollama be converted to use MLX from Apple as backend for the models ?
+open,2023,12,27,,,"Hi, I'm looking for a way to add function call to work with Ollama and LlamaIndex.
+
+From my research we have format json in Ollama, so theoretically, there are 2 ways we can support function call:
+1.  Enforce the LLM to output json following a schema, and we can call the function based on the json output.
+  * Not sure how reliable it is for this approach, has anyone been able to have a consistent output from the LLM for the exact prompt?
+  * Client side also need to implement a retry mechanism so we will feed the previous output and errors back to LLM and ask it to regenerate
+  * What are schemas and data structure that we should use? Currently, most people seem to go with OpenAI function call schema, but it does not support validation and we probably need to have a pydantic model and keep it up-to-date for LLM response's validation.
+  * Some examples: https://github.com/lgrammel/modelfusion/blob/main/examples/basic/src/model-provider/ollama/ollama-chat-use-tools-or-generator-text-mistral-example.ts 
+
+2. We can also add API in Ollama itself to support function call directly, similar to OpenAI.
+  * I'm not sure how this will work, especially OpenAI is not open source. Do you think it's possible to implement the function call feature directly in Ollama?
+    * I'm not sure will we need to have a specific model that support function call, and we can feed `{ role: ""tool"", content: ""tool output"" }` into the LLM
+    * Or it's simply the feature we can add at the API level.
+
+Please let me know what do you guys think and what should be the right approach for this issue going forward."
+closed,2023,12,27,,,"It seems like sometimes Ollama streams multiple json objects one after the other in the same streamed response, which cannot be deserialized.
+
+Here's an example of one single streamed json response using the /generate endpoint
+
+```json
+{""model"":""dolphin-mixtral:latest"",""created_at"":""2023-12-25T01:12:45.58944567Z"",""response"":"" you"",""done"":false}\n
+{""model"":""dolphin-mixtral:latest"",""created_at"":""2023-12-25T01:12:45.607384298Z"",""response"":"" today"",""done"":false}\n
+{""model"":""dolphin-mixtral:latest"",""created_at"":""2023-12-25T01:12:45.625372937Z"",""response"":""?"",""done"":false}\n
+{""model"":""dolphin-mixtral:latest"",""created_at"":""2023-12-25T01:12:45.643531751Z"",""response"":"""",""done"":true,""context"":[32001,6574,13,24205,574,8570,6817,28723,32000,13,32001,1838,13,21558,28801,13,32000,13,32001,489,11143,13,22557,28808,1602,541,315,6031,368,3154,28804],""total_duration"":376468647,""load_duration"":758387,""prompt_eval_count"":23,""prompt_eval_duration"":226302000,""eval_count"":9,""eval_duration"":147877000}
+```"
+open,2023,12,27,,,"I'm running Ollama on a ubuntu 22 linux laptop with 32 G of RAM and a NVIDIA gtx 1650.  Ollama loads the models exclusively in the graphic card RAM, and doesn't use any of the system RAM at all. Very frustrating, as it exists with ""Error: llama runner exited, you may not have enough available memory to run this model"" as soon as I try to chat...
+"
+open,2023,12,27,,,"The repo is available [here](https://github.com/Pythagora-io/gpt-pilot/): which supports Ollama according to this wiki:
+
+[GPT Pilot](https://github.com/Pythagora-io/gpt-pilot/wiki/Using-GPT%E2%80%90Pilot-with-Local-LLMs).
+
+This will allow Ollama models to do full stack development for us."
+closed,2023,12,27,,,"Hi
+
+I know this is not an ollama caused issue, but I can't find a proper answer on the Internet, and `ollama pull` is the only command that is giving me this. Does anyone know why I am hitting this minor annoyance?
+
+
+![image](https://github.com/jmorganca/ollama/assets/8519469/fc2080b0-7457-4091-afa1-ed11d50ab090)
+"
+open,2023,12,27,,,"the ollama sever is running. When I try to use the api I get an error.
+<img width=""692"" alt=""image"" src=""https://github.com/jmorganca/ollama/assets/56569171/51251b5b-e206-4b6f-8cbb-41c9fbdb4dde"">
+<img width=""790"" alt=""image"" src=""https://github.com/jmorganca/ollama/assets/56569171/ce2d9aea-2a82-419c-a37d-8fec5ca53f25"">
+"
+closed,2023,12,27,,,"Hi
+
+Is it possible that OIlama is against symlinked that are coming from network drives? Is there a OS locked IO that would prevent such a thing? I am using WSL2 on Win 10, I am symlinking the `~/.ollama` folder to a network drive location since my VM drive is limited for all the models.
+
+Ollama serve works but querying does not load any answers."
+open,2023,12,26,,,"So here is what I am trying to do - 
+
+1)Create a custom Ollama model by giving it data exported from Snowflake database tables. Data in Snowflake tables is already in a Golden Format. Have additional follow up questions on my requirement - 
+
+A)Instead of creating the model using -f (file with data exported from Snowflake database), can I create a model GPT using results of Snowflake query execution? 
+B)How to update this model in a timely manner? So that my results are consistent with the new data generated? 
+
+TIA. "
+open,2023,12,26,,,"Since it can read '/home/user/whateverfile.it.is', would it be possible for ollama to be able to read an entire directory or 'repo' for that matter so we can talk to it?
+
+If it is not yet a feature, maybe its neat to add this for developers to help us quickly solve our coding challenges.
+
+Thanks."
+open,2023,12,26,,,"When i get JSON as a response it seem to be formatted with newlines and spaces. If i want to include the response message in follow-up request it will take up extra token space. Maybe better to have the client format the JSON as needed?
+
+EDIT: I'm not really sure if i need to include the previous messages or if i should just set the `context` ?"
+open,2023,12,26,,,can ollama support qwen72b ?
+closed,2023,12,26,,,I tried both /api/chat and /api/generate endpoints which seem to produce the same results. however I'm getting invalid json on every response.
+open,2023,12,26,,,"When an update is available to an already installed model, something like `ollama pull` (without an argument) or `ollama update` would be great!"
+closed,2023,12,26,,,"I don't know if this limitation exists with the api. I'm swtiching from openai to ollama api, and with openai I need to calculate token size and subtract it from the total 4096.
+
+Do we need to do that for ollama api? If so, how do I caclulate token size of prompt?"
+open,2023,12,26,,,"This is an issue very similar to #845. I was able to get this working on my machine by following the fix described here. However, this fix doesn't get you the latest version of ollama. Are there any plans to implement this fix throughout all versions?"

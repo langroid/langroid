@@ -167,6 +167,62 @@ def flatten_pydantic_instance(
     return flat_data
 
 
+def extract_fields(doc: BaseModel, fields: List[str]) -> Dict[str, Any]:
+    """
+    Extract specified fields from a Pydantic object.
+    Supports dotted field names, e.g. "metadata.author".
+    Dotted fields are matched exactly according to the corresponding path.
+    Non-dotted fields are matched against the last part of the path.
+    Clashes ignored.
+    Args:
+        doc (BaseModel): The Pydantic object.
+        fields (List[str]): The list of fields to extract.
+
+    Returns:
+        Dict[str, Any]: A dictionary of field names and values.
+
+    """
+
+    def get_value(obj: BaseModel, path: str) -> Any | None:
+        for part in path.split("."):
+            if hasattr(obj, part):
+                obj = getattr(obj, part)
+            else:
+                return None
+        return obj
+
+    def traverse(obj: BaseModel, result: Dict[str, Any], prefix: str = "") -> None:
+        for k, v in obj.__dict__.items():
+            key = f"{prefix}.{k}" if prefix else k
+            if isinstance(v, BaseModel):
+                traverse(v, result, key)
+            else:
+                result[key] = v
+
+    result: Dict[str, Any] = {}
+
+    # Extract values for dotted field names and use last part as key
+    for field in fields:
+        if "." in field:
+            value = get_value(doc, field)
+            if value is not None:
+                key = field.split(".")[-1]
+                result[key] = value
+
+    # Traverse the object to get non-dotted fields
+    all_fields: Dict[str, Any] = {}
+    traverse(doc, all_fields)
+
+    # Add non-dotted fields to the result,
+    # avoid overwriting if already present from dotted names
+    for field in [f for f in fields if "." not in f]:
+        for key, value in all_fields.items():
+            if key.split(".")[-1] == field and field not in result:
+                result[field] = value
+
+    return result
+
+
 def nested_dict_from_flat(
     flat_data: Dict[str, Any],
     sub_dict: str = "",
@@ -309,6 +365,14 @@ def dataframe_to_pydantic_objects(df: pd.DataFrame) -> List[BaseModel]:
     return [Model(**row.to_dict()) for index, row in df.iterrows()]
 
 
+def first_non_null(series: pd.Series) -> Any | None:
+    """Find the first non-null item in a pandas Series."""
+    for item in series:
+        if item is not None:
+            return item
+    return None
+
+
 def dataframe_to_document_model(
     df: pd.DataFrame,
     content: str = "content",
@@ -339,8 +403,8 @@ def dataframe_to_document_model(
         # Define fields for the dynamic subclass of DocMetaData
         metadata_fields = {
             col: (
-                numpy_to_python_type(type(df[col].iloc[0])),
-                Optional[numpy_to_python_type(type(df[col].iloc[0]))],
+                Optional[numpy_to_python_type(type(first_non_null(df[col])))],
+                None,  # Optional[numpy_to_python_type(type(first_non_null(df[col])))],
             )
             for col in metadata
         }
@@ -353,7 +417,10 @@ def dataframe_to_document_model(
 
     # Define additional top-level fields for DynamicDocument
     additional_fields = {
-        col: (numpy_to_python_type(type(df[col].iloc[0])), ...)
+        col: (
+            Optional[numpy_to_python_type(type(first_non_null(df[col])))],
+            None,  # Optional[numpy_to_python_type(type(first_non_null(df[col])))],
+        )
         for col in df.columns
         if col not in metadata and col != content
     }
@@ -410,6 +477,7 @@ def dataframe_to_documents(
     """
     Model = doc_cls or dataframe_to_document_model(df, content, metadata)
     docs = [
-        Model.from_df_row(row, content, metadata) for _, row in df.iterrows()  # type: ignore
+        Model.from_df_row(row, content, metadata)  # type: ignore
+        for _, row in df.iterrows()
     ]
     return [m for m in docs if m is not None]

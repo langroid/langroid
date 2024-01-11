@@ -74,7 +74,6 @@ class ExtractorAgent(ChatAgent):
 class ExtractorConfig(ChatAgentConfig):
     name = "Extractor"
     debug: bool = False
-    max_context_tokens = 500
     conversation_mode = True
     cache: bool = True  # cache results
     gpt4: bool = False  # use GPT-4?
@@ -117,8 +116,6 @@ def chat(config: ExtractorConfig) -> None:
         Don't add any methods not mentioned in the solution description.
         Call the methods_list function or Tool to accomplish this.
         """,
-        llm_delegate=False,
-        single_round=False,
     )
     task.run(kaggle_description)
 

@@ -19,6 +19,7 @@ from typing import (
     no_type_check,
 )
 
+import openai
 from httpx import Timeout
 from openai import AsyncOpenAI, OpenAI
 from pydantic import BaseModel
@@ -54,7 +55,6 @@ class OpenAIChatModel(str, Enum):
     """Enum for OpenAI Chat models"""
 
     GPT3_5_TURBO = "gpt-3.5-turbo-1106"
-    GPT4_NOFUNC = "gpt-4"  # before function_call API
     GPT4 = "gpt-4"
     GPT4_TURBO = "gpt-4-1106-preview"
 
@@ -70,7 +70,6 @@ _context_length: Dict[str, int] = {
     # can add other non-openAI models here
     OpenAIChatModel.GPT3_5_TURBO: 4096,
     OpenAIChatModel.GPT4: 8192,
-    OpenAIChatModel.GPT4_NOFUNC: 8192,
     OpenAIChatModel.GPT4_TURBO: 128_000,
     OpenAICompletionModel.TEXT_DA_VINCI_003: 4096,
 }
@@ -81,7 +80,6 @@ _cost_per_1k_tokens: Dict[str, Tuple[float, float]] = {
     OpenAIChatModel.GPT3_5_TURBO: (0.0015, 0.002),
     OpenAIChatModel.GPT4: (0.03, 0.06),  # 8K context
     OpenAIChatModel.GPT4_TURBO: (0.01, 0.03),  # 128K context
-    OpenAIChatModel.GPT4_NOFUNC: (0.03, 0.06),
 }
 
 
@@ -98,7 +96,19 @@ openAICompletionModelPreferenceList = [
 
 
 if "OPENAI_API_KEY" in os.environ:
-    availableModels = set(map(lambda m: m.id, OpenAI().models.list()))
+    try:
+        availableModels = set(map(lambda m: m.id, OpenAI().models.list()))
+    except openai.AuthenticationError as e:
+        if settings.debug:
+            logging.warning(
+                f"""
+            OpenAI Authentication Error: {e}.
+            ---
+            If you intended to use an OpenAI Model, you should fix this,
+            otherwise you can ignore this warning.
+            """
+            )
+        availableModels = set()
 else:
     availableModels = set()
 
@@ -172,7 +182,7 @@ class OpenAIGPTConfig(LLMConfig):
         local_model = "api_base" in kwargs and kwargs["api_base"] is not None
 
         chat_model = kwargs.get("chat_model", "")
-        if chat_model.startswith("litellm") or chat_model.startswith("local"):
+        if chat_model.startswith("litellm/") or chat_model.startswith("local/"):
             local_model = True
 
         warn_gpt_3_5 = (
@@ -273,8 +283,6 @@ class OpenAIGPT(LanguageModel):
         """
         super().__init__(config)
         self.config: OpenAIGPTConfig = config
-        if settings.nofunc:
-            self.config.chat_model = OpenAIChatModel.GPT4_NOFUNC
 
         # Run the first time the model is used
         self.run_on_first_use = cache(self.config.run_on_first_use)
@@ -311,7 +319,8 @@ class OpenAIGPT(LanguageModel):
         # an explicit `export OPENAI_API_KEY=xxx` or `setenv OPENAI_API_KEY xxx`
         # Pydantic's BaseSettings will automatically pick it up from the
         # .env file
-        self.api_key = config.api_key or "xxx"
+        # The config.api_key is ignored when not using an OpenAI model
+        self.api_key = config.api_key if self.is_openai_chat_model() else "xxx"
         self.client = OpenAI(
             api_key=self.api_key,
             base_url=self.api_base,
@@ -341,8 +350,10 @@ class OpenAIGPT(LanguageModel):
                 config.cache_config = RedisCacheConfig(
                     fake="fake" in settings.cache_type
                 )
+            if "fake" in settings.cache_type:
+                # force use of fake redis if global cache_type is "fakeredis"
+                config.cache_config.fake = True
             self.cache = RedisCache(config.cache_config)
-            config.cache_config.fake = "fake" in settings.cache_type
         else:
             raise ValueError(
                 f"Invalid cache type {settings.cache_type}. "
@@ -354,10 +365,6 @@ class OpenAIGPT(LanguageModel):
     def is_openai_chat_model(self) -> bool:
         openai_chat_models = [e.value for e in OpenAIChatModel]
         return self.config.chat_model in openai_chat_models
-
-    def _is_openai_completion_model(self) -> bool:
-        openai_completion_models = [e.value for e in OpenAICompletionModel]
-        return self.config.completion_model in openai_completion_models
 
     def chat_context_length(self) -> int:
         """

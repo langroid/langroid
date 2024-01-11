@@ -35,9 +35,7 @@ from langroid.agent.special.sql.utils.tools import (
     GetTableSchemaTool,
     RunQueryTool,
 )
-from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
 from langroid.mytypes import Entity
-from langroid.prompts.prompts_config import PromptsConfig
 from langroid.vector_store.base import VectorStoreConfig
 
 logger = logging.getLogger(__name__)
@@ -67,7 +65,6 @@ SQL_ERROR_MSG = "There was an error in your SQL Query"
 class SQLChatAgentConfig(ChatAgentConfig):
     system_message: str = DEFAULT_SQL_CHAT_SYSTEM_MESSAGE
     user_message: None | str = None
-    max_context_tokens: int = 1000
     cache: bool = True  # cache results
     debug: bool = False
     stream: bool = True  # allow streaming where needed
@@ -108,15 +105,6 @@ class SQLChatAgentConfig(ChatAgentConfig):
         }
     }
     """
-
-    llm: OpenAIGPTConfig = OpenAIGPTConfig(
-        type="openai",
-        chat_model=OpenAIChatModel.GPT4,
-        completion_model=OpenAIChatModel.GPT4,
-    )
-    prompts: PromptsConfig = PromptsConfig(
-        max_tokens=1000,
-    )
 
 
 class SQLChatAgent(ChatAgent):
@@ -228,8 +216,10 @@ class SQLChatAgent(ChatAgent):
         if isinstance(msg, ChatDocument) and msg.function_call is not None:
             sender_name = msg.function_call.name
 
+        content = results.content if isinstance(results, ChatDocument) else results
+
         return ChatDocument(
-            content=results,
+            content=content,
             metadata=ChatDocMetaData(
                 source=Entity.AGENT,
                 sender=Entity.AGENT,

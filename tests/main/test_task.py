@@ -6,12 +6,13 @@ from typing import List
 import pytest
 
 import langroid as lr
+from langroid.agent import ChatDocument
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
 from langroid.agent.tool_message import ToolMessage
 from langroid.mytypes import Entity
 from langroid.utils.configuration import Settings, set_global
-from langroid.utils.constants import DONE, PASS, TOOL
+from langroid.utils.constants import DONE, PASS
 
 
 def test_task_empty_response(test_settings: Settings):
@@ -127,7 +128,6 @@ def test_task_default_human_response(
     task = Task(
         agent,
         interactive=False,
-        single_round=False,
         done_if_response=[Entity.LLM],
         done_if_no_response=[Entity.LLM],
         default_human_response=default_human_response,
@@ -141,9 +141,9 @@ def test_task_default_human_response(
 @pytest.mark.parametrize("use_fn_api", [True, False])
 @pytest.mark.parametrize(
     "agent_response",
-    [DONE, f"{DONE} {PASS}"],
+    [f"{DONE} {PASS}", DONE],
 )
-def test_task_tool_pass(
+def test_task_tool_agent_response(
     test_settings: Settings,
     use_fn_api: bool,
     agent_response: str,
@@ -152,7 +152,7 @@ def test_task_tool_pass(
     Test loop within single agent, where this cycle repeats:
         [ LLM --Tool--> Agent[Tool] ---> (User) ]*
 
-    The Agent responds to the tool with a PASS or PASS DONE.
+    Test expected behavior for various Agent-tool-handler responses.
     """
     set_global(test_settings)
 
@@ -167,34 +167,59 @@ def test_task_tool_pass(
         def handle(self) -> str:
             return agent_response
 
+        @classmethod
+        def examples(cls) -> List["ToolMessage"]:
+            return [
+                cls(
+                    number=100,
+                    successor=101,
+                ),
+            ]
+
+        @staticmethod
+        def handle_message_fallback(
+            agent, msg: str | ChatDocument
+        ) -> str | ChatDocument | None:
+            if isinstance(msg, ChatDocument) and msg.metadata.sender == Entity.LLM:
+                return """
+                    You must use the `next_num` tool/function to 
+                    augment the given number.
+                    """
+            return None
+
     agent = ChatAgent(
         ChatAgentConfig(
             name="Test",
             use_functions_api=use_fn_api,
+            use_tools=not use_fn_api,
             system_message="""
-            User will send a number. Augment it with its successor,
-            and present the numbers using the `next_num` tool/function.
+            User will send a number. Present this number and its successor,
+            using the `next_num` tool/function.
             """,
         )
     )
     agent.enable_message(AugmentTool)
-    task = Task(
-        agent,
-        default_human_response=PASS,
-        interactive=False,
-    )
+    task = Task(agent, interactive=False)
 
     response = task.run("100")
-    if use_fn_api:
-        if agent_response == DONE:
-            assert response.content == ""
-        else:
-            assert response.function_call.name == "next_num"
-    else:
-        if agent_response == DONE:
-            assert response.content == ""
-        else:
-            assert TOOL in response.content and "next_num" in response.content
+
+    def content_empty():
+        return response.content == ""
+
+    def fn_call_valid():
+        return response.function_call.name == "next_num"
+
+    def tool_valid():
+        return "next_num" in response.content
+
+    def fn_or_tool_valid():
+        return fn_call_valid() if use_fn_api else tool_valid()
+
+    match agent_response:
+        case x if x == DONE:
+            assert content_empty()
+        case x if x == f"{DONE} {PASS}":
+            assert fn_or_tool_valid()
 
 
 @pytest.mark.parametrize("use_fn_api", [True, False])
@@ -230,6 +255,7 @@ def test_task_tool_num(
         ChatAgentConfig(
             name="Test",
             use_functions_api=use_fn_api,
+            use_tools=not use_fn_api,
             system_message=f"""
             User will send a number. Augment it with its successor,
             and present the numbers using the `number` tool/function.
@@ -284,6 +310,7 @@ def test_task_2_agent_tool(
         ChatAgentConfig(
             name="Requestor",
             use_functions_api=use_fn_api,
+            use_tools=not use_fn_api,
             system_message=f"""
                 User will send a number. Your job is to find out what is
                 the "Polinsky transform", which you KNOW is POSITIVE 
@@ -318,6 +345,7 @@ def test_task_2_agent_tool(
         ChatAgentConfig(
             name="Polinsky",
             use_functions_api=use_fn_api,
+            use_tools=not use_fn_api,
             system_message="""
                 When you receive a number, respond with the DOUBLE of that number,
                 say nothing else.
@@ -394,6 +422,7 @@ def test_task_2_agent_2_tool(
         ChatAgentConfig(
             name="Requestor",
             use_functions_api=use_fn_api,
+            use_tools=not use_fn_api,
             system_message=f"""
                     Your mission is to find the "Polinsky transform" of TWO NUMBERS:
                     100 and 500.
@@ -441,6 +470,7 @@ def test_task_2_agent_2_tool(
         ChatAgentConfig(
             name="Critic",
             use_functions_api=use_fn_api,
+            use_tools=not use_fn_api,
             system_message="""
                     When you receive a query asking whether the Polinsky
                     transform of a number x is y, and you must give FEEDBACK
@@ -455,9 +485,6 @@ def test_task_2_agent_2_tool(
     critic_task = Task(
         critic_agent,
         interactive=False,
-        # below ensure that task returns to requestor_task when LLM responds
-        done_if_no_response=[Entity.LLM],
-        done_if_response=[Entity.LLM],
     )
 
     # connect the two agents

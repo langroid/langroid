@@ -253,6 +253,10 @@ class Agent(ABC):
         ]
         return "\n\n".join(sample_convo)
 
+    def agent_response_template(self) -> ChatDocument:
+        """Template for agent_response."""
+        return self._response_template(Entity.AGENT)
+
     async def agent_response_async(
         self,
         msg: Optional[str | ChatDocument] = None,
@@ -306,6 +310,20 @@ class Agent(ABC):
                 tool_ids=[] if isinstance(msg, str) else msg.metadata.tool_ids,
             ),
         )
+
+    def _response_template(self, e: Entity) -> ChatDocument:
+        """Template for response from entity `e`."""
+        return ChatDocument(
+            content="",
+            tool_messages=[],
+            metadata=ChatDocMetaData(
+                source=e, sender=e, sender_name=self.config.name, tool_ids=[]
+            ),
+        )
+
+    def user_response_template(self) -> ChatDocument:
+        """Template for user_response."""
+        return self._response_template(Entity.USER)
 
     async def user_response_async(
         self,
@@ -377,19 +395,16 @@ class Agent(ABC):
         if self.llm is None:
             return False
 
-        if isinstance(message, ChatDocument) and message.function_call is not None:
-            # LLM should not handle `function_call` messages,
-            # EVEN if message.function_call is not a legit function_call
-            # The OpenAI API raises error if there is a message in history
-            # from a non-Assistant role, with a `function_call` in it
-            return False
-
         if message is not None and len(self.get_tool_messages(message)) > 0:
             # if there is a valid "tool" message (either JSON or via `function_call`)
             # then LLM cannot respond to it
             return False
 
         return True
+
+    def llm_response_template(self) -> ChatDocument:
+        """Template for llm_response."""
+        return self._response_template(Entity.LLM)
 
     @no_type_check
     async def llm_response_async(
@@ -523,14 +538,22 @@ class Agent(ABC):
     def get_tool_messages(self, msg: str | ChatDocument) -> List[ToolMessage]:
         if isinstance(msg, str):
             return self.get_json_tool_messages(msg)
+        if len(msg.tool_messages) > 0:
+            # We've already found tool_messages
+            # (either via OpenAI Fn-call or Langroid-native ToolMessage)
+            return msg.tool_messages
         assert isinstance(msg, ChatDocument)
         # when `content` is non-empty, we assume there will be no `function_call`
         if msg.content != "":
-            return self.get_json_tool_messages(msg.content)
+            tools = self.get_json_tool_messages(msg.content)
+            msg.tool_messages = tools
+            return tools
 
         # otherwise, we look for a `function_call`
         fun_call_cls = self.get_function_call_class(msg)
-        return [fun_call_cls] if fun_call_cls is not None else []
+        tools = [fun_call_cls] if fun_call_cls is not None else []
+        msg.tool_messages = tools
+        return tools
 
     def get_json_tool_messages(self, input_str: str) -> List[ToolMessage]:
         """
@@ -564,7 +587,7 @@ class Agent(ABC):
                 or you need to enable this agent to handle this fn-call.
                 """
             )
-            raise ValueError(f"{tool_name} is not a valid function_call!")
+            return None
         tool_class = self.llm_tools_map[tool_name]
         tool_msg.update(dict(request=tool_name))
         tool = tool_class.parse_obj(tool_msg)
@@ -627,7 +650,7 @@ class Agent(ABC):
 
         results_list = [r for r in results if r is not None]
         if len(results_list) == 0:
-            return self.handle_message_fallback(msg)
+            return None  # self.handle_message_fallback(msg)
         # there was a non-None result
         chat_doc_results = [r for r in results_list if isinstance(r, ChatDocument)]
         if len(chat_doc_results) > 1:
@@ -648,7 +671,7 @@ class Agent(ABC):
         self, msg: str | ChatDocument
     ) -> str | ChatDocument | None:
         """
-        Fallback method to handle possible "tool" msg if not other method applies
+        Fallback method to handle possible "tool" msg if no other method applies
         or if an error is thrown.
         This method can be overridden by subclasses.
 
@@ -663,7 +686,11 @@ class Agent(ABC):
     def _get_one_tool_message(self, json_str: str) -> Optional[ToolMessage]:
         json_data = json.loads(json_str)
         request = json_data.get("request")
-        if request is None or request not in self.llm_tools_handled:
+        if (
+            request is None
+            or not (isinstance(request, str))
+            or request not in self.llm_tools_handled
+        ):
             return None
 
         message_class = self.llm_tools_map.get(request)

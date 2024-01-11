@@ -43,7 +43,8 @@ def test_inter_agent_chat(test_settings: Settings, helper_human_response: str):
     agent_helper = ChatAgent(cfg2)
     task_helper = Task(
         agent_helper,
-        single_round=True,
+        done_if_no_response=[Entity.LLM],
+        done_if_response=[Entity.LLM],
         default_human_response=helper_human_response,
     )
     task.add_sub_task(task_helper)
@@ -205,7 +206,8 @@ def test_multi_agent_directed(test_settings: Settings):
         agent_b,
         system_message=f"your job is to always say '{B_RESPONSE}'",
         default_human_response="",
-        single_round=True,
+        done_if_no_response=[Entity.LLM],
+        done_if_response=[Entity.LLM],
     )
 
     task_c = Task(

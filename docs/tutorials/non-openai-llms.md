@@ -65,7 +65,7 @@ my_llm_config = MyLLMConfig(
 ## Other local LLM servers
 There are other ways to spin up a local server running an LLM behind an OpenAI-compatible API,
 
-- [`oobabooga/text-generation-webui`](https://github.com/oobabooga/text-generation-webui/tree/main/extensions), `ollama`, and `llama-cpp-python`.
+- [`oobabooga/text-generation-webui`](https://github.com/oobabooga/text-generation-webui/tree/main/extensions)
 - [`ollama`](https://github.com/jmorganca/ollama)
 - [`llama-cpp-python`](https://github.com/abetlen/llama-cpp-python)
 

@@ -6,7 +6,7 @@ from langroid.parsing.document_parser import DocumentParser
 from langroid.parsing.parser import DocxParsingConfig, ParsingConfig
 
 
-@pytest.mark.parametrize("docxlib", ["unstructured"])
+@pytest.mark.parametrize("docxlib", ["unstructured", "python-docx"])
 def test_get_docx_file(docxlib: str):
     current_dir = os.path.dirname(os.path.abspath(__file__))
     path = os.path.join(current_dir, "docx-test-file.docx")
@@ -17,7 +17,7 @@ def test_get_docx_file(docxlib: str):
 
     # Check the results
     assert isinstance(doc.content, str)
-    assert len(doc.content) > 0  # assuming the PDF is not empty
+    assert len(doc.content) > 0  # assuming the docx is not empty
     assert doc.metadata.source == path
 
     # parser = Parser(ParsingConfig())

@@ -11,16 +11,18 @@ from rich.console import Console
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.chat_document import ChatDocument
 from langroid.agent.tools.segment_extract_tool import SegmentExtractTool
+from langroid.language_models.base import LLMConfig
 from langroid.language_models.openai_gpt import OpenAIGPTConfig
+from langroid.mytypes import Entity
 from langroid.parsing.utils import extract_numbered_segments, number_segments
-from langroid.utils.constants import NO_ANSWER
+from langroid.utils.constants import DONE, NO_ANSWER
 
 console = Console()
 logger = logging.getLogger(__name__)
 
 
 class RelevanceExtractorAgentConfig(ChatAgentConfig):
-    llm: OpenAIGPTConfig = OpenAIGPTConfig()
+    llm: LLMConfig | None = OpenAIGPTConfig()
     segment_length: int = 1  # number of sentences per segment
     query: str = ""  # query for relevance extraction
     system_message = """
@@ -101,11 +103,20 @@ class RelevanceExtractorAgent(ChatAgent):
         """Method to handle a segmentExtractTool message from LLM"""
         spec = msg.segment_list
         if len(self.message_history) == 0:
-            return NO_ANSWER
+            return DONE + " " + NO_ANSWER
         if spec is None or spec.strip() in ["", NO_ANSWER]:
-            return NO_ANSWER
+            return DONE + " " + NO_ANSWER
         assert self.numbered_passage is not None, "No numbered passage"
         # assume this has numbered segments
         extracts = extract_numbered_segments(self.numbered_passage, spec)
         # this response ends the task by saying DONE
-        return "DONE " + extracts
+        return DONE + " " + extracts
+
+    def handle_message_fallback(
+        self, msg: str | ChatDocument
+    ) -> str | ChatDocument | None:
+        """Handle case where LLM forgets to use SegmentExtractTool"""
+        if isinstance(msg, ChatDocument) and msg.metadata.sender == Entity.LLM:
+            return DONE + " " + NO_ANSWER
+        else:
+            return None

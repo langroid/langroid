@@ -14,7 +14,7 @@ pip install "langroid[hf-embeddings]"
 """
 import logging
 from contextlib import ExitStack
-from typing import List, Optional, Tuple, no_type_check
+from typing import Dict, List, Optional, Set, Tuple, no_type_check
 
 import numpy as np
 import pandas as pd
@@ -42,6 +42,7 @@ from langroid.parsing.search import (
     find_fuzzy_matches_in_docs,
     preprocess_text,
 )
+from langroid.parsing.table_loader import describe_dataframe
 from langroid.parsing.url_loader import URLLoader
 from langroid.parsing.urls import get_list_from_user, get_urls_and_paths
 from langroid.parsing.utils import batched
@@ -50,7 +51,7 @@ from langroid.prompts.templates import SUMMARY_ANSWER_PROMPT_GPT4
 from langroid.utils.configuration import settings
 from langroid.utils.constants import NO_ANSWER
 from langroid.utils.output.printing import show_if_debug
-from langroid.utils.pydantic_utils import dataframe_to_documents
+from langroid.utils.pydantic_utils import dataframe_to_documents, extract_fields
 from langroid.vector_store.base import VectorStoreConfig
 from langroid.vector_store.lancedb import LanceDBConfig
 
@@ -70,26 +71,19 @@ You are a helpful assistant, helping me understand a collection of documents.
 
 
 class DocChatAgentConfig(ChatAgentConfig):
-    """
-    Attributes:
-        max_context_tokens (int): threshold to use for various steps, e.g.
-            if we are able to fit the current stage of doc processing into
-            this many tokens, we skip additional compression steps, and
-            use the current docs as-is in the context
-        conversation_mode (bool): if True, we will accumulate message history,
-            and pass entire history to LLM at each round.
-            If False, each request to LLM will consist only of the
-            initial task messages plus the current query.
-    """
-
     system_message: str = DEFAULT_DOC_CHAT_SYSTEM_MESSAGE
     user_message: str = DEFAULT_DOC_CHAT_INSTRUCTIONS
     summarize_prompt: str = SUMMARY_ANSWER_PROMPT_GPT4
+    # extra fields to include in content as key=value pairs
+    # (helps retrieval for table-like data)
+    add_fields_to_content: List[str] = []
+    filter_fields: List[str] = []  # fields usable in filter
+    retrieve_only: bool = False  # only retr relevant extracts, don't gen summary answer
+    extraction_granularity: int = 1  # granularity (in sentences) for relev extraction
     filter: str | None = (
         None  # filter condition for various lexical/semantic search fns
     )
-    max_context_tokens: int = 1000
-    conversation_mode: bool = True
+    conversation_mode: bool = True  # accumulate message history?
     # In assistant mode, DocChatAgent receives questions from another Agent,
     # and those will already be in stand-alone form, so in this mode
     # there is no need to convert them to stand-alone form.
@@ -113,7 +107,9 @@ class DocChatAgentConfig(ChatAgentConfig):
     debug: bool = False
     stream: bool = True  # allow streaming where needed
     relevance_extractor_config: None | RelevanceExtractorAgentConfig = (
-        RelevanceExtractorAgentConfig()
+        RelevanceExtractorAgentConfig(
+            llm=None  # use the parent's llm unless explicitly set here
+        )
     )
     doc_paths: List[str] = []
     default_paths: List[str] = [
@@ -187,6 +183,8 @@ class DocChatAgent(ChatAgent):
         self.config: DocChatAgentConfig = config
         self.original_docs: None | List[Document] = None
         self.original_docs_length = 0
+        self.from_dataframe = False
+        self.df_description = ""
         self.chunked_docs: None | List[Document] = None
         self.chunked_docs_clean: None | List[Document] = None
         self.response: None | Document = None
@@ -259,6 +257,24 @@ class DocChatAgent(ChatAgent):
                 d.metadata.is_chunk = True
         if self.vecdb is None:
             raise ValueError("VecDB not set")
+
+        # If any additional fields need to be added to content,
+        # add them as key=value pairs for all docs, before batching.
+        # This helps retrieval for table-like data.
+        # Note we need to do this at stage so that the embeddings
+        # are computed on the full content with these additional fields.
+        if len(self.config.add_fields_to_content) > 0:
+            fields = [
+                f for f in extract_fields(docs[0], self.config.add_fields_to_content)
+            ]
+            if len(fields) > 0:
+                for d in docs:
+                    key_vals = extract_fields(d, fields)
+                    d.content = (
+                        ",".join(f"{k}={v}" for k, v in key_vals.items())
+                        + ",content="
+                        + d.content
+                    )
         # add embeddings in batches, to stay under limit of embeddings API
         batches = list(batched(docs, self.config.embed_batch_size))
         for batch in batches:
@@ -288,6 +304,15 @@ class DocChatAgent(ChatAgent):
                 - dataframe: dataframe with "content" column and "id" column
                 - metadata: list of metadata column names, including "id"
         """
+        if content not in df.columns:
+            raise ValueError(
+                f"""
+                Content column {content} not in dataframe, 
+                so we cannot ingest into the DocChatAgent.
+                Please specify the `content` parameter as a suitable
+                text-based column in the dataframe.
+                """
+            )
         if content != "content":
             # rename content column to "content", leave existing column intact
             df = df.rename(columns={content: "content"}, inplace=False)
@@ -312,6 +337,10 @@ class DocChatAgent(ChatAgent):
         """
         Ingest a dataframe into vecdb.
         """
+        self.from_dataframe = True
+        self.df_description = describe_dataframe(
+            df, filter_fields=self.config.filter_fields, n_vals=5
+        )
         df, metadata = DocChatAgent.document_compatible_dataframe(df, content, metadata)
         docs = dataframe_to_documents(df, content="content", metadata=metadata)
         # When ingesting a dataframe we will no longer do any chunking,
@@ -349,6 +378,42 @@ class DocChatAgent(ChatAgent):
             Document(content=preprocess_text(d.content), metadata=d.metadata)
             for d in self.chunked_docs
         ]
+
+    def get_field_values(self, fields: list[str]) -> Dict[str, str]:
+        """Get string-listing of possible values of each filterable field,
+        e.g.
+        {
+            "genre": "crime, drama, mystery, ... (10 more)",
+            "certificate": "R, PG-13, PG, R",
+        }
+        """
+        field_values: Dict[str, Set[str]] = {}
+        # make empty set for each field
+        for f in fields:
+            field_values[f] = set()
+        if self.vecdb is None:
+            raise ValueError("VecDB not set")
+        # get all documents and accumulate possible values of each field until 10
+        docs = self.vecdb.get_all_documents()  # only works for vecdbs that support this
+        for d in docs:
+            # extract fields from d
+            doc_field_vals = extract_fields(d, fields)
+            for field, val in doc_field_vals.items():
+                field_values[field].add(val)
+        # For each field make a string showing list of possible values,
+        # truncate to 20 values, and if there are more, indicate how many
+        # more there are, e.g. Genre: crime, drama, mystery, ... (20 more)
+        field_values_list = {}
+        for f in fields:
+            vals = list(field_values[f])
+            n = len(vals)
+            remaining = n - 20
+            vals = vals[:20]
+            if n > 20:
+                vals.append(f"(...{remaining} more)")
+            # make a string of the values, ensure they are strings
+            field_values_list[f] = ", ".join(str(v) for v in vals)
+        return field_values_list
 
     def doc_length(self, docs: List[Document]) -> int:
         """
@@ -936,9 +1001,12 @@ class DocChatAgent(ChatAgent):
         if agent_cfg is None:
             # no relevance extraction: simply return passages
             return passages
-
+        if agent_cfg.llm is None:
+            # Use main DocChatAgent's LLM if not provided explicitly:
+            # this reduces setup burden on the user
+            agent_cfg.llm = self.config.llm
         agent_cfg.query = query
-        agent_cfg.segment_length = 1
+        agent_cfg.segment_length = self.config.extraction_granularity
         agent_cfg.llm.stream = False  # disable streaming for concurrent calls
 
         agent = RelevanceExtractorAgent(agent_cfg)
@@ -985,6 +1053,17 @@ class DocChatAgent(ChatAgent):
             return response
         if self.llm is None:
             raise ValueError("LLM not set")
+        if self.config.retrieve_only:
+            # only return extracts, skip LLM-based summary answer
+            meta = dict(
+                sender=Entity.LLM,
+            )
+            # copy metadata from first doc, unclear what to do here.
+            meta.update(extracts[0].metadata)
+            return ChatDocument(
+                content="\n\n".join([e.content for e in extracts]),
+                metadata=ChatDocMetaData(**meta),
+            )
         with ExitStack() as stack:
             # conditionally use Streaming or rich console context
             cm = (

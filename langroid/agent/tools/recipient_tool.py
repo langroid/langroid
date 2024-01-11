@@ -6,24 +6,6 @@ the method `_get_tool_list()`).
 
 See usage examples in `tests/main/test_multi_agent_complex.py` and
 `tests/main/test_recipient_tool.py`.
-
-Previously we were using RecipientValidatorAgent to enforce proper
-recipient specifiction, but the preferred method is to use the
-`RecipientTool` class.  This has numerous advantages:
-- it uses the tool/function-call mechanism to specify a recipient in a JSON-structured
-    string, which is more consistent with the rest of the system, and does not require
-    inventing a new syntax like `TO:<recipient>` (which the RecipientValidatorAgent
-    uses).
-- it removes the need for any special parsing of the message content, since we leverage
-    the built-in JSON tool-matching in `Agent.handle_message()` and downstream code.
-- it does not require setting the `parent_responder` field in the `ChatDocument`
-    metadata, which is somewhat hacky.
-- it appears to be less brittle than requiring the LLM to use TO:<recipient> syntax:
-  The LLM almost never forgets to use the RecipientTool as instructed.
-- The RecipientTool class acts as a specification of the required syntax, and also
-  contains mechanisms to enforce this syntax.
-- For a developer who needs to enforce recipient specification for an agent, they only
-  need to do `agent.enable_message(RecipientTool)`, and the rest is taken care of.
 """
 from typing import List, Type
 
@@ -68,17 +50,16 @@ class AddRecipientTool(ToolMessage):
         )
         if self.__class__.saved_content == "":
             recipient_request_name = RecipientTool.default_value("request")
-            raise ValueError(
-                f"""
+            content = f"""
                 Recipient specified but content is empty!
                 This could be because the `{self.request}` tool/function was used 
                 before using `{recipient_request_name}` tool/function.
                 Resend the message using `{recipient_request_name}` tool/function.
                 """
-            )
-        content = self.__class__.saved_content  # use class-level attrib value
-        # erase content since we just used it.
-        self.__class__.saved_content = ""
+        else:
+            content = self.__class__.saved_content  # use class-level attrib value
+            # erase content since we just used it.
+            self.__class__.saved_content = ""
         return ChatDocument(
             content=content,
             metadata=ChatDocMetaData(

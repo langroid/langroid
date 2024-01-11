@@ -7,6 +7,7 @@ from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
+from langroid.mytypes import Entity
 from langroid.utils.configuration import Settings, set_global
 from langroid.vector_store.base import VectorStoreConfig
 
@@ -28,9 +29,9 @@ def test_task_batch(test_settings: Settings):
     task = Task(
         agent,
         name="Test",
-        llm_delegate=False,
-        single_round=True,
-        default_human_response="",
+        interactive=False,
+        done_if_response=[Entity.LLM],
+        done_if_no_response=[Entity.LLM],
     )
 
     # run clones of this task on these inputs

@@ -41,8 +41,8 @@ class ChatAgentConfig(AgentConfig):
 
     system_message: str = "You are a helpful assistant."
     user_message: Optional[str] = None
-    use_tools: bool = True
-    use_functions_api: bool = False
+    use_tools: bool = False
+    use_functions_api: bool = True
 
     def _set_fn_or_tools(self, fn_available: bool) -> None:
         """
@@ -50,7 +50,7 @@ class ChatAgentConfig(AgentConfig):
         depending on config settings and availability of fn-calling.
         """
         if self.use_functions_api and not fn_available:
-            logger.warning(
+            logger.debug(
                 """
                 You have enabled `use_functions_api` but the LLM does not support it.
                 So we will enable `use_tools` instead, so we can use 
@@ -63,7 +63,7 @@ class ChatAgentConfig(AgentConfig):
         if not self.use_functions_api or not self.use_tools:
             return
         if self.use_functions_api and self.use_tools:
-            logger.warning(
+            logger.debug(
                 """
                 You have enabled both `use_tools` and `use_functions_api`.
                 Turning off `use_tools`, since the LLM supports function-calling.
