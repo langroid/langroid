@@ -7,8 +7,7 @@ CONSTRUCT_DEPENDENCY_GRAPH = """
         
         call {{ with r
                 unwind r.nodes as package
-                merge (p:Package:PyPi {{name:package.versionKey.name}}) on create set 
-                p.version = package.versionKey.version
+                merge (p:Package:PyPi {{name: package.versionKey.name, version: package.versionKey.version}})
                 return collect(p) as packages
         }}
         call {{ with r, packages
@@ -28,8 +27,7 @@ CONSTRUCT_DEPENDENCY_GRAPH = """
         
         call {{ with r
                 unwind r.nodes as package
-                merge (p:Package:PyPi {{name:package.versionKey.name}}) on create set 
-                p.version = package.versionKey.version
+                merge (p:Package:PyPi {{name: package.versionKey.name, version: package.versionKey.version}})
                 return collect(p) as packages
         }}
         call {{ with r, packages

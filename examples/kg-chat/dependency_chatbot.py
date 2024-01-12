@@ -60,8 +60,12 @@ class DependencyGraphAgent(Neo4jChatAgent):
     package_name: str
 
     def construct_dependency_graph(self, msg: GetPackageInfo) -> None:
-        check_db_exist = "MATCH (n) WHERE n.name = $name RETURN n LIMIT 1"
-        response = self.read_query(check_db_exist, {"name": msg.package_name})
+        check_db_exist = (
+            "MATCH (n) WHERE n.name = $name AND n.version = $version RETURN n LIMIT 1"
+        )
+        response = self.read_query(
+            check_db_exist, {"name": msg.package_name, "version": msg.package_version}
+        )
         if "No records found" not in response:
             self.config.database_created = True
             return "Database Exists"
@@ -113,6 +117,13 @@ def chat(opts: CLIOptions) -> None:
             ),
         ),
     )
+
+    construct_dependency_graph = CONSTRUCT_DEPENDENCY_GRAPH.format(
+        package_type="pypi",
+        package_name="pydantic",
+        package_version="2.0",
+    )
+    dependency_agent.write_query(construct_dependency_graph)
 
     system_message = f"""You are expert in Dependency graphs and analyzing them using
     Neo4j. FIRST, I'll give you the name of the package that I want to analyze.
