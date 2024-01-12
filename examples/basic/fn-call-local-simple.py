@@ -10,7 +10,8 @@ This is also referred to in various scenarios as "Tools", "Actions" or "Plugins"
 # ollama pull mistral:7b-instruct-v0.2-q4_K_M
 
 # (2) Ensure you've installed the `litellm` extra with Langroid, e.g.
-# pip install langroid[litellm] (or use pip install langroid\[litellm\] if using zsh),
+# pip install langroid[litellm]
+# (or use pip install "langroid[litellm]" if using zsh or similar shells),
 or if you use the `pyproject.toml` in this repo you can simply use `poetry install`
 
 # (3) Run like this:

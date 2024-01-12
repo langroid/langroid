@@ -6,6 +6,8 @@ an agent. The messages could represent, for example:
 - request to run a method of the agent
 """
 
+import json
+import textwrap
 from abc import ABC
 from random import choice
 from typing import Any, Dict, List, Type
@@ -97,6 +99,28 @@ class ToolMessage(ABC, BaseModel):
         schema = cls.schema()
         properties = schema["properties"]
         return properties.get(f, {}).get("default", None)
+
+    @classmethod
+    def json_instructions(cls) -> str:
+        """
+        Default Instructions to the LLM showing how to use the message.
+        Works for GPT4 but override this for weaker LLMs if needed.
+        Returns:
+            str: instructions on how to use the message
+        """
+        return textwrap.dedent(
+            f"""
+            TOOL: {cls.default_value("request")}
+            PURPOSE: {cls.default_value("purpose")} 
+            JSON FORMAT: {
+                json.dumps(
+                    cls.llm_function_schema(request=True).parameters,
+                    indent=4,
+                )
+            }
+            {"EXAMPLE: " + cls.usage_example() if cls.examples() else ""}
+            """.lstrip()
+        )
 
     @classmethod
     def llm_function_schema(
