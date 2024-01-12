@@ -47,8 +47,8 @@ jobs:
       AZURE_OPENAI_API_BASE: ${{ secrets.AZURE_OPENAI_API_BASE }}
       AZURE_OPENAI_API_VERSION: "2023-05-15"
       AZURE_OPENAI_DEPLOYMENT_NAME: ${{ secrets.AZURE_OPENAI_DEPLOYMENT_NAME }}
-      AZURE_OPENAI_MODEL_NAME: ${{ secrets.AZURE_GPT_MODEL_NAME }}
-
+      AZURE_OPENAI_MODEL_NAME: ${{ secrets.AZURE_GPT_MODEL_NAME }} 
+      AZURE_OPENAI_MODEL_VERSION: ${{ secrets.AZURE_OPENAI_MODEL_VERSION }}
     steps:
     - name: Check out repository
       uses: actions/checkout@v3

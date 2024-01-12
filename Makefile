@@ -17,7 +17,7 @@ check:
 	@echo "Running black..."
 	@black --check .
 	@echo "Running flake8 on git-tracked files ONLY! ..."
-	@git ls-files | grep '\.py$$' | xargs flake8 --exclude=.git,__pycache__,.venv,__init__.py
+	@git ls-files | grep '\.py$$' | xargs flake8 --exclude=.git,__pycache__,.venv
 	@poetry run ruff .
 	@echo "Running mypy...";
 	@poetry run mypy -p langroid
