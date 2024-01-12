@@ -22,6 +22,9 @@ class AzureConfig(OpenAIGPTConfig):
             chose for your deployment when you deployed a model.
         model_name (str): can be set in the ``.env`` file as ``AZURE_GPT_MODEL_NAME``
             and should be based on the model name chosen during setup.
+        model_version (str): can be set in the ``.env`` file as
+          ``AZURE_OPENAI_MODEL_VERSION`` and should be based on the model name
+          chosen during setup.
     """
 
     api_key: str = ""  # CAUTION: set this ONLY via env var AZURE_OPENAI_API_KEY
@@ -29,6 +32,7 @@ class AzureConfig(OpenAIGPTConfig):
     api_version: str = "2023-05-15"
     deployment_name: str = ""
     model_name: str = ""
+    model_version: str = ""  # is used to determine the cost of using the model
     api_base: str = ""
 
     # all of the vars above can be set via env vars,
@@ -50,6 +54,7 @@ class AzureGPT(OpenAIGPT):
         api_base (str): Azure API base url
         api_version (str): Azure API version
         model_name (str): the name of gpt model in your deployment
+        model_version (str): the version of gpt model in your deployment
     """
 
     def __init__(self, config: AzureConfig):
@@ -89,10 +94,7 @@ class AzureGPT(OpenAIGPT):
         # set the chat model to be the same as the model_name
         # This corresponds to the gpt model you chose for your deployment
         # when you deployed a model
-        if "35-turbo" in self.config.model_name:
-            self.config.chat_model = OpenAIChatModel.GPT3_5_TURBO
-        else:
-            self.config.chat_model = OpenAIChatModel.GPT4
+        self.set_chat_model()
 
         self.client = AzureOpenAI(
             api_key=self.config.api_key,
@@ -107,3 +109,44 @@ class AzureGPT(OpenAIGPT):
             azure_deployment=self.config.deployment_name,
             timeout=Timeout(self.config.timeout),
         )
+
+    def set_chat_model(self) -> None:
+        """
+        Sets the chat model configuration based on the model name specified in the
+        ``.env``. This function checks the `model_name` in the configuration and sets
+        the appropriate chat model in the `config.chat_model`. It supports handling for
+        '35-turbo' and 'gpt-4' models. For 'gpt-4', it further delegates the handling
+        to `handle_gpt4_model` method. If the model name does not match any predefined
+        models, it defaults to `OpenAIChatModel.GPT4`.
+        """
+        MODEL_35_TURBO = "35-turbo"
+        MODEL_GPT4 = "gpt-4"
+
+        if self.config.model_name == MODEL_35_TURBO:
+            self.config.chat_model = OpenAIChatModel.GPT3_5_TURBO
+        elif self.config.model_name == MODEL_GPT4:
+            self.handle_gpt4_model()
+        else:
+            self.config.chat_model = OpenAIChatModel.GPT4
+
+    def handle_gpt4_model(self) -> None:
+        """
+        Handles the setting of the GPT-4 model in the configuration.
+        This function checks the `model_version` in the configuration.
+        If the version is not set, it raises a ValueError indicating that the model
+        version needs to be specified in the ``.env`` file.
+        It sets `OpenAIChatModel.GPT4_TURBO` if the version is
+        '1106-Preview', otherwise, it defaults to setting `OpenAIChatModel.GPT4`.
+        """
+        VERSION_1106_PREVIEW = "1106-Preview"
+
+        if self.config.model_version == "":
+            raise ValueError(
+                "AZURE_OPENAI_MODEL_VERSION not set in .env file. "
+                "Please set it to the chat model version used in your deployment."
+            )
+
+        if self.config.model_version == VERSION_1106_PREVIEW:
+            self.config.chat_model = OpenAIChatModel.GPT4_TURBO
+        else:
+            self.config.chat_model = OpenAIChatModel.GPT4
