@@ -287,10 +287,15 @@ install Langroid like this:
 ```bash
 pip install langroid[hf-embeddings]
 ```
-If using `zsh`, please run the following command instead:
+If using `zsh` (or similar shells), you may need to escape the square brackets, e.g.:
 ```
 pip install langroid\[hf-embeddings\]
 ```
+or use quotes:
+```
+pip install "langroid[hf-embeddings]"
+```
+
 
 <details>
 <summary><b>Optional Installs for using SQL Chat with a PostgreSQL DB </b></summary>
