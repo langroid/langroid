@@ -118,13 +118,6 @@ def chat(opts: CLIOptions) -> None:
         ),
     )
 
-    construct_dependency_graph = CONSTRUCT_DEPENDENCY_GRAPH.format(
-        package_type="pypi",
-        package_name="pydantic",
-        package_version="2.0",
-    )
-    dependency_agent.write_query(construct_dependency_graph)
-
     system_message = f"""You are expert in Dependency graphs and analyzing them using
     Neo4j. FIRST, I'll give you the name of the package that I want to analyze.
     THEN, You can ask me questions about the **package version number** and
