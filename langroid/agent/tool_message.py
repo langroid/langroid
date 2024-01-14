@@ -103,7 +103,7 @@ class ToolMessage(ABC, BaseModel):
     @classmethod
     def json_instructions(cls) -> str:
         """
-        Default Instructions to the LLM showing how to use the message.
+        Default Instructions to the LLM showing how to use the tool/function-call.
         Works for GPT4 but override this for weaker LLMs if needed.
         Returns:
             str: instructions on how to use the message
@@ -120,6 +120,23 @@ class ToolMessage(ABC, BaseModel):
             }
             {"EXAMPLE: " + cls.usage_example() if cls.examples() else ""}
             """.lstrip()
+        )
+
+    @staticmethod
+    def json_group_instructions() -> str:
+        """Template for instructions for a group of tools.
+        Works with GPT4 but override this for weaker LLMs if needed.
+        """
+        return textwrap.dedent(
+            """
+            === ALL AVAILABLE TOOLS and THEIR JSON FORMAT INSTRUCTIONS ===
+            You have access to the following TOOLS to accomplish your task:
+
+            {json_instructions}
+            
+            When one of the above TOOLs is applicable, you must express your 
+            request as "TOOL:" followed by the request in the above JSON format.
+            """
         )
 
     @classmethod

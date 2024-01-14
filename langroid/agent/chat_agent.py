@@ -207,26 +207,8 @@ class ChatAgent(Agent):
                 if msg_cls.default_value("request") in self.llm_tools_usable
             ]
         )
-        return textwrap.dedent(
-            f"""
-            === ALL AVAILABLE TOOLS and THEIR JSON FORMAT INSTRUCTIONS ===
-            You have access to the following TOOLS to accomplish your task:
-
-            {json_instructions}
-            
-            When one of the above TOOLs is applicable, you must express your 
-            request as "TOOL:" followed by the request in the above JSON format.
-            """
-            + """
-            The JSON format will be:
-                \\{
-                    "request": "<tool_name>",
-                    "<arg1>": <value1>,
-                    "<arg2>": <value2>,
-                    ...
-                \\}             
-            ----------------------------
-            """.lstrip()
+        return ToolMessage.json_group_instructions().format(
+            json_instructions=json_instructions
         )
 
     def tool_instructions(self) -> str:
