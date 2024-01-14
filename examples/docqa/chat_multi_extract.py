@@ -121,9 +121,9 @@ def main(
         DocChatAgentConfig(
             llm=llm_cfg,
             parsing=ParsingConfig(
-                chunk_size=100,
-                overlap=20,
-                n_similar_docs=2,
+                chunk_size=300,
+                overlap=50,
+                n_similar_docs=3,
             ),
             cross_encoder_reranking_model="",
         )

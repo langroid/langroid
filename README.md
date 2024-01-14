@@ -45,6 +45,10 @@ This Multi-Agent paradigm is inspired by the
 `Langroid` is a fresh take on LLM app-development, where considerable thought has gone 
 into simplifying the developer experience; it does not use `Langchain`.
 
+:fire: See this [Intro to Langroid](https://lancedb.substack.com/p/langoid-multi-agent-programming-framework)
+blog post from the LanceDB team
+
+
 We welcome contributions -- See the [contributions](./CONTRIBUTING.md) document
 for ideas on what to contribute.
 
