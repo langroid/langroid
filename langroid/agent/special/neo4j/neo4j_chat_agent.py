@@ -1,11 +1,13 @@
 import logging
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
+from pydantic import BaseSettings
 from rich import print
 from rich.console import Console
 
 if TYPE_CHECKING:
     import neo4j
+
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.chat_document import ChatDocMetaData, ChatDocument
@@ -35,12 +37,19 @@ not_valid_query_response = [
 ]
 
 
+class Neo4jSettings(BaseSettings):
+    uri: str = ""
+    username: str = ""
+    password: str = ""
+    database: str = ""
+
+    class Config:
+        env_prefix = "NEO4J_"
+
+
 class Neo4jChatAgentConfig(ChatAgentConfig):
+    neo4j_settings: Neo4jSettings = Neo4jSettings()
     system_message: str = DEFAULT_NEO4J_CHAT_SYSTEM_MESSAGE
-    uri: str
-    username: str
-    password: str
-    database: str
     kg_schema: Optional[List[Dict[str, Any]]]
     database_created: bool = False
     use_schema_tools: bool = False
@@ -53,16 +62,21 @@ class Neo4jChatAgent(ChatAgent):
         Raises:
             ValueError: If database information is not provided in the config.
         """
-        self._validate_config(config)
-        self.config: Neo4jChatAgentConfig = config
+        self.config = config
+        self._validate_config()
         self._import_neo4j()
         self._initialize_connection()
         self._init_message_tools()
 
-    def _validate_config(self, config: Neo4jChatAgentConfig) -> None:
+    def _validate_config(self) -> None:
         """Validate the configuration to ensure all necessary fields are present."""
-        if config.username is None and config.password is None and config.database:
-            raise ValueError("Neo4j information must be provided")
+        assert isinstance(self.config, Neo4jChatAgentConfig)
+        if (
+            self.config.neo4j_settings.username is None
+            and self.config.neo4j_settings.password is None
+            and self.config.neo4j_settings.database
+        ):
+            raise ValueError("Neo4j env information must be provided")
 
     def _import_neo4j(self) -> None:
         """Dynamically imports the Neo4j module and sets it as a global variable."""
@@ -84,8 +98,13 @@ class Neo4jChatAgent(ChatAgent):
         Initializes a connection to the Neo4j database using the configuration settings.
         """
         try:
+            assert isinstance(self.config, Neo4jChatAgentConfig)
             self.driver = neo4j.GraphDatabase.driver(
-                self.config.uri, auth=(self.config.username, self.config.password)
+                self.config.neo4j_settings.uri,
+                auth=(
+                    self.config.neo4j_settings.username,
+                    self.config.neo4j_settings.password,
+                ),
             )
         except Exception as e:
             raise ConnectionError(f"Failed to initialize Neo4j connection: {e}")
@@ -136,7 +155,10 @@ class Neo4jChatAgent(ChatAgent):
             raise ValueError("No database connection is established.")
 
         try:
-            with self.driver.session(database=self.config.database) as session:
+            assert isinstance(self.config, Neo4jChatAgentConfig)
+            with self.driver.session(
+                database=self.config.neo4j_settings.database
+            ) as session:
                 result = session.run(query, parameters)
                 # Check if there are records in the result
                 if result.peek():
@@ -171,7 +193,10 @@ class Neo4jChatAgent(ChatAgent):
             raise ValueError("No database connection is established.")
 
         try:
-            with self.driver.session(database=self.config.database) as session:
+            assert isinstance(self.config, Neo4jChatAgentConfig)
+            with self.driver.session(
+                database=self.config.neo4j_settings.database
+            ) as session:
                 # Execute the query within a write transaction
                 session.write_transaction(lambda tx: tx.run(query, parameters))
                 return True
@@ -196,8 +221,8 @@ class Neo4jChatAgent(ChatAgent):
 
     def make_query(self, msg: GenerateCypherQueries) -> str:
         """ "
-        Handle a RunQueryTool message by executing a Cypher query and returning the
-        result.
+        Handle a GenerateCypherQueries message by executing a Cypher query and
+        returning the result.
         Args:
             msg (GenerateCypherQueries): The tool-message to handle.
 
@@ -249,7 +274,7 @@ class Neo4jChatAgent(ChatAgent):
     def _format_message(self) -> str:
         if self.driver is None:
             raise ValueError("Database driver None")
-
+        assert isinstance(self.config, Neo4jChatAgentConfig)
         return (
             SCHEMA_TOOLS_SYS_MSG.format(schema=self.get_schema(None))
             if self.config.use_schema_tools

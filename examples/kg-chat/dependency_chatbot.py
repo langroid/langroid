@@ -11,10 +11,8 @@ account settings, please provide the following information (uri, username, passw
 while creating the constructor `Neo4jConfig`.
 
 Run like this:
-python3 examples/graph_db/chat.py
+python3 examples/kg-chat/dependency_chatbot.py
 """
-
-import os
 import typer
 from rich import print
 from rich.prompt import Prompt
@@ -24,6 +22,7 @@ from dotenv import load_dotenv
 from langroid.agent.special.neo4j.neo4j_chat_agent import (
     Neo4jChatAgent,
     Neo4jChatAgentConfig,
+    Neo4jSettings,
 )
 from langroid.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
 from langroid.utils.constants import NO_ANSWER
@@ -104,14 +103,13 @@ def chat(opts: CLIOptions) -> None:
 
     load_dotenv()
 
+    neo4j_settings = Neo4jSettings()
+
     dependency_agent = DependencyGraphAgent(
         config=Neo4jChatAgentConfig(
-            uri=os.getenv("NEO4J_URI"),
-            username=os.getenv("NEO4J_USERNAME"),
-            password=os.getenv("NEO4J_PASSWORD"),
-            database=os.getenv("NEO4J_DATABASE"),
-            use_tools=opts.fn_api,
-            use_functions_api=not opts.fn_api,
+            neo4j_settings=neo4j_settings,
+            use_tools=not opts.fn_api,
+            use_functions_api=opts.fn_api,
             llm=OpenAIGPTConfig(
                 chat_model=OpenAIChatModel.GPT4_TURBO,
             ),
