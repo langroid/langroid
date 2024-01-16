@@ -1,4 +1,5 @@
 import pytest
+from dotenv import load_dotenv
 
 from langroid.agent.special.neo4j.neo4j_chat_agent import (
     Neo4jChatAgent,
@@ -15,16 +16,20 @@ docker run --rm \
     -e NEO4J_AUTH=neo4j/password \
     neo4j:latest
 
+In this case, Neo4j env variables would look like this 
+```
+NEO4J_USERNAME=neo4j
+NEO4J_PASSWORD=password
+NEO4J_URI=neo4j://localhost:7687
+NEO4J_DATABASE=neo4j
+```
+
 OR 
 You can sign-up a free account at Neo4j Aura to create neo4j DB on the cloud.
 """
 
-neo4j_settings = Neo4jSettings(
-    uri="neo4j://localhost:7687",
-    username="neo4j",
-    password="password",
-    database="neo4j",
-)
+load_dotenv()
+neo4j_settings = Neo4jSettings()
 
 
 @pytest.fixture
