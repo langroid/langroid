@@ -1,9 +1,30 @@
 """
-Two-agent chat with Retrieval-augmented LLM.
+Two-agent system to do Question-Answer based summarization of documents.
+E.g. one could use this to summarize a very large document, assuming there is a
+reasonable abstract/intro at the start that "covers" the import aspects.
+
 WriterAgent (has no access to docs) is tasked with writing 5 bullet points based on
-some docs.
-DocAgent (has access to docs) helps answer questions about the docs.
-Repeat: WriterAgent --Question--> DocAgent --> Answer
+some docs. Initially it generates a summary of the docs from the beginning of the doc,
+then it formulates questions to ask until it gets 5 key pieces of information.
+
+DocAgent (has access to docs) answers these questions using RAG.
+
+Run like this:
+
+python examples/docqa/chat-qa-summarize.py
+
+You can let it run and it will finish with 5 key bullet points about the document(s).
+
+There are optional args, especially note you can pass in a different LLM model, e.g.
+
+python examples/docqa/chat-qa-summarize.py -m litellm/ollama/mistral
+
+[To avail of this, remember to install the litellm extra, e.g.
+`pip install "langroid[litellm]"` or `poetry add langroid[litellm]`]
+
+See this example for more details on how to specify a different LLM model:
+https://github.com/langroid/langroid-examples/blob/main/examples/docqa/rag-local-simple.py
+
 """
 import typer
 from rich import print
@@ -13,6 +34,7 @@ from langroid.agent.special.doc_chat_agent import (
     DocChatAgent,
     DocChatAgentConfig,
 )
+import langroid.language_models as lm
 from langroid.mytypes import Entity
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
@@ -27,7 +49,32 @@ setup_colored_logging()
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 
-def chat(config: DocChatAgentConfig) -> None:
+@app.command()
+def main(
+    debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
+    nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
+    model: str = typer.Option(
+        "",
+        "--model",
+        "-m",
+        help="specify alternative LLM, e.g. litellm/ollama/mistral",
+    ),
+    cache_type: str = typer.Option(
+        "redis", "--cachetype", "-ct", help="redis or momento"
+    ),
+) -> None:
+    config = DocChatAgentConfig(
+        llm=lm.OpenAIGPTConfig(
+            chat_model=model or lm.OpenAIChatModel.GPT4_TURBO,
+        ),
+    )
+    set_global(
+        Settings(
+            debug=debug,
+            cache=not nocache,
+            cache_type=cache_type,
+        )
+    )
     doc_agent = DocChatAgent(config)
     doc_agent.vecdb.set_collection("docqa-chat-multi", replace=True)
     print("[blue]Welcome to the document chatbot!")
@@ -82,25 +129,6 @@ def chat(config: DocChatAgentConfig) -> None:
     )
     writer_task.add_sub_task(doc_task)
     writer_task.run()
-
-
-@app.command()
-def main(
-    debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
-    nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
-    cache_type: str = typer.Option(
-        "redis", "--cachetype", "-ct", help="redis or momento"
-    ),
-) -> None:
-    config = DocChatAgentConfig()
-    set_global(
-        Settings(
-            debug=debug,
-            cache=not nocache,
-            cache_type=cache_type,
-        )
-    )
-    chat(config)
 
 
 if __name__ == "__main__":
