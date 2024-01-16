@@ -28,6 +28,10 @@ class DocxParsingConfig(BaseSettings):
     library: Literal["python-docx", "unstructured"] = "unstructured"
 
 
+class DocParsingConfig(BaseSettings):
+    library: Literal["unstructured"] = "unstructured"
+
+
 class ParsingConfig(BaseSettings):
     splitter: str = Splitter.TOKENS
     chunk_size: int = 200  # aim for this many tokens per chunk
@@ -42,6 +46,7 @@ class ParsingConfig(BaseSettings):
     token_encoding_model: str = "text-embedding-ada-002"
     pdf: PdfParsingConfig = PdfParsingConfig()
     docx: DocxParsingConfig = DocxParsingConfig()
+    doc: DocParsingConfig = DocParsingConfig()
 
 
 class Parser:
