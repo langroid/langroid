@@ -7,9 +7,14 @@ structure of a given `PyPi` package. You can then ask the chatbot questions
 about the dependency graph. This agent uses two tools in addition to those 
 already available to `Neo4jChatAgent`:
 
-- GoogleSearchTool to find package version and type information 
 - DepGraphTool to build the dependency graph for a given pkg version, using the API
    at [DepsDev](https://deps.dev/)
+- GoogleSearchTool to find package version and type information. It also can answer
+other question from the web about other aspects after obtaining the intended information
+from the dependency graph. For examples:
+  - Is this package/version vulnerable?
+  - does the dpendency use latest version for this package verion?
+  - Can I upgrade this package in the dependency graph?
 
 The `Neo4jChatAgent` has access to these tools/function-calls:
 
@@ -45,7 +50,7 @@ python3 examples/kg-chat/dependency_chatbot.py
 ```
 
 `DependencyAgent` then will ask you to provide the name of the `PyPi` package.
-It will then consult the 2nd agent `GoogleSearchAgent` to get the version of
+It will then the tool `GoogleSearchTool` to get the version of
 this package (you can skip this process by providing the intended version).
 The `DependencyAgent` agent will ask to confirm the version number before
 proceeding with constructing the dependency graph.
@@ -59,8 +64,8 @@ used here for illustration purposes, but of course you can use other names):
 - any dependency on pytorch? which version?
 - Is this package pytorch vunlnerable?
   (Note that in this case the `DependencyAgent` agent will consult the 
-  second agent `GoogleSearchAgent` to get an answer from the internet.)
-- tell me 3 interesting things about this package
+  tool `GoogleSearchTool` to get an answer from the internet.)
+- tell me 3 interesting things about this package or dependency graph
 - what's the path between package-1 and package-2? (provide names of package-1
   and -2)
 - Tell me the names of all packages in the dependency graph that use pytorch.
