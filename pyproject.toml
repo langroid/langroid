@@ -81,6 +81,7 @@ scrapy = "^2.11.0"
 async-generator = "^1.10"
 lancedb = "^0.4.1"
 pytest-redis = "^3.0.2"
+neo4j = {version = "^5.14.1", optional = true}
 agent-search = {version = "^0.0.7", optional = true}
 python-docx = "^1.1.0"
 aiohttp = "^3.9.1"
@@ -91,6 +92,7 @@ hf-embeddings = ["sentence-transformers", "torch"]
 postgres = ["psycopg2", "pytest-postgresql"]
 mysql = ["pymysql", "pytest-mysql"]
 litellm = ["litellm"]
+neo4j = ["neo4j"]
 sciphi = ["agent-search"]
 
 
