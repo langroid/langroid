@@ -3,6 +3,7 @@ import pytest
 from langroid.agent.special.neo4j.neo4j_chat_agent import (
     Neo4jChatAgent,
     Neo4jChatAgentConfig,
+    Neo4jSettings,
 )
 
 """
@@ -18,15 +19,19 @@ OR
 You can sign-up a free account at Neo4j Aura to create neo4j DB on the cloud.
 """
 
+neo4j_settings = Neo4jSettings(
+    uri="neo4j://localhost:7687",
+    username="neo4j",
+    password="password",
+    database="neo4j",
+)
+
 
 @pytest.fixture
 def agent():
     return Neo4jChatAgent(
         Neo4jChatAgentConfig(
-            uri="neo4j://localhost:7687",
-            username="neo4j",
-            password="password",
-            database="neo4j",
+            neo4j_settings=neo4j_settings,
         )
     )
 
