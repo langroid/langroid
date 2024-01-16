@@ -545,7 +545,7 @@ class RepoLoader:
 
         for file_path in file_paths:
             _, file_extension = os.path.splitext(file_path)
-            if file_extension.lower() in [".pdf", ".docx"]:
+            if file_extension.lower() in [".pdf", ".docx", ".doc"]:
                 doc_parser = DocumentParser.create(
                     file_path,
                     parser.config,

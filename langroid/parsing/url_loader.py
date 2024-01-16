@@ -44,7 +44,11 @@ class URLLoader:
                 sleep_time=5,
             )
             for url, result in buffered_downloads(buffer, threads):
-                if url.lower().endswith(".pdf") or url.lower().endswith(".docx"):
+                if (
+                    url.lower().endswith(".pdf")
+                    or url.lower().endswith(".docx")
+                    or url.lower().endswith(".doc")
+                ):
                     doc_parser = DocumentParser.create(
                         url,
                         self.parser.config,

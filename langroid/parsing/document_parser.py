@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 class DocumentType(str, Enum):
     PDF = "pdf"
     DOCX = "docx"
+    DOC = "doc"
 
 
 class DocumentParser(Parser):
@@ -68,6 +69,8 @@ class DocumentParser(Parser):
                 raise ValueError(
                     f"Unsupported DOCX library specified: {config.docx.library}"
                 )
+        elif DocumentParser._document_type(source) == DocumentType.DOC:
+            return UnstructuredDocParser(source, config)
         else:
             raise ValueError(f"Unsupported document type: {source}")
 
@@ -98,6 +101,8 @@ class DocumentParser(Parser):
             return DocumentType.PDF
         elif source.lower().endswith(".docx"):
             return DocumentType.DOCX
+        elif source.lower().endswith(".doc"):
+            return DocumentType.DOC
         else:
             raise ValueError(f"Unsupported document type: {source}")
 
@@ -438,6 +443,27 @@ class UnstructuredDocxParser(DocumentParser):
         """
         text = " ".join(el.text for el in page)
         return self.fix_text(text)
+
+
+class UnstructuredDocParser(UnstructuredDocxParser):
+    def iterate_pages(self) -> Generator[Tuple[int, Any], None, None]:  # type: ignore
+        from unstructured.partition.doc import partition_doc
+
+        elements = partition_doc(filename=self.source, include_page_breaks=True)
+
+        page_number = 1
+        page_elements = []  # type: ignore
+        for el in elements:
+            if el.category == "PageBreak":
+                if page_elements:  # Avoid yielding empty pages at the start
+                    yield page_number, page_elements
+                page_number += 1
+                page_elements = []
+            else:
+                page_elements.append(el)
+        # Yield the last page if it's not empty
+        if page_elements:
+            yield page_number, page_elements
 
 
 class PythonDocxParser(DocumentParser):
