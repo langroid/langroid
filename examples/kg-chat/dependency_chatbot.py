@@ -25,7 +25,6 @@ python3 examples/kg-chat/dependency_chatbot.py
 import typer
 from rich import print
 from rich.prompt import Prompt
-from pydantic import BaseSettings
 from dotenv import load_dotenv
 
 from langroid.agent.special.neo4j.neo4j_chat_agent import (
@@ -89,7 +88,6 @@ class DependencyGraphAgent(Neo4jChatAgent):
                     """
 
 
-
 @app.command()
 def main(
     debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
@@ -103,7 +101,6 @@ def main(
         "redis", "--cachetype", "-ct", help="redis or momento"
     ),
 ) -> None:
-
     set_global(
         Settings(
             debug=debug,
@@ -177,7 +174,6 @@ def main(
     if dependency_agent.config.database_created:
         if Prompt.ask("[blue] Do you want to delete the database? (y/n)") == "y":
             dependency_agent.remove_database()
-
 
 
 if __name__ == "__main__":
