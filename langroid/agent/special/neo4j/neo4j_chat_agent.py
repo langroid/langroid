@@ -196,7 +196,7 @@ class Neo4jChatAgent(ChatAgent):
         """
         if not self.driver:
             raise ValueError("No database connection is established.")
-
+        response = False
         try:
             assert isinstance(self.config, Neo4jChatAgentConfig)
             with self.driver.session(
@@ -204,12 +204,14 @@ class Neo4jChatAgent(ChatAgent):
             ) as session:
                 # Execute the query within a write transaction
                 session.write_transaction(lambda tx: tx.run(query, parameters))
-                return True
+                response = True
         except Exception as e:
             logging.warning(
                 f"An unexpected error occurred while executing the write query: {e}"
             )
-        return False
+        finally:
+            self.close()
+        return response
 
     # TODO: test under enterprise edition because community edition doesn't allow
     # database creation/deletion
