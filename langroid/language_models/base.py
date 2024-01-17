@@ -3,11 +3,12 @@ import asyncio
 import json
 import logging
 from abc import ABC, abstractmethod
+from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple, Type, Union
 
 import aiohttp
-from pydantic import BaseModel, BaseSettings
+from pydantic import BaseModel, BaseSettings, Field
 
 from langroid.cachedb.momento_cachedb import MomentoCacheConfig
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
@@ -135,6 +136,7 @@ class LLMMessage(BaseModel):
     tool_id: str = ""  # used by OpenAIAssistant
     content: str
     function_call: Optional[LLMFunctionCall] = None
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
 
     def api_dict(self) -> Dict[str, Any]:
         """
@@ -157,6 +159,7 @@ class LLMMessage(BaseModel):
                     dict_no_none["function_call"]["arguments"]
                 )
         dict_no_none.pop("tool_id", None)
+        dict_no_none.pop("timestamp", None)
         return dict_no_none
 
     def __str__(self) -> str:
