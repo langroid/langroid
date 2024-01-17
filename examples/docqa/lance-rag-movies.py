@@ -50,6 +50,7 @@ def main(
         Settings(
             debug=debug,
             cache=not nocache,
+            cache_type="fakeredis",
         )
     )
 
