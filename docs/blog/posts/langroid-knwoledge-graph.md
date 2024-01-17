@@ -3,7 +3,7 @@ title: 'Langroid: Knolwedge Graph RAG powered by Neo4j'
 draft: true
 date: 2024-01-16
 authors: 
-  - Mohannad Alhanahnah
+  - mohannad
 categories:
   - langroid
   - neo4j
