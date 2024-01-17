@@ -12,26 +12,22 @@ categories:
 comments: true
 ---
 
-## Knowledge graph-based RAG application with Langroid
+## Knowledge Graph-Based RAG Application with Langroid
 
-RAG is one of the most popular LLM applications to answer questions.   
-Recently, knowledge graphs via Retrieval-Augmented Generation (RAG) is getting more 
-attention.
-Langroid has a built-in a special agent Neo4jChatAgent. This agent incorporates a 
-set of tools to facilitate the interactions with the graph database.
+RAG (Retrieval-Augmented Generation) is one of the most popular LLM (Language Learning Model) 
+applications for answering questions. Recently, the incorporation of knowledge graphs into 
+RAG has been gaining more attention. Therefore, Langroid introduces a special agent called 
+Neo4jChatAgent, which integrates a suite of tools to enhance interactions with graph databases.
 
+### Built-In Support for Neo4j
 
-### Built-in Support for Neo4j
+Langroid's Neo4jChatAgent leverages the Neo4j graph database. The tools provided by Neo4jChatAgent 
+support reading from and writing to the Neo4j graph database to answer users' questions. 
+Additionally, these tools can automatically generate necessary Cypher Queries, thereby 
+reducing the need to learn a new query language for interacting with graph databases.
 
-Langroid's Neo4jChatAgent uses Neo4j graph database. 
-Neo4jChatAgent' tools provide support to read and write from/to Neo4j graph database 
-to answer ussers' questions.
-These tools provide also the functionality to automatically generate necessary Cypher 
-Queries to answer the questions. Thus, allevieating the overhead of learning a new query 
-language to interact with graph database. 
-
-
-Setting up a basic knowledge-graph based RAG chatbot is as simple as (assume Neo4j settings provided in .env):
+Setting up a basic knowledge graph-based RAG chatbot is straightforward (assuming Neo4j 
+settings are provided in .env):
 
 ```python
 import langroid as lr
@@ -58,36 +54,31 @@ kg_rag_task = lr.Task(kg_rag_agent, name="kg_RAG")
 kg_rag_task.run()
 ```
 
-### PyPi Packages Dependency Chatbot
 
-In the Langroid-examples repo there is an example showcase Tools/Function-calling + RAG in a single-agent setup [script](https://github.com/langroid/langroid/blob/main/examples/kg-chat/dependency_chatbot.py).
+### PyPi Package Dependency Chatbot
 
-A detailed description about this example and how to use it is provided here [description](https://github.com/langroid/langroid/blob/main/examples/kg-chat/README.md). 
+In the Langroid-examples repository, there is an example showcasing Tools/Function-calling + RAG in a single-agent setup [script](https://github.com/langroid/langroid/blob/main/examples/kg-chat/dependency_chatbot.py). A detailed description of this example and instructions for use 
+are provided here [description](https://github.com/langroid/langroid/blob/main/examples/kg-chat/README.md).
 
-This example uses a `DependencyGraphAgent` 
+This example employs a `DependencyGraphAgent`
 (derived from [`Neo4jChatAgent`](https://github.com/langroid/langroid/blob/main/langroid/agent/special/neo4j/neo4j_chat_agent.py)).
-It auto-generates a `neo4j` knowledge-graph based on the dependency
-structure of a given `PyPi` package. You can then ask the chatbot questions
-about the dependency graph. This agent uses two tools in addition to those 
-already available to `Neo4jChatAgent`:
+It automatically generates a `neo4j` knowledge graph based on the dependency
+structure of a given `PyPi` package. Users can then ask the chatbot questions
+about the dependency graph. In addition to the tools available to `Neo4jChatAgent`, this agent utilizes:
 
-- DepGraphTool to build the dependency graph for a given pkg version, using the API
-   at [DepsDev](https://deps.dev/)
-- GoogleSearchTool to find package version and type information. It also can answer
-other question from the web about other aspects after obtaining the intended information
-from the dependency graph.
+- `DepGraphTool` to construct the dependency graph for a specific package version, using the API at [DepsDev](https://deps.dev/).
+- `GoogleSearchTool` to find package version and type information, as well as to answer other web-based questions after acquiring the required information from the dependency graph.
 
 Here is what it looks like in action:
 
 <figure markdown>
-  ![dependency-demo](../../assets/demos/dependency_chatbot.gif){ width="800" }
+  ![dependency-demo](../../assets/demos/dependency_chatbot.gif)
   <figcaption>
-Constructing dependency graph for `chainlit` using a single-agent system, with 
-a Tool/Function-calling and RAG. The DependencyGraphAgent auto-generates a `neo4j` 
-knowledge-graph based on the dependency structure of a given `PyPi` package
-to answer using RAG.
-</figcaption>
+Constructing the dependency graph for `chainlit` using a single-agent system, with 
+Tool/Function-calling and RAG. The DependencyGraphAgent automatically generates a `neo4j` 
+knowledge graph based on the dependency structure of a given `PyPi` package
+to provide answers using RAG.
+  </figcaption>
 </figure>
-
 
 
