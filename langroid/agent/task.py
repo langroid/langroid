@@ -1013,11 +1013,7 @@ class Task:
         return (
             result is not None
             and not self._is_empty_message(result)
-            # and (  # if NO_ANSWER is from controller, then it means
-            #     # controller is stuck and we are done with task loop
-            #     NO_ANSWER not in result.content
-            #     or result.metadata.sender == self.controller
-            # )
+            and NO_ANSWER not in result.content
         )
 
     def log_message(
