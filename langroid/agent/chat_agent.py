@@ -571,7 +571,10 @@ class ChatAgent(Agent):
                         raise ValueError(
                             """
                         The message history is longer than the max chat context 
-                        length allowed, and we have run out of messages to drop."""
+                        length allowed, and we have run out of messages to drop.
+                        HINT: In your `OpenAIGPTConfig` object, try increasing
+                        `chat_context_length` or decreasing `max_output_tokens`.
+                        """
                         )
                     # drop the second message, i.e. first msg after the sys msg
                     # (typically user msg).
