@@ -38,7 +38,7 @@ This Agent has access to two key tools that enable it to handle a user's queries
 - `GraphSchemaTool` to get the schema of a Neo4j knowledge graph.
 - `CypherQueryTool` to generate Cypher queries from a user's query.
 Cypher is a specialized query language for Neo4j, and even though it is not as widely known as SQL,
-most LLMs today can Cypher Queries.
+most LLMs today can generate Cypher Queries.
 
 Setting up a basic Neo4j-based RAG chatbot is straightforward. First ensure 
 you set these environment variables (or provide them in a `.env` file):
