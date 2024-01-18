@@ -144,6 +144,9 @@ class ChatDocument(Document):
             ChatDocument: ChatDocument representation of this LLMResponse.
         """
         recipient, message = response.get_recipient_and_message()
+        message = message.strip()
+        if message in ["''", '""']:
+            message = ""
         return ChatDocument(
             content=message,
             function_call=response.function_call,
