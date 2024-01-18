@@ -8,33 +8,24 @@ python3 examples/basic/chat.py
 
 Use optional arguments to change the settings, e.g.:
 
--m "local" to use a model served locally at an OpenAI-API-compatible endpoint
-[ Ensure the API endpoint url matches the one in the code below, or edit it. ]
-OR
-- m "litellm/ollama/llama2" to use any model supported by litellm
-(see list here https://docs.litellm.ai/docs/providers)
-[Note you must prepend "litellm/" to the model name required in the litellm docs,
-e.g. "ollama/llama2" becomes "litellm/ollama/llama2",
-"bedrock/anthropic.claude-instant-v1" becomes
-"litellm/bedrock/anthropic.claude-instant-v1"]
-
+-m <local_model_spec>
 -ns # no streaming
 -d # debug mode
 -nc # no cache
--ct momento # use momento cache (instead of redis)
+-sm <system_message>
+-q <initial user msg>
 
-For details on running with local Llama model, see:
-https://langroid.github.io/langroid/blog/2023/09/14/using-langroid-with-local-llms/
+For details on running with local or non-OpenAI models, see:
+https://langroid.github.io/langroid/tutorials/non-openai-llms/
 """
 import typer
 from rich import print
 from rich.prompt import Prompt
-from pydantic import BaseSettings
 from dotenv import load_dotenv
 
+import langroid.language_models as lm
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
-from langroid.language_models.openai_gpt import OpenAIGPTConfig
 from langroid.utils.configuration import set_global, Settings
 from langroid.utils.logging import setup_colored_logging
 
@@ -72,27 +63,29 @@ setup_colored_logging()
 # of the config so that the `openai.*` completion functions can be used
 # without having to rely on adapter libraries like litellm.
 
-MyLLMConfig = OpenAIGPTConfig.create(prefix="myllm")
-my_llm_config = MyLLMConfig(
-    chat_model="litellm/ollama/llama2",
-    # or, other possibilities for example:
-    # "litellm/bedrock/anthropic.claude-instant-v1"
-    # "litellm/ollama/llama2"
-    # "local/localhost:8000/v1"
-    # "local/localhost:8000"
-    chat_context_length=2048,  # adjust based on model
-)
 
-
-class CLIOptions(BaseSettings):
-    model: str = ""
-
-    class Config:
-        extra = "forbid"
-        env_prefix = ""
-
-
-def chat(opts: CLIOptions) -> None:
+@app.command()
+def main(
+    debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
+    model: str = typer.Option("", "--model", "-m", help="model name"),
+    no_stream: bool = typer.Option(False, "--nostream", "-ns", help="no streaming"),
+    nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
+    query: str = typer.Option("", "--query", "-q", help="initial user query or msg"),
+    sys_msg: str = typer.Option(
+        "You are a helpful assistant. Be concise in your answers.",
+        "--sysmsg",
+        "-sm",
+        help="system message",
+    ),
+) -> None:
+    set_global(
+        Settings(
+            debug=debug,
+            cache=not nocache,
+            stream=not no_stream,
+            cache_type=cache_type,
+        )
+    )
     print(
         """
         [blue]Welcome to the basic chatbot!
@@ -103,19 +96,15 @@ def chat(opts: CLIOptions) -> None:
     load_dotenv()
 
     # use the appropriate config instance depending on model name
-    if opts.model.startswith("litellm/") or opts.model.startswith("local/"):
-        # e.g. litellm/ollama/llama2 or litellm/bedrock/anthropic.claude-instant-v1
-        llm_config = my_llm_config
-        llm_config.chat_model = opts.model
-
-    else:
-        llm_config = OpenAIGPTConfig()
-
-    default_sys_msg = "You are a helpful assistant. Be concise in your answers."
+    llm_config = lm.OpenAIGPTConfig(
+        chat_model=model or lm.OpenAIChatModel.GPT4_TURBO,
+        chat_context_length=4096,
+        timeout=45,
+    )
 
     sys_msg = Prompt.ask(
         "[blue]Tell me who I am. Hit Enter for default, or type your own\n",
-        default=default_sys_msg,
+        default=sys_msg,
     )
 
     config = ChatAgentConfig(
@@ -128,29 +117,10 @@ def chat(opts: CLIOptions) -> None:
     # but in some scenarios, other (e.g. llama) models
     # seem to do better when kicked off with a sys msg and a user msg.
     # In those cases we may want to do task.run("hello") instead.
-    task.run()
-
-
-@app.command()
-def main(
-    debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
-    model: str = typer.Option("", "--model", "-m", help="model name"),
-    no_stream: bool = typer.Option(False, "--nostream", "-ns", help="no streaming"),
-    nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
-    cache_type: str = typer.Option(
-        "redis", "--cachetype", "-ct", help="redis or momento"
-    ),
-) -> None:
-    set_global(
-        Settings(
-            debug=debug,
-            cache=not nocache,
-            stream=not no_stream,
-            cache_type=cache_type,
-        )
-    )
-    opts = CLIOptions(model=model)
-    chat(opts)
+    if query:
+        task.run(query)
+    else:
+        task.run()
 
 
 if __name__ == "__main__":
