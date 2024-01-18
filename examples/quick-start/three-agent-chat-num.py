@@ -25,10 +25,23 @@ lr.utils.logging.setup_colored_logging()
 NO_ANSWER = lr.utils.constants.NO_ANSWER
 
 
-def chat() -> None:
+@app.command()
+def main(
+    debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
+    no_stream: bool = typer.Option(False, "--nostream", "-ns", help="no streaming"),
+    model: str = typer.Option("", "--model", "-m", help="model name"),
+    nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
+) -> None:
+    lr.utils.configuration.set_global(
+        lr.utils.configuration.Settings(
+            debug=debug,
+            cache=not nocache,
+            stream=not no_stream,
+        )
+    )
     config = lr.ChatAgentConfig(
         llm=lr.language_models.OpenAIGPTConfig(
-            chat_model=lr.language_models.OpenAIChatModel.GPT4,
+            chat_model=model or lr.language_models.OpenAIChatModel.GPT4,
         ),
         vecdb=None,
     )
@@ -76,22 +89,6 @@ def chat() -> None:
 
     processor_task.add_sub_task([even_task, odd_task])
     processor_task.run()
-
-
-@app.command()
-def main(
-    debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
-    no_stream: bool = typer.Option(False, "--nostream", "-ns", help="no streaming"),
-    nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
-) -> None:
-    lr.utils.configuration.set_global(
-        lr.utils.configuration.Settings(
-            debug=debug,
-            cache=not nocache,
-            stream=not no_stream,
-        )
-    )
-    chat()
 
 
 if __name__ == "__main__":

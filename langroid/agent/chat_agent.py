@@ -6,6 +6,7 @@ from typing import Dict, List, Optional, Set, Tuple, Type, cast
 
 from rich import print
 from rich.console import Console
+from rich.markup import escape
 
 from langroid.agent.base import Agent, AgentConfig
 from langroid.agent.chat_document import ChatDocument
@@ -663,7 +664,7 @@ class ChatAgent(Agent):
             else:
                 response_str = response.message
             if not settings.quiet:
-                print(cached + "[green]" + response_str)
+                print(cached + "[green]" + escape(response_str))
         self.update_token_usage(
             response,
             messages,
@@ -706,7 +707,7 @@ class ChatAgent(Agent):
             else:
                 response_str = response.message
             if not settings.quiet:
-                print(cached + "[green]" + response_str)
+                print(cached + "[green]" + escape(response_str))
 
         self.update_token_usage(
             response,
