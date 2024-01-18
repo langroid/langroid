@@ -18,8 +18,8 @@ from the dependency graph. For examples:
 
 The `Neo4jChatAgent` has access to these tools/function-calls:
 
-- `GraphDatabaseSchema`: get schema of Neo4j knowledge-graph
-- `GenerateCypherQueries`: generate cypher queries to get information from
+- `GraphSchemaTool`: get schema of Neo4j knowledge-graph
+- `CypherQueryTool`: generate cypher queries to get information from
    Neo4j knowledge-graph (Cypher is the query language for Neo4j)
 
 
