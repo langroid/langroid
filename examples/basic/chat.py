@@ -32,8 +32,6 @@ from langroid.utils.logging import setup_colored_logging
 
 app = typer.Typer()
 
-setup_colored_logging()
-
 # Create classes for non-OpenAI model configs
 
 # OPTION 1: LiteLLM-supported models
@@ -83,7 +81,6 @@ def main(
             debug=debug,
             cache=not nocache,
             stream=not no_stream,
-            cache_type=cache_type,
         )
     )
     print(
