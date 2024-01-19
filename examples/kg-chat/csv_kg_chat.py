@@ -1,9 +1,10 @@
 import typer
-from rich import print
+from typing import List
 from dotenv import load_dotenv
 from rich.console import Console
-from pandas import DataFrame, read_csv
 from rich.prompt import Prompt
+from rich import print
+from pandas import DataFrame, read_csv
 
 from langroid.agent.tool_message import ToolMessage
 from langroid.agent.task import Task
@@ -84,14 +85,25 @@ class CSVNodeGenerator(ToolMessage):
     Take into account that the Cypher query will be executed while iterating the rows in
     the CSV file (like this `index, row in df.iterrows()`). So NO NEED to load the CSV.
     Make sure you send me the cypher query in this format: 
-    - placehoders in <cypherQuery> should be based on the heasers. 
-    - <args> an array wherein each element corresponds to everyplaceholder in the 
-    <cypherQuery>.
-    and provided in the same order as the headers. SO the <args> should be like this:
-    `[row_dict[header] for header in headers]`
+    - placehoders in <cypherQuery> should be based on the CSV header. 
+    - <args> an array wherein each element corresponds to every placeholder in the 
+    <cypherQuery> and provided in the same order as the headers. 
+    SO the <args> should be like this: `[row_dict[header] for header in headers]`
     """
     cypherQuery: str
     args: list[str]
+
+    @classmethod
+    def examples(cls) -> List["ToolMessage"]:
+        return [
+            cls(
+                cypherQuery="""MERGE (employee:Employee {name: $employeeName, id: $employeeId})\n
+                MERGE (department:Department {name: $departmentName})\n
+                MERGE (employee)-[:WORKS_IN]->(department)\n
+                SET employee.email = $employeeEmail""",
+                args=["employeeName", "employeeId", "departmentName", "employeeEmail"],
+            ),
+        ]
 
 
 class CSVChatGraphAgent(Neo4jChatAgent):
@@ -121,6 +133,8 @@ class CSVChatGraphAgent(Neo4jChatAgent):
                     msg.cypherQuery,
                     parameters={header: row_dict[header] for header in msg.args},
                 )
+                # there is a possibility the generated cypher query is not correct
+                # so we need to check the response before continuing to the iteration
                 if index == 0 and "successfully" not in response:
                     print(f"[red]{response}")
                     return response
@@ -199,8 +213,6 @@ def main(
                 "Do you want to continue? (y/n)",
             )
             if user_input == "y":
-                # ask the user if they want to continue with the whole dataset or just
-                # a sample of it
                 user_input_continue = Prompt.ask(
                     "Do you want to continue with the whole dataset? (y/n)",
                 )
@@ -222,12 +234,12 @@ def main(
                 csv_kg_chat_agent.csv_location = csv_location
                 build_kg_instructions = f"""
                     Your task is to build a knowledge graph based on a CSV file. 
-                    You will then be asked to answer questions based on the knowledge 
-                    graph.
-                    You FIRST need to generate the graph database based on the provided 
-                    CSV file by the user. The CSV file has this {headers}.
-                    You can use the tool `create_nodes_and_relationships_from_csv` to
-                      create the graph database based on the header of the CSV file.
+                    
+                    You need to generate the graph database based on these
+                    headers: {headers} in the CSV file.
+                    You can use the tool/function
+                    `create_nodes_and_relationships_from_csv` to display and confirm 
+                    the nodes and relationships.
                 """
 
             if user_input == "n":
