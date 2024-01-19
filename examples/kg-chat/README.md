@@ -82,7 +82,9 @@ This example uses a `CSVChatGraphAgent`
 
 The `CSVChatGraphAgent` allows users to ask questions about a CSV file by converting it into a knowledge graph. This enables capturing complex relationships that cannot be easily handled by libraries like `pandas`.
 
-If the CSV knowledge graph has not been constructed beforehand, the `CSVChatGraphAgent` provides the `create_nodes_and_relationships_from_csv` tool/function-call to create the necessary nodes and relationships from the CSV file. Once the CSV knowledge graph is constructed, the `CSVChatGraphAgent` can answer questions related to the CSV knowledge graph.
+If the CSV knowledge graph has not been constructed beforehand, the `CSVChatGraphAgent` provides the `pandas_to_kg` tool/function-call to create the necessary nodes and relationships from the CSV file. Once the CSV knowledge graph is constructed, the `CSVChatGraphAgent` can answer questions related to the CSV knowledge graph. The `CSVChatGraphAgent` has access to these tools/function-calls:
+
+- `PandasToKGTool`: convert a `pandas` DataFrame into a CSV knowledge graph.
 
 ## Requirements:
 

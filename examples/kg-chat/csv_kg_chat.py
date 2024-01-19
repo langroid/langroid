@@ -78,8 +78,8 @@ def _preprocess_dataframe_for_neo4j(
     return df
 
 
-class CSVNodeGenerator(ToolMessage):
-    request: str = "create_nodes_and_relationships_from_csv"
+class PandasToKGTool(ToolMessage):
+    request: str = "pandas_to_kg"
     purpose: str = """Use this tool to create ONLY nodes and their relashipnships based
     on the created model.
     Take into account that the Cypher query will be executed while iterating the rows in
@@ -113,7 +113,7 @@ class CSVChatGraphAgent(Neo4jChatAgent):
         self.csv_location: None | str = None
         self.csv_dataframe: None | DataFrame = None
 
-    def create_nodes_and_relationships_from_csv(self, msg: CSVNodeGenerator) -> str:
+    def pandas_to_kg(self, msg: PandasToKGTool) -> str:
         """
         Creates nodes and relationships in the graph database based on the data in
         a CSV file.
@@ -237,8 +237,7 @@ def main(
                     
                     You need to generate the graph database based on these
                     headers: {headers} in the CSV file.
-                    You can use the tool/function
-                    `create_nodes_and_relationships_from_csv` to display and confirm 
+                    You can use the tool/function `pandas_to_kg` to display and confirm 
                     the nodes and relationships.
                 """
 
@@ -246,7 +245,7 @@ def main(
                 print("Quitting the chatbot...")
                 return
 
-    csv_kg_chat_agent.enable_message(CSVNodeGenerator)
+    csv_kg_chat_agent.enable_message(PandasToKGTool)
 
     system_message = f"""
     You are an expert in Knowledge Graphs and analyzing them using Neo4j.
