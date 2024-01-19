@@ -10,4 +10,4 @@ class GenerateCypherQueries(ToolMessage):
 
 class GraphDatabaseSchema(ToolMessage):
     request: str = "get_schema"
-    purpose: str = """Use this tool to get me the schema of the graph database."""
+    purpose: str = """Use this tool to get the schema of the graph database."""

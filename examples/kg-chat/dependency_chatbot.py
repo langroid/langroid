@@ -60,8 +60,6 @@ class DepGraphTool(ToolMessage):
 
 
 class DependencyGraphAgent(Neo4jChatAgent):
-    package_name: str
-
     def construct_dependency_graph(self, msg: DepGraphTool) -> None:
         check_db_exist = (
             "MATCH (n) WHERE n.name = $name AND n.version = $version RETURN n LIMIT 1"
@@ -78,7 +76,8 @@ class DependencyGraphAgent(Neo4jChatAgent):
                 package_name=msg.package_name,
                 package_version=msg.package_version,
             )
-            if self.write_query(construct_dependency_graph):
+            response = self.write_query(construct_dependency_graph)
+            if "successfully" in response:
                 self.config.database_created = True
                 return "Database is created!"
             else:
