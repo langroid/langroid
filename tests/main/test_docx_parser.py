@@ -29,6 +29,10 @@ def test_get_docx_file(docxlib: str):
     assert all(path in d.metadata.source for d in docs)
 
 
+@pytest.mark.skip(
+    reason="This requires libreoffice to be installed so we "
+    "don't want to run it in Github Actions"
+)
 @pytest.mark.parametrize("doclib", ["unstructured"])
 def test_get_doc_file(doclib: str):
     current_dir = os.path.dirname(os.path.abspath(__file__))

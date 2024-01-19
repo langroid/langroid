@@ -17,8 +17,8 @@ from langroid.agent.special.neo4j.utils.system_message import (
     SCHEMA_TOOLS_SYS_MSG,
 )
 from langroid.agent.special.neo4j.utils.tools import (
-    GenerateCypherQueries,
-    GraphDatabaseSchema,
+    CypherQueryTool,
+    GraphSchemaTool,
 )
 from langroid.mytypes import Entity
 
@@ -229,12 +229,12 @@ class Neo4jChatAgent(ChatAgent):
         else:
             print("[red]Database is not deleted!")
 
-    def make_query(self, msg: GenerateCypherQueries) -> str:
+    def make_query(self, msg: CypherQueryTool) -> str:
         """ "
         Handle a GenerateCypherQueries message by executing a Cypher query and
         returning the result.
         Args:
-            msg (GenerateCypherQueries): The tool-message to handle.
+            msg (CypherQueryTool): The tool-message to handle.
 
         Returns:
             str: The result of executing the Cypherquery.
@@ -250,12 +250,12 @@ class Neo4jChatAgent(ChatAgent):
     # The current query works well. But we could use the queries here:
     # https://github.com/neo4j/NaLLM/blob/1af09cd117ba0777d81075c597a5081583568f9f/api/
     # src/driver/neo4j.py#L30
-    def get_schema(self, msg: GraphDatabaseSchema | None) -> str:
+    def get_schema(self, msg: GraphSchemaTool | None) -> str:
         """
         Retrieves the schema of a Neo4j graph database.
 
         Args:
-            msg (GraphDatabaseSchema): An instance of GraphDatabaseSchema, typically
+            msg (GraphSchemaTool): An instance of GraphDatabaseSchema, typically
             containing information or parameters needed for the database query.
 
         Returns:
@@ -278,8 +278,8 @@ class Neo4jChatAgent(ChatAgent):
         message = self._format_message()
         self.config.system_message = self.config.system_message.format(mode=message)
         super().__init__(self.config)
-        self.enable_message(GenerateCypherQueries)
-        self.enable_message(GraphDatabaseSchema)
+        self.enable_message(CypherQueryTool)
+        self.enable_message(GraphSchemaTool)
 
     def _format_message(self) -> str:
         if self.driver is None:

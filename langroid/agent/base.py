@@ -21,6 +21,7 @@ from typing import (
 from pydantic import BaseSettings, ValidationError
 from rich import print
 from rich.console import Console
+from rich.markup import escape
 from rich.prompt import Prompt
 
 from langroid.agent.chat_document import ChatDocMetaData, ChatDocument
@@ -449,7 +450,7 @@ class Agent(ABC):
             # streaming was enabled, AND we did not find a cached response.
             # If we are here, it means the response has not yet been displayed.
             cached = f"[red]{self.indent}(cached)[/red]" if response.cached else ""
-            print(cached + "[green]" + response.message)
+            print(cached + "[green]" + escape(response.message))
         async with self.lock:
             self.update_token_usage(
                 response,
@@ -522,7 +523,7 @@ class Agent(ABC):
             # If we are here, it means the response has not yet been displayed.
             cached = f"[red]{self.indent}(cached)[/red]" if response.cached else ""
             console.print(f"[green]{self.indent}", end="")
-            print(cached + "[green]" + response.message)
+            print(cached + "[green]" + escape(response.message))
         self.update_token_usage(
             response,
             prompt,

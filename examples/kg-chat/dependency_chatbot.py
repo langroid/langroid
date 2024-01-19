@@ -72,7 +72,7 @@ class DependencyGraphAgent(Neo4jChatAgent):
             return "Database Exists"
         else:
             construct_dependency_graph = CONSTRUCT_DEPENDENCY_GRAPH.format(
-                package_type=msg.package_type,
+                package_type=msg.package_type.lower(),
                 package_name=msg.package_name,
                 package_version=msg.package_version,
             )
@@ -136,14 +136,14 @@ def main(
     FIRST, I'll give you the name of the package that I want to analyze.
     
     THEN, you can also use the `web_search` tool/function to find out information about a package,
-      such as version number and package type (PyPI or not). 
+      such as version number and package type (PyPi or not). 
     
     If unable to get this info, you can ask me and I can tell you.
     
     DON'T forget to include the package name in your questions. 
       
     After receiving this infomration, make sure the package version is a number and the
-    package type is PYPI.
+    package type is PyPi.
     THEN ask the user if they want to construct the dependency graph,
     and if so, use the tool/function `construct_dependency_graph` to construct
       the dependency graph. Otherwise, say `Couldn't retrieve package type or version`

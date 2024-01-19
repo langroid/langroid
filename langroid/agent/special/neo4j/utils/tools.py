@@ -1,13 +1,13 @@
 from langroid.agent.tool_message import ToolMessage
 
 
-class GenerateCypherQueries(ToolMessage):
+class CypherQueryTool(ToolMessage):
     request: str = "make_query"
     purpose: str = """Use this tool to send me the Generated Cypher query based on 
     text description and schema that I will provide you."""
     cypherQuery: str
 
 
-class GraphDatabaseSchema(ToolMessage):
+class GraphSchemaTool(ToolMessage):
     request: str = "get_schema"
     purpose: str = """Use this tool to get the schema of the graph database."""

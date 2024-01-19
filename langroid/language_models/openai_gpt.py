@@ -931,7 +931,7 @@ class OpenAIGPT(LanguageModel):
                 self._cache_store(hashed_key, result.model_dump())
         return cached, hashed_key, result
 
-    @retry_with_exponential_backoff
+    @async_retry_with_exponential_backoff
     async def _achat_completions_with_backoff(self, **kwargs):  # type: ignore
         cached = False
         hashed_key, result = self._cache_lookup("Completion", **kwargs)

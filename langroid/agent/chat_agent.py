@@ -6,6 +6,7 @@ from typing import Dict, List, Optional, Set, Tuple, Type, cast
 
 from rich import print
 from rich.console import Console
+from rich.markup import escape
 
 from langroid.agent.base import Agent, AgentConfig
 from langroid.agent.chat_document import ChatDocument
@@ -570,7 +571,10 @@ class ChatAgent(Agent):
                         raise ValueError(
                             """
                         The message history is longer than the max chat context 
-                        length allowed, and we have run out of messages to drop."""
+                        length allowed, and we have run out of messages to drop.
+                        HINT: In your `OpenAIGPTConfig` object, try increasing
+                        `chat_context_length` or decreasing `max_output_tokens`.
+                        """
                         )
                     # drop the second message, i.e. first msg after the sys msg
                     # (typically user msg).
@@ -663,7 +667,7 @@ class ChatAgent(Agent):
             else:
                 response_str = response.message
             if not settings.quiet:
-                print(cached + "[green]" + response_str)
+                print(cached + "[green]" + escape(response_str))
         self.update_token_usage(
             response,
             messages,
@@ -706,7 +710,7 @@ class ChatAgent(Agent):
             else:
                 response_str = response.message
             if not settings.quiet:
-                print(cached + "[green]" + response_str)
+                print(cached + "[green]" + escape(response_str))
 
         self.update_token_usage(
             response,
