@@ -6,24 +6,6 @@ the method `_get_tool_list()`).
 
 See usage examples in `tests/main/test_multi_agent_complex.py` and
 `tests/main/test_recipient_tool.py`.
-
-Previously we were using RecipientValidatorAgent to enforce proper
-recipient specifiction, but the preferred method is to use the
-`RecipientTool` class.  This has numerous advantages:
-- it uses the tool/function-call mechanism to specify a recipient in a JSON-structured
-    string, which is more consistent with the rest of the system, and does not require
-    inventing a new syntax like `TO:<recipient>` (which the RecipientValidatorAgent
-    uses).
-- it removes the need for any special parsing of the message content, since we leverage
-    the built-in JSON tool-matching in `Agent.handle_message()` and downstream code.
-- it does not require setting the `parent_responder` field in the `ChatDocument`
-    metadata, which is somewhat hacky.
-- it appears to be less brittle than requiring the LLM to use TO:<recipient> syntax:
-  The LLM almost never forgets to use the RecipientTool as instructed.
-- The RecipientTool class acts as a specification of the required syntax, and also
-  contains mechanisms to enforce this syntax.
-- For a developer who needs to enforce recipient specification for an agent, they only
-  need to do `agent.enable_message(RecipientTool)`, and the rest is taken care of.
 """
 from typing import List, Type
 
@@ -62,20 +44,22 @@ class AddRecipientTool(ToolMessage):
             (ChatDocument): with content set to self.content and
                 metadata.recipient set to self.recipient.
         """
-        print(f"[red]RecipientTool: Added recipient {self.recipient} to message.")
+        print(
+            "[red]RecipientTool: "
+            f"Added recipient {self.intended_recipient} to message."
+        )
         if self.__class__.saved_content == "":
             recipient_request_name = RecipientTool.default_value("request")
-            raise ValueError(
-                f"""
+            content = f"""
                 Recipient specified but content is empty!
                 This could be because the `{self.request}` tool/function was used 
                 before using `{recipient_request_name}` tool/function.
                 Resend the message using `{recipient_request_name}` tool/function.
                 """
-            )
-        content = self.__class__.saved_content  # use class-level attrib value
-        # erase content since we just used it.
-        self.__class__.saved_content = ""
+        else:
+            content = self.__class__.saved_content  # use class-level attrib value
+            # erase content since we just used it.
+            self.__class__.saved_content = ""
         return ChatDocument(
             content=content,
             metadata=ChatDocMetaData(
@@ -91,9 +75,10 @@ class RecipientTool(ToolMessage):
     Used by LLM to send a message to a specific recipient.
 
     Useful in cases where an LLM is talking to 2 or more
-    agents, and needs to specify which agent (task) its message is intended for.
-    The recipient name should be the name of a task (which is normally the name of
-    the agent that the task wraps, although the task can have its own name).
+    agents (or an Agent and human user), and needs to specify which agent (task)
+    its message is intended for. The recipient name should be the name of a task
+    (which is normally the name of the agent that the task wraps, although the task
+    can have its own name).
 
     To use this tool/function-call, LLM must generate a JSON structure
     with these fields:
@@ -102,6 +87,7 @@ class RecipientTool(ToolMessage):
         "intended_recipient": <name_of_recipient_task_or_entity>,
         "content": <content>
     }
+    The effect of this is that `content` will be sent to the `intended_recipient` task.
     """
 
     request: str = "recipient_message"
@@ -181,7 +167,7 @@ class RecipientTool(ToolMessage):
             content=self.content,
             metadata=ChatDocMetaData(
                 recipient=self.intended_recipient,
-                # we are constructing this so it looks as it msg is from LLM
+                # we are constructing this so it looks as if msg is from LLM
                 sender=Entity.LLM,
             ),
         )

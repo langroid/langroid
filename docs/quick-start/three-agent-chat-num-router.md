@@ -1,9 +1,9 @@
 # Three-Agent Collaboration, with message Routing
 
 !!! tip "Script in `langroid-examples`"
-        A full working example for the material in this section is
-        in the `three-agent-chat-num-router.py` script in the `langroid-examples` repo:
-        [`examples/quick-start/three-agent-chat-num-router.py`](https://github.com/langroid/langroid-examples/tree/main/examples/quick-start/three-agent-chat-num-router.py).
+    A full working example for the material in this section is
+    in the `three-agent-chat-num-router.py` script in the `langroid-examples` repo:
+    [`examples/quick-start/three-agent-chat-num-router.py`](https://github.com/langroid/langroid-examples/tree/main/examples/quick-start/three-agent-chat-num-router.py).
 
 Let's change the number game from the [three agent chat example](three-agent-chat-num.md) slightly.
 In that example, when the `even_agent`'s LLM receives an odd number,
@@ -25,14 +25,14 @@ The goal we have set for the `processor_agent` implies that it
 must specify the intended recipient of 
 the number it is sending. 
 We can enforce this using a special Langroid Tool, 
-[`RecipientTool`](langroid.agent.tools.recipient_tool.RecipientTool).
+[`RecipientTool`][langroid.agent.tools.recipient_tool.RecipientTool].
 So when setting up the
 `processor_task` we include instructions to use this tool
 (whose name is `recipient_message`, the value of `RecipientTool.request`):
 
 ```py
-processor_agent = ChatAgent(config)
-processor_task = Task(
+processor_agent = lr.ChatAgent(config)
+processor_task = lr.Task(
     processor_agent,
     name = "Processor",
     system_message="""
@@ -65,14 +65,14 @@ processor_task = Task(
 
 To enable the `processor_agent` to use this tool, we must enable it:
 ```py
-processor_agent.enable_message(RecipientTool)
+processor_agent.enable_message(lr.agent.tools.RecipientTool)
 ```
 
 The rest of the code remains the same as in the [previous section](three-agent-chat-num.md),
 i.e., we simply add the two handler tasks
 as sub-tasks of the `processor_task`, like this:
 ```python
-processor_task.add_subtask([even_task, odd_task])
+processor_task.add_sub_task([even_task, odd_task])
 ```
 
 One of the benefits of using the `RecipientTool` is that it contains 

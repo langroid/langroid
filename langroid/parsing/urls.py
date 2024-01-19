@@ -221,6 +221,9 @@ def find_urls(
             link for link in defragged_links if urlparse(link).netloc == base_domain
         ]
 
+        # ensure url is first, since below we are taking first max_links urls
+        domain_matching_links = [url] + [x for x in domain_matching_links if x != url]
+
         # If found links exceed max_links, return immediately
         if len(domain_matching_links) >= max_links:
             return set(domain_matching_links[:max_links])

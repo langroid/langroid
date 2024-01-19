@@ -32,7 +32,7 @@ class MeiliSearchConfig(VectorStoreConfig):
 
 
 class MeiliSearch(VectorStore):
-    def __init__(self, config: MeiliSearchConfig):
+    def __init__(self, config: MeiliSearchConfig = MeiliSearchConfig()):
         super().__init__(config)
         self.config: MeiliSearchConfig = config
         self.host = config.host
@@ -165,12 +165,13 @@ class MeiliSearch(VectorStore):
         async with self.client() as client:
             index = client.index(collection_name)
             await index.add_documents_in_batches(
-                documents=documents,  # type: ignore
+                documents=documents,
                 batch_size=self.config.batch_size,
                 primary_key=self.config.primary_key,
             )
 
     def add_documents(self, documents: Sequence[Document]) -> None:
+        super().maybe_add_ids(documents)
         if len(documents) == 0:
             return
         colls = self._list_all_collections()
@@ -197,18 +198,19 @@ class MeiliSearch(VectorStore):
         except ValueError:
             return id
 
-    async def _async_get_documents(self) -> DocumentsInfo:
+    async def _async_get_documents(self, where: str = "") -> DocumentsInfo:
         if self.config.collection_name is None:
             raise ValueError("No collection name set, cannot retrieve docs")
+        filter = [] if where is None else where
         async with self.client() as client:
             index = client.index(self.config.collection_name)
-            documents = await index.get_documents(limit=10_000)
+            documents = await index.get_documents(limit=10_000, filter=filter)
         return documents
 
-    def get_all_documents(self) -> List[Document]:
+    def get_all_documents(self, where: str = "") -> List[Document]:
         if self.config.collection_name is None:
             raise ValueError("No collection name set, cannot retrieve docs")
-        docs = asyncio.run(self._async_get_documents())
+        docs = asyncio.run(self._async_get_documents(where))
         if docs is None:
             return []
         doc_results = docs.results
@@ -226,7 +228,7 @@ class MeiliSearch(VectorStore):
         async with self.client() as client:
             index = client.index(self.config.collection_name)
             documents = await asyncio.gather(*[index.get_document(id) for id in ids])
-        return documents  # type: ignore
+        return documents
 
     def get_documents_by_ids(self, ids: List[str]) -> List[Document]:
         if self.config.collection_name is None:
@@ -263,6 +265,7 @@ class MeiliSearch(VectorStore):
         text: str,
         k: int = 20,
         where: Optional[str] = None,
+        neighbors: int = 0,  # ignored
     ) -> List[Tuple[Document, float]]:
         filter = [] if where is None else where
         if self.config.collection_name is None:

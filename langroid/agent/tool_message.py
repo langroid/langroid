@@ -6,6 +6,8 @@ an agent. The messages could represent, for example:
 - request to run a method of the agent
 """
 
+import json
+import textwrap
 from abc import ABC
 from random import choice
 from typing import Any, Dict, List, Type
@@ -14,16 +16,7 @@ from docstring_parser import parse
 from pydantic import BaseModel
 
 from langroid.language_models.base import LLMFunctionSpec
-
-
-def _recursive_purge_dict_key(d: Dict[str, Any], k: str) -> None:
-    """Remove a key from a dictionary recursively"""
-    if isinstance(d, dict):
-        for key in list(d.keys()):
-            if key == k and "type" in d.keys():
-                del d[key]
-            else:
-                _recursive_purge_dict_key(d[key], k)
+from langroid.utils.pydantic_utils import _recursive_purge_dict_key
 
 
 class ToolMessage(ABC, BaseModel):
@@ -45,7 +38,6 @@ class ToolMessage(ABC, BaseModel):
     request: str
     purpose: str
     result: str = ""
-    recipient: str = ""  # default is empty string, so it is optional
 
     class Config:
         arbitrary_types_allowed = False
@@ -109,7 +101,50 @@ class ToolMessage(ABC, BaseModel):
         return properties.get(f, {}).get("default", None)
 
     @classmethod
-    def llm_function_schema(cls, request: bool = False) -> LLMFunctionSpec:
+    def json_instructions(cls) -> str:
+        """
+        Default Instructions to the LLM showing how to use the tool/function-call.
+        Works for GPT4 but override this for weaker LLMs if needed.
+        Returns:
+            str: instructions on how to use the message
+        """
+        return textwrap.dedent(
+            f"""
+            TOOL: {cls.default_value("request")}
+            PURPOSE: {cls.default_value("purpose")} 
+            JSON FORMAT: {
+                json.dumps(
+                    cls.llm_function_schema(request=True).parameters,
+                    indent=4,
+                )
+            }
+            {"EXAMPLE: " + cls.usage_example() if cls.examples() else ""}
+            """.lstrip()
+        )
+
+    @staticmethod
+    def json_group_instructions() -> str:
+        """Template for instructions for a group of tools.
+        Works with GPT4 but override this for weaker LLMs if needed.
+        """
+        return textwrap.dedent(
+            """
+            === ALL AVAILABLE TOOLS and THEIR JSON FORMAT INSTRUCTIONS ===
+            You have access to the following TOOLS to accomplish your task:
+
+            {json_instructions}
+            
+            When one of the above TOOLs is applicable, you must express your 
+            request as "TOOL:" followed by the request in the above JSON format.
+            """
+        )
+
+    @classmethod
+    def llm_function_schema(
+        cls,
+        request: bool = False,
+        defaults: bool = True,
+    ) -> LLMFunctionSpec:
         """
         Clean up the schema of the Pydantic class (which can recursively contain
         other Pydantic classes), to create a version compatible with OpenAI
@@ -122,6 +157,8 @@ class ToolMessage(ABC, BaseModel):
             request: whether to include the "request" field in the schema.
                 (we set this to True when using Langroid-native TOOLs as opposed to
                 OpenAI Function calls)
+            defaults: whether to include fields with default values in the schema,
+                    in the "properties" section.
 
         Returns:
             LLMFunctionSpec: the schema as an LLMFunctionSpec
@@ -146,7 +183,7 @@ class ToolMessage(ABC, BaseModel):
         parameters["properties"] = {
             field: details
             for field, details in parameters["properties"].items()
-            if field not in excludes
+            if field not in excludes and (defaults or details.get("default") is None)
         }
         parameters["required"] = sorted(
             k

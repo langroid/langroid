@@ -19,6 +19,7 @@ logger = logging.getLogger(__name__)
 class DocumentType(str, Enum):
     PDF = "pdf"
     DOCX = "docx"
+    DOC = "doc"
 
 
 class DocumentParser(Parser):
@@ -62,10 +63,14 @@ class DocumentParser(Parser):
         elif DocumentParser._document_type(source) == DocumentType.DOCX:
             if config.docx.library == "unstructured":
                 return UnstructuredDocxParser(source, config)
+            elif config.docx.library == "python-docx":
+                return PythonDocxParser(source, config)
             else:
                 raise ValueError(
                     f"Unsupported DOCX library specified: {config.docx.library}"
                 )
+        elif DocumentParser._document_type(source) == DocumentType.DOC:
+            return UnstructuredDocParser(source, config)
         else:
             raise ValueError(f"Unsupported document type: {source}")
 
@@ -96,6 +101,8 @@ class DocumentParser(Parser):
             return DocumentType.PDF
         elif source.lower().endswith(".docx"):
             return DocumentType.DOCX
+        elif source.lower().endswith(".doc"):
+            return DocumentType.DOC
         else:
             raise ValueError(f"Unsupported document type: {source}")
 
@@ -200,6 +207,7 @@ class DocumentParser(Parser):
                     ),
                 )
             )
+        self.add_window_ids(docs)
         return docs
 
 
@@ -435,3 +443,55 @@ class UnstructuredDocxParser(DocumentParser):
         """
         text = " ".join(el.text for el in page)
         return self.fix_text(text)
+
+
+class UnstructuredDocParser(UnstructuredDocxParser):
+    def iterate_pages(self) -> Generator[Tuple[int, Any], None, None]:  # type: ignore
+        from unstructured.partition.doc import partition_doc
+
+        elements = partition_doc(filename=self.source, include_page_breaks=True)
+
+        page_number = 1
+        page_elements = []  # type: ignore
+        for el in elements:
+            if el.category == "PageBreak":
+                if page_elements:  # Avoid yielding empty pages at the start
+                    yield page_number, page_elements
+                page_number += 1
+                page_elements = []
+            else:
+                page_elements.append(el)
+        # Yield the last page if it's not empty
+        if page_elements:
+            yield page_number, page_elements
+
+
+class PythonDocxParser(DocumentParser):
+    """
+    Parser for processing DOCX files using the `python-docx` library.
+    """
+
+    def iterate_pages(self) -> Generator[Tuple[int, Any], None, None]:
+        """
+        Simulate iterating through pages.
+        In a DOCX file, pages are not explicitly defined,
+        so we consider each paragraph as a separate 'page' for simplicity.
+        """
+        import docx
+
+        doc = docx.Document(self.doc_bytes)
+        for i, para in enumerate(doc.paragraphs, start=1):
+            yield i, [para]
+
+    def extract_text_from_page(self, page: Any) -> str:
+        """
+        Extract text from a given 'page', which in this case is a single paragraph.
+
+        Args:
+            page (list): A list containing a single Paragraph object.
+
+        Returns:
+            str: Extracted text from the paragraph.
+        """
+        paragraph = page[0]
+        return self.fix_text(paragraph.text)

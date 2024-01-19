@@ -1,8 +1,10 @@
+import hashlib
+import json
 import logging
 import os
-from typing import List, Optional, Sequence, Tuple
+import uuid
+from typing import List, Optional, Sequence, Tuple, TypeVar
 
-from chromadb.api.types import EmbeddingFunction
 from dotenv import load_dotenv
 from qdrant_client import QdrantClient
 from qdrant_client.conversions.common_types import ScoredPoint
@@ -20,23 +22,50 @@ from langroid.embedding_models.base import (
     EmbeddingModelsConfig,
 )
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
-from langroid.mytypes import Document
+from langroid.mytypes import Document, EmbeddingFunction
 from langroid.utils.configuration import settings
 from langroid.vector_store.base import VectorStore, VectorStoreConfig
 
 logger = logging.getLogger(__name__)
 
 
+T = TypeVar("T")
+
+
+def from_optional(x: Optional[T], default: T) -> T:
+    if x is None:
+        return default
+
+    return x
+
+
+def is_valid_uuid(uuid_to_test: str) -> bool:
+    """
+    Check if a given string is a valid UUID.
+    """
+    try:
+        uuid_obj = uuid.UUID(uuid_to_test)
+        return str(uuid_obj) == uuid_to_test
+    except Exception:
+        pass
+    # Check for valid unsigned 64-bit integer
+    try:
+        int_value = int(uuid_to_test)
+        return 0 <= int_value <= 18446744073709551615
+    except ValueError:
+        return False
+
+
 class QdrantDBConfig(VectorStoreConfig):
     cloud: bool = True
-    collection_name: str | None = None
+    collection_name: str | None = "temp"
     storage_path: str = ".qdrant/data"
     embedding: EmbeddingModelsConfig = OpenAIEmbeddingsConfig()
     distance: str = Distance.COSINE
 
 
 class QdrantDB(VectorStore):
-    def __init__(self, config: QdrantDBConfig):
+    def __init__(self, config: QdrantDBConfig = QdrantDBConfig()):
         super().__init__(config)
         self.config = config
         emb_model = EmbeddingModel.create(config.embedding)
@@ -113,8 +142,10 @@ class QdrantDB(VectorStore):
         n_non_empty_deletes = 0
         for name in coll_names:
             info = self.client.get_collection(collection_name=name)
-            n_empty_deletes += info.points_count == 0
-            n_non_empty_deletes += info.points_count > 0
+            points_count = from_optional(info.points_count, 0)
+
+            n_empty_deletes += points_count == 0
+            n_non_empty_deletes += points_count > 0
             self.client.delete_collection(collection_name=name)
         logger.warning(
             f"""
@@ -135,11 +166,21 @@ class QdrantDB(VectorStore):
         colls = list(self.client.get_collections())[0][1]
         if empty:
             return [coll.name for coll in colls]
-        counts = [
-            self.client.get_collection(collection_name=coll.name).points_count
-            for coll in colls
-        ]
-        return [coll.name for coll, count in zip(colls, counts) if count > 0]
+        counts = []
+        for coll in colls:
+            try:
+                counts.append(
+                    from_optional(
+                        self.client.get_collection(
+                            collection_name=coll.name
+                        ).points_count,
+                        0,
+                    )
+                )
+            except Exception:
+                logger.warning(f"Error getting collection {coll.name}")
+                counts.append(0)
+        return [coll.name for coll, count in zip(colls, counts) if (count or 0) > 0]
 
     def create_collection(self, collection_name: str, replace: bool = False) -> None:
         """
@@ -154,7 +195,10 @@ class QdrantDB(VectorStore):
         collections = self.list_collections()
         if collection_name in collections:
             coll = self.client.get_collection(collection_name=collection_name)
-            if coll.status == CollectionStatus.GREEN and coll.points_count > 0:
+            if (
+                coll.status == CollectionStatus.GREEN
+                and from_optional(coll.points_count, 0) > 0
+            ):
                 logger.warning(f"Non-empty Collection {collection_name} already exists")
                 if not replace:
                     logger.warning("Not replacing collection")
@@ -178,6 +222,11 @@ class QdrantDB(VectorStore):
             logger.setLevel(level)
 
     def add_documents(self, documents: Sequence[Document]) -> None:
+        # Add id to metadata if not already present
+        super().maybe_add_ids(documents)
+        # Fix the ids due to qdrant finickiness
+        for doc in documents:
+            doc.metadata.id = str(self._to_int_or_uuid(doc.metadata.id))
         colls = self.list_collections(empty=True)
         if len(documents) == 0:
             return
@@ -205,19 +254,42 @@ class QdrantDB(VectorStore):
 
     def _to_int_or_uuid(self, id: str) -> int | str:
         try:
-            return int(id)
+            int_val = int(id)
+            if is_valid_uuid(id):
+                return int_val
         except ValueError:
+            pass
+
+        # If doc_id is already a valid UUID, return it as is
+        if isinstance(id, str) and is_valid_uuid(id):
             return id
 
-    def get_all_documents(self) -> List[Document]:
+        # Otherwise, generate a UUID from the doc_id
+        # Convert doc_id to string if it's not already
+        id_str = str(id)
+
+        # Hash the document ID using SHA-1
+        hash_object = hashlib.sha1(id_str.encode())
+        hash_digest = hash_object.hexdigest()
+
+        # Truncate or manipulate the hash to fit into a UUID (128 bits)
+        uuid_str = hash_digest[:32]
+
+        # Format this string into a UUID format
+        formatted_uuid = uuid.UUID(uuid_str)
+
+        return str(formatted_uuid)
+
+    def get_all_documents(self, where: str = "") -> List[Document]:
         if self.config.collection_name is None:
             raise ValueError("No collection name set, cannot retrieve docs")
         docs = []
         offset = 0
+        filter = Filter() if where == "" else Filter.parse_obj(json.loads(where))
         while True:
             results, next_page_offset = self.client.scroll(
                 collection_name=self.config.collection_name,
-                scroll_filter=None,
+                scroll_filter=filter,
                 offset=offset,
                 limit=10_000,  # try getting all at once, if not we keep paging
                 with_payload=True,
@@ -239,7 +311,11 @@ class QdrantDB(VectorStore):
             with_vectors=False,
             with_payload=True,
         )
-        docs = [Document(**record.payload) for record in records]  # type: ignore
+        # Note the records may NOT be in the order of the ids,
+        # so we re-order them here.
+        id2payload = {record.id: record.payload for record in records}
+        ordered_payloads = [id2payload[id] for id in _ids]
+        docs = [Document(**payload) for payload in ordered_payloads]  # type: ignore
         return docs
 
     def similar_texts_with_scores(
@@ -247,10 +323,14 @@ class QdrantDB(VectorStore):
         text: str,
         k: int = 1,
         where: Optional[str] = None,
+        neighbors: int = 0,
     ) -> List[Tuple[Document, float]]:
         embedding = self.embedding_fn([text])[0]
         # TODO filter may not work yet
-        filter = Filter() if where is None else Filter.from_json(where)  # type: ignore
+        if where is None or where == "":
+            filter = Filter()
+        else:
+            filter = Filter.parse_obj(json.loads(where))
         if self.config.collection_name is None:
             raise ValueError("No collection name set, cannot search")
         search_result: List[ScoredPoint] = self.client.search(
@@ -263,7 +343,7 @@ class QdrantDB(VectorStore):
                 exact=False,  # use Apx NN, not exact NN
             ),
         )
-        scores = [match.score for match in search_result]
+        scores = [match.score for match in search_result if match is not None]
         docs = [
             Document(**(match.payload))  # type: ignore
             for match in search_result
@@ -272,8 +352,9 @@ class QdrantDB(VectorStore):
         if len(docs) == 0:
             logger.warning(f"No matches found for {text}")
             return []
-        if settings.debug:
-            logger.info(f"Found {len(docs)} matches, max score: {max(scores)}")
         doc_score_pairs = list(zip(docs, scores))
+        max_score = max(ds[1] for ds in doc_score_pairs)
+        if settings.debug:
+            logger.info(f"Found {len(doc_score_pairs)} matches, max score: {max_score}")
         self.show_if_debug(doc_score_pairs)
         return doc_score_pairs

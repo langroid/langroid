@@ -63,9 +63,6 @@ def test_process_messages(test_settings: Settings):
     task = Task(
         agent,
         name="Test",
-        llm_delegate=False,
-        single_round=False,
-        only_user_quits_root=False,
     )
     msg = "What is the capital of France?"
     task.init(msg)
@@ -107,10 +104,7 @@ def test_process_messages(test_settings: Settings):
         name="Test",
         system_message=f""" Your job is to always say "{NO_ANSWER}" """,
         user_message=question,
-        llm_delegate=False,
-        single_round=False,
         restart=True,
-        only_user_quits_root=False,
     )
     # LLM responds with NO_ANSWER
     task.init()
@@ -123,7 +117,7 @@ def test_task(test_settings: Settings):
     set_global(test_settings)
     cfg = _TestChatAgentConfig()
     agent = ChatAgent(cfg)
-    task = Task(agent, name="Test", llm_delegate=False, single_round=False)
+    task = Task(agent, name="Test")
     question = "What is the capital of France?"
     agent.default_human_response = question
 
@@ -131,7 +125,7 @@ def test_task(test_settings: Settings):
     task.run(turns=3)
 
     # 3 Turns:
-    # 1. LLM initiates convo saying thanks how can I help (since do_task msg empty)
+    # 1. LLM initiates convo saying thanks how can I help (since task msg empty)
     # 2. User asks the `default_human_response`: What is the capital of France?
     # 3. LLM responds
 
@@ -150,3 +144,36 @@ def test_task(test_settings: Settings):
 
     assert task.pending_message.metadata.sender == Entity.LLM
     assert "London" in task.pending_message.content
+
+
+def test_simple_task(test_settings: Settings):
+    set_global(test_settings)
+    cfg = _TestChatAgentConfig()
+    agent = ChatAgent(cfg)
+    task = Task(
+        agent,
+        interactive=False,
+        done_if_response=[Entity.LLM],
+        system_message="""
+        User will give you a number, respond with the square of the number.
+        """,
+    )
+
+    response = task.run(msg="5")
+    assert "25" in response.content
+
+    # create new task with SAME agent, and restart=True,
+    # verify that this works fine, i.e. does not use previous state of agent
+
+    task = Task(
+        agent,
+        interactive=False,
+        done_if_response=[Entity.LLM],
+        restart=True,
+        system_message="""
+        User will give you a number, respond with the square of the number.
+        """,
+    )
+
+    response = task.run(msg="7")
+    assert "49" in response.content

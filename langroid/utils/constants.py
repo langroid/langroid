@@ -16,3 +16,7 @@ class Colors(BaseModel):
 USER_QUIT = ["q", "x", "quit", "exit", "bye"]
 NO_ANSWER = "DO-NOT-KNOW"
 DONE = "DONE"
+PASS = "__PASS__"
+PASS_TO = PASS + ":"
+SEND_TO = "SEND:"
+TOOL = "TOOL"

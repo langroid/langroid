@@ -1,3 +1,4 @@
+import json
 import logging
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
@@ -17,7 +18,7 @@ logger = logging.getLogger(__name__)
 
 
 class ChromaDBConfig(VectorStoreConfig):
-    collection_name: str = "chroma-langroid"
+    collection_name: str = "temp"
     storage_path: str = ".chroma/data"
     embedding: EmbeddingModelsConfig = OpenAIEmbeddingsConfig()
     host: str = "127.0.0.1"
@@ -25,7 +26,7 @@ class ChromaDBConfig(VectorStoreConfig):
 
 
 class ChromaDB(VectorStore):
-    def __init__(self, config: ChromaDBConfig):
+    def __init__(self, config: ChromaDBConfig = ChromaDBConfig()):
         super().__init__(config)
         self.config = config
         emb_model = EmbeddingModel.create(config.embedding)
@@ -99,29 +100,42 @@ class ChromaDB(VectorStore):
 
         """
         self.config.collection_name = collection_name
+        if collection_name in self.list_collections(empty=True) and replace:
+            logger.warning(f"Replacing existing collection {collection_name}")
+            self.client.delete_collection(collection_name)
         self.collection = self.client.create_collection(
             name=self.config.collection_name,
             embedding_function=self.embedding_fn,
             get_or_create=not replace,
         )
 
-    def add_documents(self, documents: Optional[Sequence[Document]] = None) -> None:
+    def add_documents(self, documents: Sequence[Document]) -> None:
+        super().maybe_add_ids(documents)
         if documents is None:
             return
         contents: List[str] = [document.content for document in documents]
-        metadatas: List[dict[str, Any]] = [
-            document.metadata.dict() for document in documents
+        # convert metadatas to dicts so chroma can handle them
+        metadata_dicts: List[dict[str, Any]] = [
+            d.metadata.dict_bool_int() for d in documents
         ]
+        for m in metadata_dicts:
+            # chroma does not handle non-atomic types in metadata
+            m["window_ids"] = ",".join(m["window_ids"])
+
         ids = [str(d.id()) for d in documents]
         self.collection.add(
             # embedding_models=embedding_models,
             documents=contents,
-            metadatas=metadatas,
+            metadatas=metadata_dicts,
             ids=ids,
         )
 
-    def get_all_documents(self) -> List[Document]:
-        results = self.collection.get(include=["documents", "metadatas"])
+    def get_all_documents(self, where: str = "") -> List[Document]:
+        filter = json.loads(where) if where else None
+        results = self.collection.get(
+            include=["documents", "metadatas"],
+            where=filter,
+        )
         results["documents"] = [results["documents"]]
         results["metadatas"] = [results["metadatas"]]
         return self._docs_from_results(results)
@@ -138,14 +152,17 @@ class ChromaDB(VectorStore):
     def similar_texts_with_scores(
         self, text: str, k: int = 1, where: Optional[str] = None
     ) -> List[Tuple[Document, float]]:
+        n = self.collection.count()
+        filter = json.loads(where) if where else None
         results = self.collection.query(
             query_texts=[text],
-            n_results=k,
-            where=where,
+            n_results=min(n, k),
+            where=filter,
             include=["documents", "distances", "metadatas"],
         )
         docs = self._docs_from_results(results)
-        scores = results["distances"][0]
+        # chroma distances are 1 - cosine.
+        scores = [1 - s for s in results["distances"][0]]
         return list(zip(docs, scores))
 
     def _docs_from_results(self, results: Dict[str, Any]) -> List[Document]:
@@ -164,22 +181,11 @@ class ChromaDB(VectorStore):
             for i, c in enumerate(contents):
                 print_long_text("red", "italic red", f"MATCH-{i}", c)
         metadatas = results["metadatas"][0]
+        for m in metadatas:
+            # restore the stringified list of window_ids into the original List[str]
+            m["window_ids"] = m["window_ids"].split(",")
         docs = [
             Document(content=d, metadata=DocMetaData(**m))
             for d, m in zip(contents, metadatas)
         ]
         return docs
-
-
-# Example usage and testing
-# chroma_db = ChromaDB.from_documents(
-#     collection_name="all-my-documents",
-#     documents=["doc1000101", "doc288822"],
-#     metadatas=[{"style": "style1"}, {"style": "style2"}],
-#     ids=["uri9", "uri10"]
-# )
-# results = chroma_db.query(
-#     query_texts=["This is a query document"],
-#     n_results=2
-# )
-# print(results)

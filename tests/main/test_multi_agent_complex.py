@@ -5,6 +5,7 @@ from langroid.agent.task import Task
 from langroid.agent.tools.recipient_tool import RecipientTool
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
+from langroid.mytypes import Entity
 from langroid.parsing.parser import ParsingConfig
 from langroid.prompts.prompts_config import PromptsConfig
 from langroid.utils.configuration import Settings, set_global
@@ -50,9 +51,7 @@ def test_agents_with_recipient(
     master = ChatAgent(master_cfg)
     task_master = Task(
         master,
-        llm_delegate=True,
-        single_round=False,
-        default_human_response="",
+        interactive=False,
         system_message=f"""
                 Your job is to ask me EXACTLY this series of exponential questions:
                 {EXPONENTIALS}
@@ -66,7 +65,6 @@ def test_agents_with_recipient(
                 e.g. "DONE: 243 512 729 125".
                 """,
         user_message="Start by asking me an exponential question.",
-        only_user_quits_root=False,
     )
 
     # For a given exponential computation, plans a sequence of multiplications.
@@ -81,9 +79,7 @@ def test_agents_with_recipient(
 
     task_planner = Task(
         planner,
-        llm_delegate=True,
-        single_round=False,
-        default_human_response="",
+        interactive=False,
         system_message="""
                 From "Master", you will receive an exponential to compute, 
                 but you do not know how to multiply. You have a helper called 
@@ -105,9 +101,8 @@ def test_agents_with_recipient(
     multiplier = ChatAgent(multiplier_cfg)
     task_multiplier = Task(
         multiplier,
-        llm_delegate=False,
-        single_round=True,
-        default_human_response="",
+        done_if_response=[Entity.LLM],
+        interactive=False,
         system_message="""
                 You are a calculator. You will be given a multiplication problem. 
                 You simply reply with the answer, say nothing else.
@@ -120,11 +115,6 @@ def test_agents_with_recipient(
     # recipient is specified via TO[recipient], and if not
     # then the validator will ask for clarification
     task_planner.add_sub_task(task_multiplier)
-
-    # ... since human has nothing to say
-    master.default_human_response = ""
-    planner.default_human_response = ""
-    multiplier.default_human_response = ""
 
     result = task_master.run()
 

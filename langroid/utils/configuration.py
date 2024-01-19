@@ -1,5 +1,7 @@
+import copy
 import os
-from typing import List
+from contextlib import contextmanager
+from typing import Iterator, List, Literal
 
 from dotenv import find_dotenv, load_dotenv
 from pydantic import BaseSettings
@@ -12,11 +14,12 @@ class Settings(BaseSettings):
     progress: bool = False  # show progress spinners/bars?
     stream: bool = True  # stream output?
     cache: bool = True  # use cache?
-    cache_type: str = "redis"  # cache type: "redis" or "momento"
+    cache_type: Literal["redis", "fakeredis", "momento"] = "redis"  # cache type
     interactive: bool = True  # interactive mode?
     gpt3_5: bool = True  # use GPT-3.5?
-    nofunc: bool = False  # use model without function_call? (i.e. gpt-4)
     chat_model: str = ""  # language model name, e.g. litellm/ollama/llama2
+    quiet: bool = False  # quiet mode (i.e. suppress all output)?
+    notebook: bool = False  # running in a notebook?
 
     class Config:
         extra = "forbid"
@@ -53,6 +56,34 @@ def update_global_settings(cfg: BaseSettings, keys: List[str]) -> None:
 def set_global(key_vals: Settings) -> None:
     """Update the unique global settings object"""
     settings.__dict__.update(key_vals.__dict__)
+
+
+@contextmanager
+def temporary_settings(temp_settings: Settings) -> Iterator[None]:
+    """Temporarily update the global settings and restore them afterward."""
+    original_settings = copy.deepcopy(settings)
+
+    set_global(temp_settings)
+
+    try:
+        yield
+    finally:
+        settings.__dict__.update(original_settings.__dict__)
+
+
+@contextmanager
+def quiet_mode(quiet: bool = True) -> Iterator[None]:
+    """Temporarily set quiet=True in global settings and restore afterward."""
+    original_settings = copy.deepcopy(settings)
+    if quiet:
+        temp_settings = original_settings.copy(update={"quiet": True})
+        set_global(temp_settings)
+
+    try:
+        yield
+    finally:
+        if quiet:
+            settings.__dict__.update(original_settings.__dict__)
 
 
 def set_env(settings: BaseSettings) -> None:

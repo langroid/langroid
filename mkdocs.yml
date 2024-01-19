@@ -78,10 +78,11 @@ plugins:
             docstring_options:
               ignore_init_summary: true
             merge_init_into_class: true
-
-      watch:
-        - langroid
   - section-index
+
+watch:
+  - langroid
+
 nav:
   - Home: index.md
   - Blog: blog/index.md
@@ -117,8 +118,8 @@ markdown_extensions:
   - attr_list
   - md_in_html
   - pymdownx.emoji:
-      emoji_index: !!python/name:materialx.emoji.twemoji
-      emoji_generator: !!python/name:materialx.emoji.to_svg
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
   - admonition
   - pymdownx.details
   - pymdownx.superfences

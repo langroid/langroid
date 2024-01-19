@@ -1,12 +1,14 @@
+import ast
 import asyncio
 import json
 import logging
 from abc import ABC, abstractmethod
+from datetime import datetime
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple, Type, Union
 
 import aiohttp
-from pydantic import BaseModel, BaseSettings
+from pydantic import BaseModel, BaseSettings, Field
 
 from langroid.cachedb.momento_cachedb import MomentoCacheConfig
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
@@ -27,6 +29,7 @@ logger = logging.getLogger(__name__)
 
 class LLMConfig(BaseSettings):
     type: str = "openai"
+    api_base: str | None = None
     formatter: None | PromptFormatterConfig = Llama2FormatterConfig()
     timeout: int = 20  # timeout for API requests
     chat_model: str = ""
@@ -59,6 +62,23 @@ class LLMFunctionCall(BaseModel):
     to: str = ""  # intended recipient
     arguments: Optional[Dict[str, Any]] = None
 
+    @staticmethod
+    def from_dict(message: Dict[str, Any]) -> "LLMFunctionCall":
+        """
+        Initialize from dictionary.
+        Args:
+            d: dictionary containing fields to initialize
+        """
+        fun_call = LLMFunctionCall(name=message["name"])
+        fun_args_str = message["arguments"]
+        # sometimes may be malformed with invalid indents,
+        # so we try to be safe by removing newlines.
+        fun_args_str = fun_args_str.replace("\n", "").strip()
+        fun_args = ast.literal_eval(fun_args_str)
+        fun_call.arguments = fun_args
+
+        return fun_call
+
     def __str__(self) -> str:
         return "FUNC: " + json.dumps(self.dict(), indent=2)
 
@@ -79,6 +99,20 @@ class LLMTokenUsage(BaseModel):
     prompt_tokens: int = 0
     completion_tokens: int = 0
     cost: float = 0.0
+    calls: int = 0  # how many API calls
+
+    def reset(self) -> None:
+        self.prompt_tokens = 0
+        self.completion_tokens = 0
+        self.cost = 0.0
+        self.calls = 0
+
+    def __str__(self) -> str:
+        return (
+            f"Tokens = "
+            f"(prompt {self.prompt_tokens}, completion {self.completion_tokens}), "
+            f"Cost={self.cost}, Calls={self.calls}"
+        )
 
     @property
     def total_tokens(self) -> int:
@@ -99,12 +133,16 @@ class LLMMessage(BaseModel):
 
     role: Role
     name: Optional[str] = None
+    tool_id: str = ""  # used by OpenAIAssistant
     content: str
     function_call: Optional[LLMFunctionCall] = None
+    timestamp: datetime = Field(default_factory=datetime.utcnow)
 
     def api_dict(self) -> Dict[str, Any]:
         """
         Convert to dictionary for API request.
+        DROP the tool_id, since it is only for use in the Assistant API,
+        not the completion API.
         Returns:
             dict: dictionary representation of LLM message
         """
@@ -120,6 +158,8 @@ class LLMMessage(BaseModel):
                 dict_no_none["function_call"]["arguments"] = json.dumps(
                     dict_no_none["function_call"]["arguments"]
                 )
+        dict_no_none.pop("tool_id", None)
+        dict_no_none.pop("timestamp", None)
         return dict_no_none
 
     def __str__(self) -> str:
@@ -137,6 +177,7 @@ class LLMResponse(BaseModel):
     """
 
     message: str
+    tool_id: str = ""  # used by OpenAIAssistant
     function_call: Optional[LLMFunctionCall] = None
     usage: Optional[LLMTokenUsage]
     cached: bool = False
@@ -204,7 +245,10 @@ class LanguageModel(ABC):
     Abstract base class for language models.
     """
 
-    def __init__(self, config: LLMConfig):
+    # usage cost by model, accumulates here
+    usage_cost_dict: Dict[str, LLMTokenUsage] = {}
+
+    def __init__(self, config: LLMConfig = LLMConfig()):
         self.config = config
 
     @staticmethod
@@ -215,6 +259,16 @@ class LanguageModel(ABC):
             config: configuration for language model
         Returns: instance of language model
         """
+        if type(config) is LLMConfig:
+            raise ValueError(
+                """
+                Cannot create a Language Model object from LLMConfig. 
+                Please specify a specific subclass of LLMConfig e.g., 
+                OpenAIGPTConfig. If you are creating a ChatAgent from 
+                a ChatAgentConfig, please specify the `llm` field of this config
+                as a specific subclass of LLMConfig, e.g., OpenAIGPTConfig.
+                """
+            )
         from langroid.language_models.azure_openai import AzureGPT
         from langroid.language_models.openai_gpt import OpenAIGPT
 
@@ -311,18 +365,18 @@ class LanguageModel(ABC):
         pass
 
     @abstractmethod
-    def generate(self, prompt: str, max_tokens: int) -> LLMResponse:
+    def generate(self, prompt: str, max_tokens: int = 200) -> LLMResponse:
         pass
 
     @abstractmethod
-    async def agenerate(self, prompt: str, max_tokens: int) -> LLMResponse:
+    async def agenerate(self, prompt: str, max_tokens: int = 200) -> LLMResponse:
         pass
 
     @abstractmethod
     def chat(
         self,
         messages: Union[str, List[LLMMessage]],
-        max_tokens: int,
+        max_tokens: int = 200,
         functions: Optional[List[LLMFunctionSpec]] = None,
         function_call: str | Dict[str, str] = "auto",
     ) -> LLMResponse:
@@ -332,7 +386,7 @@ class LanguageModel(ABC):
     async def achat(
         self,
         messages: Union[str, List[LLMMessage]],
-        max_tokens: int,
+        max_tokens: int = 200,
         functions: Optional[List[LLMFunctionSpec]] = None,
         function_call: str | Dict[str, str] = "auto",
     ) -> LLMResponse:
@@ -349,6 +403,44 @@ class LanguageModel(ABC):
 
     def chat_cost(self) -> Tuple[float, float]:
         return self.config.chat_cost_per_1k_tokens
+
+    def reset_usage_cost(self) -> None:
+        for mdl in [self.config.chat_model, self.config.completion_model]:
+            if mdl is None:
+                return
+            if mdl not in self.usage_cost_dict:
+                self.usage_cost_dict[mdl] = LLMTokenUsage()
+            counter = self.usage_cost_dict[mdl]
+            counter.reset()
+
+    def update_usage_cost(
+        self, chat: bool, prompts: int, completions: int, cost: float
+    ) -> None:
+        """
+        Update usage cost for this LLM.
+        Args:
+            chat (bool): whether to update for chat or completion model
+            prompts (int): number of tokens used for prompts
+            completions (int): number of tokens used for completions
+            cost (float): total token cost in USD
+        """
+        mdl = self.config.chat_model if chat else self.config.completion_model
+        if mdl is None:
+            return
+        if mdl not in self.usage_cost_dict:
+            self.usage_cost_dict[mdl] = LLMTokenUsage()
+        counter = self.usage_cost_dict[mdl]
+        counter.prompt_tokens += prompts
+        counter.completion_tokens += completions
+        counter.cost += cost
+        counter.calls += 1
+
+    @classmethod
+    def usage_cost_summary(cls) -> str:
+        s = ""
+        for model, counter in cls.usage_cost_dict.items():
+            s += f"{model}: {counter}\n"
+        return s
 
     def followup_to_standalone(
         self, chat_history: List[Tuple[str, str]], question: str

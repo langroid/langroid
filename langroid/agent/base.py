@@ -1,3 +1,4 @@
+import asyncio
 import inspect
 import json
 import logging
@@ -20,6 +21,7 @@ from typing import (
 from pydantic import BaseSettings, ValidationError
 from rich import print
 from rich.console import Console
+from rich.markup import escape
 from rich.prompt import Prompt
 
 from langroid.agent.chat_document import ChatDocMetaData, ChatDocument
@@ -32,7 +34,8 @@ from langroid.language_models.base import (
     LLMTokenUsage,
     StreamingIfAllowed,
 )
-from langroid.mytypes import DocMetaData, Entity
+from langroid.language_models.openai_gpt import OpenAIGPTConfig
+from langroid.mytypes import Entity
 from langroid.parsing.json import extract_top_level_json
 from langroid.parsing.parser import Parser, ParsingConfig
 from langroid.prompts.prompts_config import PromptsConfig
@@ -40,7 +43,7 @@ from langroid.utils.configuration import settings
 from langroid.utils.constants import NO_ANSWER
 from langroid.vector_store.base import VectorStore, VectorStoreConfig
 
-console = Console()
+console = Console(quiet=settings.quiet)
 
 logger = logging.getLogger(__name__)
 
@@ -53,10 +56,11 @@ class AgentConfig(BaseSettings):
 
     name: str = "LLM-Agent"
     debug: bool = False
-    vecdb: Optional[VectorStoreConfig] = VectorStoreConfig()
-    llm: Optional[LLMConfig] = LLMConfig()
+    vecdb: Optional[VectorStoreConfig] = None
+    llm: Optional[LLMConfig] = OpenAIGPTConfig()
     parsing: Optional[ParsingConfig] = ParsingConfig()
     prompts: Optional[PromptsConfig] = PromptsConfig()
+    show_stats: bool = True  # show token usage/cost stats?
 
 
 class Agent(ABC):
@@ -70,8 +74,9 @@ class Agent(ABC):
     information about any tool/function-calling messages that have been defined.
     """
 
-    def __init__(self, config: AgentConfig):
+    def __init__(self, config: AgentConfig = AgentConfig()):
         self.config = config
+        self.lock = asyncio.Lock()  # for async access to update self.llm.usage_cost
         self.dialog: List[Tuple[str, str]] = []  # seq of LLM (prompt, response) tuples
         self.llm_tools_map: Dict[str, Type[ToolMessage]] = {}
         self.llm_tools_handled: Set[str] = set()
@@ -138,6 +143,9 @@ class Agent(ABC):
 
     def get_dialog(self) -> List[Tuple[str, str]]:
         return self.dialog
+
+    def clear_dialog(self) -> None:
+        self.dialog = []
 
     def _get_tool_list(
         self, message_class: Optional[Type[ToolMessage]] = None
@@ -246,6 +254,10 @@ class Agent(ABC):
         ]
         return "\n\n".join(sample_convo)
 
+    def agent_response_template(self) -> ChatDocument:
+        """Template for agent_response."""
+        return self._response_template(Entity.AGENT)
+
     async def agent_response_async(
         self,
         msg: Optional[str | ChatDocument] = None,
@@ -275,9 +287,14 @@ class Agent(ABC):
         if results is None:
             return None
         if isinstance(results, ChatDocument):
+            # Preserve trail of tool_ids for OpenAI Assistant fn-calls
+            results.metadata.tool_ids = (
+                [] if isinstance(msg, str) else msg.metadata.tool_ids
+            )
             return results
-        console.print(f"[red]{self.indent}", end="")
-        print(f"[red]Agent: {results}")
+        if not settings.quiet:
+            console.print(f"[red]{self.indent}", end="")
+            print(f"[red]Agent: {results}")
         sender_name = self.config.name
         if isinstance(msg, ChatDocument) and msg.function_call is not None:
             # if result was from handling an LLM `function_call`,
@@ -290,8 +307,24 @@ class Agent(ABC):
                 source=Entity.AGENT,
                 sender=Entity.AGENT,
                 sender_name=sender_name,
+                # preserve trail of tool_ids for OpenAI Assistant fn-calls
+                tool_ids=[] if isinstance(msg, str) else msg.metadata.tool_ids,
             ),
         )
+
+    def _response_template(self, e: Entity) -> ChatDocument:
+        """Template for response from entity `e`."""
+        return ChatDocument(
+            content="",
+            tool_messages=[],
+            metadata=ChatDocMetaData(
+                source=e, sender=e, sender_name=self.config.name, tool_ids=[]
+            ),
+        )
+
+    def user_response_template(self) -> ChatDocument:
+        """Template for user_response."""
+        return self._response_template(Entity.USER)
 
     async def user_response_async(
         self,
@@ -326,6 +359,9 @@ class Agent(ABC):
                 f"or hit enter to continue)\n{self.indent}",
             ).strip()
 
+        tool_ids = []
+        if msg is not None and isinstance(msg, ChatDocument):
+            tool_ids = msg.metadata.tool_ids
         # only return non-None result if user_msg not empty
         if not user_msg:
             return None
@@ -339,9 +375,11 @@ class Agent(ABC):
                 sender = Entity.USER
             return ChatDocument(
                 content=user_msg,
-                metadata=DocMetaData(
+                metadata=ChatDocMetaData(
                     source=source,
                     sender=sender,
+                    # preserve trail of tool_ids for OpenAI Assistant fn-calls
+                    tool_ids=tool_ids,
                 ),
             )
 
@@ -358,19 +396,16 @@ class Agent(ABC):
         if self.llm is None:
             return False
 
-        if isinstance(message, ChatDocument) and message.function_call is not None:
-            # LLM should not handle `function_call` messages,
-            # EVEN if message.function_call is not a legit function_call
-            # The OpenAI API raises error if there is a message in history
-            # from a non-Assistant role, with a `function_call` in it
-            return False
-
         if message is not None and len(self.get_tool_messages(message)) > 0:
             # if there is a valid "tool" message (either JSON or via `function_call`)
             # then LLM cannot respond to it
             return False
 
         return True
+
+    def llm_response_template(self) -> ChatDocument:
+        """Template for llm_response."""
+        return self._response_template(Entity.LLM)
 
     @no_type_check
     async def llm_response_async(
@@ -410,18 +445,24 @@ class Agent(ABC):
         with StreamingIfAllowed(self.llm, self.llm.get_stream()):
             response = await self.llm.agenerate(prompt, output_len)
 
-        # we would have already displayed the msg "live" ONLY if
-        # streaming was enabled, AND we did not find a cached response
-        console.print(f"[green]{self.indent}", end="")
-        print("[green]" + response.message)
-        displayed = True
-        self.update_token_usage(
-            response,
-            prompt,
-            self.llm.get_stream(),
-            print_response_stats=True,
-        )
-        return ChatDocument.from_LLMResponse(response, displayed)
+        if not self.llm.get_stream() or response.cached and not settings.quiet:
+            # We would have already displayed the msg "live" ONLY if
+            # streaming was enabled, AND we did not find a cached response.
+            # If we are here, it means the response has not yet been displayed.
+            cached = f"[red]{self.indent}(cached)[/red]" if response.cached else ""
+            print(cached + "[green]" + escape(response.message))
+        async with self.lock:
+            self.update_token_usage(
+                response,
+                prompt,
+                self.llm.get_stream(),
+                chat=False,  # i.e. it's a completion model not chat model
+                print_response_stats=self.config.show_stats and not settings.quiet,
+            )
+        cdoc = ChatDocument.from_LLMResponse(response, displayed=True)
+        # Preserve trail of tool_ids for OpenAI Assistant fn-calls
+        cdoc.metadata.tool_ids = [] if isinstance(msg, str) else msg.metadata.tool_ids
+        return cdoc
 
     @no_type_check
     def llm_response(
@@ -472,36 +513,48 @@ class Agent(ABC):
                     the completion context length of the LLM. 
                     """
                     )
-            if self.llm.get_stream():
+            if self.llm.get_stream() and not settings.quiet:
                 console.print(f"[green]{self.indent}", end="")
             response = self.llm.generate(prompt, output_len)
 
-        displayed = False
-        if not self.llm.get_stream() or response.cached:
+        if not self.llm.get_stream() or response.cached and not settings.quiet:
             # we would have already displayed the msg "live" ONLY if
             # streaming was enabled, AND we did not find a cached response
+            # If we are here, it means the response has not yet been displayed.
+            cached = f"[red]{self.indent}(cached)[/red]" if response.cached else ""
             console.print(f"[green]{self.indent}", end="")
-            print("[green]" + response.message)
-            displayed = True
+            print(cached + "[green]" + escape(response.message))
         self.update_token_usage(
             response,
             prompt,
             self.llm.get_stream(),
-            print_response_stats=True,
+            chat=False,  # i.e. it's a completion model not chat model
+            print_response_stats=self.config.show_stats and not settings.quiet,
         )
-        return ChatDocument.from_LLMResponse(response, displayed)
+        cdoc = ChatDocument.from_LLMResponse(response, displayed=True)
+        # Preserve trail of tool_ids for OpenAI Assistant fn-calls
+        cdoc.metadata.tool_ids = [] if isinstance(msg, str) else msg.metadata.tool_ids
+        return cdoc
 
     def get_tool_messages(self, msg: str | ChatDocument) -> List[ToolMessage]:
         if isinstance(msg, str):
             return self.get_json_tool_messages(msg)
+        if len(msg.tool_messages) > 0:
+            # We've already found tool_messages
+            # (either via OpenAI Fn-call or Langroid-native ToolMessage)
+            return msg.tool_messages
         assert isinstance(msg, ChatDocument)
         # when `content` is non-empty, we assume there will be no `function_call`
         if msg.content != "":
-            return self.get_json_tool_messages(msg.content)
+            tools = self.get_json_tool_messages(msg.content)
+            msg.tool_messages = tools
+            return tools
 
         # otherwise, we look for a `function_call`
         fun_call_cls = self.get_function_call_class(msg)
-        return [fun_call_cls] if fun_call_cls is not None else []
+        tools = [fun_call_cls] if fun_call_cls is not None else []
+        msg.tool_messages = tools
+        return tools
 
     def get_json_tool_messages(self, input_str: str) -> List[ToolMessage]:
         """
@@ -525,7 +578,17 @@ class Agent(ABC):
         tool_name = msg.function_call.name
         tool_msg = msg.function_call.arguments or {}
         if tool_name not in self.llm_tools_handled:
-            raise ValueError(f"{tool_name} is not a valid function_call!")
+            logger.warning(
+                f"""
+                The function_call '{tool_name}' is not handled 
+                by the agent named '{self.config.name}'!
+                If you intended this agent to handle this function_call,
+                either the fn-call name is incorrectly generated by the LLM,
+                (in which case you may need to adjust your LLM instructions),
+                or you need to enable this agent to handle this fn-call.
+                """
+            )
+            return None
         tool_class = self.llm_tools_map[tool_name]
         tool_msg.update(dict(request=tool_name))
         tool = tool_class.parse_obj(tool_msg)
@@ -544,7 +607,7 @@ class Agent(ABC):
         """
         tool_name = cast(ToolMessage, ve.model).default_value("request")
         bad_field_errors = "\n".join(
-            [f"{e['loc'][0]}: {e['msg']}" for e in ve.errors() if "loc" in e]
+            [f"{e['loc']}: {e['msg']}" for e in ve.errors() if "loc" in e]
         )
         return f"""
         There were one or more errors in your attempt to use the 
@@ -588,7 +651,7 @@ class Agent(ABC):
 
         results_list = [r for r in results if r is not None]
         if len(results_list) == 0:
-            return self.handle_message_fallback(msg)
+            return None  # self.handle_message_fallback(msg)
         # there was a non-None result
         chat_doc_results = [r for r in results_list if isinstance(r, ChatDocument)]
         if len(chat_doc_results) > 1:
@@ -603,19 +666,13 @@ class Agent(ABC):
 
         str_doc_results = [r for r in results_list if isinstance(r, str)]
         final = "\n".join(str_doc_results)
-        if final == "":
-            logger.warning(
-                """final result from a tool handler should not be empty str, since  
-             it would be considered an invalid result and other responders 
-             will be tried, and we may not necessarily want that"""
-            )
         return final
 
     def handle_message_fallback(
         self, msg: str | ChatDocument
     ) -> str | ChatDocument | None:
         """
-        Fallback method to handle possible "tool" msg if not other method applies
+        Fallback method to handle possible "tool" msg if no other method applies
         or if an error is thrown.
         This method can be overridden by subclasses.
 
@@ -630,7 +687,11 @@ class Agent(ABC):
     def _get_one_tool_message(self, json_str: str) -> Optional[ToolMessage]:
         json_data = json.loads(json_str)
         request = json_data.get("request")
-        if request is None or request not in self.llm_tools_handled:
+        if (
+            request is None
+            or not (isinstance(request, str))
+            or request not in self.llm_tools_handled
+        ):
             return None
 
         message_class = self.llm_tools_map.get(request)
@@ -661,8 +722,10 @@ class Agent(ABC):
         try:
             result = handler_method(tool)
         except Exception as e:
-            # return the error message to the LLM so it can try to fix the error
-            result = f"Error in tool/function-call {tool_name} usage: {type(e)}: {e}"
+            # raise the error here since we are sure it's
+            # not a pydantic validation error,
+            # which we check in `handle_message`
+            raise e
         return result  # type: ignore
 
     def num_tokens(self, prompt: str | List[LLMMessage]) -> int:
@@ -671,7 +734,13 @@ class Agent(ABC):
         if isinstance(prompt, str):
             return self.parser.num_tokens(prompt)
         else:
-            return sum([self.parser.num_tokens(m.content) for m in prompt])
+            return sum(
+                [
+                    self.parser.num_tokens(m.content)
+                    + self.parser.num_tokens(str(m.function_call or ""))
+                    for m in prompt
+                ]
+            )
 
     def _get_response_stats(
         self, chat_length: int, tot_cost: float, response: LLMResponse
@@ -696,11 +765,17 @@ class Agent(ABC):
             assert isinstance(self.llm, LanguageModel)
             context_length = self.llm.chat_context_length()
             max_out = self.config.llm.max_output_tokens
+
+            llm_model = (
+                "no-LLM" if self.config.llm is None else self.config.llm.chat_model
+            )
+
             return (
-                f"[bold]Stats:[/bold] [magenta] N_MSG={chat_length}, "
+                f"[bold]Stats:[/bold] [magenta]N_MSG={chat_length}, "
                 f"TOKENS: in={in_tokens}, out={out_tokens}, "
                 f"max={max_out}, ctx={context_length}, "
-                f"COST: now=${llm_response_cost}, cumul=${cumul_cost}[/magenta]"
+                f"COST: now=${llm_response_cost}, cumul=${cumul_cost} "
+                f"[bold]({llm_model})[/bold][/magenta]"
             )
         return ""
 
@@ -709,6 +784,7 @@ class Agent(ABC):
         response: LLMResponse,
         prompt: str | List[LLMMessage],
         stream: bool,
+        chat: bool = True,
         print_response_stats: bool = True,
     ) -> None:
         """
@@ -722,36 +798,48 @@ class Agent(ABC):
             prompt (str | List[LLMMessage]): prompt or list of LLMMessage objects
             stream (bool): whether to update the usage in the response object
                 if the response is not cached.
+            chat (bool): whether this is a chat model or a completion model
+            print_response_stats (bool): whether to print the response stats
         """
-        if response is not None:
-            # Note: If response was not streamed, then
-            # `response.usage` would already have been set by the API,
-            # so we only need to update in the stream case.
-            if stream:
-                # usage, cost = 0 when response is from cache
-                prompt_tokens = 0
-                completion_tokens = 0
-                cost = 0.0
-                if not response.cached:
-                    prompt_tokens = self.num_tokens(prompt)
-                    completion_tokens = self.num_tokens(response.message)
-                    cost = self.compute_token_cost(prompt_tokens, completion_tokens)
-                response.usage = LLMTokenUsage(
-                    prompt_tokens=prompt_tokens,
-                    completion_tokens=completion_tokens,
-                    cost=cost,
-                )
+        if response is None or self.llm is None:
+            return
 
-            # update total counters
-            if response.usage is not None:
-                self.total_llm_token_cost += response.usage.cost
-                self.total_llm_token_usage += response.usage.total_tokens
-                chat_length = 1 if isinstance(prompt, str) else len(prompt)
-                self.token_stats_str = self._get_response_stats(
-                    chat_length, self.total_llm_token_cost, response
-                )
-                if print_response_stats:
-                    print(self.indent + self.token_stats_str)
+        # Note: If response was not streamed, then
+        # `response.usage` would already have been set by the API,
+        # so we only need to update in the stream case.
+        if stream:
+            # usage, cost = 0 when response is from cache
+            prompt_tokens = 0
+            completion_tokens = 0
+            cost = 0.0
+            if not response.cached:
+                prompt_tokens = self.num_tokens(prompt)
+                completion_tokens = self.num_tokens(response.message)
+                if response.function_call is not None:
+                    completion_tokens += self.num_tokens(str(response.function_call))
+                cost = self.compute_token_cost(prompt_tokens, completion_tokens)
+            response.usage = LLMTokenUsage(
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                cost=cost,
+            )
+
+        # update total counters
+        if response.usage is not None:
+            self.total_llm_token_cost += response.usage.cost
+            self.total_llm_token_usage += response.usage.total_tokens
+            self.llm.update_usage_cost(
+                chat,
+                response.usage.prompt_tokens,
+                response.usage.completion_tokens,
+                response.usage.cost,
+            )
+            chat_length = 1 if isinstance(prompt, str) else len(prompt)
+            self.token_stats_str = self._get_response_stats(
+                chat_length, self.total_llm_token_cost, response
+            )
+            if print_response_stats:
+                print(self.indent + self.token_stats_str)
 
     def compute_token_cost(self, prompt: int, completion: int) -> float:
         price = cast(LanguageModel, self.llm).chat_cost()
@@ -773,8 +861,8 @@ class Agent(ABC):
         Args:
             agent (Agent): agent to ask
             request (str): request to send
-            no_answer: expected response when agent does not know the answer
-            gate_human: whether to gate the request with a human confirmation
+            no_answer (str): expected response when agent does not know the answer
+            user_confirm (bool): whether to gate the request with a human confirmation
 
         Returns:
             str: response from agent

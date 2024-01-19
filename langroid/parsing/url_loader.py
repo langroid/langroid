@@ -44,7 +44,11 @@ class URLLoader:
                 sleep_time=5,
             )
             for url, result in buffered_downloads(buffer, threads):
-                if url.lower().endswith(".pdf") or url.lower().endswith(".docx"):
+                if (
+                    url.lower().endswith(".pdf")
+                    or url.lower().endswith(".docx")
+                    or url.lower().endswith(".doc")
+                ):
                     doc_parser = DocumentParser.create(
                         url,
                         self.parser.config,
@@ -56,6 +60,8 @@ class URLLoader:
                         no_fallback=False,
                         favor_recall=True,
                     )
+                    if text is None and result is not None and isinstance(result, str):
+                        text = result
                     if text is not None and text != "":
                         docs.append(
                             Document(content=text, metadata=DocMetaData(source=url))

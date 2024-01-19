@@ -1,12 +1,12 @@
 import inspect
-import json
 import logging
 import textwrap
 from contextlib import ExitStack
-from typing import Dict, List, Optional, Set, Tuple, Type, cast, no_type_check
+from typing import Dict, List, Optional, Set, Tuple, Type, cast
 
 from rich import print
 from rich.console import Console
+from rich.markup import escape
 
 from langroid.agent.base import Agent, AgentConfig
 from langroid.agent.chat_document import ChatDocument
@@ -17,9 +17,10 @@ from langroid.language_models.base import (
     Role,
     StreamingIfAllowed,
 )
+from langroid.language_models.openai_gpt import OpenAIGPT
 from langroid.utils.configuration import settings
 
-console = Console()
+console = Console(quiet=settings.quiet)
 
 logger = logging.getLogger(__name__)
 
@@ -40,8 +41,36 @@ class ChatAgentConfig(AgentConfig):
 
     system_message: str = "You are a helpful assistant."
     user_message: Optional[str] = None
-    use_tools: bool = True
-    use_functions_api: bool = False
+    use_tools: bool = False
+    use_functions_api: bool = True
+
+    def _set_fn_or_tools(self, fn_available: bool) -> None:
+        """
+        Enable Langroid Tool or OpenAI-like fn-calling,
+        depending on config settings and availability of fn-calling.
+        """
+        if self.use_functions_api and not fn_available:
+            logger.debug(
+                """
+                You have enabled `use_functions_api` but the LLM does not support it.
+                So we will enable `use_tools` instead, so we can use 
+                Langroid's ToolMessage mechanism.
+                """
+            )
+            self.use_functions_api = False
+            self.use_tools = True
+
+        if not self.use_functions_api or not self.use_tools:
+            return
+        if self.use_functions_api and self.use_tools:
+            logger.debug(
+                """
+                You have enabled both `use_tools` and `use_functions_api`.
+                Turning off `use_tools`, since the LLM supports function-calling.
+                """
+            )
+            self.use_tools = False
+            self.use_functions_api = True
 
 
 class ChatAgent(Agent):
@@ -61,7 +90,9 @@ class ChatAgent(Agent):
     """
 
     def __init__(
-        self, config: ChatAgentConfig, task: Optional[List[LLMMessage]] = None
+        self,
+        config: ChatAgentConfig = ChatAgentConfig(),
+        task: Optional[List[LLMMessage]] = None,
     ):
         """
         Chat-mode agent initialized with task spec as the initial message sequence
@@ -71,6 +102,7 @@ class ChatAgent(Agent):
         """
         super().__init__(config)
         self.config: ChatAgentConfig = config
+        self.config._set_fn_or_tools(self._fn_call_available())
         self.message_history: List[LLMMessage] = []
         self.tool_instructions_added: bool = False
         # An agent's "task" is defined by a system msg and an optional user msg;
@@ -101,6 +133,14 @@ class ChatAgent(Agent):
         self.llm_functions_handled: Set[str] = set()
         self.llm_functions_usable: Set[str] = set()
         self.llm_function_force: Optional[Dict[str, str]] = None
+
+    def _fn_call_available(self) -> bool:
+        """Does this agent's LLM support function calling?"""
+        return (
+            self.llm is not None
+            and isinstance(self.llm, OpenAIGPT)
+            and self.llm.is_openai_chat_model()
+        )
 
     def set_system_message(self, msg: str) -> None:
         self.system_message = msg
@@ -163,43 +203,13 @@ class ChatAgent(Agent):
 
         json_instructions = "\n\n".join(
             [
-                textwrap.dedent(
-                    f"""
-                TOOL: {msg_cls.default_value("request")}
-                PURPOSE: {msg_cls.default_value("purpose")} 
-                JSON FORMAT: {
-                    json.dumps(
-                        msg_cls.llm_function_schema(request=True).parameters,
-                        indent=4,
-                    )
-                }
-                {"EXAMPLE: " + msg_cls.usage_example() if msg_cls.examples() else ""}
-                """.lstrip()
-                )
-                for i, msg_cls in enumerate(enabled_classes)
+                msg_cls.json_instructions()
+                for _, msg_cls in enumerate(enabled_classes)
                 if msg_cls.default_value("request") in self.llm_tools_usable
             ]
         )
-        return textwrap.dedent(
-            f"""
-            === ALL AVAILABLE TOOLS and THEIR JSON FORMAT INSTRUCTIONS ===
-            You have access to the following TOOLS to accomplish your task:
-
-            {json_instructions}
-            
-            When one of the above TOOLs is applicable, you must express your 
-            request as "TOOL:" followed by the request in the above JSON format.
-            """
-            + """
-            The JSON format will be:
-                \\{
-                    "request": "<tool_name>",
-                    "<arg1>": <value1>,
-                    "<arg2>": <value2>,
-                    ...
-                \\}             
-            ----------------------------
-            """.lstrip()
+        return ToolMessage.json_group_instructions().format(
+            json_instructions=json_instructions
         )
 
     def tool_instructions(self) -> str:
@@ -260,13 +270,20 @@ class ChatAgent(Agent):
         """
         self.system_message += "\n\n" + message
 
+    def last_message_with_role(self, role: Role) -> LLMMessage | None:
+        """from `message_history`, return the last message with role `role`"""
+        for i in range(len(self.message_history) - 1, -1, -1):
+            if self.message_history[i].role == role:
+                return self.message_history[i]
+        return None
+
     def update_last_message(self, message: str, role: str = Role.USER) -> None:
         """
         Update the last message that has role `role` in the message history.
         Useful when we want to replace a long user prompt, that may contain context
         documents plus a question, with just the question.
         Args:
-            message (str): user message
+            message (str): new message to replace with
             role (str): role of message to replace
         """
         if len(self.message_history) == 0:
@@ -311,6 +328,7 @@ class ChatAgent(Agent):
         handle: bool = True,
         force: bool = False,
         require_recipient: bool = False,
+        include_defaults: bool = True,
     ) -> None:
         """
         Add the tool (message class) to the agent, and enable either
@@ -331,7 +349,11 @@ class ChatAgent(Agent):
                  `force` is ignored if `message_class` is None.
             require_recipient: whether to require that recipient be specified
                 when using the tool message (only applies if `use` is True).
-
+            require_defaults: whether to include fields that have default values,
+                in the "properties" section of the JSON format instructions.
+                (Normally the OpenAI completion API ignores these fields,
+                but the Assistant fn-calling seems to pay attn to these,
+                and if we don't want this, we should set this to False.)
         """
         super().enable_message_handling(message_class)  # enables handling only
         tools = self._get_tool_list(message_class)
@@ -339,7 +361,7 @@ class ChatAgent(Agent):
             if require_recipient:
                 message_class = message_class.require_recipient()
             request = message_class.default_value("request")
-            llm_function = message_class.llm_function_schema()
+            llm_function = message_class.llm_function_schema(defaults=include_defaults)
             self.llm_functions_map[request] = llm_function
             if force:
                 self.llm_function_force = dict(name=request)
@@ -408,7 +430,6 @@ class ChatAgent(Agent):
                 self.llm_tools_usable.discard(r)
                 self.llm_functions_usable.discard(r)
 
-    @no_type_check
     def llm_response(
         self, message: Optional[str | ChatDocument] = None
     ) -> Optional[ChatDocument]:
@@ -421,32 +442,55 @@ class ChatAgent(Agent):
         Returns:
             LLM response as a ChatDocument object
         """
+        if self.llm is None:
+            return None
         hist, output_len = self._prep_llm_messages(message)
+        if len(hist) == 0:
+            return None
         with StreamingIfAllowed(self.llm, self.llm.get_stream()):
             response = self.llm_response_messages(hist, output_len)
         # TODO - when response contains function_call we should include
         # that (and related fields) in the message_history
         self.message_history.append(ChatDocument.to_LLMMessage(response))
+        # Preserve trail of tool_ids for OpenAI Assistant fn-calls
+        response.metadata.tool_ids = (
+            []
+            if isinstance(message, str)
+            else message.metadata.tool_ids
+            if message is not None
+            else []
+        )
         return response
 
-    @no_type_check
     async def llm_response_async(
         self, message: Optional[str | ChatDocument] = None
     ) -> Optional[ChatDocument]:
         """
         Async version of `llm_response`. See there for details.
         """
+        if self.llm is None:
+            return None
+
         hist, output_len = self._prep_llm_messages(message)
         with StreamingIfAllowed(self.llm, self.llm.get_stream()):
             response = await self.llm_response_messages_async(hist, output_len)
         # TODO - when response contains function_call we should include
         # that (and related fields) in the message_history
         self.message_history.append(ChatDocument.to_LLMMessage(response))
+        # Preserve trail of tool_ids for OpenAI Assistant fn-calls
+        response.metadata.tool_ids = (
+            []
+            if isinstance(message, str)
+            else message.metadata.tool_ids
+            if message is not None
+            else []
+        )
         return response
 
-    @no_type_check
     def _prep_llm_messages(
-        self, message: Optional[str | ChatDocument] = None
+        self,
+        message: Optional[str | ChatDocument] = None,
+        truncate: bool = True,
     ) -> Tuple[List[LLMMessage], int]:
         """
         Prepare messages to be sent to self.llm_response_messages,
@@ -458,12 +502,21 @@ class ChatAgent(Agent):
                 output_len = max expected number of tokens in response
         """
 
-        if not self.llm_can_respond(message):
-            return None
+        if (
+            not self.llm_can_respond(message)
+            or self.config.llm is None
+            or self.llm is None
+        ):
+            return [], 0
 
-        assert (
-            message is not None or len(self.message_history) == 0
-        ), "message can be None only if message_history is empty, i.e. at start."
+        if message is None and len(self.message_history) > 0:
+            # this means agent has been used to get LLM response already,
+            # and so the last message is an "assistant" response.
+            # We delete this last assistant response and re-generate it.
+            self.clear_history(-1)
+            logger.warning(
+                "Re-generating the last assistant response since message is None"
+            )
 
         if len(self.message_history) == 0:
             # initial messages have not yet been loaded, so load them
@@ -493,7 +546,8 @@ class ChatAgent(Agent):
         hist = self.message_history
         output_len = self.config.llm.max_output_tokens
         if (
-            self.chat_num_tokens(hist)
+            truncate
+            and self.chat_num_tokens(hist)
             > self.llm.chat_context_length() - self.config.llm.max_output_tokens
         ):
             # chat + output > max context length,
@@ -517,7 +571,10 @@ class ChatAgent(Agent):
                         raise ValueError(
                             """
                         The message history is longer than the max chat context 
-                        length allowed, and we have run out of messages to drop."""
+                        length allowed, and we have run out of messages to drop.
+                        HINT: In your `OpenAIGPTConfig` object, try increasing
+                        `chat_context_length` or decreasing `max_output_tokens`.
+                        """
                         )
                     # drop the second message, i.e. first msg after the sys msg
                     # (typically user msg).
@@ -559,6 +616,18 @@ class ChatAgent(Agent):
             )
         return hist, output_len
 
+    def _function_args(
+        self,
+    ) -> Tuple[Optional[List[LLMFunctionSpec]], str | Dict[str, str]]:
+        functions: Optional[List[LLMFunctionSpec]] = None
+        fun_call: str | Dict[str, str] = "none"
+        if self.config.use_functions_api and len(self.llm_functions_usable) > 0:
+            functions = [self.llm_functions_map[f] for f in self.llm_functions_usable]
+            fun_call = (
+                "auto" if self.llm_function_force is None else self.llm_function_force
+            )
+        return functions, fun_call
+
     def llm_response_messages(
         self, messages: List[LLMMessage], output_len: Optional[int] = None
     ) -> ChatDocument:
@@ -574,23 +643,13 @@ class ChatAgent(Agent):
         assert self.config.llm is not None and self.llm is not None
         output_len = output_len or self.config.llm.max_output_tokens
         with ExitStack() as stack:  # for conditionally using rich spinner
-            if not self.llm.get_stream():
+            if not self.llm.get_stream() and not settings.quiet:
                 # show rich spinner only if not streaming!
                 cm = console.status("LLM responding to messages...")
                 stack.enter_context(cm)
-            if self.llm.get_stream():
+            if self.llm.get_stream() and not settings.quiet:
                 console.print(f"[green]{self.indent}", end="")
-            functions: Optional[List[LLMFunctionSpec]] = None
-            fun_call: str | Dict[str, str] = "none"
-            if self.config.use_functions_api and len(self.llm_functions_usable) > 0:
-                functions = [
-                    self.llm_functions_map[f] for f in self.llm_functions_usable
-                ]
-                fun_call = (
-                    "auto"
-                    if self.llm_function_force is None
-                    else self.llm_function_force
-                )
+            functions, fun_call = self._function_args()
             assert self.llm is not None
             response = self.llm.chat(
                 messages,
@@ -598,22 +657,25 @@ class ChatAgent(Agent):
                 functions=functions,
                 function_call=fun_call,
             )
-        displayed = False
         if not self.llm.get_stream() or response.cached:
-            displayed = True
+            # We would have already displayed the msg "live" ONLY if
+            # streaming was enabled, AND we did not find a cached response.
+            # If we are here, it means the response has not yet been displayed.
             cached = f"[red]{self.indent}(cached)[/red]" if response.cached else ""
             if response.function_call is not None:
                 response_str = str(response.function_call)
             else:
                 response_str = response.message
-            print(cached + "[green]" + response_str)
+            if not settings.quiet:
+                print(cached + "[green]" + escape(response_str))
         self.update_token_usage(
             response,
             messages,
             self.llm.get_stream(),
-            print_response_stats=True,
+            chat=True,
+            print_response_stats=self.config.show_stats and not settings.quiet,
         )
-        return ChatDocument.from_LLMResponse(response, displayed)
+        return ChatDocument.from_LLMResponse(response, displayed=True)
 
     async def llm_response_messages_async(
         self, messages: List[LLMMessage], output_len: Optional[int] = None
@@ -637,20 +699,27 @@ class ChatAgent(Agent):
             functions=functions,
             function_call=fun_call,
         )
-        displayed = True
-        cached = f"[red]{self.indent}(cached)[/red]" if response.cached else ""
-        if response.function_call is not None:
-            response_str = str(response.function_call)
-        else:
-            response_str = response.message
-        print(cached + "[green]" + response_str)
+
+        if not self.llm.get_stream() or response.cached:
+            # We would have already displayed the msg "live" ONLY if
+            # streaming was enabled, AND we did not find a cached response.
+            # If we are here, it means the response has not yet been displayed.
+            cached = f"[red]{self.indent}(cached)[/red]" if response.cached else ""
+            if response.function_call is not None:
+                response_str = str(response.function_call)
+            else:
+                response_str = response.message
+            if not settings.quiet:
+                print(cached + "[green]" + escape(response_str))
+
         self.update_token_usage(
             response,
             messages,
             self.llm.get_stream(),
-            print_response_stats=True,
+            chat=True,
+            print_response_stats=self.config.show_stats and not settings.quiet,
         )
-        return ChatDocument.from_LLMResponse(response, displayed)
+        return ChatDocument.from_LLMResponse(response, displayed=True)
 
     def _llm_response_temp_context(self, message: str, prompt: str) -> ChatDocument:
         """
@@ -703,12 +772,14 @@ class ChatAgent(Agent):
         """
         # explicitly call THIS class's respond method,
         # not a derived class's (or else there would be infinite recursion!)
+        n_msgs = len(self.message_history)
         with StreamingIfAllowed(self.llm, self.llm.get_stream()):  # type: ignore
             response = cast(ChatDocument, ChatAgent.llm_response(self, message))
-        # clear the last two messages, which are the
-        # user message and the assistant response
-        self.message_history.pop()
-        self.message_history.pop()
+        # If there is a response, then we will have two additional
+        # messages in the message history, i.e. the user message and the
+        # assistant response. We want to (carefully) remove these two messages.
+        self.message_history.pop() if len(self.message_history) > n_msgs else None
+        self.message_history.pop() if len(self.message_history) > n_msgs else None
         return response
 
     async def llm_response_forget_async(self, message: str) -> ChatDocument:
@@ -717,14 +788,16 @@ class ChatAgent(Agent):
         """
         # explicitly call THIS class's respond method,
         # not a derived class's (or else there would be infinite recursion!)
+        n_msgs = len(self.message_history)
         with StreamingIfAllowed(self.llm, self.llm.get_stream()):  # type: ignore
             response = cast(
                 ChatDocument, await ChatAgent.llm_response_async(self, message)
             )
-        # clear the last two messages, which are the
-        # user message and the assistant response
-        self.message_history.pop()
-        self.message_history.pop()
+        # If there is a response, then we will have two additional
+        # messages in the message history, i.e. the user message and the
+        # assistant response. We want to (carefully) remove these two messages.
+        self.message_history.pop() if len(self.message_history) > n_msgs else None
+        self.message_history.pop() if len(self.message_history) > n_msgs else None
         return response
 
     def chat_num_tokens(self, messages: Optional[List[LLMMessage]] = None) -> int:

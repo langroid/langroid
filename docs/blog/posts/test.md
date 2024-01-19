@@ -14,7 +14,7 @@ comments: true
 ```python
 from langroid.language_models.base import LLMMessage, Role
 msg = LLMMessage(
-        content="what is the capital of Bangladesh?",
+        content="What is the capital of Bangladesh?",
         role=Role.USER,
       )
 ```

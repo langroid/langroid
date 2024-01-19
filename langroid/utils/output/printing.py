@@ -1,5 +1,7 @@
+import logging
 import sys
-from typing import Any, Optional
+from contextlib import contextmanager
+from typing import Any, Iterator, Optional
 
 from rich import print as rprint
 from rich.text import Text
@@ -46,3 +48,47 @@ class PrintColored:
 
     def __exit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
         print(Colors().RESET)
+
+
+@contextmanager
+def silence_stdout() -> Iterator[None]:
+    """
+    Temporarily silence all output to stdout and from rich.print.
+
+    This context manager redirects all output written to stdout (which includes
+    outputs from the built-in print function and rich.print) to /dev/null on
+    UNIX-like systems or NUL on Windows. Once the context block exits, stdout is
+    restored to its original state.
+
+    Example:
+        with silence_stdout_and_rich():
+            print("This won't be printed")
+            rich.print("This also won't be printed")
+
+    Note:
+        This suppresses both standard print functions and the rich library outputs.
+    """
+    platform_null = "/dev/null" if sys.platform != "win32" else "NUL"
+    original_stdout = sys.stdout
+    fnull = open(platform_null, "w")
+    sys.stdout = fnull
+    try:
+        yield
+    finally:
+        sys.stdout = original_stdout
+        fnull.close()
+
+
+class SuppressLoggerWarnings:
+    def __init__(self, logger: str | None = None):
+        # If no logger name is given, get the root logger
+        self.logger = logging.getLogger(logger)
+        self.original_level = self.logger.getEffectiveLevel()
+
+    def __enter__(self) -> None:
+        # Set the logging level to 'ERROR' to suppress warnings
+        self.logger.setLevel(logging.ERROR)
+
+    def __exit__(self, exc_type, exc_value, traceback) -> None:  # type: ignore
+        # Reset the logging level to its original value
+        self.logger.setLevel(self.original_level)

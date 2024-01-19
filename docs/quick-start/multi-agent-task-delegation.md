@@ -49,7 +49,7 @@ helper_agent2 = ChatAgent(ChatAgentConfig(...))
 helper_task1 = Task(agent1, ...)
 helper_task2 = Task(agent2, ...)
 
-main_task.add_subtask([helper_task1, helper_task2])
+main_task.add_sub_task([helper_task1, helper_task2])
 ```
 
 What happens when we call `main_task.run()`?
@@ -63,7 +63,7 @@ in this sequence:
 ```
 
 1. This is the default sequence in Langroid, but it can be changed by
-   overriding [`ChatAgent.entity_responders()`](../../reference/agent/base/#langroid.agent.base.Agent.entity_responders)
+   overriding [`ChatAgent.entity_responders()`][langroid.agent.base.Agent.entity_responders]
 
 When a `Task` object has subtasks, the sequence of responders tried by
 `Task.step()` consists of the above "native" responders, plus the
@@ -99,8 +99,8 @@ to trigger `helper_task1` and `helper_task2` in sequence,
 then we could set it up like this:
 
 ```py
-helper_task1.add_subtask(helper_task2) #(1)!
-main_task.add_subtask(helper_task1)
+helper_task1.add_sub_task(helper_task2) #(1)!
+main_task.add_sub_task(helper_task1)
 ```
 
 1. When adding a single sub-task, we do not need to wrap it in a list.

@@ -33,8 +33,8 @@ async def test_openai_gpt_async(test_settings: Settings, streaming, country, cap
             if test_settings.gpt3_5
             else OpenAIChatModel.GPT4
         ),
-        completion_model=OpenAICompletionModel.GPT4,
-        cache_config=RedisCacheConfig(fake=False),
+        completion_model=OpenAICompletionModel.GPT3_5_TURBO_INSTRUCT,
+        cache_config=RedisCacheConfig(fake=True),
     )
 
     mdl = OpenAIGPT(config=cfg)
@@ -82,8 +82,8 @@ async def test_llm_async_concurrent(test_settings: Settings):
             if test_settings.gpt3_5
             else OpenAIChatModel.GPT4
         ),
-        completion_model=OpenAICompletionModel.GPT4,
-        cache_config=RedisCacheConfig(fake=False),
+        completion_model=OpenAICompletionModel.GPT3_5_TURBO_INSTRUCT,
+        cache_config=RedisCacheConfig(fake=True),
     )
 
     mdl = OpenAIGPT(config=cfg)

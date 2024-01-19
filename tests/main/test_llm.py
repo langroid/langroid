@@ -1,9 +1,13 @@
+import warnings
+
 import openai
 import pytest
 
+import langroid as lr
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
 from langroid.language_models.base import LLMMessage, Role
 from langroid.language_models.openai_gpt import (
+    AccessWarning,
     OpenAIChatModel,
     OpenAICompletionModel,
     OpenAIGPT,
@@ -31,10 +35,10 @@ def test_openai_gpt(test_settings: Settings, streaming, country, capital):
         chat_model=(
             OpenAIChatModel.GPT3_5_TURBO
             if test_settings.gpt3_5
-            else OpenAIChatModel.GPT4
+            else OpenAIChatModel.GPT4  # or GPT4_TURBO
         ),
-        completion_model=OpenAICompletionModel.GPT4,
-        cache_config=RedisCacheConfig(fake=False),
+        completion_model=OpenAICompletionModel.GPT3_5_TURBO_INSTRUCT,
+        cache_config=RedisCacheConfig(fake=True),
     )
 
     mdl = OpenAIGPT(config=cfg)
@@ -89,9 +93,9 @@ def _test_context_length_error(test_settings: Settings, mode: str, max_tokens: i
     cfg = OpenAIGPTConfig(
         stream=False,
         max_output_tokens=max_tokens,
-        chat_model=OpenAIChatModel.GPT4,
+        chat_model=OpenAIChatModel.GPT4,  # or GPT4_TURBO,
         completion_model=OpenAICompletionModel.TEXT_DA_VINCI_003,
-        cache_config=RedisCacheConfig(fake=False),
+        cache_config=RedisCacheConfig(fake=True),
     )
     parser = Parser(config=ParsingConfig())
     llm = OpenAIGPT(config=cfg)
@@ -106,7 +110,7 @@ def _test_context_length_error(test_settings: Settings, mode: str, max_tokens: i
     assert big_message_tokens + max_tokens > context_length
     response = None
     # TODO need to figure out what error type to expect here
-    with pytest.raises(openai.error.InvalidRequestError) as e:
+    with pytest.raises(openai.BadRequestError) as e:
         if mode == "chat":
             response = llm.chat(big_message, max_tokens=max_tokens)
         else:
@@ -114,3 +118,71 @@ def _test_context_length_error(test_settings: Settings, mode: str, max_tokens: i
 
     assert response is None
     assert "context length" in str(e.value).lower()
+
+
+def test_model_selection(test_settings: Settings):
+    set_global(test_settings)
+
+    defaultOpenAIChatModel = lr.language_models.openai_gpt.defaultOpenAIChatModel
+
+    def get_response(llm):
+        llm.generate(prompt="What is the capital of France?", max_tokens=10)
+
+    def simulate_response(llm):
+        llm.run_on_first_use()
+
+    def check_warning(
+        llm,
+        assert_warn,
+        function=get_response,
+        warning_type=AccessWarning,
+        catch_errors=(ImportError,),
+    ):
+        if assert_warn:
+            with pytest.warns(expected_warning=warning_type):
+                try:
+                    function(llm)
+                except catch_errors:
+                    pass
+        else:
+            with warnings.catch_warnings():
+                warnings.simplefilter("error", category=warning_type)
+
+                try:
+                    function(llm)
+                except catch_errors:
+                    pass
+
+    # Default is GPT4; we should not generate the warning in this case
+    lr.language_models.openai_gpt.defaultOpenAIChatModel = OpenAIChatModel.GPT4_TURBO
+    llm = OpenAIGPT(config=OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT3_5_TURBO))
+    check_warning(llm, False)
+
+    llm = OpenAIGPT(config=OpenAIGPTConfig())
+    check_warning(llm, False)
+
+    # Default is GPT3.5 (simulate GPT 4 inaccessible)
+    lr.language_models.openai_gpt.defaultOpenAIChatModel = OpenAIChatModel.GPT3_5_TURBO
+
+    # No warnings generated if we specify the model explicitly
+    llm = OpenAIGPT(config=OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT3_5_TURBO))
+    check_warning(llm, False)
+
+    # No warnings generated if we are using a local model
+    llm = OpenAIGPT(config=OpenAIGPTConfig(api_base="localhost:8000"))
+    check_warning(llm, False, function=simulate_response)
+    llm = OpenAIGPT(config=OpenAIGPTConfig(chat_model="local/localhost:8000"))
+    check_warning(llm, False, function=simulate_response)
+    llm = OpenAIGPT(config=OpenAIGPTConfig(chat_model="litellm/ollama/llama"))
+    check_warning(llm, False, function=simulate_response)
+
+    # We should warn on the first usage of a model with auto-selected GPT-3.5
+    llm = OpenAIGPT(config=OpenAIGPTConfig())
+    check_warning(llm, True)
+
+    # We should not warn on subsequent uses and models with auto-selected GPT-3.5
+    check_warning(llm, False)
+    llm = OpenAIGPT(config=OpenAIGPTConfig())
+    check_warning(llm, False)
+
+    lr.language_models.openai_gpt.defaultOpenAIChatModel = defaultOpenAIChatModel

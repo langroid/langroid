@@ -1,7 +1,6 @@
 import logging
 from enum import Enum
-from functools import reduce
-from typing import List
+from typing import Dict, List, Literal
 
 import tiktoken
 from pydantic import BaseSettings
@@ -20,11 +19,17 @@ class Splitter(str, Enum):
 
 
 class PdfParsingConfig(BaseSettings):
-    library: str = "pdfplumber"
+    library: Literal[
+        "fitz", "pdfplumber", "pypdf", "unstructured", "haystack"
+    ] = "pdfplumber"
 
 
 class DocxParsingConfig(BaseSettings):
-    library: str = "unstructured"
+    library: Literal["python-docx", "unstructured"] = "unstructured"
+
+
+class DocParsingConfig(BaseSettings):
+    library: Literal["unstructured"] = "unstructured"
 
 
 class ParsingConfig(BaseSettings):
@@ -36,10 +41,12 @@ class ParsingConfig(BaseSettings):
     min_chunk_chars: int = 350
     discard_chunk_chars: int = 5  # discard chunks with fewer than this many chars
     n_similar_docs: int = 4
+    n_neighbor_ids: int = 5  # window size to store around each chunk
     separators: List[str] = ["\n\n", "\n", " ", ""]
     token_encoding_model: str = "text-embedding-ada-002"
     pdf: PdfParsingConfig = PdfParsingConfig()
     docx: DocxParsingConfig = DocxParsingConfig()
+    doc: DocParsingConfig = DocParsingConfig()
 
 
 class Parser:
@@ -51,72 +58,120 @@ class Parser:
         tokens = self.tokenizer.encode(text)
         return len(tokens)
 
+    def add_window_ids(self, chunks: List[Document]) -> None:
+        """Chunks may belong to multiple docs, but for each doc,
+        they appear consecutively. Add window_ids in metadata"""
+
+        # The original metadata.id (if any) is ignored since it will be same for all
+        # chunks and is useless. We want a distinct id for each chunk.
+        orig_ids = [c.metadata.id for c in chunks]
+        ids = [Document.hash_id(str(c)) for c in chunks]
+        id2chunk = {id: c for id, c in zip(ids, chunks)}
+
+        # group the ids by orig_id
+        orig_id_to_ids: Dict[str, List[str]] = {}
+        for orig_id, id in zip(orig_ids, ids):
+            if orig_id not in orig_id_to_ids:
+                orig_id_to_ids[orig_id] = []
+            orig_id_to_ids[orig_id].append(id)
+
+        # now each orig_id maps to a sequence of ids within a single doc
+
+        k = self.config.n_neighbor_ids
+        for orig, ids in orig_id_to_ids.items():
+            # ids are consecutive chunks in a single doc
+            n = len(ids)
+            window_ids = [ids[max(0, i - k) : min(n, i + k + 1)] for i in range(n)]
+            for i, _ in enumerate(ids):
+                c = id2chunk[ids[i]]
+                if c.content.strip() == "":
+                    continue
+                c.metadata.window_ids = window_ids[i]
+                c.metadata.id = ids[i]
+                c.metadata.is_chunk = True
+
     def split_simple(self, docs: List[Document]) -> List[Document]:
         if len(self.config.separators) == 0:
             raise ValueError("Must have at least one separator")
-        return [
-            Document(content=chunk.strip(), metadata=d.metadata)
-            for d in docs
-            for chunk in remove_extra_whitespace(d.content).split(
-                self.config.separators[0]
-            )
-            if chunk.strip() != ""
-        ]
+        final_docs = []
+
+        for d in docs:
+            if d.content.strip() == "":
+                continue
+            chunks = remove_extra_whitespace(d.content).split(self.config.separators[0])
+            chunk_docs = [
+                Document(
+                    content=c, metadata=d.metadata.copy(update=dict(is_chunk=True))
+                )
+                for c in chunks
+                if c.strip() != ""
+            ]
+            self.add_window_ids(chunk_docs)
+            final_docs += chunk_docs
+        return final_docs
 
     def split_para_sentence(self, docs: List[Document]) -> List[Document]:
-        final_chunks = []
         chunks = docs
         while True:
-            long_chunks = [
-                p
-                for p in chunks
-                if self.num_tokens(p.content) > 1.3 * self.config.chunk_size
-            ]
-            if len(long_chunks) == 0:
-                break
-            short_chunks = [
-                p
-                for p in chunks
-                if self.num_tokens(p.content) <= 1.3 * self.config.chunk_size
-            ]
-            final_chunks += short_chunks
-            chunks = self._split_para_sentence_once(long_chunks)
-            if len(chunks) == len(long_chunks):
-                max_len = max([self.num_tokens(p.content) for p in long_chunks])
-                logger.warning(
-                    f"""
-                    Unable to split {len(long_chunks)} long chunks
-                    using chunk_size = {self.config.chunk_size}.
-                    Max chunk size is {max_len} tokens.
-                    """
-                )
+            un_splittables = 0
+            split_chunks = []
+            for c in chunks:
+                if c.content.strip() == "":
+                    continue
+                if self.num_tokens(c.content) <= 1.3 * self.config.chunk_size:
+                    # small chunk: no need to split
+                    split_chunks.append(c)
+                    continue
+                splits = self._split_para_sentence_once([c])
+                un_splittables += len(splits) == 1
+                split_chunks += splits
+            if len(split_chunks) == len(chunks):
+                if un_splittables > 0:
+                    max_len = max([self.num_tokens(p.content) for p in chunks])
+                    logger.warning(
+                        f"""
+                        Unable to split {un_splittables} chunks
+                        using chunk_size = {self.config.chunk_size}.
+                        Max chunk size is {max_len} tokens.
+                        """
+                    )
                 break  # we won't be able to shorten them with current settings
+            chunks = split_chunks.copy()
 
-        return final_chunks + chunks
+        self.add_window_ids(chunks)
+        return chunks
 
     def _split_para_sentence_once(self, docs: List[Document]) -> List[Document]:
-        chunked_docs = [
-            [
-                Document(content=chunk.strip(), metadata=d.metadata)
-                for chunk in create_chunks(
-                    d.content, self.config.chunk_size, self.num_tokens
+        final_chunks = []
+        for d in docs:
+            if d.content.strip() == "":
+                continue
+            chunks = create_chunks(d.content, self.config.chunk_size, self.num_tokens)
+            chunk_docs = [
+                Document(
+                    content=c, metadata=d.metadata.copy(update=dict(is_chunk=True))
                 )
-                if chunk.strip() != ""
+                for c in chunks
+                if c.strip() != ""
             ]
-            for d in docs
-        ]
-        return reduce(lambda x, y: x + y, chunked_docs)
+            final_chunks += chunk_docs
+
+        return final_chunks
 
     def split_chunk_tokens(self, docs: List[Document]) -> List[Document]:
-        chunked_docs = [
-            [
-                Document(content=chunk.strip(), metadata=d.metadata)
-                for chunk in self.chunk_tokens(d.content)
-                if chunk.strip() != ""
+        final_docs = []
+        for d in docs:
+            chunks = self.chunk_tokens(d.content)
+            chunk_docs = [
+                Document(
+                    content=c, metadata=d.metadata.copy(update=dict(is_chunk=True))
+                )
+                for c in chunks
+                if c.strip() != ""
             ]
-            for d in docs
-        ]
-        return reduce(lambda x, y: x + y, chunked_docs)
+            self.add_window_ids(chunk_docs)
+            final_docs += chunk_docs
+        return final_docs
 
     def chunk_tokens(
         self,
@@ -198,17 +253,19 @@ class Parser:
             # Increment the number of chunks
             num_chunks += 1
 
-        # Handle the remaining tokens
-        if tokens:
-            remaining_text = self.tokenizer.decode(tokens).replace("\n", " ").strip()
-            if len(remaining_text) > self.config.discard_chunk_chars:
-                chunks.append(remaining_text)
+        # There may be remaining tokens, but we discard them
+        # since we have already reached the maximum number of chunks
 
         return chunks
 
     def split(self, docs: List[Document]) -> List[Document]:
         if len(docs) == 0:
             return []
+        # create ids in metadata of docs if absent:
+        # we need this to distinguish docs later in add_window_ids
+        for d in docs:
+            if d.metadata.id in [None, ""]:
+                d.metadata.id = d._unique_hash_id()
         # some docs are already splits, so don't split them further!
         chunked_docs = [d for d in docs if d.metadata.is_chunk]
         big_docs = [d for d in docs if not d.metadata.is_chunk]

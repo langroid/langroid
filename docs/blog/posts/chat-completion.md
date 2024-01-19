@@ -68,7 +68,7 @@ So how can an LLM be improved to perform well on these kinds of prompts?
 This brings us to the heart of the innovation behind the wildly popular ChatGPT:
 it uses an enhancement of GPT3 that (besides having a lot more parameters),
 was _explicitly_ fine-tuned on instructions (and dialogs more generally) -- this is referred to
-as **instruction-fine-tuning** or IFT for short. In addition to fine-tuning on instructions/dialogs,
+as **instruction-fine-tuning** or IFT for short. In addition to fine-tuning instructions/dialogs,
 the models behind ChatGPT (i.e., GPT-3.5-Turbo and GPT-4) are further tuned to produce
 responses that _align_ with human preferences (i.e. produce responses that are more helpful and safe),
 using a procedure called Reinforcement Learning with Human Feedback (RLHF).
@@ -93,7 +93,7 @@ or
 [User] In the text below, find all proper nouns:
     Jack lives in Bosnia, and Jill lives in Belgium.
 [Assistant] John, Bosnia, Jill, Belgium are all proper nouns.
-[User] where does John live?
+[User] Where does John live?
 [Assistant] John lives in Bosnia.
 ```
 
@@ -132,7 +132,7 @@ A dialog fed to a Llama2 model in its expected prompt format would look like thi
 
 ```
 <s>[INST] <<SYS>>
-You are are a helpful assistant.
+You are a helpful assistant.
 <</SYS>>
 
 Hi there! 
@@ -180,7 +180,7 @@ so users looking to use llama2 models with langroid can try either of these opti
 (See the local-LLM [tutorial](https://langroid.github.io/langroid/blog/2023/09/14/using-langroid-with-local-llms/) for details).
 
 When this flag is set to `True`, the chat history is formatted using the built-in 
-Langroid llama2 formatter and the completion endpoint is used. When the flag is set to `False`, the chat 
+Langroid llama2 formatter and the completion endpoint are used. When the flag is set to `False`, the chat 
 history is sent directly to the chat-completion endpoint, which internally converts the 
 chat history to a prompt in the expected llama2 format.
 
@@ -188,7 +188,7 @@ For local models other than Llama2, users can either:
 
 - write their own formatters by writing a class similar to `Llama2Formatter` and 
 then setting the `use_completion_for_chat` flag to `True` in the `LocalModelConfig` object, or
-- use a LLM server library (such as the `oobabooga` library mentioned above) that provides a chat-completion endpoint, 
+- use an LLM server library (such as the `oobabooga` library mentioned above) that provides a chat-completion endpoint, 
 _and converts chats to single prompts under the hood,_ and set the
   `use_completion_for_chat` flag to `False` in the `LocalModelConfig` object.
 

@@ -14,8 +14,9 @@ from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from github import Github
 from github.ContentFile import ContentFile
+from github.Label import Label
 from github.Repository import Repository
-from pydantic import BaseSettings
+from pydantic import BaseModel, BaseSettings, Field
 
 from langroid.mytypes import DocMetaData, Document
 from langroid.parsing.document_parser import DocumentParser
@@ -41,6 +42,22 @@ def _has_files(directory: str) -> bool:
         if filenames:
             return True
     return False
+
+
+# Pydantic model for GitHub issue data
+class IssueData(BaseModel):
+    state: str = Field(..., description="State of issue e.g. open or closed")
+    year: int = Field(..., description="Year issue was created")
+    month: int = Field(..., description="Month issue was created")
+    day: int = Field(..., description="Day issue was created")
+    assignee: Optional[str] = Field(..., description="Assignee of issue")
+    size: Optional[str] = Field(..., description="Size of issue, e.g. XS, S, M, L, XXL")
+    text: str = Field(..., description="Text of issue, i.e. description body")
+
+
+def get_issue_size(labels: List[Label]) -> str | None:
+    sizes = ["XS", "S", "M", "L", "XL", "XXL"]
+    return next((label.name for label in labels if label.name in sizes), None)
 
 
 class RepoLoaderConfig(BaseSettings):
@@ -154,6 +171,27 @@ class RepoLoader:
 
     def _get_dir_name(self) -> str:
         return urlparse(self.url).path.replace("/", "_")
+
+    def get_issues(self, k: int | None = 100) -> List[IssueData]:
+        """Get up to k issues from the GitHub repo."""
+        if k is None:
+            issues = self.repo.get_issues(state="all")
+        else:
+            issues = self.repo.get_issues(state="all")[:k]
+        issue_data_list = []
+        for issue in issues:
+            issue_data = IssueData(
+                state=issue.state,
+                year=issue.created_at.year,
+                month=issue.created_at.month,
+                day=issue.created_at.day,
+                assignee=issue.assignee.login if issue.assignee else None,
+                size=get_issue_size(issue.labels),
+                text=issue.body or "No issue description body.",
+            )
+            issue_data_list.append(issue_data)
+
+        return issue_data_list
 
     @staticmethod
     def _file_type(name: str) -> str:
@@ -336,8 +374,8 @@ class RepoLoader:
 
         Returns:
             Tuple of (dict, List_of_Documents):
-              A dictionary containing file and directory names, with file contents, and
-              A list of Document objects for each file.
+                A dictionary containing file and directory names, with file
+                contents, and a list of Document objects for each file.
         """
         if path is None:
             if self.clone_path is None or not _has_files(self.clone_path):
@@ -382,8 +420,8 @@ class RepoLoader:
 
         Returns:
             Tuple of (dict, List_of_Documents):
-              A dictionary containing file and directory names, with file contents.
-              A list of Document objects for each file.
+                A dictionary containing file and directory names, with file contents.
+                A list of Document objects for each file.
         """
 
         folder_structure = {
@@ -507,7 +545,7 @@ class RepoLoader:
 
         for file_path in file_paths:
             _, file_extension = os.path.splitext(file_path)
-            if file_extension.lower() in [".pdf", ".docx"]:
+            if file_extension.lower() in [".pdf", ".docx", ".doc"]:
                 doc_parser = DocumentParser.create(
                     file_path,
                     parser.config,
@@ -543,8 +581,8 @@ class RepoLoader:
         of lines per file (if any of these are specified).
 
         Args:
-            k(int): max number of files to load, or None for all files
-            depth(int): max depth to recurse, or None for infinite depth
+            k (int): max number of files to load, or None for all files
+            depth (int): max depth to recurse, or None for infinite depth
             lines (int): max number of lines to get, from a file, or None for all lines
 
         Returns:
