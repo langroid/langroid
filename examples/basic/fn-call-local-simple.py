@@ -7,7 +7,7 @@ which is then interpreted by your code to perform some action.
 This is also referred to in various scenarios as "Tools", "Actions" or "Plugins".
 
 # (1) Mac: Install latest ollama, then do this:
-# ollama pull mistral:7b-instruct-v0.2-q4_K_M
+# ollama pull mistral:7b-instruct-v0.2-q4_K_M"
 
 # (2) Ensure you've installed the `litellm` extra with Langroid, e.g.
 # pip install langroid[litellm], or if you use the `pyproject.toml` in this repo
@@ -28,10 +28,13 @@ import fire
 
 from pydantic import BaseModel, Field
 import langroid as lr
+from langroid.utils.configuration import settings
 from langroid.agent.tool_message import ToolMessage
 import langroid.language_models as lm
 from langroid.agent.chat_document import ChatDocument
 
+# for best results:
+DEFAULT_LLM = "litellm/ollama/mixtral:8x7b-instruct-v0.1-q4_K_M"
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
@@ -56,8 +59,17 @@ class CityTool(lr.agent.ToolMessage):
     """Present information about a city"""
 
     request: str = "city_tool"
-    purpose: str = "present <city_info>"
+    purpose: str = """
+    To present <city_info> AFTER user gives a city name,
+    with all fields of the appropriate type filled out;
+    DO NOT USE THIS TOOL TO ASK FOR A CITY NAME.
+    SIMPLY ASK IN NATURAL LANGUAGE.
+    """
     city_info: City = Field(..., description="information about a city")
+
+    @staticmethod
+    def json_group_instruction() -> str:
+        return ""
 
     def handle(self) -> str:
         """Handle LLM's structured output if it matches City structure"""
@@ -74,9 +86,10 @@ class CityTool(lr.agent.ToolMessage):
         """Fallback method when LLM forgets to generate a tool"""
         if isinstance(msg, ChatDocument) and msg.metadata.sender == "LLM":
             return """
-                You must use the `city_tool` to generate city information.
+                You must use the "city_tool" to generate city information.
                 You either forgot to use it, or you used it with the wrong format.
-                Make sure all fields are filled out.
+                Make sure all fields are filled out and pay attention to the 
+                required types of the fields.
                 """
 
     @classmethod
@@ -96,11 +109,13 @@ class CityTool(lr.agent.ToolMessage):
 
 
 def app(
-    m: str = "litellm/ollama/mistral:7b-instruct-v0.2-q4_K_M",
+    m: str = DEFAULT_LLM,
+    d: bool = False,
 ):
+    settings.debug = d
     # create LLM config
     llm_cfg = lm.OpenAIGPTConfig(
-        chat_model=m or "litellm/ollama/mistral:7b-instruct-v0.2-q4_K_M",
+        chat_model=m or DEFAULT_LLM,
         chat_context_length=4096,  # set this based on model
         max_output_tokens=100,
         temperature=0.2,
@@ -129,18 +144,19 @@ def app(
         llm=llm_cfg,
         system_message="""
         You are an expert on world city information. 
-        The user will give you a city name, and you should use the `city_tool` to
-        generate information about the city, and present it to the user.
-        Make up the values if you don't know them exactly, but make sure
-        the structure is as specified in the `city_tool` JSON definition.
+        We will play this game, taking turns:
+        YOU: ask me to give you a city name.
+        I: will give you a city name.
+        YOU: use the "city_tool" to generate information about the city, and present it to me.
+            Make up the values if you don't know them exactly, but make sure
+        I: will confirm whether you provided the info in a valid form,
+            and if not I will ask you to try again.
+        YOU: wait for my confirmation, and then ask for another city name, and so on.
         
-        DO NOT SAY ANYTHING ELSE BESIDES PROVIDING THE CITY INFORMATION.
         
         START BY ASKING ME TO GIVE YOU A CITY NAME. 
-        DO NOT GENERATE ANYTHING YOU GET A CITY NAME.
-        
-        Once you've generated the city information using `city_tool`,
-        ask for another city name, and so on.
+        DO NOT SAY ANYTHING YOU GET A CITY NAME.
+
         """,
     )
 

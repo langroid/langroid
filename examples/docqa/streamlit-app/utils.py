@@ -2,7 +2,7 @@ from langroid.agent.special import DocChatAgent, DocChatAgentConfig
 from langroid.vector_store.lancedb import LanceDBConfig
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
 from langroid.parsing.parser import ParsingConfig
-from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
+from langroid.language_models.openai_gpt import OpenAIGPTConfig
 import os
 import streamlit as st
 
