@@ -1,20 +1,21 @@
-import typer
 from typing import List
+
+import typer
 from dotenv import load_dotenv
+from pandas import DataFrame, read_csv
+from rich import print
 from rich.console import Console
 from rich.prompt import Prompt
-from rich import print
-from pandas import DataFrame, read_csv
 
-from langroid.agent.tool_message import ToolMessage
-from langroid.agent.task import Task
-from langroid.utils.configuration import set_global, Settings
-from langroid.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
 from langroid.agent.special.neo4j.neo4j_chat_agent import (
     Neo4jChatAgent,
     Neo4jChatAgentConfig,
     Neo4jSettings,
 )
+from langroid.agent.task import Task
+from langroid.agent.tool_message import ToolMessage
+from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
+from langroid.utils.configuration import Settings, set_global
 
 console = Console()
 app = typer.Typer()
@@ -97,7 +98,8 @@ class PandasToKGTool(ToolMessage):
     def examples(cls) -> List["ToolMessage"]:
         return [
             cls(
-                cypherQuery="""MERGE (employee:Employee {name: $employeeName, id: $employeeId})\n
+                cypherQuery="""MERGE (employee:Employee {name: $employeeName, 
+                id: $employeeId})\n
                 MERGE (department:Department {name: $departmentName})\n
                 MERGE (employee)-[:WORKS_IN]->(department)\n
                 SET employee.email = $employeeEmail""",
