@@ -10,17 +10,21 @@ This is also referred to in various scenarios as "Tools", "Actions" or "Plugins"
 # ollama pull mistral:7b-instruct-v0.2-q4_K_M
 
 # (2) Ensure you've installed the `litellm` extra with Langroid, e.g.
-# pip install langroid[litellm]
-# (or use pip install "langroid[litellm]" if using zsh or similar shells),
-or if you use the `pyproject.toml` in this repo you can simply use `poetry install`
+# pip install langroid[litellm], or if you use the `pyproject.toml` in this repo
+# you can simply use `poetry install`
 
 # (3) Run like this:
 
-python3 examples/basic/fn-call-local-simple.py
+python3 examples/docqa/fn-call-local-simple.py
+
+To change the local model, use the optional arg -m <local_model>.
+See this [script](https://github.com/langroid/langroid-examples/blob/main/examples/docqa/rag-local-simple.py)
+for other ways to specify the local_model.
 
 """
 import os
 from typing import List
+import fire
 
 from pydantic import BaseModel, Field
 import langroid as lr
@@ -30,38 +34,6 @@ from langroid.agent.chat_document import ChatDocument
 
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
-
-# Create the llm config object.
-# Note: if instead of ollama you've spun up your local LLM to listen at
-# an OpenAI-Compatible Endpoint like `localhost:8000`, then you can set
-# chat_model="local/localhost:8000"; carefully note there's no http in this,
-# and if the endpoint is localhost:8000/v1, then you must set
-# chat_model="local/localhost:8000/v1"
-# Similarly if your endpoint is `http://128.0.4.5:8000/v1`, then you must set
-# chat_model="local/128.0.4.5:8000/v1"
-llm_cfg = lm.OpenAIGPTConfig(
-    chat_model="litellm/ollama/mistral:7b-instruct-v0.2-q4_K_M",
-    chat_context_length=4096,  # set this based on model
-    max_output_tokens=100,
-    temperature=0.2,
-    stream=True,
-    timeout=45,
-)
-
-# Recommended: First test if basic chat works with this llm setup as below:
-# Once this works, then you can try the rest of the example.
-#
-# agent = lr.ChatAgent(
-#     lr.ChatAgentConfig(
-#         llm=llm_cfg,
-#     )
-# )
-#
-# agent.llm_response("What is 3 + 4?")
-#
-# task = lr.Task(agent)
-# verify you can interact with this in a chat loop on cmd line:
-# task.run("Concisely answer some questions")
 
 # (1) Define the desired structure via Pydantic.
 # Here we define a nested structure for City information.
@@ -91,9 +63,9 @@ class CityTool(lr.agent.ToolMessage):
         """Handle LLM's structured output if it matches City structure"""
         print("SUCCESS! Got Valid City Info")
         return """
-        Thanks! ask me for another city name, do not say anything else
-        until you get a city name.
-        """
+            Thanks! ask me for another city name, do not say anything else
+            until you get a city name.
+            """
 
     @staticmethod
     def handle_message_fallback(
@@ -102,10 +74,10 @@ class CityTool(lr.agent.ToolMessage):
         """Fallback method when LLM forgets to generate a tool"""
         if isinstance(msg, ChatDocument) and msg.metadata.sender == "LLM":
             return """
-            You must use the `city_tool` to generate city information.
-            You either forgot to use it, or you used it with the wrong format.
-            Make sure all fields are filled out.
-            """
+                You must use the `city_tool` to generate city information.
+                You either forgot to use it, or you used it with the wrong format.
+                Make sure all fields are filled out.
+                """
 
     @classmethod
     def examples(cls) -> List["ToolMessage"]:
@@ -123,33 +95,65 @@ class CityTool(lr.agent.ToolMessage):
         ]
 
 
-# (3) Define a ChatAgentConfig and ChatAgent
+def app(
+    m: str = "litellm/ollama/mistral:7b-instruct-v0.2-q4_K_M",
+):
+    # create LLM config
+    llm_cfg = lm.OpenAIGPTConfig(
+        chat_model=m or "litellm/ollama/mistral:7b-instruct-v0.2-q4_K_M",
+        chat_context_length=4096,  # set this based on model
+        max_output_tokens=100,
+        temperature=0.2,
+        stream=True,
+        timeout=45,
+    )
 
-config = lr.ChatAgentConfig(
-    llm=llm_cfg,
-    system_message="""
-    You are an expert on world city information. 
-    The user will give you a city name, and you should use the `city_tool` to
-    generate information about the city, and present it to the user.
-    Make up the values if you don't know them exactly, but make sure
-    the structure is as specified in the `city_tool` JSON definition.
-    
-    DO NOT SAY ANYTHING ELSE BESIDES PROVIDING THE CITY INFORMATION.
-    
-    START BY ASKING ME TO GIVE YOU A CITY NAME. 
-    DO NOT GENERATE ANYTHING YOU GET A CITY NAME.
-    
-    Once you've generated the city information using `city_tool`,
-    ask for another city name, and so on.
-    """,
-)
+    # Recommended: First test if basic chat works with this llm setup as below:
+    # Once this works, then you can try the rest of the example.
+    #
+    # agent = lr.ChatAgent(
+    #     lr.ChatAgentConfig(
+    #         llm=llm_cfg,
+    #     )
+    # )
+    #
+    # agent.llm_response("What is 3 + 4?")
+    #
+    # task = lr.Task(agent)
+    # verify you can interact with this in a chat loop on cmd line:
+    # task.run("Concisely answer some questions")
 
-agent = lr.ChatAgent(config)
+    # Define a ChatAgentConfig and ChatAgent
 
-# (4) Enable the Tool for this agent --> this auto-inserts JSON instructions
-# and few-shot examples into the system message
-agent.enable_message(CityTool)
+    config = lr.ChatAgentConfig(
+        llm=llm_cfg,
+        system_message="""
+        You are an expert on world city information. 
+        The user will give you a city name, and you should use the `city_tool` to
+        generate information about the city, and present it to the user.
+        Make up the values if you don't know them exactly, but make sure
+        the structure is as specified in the `city_tool` JSON definition.
+        
+        DO NOT SAY ANYTHING ELSE BESIDES PROVIDING THE CITY INFORMATION.
+        
+        START BY ASKING ME TO GIVE YOU A CITY NAME. 
+        DO NOT GENERATE ANYTHING YOU GET A CITY NAME.
+        
+        Once you've generated the city information using `city_tool`,
+        ask for another city name, and so on.
+        """,
+    )
 
-# (5) Create task and run it to start an interactive loop
-task = lr.Task(agent)
-task.run()
+    agent = lr.ChatAgent(config)
+
+    # (4) Enable the Tool for this agent --> this auto-inserts JSON instructions
+    # and few-shot examples into the system message
+    agent.enable_message(CityTool)
+
+    # (5) Create task and run it to start an interactive loop
+    task = lr.Task(agent)
+    task.run()
+
+
+if __name__ == "__main__":
+    fire.Fire(app)

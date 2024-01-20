@@ -17,11 +17,11 @@ To change the local model, use the optional arg -m <local_model>.
 Other possibilities for local_model are:
 - If instead of ollama (perhaps using oobo text-generation-webui)
   you've spun up your local LLM to listen at an OpenAI-Compatible Endpoint
-  like `localhost:8000`, then you can use -m local/localhost:8000
+  like `localhost:8000`, then you can use `-m local/localhost:8000`
 - If the endpoint is listening at https://localhost:8000/v1, you must include the `v1`
-- If the endpoint is http://127.0.0.1:8000, use -m local/127.0.0.1:8000
+- If the endpoint is http://127.0.0.1:8000, use `-m local/127.0.0.1:8000`
 
-And so on. The above are few-shot examples for you. You get the idea.
+And so on. The above are few-shot examples for you. You get the idea!
 """
 
 import os
