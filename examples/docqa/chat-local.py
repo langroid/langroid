@@ -45,35 +45,10 @@ from langroid.agent.special.doc_chat_agent import (
 from langroid.parsing.parser import ParsingConfig, PdfParsingConfig, Splitter
 from langroid.agent.task import Task
 from langroid.utils.configuration import set_global, Settings
-from langroid.utils.logging import setup_colored_logging
 
 app = typer.Typer()
 
-setup_colored_logging()
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
-
-
-def chat(config: DocChatAgentConfig) -> None:
-    agent = DocChatAgent(config)
-    print("[blue]Welcome to the document chatbot!")
-    agent.user_docs_ingest_dialog()
-    print("[cyan]Enter x or q to quit, or ? for evidence")
-
-    system_msg = Prompt.ask(
-        """
-    [blue] Tell me who I am; complete this sentence: You are...
-    [or hit enter for default] 
-    [blue] Human
-    """,
-        default="a helpful assistant.",
-    )
-    system_msg = re.sub("you are", "", system_msg, flags=re.IGNORECASE)
-    task = Task(
-        agent,
-        system_message="You are " + system_msg,
-    )
-    task.run()
-
 
 @app.command()
 def main(
@@ -81,6 +56,7 @@ def main(
     nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
     model: str = typer.Option("", "--model", "-m", help="model name"),
 ) -> None:
+
     llm_config = lm.OpenAIGPTConfig(
         chat_model=model or lm.OpenAIChatModel.GPT4_TURBO,
         # or, other possibilities for example:
@@ -133,7 +109,26 @@ def main(
             cache=not nocache,
         )
     )
-    chat(config)
+
+    agent = DocChatAgent(config)
+    print("[blue]Welcome to the document chatbot!")
+    agent.user_docs_ingest_dialog()
+    print("[cyan]Enter x or q to quit, or ? for evidence")
+
+    system_msg = Prompt.ask(
+        """
+    [blue] Tell me who I am; complete this sentence: You are...
+    [or hit enter for default] 
+    [blue] Human
+    """,
+        default="a helpful assistant.",
+    )
+    system_msg = re.sub("you are", "", system_msg, flags=re.IGNORECASE)
+    task = Task(
+        agent,
+        system_message="You are " + system_msg,
+    )
+    task.run()
 
 
 if __name__ == "__main__":
