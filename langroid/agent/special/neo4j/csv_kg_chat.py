@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 
 import typer
 from dotenv import load_dotenv
@@ -21,7 +21,7 @@ console = Console()
 app = typer.Typer()
 
 
-def _load_csv_dataset(csv_location) -> DataFrame:
+def _load_csv_dataset(csv_location: str) -> DataFrame:
     """
     Load a CSV dataset from a given file path or URL.
 
@@ -45,7 +45,7 @@ def _load_csv_dataset(csv_location) -> DataFrame:
 
 
 def _preprocess_dataframe_for_neo4j(
-    df: DataFrame, default_value: str = None, remove_null_rows: bool = True
+    df: DataFrame, default_value: Optional[str] = None, remove_null_rows: bool = True
 ) -> DataFrame:
     """
     Preprocess a DataFrame for Neo4j import by fixing mismatched quotes in string
@@ -129,18 +129,22 @@ class CSVChatGraphAgent(Neo4jChatAgent):
         """
         response = ""
         with console.status("[cyan]Generating graph database..."):
-            for index, row in self.csv_dataframe.iterrows():
-                row_dict = row.to_dict()
-                response = self.write_query(
-                    msg.cypherQuery,
-                    parameters={header: row_dict[header] for header in msg.args},
-                )
-                # there is a possibility the generated cypher query is not correct
-                # so we need to check the response before continuing to the iteration
-                if index == 0 and "successfully" not in response:
-                    print(f"[red]{response}")
-                    return response
-        return "Graph database successfully generated"
+            if self.csv_dataframe is not None and hasattr(
+                self.csv_dataframe, "iterrows"
+            ):
+                for index, row in self.csv_dataframe.iterrows():
+                    row_dict = row.to_dict()
+                    response = self.write_query(
+                        msg.cypherQuery,
+                        parameters={header: row_dict[header] for header in msg.args},
+                    )
+                    # there is a possibility the generated cypher query is not correct
+                    # so we need to check the response before continuing to the
+                    # iteration
+                    if index == 0 and "successfully" not in response:
+                        print(f"[red]{response}")
+                        return response
+            return "Graph database successfully generated"
 
 
 @app.command()
