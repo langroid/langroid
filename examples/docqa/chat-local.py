@@ -50,13 +50,13 @@ app = typer.Typer()
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
+
 @app.command()
 def main(
     debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
     nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
     model: str = typer.Option("", "--model", "-m", help="model name"),
 ) -> None:
-
     llm_config = lm.OpenAIGPTConfig(
         chat_model=model or lm.OpenAIChatModel.GPT4_TURBO,
         # or, other possibilities for example:
@@ -85,8 +85,8 @@ def main(
         # summarize_prompt="...override default DocChatAgent summarize prompt here",
         parsing=ParsingConfig(  # modify as needed
             splitter=Splitter.TOKENS,
-            chunk_size=1000,  # aim for this many tokens per chunk
-            overlap=100,  # overlap between chunks
+            chunk_size=300,  # aim for this many tokens per chunk
+            overlap=30,  # overlap between chunks
             max_chunks=10_000,
             n_neighbor_ids=5,  # store ids of window of k chunks around each chunk.
             # aim to have at least this many chars per chunk when
