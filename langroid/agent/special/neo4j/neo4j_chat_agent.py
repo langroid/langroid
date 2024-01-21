@@ -231,15 +231,15 @@ class Neo4jChatAgent(ChatAgent):
 
     def make_query(self, msg: CypherQueryTool) -> str:
         """ "
-        Handle a GenerateCypherQueries message by executing a Cypher query and
+        Handle a CypherQueryTool message by executing a Cypher query and
         returning the result.
         Args:
             msg (CypherQueryTool): The tool-message to handle.
 
         Returns:
-            str: The result of executing the Cypherquery.
+            str: The result of executing the cypher_query.
         """
-        query = msg.cypherQuery
+        query = msg.cypher_query
 
         logger.info(f"Executing Cypher query: {query}")
         return self.read_query(query)

@@ -230,6 +230,7 @@ class QdrantDB(VectorStore):
         colls = self.list_collections(empty=True)
         if len(documents) == 0:
             return
+        document_dicts = [doc.dict() for doc in documents]
         embedding_vecs = self.embedding_fn([doc.content for doc in documents])
         if self.config.collection_name is None:
             raise ValueError("No collection name set, cannot ingest docs")
@@ -245,7 +246,7 @@ class QdrantDB(VectorStore):
                 points=Batch(
                     ids=ids[i : i + b],
                     vectors=embedding_vecs[i : i + b],
-                    payloads=documents[i : i + b],
+                    payloads=document_dicts[i : i + b],
                 ),
             )
 

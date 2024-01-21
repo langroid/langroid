@@ -1,7 +1,6 @@
 from langroid.utils.configuration import settings
 from utils import configure, agent
 import langroid.language_models as lm
-import tempfile
 
 import streamlit as st
 import os
