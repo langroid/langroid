@@ -30,6 +30,7 @@ class RelevanceExtractorAgentConfig(ChatAgentConfig):
     <#1#>, <#2#>, <#3#>, etc.,
     followed by a QUERY. Extract ONLY the segment-numbers from 
     the PASSAGE that are RELEVANT to the QUERY.
+    Present the extracted segment-numbers using the `extract_segments` tool/function.
     """
 
 
