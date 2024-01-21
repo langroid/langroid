@@ -45,6 +45,7 @@ from langroid.utils.configuration import Settings, set_global
 
 app = typer.Typer()
 
+
 @app.command()
 def main(
     debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
@@ -98,6 +99,7 @@ def main(
             search_tool_class = GoogleSearchTool
         case "sciphi":
             from langroid.agent.tools.sciphi_search_rag_tool import SciPhiSearchRAGTool
+
             search_tool_class = SciPhiSearchRAGTool
         case _:
             raise ValueError(f"Unsupported provider {provider} specified.")
