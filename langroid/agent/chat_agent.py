@@ -530,8 +530,9 @@ class ChatAgent(Agent):
             if settings.debug:
                 print(
                     f"""
-                [red]LLM Initial Msg History:
-                {self.message_history_str()}
+                [grey37]LLM Initial Msg History:
+                {escape(self.message_history_str())}
+                [/grey37]
                 """
                 )
         else:
