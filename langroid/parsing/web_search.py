@@ -6,6 +6,7 @@ environment variables in your `.env` file, as explained in the
 [README](https://github.com/langroid/langroid#gear-installation-and-setup).
 """
 
+import json
 import os
 from typing import Dict, List
 
@@ -75,5 +76,48 @@ def google_search(query: str, num_results: int = 5) -> List[WebSearchResult]:
 
     return [
         WebSearchResult(result["title"], result["link"], 3500, 300)
+        for result in raw_results
+    ]
+
+
+def metaphor_search(query: str, num_results: int = 5) -> List[WebSearchResult]:
+    """
+    Method that makes a POST to request to Metaphor API that queries
+    the top num_results links that matches the query. Returns a list
+    of WebSearchResult objects.
+
+    Args:
+        query (str): The query body that users wants to make.
+        num_results (int): Number of top matching results that we want
+            to grab
+    """
+
+    load_dotenv()
+
+    url = "https://api.metaphor.systems/search"
+    api_key = os.getenv("METAPHOR_API_KEY")
+    if not api_key:
+        raise ValueError(
+            """
+            METAPHOR_API_KEY is not set. 
+            Please set the METAPHOR_API_KEY environment variable.
+            """
+        )
+
+    payload = {
+        "query": query,
+        "numResults": num_results,
+    }
+    headers = {
+        "accept": "application/json",
+        "content-type": "application/json",
+        "x-api-key": api_key,
+    }
+
+    response = requests.post(url, json=payload, headers=headers)
+    raw_results = json.loads(response.text)["results"]
+
+    return [
+        WebSearchResult(result["title"], result["url"], 3500, 300)
         for result in raw_results
     ]
