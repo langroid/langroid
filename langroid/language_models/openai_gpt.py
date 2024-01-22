@@ -779,7 +779,7 @@ class OpenAIGPT(LanguageModel):
                 if self.get_stream():
                     llm_response, openai_response = self._stream_response(
                         result,
-                        chat=True,
+                        chat=self.config.litellm,
                     )
                     self._cache_store(hashed_key, openai_response)
                     return cached, hashed_key, openai_response
@@ -787,19 +787,24 @@ class OpenAIGPT(LanguageModel):
                     self._cache_store(hashed_key, result.model_dump())
             return cached, hashed_key, result
 
-        key_name = "model"
-        cached, hashed_key, response = completions_with_backoff(
-            **{key_name: self.config.completion_model},
+        kwargs: Dict[str, Any] = dict(model=self.config.completion_model)
+        if self.config.litellm:
             # TODO this is a temp fix, we should really be using a proper completion fn
             # that takes a pre-formatted prompt, rather than mocking it as a sys msg.
-            messages=[dict(content=prompt, role=Role.SYSTEM)],
+            kwargs["messages"] = [dict(content=prompt, role=Role.SYSTEM)]
+        else:  # any other OpenAI-compatible endpoint
+            kwargs["prompt"] = prompt
+        cached, hashed_key, response = completions_with_backoff(
+            **kwargs,
             max_tokens=max_tokens,  # for output/completion
             temperature=self.config.temperature,
             echo=False,
             stream=self.get_stream(),
         )
-
-        msg = response["choices"][0]["message"]["content"].strip()
+        if "message" in response["choices"][0]:
+            msg = response["choices"][0]["message"]["content"].strip()
+        else:
+            msg = response["choices"][0]["text"].strip()
         return LLMResponse(message=msg, cached=cached)
 
     async def agenerate(self, prompt: str, max_tokens: int = 200) -> LLMResponse:
@@ -851,17 +856,24 @@ class OpenAIGPT(LanguageModel):
                 self._cache_store(hashed_key, result.model_dump())
             return cached, hashed_key, result
 
-        cached, hashed_key, response = await completions_with_backoff(
-            model=self.config.completion_model,
+        kwargs: Dict[str, Any] = dict(model=self.config.completion_model)
+        if self.config.litellm:
             # TODO this is a temp fix, we should really be using a proper completion fn
             # that takes a pre-formatted prompt, rather than mocking it as a sys msg.
-            messages=[dict(content=prompt, role=Role.SYSTEM)],
+            kwargs["messages"] = [dict(content=prompt, role=Role.SYSTEM)]
+        else:  # any other OpenAI-compatible endpoint
+            kwargs["prompt"] = prompt
+        cached, hashed_key, response = await completions_with_backoff(
+            **kwargs,
             max_tokens=max_tokens,
             temperature=self.config.temperature,
             echo=False,
             stream=False,
         )
-        msg = response["choices"][0]["message"]["content"].strip()
+        if "message" in response["choices"][0]:
+            msg = response["choices"][0]["message"]["content"].strip()
+        else:
+            msg = response["choices"][0]["text"].strip()
         return LLMResponse(message=msg, cached=cached)
 
     def chat(
