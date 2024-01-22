@@ -1,75 +1,89 @@
+"""
+Prompt formatter based on HuggingFace `AutoTokenizer.apply_chat_template` method
+from their Transformers library. It searches the hub for a model matching the
+specified name, and uses the first one it finds. We assume that all matching
+models will have the same tokenizer, so we just use the first one.
+"""
 import logging
-from typing import List, Tuple
+import re
+from typing import List
 
-from langroid.language_models.base import LanguageModel, LLMMessage
-from langroid.language_models.config import Llama2FormatterConfig
+from huggingface_hub import HfApi, ModelFilter
+from jinja2.exceptions import TemplateError
+from transformers import AutoTokenizer
+
+from langroid.language_models.base import LanguageModel, LLMMessage, Role
+from langroid.language_models.config import HFPromptFormatterConfig
 from langroid.language_models.prompt_formatter.base import PromptFormatter
 
 logger = logging.getLogger(__name__)
 
 
-BOS: str = "<s>"
-EOS: str = "</s>"
-B_INST: str = "[INST]"
-E_INST: str = "[/INST]"
-B_SYS: str = "<<SYS>>\n"
-E_SYS: str = "\n<</SYS>>\n\n"
-SPECIAL_TAGS: List[str] = [B_INST, E_INST, BOS, EOS, "<<SYS>>", "<</SYS>>"]
+def find_hf_formatter(model_name: str) -> str:
+    hf_api = HfApi()
+    # try to find a matching model, with progressivly shorter prefixes of model_name
+    model_name = model_name.lower().split("/")[-1]
+    parts = re.split("[:\\-_]", model_name)
+    parts = [p.lower() for p in parts if p != ""]
+    for i in range(len(parts), 0, -1):
+        prefix = "-".join(parts[:i])
+        models = hf_api.list_models(
+            filter=ModelFilter(
+                task="text-generation",
+                model_name=prefix,
+            )
+        )
+        try:
+            mdl = next(models)
+        except StopIteration:
+            continue
+        tokenizer = AutoTokenizer.from_pretrained(mdl.id)
+        if tokenizer.chat_template is not None:
+            return str(mdl.id)
+    return ""
 
 
-class Llama2Formatter(PromptFormatter):
-    def __int__(self, config: Llama2FormatterConfig) -> None:
+class HFFormatter(PromptFormatter):
+    def __init__(self, config: HFPromptFormatterConfig):
         super().__init__(config)
-        self.config: Llama2FormatterConfig = config
+        self.config: HFPromptFormatterConfig = config
+        hf_api = HfApi()
+        models = hf_api.list_models(
+            filter=ModelFilter(
+                task="text-generation",
+                model_name=config.model_name,
+            )
+        )
+        try:
+            mdl = next(models)
+        except StopIteration:
+            raise ValueError(f"Model {config.model_name} not found on HuggingFace Hub")
+        self.tokenizer = AutoTokenizer.from_pretrained(mdl.id)
+        if self.tokenizer.chat_template is None:
+            raise ValueError(
+                f"Model {config.model_name} does not support chat template"
+            )
 
     def format(self, messages: List[LLMMessage]) -> str:
         sys_msg, chat_msgs, user_msg = LanguageModel.get_chat_history_components(
             messages
         )
-        return self._get_prompt_from_components(sys_msg, chat_msgs, user_msg)
-
-    def _get_prompt_from_components(
-        self,
-        system_prompt: str,
-        chat_history: List[Tuple[str, str]],
-        user_message: str,
-    ) -> str:
-        """
-        For llama2 models, convert chat history into a single
-        prompt for Llama2 models, for use in the /completions endpoint
-        (as opposed to the /chat/completions endpoint).
-        See:
-        https://www.reddit.com/r/LocalLLaMA/comments/155po2p/get_llama_2_prompt_format_right/
-        https://github.com/facebookresearch/llama/blob/main/llama/generation.py#L44
-
-        Args:
-            system_prompt (str): system prompt, typically specifying role/task.
-            chat_history (List[Tuple[str,str]]): List of (user, assistant) pairs
-            user_message (str): user message, at the end of the chat, i.e. the message
-                for which we want to generate a response.
-
-        Returns:
-            str: Prompt for Llama2 models
-
-        Typical structure of the formatted prompt:
-        Note important that the first [INST], [/INST] surrounds the system prompt,
-        together with the first user message. A lot of libs seem to miss this detail.
-
-        <s>[INST] <<SYS>>
-        You are are a helpful... bla bla.. assistant
-        <</SYS>>
-
-        Hi there! [/INST] Hello! How can I help you today? </s><s>[INST]
-        What is a neutron star? [/INST] A neutron star is a ... </s><s>
-        [INST] Okay cool, thank you! [/INST] You're welcome! </s><s>
-        [INST] Ah, I have one more question.. [/INST]
-        """
-        bos = BOS if self.config.use_bos_eos else ""
-        eos = EOS if self.config.use_bos_eos else ""
-        text = f"{bos}{B_INST} {B_SYS}{system_prompt}{E_SYS}"
-        for user_input, response in chat_history:
-            text += (
-                f"{user_input.strip()} {E_INST} {response.strip()} {eos}{bos} {B_INST} "
-            )
-        text += f"{user_message.strip()} {E_INST}"
-        return text
+        # build msg dicts expected by AutoTokenizer.apply_chat_template
+        sys_msg_dict = dict(role=Role.SYSTEM, content=sys_msg)
+        chat_dicts = []
+        for user, assistant in chat_msgs:
+            chat_dicts.append(dict(role=Role.USER, content=user))
+            chat_dicts.append(dict(role=Role.ASSISTANT, content=assistant))
+        chat_dicts.append(dict(role=Role.USER, content=user_msg))
+        all_dicts = [sys_msg_dict] + chat_dicts
+        try:
+            # apply chat template
+            result = self.tokenizer.apply_chat_template(all_dicts, tokenize=False)
+        except TemplateError:
+            # this likely means the model doesn't support a system msg,
+            # so combine it with the first user msg
+            first_user_msg = chat_msgs[0][0] if len(chat_msgs) > 0 else user_msg
+            first_user_msg = sys_msg + "\n\n" + first_user_msg
+            chat_dicts[0] = dict(role=Role.USER, content=first_user_msg)
+            result = self.tokenizer.apply_chat_template(chat_dicts, tokenize=False)
+        return str(result)
