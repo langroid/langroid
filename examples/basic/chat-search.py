@@ -30,6 +30,15 @@ See here for more info: https://www.sciphi.ai/
 This tool requires installing langroid with the `sciphi` extra, e.g.
 `pip install langroid[sciphi]` or `poetry add langroid[sciphi]`
 (it installs the `agent-search` package from pypi).
+
+(c) If using Metaphor Search, you must have METAPHOR_API_KEY 
+environment variables in your `.env` file, as explained in the
+[README](https://github.com/langroid/langroid#gear-installation-and-setup).
+See here for more info: https://metaphor.systems/
+This tool requires installing langroid with the `metaphor` extra, e.g.
+`pip install langroid[metaphor]` or `poetry add langroid[metaphor]`
+(it installs the `metaphor-python` package from pypi).
+
 """
 
 import typer
@@ -44,6 +53,7 @@ from langroid.agent.tools.google_search_tool import GoogleSearchTool
 from langroid.utils.configuration import Settings, set_global
 
 app = typer.Typer()
+
 
 @app.command()
 def main(
@@ -98,7 +108,12 @@ def main(
             search_tool_class = GoogleSearchTool
         case "sciphi":
             from langroid.agent.tools.sciphi_search_rag_tool import SciPhiSearchRAGTool
+
             search_tool_class = SciPhiSearchRAGTool
+        case "metaphor":
+            from langroid.agent.tools.metaphor_search_tool import MetaphorSearchTool
+
+            search_tool_class = MetaphorSearchTool
         case _:
             raise ValueError(f"Unsupported provider {provider} specified.")
 

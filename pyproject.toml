@@ -94,7 +94,7 @@ mysql = ["pymysql", "pytest-mysql"]
 litellm = ["litellm"]
 neo4j = ["neo4j"]
 sciphi = ["agent-search"]
-
+metaphor = ["metaphor-python"]
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.3.1"

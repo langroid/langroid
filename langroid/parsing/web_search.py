@@ -6,7 +6,6 @@ environment variables in your `.env` file, as explained in the
 [README](https://github.com/langroid/langroid#gear-installation-and-setup).
 """
 
-import json
 import os
 from typing import Dict, List
 
@@ -82,7 +81,7 @@ def google_search(query: str, num_results: int = 5) -> List[WebSearchResult]:
 
 def metaphor_search(query: str, num_results: int = 5) -> List[WebSearchResult]:
     """
-    Method that makes a POST to request to Metaphor API that queries
+    Method that makes an API call by Metaphor client that queries
     the top num_results links that matches the query. Returns a list
     of WebSearchResult objects.
 
@@ -94,7 +93,6 @@ def metaphor_search(query: str, num_results: int = 5) -> List[WebSearchResult]:
 
     load_dotenv()
 
-    url = "https://api.metaphor.systems/search"
     api_key = os.getenv("METAPHOR_API_KEY")
     if not api_key:
         raise ValueError(
@@ -104,20 +102,24 @@ def metaphor_search(query: str, num_results: int = 5) -> List[WebSearchResult]:
             """
         )
 
-    payload = {
-        "query": query,
-        "numResults": num_results,
-    }
-    headers = {
-        "accept": "application/json",
-        "content-type": "application/json",
-        "x-api-key": api_key,
-    }
+    try:
+        from metaphor_python import Metaphor
+    except ImportError:
+        raise ImportError(
+            "You are attempting to use the `metaphor_python` library;"
+            "To use it, please install langroid with the `metaphor` extra, e.g. "
+            "`pip install langroid[metaphor]` or `poetry add langroid[metaphor]` "
+            "(it installs the `metaphor_python` package from pypi)."
+        )
 
-    response = requests.post(url, json=payload, headers=headers)
-    raw_results = json.loads(response.text)["results"]
+    client = Metaphor(api_key=api_key)
+
+    response = client.search(
+        query=query,
+        num_results=num_results,
+    )
+    raw_results = response.results
 
     return [
-        WebSearchResult(result["title"], result["url"], 3500, 300)
-        for result in raw_results
+        WebSearchResult(result.title, result.url, 3500, 300) for result in raw_results
     ]
