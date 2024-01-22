@@ -1,7 +1,6 @@
 """
 NOTE: running this example requires setting METAPHOR_API_KEY
-environment variables in your `.env` file, as explained in the
-[README](https://github.com/langroid/langroid#gear-installation-and-setup).
+environment variables in your `.env` file.
 
 """
 import itertools

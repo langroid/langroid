@@ -7,6 +7,13 @@ special method inside the agent: `agent.enable_message(MetaphorSearchTool)`
 NOTE: Using this tool requires setting the METAPHOR_API_KEY environment variables in 
 your `.env` file, as explained in the
 [README](https://github.com/langroid/langroid#gear-installation-and-setup).
+
+This tool requires installing langroid with the `metaphor` extra, e.g.
+`pip install langroid[metaphor]` or `poetry add langroid[metaphor]`
+(it installs the `metaphor-python` package from pypi).
+
+For more information, please refer to the official docs:
+https://metaphor.systems/
 """
 
 from langroid.agent.tool_message import ToolMessage

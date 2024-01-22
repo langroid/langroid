@@ -30,15 +30,6 @@ See here for more info: https://www.sciphi.ai/
 This tool requires installing langroid with the `sciphi` extra, e.g.
 `pip install langroid[sciphi]` or `poetry add langroid[sciphi]`
 (it installs the `agent-search` package from pypi).
-
-(c) If using Metaphor Search, you must have METAPHOR_API_KEY 
-environment variables in your `.env` file, as explained in the
-[README](https://github.com/langroid/langroid#gear-installation-and-setup).
-See here for more info: https://metaphor.systems/
-This tool requires installing langroid with the `metaphor` extra, e.g.
-`pip install langroid[metaphor]` or `poetry add langroid[metaphor]`
-(it installs the `metaphor-python` package from pypi).
-
 """
 
 import typer
