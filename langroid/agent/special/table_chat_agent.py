@@ -16,24 +16,27 @@ import numpy as np
 import pandas as pd
 from rich.console import Console
 
+import langroid as lr
+from langroid.agent import ChatDocument
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.tool_message import ToolMessage
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
 from langroid.parsing.table_loader import read_tabular_data
 from langroid.prompts.prompts_config import PromptsConfig
+from langroid.utils.constants import DONE, PASS
 from langroid.vector_store.base import VectorStoreConfig
 
 logger = logging.getLogger(__name__)
 
 console = Console()
 
-DEFAULT_TABLE_CHAT_SYSTEM_MESSAGE = """
+DEFAULT_TABLE_CHAT_SYSTEM_MESSAGE = f"""
 You are a savvy data scientist, with expertise in analyzing tabular datasets,
 using Python and the Pandas library for dataframe manipulation.
 Since you do not have access to the dataframe 'df', you
 will need to use the `run_code` tool/function-call to answer the question.
 Here is a summary of the dataframe:
-{summary}
+{{summary}}
 Do not assume any columns other than those shown.
 In the code you submit to the `run_code` tool/function, 
 do not forget to include any necessary imports, such as `import pandas as pd`.
@@ -45,7 +48,7 @@ If you receive a null or other unexpected result, see if you have made an assump
 in your code, and try another way, or use `run_code` to explore the dataframe 
 before submitting your final code. 
 
-Once you have the answer to the question, say DONE and show me the answer.
+Once you have the answer to the question, say {DONE} and show me the answer.
 If you receive an error message, try using the `run_code` tool/function 
 again with the corrected code. 
 
@@ -221,3 +224,19 @@ class TableChatAgent(ChatAgent):
             result = "No result"
         # Return the result
         return result
+
+    def handle_message_fallback(
+        self, msg: str | ChatDocument
+    ) -> str | ChatDocument | None:
+        """Handle scenario where LLM forgets to say DONE"""
+        if isinstance(msg, ChatDocument) and msg.metadata.sender == lr.Entity.LLM:
+            return f"""
+                You may have forgotten to do one of the following:
+                
+                (A) forgot to use the `run_code` tool/function to find the answer,
+                        ==> In this case re-try using the `run_code` tool/function. 
+                OR 
+                (B) forgot to say {DONE} after you found the answer.
+                        ==> In this case say "{DONE} {PASS}"
+                """
+        return None
