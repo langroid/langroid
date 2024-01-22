@@ -312,22 +312,30 @@ class OpenAIGPT(LanguageModel):
         # to allow quick testing with other models
         if settings.chat_model != "":
             self.config.chat_model = settings.chat_model
+            self.config.completion_model = settings.chat_model
 
-        if self.config.chat_model.endswith("/hf"):
-            # e.g. "litellm/ollama/mistral/hf" -> "litellm/ollama/mistral"
-            self.config.chat_model = self.config.chat_model.replace("/hf", "")
-            formatter = find_hf_formatter(self.config.chat_model)
-            if formatter != "":
-                self.config.use_completion_for_chat = True
-                # e.g. "mistral"
+        if len(parts := self.config.chat_model.split("//")) > 1:
+            # there is a formatter specified, e.g.
+            # "litellm/ollama/mistral//hf" or
+            # "local/localhost:8000/v1//mistral-instruct-v0.2"
+            formatter = parts[1]
+            self.config.chat_model = parts[0]
+            if formatter == "hf":
+                # e.g. "litellm/ollama/mistral//hf" -> "litellm/ollama/mistral"
+                formatter = find_hf_formatter(self.config.chat_model)
+                if formatter != "":
+                    # e.g. "mistral"
+                    self.config.formatter = formatter
+                    logging.warning(
+                        f"""
+                        Using completions (not chat) endpoint with HuggingFace 
+                        chat_template for {formatter} for 
+                        model {self.config.chat_model}
+                        """
+                    )
+            else:
+                # e.g. "local/localhost:8000/v1//mistral-instruct-v0.2"
                 self.config.formatter = formatter
-                logging.warning(
-                    f"""
-                    Using completions (not chat) endpoint with HuggingFace 
-                    chat_template for {formatter} for 
-                    model {self.config.chat_model}
-                    """
-                )
 
         # if model name starts with "litellm",
         # set the actual model name by stripping the "litellm/" prefix
@@ -353,9 +361,14 @@ class OpenAIGPT(LanguageModel):
         else:
             self.api_base = self.config.api_base
 
+        if settings.chat_model != "":
+            # if we're overriding chat model globally, set completion model to same
+            self.config.completion_model = self.config.chat_model
+
         if self.config.formatter is not None:
             # we want to format chats -> completions using this specific formatter
             self.config.use_completion_for_chat = True
+            self.config.completion_model = self.config.chat_model
 
         if self.config.use_completion_for_chat:
             self.config.use_chat_for_completion = False
@@ -777,7 +790,9 @@ class OpenAIGPT(LanguageModel):
         key_name = "model"
         cached, hashed_key, response = completions_with_backoff(
             **{key_name: self.config.completion_model},
-            messages=[dict(content=prompt)],
+            # TODO this is a temp fix, we should really be using a proper completion fn
+            # that takes a pre-formatted prompt, rather than mocking it as a sys msg.
+            messages=[dict(content=prompt, role=Role.SYSTEM)],
             max_tokens=max_tokens,  # for output/completion
             temperature=self.config.temperature,
             echo=False,
@@ -838,7 +853,9 @@ class OpenAIGPT(LanguageModel):
 
         cached, hashed_key, response = await completions_with_backoff(
             model=self.config.completion_model,
-            messages=[dict(content=prompt)],
+            # TODO this is a temp fix, we should really be using a proper completion fn
+            # that takes a pre-formatted prompt, rather than mocking it as a sys msg.
+            messages=[dict(content=prompt, role=Role.SYSTEM)],
             max_tokens=max_tokens,
             temperature=self.config.temperature,
             echo=False,
