@@ -157,6 +157,31 @@ def noop() -> None:
     return None
 
 
+class OpenAICallParams(BaseModel):
+    """
+    Various params that can be sent to an OpenAI API chat-completion call.
+    When specified, any param here overrides the one with same name in the
+    OpenAIGPTConfig.
+    """
+
+    max_tokens: int = 1024
+    temperature: float = 0.2
+    frequency_penalty: float | None = 0.0  # between -2 and 2
+    presence_penalty: float | None = 0.0  # between -2 and 2
+    response_format: Dict[str, str] | None = None
+    logit_bias: Dict[int, float] | None = None  # token_id -> bias
+    logprobs: bool = False
+    top_p: int | None = 1
+    top_logprobs: int | None = None  # if int, requires logprobs=True
+    n: int = 1  # how many completions to generate (n > 1 is NOT handled now)
+    stop: str | List[str] | None = None  # (list of) stop sequence(s)
+    seed: int | None = 42
+    user: str | None = None  # user id for tracking
+
+    def to_dict_exclude_none(self) -> Dict[str, Any]:
+        return {k: v for k, v in self.dict().items() if v is not None}
+
+
 class OpenAIGPTConfig(LLMConfig):
     """
     Class for any LLM with an OpenAI-like API: besides the OpenAI models this includes:
@@ -177,6 +202,7 @@ class OpenAIGPTConfig(LLMConfig):
     timeout: int = 20
     temperature: float = 0.2
     seed: int | None = 42
+    params: OpenAICallParams | None = None
     # these can be any model name that is served at an OpenAI-compatible API end point
     chat_model: str = defaultOpenAIChatModel
     completion_model: str = defaultOpenAICompletionModel
@@ -419,6 +445,26 @@ class OpenAIGPT(LanguageModel):
             )
 
         self.config._validate_litellm()
+
+    def _openai_api_call_params(self, kwargs: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Prep the params to be sent to the OpenAI API
+        (or any OpenAI-compatible API, e.g. from Ooba or LmStudio)
+        for chat-completion.
+
+        Order of priority:
+        - (1) Params (mainly max_tokens) in the chat/achat/generate/agenerate call
+                (these are passed in via kwargs)
+        - (2) Params in OpenAICallParams
+        - (3) Params in OpenAIGPTConfig
+        """
+        params = dict(
+            temperature=self.config.temperature,
+        )
+        if self.config.params is not None:
+            params.update(self.config.params.to_dict_exclude_none())
+        params.update(kwargs)
+        return params
 
     def is_openai_chat_model(self) -> bool:
         openai_chat_models = [e.value for e in OpenAIChatModel]
@@ -794,13 +840,15 @@ class OpenAIGPT(LanguageModel):
             kwargs["messages"] = [dict(content=prompt, role=Role.SYSTEM)]
         else:  # any other OpenAI-compatible endpoint
             kwargs["prompt"] = prompt
-        cached, hashed_key, response = completions_with_backoff(
+        args = dict(
             **kwargs,
             max_tokens=max_tokens,  # for output/completion
-            temperature=self.config.temperature,
-            echo=False,
             stream=self.get_stream(),
         )
+        args = self._openai_api_call_params(args)
+        cached, hashed_key, response = completions_with_backoff(**args)
+        if not isinstance(response, dict):
+            response = response.dict()
         if "message" in response["choices"][0]:
             msg = response["choices"][0]["message"]["content"].strip()
         else:
@@ -866,10 +914,10 @@ class OpenAIGPT(LanguageModel):
         cached, hashed_key, response = await completions_with_backoff(
             **kwargs,
             max_tokens=max_tokens,
-            temperature=self.config.temperature,
-            echo=False,
             stream=False,
         )
+        if not isinstance(response, dict):
+            response = response.dict()
         if "message" in response["choices"][0]:
             msg = response["choices"][0]["message"]["content"].strip()
         else:
@@ -1045,22 +1093,17 @@ class OpenAIGPT(LanguageModel):
         # Azure uses different parameters. It uses ``engine`` instead of ``model``
         # and the value should be the deployment_name not ``self.config.chat_model``
         chat_model = self.config.chat_model
-        key_name = "model"
         if self.config.type == "azure":
             if hasattr(self, "deployment_name"):
                 chat_model = self.deployment_name
 
         args: Dict[str, Any] = dict(
-            **{key_name: chat_model},
+            model=chat_model,
             messages=[m.api_dict() for m in llm_messages],
             max_tokens=max_tokens,
-            n=1,
-            stop=None,
-            temperature=self.config.temperature,
             stream=self.get_stream(),
         )
-        if self.config.seed is not None:
-            args.update(dict(seed=self.config.seed))
+        args.update(self._openai_api_call_params(args))
         # only include functions-related args if functions are provided
         # since the OpenAI API will throw an error if `functions` is None or []
         if functions is not None:

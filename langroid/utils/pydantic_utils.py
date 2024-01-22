@@ -8,6 +8,7 @@ from typing import (
     Optional,
     Tuple,
     Type,
+    TypeVar,
     get_args,
     get_origin,
     no_type_check,
@@ -338,6 +339,22 @@ def temp_update(
         # Restore original values
         for field, value in original_values.items():
             setattr(pydantic_object, field, value)
+
+
+T = TypeVar("T", bound=BaseModel)
+
+
+@contextmanager
+def temp_params(config: T, field: str, temp: T) -> Generator[None, None, None]:
+    """Context manager to temporarily override `field` in a `config`"""
+    original_vals = getattr(config, field)
+    try:
+        # Apply temporary settings
+        setattr(config, field, temp)
+        yield
+    finally:
+        # Revert to original settings
+        setattr(config, field, original_vals)
 
 
 def numpy_to_python_type(numpy_type: Type[Any]) -> Type[Any]:

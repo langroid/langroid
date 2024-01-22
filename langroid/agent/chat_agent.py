@@ -319,7 +319,8 @@ class ChatAgent(Agent):
             
             """.lstrip()
         )
-        return LLMMessage(role=Role.SYSTEM, content=content)
+        # remove leading and trailing newlines and other whitespace
+        return LLMMessage(role=Role.SYSTEM, content=content.strip())
 
     def enable_message(
         self,
