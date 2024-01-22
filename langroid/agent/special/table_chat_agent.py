@@ -228,14 +228,15 @@ class TableChatAgent(ChatAgent):
     def handle_message_fallback(
         self, msg: str | ChatDocument
     ) -> str | ChatDocument | None:
-        """Handle scenario where LLM forgets to say DONE"""
+        """Handle scenario where LLM forgets to say DONE or forgets to use run_code"""
         if isinstance(msg, ChatDocument) and msg.metadata.sender == lr.Entity.LLM:
             return f"""
-                You may have forgotten to do one of the following:
+                You either:
                 
                 (A) forgot to use the `run_code` tool/function to find the answer,
                         ==> In this case re-try using the `run_code` tool/function. 
                 OR 
+                
                 (B) forgot to say {DONE} after you found the answer.
                         ==> In this case say "{DONE} {PASS}"
                 """
