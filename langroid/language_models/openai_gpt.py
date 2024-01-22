@@ -455,8 +455,8 @@ class OpenAIGPT(LanguageModel):
         Order of priority:
         - (1) Params (mainly max_tokens) in the chat/achat/generate/agenerate call
                 (these are passed in via kwargs)
-        - (2) Params in OpenAICallParams
-        - (3) Params in OpenAIGPTConfig
+        - (2) Params in OpenAIGPTConfi.params (of class OpenAICallParams)
+        - (3) Specific Params in OpenAIGPTConfig (just temperature for now)
         """
         params = dict(
             temperature=self.config.temperature,
