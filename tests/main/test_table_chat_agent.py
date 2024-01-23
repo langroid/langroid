@@ -37,7 +37,7 @@ def generate_data(size: int) -> str:
     states = ["CA", "TX"]
 
     # Generate random age between 18 and 100
-    ages = np.random.randint(18, 101, size)
+    ages = np.random.randint(18, 50, size)
 
     # Generate random gender
     genders = np.random.choice(["Male", "Female"], size)
@@ -56,7 +56,7 @@ def generate_data(size: int) -> str:
 
 @pytest.fixture
 def mock_dataframe() -> pd.DataFrame:
-    data = generate_data(100)  # generate data for 1000 rows
+    data = generate_data(200)  # generate data for 1000 rows
     return data
 
 
