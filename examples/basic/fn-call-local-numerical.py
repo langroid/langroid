@@ -6,20 +6,18 @@ a structured response, typically a JSON object, instead of a plain text response
 which is then interpreted by your code to perform some action.
 This is also referred to in various scenarios as "Tools", "Actions" or "Plugins".
 
-# (1) Mac: Install latest ollama, then do this:
-# ollama pull mistral:7b-instruct-v0.2-q4_K_M"
+Run like this --
 
-# (2) Ensure you've installed the `litellm` extra with Langroid, e.g.
-# pip install langroid[litellm], or if you use the `pyproject.toml` in this repo
-# you can simply use `poetry install`
+python3 examples/basic/fn-call-local-numerical.py -m <model_name_with_formatter_after//>
 
-# (3) Run like this:
-
-python3 examples/basic/fn-call-local-numerical.py
-
-To change the local model, use the optional arg -m <local_model>.
-See this [script](https://github.com/langroid/langroid-examples/blob/main/examples/docqa/rag-local-simple.py)
-for other ways to specify the local_model.
+Recommended local model setup:
+- spin up an LLM with oobabooga at an endpoint like http://127.0.0.1:5000/v1
+- run this script with -m local/127.0.0.1:5000/v1
+- To ensure accurate chat formatting (and not use the defaults from ooba),
+  append the appropriate HuggingFace model name to the
+  -m arg, separated by //, e.g. -m local/127.0.0.1:5000/v1//mistral-instruct-v0.2
+  (no need to include the full model name, as long as you include enough to
+   uniquely identify the model's chat formatting template)
 
 """
 import os

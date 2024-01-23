@@ -6,15 +6,18 @@ In each round:
 - User gives a number
 - LLM responds with the double of that number
 
+Run like this --
 
-python3 examples/basic/chat-local-numerical.py
+python3 examples/basic/chat-local-numerical.py -m <model_name_with_formatter_after//>
 
 Recommended local model setup:
 - spin up an LLM with oobabooga at an endpoint like http://127.0.0.1:5000/v1
 - run this script with -m local/127.0.0.1:5000/v1
-
-See this [script](https://github.com/langroid/langroid-examples/blob/main/examples/docqa/rag-local-simple.py)
-for other ways to specify the local_model.
+- To ensure accurate chat formatting (and not use the defaults from ooba),
+  append the appropriate HuggingFace model name to the
+  -m arg, separated by //, e.g. -m local/127.0.0.1:5000/v1//mistral-instruct-v0.2
+  (no need to include the full model name, as long as you include enough to
+   uniquely identify the model's chat formatting template)
 
 """
 import os
@@ -25,7 +28,7 @@ from langroid.utils.configuration import settings
 import langroid.language_models as lm
 
 # for best results:
-DEFAULT_LLM = "litellm/ollama/mixtral:8x7b-instruct-v0.1-q4_K_M"
+DEFAULT_LLM = lm.OpenAIChatModel.GPT4_TURBO
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 

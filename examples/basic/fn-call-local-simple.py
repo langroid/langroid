@@ -6,20 +6,19 @@ a structured response, typically a JSON object, instead of a plain text response
 which is then interpreted by your code to perform some action.
 This is also referred to in various scenarios as "Tools", "Actions" or "Plugins".
 
-# (1) Mac: Install latest ollama, then do this:
-# ollama pull mistral:7b-instruct-v0.2-q4_K_M"
+Run like this --
 
-# (2) Ensure you've installed the `litellm` extra with Langroid, e.g.
-# pip install langroid[litellm], or if you use the `pyproject.toml` in this repo
-# you can simply use `poetry install`
+python3 examples/basic/fn-call-local-simple.py -m <model_name_with_formatter_after//>
 
-# (3) Run like this:
+Recommended local model setup:
+- spin up an LLM with oobabooga at an endpoint like http://127.0.0.1:5000/v1
+- run this script with -m local/127.0.0.1:5000/v1
+- To ensure accurate chat formatting (and not use the defaults from ooba),
+  append the appropriate HuggingFace model name to the
+  -m arg, separated by //, e.g. -m local/127.0.0.1:5000/v1//mistral-instruct-v0.2
+  (no need to include the full model name, as long as you include enough to
+   uniquely identify the model's chat formatting template)
 
-python3 examples/basic/fn-call-local-simple.py
-
-To change the local model, use the optional arg -m <local_model>.
-See this [script](https://github.com/langroid/langroid-examples/blob/main/examples/docqa/rag-local-simple.py)
-for other ways to specify the local_model.
 
 """
 import os
@@ -105,10 +104,12 @@ class CityTool(lr.agent.ToolMessage):
 
 
 def app(
-    m: str = DEFAULT_LLM,
-    d: bool = False,
+    m: str = DEFAULT_LLM,  # model
+    d: bool = False,  # pass -d to enable debug mode (see prompts etc)
+    nc: bool = False,  # pass -nc to disable cache-retrieval (i.e. get fresh answers)
 ):
     settings.debug = d
+    settings.cache = not nc
     # create LLM config
     llm_cfg = lm.OpenAIGPTConfig(
         chat_model=m or DEFAULT_LLM,
