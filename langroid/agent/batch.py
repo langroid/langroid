@@ -25,6 +25,7 @@ def run_batch_tasks(
     items: List[Any],
     input_map: Callable[[Any], str | ChatDocument] = lambda x: str(x),
     output_map: Callable[[ChatDocument | None], Any] = lambda x: x,
+    sequential: bool = True,
 ) -> List[Any]:
     """
     Run copies of `task` async/concurrently one per item in `items` list.
@@ -37,6 +38,8 @@ def run_batch_tasks(
             initial message to process
         output_map (Callable[[ChatDocument|str], Any]): function to map result
             to final result
+        sequential (bool): whether to run sequentially
+            (e.g. some APIs such as ooba don't support concurrent requests)
 
     Returns:
         List[Any]: list of final results
@@ -55,6 +58,12 @@ def run_batch_tasks(
 
     async def _do_all() -> List[Any]:
         with quiet_mode(not settings.debug), SuppressLoggerWarnings():
+            if sequential:
+                results = []
+                for i, input in enumerate(inputs):
+                    result = await _do_task(input, i)
+                    results.append(result)
+                return results
             return await asyncio.gather(
                 *(_do_task(input, i) for i, input in enumerate(inputs))
             )
@@ -76,6 +85,7 @@ def run_batch_agent_method(
     items: List[Any],
     input_map: Callable[[Any], str | ChatDocument] = lambda x: str(x),
     output_map: Callable[[ChatDocument | None], Any] = lambda x: x,
+    sequential: bool = True,
 ) -> List[Any]:
     """
     Run the `method` on copies of `agent`, async/concurrently one per
@@ -97,6 +107,8 @@ def run_batch_agent_method(
             initial message to process
         output_map (Callable[[ChatDocument|str], Any]): function to map result
             to final result
+        sequential (bool): whether to run sequentially
+            (e.g. some APIs such as ooba don't support concurrent requests)
     Returns:
         List[Any]: list of final results
     """
@@ -123,6 +135,12 @@ def run_batch_agent_method(
         return output_map(result)
 
     async def _do_all() -> List[Any]:
+        if sequential:
+            results = []
+            for i, input in enumerate(inputs):
+                result = await _do_task(input, i)
+                results.append(result)
+            return results
         with quiet_mode(), SuppressLoggerWarnings():
             return await asyncio.gather(
                 *(_do_task(input, i) for i, input in enumerate(inputs))
@@ -140,6 +158,7 @@ def llm_response_batch(
     items: List[Any],
     input_map: Callable[[Any], str | ChatDocument] = lambda x: str(x),
     output_map: Callable[[ChatDocument | None], Any] = lambda x: x,
+    sequential: bool = True,
 ) -> List[Any]:
     return run_batch_agent_method(
         agent,
@@ -147,6 +166,7 @@ def llm_response_batch(
         items,
         input_map=input_map,
         output_map=output_map,
+        sequential=sequential,
     )
 
 
@@ -155,6 +175,7 @@ def agent_response_batch(
     items: List[Any],
     input_map: Callable[[Any], str | ChatDocument] = lambda x: str(x),
     output_map: Callable[[ChatDocument | None], Any] = lambda x: x,
+    sequential: bool = True,
 ) -> List[Any]:
     return run_batch_agent_method(
         agent,
@@ -162,4 +183,5 @@ def agent_response_batch(
         items,
         input_map=input_map,
         output_map=output_map,
+        sequential=sequential,
     )

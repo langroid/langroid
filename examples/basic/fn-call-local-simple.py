@@ -33,7 +33,7 @@ import langroid.language_models as lm
 from langroid.agent.chat_document import ChatDocument
 
 # for best results:
-DEFAULT_LLM = "litellm/ollama/mixtral:8x7b-instruct-v0.1-q4_K_M"
+DEFAULT_LLM = lm.OpenAIChatModel.GPT4_TURBO
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 

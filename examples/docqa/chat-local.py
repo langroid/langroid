@@ -64,7 +64,8 @@ def main(
         # "litellm/ollama/llama2"
         # "local/localhost:8000/v1"
         # "local/localhost:8000"
-        chat_context_length=2048,  # adjust based on model
+        chat_context_length=4096,  # adjust based on model
+        timeout=90,
     )
 
     relevance_extractor_config = lr.agent.special.RelevanceExtractorAgentConfig(

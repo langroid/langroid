@@ -1,3 +1,5 @@
+import pytest
+
 from langroid.agent.batch import (
     llm_response_batch,
     run_batch_agent_method,
@@ -21,7 +23,8 @@ class _TestChatAgentConfig(ChatAgentConfig):
     )
 
 
-def test_task_batch(test_settings: Settings):
+@pytest.mark.parametrize("sequential", [True, False])
+def test_task_batch(test_settings: Settings, sequential: bool):
     set_global(test_settings)
     cfg = _TestChatAgentConfig()
 
@@ -35,8 +38,8 @@ def test_task_batch(test_settings: Settings):
     )
 
     # run clones of this task on these inputs
-    N = 5
-    questions = list(range(5))
+    N = 3
+    questions = list(range(N))
     expected_answers = [(i + 3) for i in range(N)]
 
     # batch run
@@ -45,6 +48,7 @@ def test_task_batch(test_settings: Settings):
         questions,
         input_map=lambda x: str(x) + "+" + str(3),  # what to feed to each task
         output_map=lambda x: x,  # how to process the result of each task
+        sequential=sequential,
     )
 
     # expected_answers are simple numbers, but
@@ -54,15 +58,16 @@ def test_task_batch(test_settings: Settings):
         assert any(str(e) in a.content.lower() for a in answers)
 
 
-def test_agent_llm_response_batch(test_settings: Settings):
+@pytest.mark.parametrize("sequential", [True, False])
+def test_agent_llm_response_batch(test_settings: Settings, sequential: bool):
     set_global(test_settings)
     cfg = _TestChatAgentConfig()
 
     agent = ChatAgent(cfg)
 
     # get llm_response_async result on clones of this agent, on these inputs:
-    N = 5
-    questions = list(range(5))
+    N = 3
+    questions = list(range(N))
     expected_answers = [(i + 3) for i in range(N)]
 
     # batch run
@@ -72,6 +77,7 @@ def test_agent_llm_response_batch(test_settings: Settings):
         questions,
         input_map=lambda x: str(x) + "+" + str(3),  # what to feed to each task
         output_map=lambda x: x,  # how to process the result of each task
+        sequential=sequential,
     )
 
     # expected_answers are simple numbers, but
@@ -85,6 +91,7 @@ def test_agent_llm_response_batch(test_settings: Settings):
         questions,
         input_map=lambda x: str(x) + "+" + str(3),  # what to feed to each task
         output_map=lambda x: x,  # how to process the result of each task
+        sequential=sequential,
     )
 
     # expected_answers are simple numbers, but
