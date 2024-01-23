@@ -38,42 +38,23 @@ DEFAULT_LLM = "litellm/ollama/mixtral:8x7b-instruct-v0.1-q4_K_M"
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-# (1) Define the desired structure via Pydantic.
-# Here we define a nested structure for City information.
-# The "Field" annotations are optional, and are included in the system message
-# if provided, and help with generation accuracy.
+# (1) Define the desired fn-call as a ToolMessage via Pydantic.
 
-
-class CityData(BaseModel):
-    population: int = Field(..., description="population of city")
-    country: str = Field(..., description="country of city")
-
-
-class City(BaseModel):
-    name: str = Field(..., description="name of city")
-    details: CityData = Field(..., description="details of city")
-
-
-# (2) Define the Tool class for the LLM to use, to produce the above structure.
-class CityTool(lr.agent.ToolMessage):
-    """Present information about a city"""
-
-    request: str = "city_tool"
-    purpose: str = """
-    To present <city_info> AFTER user gives a city name,
-    with all fields of the appropriate type filled out;
-    DO NOT USE THIS TOOL TO ASK FOR A CITY NAME.
-    SIMPLY ASK IN NATURAL LANGUAGE.
-    """
-    city_info: City = Field(..., description="information about a city")
+class PolinskyTool(lr.agent.ToolMessage):
+    """A fictitious number transformation tool"""
+    request: str = "polinsky"
+    purpose: str = "To find out the Polinsky transform of a <number>."
+    number: int
 
     def handle(self) -> str:
-        """Handle LLM's structured output if it matches City structure"""
-        print("SUCCESS! Got Valid City Info")
-        return """
-            Thanks! ask me for another city name, do not say anything else
-            until you get a city name.
-            """
+        """Handle LLM's structured output if it matches Polinsky tool"""
+        result = self.number * 3 + 1
+        msg = f"""
+        SUCCESS! The Polinksy transform of {self.number} is {result}.
+        Now ask me for another number.
+        """
+        return msg
+
 
     @staticmethod
     def handle_message_fallback(
@@ -82,7 +63,8 @@ class CityTool(lr.agent.ToolMessage):
         """Fallback method when LLM forgets to generate a tool"""
         if isinstance(msg, ChatDocument) and msg.metadata.sender == "LLM":
             return """
-                You must use the "city_tool" to generate city information.
+                You must use the "polinskty" tool/function to 
+                request the Polinsky transform of a number.
                 You either forgot to use it, or you used it with the wrong format.
                 Make sure all fields are filled out and pay attention to the 
                 required types of the fields.
@@ -93,20 +75,16 @@ class CityTool(lr.agent.ToolMessage):
         # Used to provide few-shot examples in the system prompt
         return [
             cls(
-                city_info=City(
-                    name="San Francisco",
-                    details=CityData(
-                        population=800_000,
-                        country="USA",
-                    ),
-                )
-            )
+                number=19,
+            ),
+            cls(
+                number=5,
+            ),
         ]
 
-
 def app(
-    m: str = DEFAULT_LLM,
-    d: bool = False,
+    m: str = DEFAULT_LLM, # model name
+    d: bool = False, # debug
 ):
     settings.debug = d
     # create LLM config
@@ -139,20 +117,16 @@ def app(
     config = lr.ChatAgentConfig(
         llm=llm_cfg,
         system_message="""
-        You are an expert on world city information. 
-        We will play this game, taking turns:
-        YOU: ask me to give you a city name.
-        I: will give you a city name.
-        YOU: use the "city_tool" to generate information about the city, and present it to me.
-            Make up the values if you don't know them exactly, but make sure
-        I: will confirm whether you provided the info in a valid form,
-            and if not I will ask you to try again.
-        YOU: wait for my confirmation, and then ask for another city name, and so on.
+        You are an expert at calling functions using the specified syntax.
+        The user wants to know the Polinsky transform of a number, and you do not
+        know how to calculate it. 
+        So when the user gives you a number, you must use the `polinsky` function/tool
+        to request the Polinsky transform of that number. This will be computed by 
+        an assistant, who will return the answer to you. You must then return the answer
+        to the user, and ask for another number, and so on.
         
-        
-        START BY ASKING ME TO GIVE YOU A CITY NAME. 
-        DO NOT SAY ANYTHING UNTIL YOU GET A CITY NAME.
-
+        START BY ASKING ME TO GIVE YOU A NUMBER.
+        DO NOT SAY ANYTHING UNTIL YOU GET A NUMBER.
         """,
     )
 
@@ -160,11 +134,11 @@ def app(
 
     # (4) Enable the Tool for this agent --> this auto-inserts JSON instructions
     # and few-shot examples into the system message
-    agent.enable_message(CityTool)
+    agent.enable_message(PolinskyTool)
 
     # (5) Create task and run it to start an interactive loop
     task = lr.Task(agent)
-    task.run("Start by asking me for a city name")
+    task.run("Start by asking me for a number")
 
 
 if __name__ == "__main__":
