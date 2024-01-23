@@ -40,8 +40,10 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 # (1) Define the desired fn-call as a ToolMessage via Pydantic.
 
+
 class PolinskyTool(lr.agent.ToolMessage):
     """A fictitious number transformation tool"""
+
     request: str = "polinsky"
     purpose: str = "To find out the Polinsky transform of a <number>."
     number: int
@@ -54,7 +56,6 @@ class PolinskyTool(lr.agent.ToolMessage):
         Now ask me for another number.
         """
         return msg
-
 
     @staticmethod
     def handle_message_fallback(
@@ -82,9 +83,10 @@ class PolinskyTool(lr.agent.ToolMessage):
             ),
         ]
 
+
 def app(
-    m: str = DEFAULT_LLM, # model name
-    d: bool = False, # debug
+    m: str = DEFAULT_LLM,  # model name
+    d: bool = False,  # debug
 ):
     settings.debug = d
     # create LLM config
