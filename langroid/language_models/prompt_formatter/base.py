@@ -17,13 +17,11 @@ class PromptFormatter(ABC):
         self.config = config
 
     @staticmethod
-    def create(config: PromptFormatterConfig) -> "PromptFormatter":
-        from langroid.language_models.prompt_formatter.llama2_formatter import (
-            Llama2Formatter,
-        )
+    def create(formatter: str) -> "PromptFormatter":
+        from langroid.language_models.config import HFPromptFormatterConfig
+        from langroid.language_models.prompt_formatter.hf_formatter import HFFormatter
 
-        formatter_class = dict(llama2=Llama2Formatter).get(config.type, Llama2Formatter)
-        return formatter_class(config)
+        return HFFormatter(HFPromptFormatterConfig(model_name=formatter))
 
     @abstractmethod
     def format(self, messages: List[LLMMessage]) -> str:
