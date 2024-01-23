@@ -15,7 +15,7 @@ This is also referred to in various scenarios as "Tools", "Actions" or "Plugins"
 
 # (3) Run like this:
 
-python3 examples/docqa/fn-call-local-simple.py
+python3 examples/basic/fn-call-local-simple.py
 
 To change the local model, use the optional arg -m <local_model>.
 See this [script](https://github.com/langroid/langroid-examples/blob/main/examples/docqa/rag-local-simple.py)
