@@ -207,6 +207,9 @@ class OpenAIGPTConfig(LLMConfig):
     chat_model: str = defaultOpenAIChatModel
     completion_model: str = defaultOpenAICompletionModel
     run_on_first_use: Callable[[], None] = noop
+    # a string that roughly matches a HuggingFace chat_template,
+    # e.g. "mistral-instruct-v0.2 (a fuzzy search is done to find the closest match)
+    formatter: str | None = None
 
     def __init__(self, **kwargs) -> None:  # type: ignore
         local_model = "api_base" in kwargs and kwargs["api_base"] is not None
