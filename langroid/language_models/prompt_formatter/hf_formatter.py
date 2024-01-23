@@ -69,12 +69,12 @@ class HFFormatter(PromptFormatter):
             messages
         )
         # build msg dicts expected by AutoTokenizer.apply_chat_template
-        sys_msg_dict = dict(role=Role.SYSTEM, content=sys_msg)
+        sys_msg_dict = dict(role=Role.SYSTEM.value, content=sys_msg)
         chat_dicts = []
         for user, assistant in chat_msgs:
-            chat_dicts.append(dict(role=Role.USER, content=user))
-            chat_dicts.append(dict(role=Role.ASSISTANT, content=assistant))
-        chat_dicts.append(dict(role=Role.USER, content=user_msg))
+            chat_dicts.append(dict(role=Role.USER.value, content=user))
+            chat_dicts.append(dict(role=Role.ASSISTANT.value, content=assistant))
+        chat_dicts.append(dict(role=Role.USER.value, content=user_msg))
         all_dicts = [sys_msg_dict] + chat_dicts
         try:
             # apply chat template
@@ -84,6 +84,6 @@ class HFFormatter(PromptFormatter):
             # so combine it with the first user msg
             first_user_msg = chat_msgs[0][0] if len(chat_msgs) > 0 else user_msg
             first_user_msg = sys_msg + "\n\n" + first_user_msg
-            chat_dicts[0] = dict(role=Role.USER, content=first_user_msg)
+            chat_dicts[0] = dict(role=Role.USER.value, content=first_user_msg)
             result = self.tokenizer.apply_chat_template(chat_dicts, tokenize=False)
         return str(result)
