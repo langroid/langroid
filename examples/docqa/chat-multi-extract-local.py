@@ -134,9 +134,35 @@ class MyDocChatAgent(DocChatAgent):
         self,
         query: None | str | ChatDocument = None,
     ) -> Optional[ChatDocument]:
-        response = super().llm_response_forget(query)
+        """
+        Override the default LLM response to return the full document,
+        to forget the last round in conversation, so we don't clutter
+        the chat history with all previous questions
+        (Assume questions don't depend on past ones, as is the case here,
+        since we are extracting separate pieces of info from docs)
+        """
+        n_msgs = len(self.message_history)
+        response = super().llm_response(query)
+        # If there is a response, then we will have two additional
+        # messages in the message history, i.e. the user message and the
+        # assistant response. We want to (carefully) remove these two messages.
+        self.message_history.pop() if len(self.message_history) > n_msgs else None
+        self.message_history.pop() if len(self.message_history) > n_msgs else None
         return response
 
+class LeasePresenterAgent(ChatAgent):
+    def handle_message_fallback(
+        self, msg: str | ChatDocument
+    ) -> str | ChatDocument | None:
+        """Handle scenario where Agent failed to present the Lease JSON"""
+        if isinstance(msg, ChatDocument) and msg.metadata.sender == Entity.LLM:
+            return """
+            You either forgot to present the information in the JSON format
+            required in `lease_info` JSON specification,
+            or you may have used the wrong name of the tool or fields.
+            Try again.
+            """
+        return None
 
 class LeaseMessage(ToolMessage):
     """Tool/function to use to present details about a commercial lease"""
@@ -152,7 +178,7 @@ class LeaseMessage(ToolMessage):
         {self.terms}
         """
         )
-        return "DONE " + json.dumps(self.terms.dict())
+        return DONE + " " + json.dumps(self.terms.dict())
 
     @classmethod
     def examples(cls) -> List["LeaseMessage"]:
@@ -270,7 +296,7 @@ def main(
 
     ### (4) LEASE PRESENTER: Given full list of question-answer pairs,
     #       organize them into the Lease JSON structure
-    lease_presenter = ChatAgent(
+    lease_presenter = LeasePresenterAgent(
         ChatAgentConfig(
             llm=llm_cfg,
             vecdb=None,
@@ -282,7 +308,6 @@ def main(
         lease_presenter,
         name="LeasePresenter",
         interactive=False,  # set to True to slow it down (hit enter to progress)
-        single_round=True,
         system_message=f"""
         The user will give you a list of Questions and Answers 
         about a commercial lease.
@@ -292,7 +317,7 @@ def main(
         """,
     )
 
-    ### (4) Use the agents/tasks
+    ### (5) Use the agents/tasks
 
     # Lease info JSON -> Questions
     question_generator_task.run()
