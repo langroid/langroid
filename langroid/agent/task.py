@@ -930,7 +930,7 @@ class Task:
         for _ in range(history):
             if p is None:
                 break
-            n_no_answers += NO_ANSWER in p.content
+            n_no_answers += p.content.strip() == NO_ANSWER
             n_empty_answers += p.content.strip() == "" and p.function_call is None
             if p.metadata.sender != Entity.LLM and PASS not in p.content:
                 counter.update([p.metadata.sender + ":" + p.content])
@@ -1014,7 +1014,7 @@ class Task:
         return (
             result is not None
             and not self._is_empty_message(result)
-            and NO_ANSWER not in result.content
+            and result.content.strip() != NO_ANSWER
         )
 
     def log_message(

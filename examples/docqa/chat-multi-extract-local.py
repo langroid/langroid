@@ -150,6 +150,7 @@ class MyDocChatAgent(DocChatAgent):
         self.message_history.pop() if len(self.message_history) > n_msgs else None
         return response
 
+
 class LeasePresenterAgent(ChatAgent):
     def handle_message_fallback(
         self, msg: str | ChatDocument
@@ -163,6 +164,7 @@ class LeasePresenterAgent(ChatAgent):
             Try again.
             """
         return None
+
 
 class LeaseMessage(ToolMessage):
     """Tool/function to use to present details about a commercial lease"""
@@ -313,7 +315,8 @@ def main(
         about a commercial lease.
         
         Organize this information into the `lease_info` JSON structure specified below,
-        and present it to me.        
+        and present it to me. 
+        For fields where the answer is NOT KNOWN, fill in "UNKNOWN" as the value.
         """,
     )
 
