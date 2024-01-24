@@ -8,9 +8,12 @@ Given a lease document, generate the lease terms, organized into
 
 Solution with Langroid Agents and tools:
 1. QuestionGeneratorAgent: Lease JSON Spec -> list of questions to ask
-2. DocAgent (has access to the lease) -> answers to the questions using RAG
-3. LeasePresenterAgent: organizes questions + answers into
-   specified Lease JSON structure
+2. InterrogatorAgent: For each question, generate 2 variants of the question,
+   so we use total 3 variants per question, joined together, to increase
+   the likelihood of getting an answer from the DocAgent (RAG).
+3. DocAgent (has access to the lease) -> answer one question using RAG
+3. LeasePresenterAgent: List of (question, answer) pairs ->
+        organized into specified Lease JSON structure
 
 This works with a local mistral-instruct-v0.2 model. High level instructions:
 
