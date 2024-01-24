@@ -1,6 +1,6 @@
 """
 Extract structured info from a commercial lease document,
-using multiple agents, powered by a weaker/local LLM, combine tools/functions and RAG.
+using multiple agents, powered by a weaker/local LLM, combining tools/functions and RAG.
 
 TASK:
 Given a lease document, generate the lease terms, organized into
@@ -16,8 +16,7 @@ This works with a local mistral-instruct-v0.2 model. High level instructions:
 
 1. Spin up an OpenAI-compatible API for the model using oobabooga:
 (See https://github.com/oobabooga/text-generation-webui for details)
-python server.py --api --model mistral-7b-instruct-v0.2.Q8_0.gguf \
-   --model-dir lmstudio-models/TheBloke/Mistral-7B-Instruct-v0.2-GGUF --verbose
+python server.py --api --model mistral-7b-instruct-v0.2.Q8_0.gguf --verbose
 
 This should load the model and start the API server at http://127.0.0.1:5000/v1
 (It won't explicitly say "/v1" but you have to include it in the URL below)
