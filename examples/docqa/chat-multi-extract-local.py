@@ -54,7 +54,7 @@ from langroid.agent.task import Task
 from langroid.agent.tool_message import ToolMessage
 from langroid.language_models.openai_gpt import OpenAIGPTConfig
 from langroid.utils.configuration import set_global, Settings
-from langroid.utils.constants import NO_ANSWER, DONE
+from langroid.utils.constants import NO_ANSWER, DONE, PASS
 from langroid.utils.pydantic_utils import flatten_pydantic_model
 
 app = typer.Typer()
@@ -127,6 +127,15 @@ class QuestionGeneratorAgent(ChatAgent):
         else:
             self.questions_list = msg.questions
             return DONE + json.dumps(msg.questions)
+
+
+class MyDocChatAgent(DocChatAgent):
+    def llm_response(
+        self,
+        query: None | str | ChatDocument = None,
+    ) -> Optional[ChatDocument]:
+        response = super().llm_response_forget(query)
+        return response
 
 
 class LeaseMessage(ToolMessage):
@@ -208,16 +217,15 @@ def main(
         interactive=False,
     )
 
-    ### (2) RAG AGENT
-    doc_agent = DocChatAgent(
+    ### (2) RAG AGENT: try to answer a given question based on documents
+    doc_agent = MyDocChatAgent(
         DocChatAgentConfig(
             llm=llm_cfg,
-            doc_paths=["examples/docqa/lease.txt"],
             assistant_mode=True,
             n_neighbor_chunks=2,
             parsing=ParsingConfig(
-                chunk_size=100,
-                overlap=20,
+                chunk_size=50,
+                overlap=10,
                 n_similar_docs=3,
                 n_neighbor_ids=4,
             ),
@@ -225,8 +233,8 @@ def main(
         )
     )
     doc_agent.vecdb.set_collection("docqa-chat-multi-extract", replace=True)
+    doc_agent.ingest_doc_paths(["examples/docqa/lease.txt"])
     print("[blue]Welcome to the real-estate info-extractor!")
-    doc_agent.ingest()
     doc_task = Task(
         doc_agent,
         name="DocAgent",
@@ -238,7 +246,30 @@ def main(
         """,
     )
 
-    ### (3) LEASE PRESENTER
+    ### (3) Interrogator: persists in getting an answer for a SINGLE question
+    #       from the RAG agent
+    interrogator = ChatAgent(
+        ChatAgentConfig(
+            llm=llm_cfg,
+            vecdb=None,
+            system_message="""
+            You are an expert on Commercial leases and their terms. 
+            User will send you a QUESTION about such a lease.
+            Your ONLY job is to reply with TWO VARIATIONS of the QUESTION,
+            and say NOTHING ELSE.
+            """,
+        )
+    )
+    interrogator_task = Task(
+        interrogator,
+        name="Interrogator",
+        restart=True,  # clear agent msg history
+        interactive=False,
+        single_round=True,
+    )
+
+    ### (4) LEASE PRESENTER: Given full list of question-answer pairs,
+    #       organize them into the Lease JSON structure
     lease_presenter = ChatAgent(
         ChatAgentConfig(
             llm=llm_cfg,
@@ -251,6 +282,7 @@ def main(
         lease_presenter,
         name="LeasePresenter",
         interactive=False,  # set to True to slow it down (hit enter to progress)
+        single_round=True,
         system_message=f"""
         The user will give you a list of Questions and Answers 
         about a commercial lease.
@@ -266,16 +298,18 @@ def main(
     question_generator_task.run()
     questions = question_generator_agent.questions_list
     print(f"found {len(questions)} questions! Now generating answers...")
-    answers = []
+
     # Questions -> Answers using RAG
+    answers = []
     for q in questions:
-        answer = doc_task.run(q)
-        answers.append(answer.content)
-    # answers = run_batch_tasks(
-    #     doc_task,
-    #     questions,
-    # )
-    print(f"found {len(answers)} answers!")
+        # use 3 variants of the question at the same time,
+        # to increase likelihood of getting an answer
+        q_variants = interrogator_task.run(q).content
+        result = doc_task.run(q + "\n" + q_variants)
+        answer = result.content or NO_ANSWER
+        answers.append(answer)
+    print(f"got {len(answers)} answers!")
+
     q2a = dict(zip(questions, answers))
     print(f"q2a: {q2a}")
     questions_answers = "\n\n".join(

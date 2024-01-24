@@ -209,7 +209,13 @@ class DocChatAgent(ChatAgent):
                 raise ValueError("VecDB not set")
             self.setup_documents(filter=self.config.filter)
             return
-        urls, paths = get_urls_and_paths(self.config.doc_paths)
+        self.ingest_doc_paths(self.config.doc_paths)
+
+    def ingest_doc_paths(self, paths: List[str]) -> None:
+        """Split, ingest docs from specified paths,
+        do not add these to config.doc_paths
+        """
+        urls, paths = get_urls_and_paths(paths)
         docs: List[Document] = []
         parser = Parser(self.config.parsing)
         if len(urls) > 0:
@@ -600,13 +606,20 @@ class DocChatAgent(ChatAgent):
 
         final_answer = answer_doc.content.strip()
         show_if_debug(final_answer, "SUMMARIZE_RESPONSE= ")
-        parts = final_answer.split("SOURCE:", maxsplit=1)
-        if len(parts) > 1:
-            content = parts[0].strip()
-            sources = parts[1].strip()
-        else:
+
+        if final_answer.startswith("SOURCE"):
+            # sometimes SOURCE may be shown first,
+            # in this case just use final_answer as-is for both content and source
             content = final_answer
-            sources = ""
+            sources = final_answer
+        else:
+            parts = final_answer.split("SOURCE:", maxsplit=1)
+            if len(parts) > 1:
+                content = parts[0].strip()
+                sources = parts[1].strip()
+            else:
+                content = final_answer
+                sources = ""
         return ChatDocument(
             content=content,
             metadata=ChatDocMetaData(
