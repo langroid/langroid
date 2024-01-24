@@ -1,0 +1,89 @@
+"""
+Prompt formatter based on HuggingFace `AutoTokenizer.apply_chat_template` method
+from their Transformers library. It searches the hub for a model matching the
+specified name, and uses the first one it finds. We assume that all matching
+models will have the same tokenizer, so we just use the first one.
+"""
+import logging
+import re
+from typing import List
+
+from huggingface_hub import HfApi, ModelFilter
+from jinja2.exceptions import TemplateError
+from transformers import AutoTokenizer
+
+from langroid.language_models.base import LanguageModel, LLMMessage, Role
+from langroid.language_models.config import HFPromptFormatterConfig
+from langroid.language_models.prompt_formatter.base import PromptFormatter
+
+logger = logging.getLogger(__name__)
+
+
+def find_hf_formatter(model_name: str) -> str:
+    hf_api = HfApi()
+    # try to find a matching model, with progressivly shorter prefixes of model_name
+    model_name = model_name.lower().split("/")[-1]
+    parts = re.split("[:\\-_]", model_name)
+    parts = [p.lower() for p in parts if p != ""]
+    for i in range(len(parts), 0, -1):
+        prefix = "-".join(parts[:i])
+        models = hf_api.list_models(
+            filter=ModelFilter(
+                task="text-generation",
+                model_name=prefix,
+            )
+        )
+        try:
+            mdl = next(models)
+        except StopIteration:
+            continue
+        tokenizer = AutoTokenizer.from_pretrained(mdl.id)
+        if tokenizer.chat_template is not None:
+            return str(mdl.id)
+    return ""
+
+
+class HFFormatter(PromptFormatter):
+    def __init__(self, config: HFPromptFormatterConfig):
+        super().__init__(config)
+        self.config: HFPromptFormatterConfig = config
+        hf_api = HfApi()
+        models = hf_api.list_models(
+            filter=ModelFilter(
+                task="text-generation",
+                model_name=config.model_name,
+            )
+        )
+        try:
+            mdl = next(models)
+        except StopIteration:
+            raise ValueError(f"Model {config.model_name} not found on HuggingFace Hub")
+        self.tokenizer = AutoTokenizer.from_pretrained(mdl.id)
+        if self.tokenizer.chat_template is None:
+            raise ValueError(
+                f"Model {config.model_name} does not support chat template"
+            )
+
+    def format(self, messages: List[LLMMessage]) -> str:
+        sys_msg, chat_msgs, user_msg = LanguageModel.get_chat_history_components(
+            messages
+        )
+        # build msg dicts expected by AutoTokenizer.apply_chat_template
+        sys_msg_dict = dict(role=Role.SYSTEM.value, content=sys_msg)
+        chat_dicts = []
+        for user, assistant in chat_msgs:
+            chat_dicts.append(dict(role=Role.USER.value, content=user))
+            chat_dicts.append(dict(role=Role.ASSISTANT.value, content=assistant))
+        chat_dicts.append(dict(role=Role.USER.value, content=user_msg))
+        all_dicts = [sys_msg_dict] + chat_dicts
+        try:
+            # apply chat template
+            result = self.tokenizer.apply_chat_template(all_dicts, tokenize=False)
+        except TemplateError:
+            # this likely means the model doesn't support a system msg,
+            # so combine it with the first user msg
+            first_user_msg = chat_msgs[0][0] if len(chat_msgs) > 0 else user_msg
+            first_user_msg = sys_msg + "\n\n" + first_user_msg
+            chat_dicts[0] = dict(role=Role.USER.value, content=first_user_msg)
+            result = self.tokenizer.apply_chat_template(chat_dicts, tokenize=False)
+        return str(result)

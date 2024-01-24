@@ -57,7 +57,7 @@ def extract_top_level_json(s: str) -> List[str]:
     json_candidates = get_json_candidates(s)
 
     normalized_candidates = [
-        candidate.replace("\\{", "{").replace("\\}", "}")
+        candidate.replace("\\{", "{").replace("\\}", "}").replace("\\_", "_")
         for candidate in json_candidates
     ]
     top_level_jsons = [

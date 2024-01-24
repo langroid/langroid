@@ -18,6 +18,7 @@ from typing import (
 )
 
 from rich import print
+from rich.markup import escape
 
 from langroid.agent.base import Agent
 from langroid.agent.chat_agent import ChatAgent
@@ -798,9 +799,9 @@ class Task:
         if self.pending_message is None:
             return
         if settings.debug:
-            sender_str = str(self.pending_sender)
-            msg_str = str(self.pending_message)
-            print(f"[red][{sender_str}]{msg_str}")
+            sender_str = escape(str(self.pending_sender))
+            msg_str = escape(str(self.pending_message))
+            print(f"[grey37][{sender_str}]{msg_str}[/grey37]")
 
     def _parse_routing(self, msg: ChatDocument | str) -> Tuple[bool | None, str | None]:
         """

@@ -43,11 +43,12 @@ litellm/ollama/mistral:7b-instruct-v0.2-q4_K_M
 Other possibilities for local_model are:
 - If instead of ollama (perhaps using ooba text-generation-webui)
   you've spun up your local LLM to listen at an OpenAI-Compatible Endpoint
-  like `localhost:8000`, then you can use -m local/localhost:8000
-- If the endpoint is listening at https://localhost:8000/v1, you must include the `v1`
-- If the endpoint is http://127.0.0.1:8000, use -m local/127.0.0.1:8000
+  like `localhost:8000`, then you can use specify the local LLM as `local/localhost:8000`
+- If the endpoint is listening at `https://localhost:8000/v1`, you must include the `v1`, i.e.
+  `local/localhost:8000/v1`
+- If the endpoint is `http://127.0.0.1:8000`, then specify `local/127.0.0.1:8000`
 
-And so on. The above are few-shot examples for you. You get the idea.
+And so on. The above are few-shot examples for you. You get the idea!
 
 ## Limitations
 

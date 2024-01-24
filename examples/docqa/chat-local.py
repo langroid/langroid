@@ -45,34 +45,10 @@ from langroid.agent.special.doc_chat_agent import (
 from langroid.parsing.parser import ParsingConfig, PdfParsingConfig, Splitter
 from langroid.agent.task import Task
 from langroid.utils.configuration import set_global, Settings
-from langroid.utils.logging import setup_colored_logging
 
 app = typer.Typer()
 
-setup_colored_logging()
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
-
-
-def chat(config: DocChatAgentConfig) -> None:
-    agent = DocChatAgent(config)
-    print("[blue]Welcome to the document chatbot!")
-    agent.user_docs_ingest_dialog()
-    print("[cyan]Enter x or q to quit, or ? for evidence")
-
-    system_msg = Prompt.ask(
-        """
-    [blue] Tell me who I am; complete this sentence: You are...
-    [or hit enter for default] 
-    [blue] Human
-    """,
-        default="a helpful assistant.",
-    )
-    system_msg = re.sub("you are", "", system_msg, flags=re.IGNORECASE)
-    task = Task(
-        agent,
-        system_message="You are " + system_msg,
-    )
-    task.run()
 
 
 @app.command()
@@ -88,7 +64,8 @@ def main(
         # "litellm/ollama/llama2"
         # "local/localhost:8000/v1"
         # "local/localhost:8000"
-        chat_context_length=2048,  # adjust based on model
+        chat_context_length=4096,  # adjust based on model
+        timeout=90,
     )
 
     relevance_extractor_config = lr.agent.special.RelevanceExtractorAgentConfig(
@@ -109,8 +86,8 @@ def main(
         # summarize_prompt="...override default DocChatAgent summarize prompt here",
         parsing=ParsingConfig(  # modify as needed
             splitter=Splitter.TOKENS,
-            chunk_size=1000,  # aim for this many tokens per chunk
-            overlap=100,  # overlap between chunks
+            chunk_size=300,  # aim for this many tokens per chunk
+            overlap=30,  # overlap between chunks
             max_chunks=10_000,
             n_neighbor_ids=5,  # store ids of window of k chunks around each chunk.
             # aim to have at least this many chars per chunk when
@@ -133,7 +110,26 @@ def main(
             cache=not nocache,
         )
     )
-    chat(config)
+
+    agent = DocChatAgent(config)
+    print("[blue]Welcome to the document chatbot!")
+    agent.user_docs_ingest_dialog()
+    print("[cyan]Enter x or q to quit, or ? for evidence")
+
+    system_msg = Prompt.ask(
+        """
+    [blue] Tell me who I am; complete this sentence: You are...
+    [or hit enter for default] 
+    [blue] Human
+    """,
+        default="a helpful assistant.",
+    )
+    system_msg = re.sub("you are", "", system_msg, flags=re.IGNORECASE)
+    task = Task(
+        agent,
+        system_message="You are " + system_msg,
+    )
+    task.run()
 
 
 if __name__ == "__main__":

@@ -5,7 +5,7 @@ class CypherQueryTool(ToolMessage):
     request: str = "make_query"
     purpose: str = """Use this tool to send me the Generated Cypher query based on 
     text description and schema that I will provide you."""
-    cypherQuery: str
+    cypher_query: str
 
 
 class GraphSchemaTool(ToolMessage):

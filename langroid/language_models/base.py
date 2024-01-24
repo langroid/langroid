@@ -12,7 +12,6 @@ from pydantic import BaseModel, BaseSettings, Field
 
 from langroid.cachedb.momento_cachedb import MomentoCacheConfig
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
-from langroid.language_models.config import Llama2FormatterConfig, PromptFormatterConfig
 from langroid.mytypes import Document
 from langroid.parsing.agent_chats import parse_message
 from langroid.parsing.json import top_level_json_field
@@ -30,7 +29,7 @@ logger = logging.getLogger(__name__)
 class LLMConfig(BaseSettings):
     type: str = "openai"
     api_base: str | None = None
-    formatter: None | PromptFormatterConfig = Llama2FormatterConfig()
+    formatter: None | str = None
     timeout: int = 20  # timeout for API requests
     chat_model: str = ""
     completion_model: str = ""
