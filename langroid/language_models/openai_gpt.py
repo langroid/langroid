@@ -386,7 +386,9 @@ class OpenAIGPT(LanguageModel):
             self.config.litellm = False
             self.config.seed = None  # some models raise an error when seed is set
             # Extract the api_base from the model name after the "local/" prefix
-            self.api_base = "http://" + self.config.chat_model.split("/", 1)[1]
+            self.api_base = self.config.chat_model.split("/", 1)[1]
+            if not self.api_base.startswith("http"):
+                self.api_base = "http://" + self.api_base
         else:
             self.api_base = self.config.api_base
 
