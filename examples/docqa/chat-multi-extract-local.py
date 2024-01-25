@@ -225,7 +225,7 @@ def main(
         timeout=120,
     )
 
-    ### (1) QUESTION GENERATOR
+    # (1) QUESTION GENERATOR
     question_generator_agent = QuestionGeneratorAgent(
         ChatAgentConfig(
             llm=llm_cfg,
@@ -247,7 +247,7 @@ def main(
         interactive=False,
     )
 
-    ### (2) RAG AGENT: try to answer a given question based on documents
+    # (2) RAG AGENT: try to answer a given question based on documents
     doc_agent = MyDocChatAgent(
         DocChatAgentConfig(
             llm=llm_cfg,
@@ -276,7 +276,7 @@ def main(
         """,
     )
 
-    ### (3) Interrogator: persists in getting an answer for a SINGLE question
+    # (3) Interrogator: persists in getting an answer for a SINGLE question
     #       from the RAG agent
     interrogator = ChatAgent(
         ChatAgentConfig(
@@ -298,7 +298,7 @@ def main(
         single_round=True,
     )
 
-    ### (4) LEASE PRESENTER: Given full list of question-answer pairs,
+    # (4) LEASE PRESENTER: Given full list of question-answer pairs,
     #       organize them into the Lease JSON structure
     lease_presenter = LeasePresenterAgent(
         ChatAgentConfig(
@@ -312,7 +312,7 @@ def main(
         lease_presenter,
         name="LeasePresenter",
         interactive=False,  # set to True to slow it down (hit enter to progress)
-        system_message=f"""
+        system_message="""
         The user will give you a list of Questions and Answers 
         about a commercial lease.
         
@@ -322,7 +322,7 @@ def main(
         """,
     )
 
-    ### (5) Use the agents/tasks
+    # (5) Use the agents/tasks
 
     # Lease info JSON -> Questions
     question_generator_task.run()

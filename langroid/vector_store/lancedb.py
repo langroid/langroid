@@ -6,7 +6,7 @@ import pandas as pd
 from dotenv import load_dotenv
 from lancedb.pydantic import LanceModel, Vector
 from lancedb.query import LanceVectorQueryBuilder
-from pydantic import BaseModel, create_model
+from pydantic import BaseModel, ValidationError, create_model
 
 from langroid.embedding_models.base import (
     EmbeddingModel,
@@ -354,7 +354,19 @@ class LanceDB(VectorStore):
                 self.unflattened_schema(**nested_dict_from_flat(rec)) for rec in records
             ]
         else:
-            docs = [self.schema(**rec) for rec in records]
+            try:
+                docs = [self.schema(**rec) for rec in records]
+            except ValidationError as e:
+                raise ValueError(
+                    f"""
+                Error validating LanceDB result: {e}
+                HINT: This could happen when you're re-using an 
+                existing LanceDB store with a different schema.
+                Try deleting your local lancedb storage at `{self.config.storage_path}`
+                re-ingesting your documents and/or replacing the collections.
+                """
+                )
+
         doc_cls = self.config.document_class
         doc_cls_field_names = doc_cls.__fields__.keys()
         return [

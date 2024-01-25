@@ -1,7 +1,7 @@
 """
 Function-calling example using a local LLM, with ollama.
 
-"Function-calling" refers to the ability to ability of the LLM to generate
+"Function-calling" refers to the ability of the LLM to generate
 a structured response, typically a JSON object, instead of a plain text response,
 which is then interpreted by your code to perform some action.
 This is also referred to in various scenarios as "Tools", "Actions" or "Plugins".

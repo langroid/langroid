@@ -160,8 +160,6 @@ def main(
     print("LLM usage, cost summary:")
     print(str(langroid.language_models.base.LanguageModel.usage_cost_summary()))
 
-    chat(config)
-
 
 if __name__ == "__main__":
     app()
