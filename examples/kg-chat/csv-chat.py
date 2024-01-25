@@ -60,7 +60,7 @@ def main(
             use_tools=tools,
             use_functions_api=not tools,
             llm=OpenAIGPTConfig(
-                chat_model=model or OpenAIChatModel.GPT4_TURBO,
+                chat_model=OpenAIChatModel.GPT4_TURBO,
             ),
         ),
     )
@@ -110,6 +110,12 @@ def main(
                         """
                     )
                     csv_dataframe = csv_dataframe.sample(n=sample_size)
+                elif user_input_continue == "y":
+                    print(
+                        """
+                        [green]The graph database will be generated for the whole dataset...
+                        """
+                    )
 
                 csv_kg_chat_agent.csv_dataframe = csv_dataframe
                 csv_kg_chat_agent.csv_location = csv_location
@@ -125,7 +131,6 @@ def main(
             if user_input == "n":
                 print("Quitting the chatbot...")
                 return
-
     csv_kg_chat_agent.enable_message(PandasToKGTool)
 
     system_message = f"""
