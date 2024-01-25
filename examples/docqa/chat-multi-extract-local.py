@@ -42,12 +42,11 @@ Other optional script args:
 import typer
 from rich import print
 from pydantic import BaseModel
-from typing import Dict, List, Optional
+from typing import List, Optional
 import json
 import os
 
 import langroid.language_models as lm
-from langroid.agent.batch import run_batch_tasks
 from langroid.agent import ChatDocument
 from langroid.mytypes import Entity
 from langroid.agent.special.doc_chat_agent import DocChatAgent, DocChatAgentConfig
@@ -57,7 +56,7 @@ from langroid.agent.task import Task
 from langroid.agent.tool_message import ToolMessage
 from langroid.language_models.openai_gpt import OpenAIGPTConfig
 from langroid.utils.configuration import set_global, Settings
-from langroid.utils.constants import NO_ANSWER, DONE, PASS
+from langroid.utils.constants import NO_ANSWER, DONE
 from langroid.utils.pydantic_utils import flatten_pydantic_model
 
 app = typer.Typer()
