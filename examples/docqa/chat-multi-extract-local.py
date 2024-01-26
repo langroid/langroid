@@ -15,26 +15,14 @@ Solution with Langroid Agents and tools:
 3. LeasePresenterAgent: List of (question, answer) pairs ->
         organized into specified Lease JSON structure
 
-This works with a local mistral-instruct-v0.2 model. High level instructions:
+This works with a local mistral-instruct-v0.2 model.
 
-1. Spin up an OpenAI-compatible API for the model using oobabooga:
-(See https://github.com/oobabooga/text-generation-webui for details)
-python server.py --api --model mistral-7b-instruct-v0.2.Q8_0.gguf --verbose
+See here for how to set up a Local LLM to work with Langroid:
+https://langroid.github.io/langroid/tutorials/local-llm-setup/
 
-This should load the model and start the API server at http://127.0.0.1:5000/v1
-(It won't explicitly say "/v1" but you have to include it in the URL below)
-
-2. Run this script
-
-python3 examples/docqa/chat-multi-extract-local.py
-        -m local/127.0.0.1:5000/v1//mistral-instruct-v0.2
-
-Notice we append the "//mistral-instruct-v0.2" at the end to ensure
-the chats are correctly formatted using the corresponding chat template.
-
-
-Other optional script args:
+Optional script args:
 -m <model_name_with_formatter_after//>, e.g. -m local/localhost:8000//mistral-instruct-v0.2
+(if omitted, defaults to GPT4_TURBO)
 -nc to disable cache retrieval
 -d to enable debug mode: see prompts, agent msgs etc.
 """
