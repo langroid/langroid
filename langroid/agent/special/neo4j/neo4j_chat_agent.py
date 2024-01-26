@@ -5,6 +5,8 @@ from pydantic import BaseSettings
 from rich import print
 from rich.console import Console
 
+from langroid.agent import ToolMessage
+
 if TYPE_CHECKING:
     import neo4j
 
@@ -15,10 +17,6 @@ from langroid.agent.special.neo4j.utils.system_message import (
     DEFAULT_NEO4J_CHAT_SYSTEM_MESSAGE,
     DEFAULT_SYS_MSG,
     SCHEMA_TOOLS_SYS_MSG,
-)
-from langroid.agent.special.neo4j.utils.tools import (
-    CypherQueryTool,
-    GraphSchemaTool,
 )
 from langroid.mytypes import Entity
 
@@ -35,6 +33,21 @@ not_valid_query_response = [
     empty_relationships,
     NEO4J_ERROR_MSG,
 ]
+
+
+# TOOLS to be used by the agent
+
+
+class CypherQueryTool(ToolMessage):
+    request: str = "make_query"
+    purpose: str = """Use this tool to send the Generated Cypher query based on 
+    provided text description and schema."""
+    cypher_query: str
+
+
+class GraphSchemaTool(ToolMessage):
+    request: str = "get_schema"
+    purpose: str = """To get the schema of the graph database."""
 
 
 class Neo4jSettings(BaseSettings):

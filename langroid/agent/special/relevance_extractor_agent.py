@@ -109,7 +109,10 @@ class RelevanceExtractorAgent(ChatAgent):
             return DONE + " " + NO_ANSWER
         assert self.numbered_passage is not None, "No numbered passage"
         # assume this has numbered segments
-        extracts = extract_numbered_segments(self.numbered_passage, spec)
+        try:
+            extracts = extract_numbered_segments(self.numbered_passage, spec)
+        except Exception:
+            return DONE + " " + NO_ANSWER
         # this response ends the task by saying DONE
         return DONE + " " + extracts
 

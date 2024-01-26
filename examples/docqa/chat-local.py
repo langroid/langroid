@@ -1,28 +1,11 @@
 """
 Single agent to use to chat with an LLM using  Retrieval-Augmented Generation (RAG).
 Similar to chat.py but allows specifying a local LLM.
-You must either have:
- - (A) a local LLM running at an OpenAI-compatible API endpoint, e.g. localhost:8000, or
- - (B) use a local-LLM library supported by litellm, e.g. ollama, and do `ollama pull mistral`,
-     (for this scenario you have to have the `litellm` extra installed,
-     via `pip install langroid[ollama]` or equivalent)
 
-For scenario (A) you can specify the local model on the cmd line for example as:
-`-m "local/localhost:8000"`
-And for scenario (B) you can specify the local model on the cmd line for example as:
-`-m "litellm/ollama/mistral"`
+See here for how to set up a Local LLM to work with Langroid:
+https://langroid.github.io/langroid/tutorials/local-llm-setup/
 
-See docs here: https://langroid.github.io/langroid/tutorials/non-openai-llms/
-
-Run like this for example in scenario (A):
-
-python3 examples/docqa/chat-local.py -m "local/localhost:8000"
-
-and for scenario (B):
-
-python3 examples/docqa/chat-local.py -m "litellm/ollama/llama2"
-
-CAVEAT:
+NOTES:
 (1) The app works best with GPT4/Turbo, but results may be mixed with local LLMs.
 You may have to tweak the system_message, use_message, and summarize_prompt
 as indicated in comments below, to get good results.
@@ -64,7 +47,8 @@ def main(
         # "litellm/ollama/llama2"
         # "local/localhost:8000/v1"
         # "local/localhost:8000"
-        chat_context_length=2048,  # adjust based on model
+        chat_context_length=4096,  # adjust based on model
+        timeout=90,
     )
 
     relevance_extractor_config = lr.agent.special.RelevanceExtractorAgentConfig(

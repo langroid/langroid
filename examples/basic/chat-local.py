@@ -1,15 +1,14 @@
 """
-Basic chat example with a local LLM, e.g. after doing `ollama pull mistral`.
-See full guide to using Langroid with non-OpenAI LLMs at
-https://langroid.github.io/langroid/tutorials/non-openai-llms/
+Basic chat example with a local LLM.
 
-For some local-model scenarios (e.g. ollama) you must ensure you have installed the
-`litellm` extra in your env, e.g.
-`pip install langroid[litellm]` or `poetry add langroid[litellm]`
+See here for how to set up a Local LLM to work with Langroid:
+https://langroid.github.io/langroid/tutorials/local-llm-setup/
 
-Then run this script as follows:
+Run this script as follows:
 
-`python examples/basic/chat-local.py`
+```
+python examples/basic/chat-local.py -m <local_model_name>
+```
 
 """
 import langroid as lr

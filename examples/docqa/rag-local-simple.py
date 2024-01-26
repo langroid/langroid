@@ -1,27 +1,12 @@
 """
 RAG example using a local LLM, with ollama
 
-(1) Mac: Install latest ollama, then do this:
-ollama pull mistral:7b-instruct-v0.2-q4_K_M
+Run like this --
 
-(2) Ensure you've installed the `litellm` extra with Langroid, e.g.
-pip install langroid[litellm], or if you use the `pyproject.toml` in this repo
-you can simply use `poetry install`
+python3 examples/docqa/rag-local-simple.py -m <model_name_with_formatter_after//>
 
-(3) Run like this:
-
-python3 examples/docqa/rag-local-simple.py
-
-To change the local model, use the optional arg -m <local_model>.
-
-Other possibilities for local_model are:
-- If instead of ollama (perhaps using oobo text-generation-webui)
-  you've spun up your local LLM to listen at an OpenAI-Compatible Endpoint
-  like `localhost:8000`, then you can use `-m local/localhost:8000`
-- If the endpoint is listening at https://localhost:8000/v1, you must include the `v1`
-- If the endpoint is http://127.0.0.1:8000, use `-m local/127.0.0.1:8000`
-
-And so on. The above are few-shot examples for you. You get the idea!
+See here for how to set up a Local LLM to work with Langroid:
+https://langroid.github.io/langroid/tutorials/local-llm-setup/
 """
 
 import os
@@ -34,9 +19,7 @@ from langroid.agent.special.doc_chat_agent import DocChatAgent, DocChatAgentConf
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 
-def app(
-    m="litellm/ollama/mistral:7b-instruct-v0.2-q4_K_M",
-):
+def app(m="litellm/ollama_chat/mistral:7b-instruct-v0.2-q8_0"):
     # Create the llm config object.
     llm_config = lm.OpenAIGPTConfig(
         # if you comment out `chat_model`, it will default to OpenAI GPT4-turbo

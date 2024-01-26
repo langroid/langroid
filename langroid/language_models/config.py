@@ -11,3 +11,8 @@ class PromptFormatterConfig(BaseSettings):
 
 class Llama2FormatterConfig(PromptFormatterConfig):
     use_bos_eos: bool = False
+
+
+class HFPromptFormatterConfig(PromptFormatterConfig):
+    type: str = "hf"
+    model_name: str

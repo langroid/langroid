@@ -11,7 +11,7 @@ For usage see:
 """
 import json
 import logging
-from typing import List, Tuple
+from typing import Any, Dict, List, Tuple
 
 import pandas as pd
 
@@ -112,8 +112,13 @@ class LanceDocChatAgent(DocChatAgent):
             # pass on the query so LLM can handle it
             return plan.query
 
-    def ingest_docs(self, docs: List[Document], split: bool = True) -> int:
-        n = super().ingest_docs(docs, split)
+    def ingest_docs(
+        self,
+        docs: List[Document],
+        split: bool = True,
+        metadata: List[Dict[str, Any]] | Dict[str, Any] = [],
+    ) -> int:
+        n = super().ingest_docs(docs, split, metadata)
         tbl = self.vecdb.client.open_table(self.vecdb.config.collection_name)
         # We assume "content" is available as top-level field
         if "content" in tbl.schema.names:
@@ -126,6 +131,8 @@ class LanceDocChatAgent(DocChatAgent):
         content: str = "content",
         metadata: List[str] = [],
     ) -> int:
+        """Ingest from a dataframe. Assume we are doing this once, not incrementally"""
+
         self.from_dataframe = True
         if df.shape[0] == 0:
             raise ValueError(
