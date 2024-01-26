@@ -248,18 +248,21 @@ class DocChatAgent(ChatAgent):
             metadata: List of metadata dicts, one for each path.
                 If a single dict is passed in, it is used for all paths.
         """
-        if isinstance(metadata, list):
-            path2meta = {p: m for p, m in zip(paths, metadata)}
-        else:
-            path2meta = {p: metadata for p in paths}
+        paths_meta: Dict[str, Any] = {}
+        urls_meta: Dict[str, Any] = {}
         urls, paths = get_urls_and_paths(paths)
-        urls_meta = {u: path2meta[u] for u in urls}
-        paths_meta = {p: path2meta[p] for p in paths}
+        if len(metadata) > 0:
+            if isinstance(metadata, list):
+                path2meta = {p: m for p, m in zip(paths, metadata)}
+            else:
+                path2meta = {p: metadata for p in paths}
+            urls_meta = {u: path2meta[u] for u in urls}
+            paths_meta = {p: path2meta[p] for p in paths}
         docs: List[Document] = []
         parser = Parser(self.config.parsing)
         if len(urls) > 0:
             for u in urls:
-                meta = urls_meta[u]
+                meta = urls_meta.get(u, {})
                 loader = URLLoader(urls=[u], parser=parser)
                 docs = loader.load()
                 # update metadata of each doc with meta
@@ -267,7 +270,7 @@ class DocChatAgent(ChatAgent):
                     d.metadata = d.metadata.copy(update=meta)
         if len(paths) > 0:
             for p in paths:
-                meta = paths_meta[p]
+                meta = paths_meta.get(p, {})
                 path_docs = RepoLoader.get_documents(p, parser=parser)
                 # update metadata of each doc with meta
                 for d in path_docs:
