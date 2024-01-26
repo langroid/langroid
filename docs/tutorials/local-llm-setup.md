@@ -21,7 +21,7 @@ OpenAIGPTConfig(
 For convenience, many of the example scripts have a `-m` arg that accepts a model name,
 e.g. 
 ```
-python3 examples/basic/chat-local -m litellm/ollama_chat/mistral:7b-instruct-v0.2-q8_0
+python3 examples/basic/chat-local.py -m litellm/ollama_chat/mistral:7b-instruct-v0.2-q8_0
 ```
 
 
