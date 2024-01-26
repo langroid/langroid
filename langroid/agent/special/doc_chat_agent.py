@@ -14,7 +14,7 @@ pip install "langroid[hf-embeddings]"
 """
 import logging
 from contextlib import ExitStack
-from typing import Dict, List, Optional, Set, Tuple, no_type_check
+from typing import Any, Dict, List, Optional, Set, Tuple, no_type_check
 
 import numpy as np
 import pandas as pd
@@ -52,7 +52,7 @@ from langroid.utils.configuration import settings
 from langroid.utils.constants import NO_ANSWER
 from langroid.utils.output.printing import show_if_debug
 from langroid.utils.pydantic_utils import dataframe_to_documents, extract_fields
-from langroid.vector_store.base import VectorStoreConfig
+from langroid.vector_store.base import VectorStore, VectorStoreConfig
 from langroid.vector_store.lancedb import LanceDBConfig
 
 logger = logging.getLogger(__name__)
@@ -181,15 +181,39 @@ class DocChatAgent(ChatAgent):
     ):
         super().__init__(config)
         self.config: DocChatAgentConfig = config
-        self.original_docs: None | List[Document] = None
+        self.original_docs: List[Document] = []
         self.original_docs_length = 0
         self.from_dataframe = False
         self.df_description = ""
-        self.chunked_docs: None | List[Document] = None
-        self.chunked_docs_clean: None | List[Document] = None
+        self.chunked_docs: List[Document] = []
+        self.chunked_docs_clean: List[Document] = []
         self.response: None | Document = None
         if len(config.doc_paths) > 0:
             self.ingest()
+
+    def clear(self) -> None:
+        """Clear the document collection and the specific collection in vecdb"""
+        if self.vecdb is None:
+            raise ValueError("VecDB not set")
+        self.original_docs = []
+        self.original_docs_length = 0
+        self.chunked_docs = []
+        self.chunked_docs_clean = []
+        collection_name = self.vecdb.config.collection_name
+        if collection_name is None:
+            return
+        try:
+            # Note we may have used a vecdb with a config.collection_name
+            # different from the agent's config.vecdb.collection_name!!
+            self.vecdb.delete_collection(collection_name)
+            self.vecdb = VectorStore.create(self.vecdb.config)
+        except Exception as e:
+            logger.warning(
+                f"""
+                Error while deleting collection {collection_name}:
+                {e}
+                """
+            )
 
     def ingest(self) -> None:
         """
@@ -211,19 +235,43 @@ class DocChatAgent(ChatAgent):
             return
         self.ingest_doc_paths(self.config.doc_paths)
 
-    def ingest_doc_paths(self, paths: List[str]) -> None:
+    def ingest_doc_paths(
+        self,
+        paths: List[str],
+        metadata: List[Dict[str, Any]] | Dict[str, Any] = [],
+    ) -> None:
         """Split, ingest docs from specified paths,
-        do not add these to config.doc_paths
+        do not add these to config.doc_paths.
+
+        Args:
+            paths: List of file/folder paths or URLs
+            metadata: List of metadata dicts, one for each path.
+                If a single dict is passed in, it is used for all paths.
         """
+        if isinstance(metadata, list):
+            path2meta = {p: m for p, m in zip(paths, metadata)}
+        else:
+            path2meta = {p: metadata for p in paths}
         urls, paths = get_urls_and_paths(paths)
+        urls_meta = {u: path2meta[u] for u in urls}
+        paths_meta = {p: path2meta[p] for p in paths}
         docs: List[Document] = []
         parser = Parser(self.config.parsing)
         if len(urls) > 0:
-            loader = URLLoader(urls=urls, parser=parser)
-            docs = loader.load()
+            for u in urls:
+                meta = urls_meta[u]
+                loader = URLLoader(urls=[u], parser=parser)
+                docs = loader.load()
+                # update metadata of each doc with meta
+                for d in docs:
+                    d.metadata = d.metadata.copy(update=meta)
         if len(paths) > 0:
             for p in paths:
+                meta = paths_meta[p]
                 path_docs = RepoLoader.get_documents(p, parser=parser)
+                # update metadata of each doc with meta
+                for d in path_docs:
+                    d.metadata = d.metadata.copy(update=meta)
                 docs.extend(path_docs)
         n_docs = len(docs)
         n_splits = self.ingest_docs(docs)
@@ -240,7 +288,12 @@ class DocChatAgent(ChatAgent):
         print("\n".join(urls))
         print("\n".join(paths))
 
-    def ingest_docs(self, docs: List[Document], split: bool = True) -> int:
+    def ingest_docs(
+        self,
+        docs: List[Document],
+        split: bool = True,
+        metadata: List[Dict[str, Any]] | Dict[str, Any] = [],
+    ) -> int:
         """
         Chunk docs into pieces, map each chunk to vec-embedding, store in vec-db
 
@@ -248,8 +301,19 @@ class DocChatAgent(ChatAgent):
             docs: List of Document objects
             split: Whether to split docs into chunks. Default is True.
                 If False, docs are treated as "chunks" and are not split.
+            metadata: List of metadata dicts, one for each doc, to augment
+                whatever metadata is already in the doc.
+                [ASSUME no conflicting keys between the two metadata dicts.]
+                If a single dict is passed in, it is used for all docs.
         """
-        self.original_docs = docs
+        if isinstance(metadata, list) and len(metadata) > 0:
+            for d, m in zip(docs, metadata):
+                d.metadata = d.metadata.copy(update=m)
+        elif isinstance(metadata, dict):
+            for d in docs:
+                d.metadata = d.metadata.copy(update=metadata)
+
+        self.original_docs.extend(docs)
         if self.parser is None:
             raise ValueError("Parser not set")
         for d in docs:
@@ -374,7 +438,7 @@ class DocChatAgent(ChatAgent):
         """
         if filter is None and len(docs) > 0:
             # no filter, so just use the docs passed in
-            self.chunked_docs = docs
+            self.chunked_docs.extend(docs)
         else:
             if self.vecdb is None:
                 raise ValueError("VecDB not set")
@@ -1098,7 +1162,7 @@ class DocChatAgent(ChatAgent):
         """Summarize all docs"""
         if self.llm is None:
             raise ValueError("LLM not set")
-        if self.original_docs is None:
+        if len(self.original_docs) == 0:
             logger.warning(
                 """
                 No docs to summarize! Perhaps you are re-using a previously
