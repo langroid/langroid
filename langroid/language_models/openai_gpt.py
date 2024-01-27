@@ -60,7 +60,8 @@ class OpenAIChatModel(str, Enum):
 
     GPT3_5_TURBO = "gpt-3.5-turbo-1106"
     GPT4 = "gpt-4"
-    GPT4_TURBO = "gpt-4-1106-preview"
+    GPT4_32K = "gpt-4-32k"
+    GPT4_TURBO = "gpt-4-turbo-preview"
 
 
 class OpenAICompletionModel(str, Enum):
@@ -72,8 +73,9 @@ class OpenAICompletionModel(str, Enum):
 
 _context_length: Dict[str, int] = {
     # can add other non-openAI models here
-    OpenAIChatModel.GPT3_5_TURBO: 4096,
+    OpenAIChatModel.GPT3_5_TURBO: 16_385,
     OpenAIChatModel.GPT4: 8192,
+    OpenAIChatModel.GPT4_32K: 32_768,
     OpenAIChatModel.GPT4_TURBO: 128_000,
     OpenAICompletionModel.TEXT_DA_VINCI_003: 4096,
 }
@@ -81,7 +83,7 @@ _context_length: Dict[str, int] = {
 _cost_per_1k_tokens: Dict[str, Tuple[float, float]] = {
     # can add other non-openAI models here.
     # model => (prompt cost, generation cost) in USD
-    OpenAIChatModel.GPT3_5_TURBO: (0.0015, 0.002),
+    OpenAIChatModel.GPT3_5_TURBO: (0.001, 0.002),
     OpenAIChatModel.GPT4: (0.03, 0.06),  # 8K context
     OpenAIChatModel.GPT4_TURBO: (0.01, 0.03),  # 128K context
 }
