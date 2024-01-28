@@ -25,7 +25,7 @@ def app(m="litellm/ollama_chat/mistral:7b-instruct-v0.2-q8_0"):
         # if you comment out `chat_model`, it will default to OpenAI GPT4-turbo
         # chat_model="litellm/ollama/mistral:7b-instruct-v0.2-q4_K_M",
         chat_model=m or lm.OpenAIChatModel.GPT4_TURBO,
-        chat_context_length=4096,  # set this based on model
+        chat_context_length=32_000,  # set this based on model
         max_output_tokens=100,
         temperature=0.2,
         stream=True,
