@@ -5,6 +5,8 @@ from pydantic import BaseSettings
 from rich import print
 from rich.console import Console
 
+from langroid.agent import ToolMessage
+
 if TYPE_CHECKING:
     import neo4j
 
@@ -15,10 +17,6 @@ from langroid.agent.special.neo4j.utils.system_message import (
     DEFAULT_NEO4J_CHAT_SYSTEM_MESSAGE,
     DEFAULT_SYS_MSG,
     SCHEMA_TOOLS_SYS_MSG,
-)
-from langroid.agent.special.neo4j.utils.tools import (
-    CypherQueryTool,
-    GraphSchemaTool,
 )
 from langroid.mytypes import Entity
 
@@ -35,6 +33,21 @@ not_valid_query_response = [
     empty_relationships,
     NEO4J_ERROR_MSG,
 ]
+
+
+# TOOLS to be used by the agent
+
+
+class CypherQueryTool(ToolMessage):
+    request: str = "make_query"
+    purpose: str = """Use this tool to send the Generated Cypher query based on 
+    provided text description and schema."""
+    cypher_query: str
+
+
+class GraphSchemaTool(ToolMessage):
+    request: str = "get_schema"
+    purpose: str = """To get the schema of the graph database."""
 
 
 class Neo4jSettings(BaseSettings):
@@ -133,10 +146,11 @@ class Neo4jChatAgent(ChatAgent):
         logger.error(f"Cypher Query failed: {query}\nException: {e}")
 
         # Construct the error message
-        error_message_template = f"""\
+        error_message_template = f"""
+        There were some errors running your Cypher query:
         {NEO4J_ERROR_MSG}: '{query}'
         {str(e)}
-        Run a new query, correcting the errors.
+        Send a new query, correcting the errors.
         """
 
         return error_message_template
@@ -155,7 +169,6 @@ class Neo4jChatAgent(ChatAgent):
         Returns:
             str: The result of executing the Cypher query.
         """
-        response_message = ""
         if not self.driver:
             raise ValueError("No database connection is established.")
 
@@ -271,7 +284,7 @@ class Neo4jChatAgent(ChatAgent):
             return "The database schema does not have any nodes or relationships."
 
     def _init_tool_messages(self) -> None:
-        """Initialize message tools used for chatting."""
+        """Attach ToolMessages to the Agent."""
         message = self._format_message()
         self.config.system_message = self.config.system_message.format(mode=message)
         super().__init__(self.config)

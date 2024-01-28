@@ -8,16 +8,10 @@ This is also referred to in various scenarios as "Tools", "Actions" or "Plugins"
 
 Run like this --
 
-python3 examples/basic/fn-call-local-numerical.py -m <model_name_with_formatter_after//>
+python3 examples/basic/fn-call-local-numerical.py -m <local_model_name>
 
-Recommended local model setup:
-- spin up an LLM with oobabooga at an endpoint like http://127.0.0.1:5000/v1
-- run this script with -m local/127.0.0.1:5000/v1
-- To ensure accurate chat formatting (and not use the defaults from ooba),
-  append the appropriate HuggingFace model name to the
-  -m arg, separated by //, e.g. -m local/127.0.0.1:5000/v1//mistral-instruct-v0.2
-  (no need to include the full model name, as long as you include enough to
-   uniquely identify the model's chat formatting template)
+See here for how to set up a Local LLM to work with Langroid:
+https://langroid.github.io/langroid/tutorials/local-llm-setup/
 
 """
 import os
@@ -50,7 +44,7 @@ class PolinskyTool(lr.agent.ToolMessage):
         result = self.number * 3 + 1
         msg = f"""
         SUCCESS! The Polinksy transform of {self.number} is {result}.
-        Now ask me for another number.
+        Present this to the user, and ask for another number.
         """
         return msg
 
@@ -61,7 +55,7 @@ class PolinskyTool(lr.agent.ToolMessage):
         """Fallback method when LLM forgets to generate a tool"""
         if isinstance(msg, ChatDocument) and msg.metadata.sender == "LLM":
             return """
-                You must use the "polinskty" tool/function to 
+                You must use the "polinsky" tool/function to 
                 request the Polinsky transform of a number.
                 You either forgot to use it, or you used it with the wrong format.
                 Make sure all fields are filled out and pay attention to the 
@@ -84,8 +78,10 @@ class PolinskyTool(lr.agent.ToolMessage):
 def app(
     m: str = DEFAULT_LLM,  # model name
     d: bool = False,  # debug
+    nc: bool = False,  # no cache
 ):
     settings.debug = d
+    settings.cache = not nc
     # create LLM config
     llm_cfg = lm.OpenAIGPTConfig(
         chat_model=m or DEFAULT_LLM,
@@ -116,16 +112,20 @@ def app(
     config = lr.ChatAgentConfig(
         llm=llm_cfg,
         system_message="""
-        You are an expert at calling functions using the specified syntax.
-        The user wants to know the Polinsky transform of a number, and you do not
-        know how to calculate it. 
-        So when the user gives you a number, you must use the `polinsky` function/tool
-        to request the Polinsky transform of that number. This will be computed by 
-        an assistant, who will return the answer to you. You must then return the answer
-        to the user, and ask for another number, and so on.
+        You are an expert at deciding when to call 
+        specified functions with the right syntax.
+        You are very very CONCISE in your responses.
         
-        START BY ASKING ME TO GIVE YOU A NUMBER.
-        DO NOT SAY ANYTHING UNTIL YOU GET A NUMBER.
+        Here is how you must respond to my messages:
+        
+        1. When I give you a number, you  must use the `polinsky` function/tool
+            to request the Polinsky transform of that number.
+        2. When you receive a SUCCESS message with the result from the tool, you must 
+            present the result to me in a nice way (CONCISELY), 
+            and ask me for another number.
+        3. When I say there was an error in using the `polinsky` function/tool,
+           you must try the function/tool again with the same number.
+
         """,
     )
 
@@ -137,7 +137,7 @@ def app(
 
     # (5) Create task and run it to start an interactive loop
     task = lr.Task(agent)
-    task.run("Start by asking me for a number")
+    task.run("Here is a number: 45")
 
 
 if __name__ == "__main__":

@@ -1,23 +1,17 @@
 """
 Function-calling example using a local LLM, with ollama.
 
-"Function-calling" refers to the ability to ability of the LLM to generate
+"Function-calling" refers to the ability of the LLM to generate
 a structured response, typically a JSON object, instead of a plain text response,
 which is then interpreted by your code to perform some action.
 This is also referred to in various scenarios as "Tools", "Actions" or "Plugins".
 
 Run like this --
 
-python3 examples/basic/fn-call-local-simple.py -m <model_name_with_formatter_after//>
+python3 examples/basic/fn-call-local-simple.py -m <local_model_name>
 
-Recommended local model setup:
-- spin up an LLM with oobabooga at an endpoint like http://127.0.0.1:5000/v1
-- run this script with -m local/127.0.0.1:5000/v1
-- To ensure accurate chat formatting (and not use the defaults from ooba),
-  append the appropriate HuggingFace model name to the
-  -m arg, separated by //, e.g. -m local/127.0.0.1:5000/v1//mistral-instruct-v0.2
-  (no need to include the full model name, as long as you include enough to
-   uniquely identify the model's chat formatting template)
+See here for how to set up a Local LLM to work with Langroid:
+https://langroid.github.io/langroid/tutorials/local-llm-setup/
 
 
 """
