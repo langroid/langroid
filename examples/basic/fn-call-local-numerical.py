@@ -6,9 +6,33 @@ a structured response, typically a JSON object, instead of a plain text response
 which is then interpreted by your code to perform some action.
 This is also referred to in various scenarios as "Tools", "Actions" or "Plugins".
 
+This script is designed to have a basic ChatAgent (powered by a LocalLLM)
+engage in a multi-round conversation where the user may occasionally
+ask for the "Polinsky transform" of a number, which requires the LLM to
+use a `Polinsky` tool/function-call. This is a fictitious transform,
+that simply does n => 3n + 1.
+We intentionally use a fictitious transform rather than something like "square"
+or "double" to prevent the LLM from trying to answer the question directly.
+
+The challenging part here is getting the LLM to decide on an appropriate response
+to a few different types of user messages:
+- user asks a general question -> LLM should answer the question directly
+- user asks for the Polinsky transform of a number -> LLM should use the Polinsky tool
+- result from applying Polinsky transform -> LLM should present this to the user
+- user says there was a format error in using the Polinsky tool -> LLM should try this tool again
+
+Many models quickly get confused in a multi-round conversation like this.
+However `dolphin-mixtral` seems to do well here.
+
 Run like this --
 
 python3 examples/basic/fn-call-local-numerical.py -m <local_model_name>
+
+Local model with best results is dolphin-mixtral:
+```
+ollama run dolphin-mixtral
+python3 examples/basic/fn-call-local-numerical.py -m litellm/ollama_chat/dolphin-mixtral:latest
+```
 
 See here for how to set up a Local LLM to work with Langroid:
 https://langroid.github.io/langroid/tutorials/local-llm-setup/
@@ -24,8 +48,8 @@ from langroid.agent.tool_message import ToolMessage
 import langroid.language_models as lm
 from langroid.agent.chat_document import ChatDocument
 
-# for best results:
 DEFAULT_LLM = lm.OpenAIChatModel.GPT4_TURBO
+
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
@@ -33,10 +57,15 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 
 class PolinskyTool(lr.agent.ToolMessage):
-    """A fictitious number transformation tool"""
+    """A fictitious number transformation tool. We intentially use
+    a fictitious tool rather than something like "square" or "double"
+    to prevent the LLM from trying to answer the question directly.
+    """
 
     request: str = "polinsky"
-    purpose: str = "To find out the Polinsky transform of a <number>."
+    purpose: str = (
+        "To respond to user request for the Polinsky transform of a <number>."
+    )
     number: int
 
     def handle(self) -> str:
@@ -44,9 +73,18 @@ class PolinskyTool(lr.agent.ToolMessage):
         result = self.number * 3 + 1
         msg = f"""
         SUCCESS! The Polinksy transform of {self.number} is {result}.
-        Present this to the user, and ask for another number.
+        Present this result to me, and ask for another number.
         """
         return msg
+
+    @classmethod
+    def json_instructions(cls) -> str:
+        inst = super().json_instructions()
+        return f"""
+        {inst}
+        
+        ONLY USE THIS TOOL AFTER THE USER ASKS FOR A POLINSKY TRANSFORM.
+        """
 
     @staticmethod
     def handle_message_fallback(
@@ -85,9 +123,9 @@ def app(
     # create LLM config
     llm_cfg = lm.OpenAIGPTConfig(
         chat_model=m or DEFAULT_LLM,
-        chat_context_length=4096,  # set this based on model
+        chat_context_length=16_000,  # for dolphin-mixtral
         max_output_tokens=100,
-        temperature=0.2,
+        temperature=0,
         stream=True,
         timeout=45,
     )
@@ -108,7 +146,6 @@ def app(
     # task.run("Concisely answer some questions")
 
     # Define a ChatAgentConfig and ChatAgent
-
     config = lr.ChatAgentConfig(
         llm=llm_cfg,
         system_message="""
@@ -118,14 +155,31 @@ def app(
         
         Here is how you must respond to my messages:
         
-        1. When I give you a number, you  must use the `polinsky` function/tool
+        1. When I ask a general question, simply respond as you see fit.
+            Example: 
+                ME(User): "What is 3 + 4?"
+                YOU(Assistant): "the answer is 7"
+                
+        2. When I ask to find the Polinksy transform of a number, 
+            you  must use the `polinsky` function/tool
             to request the Polinsky transform of that number.
-        2. When you receive a SUCCESS message with the result from the tool, you must 
-            present the result to me in a nice way (CONCISELY), 
-            and ask me for another number.
-        3. When I say there was an error in using the `polinsky` function/tool,
+            Example:
+                ME(User): "What is the Polinsky transform of 5?"
+                YOU(Assistant): <polinsky tool request in JSON format>
+                 
+        3. When you receive a SUCCESS message with the result from the `polinsky` 
+            tool, you must present the result to me in a nice way (CONCISELY), 
+            and ask: 'What else can I help with?'
+            Example:
+                ME(User): "SUCCESS! The Polinksy transform of 5 is 16"
+                YOU(Assistant): "The polinsky transform of 5 is 16. What else can I help with?"
+                ME(User): "The answer is 16. What is the Polinsky transform of 19?"
+                YOU(Assistant): <polinsky tool request in JSON format>
+        4. When I say there was an error in using the `polinsky` function/tool,
            you must try the function/tool again with the same number.
-
+              Example:
+               ME(User): "There was an error in your use of the polinsky tool:..."
+               YOU(Assistant): <polinsky tool request in JSON format>
         """,
     )
 
@@ -137,7 +191,7 @@ def app(
 
     # (5) Create task and run it to start an interactive loop
     task = lr.Task(agent)
-    task.run("Here is a number: 45")
+    task.run("ONLY say this: 'What can I help with?' say NOTHING ELSE.")
 
 
 if __name__ == "__main__":

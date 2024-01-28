@@ -199,7 +199,7 @@ class OpenAIGPTConfig(LLMConfig):
     api_base: str | None = None  # used for local or other non-OpenAI models
     litellm: bool = False  # use litellm api?
     max_output_tokens: int = 1024
-    min_output_tokens: int = 64
+    min_output_tokens: int = 1
     use_chat_for_completion = True  # do not change this, for OpenAI models!
     timeout: int = 20
     temperature: float = 0.2
