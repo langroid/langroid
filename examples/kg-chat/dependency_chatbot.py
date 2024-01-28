@@ -77,7 +77,6 @@ class VisualizeGraph(ToolMessage):
 
 
 class DependencyGraphAgent(Neo4jChatAgent):
-
     def construct_dependency_graph(self, msg: DepGraphTool) -> None:
         check_db_exist = (
             "MATCH (n) WHERE n.name = $name AND n.version = $version RETURN n LIMIT 1"
