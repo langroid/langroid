@@ -195,7 +195,7 @@ class Neo4jChatAgent(ChatAgent):
 
     def write_query(
         self, query: str, parameters: Optional[Dict[Any, Any]] = None
-    ) -> bool:
+    ) -> str:
         """
         Executes a write transaction using a given Cypher query on the Neo4j database.
         This method should be used for queries that modify the database.
@@ -209,7 +209,7 @@ class Neo4jChatAgent(ChatAgent):
         """
         if not self.driver:
             raise ValueError("No database connection is established.")
-        response = False
+        response_message = ""
         try:
             assert isinstance(self.config, Neo4jChatAgentConfig)
             with self.driver.session(
@@ -217,14 +217,15 @@ class Neo4jChatAgent(ChatAgent):
             ) as session:
                 # Execute the query within a write transaction
                 session.write_transaction(lambda tx: tx.run(query, parameters))
-                response = True
+                response_message = "the query has been executed successfully"
         except Exception as e:
             logging.warning(
                 f"An unexpected error occurred while executing the write query: {e}"
             )
+            response_message = self.retry_query(e, query)
         finally:
             self.close()
-        return response
+        return response_message
 
     # TODO: test under enterprise edition because community edition doesn't allow
     # database creation/deletion
@@ -234,7 +235,9 @@ class Neo4jChatAgent(ChatAgent):
                 MATCH (n)
                 DETACH DELETE n
             """
-        if self.write_query(delete_query):
+        response = self.write_query(delete_query)
+
+        if "successfully" in response:
             print("[green]Database is deleted!")
         else:
             print("[red]Database is not deleted!")
