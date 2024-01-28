@@ -56,7 +56,7 @@ def main(
         # "litellm/ollama/llama2"
         # "local/localhost:8000/v1"
         # "local/localhost:8000"
-        chat_context_length=8192,  # adjust based on model
+        chat_context_length=16_000,  # adjust based on model
         timeout=45,
     )
 
@@ -154,7 +154,7 @@ def main(
         """,
     )
     writer_task.add_sub_task(doc_task)
-    writer_task.run()
+    writer_task.run("Can you help me with some questions?")
 
     # show cost summary
     print("LLM usage, cost summary:")
