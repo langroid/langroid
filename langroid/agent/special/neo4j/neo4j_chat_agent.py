@@ -180,8 +180,8 @@ class Neo4jChatAgent(ChatAgent):
                 result = session.run(query, parameters)
                 # Check if there are records in the result
                 if result.peek():
-                    # TODO: change `read_query` to return a list of dictionaries 
-                    # when query returns valid results, or return a tuple of flag, 
+                    # TODO: change `read_query` to return a list of dictionaries
+                    # when query returns valid results, or return a tuple of flag,
                     # list of dictionaries.
                     response_message = ", ".join(
                         [str(record.data()) for record in result]
