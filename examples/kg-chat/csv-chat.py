@@ -90,47 +90,54 @@ def main(
                 generating the graph database will take long time.
                 """
             )
-            user_input = Prompt.ask(
-                "Do you want to continue? (y/n)",
+
+            user_input_continue = Prompt.ask(
+                "Do you want to continue with the whole dataset? (y/n)",
             )
-            if user_input == "y":
-                user_input_continue = Prompt.ask(
-                    "Do you want to continue with the whole dataset? (y/n)",
+            if user_input_continue == "n":
+                sample_size = int(
+                    Prompt.ask(
+                        "Please enter the sample size",
+                    )
                 )
-                if user_input_continue == "n":
-                    sample_size = int(
-                        Prompt.ask(
-                            "Please enter the sample size",
-                        )
-                    )
-                    print(
-                        f"""
-                        [green]The graph database will be generated for {sample_size} 
-                        rows...
-                        """
-                    )
-                    csv_dataframe = csv_dataframe.sample(n=sample_size)
-                elif user_input_continue == "y":
-                    print(
-                        """
-                        [green]The graph database will be generated for the whole dataset...
-                        """
-                    )
+                print(
+                    f"""
+                    [green]The graph database will be generated for {sample_size} 
+                    rows...
+                    """
+                )
+                csv_dataframe = csv_dataframe.sample(n=sample_size)
+            elif user_input_continue == "y":
+                print(
+                    """
+                    [green]The graph database will be generated for the whole dataset...
+                    """
+                )
 
-                csv_kg_chat_agent.csv_dataframe = csv_dataframe
-                csv_kg_chat_agent.csv_location = csv_location
-                build_kg_instructions = f"""
-                    Your task is to build a knowledge graph based on a CSV file. 
-                    
-                    You need to generate the graph database based on these
-                    headers: {headers} in the CSV file.
-                    You can use the tool/function `pandas_to_kg` to display and confirm 
-                    the nodes and relationships.
-                """
+            csv_kg_chat_agent.csv_dataframe = csv_dataframe
+            csv_kg_chat_agent.csv_location = csv_location
+            print(csv_dataframe.head(3))
+            build_kg_instructions = f"""
+                Your task is to build a knowledge graph based on a CSV file. 
+                
+                You need to generate the graph database based on this
+                header: 
+                ```
+                {headers} 
+                ```
+                and these sample rows: 
+                ```
+                {csv_dataframe.head(3)}. 
+                ```
+                Leverage the above information to: 
+                - Define node labels and their properties
+                - Infer relationships
+                - Infer constraints 
+                ASK me if you need further information to figure out the schema.
+                You can use the tool/function `pandas_to_kg` to display and confirm 
+                the nodes and relationships.
+            """
 
-            if user_input == "n":
-                print("Quitting the chatbot...")
-                return
     csv_kg_chat_agent.enable_message(PandasToKGTool)
 
     system_message = f"""

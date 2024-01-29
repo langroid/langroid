@@ -2,7 +2,6 @@ from typing import List, Optional
 
 import typer
 from pandas import DataFrame, read_csv
-from rich import print
 from rich.console import Console
 
 from langroid.agent.special.neo4j.neo4j_chat_agent import (
@@ -135,7 +134,6 @@ class CSVChatGraphAgent(Neo4jChatAgent):
                     # there is a possibility the generated cypher query is not correct
                     # so we need to check the response before continuing to the
                     # iteration
-                    if index == 0 and "successfully" not in response:
-                        print(f"[red]{response}")
-                        return response
+                    if index == 0 and not response.success:
+                        return str(response.data)
             return "Graph database successfully generated"

@@ -49,13 +49,10 @@ def test_pandas_to_kg(csv_chat_agent):
 
     # Query to obtain the nodes
     query = "MATCH (n:Person) RETURN n"
-    nodes_query_result = csv_chat_agent.read_query(query)
-
-    # Convert the string to a list of dictionaries
-    data_list = eval("[" + nodes_query_result + "]")
+    query_result = csv_chat_agent.read_query(query)
 
     # Extract the inner dictionaries
-    data_list = [item["n"] for item in data_list]
+    data_list = [item["n"] for item in query_result.data]
 
     # Convert the list of dictionaries to a DataFrame and reorder the columns
     nodes_query_df = pd.DataFrame(data_list).reindex(columns=df.columns)
