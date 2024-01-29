@@ -160,6 +160,8 @@ class Task:
         self.name = name or agent.config.name
         self.value: str = self.name
         self.default_human_response = default_human_response
+        if default_human_response is not None and default_human_response == "":
+            interactive = False
         self.interactive = interactive
         self.message_history_idx = -1
         if interactive:
@@ -957,8 +959,6 @@ class Task:
             bool: True if task is done, False otherwise
         """
         result = result or self.pending_message
-        if self.is_done:
-            return True
         user_quit = (
             result is not None
             and result.content in USER_QUIT
@@ -967,6 +967,9 @@ class Task:
         if self._level == 0 and self.only_user_quits_root:
             # for top-level task, only user can quit out
             return user_quit
+
+        if self.is_done:
+            return True
 
         if self.n_stalled_steps >= self.max_stalled_steps:
             # we are stuck, so bail to avoid infinite loop
