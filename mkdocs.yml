@@ -104,6 +104,7 @@ nav:
     - Demos:
       - Audience Targeting: demos/targeting/audience-targeting.md
   - Tutorials:
+    - Local LLM Setup: tutorials/local-llm-setup.md
     - Non-OpenAI LLMs: tutorials/non-openai-llms.md
     - SQLChatAgent: tutorials/postgresql-agent.md
   - Code/API Docs: reference/

@@ -4,7 +4,6 @@ from typing import no_type_check
 
 import colorlog
 from rich.console import Console
-from rich.markup import escape
 
 
 # Define a function to set up the colored logger
@@ -126,6 +125,6 @@ class RichFileLogger:
         with open(self.log_file, "a") as f:
             if self.color:
                 console = Console(file=f, force_terminal=True, width=200)
-                console.print(escape(message))
+                console.print(message)
             else:
                 print(message, file=f)

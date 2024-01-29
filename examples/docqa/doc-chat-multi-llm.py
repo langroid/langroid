@@ -6,21 +6,11 @@ Breaks it down into smaller questions (if needed) to send to DocAgent
 (powered by a possibly weaker but cheaper LLM),
 who has access to the docs via a vector-db.
 
-A few ways to run this:
+You can run this with different combinations, using the -m and -mr
+args to specify the LLMs for the WriterAgent and DocAgent (RAG) respectively.
 
-(a) GPT4 for both agents, WriterAgent and DocAgent:
-python3 examples/docqa/doc-chat-multi-llm.py
-
-(b) GPT4 for WriterAgent, local LLM for DocAgent, assuming you have done
-`ollama run mistral`:
-
-python3 examples/docqa/doc-chat-multi-llm.py -m litellm/ollama/mistral
-
-(c) GPT4 for WriterAgent, local LLM for DocAgent, assuming you have done
-`ollama pull mistral` and spun up the liteLLM OpenAI proxy server listening on
-localhost:8000:
-
-python3 examples/docqa/doc-chat-multi-llm.py -m local/localhost:8000
+See this [script](https://github.com/langroid/langroid/blob/main/examples/docqa/rag-local-simple.py)
+ for examples of specifying local models.
 
 See here for a guide on how to use Langroid with non-OpenAI LLMs (local/remote):
 https://langroid.github.io/langroid/tutorials/non-openai-llms/
@@ -31,6 +21,7 @@ from rich import print
 import os
 
 import langroid as lr
+import langroid.language_models as lm
 import langroid.language_models.base
 from langroid.agent.special.doc_chat_agent import (
     DocChatAgent,
@@ -42,16 +33,66 @@ from langroid.agent.task import Task
 from langroid.language_models.openai_gpt import OpenAIGPTConfig
 from langroid.agent.tools.recipient_tool import RecipientTool
 from langroid.utils.configuration import set_global, Settings
-from langroid.utils.logging import setup_colored_logging
 from langroid.utils.constants import NO_ANSWER
 
 app = typer.Typer()
 
-setup_colored_logging()
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 
-def chat(config: DocChatAgentConfig) -> None:
+@app.command()
+def main(
+    debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
+    model: str = typer.Option("", "--model", "-m", help="model name for writer agent"),
+    model_rag: str = typer.Option(
+        "", "--model_rag", "-mr", help="model name for RAG agent"
+    ),
+    nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
+) -> None:
+    llm_config_rag = OpenAIGPTConfig(
+        chat_model=model_rag or model or lm.OpenAIChatModel.GPT4_TURBO,
+        # or, other possibilities for example:
+        # "litellm/bedrock/anthropic.claude-instant-v1"
+        # "litellm/ollama/llama2"
+        # "local/localhost:8000/v1"
+        # "local/localhost:8000"
+        chat_context_length=16_000,  # adjust based on model
+        timeout=45,
+    )
+
+    config = DocChatAgentConfig(
+        llm=llm_config_rag,
+        n_query_rephrases=0,
+        cross_encoder_reranking_model="cross-encoder/ms-marco-MiniLM-L-6-v2",
+        hypothetical_answer=False,
+        assistant_mode=True,
+        parsing=ParsingConfig(  # modify as needed
+            splitter=Splitter.TOKENS,
+            chunk_size=200,  # aim for this many tokens per chunk
+            overlap=30,  # overlap between chunks
+            max_chunks=10_000,
+            # aim to have at least this many chars per chunk when
+            # truncating due to punctuation
+            min_chunk_chars=200,
+            discard_chunk_chars=5,  # discard chunks with fewer than this many chars
+            n_similar_docs=5,
+            # NOTE: PDF parsing is extremely challenging, each library has its own
+            # strengths and weaknesses. Try one that works for your use case.
+            pdf=PdfParsingConfig(
+                # alternatives: "haystack", "unstructured", "pdfplumber", "fitz"
+                library="pdfplumber",
+            ),
+        ),
+    )
+
+    set_global(
+        Settings(
+            debug=debug,
+            cache=not nocache,
+            cache_type="fakeredis",
+        )
+    )
+
     doc_agent = DocChatAgent(config)
     print("[blue]Welcome to the document chatbot!")
     doc_agent.user_docs_ingest_dialog()
@@ -67,7 +108,10 @@ def chat(config: DocChatAgentConfig) -> None:
     writer_agent = ChatAgent(
         ChatAgentConfig(
             name="WriterAgent",
-            llm=OpenAIGPTConfig(),
+            llm=OpenAIGPTConfig(
+                chat_model=model or lm.OpenAIChatModel.GPT4_TURBO,
+                chat_context_length=8192,  # adjust based on model
+            ),
             vecdb=None,
         )
     )
@@ -110,73 +154,11 @@ def chat(config: DocChatAgentConfig) -> None:
         """,
     )
     writer_task.add_sub_task(doc_task)
-    writer_task.run()
+    writer_task.run("Can you help me with some questions?")
 
     # show cost summary
     print("LLM usage, cost summary:")
     print(str(langroid.language_models.base.LanguageModel.usage_cost_summary()))
-
-
-@app.command()
-def main(
-    debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
-    model: str = typer.Option("", "--model", "-m", help="model name"),
-    nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
-    cache_type: str = typer.Option(
-        "redis", "--cachetype", "-ct", help="redis or momento"
-    ),
-) -> None:
-    MyLLMConfig = OpenAIGPTConfig.create(prefix="myllm")
-    my_llm_config = MyLLMConfig(
-        chat_model="litellm/ollama/llama2",
-        # or, other possibilities for example:
-        # "litellm/bedrock/anthropic.claude-instant-v1"
-        # "litellm/ollama/llama2"
-        # "local/localhost:8000/v1"
-        # "local/localhost:8000"
-        chat_context_length=8192,  # adjust based on model
-        timeout=45,
-    )
-
-    if model == "":
-        llm_config = OpenAIGPTConfig(timeout=45)  # default GPT-4
-    else:
-        llm_config = my_llm_config
-        llm_config.chat_model = model
-
-    config = DocChatAgentConfig(
-        llm=llm_config,
-        n_query_rephrases=0,
-        cross_encoder_reranking_model="cross-encoder/ms-marco-MiniLM-L-6-v2",
-        hypothetical_answer=False,
-        assistant_mode=True,
-        parsing=ParsingConfig(  # modify as needed
-            splitter=Splitter.TOKENS,
-            chunk_size=500,  # aim for this many tokens per chunk
-            overlap=200,  # overlap between chunks
-            max_chunks=10_000,
-            # aim to have at least this many chars per chunk when
-            # truncating due to punctuation
-            min_chunk_chars=200,
-            discard_chunk_chars=5,  # discard chunks with fewer than this many chars
-            n_similar_docs=5,
-            # NOTE: PDF parsing is extremely challenging, each library has its own
-            # strengths and weaknesses. Try one that works for your use case.
-            pdf=PdfParsingConfig(
-                # alternatives: "haystack", "unstructured", "pdfplumber", "fitz"
-                library="pdfplumber",
-            ),
-        ),
-    )
-
-    set_global(
-        Settings(
-            debug=debug,
-            cache=not nocache,
-            cache_type=cache_type,
-        )
-    )
-    chat(config)
 
 
 if __name__ == "__main__":

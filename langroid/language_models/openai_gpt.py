@@ -1,5 +1,6 @@
 import ast
 import hashlib
+import json
 import logging
 import os
 import sys
@@ -24,6 +25,7 @@ from httpx import Timeout
 from openai import AsyncOpenAI, OpenAI
 from pydantic import BaseModel
 from rich import print
+from rich.markup import escape
 
 from langroid.cachedb.momento_cachedb import MomentoCache, MomentoCacheConfig
 from langroid.cachedb.redis_cachedb import RedisCache, RedisCacheConfig
@@ -37,8 +39,10 @@ from langroid.language_models.base import (
     LLMTokenUsage,
     Role,
 )
-from langroid.language_models.prompt_formatter.base import (
-    PromptFormatter,
+from langroid.language_models.config import HFPromptFormatterConfig
+from langroid.language_models.prompt_formatter.hf_formatter import (
+    HFFormatter,
+    find_hf_formatter,
 )
 from langroid.language_models.utils import (
     async_retry_with_exponential_backoff,
@@ -56,7 +60,8 @@ class OpenAIChatModel(str, Enum):
 
     GPT3_5_TURBO = "gpt-3.5-turbo-1106"
     GPT4 = "gpt-4"
-    GPT4_TURBO = "gpt-4-1106-preview"
+    GPT4_32K = "gpt-4-32k"
+    GPT4_TURBO = "gpt-4-turbo-preview"
 
 
 class OpenAICompletionModel(str, Enum):
@@ -68,8 +73,9 @@ class OpenAICompletionModel(str, Enum):
 
 _context_length: Dict[str, int] = {
     # can add other non-openAI models here
-    OpenAIChatModel.GPT3_5_TURBO: 4096,
+    OpenAIChatModel.GPT3_5_TURBO: 16_385,
     OpenAIChatModel.GPT4: 8192,
+    OpenAIChatModel.GPT4_32K: 32_768,
     OpenAIChatModel.GPT4_TURBO: 128_000,
     OpenAICompletionModel.TEXT_DA_VINCI_003: 4096,
 }
@@ -77,7 +83,7 @@ _context_length: Dict[str, int] = {
 _cost_per_1k_tokens: Dict[str, Tuple[float, float]] = {
     # can add other non-openAI models here.
     # model => (prompt cost, generation cost) in USD
-    OpenAIChatModel.GPT3_5_TURBO: (0.0015, 0.002),
+    OpenAIChatModel.GPT3_5_TURBO: (0.001, 0.002),
     OpenAIChatModel.GPT4: (0.03, 0.06),  # 8K context
     OpenAIChatModel.GPT4_TURBO: (0.01, 0.03),  # 128K context
 }
@@ -153,6 +159,31 @@ def noop() -> None:
     return None
 
 
+class OpenAICallParams(BaseModel):
+    """
+    Various params that can be sent to an OpenAI API chat-completion call.
+    When specified, any param here overrides the one with same name in the
+    OpenAIGPTConfig.
+    """
+
+    max_tokens: int = 1024
+    temperature: float = 0.2
+    frequency_penalty: float | None = 0.0  # between -2 and 2
+    presence_penalty: float | None = 0.0  # between -2 and 2
+    response_format: Dict[str, str] | None = None
+    logit_bias: Dict[int, float] | None = None  # token_id -> bias
+    logprobs: bool = False
+    top_p: int | None = 1
+    top_logprobs: int | None = None  # if int, requires logprobs=True
+    n: int = 1  # how many completions to generate (n > 1 is NOT handled now)
+    stop: str | List[str] | None = None  # (list of) stop sequence(s)
+    seed: int | None = 42
+    user: str | None = None  # user id for tracking
+
+    def to_dict_exclude_none(self) -> Dict[str, Any]:
+        return {k: v for k, v in self.dict().items() if v is not None}
+
+
 class OpenAIGPTConfig(LLMConfig):
     """
     Class for any LLM with an OpenAI-like API: besides the OpenAI models this includes:
@@ -168,15 +199,19 @@ class OpenAIGPTConfig(LLMConfig):
     api_base: str | None = None  # used for local or other non-OpenAI models
     litellm: bool = False  # use litellm api?
     max_output_tokens: int = 1024
-    min_output_tokens: int = 64
+    min_output_tokens: int = 1
     use_chat_for_completion = True  # do not change this, for OpenAI models!
     timeout: int = 20
     temperature: float = 0.2
     seed: int | None = 42
+    params: OpenAICallParams | None = None
     # these can be any model name that is served at an OpenAI-compatible API end point
     chat_model: str = defaultOpenAIChatModel
     completion_model: str = defaultOpenAICompletionModel
     run_on_first_use: Callable[[], None] = noop
+    # a string that roughly matches a HuggingFace chat_template,
+    # e.g. "mistral-instruct-v0.2 (a fuzzy search is done to find the closest match)
+    formatter: str | None = None
 
     def __init__(self, **kwargs) -> None:  # type: ignore
         local_model = "api_base" in kwargs and kwargs["api_base"] is not None
@@ -270,6 +305,21 @@ class OpenAIResponse(BaseModel):
     usage: Dict  # type: ignore
 
 
+def litellm_logging_fn(model_call_dict: Dict[str, Any]) -> None:
+    """Logging function for litellm"""
+    try:
+        api_input_dict = model_call_dict.get("additional_args", {}).get(
+            "complete_input_dict"
+        )
+        if api_input_dict is not None:
+            text = escape(json.dumps(api_input_dict, indent=2))
+            print(
+                f"[grey37]LITELLM: {text}[/grey37]",
+            )
+    except Exception:
+        pass
+
+
 # Define a class for OpenAI GPT models that extends the base class
 class OpenAIGPT(LanguageModel):
     """
@@ -281,6 +331,8 @@ class OpenAIGPT(LanguageModel):
         Args:
             config: configuration for openai-gpt model
         """
+        # copy the config to avoid modifying the original
+        config = config.copy()
         super().__init__(config)
         self.config: OpenAIGPTConfig = config
 
@@ -291,17 +343,42 @@ class OpenAIGPT(LanguageModel):
         # to allow quick testing with other models
         if settings.chat_model != "":
             self.config.chat_model = settings.chat_model
+            self.config.completion_model = settings.chat_model
+
+        if len(parts := self.config.chat_model.split("//")) > 1:
+            # there is a formatter specified, e.g.
+            # "litellm/ollama/mistral//hf" or
+            # "local/localhost:8000/v1//mistral-instruct-v0.2"
+            formatter = parts[1]
+            self.config.chat_model = parts[0]
+            if formatter == "hf":
+                # e.g. "litellm/ollama/mistral//hf" -> "litellm/ollama/mistral"
+                formatter = find_hf_formatter(self.config.chat_model)
+                if formatter != "":
+                    # e.g. "mistral"
+                    self.config.formatter = formatter
+                    logging.warning(
+                        f"""
+                        Using completions (not chat) endpoint with HuggingFace 
+                        chat_template for {formatter} for 
+                        model {self.config.chat_model}
+                        """
+                    )
+            else:
+                # e.g. "local/localhost:8000/v1//mistral-instruct-v0.2"
+                self.config.formatter = formatter
 
         # if model name starts with "litellm",
         # set the actual model name by stripping the "litellm/" prefix
         # and set the litellm flag to True
         if self.config.chat_model.startswith("litellm/") or self.config.litellm:
+            # e.g. litellm/ollama/mistral
             self.config.litellm = True
             self.api_base = self.config.api_base
             if self.config.chat_model.startswith("litellm/"):
                 # strip the "litellm/" prefix
+                # e.g. litellm/ollama/llama2 => ollama/llama2
                 self.config.chat_model = self.config.chat_model.split("/", 1)[1]
-            # litellm/ollama/llama2 => ollama/llama2 for example
         elif self.config.chat_model.startswith("local/"):
             # expect this to be of the form "local/localhost:8000/v1",
             # depending on how the model is launched locally.
@@ -311,9 +388,23 @@ class OpenAIGPT(LanguageModel):
             self.config.litellm = False
             self.config.seed = None  # some models raise an error when seed is set
             # Extract the api_base from the model name after the "local/" prefix
-            self.api_base = "http://" + self.config.chat_model.split("/", 1)[1]
+            self.api_base = self.config.chat_model.split("/", 1)[1]
+            if not self.api_base.startswith("http"):
+                self.api_base = "http://" + self.api_base
         else:
             self.api_base = self.config.api_base
+
+        if settings.chat_model != "":
+            # if we're overriding chat model globally, set completion model to same
+            self.config.completion_model = self.config.chat_model
+
+        if self.config.formatter is not None:
+            # we want to format chats -> completions using this specific formatter
+            self.config.use_completion_for_chat = True
+            self.config.completion_model = self.config.chat_model
+
+        if self.config.use_completion_for_chat:
+            self.config.use_chat_for_completion = False
 
         # NOTE: The api_key should be set in the .env file, or via
         # an explicit `export OPENAI_API_KEY=xxx` or `setenv OPENAI_API_KEY xxx`
@@ -362,9 +453,33 @@ class OpenAIGPT(LanguageModel):
 
         self.config._validate_litellm()
 
+    def _openai_api_call_params(self, kwargs: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        Prep the params to be sent to the OpenAI API
+        (or any OpenAI-compatible API, e.g. from Ooba or LmStudio)
+        for chat-completion.
+
+        Order of priority:
+        - (1) Params (mainly max_tokens) in the chat/achat/generate/agenerate call
+                (these are passed in via kwargs)
+        - (2) Params in OpenAIGPTConfi.params (of class OpenAICallParams)
+        - (3) Specific Params in OpenAIGPTConfig (just temperature for now)
+        """
+        params = dict(
+            temperature=self.config.temperature,
+        )
+        if self.config.params is not None:
+            params.update(self.config.params.to_dict_exclude_none())
+        params.update(kwargs)
+        return params
+
     def is_openai_chat_model(self) -> bool:
         openai_chat_models = [e.value for e in OpenAIChatModel]
         return self.config.chat_model in openai_chat_models
+
+    def is_openai_completion_model(self) -> bool:
+        openai_completion_models = [e.value for e in OpenAICompletionModel]
+        return self.config.completion_model in openai_completion_models
 
     def chat_context_length(self) -> int:
         """
@@ -692,7 +807,7 @@ class OpenAIGPT(LanguageModel):
             return self.chat(messages=prompt, max_tokens=max_tokens)
 
         if settings.debug:
-            print(f"[red]PROMPT: {prompt}[/red]")
+            print(f"[grey37]PROMPT: {escape(prompt)}[/grey37]")
 
         @retry_with_exponential_backoff
         def completions_with_backoff(**kwargs):  # type: ignore
@@ -701,29 +816,50 @@ class OpenAIGPT(LanguageModel):
             if result is not None:
                 cached = True
                 if settings.debug:
-                    print("[red]CACHED[/red]")
+                    print("[grey37]CACHED[/grey37]")
             else:
+                if self.config.litellm:
+                    from litellm import completion as litellm_completion
+                completion_call = (
+                    litellm_completion
+                    if self.config.litellm
+                    else self.client.completions.create
+                )
+                if self.config.litellm and settings.debug:
+                    kwargs["logger_fn"] = litellm_logging_fn
                 # If it's not in the cache, call the API
-                result = self.client.completions.create(**kwargs)
+                result = completion_call(**kwargs)
                 if self.get_stream():
-                    llm_response, openai_response = self._stream_response(result)
+                    llm_response, openai_response = self._stream_response(
+                        result,
+                        chat=self.config.litellm,
+                    )
                     self._cache_store(hashed_key, openai_response)
                     return cached, hashed_key, openai_response
                 else:
                     self._cache_store(hashed_key, result.model_dump())
             return cached, hashed_key, result
 
-        key_name = "model"
-        cached, hashed_key, response = completions_with_backoff(
-            **{key_name: self.config.completion_model},
-            prompt=prompt,
+        kwargs: Dict[str, Any] = dict(model=self.config.completion_model)
+        if self.config.litellm:
+            # TODO this is a temp fix, we should really be using a proper completion fn
+            # that takes a pre-formatted prompt, rather than mocking it as a sys msg.
+            kwargs["messages"] = [dict(content=prompt, role=Role.SYSTEM)]
+        else:  # any other OpenAI-compatible endpoint
+            kwargs["prompt"] = prompt
+        args = dict(
+            **kwargs,
             max_tokens=max_tokens,  # for output/completion
-            temperature=self.config.temperature,
-            echo=False,
             stream=self.get_stream(),
         )
-
-        msg = response["choices"][0]["text"].strip()
+        args = self._openai_api_call_params(args)
+        cached, hashed_key, response = completions_with_backoff(**args)
+        if not isinstance(response, dict):
+            response = response.dict()
+        if "message" in response["choices"][0]:
+            msg = response["choices"][0]["message"]["content"].strip()
+        else:
+            msg = response["choices"][0]["text"].strip()
         return LLMResponse(message=msg, cached=cached)
 
     async def agenerate(self, prompt: str, max_tokens: int = 200) -> LLMResponse:
@@ -742,76 +878,56 @@ class OpenAIGPT(LanguageModel):
         # The calling fn should use the context `with Streaming(..., False)` to
         # disable streaming.
         if self.config.use_chat_for_completion:
-            messages = [
-                LLMMessage(role=Role.SYSTEM, content="You are a helpful assistant."),
-                LLMMessage(role=Role.USER, content=prompt),
-            ]
+            return await self.achat(messages=prompt, max_tokens=max_tokens)
 
-            @async_retry_with_exponential_backoff
-            async def completions_with_backoff(
-                **kwargs: Dict[str, Any]
-            ) -> Tuple[bool, str, Any]:
-                cached = False
-                hashed_key, result = self._cache_lookup("AsyncChatCompletion", **kwargs)
-                if result is not None:
-                    cached = True
-                else:
-                    if self.config.litellm:
-                        from litellm import acompletion as litellm_acompletion
-                    acompletion_call = (
-                        litellm_acompletion
-                        if self.config.litellm
-                        else self.async_client.chat.completions.create
-                    )
+        if settings.debug:
+            print(f"[grey37]PROMPT: {escape(prompt)}[/grey37]")
 
-                    # If it's not in the cache, call the API
-                    result = await acompletion_call(**kwargs)
-                    self._cache_store(hashed_key, result.model_dump())
-                return cached, hashed_key, result
-
-            cached, hashed_key, response = await completions_with_backoff(
-                model=self.config.chat_model,
-                messages=[m.api_dict() for m in messages],
-                max_tokens=max_tokens,
-                temperature=self.config.temperature,
-                stream=False,
-            )
-            if isinstance(response, dict):
-                response_dict = response
+        # WARNING: .Completion.* endpoints are deprecated,
+        # and as of Sep 2023 only legacy models will work here,
+        # e.g. text-davinci-003, text-ada-001.
+        @async_retry_with_exponential_backoff
+        async def completions_with_backoff(**kwargs):  # type: ignore
+            cached = False
+            hashed_key, result = self._cache_lookup("AsyncCompletion", **kwargs)
+            if result is not None:
+                cached = True
+                if settings.debug:
+                    print("[grey37]CACHED[/grey37]")
             else:
-                response_dict = response.model_dump()
-            msg = response_dict["choices"][0]["message"]["content"].strip()
-        else:
-            # WARNING: .Completion.* endpoints are deprecated,
-            # and as of Sep 2023 only legacy models will work here,
-            # e.g. text-davinci-003, text-ada-001.
-            @retry_with_exponential_backoff
-            async def completions_with_backoff(**kwargs):  # type: ignore
-                cached = False
-                hashed_key, result = self._cache_lookup("AsyncCompletion", **kwargs)
-                if result is not None:
-                    cached = True
-                else:
-                    if self.config.litellm:
-                        from litellm import acompletion as litellm_acompletion
-                    acompletion_call = (
-                        litellm_acompletion
-                        if self.config.litellm
-                        else self.async_client.completions.create
-                    )
-                    # If it's not in the cache, call the API
-                    result = await acompletion_call(**kwargs)
-                    self._cache_store(hashed_key, result.model_dump())
-                return cached, hashed_key, result
+                if self.config.litellm:
+                    from litellm import acompletion as litellm_acompletion
+                # TODO this may not work: text_completion is not async,
+                # and we didn't find an async version in litellm
+                acompletion_call = (
+                    litellm_acompletion
+                    if self.config.litellm
+                    else self.async_client.completions.create
+                )
+                if self.config.litellm and settings.debug:
+                    kwargs["logger_fn"] = litellm_logging_fn
+                # If it's not in the cache, call the API
+                result = await acompletion_call(**kwargs)
+                self._cache_store(hashed_key, result.model_dump())
+            return cached, hashed_key, result
 
-            cached, hashed_key, response = await completions_with_backoff(
-                model=self.config.completion_model,
-                prompt=prompt,
-                max_tokens=max_tokens,
-                temperature=self.config.temperature,
-                echo=False,
-                stream=False,
-            )
+        kwargs: Dict[str, Any] = dict(model=self.config.completion_model)
+        if self.config.litellm:
+            # TODO this is a temp fix, we should really be using a proper completion fn
+            # that takes a pre-formatted prompt, rather than mocking it as a sys msg.
+            kwargs["messages"] = [dict(content=prompt, role=Role.SYSTEM)]
+        else:  # any other OpenAI-compatible endpoint
+            kwargs["prompt"] = prompt
+        cached, hashed_key, response = await completions_with_backoff(
+            **kwargs,
+            max_tokens=max_tokens,
+            stream=False,
+        )
+        if not isinstance(response, dict):
+            response = response.dict()
+        if "message" in response["choices"][0]:
+            msg = response["choices"][0]["message"]["content"].strip()
+        else:
             msg = response["choices"][0]["text"].strip()
         return LLMResponse(message=msg, cached=cached)
 
@@ -842,7 +958,9 @@ class OpenAIGPT(LanguageModel):
                     `formatter` must be specified in config to use completion for chat.
                     """
                 )
-            formatter = PromptFormatter.create(self.config.formatter)
+            formatter = HFFormatter(
+                HFPromptFormatterConfig(model_name=self.config.formatter)
+            )
             if isinstance(messages, str):
                 messages = [
                     LLMMessage(
@@ -879,15 +997,22 @@ class OpenAIGPT(LanguageModel):
                 """
             )
         # turn off streaming for async calls
-        if self.config.use_completion_for_chat and not self.is_openai_chat_model():
-            # only makes sense for local models
+        if (
+            self.config.use_completion_for_chat
+            and not self.is_openai_chat_model()
+            and not self.is_openai_completion_model()
+        ):
+            # only makes sense for local models, where we are trying to
+            # convert a chat dialog msg-sequence to a simple completion prompt.
             if self.config.formatter is None:
                 raise ValueError(
                     """
                     `formatter` must be specified in config to use completion for chat.
                     """
                 )
-            formatter = PromptFormatter.create(self.config.formatter)
+            formatter = HFFormatter(
+                HFPromptFormatterConfig(model_name=self.config.formatter)
+            )
             if isinstance(messages, str):
                 messages = [
                     LLMMessage(
@@ -912,7 +1037,7 @@ class OpenAIGPT(LanguageModel):
         if result is not None:
             cached = True
             if settings.debug:
-                print("[red]CACHED[/red]")
+                print("[grey37]CACHED[/grey37]")
         else:
             if self.config.litellm:
                 from litellm import completion as litellm_completion
@@ -922,6 +1047,8 @@ class OpenAIGPT(LanguageModel):
                 if self.config.litellm
                 else self.client.chat.completions.create
             )
+            if self.config.litellm and settings.debug:
+                kwargs["logger_fn"] = litellm_logging_fn
             result = completion_call(**kwargs)
             if not self.get_stream():
                 # if streaming, cannot cache result
@@ -938,7 +1065,7 @@ class OpenAIGPT(LanguageModel):
         if result is not None:
             cached = True
             if settings.debug:
-                print("[red]CACHED[/red]")
+                print("[grey37]CACHED[/grey37]")
         else:
             if self.config.litellm:
                 from litellm import acompletion as litellm_acompletion
@@ -947,6 +1074,8 @@ class OpenAIGPT(LanguageModel):
                 if self.config.litellm
                 else self.async_client.chat.completions.create
             )
+            if self.config.litellm and settings.debug:
+                kwargs["logger_fn"] = litellm_logging_fn
             # If it's not in the cache, call the API
             result = await acompletion_call(**kwargs)
             if not self.get_stream():
@@ -971,22 +1100,17 @@ class OpenAIGPT(LanguageModel):
         # Azure uses different parameters. It uses ``engine`` instead of ``model``
         # and the value should be the deployment_name not ``self.config.chat_model``
         chat_model = self.config.chat_model
-        key_name = "model"
         if self.config.type == "azure":
             if hasattr(self, "deployment_name"):
                 chat_model = self.deployment_name
 
         args: Dict[str, Any] = dict(
-            **{key_name: chat_model},
+            model=chat_model,
             messages=[m.api_dict() for m in llm_messages],
             max_tokens=max_tokens,
-            n=1,
-            stop=None,
-            temperature=self.config.temperature,
             stream=self.get_stream(),
         )
-        if self.config.seed is not None:
-            args.update(dict(seed=self.config.seed))
+        args.update(self._openai_api_call_params(args))
         # only include functions-related args if functions are provided
         # since the OpenAI API will throw an error if `functions` is None or []
         if functions is not None:

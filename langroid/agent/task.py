@@ -17,6 +17,7 @@ from typing import (
 )
 
 from rich import print
+from rich.markup import escape
 
 from langroid.agent.base import Agent
 from langroid.agent.chat_agent import ChatAgent
@@ -711,9 +712,9 @@ class Task:
         if self.pending_message is None:
             return
         if settings.debug:
-            sender_str = str(self.pending_sender)
-            msg_str = str(self.pending_message)
-            print(f"[red][{sender_str}]{msg_str}")
+            sender_str = escape(str(self.pending_sender))
+            msg_str = escape(str(self.pending_message))
+            print(f"[grey37][{sender_str}]{msg_str}[/grey37]")
 
     def _parse_routing(self, msg: ChatDocument | str) -> Tuple[bool | None, str | None]:
         """
@@ -929,7 +930,7 @@ class Task:
         for _ in range(history):
             if p is None:
                 break
-            n_no_answers += NO_ANSWER in p.content
+            n_no_answers += p.content.strip() == NO_ANSWER
             n_empty_answers += p.content.strip() == "" and p.function_call is None
             if p.metadata.sender != Entity.LLM and PASS not in p.content:
                 counter.update([p.metadata.sender + ":" + p.content])
@@ -1013,7 +1014,7 @@ class Task:
         return (
             result is not None
             and not self._is_empty_message(result)
-            and NO_ANSWER not in result.content
+            and result.content.strip() != NO_ANSWER
         )
 
     def log_message(

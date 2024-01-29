@@ -1,25 +1,18 @@
 """
 Function-calling example using a local LLM, with ollama.
 
-"Function-calling" refers to the ability to ability of the LLM to generate
+"Function-calling" refers to the ability of the LLM to generate
 a structured response, typically a JSON object, instead of a plain text response,
 which is then interpreted by your code to perform some action.
 This is also referred to in various scenarios as "Tools", "Actions" or "Plugins".
 
-# (1) Mac: Install latest ollama, then do this:
-# ollama pull mistral:7b-instruct-v0.2-q4_K_M"
+Run like this --
 
-# (2) Ensure you've installed the `litellm` extra with Langroid, e.g.
-# pip install langroid[litellm], or if you use the `pyproject.toml` in this repo
-# you can simply use `poetry install`
+python3 examples/basic/fn-call-local-simple.py -m <local_model_name>
 
-# (3) Run like this:
+See here for how to set up a Local LLM to work with Langroid:
+https://langroid.github.io/langroid/tutorials/local-llm-setup/
 
-python3 examples/docqa/fn-call-local-simple.py
-
-To change the local model, use the optional arg -m <local_model>.
-See this [script](https://github.com/langroid/langroid-examples/blob/main/examples/docqa/rag-local-simple.py)
-for other ways to specify the local_model.
 
 """
 import os
@@ -34,7 +27,7 @@ import langroid.language_models as lm
 from langroid.agent.chat_document import ChatDocument
 
 # for best results:
-DEFAULT_LLM = "litellm/ollama/mixtral:8x7b-instruct-v0.1-q4_K_M"
+DEFAULT_LLM = lm.OpenAIChatModel.GPT4_TURBO
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
@@ -66,10 +59,6 @@ class CityTool(lr.agent.ToolMessage):
     SIMPLY ASK IN NATURAL LANGUAGE.
     """
     city_info: City = Field(..., description="information about a city")
-
-    @staticmethod
-    def json_group_instruction() -> str:
-        return ""
 
     def handle(self) -> str:
         """Handle LLM's structured output if it matches City structure"""
@@ -109,10 +98,12 @@ class CityTool(lr.agent.ToolMessage):
 
 
 def app(
-    m: str = DEFAULT_LLM,
-    d: bool = False,
+    m: str = DEFAULT_LLM,  # model
+    d: bool = False,  # pass -d to enable debug mode (see prompts etc)
+    nc: bool = False,  # pass -nc to disable cache-retrieval (i.e. get fresh answers)
 ):
     settings.debug = d
+    settings.cache = not nc
     # create LLM config
     llm_cfg = lm.OpenAIGPTConfig(
         chat_model=m or DEFAULT_LLM,
@@ -155,7 +146,7 @@ def app(
         
         
         START BY ASKING ME TO GIVE YOU A CITY NAME. 
-        DO NOT SAY ANYTHING YOU GET A CITY NAME.
+        DO NOT SAY ANYTHING UNTIL YOU GET A CITY NAME.
 
         """,
     )
@@ -168,7 +159,7 @@ def app(
 
     # (5) Create task and run it to start an interactive loop
     task = lr.Task(agent)
-    task.run()
+    task.run("Start by asking me for a city name")
 
 
 if __name__ == "__main__":
