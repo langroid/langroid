@@ -3,13 +3,32 @@ Two-agent chat with Retrieval-augmented LLM + function-call/tool.
 ExtractorAgent (has no access to docs) is tasked with extracting structured
 information from a commercial lease document, and must present the terms in
 a specific nested JSON format.
-DocAgent (has access to the lease) helps answer questions about the lease.
-Repeat: WriterAgent --Question--> DocAgent --> Answer
+This agent generates questions corresponding to each field in the JSON format,
+and the RAG-enabled DocAgent (has access to the lease) answers the  questions.
+
 
 Example:
 python3 examples/docqa/chat_multi_extract.py
 
-Use -f option to use OpenAI function calling API instead of Langroid tool.
+This uses a GPT4 model by default, but works very well with the `dolphin-mixtral`
+local LLM, which you can specify via the -m arg:
+
+```
+ollama run dolphin-mixtral
+
+python3 examples/docqa/chat_multi_extract.py -m litellm/ollama_chat/dolphin-mixtral:latest
+```
+
+The challenging parts in this script are agent-to-agent delegation, and the extractor
+agent planning out a sequence of questions to ask the doc agent, and finally presenting
+the collected information in a structured format to the user using a Tool/Function-call.
+The `dolphin-mixtral` model seems to handle this pretty well, however weaker models
+may not be able to handle this.
+
+For weaker LLMs, the script examples/docqa/chat-multi-extract-local.py performs a similar task
+but uses a workflow where agents do not delegate to each other,
+and uses more agents to break down tasks into smaller parts.
+
 """
 import typer
 from rich import print
@@ -115,7 +134,7 @@ def main(
     )
     llm_cfg = OpenAIGPTConfig(
         chat_model=model or lm.OpenAIChatModel.GPT4_TURBO,
-        chat_context_length=4096,
+        chat_context_length=16_000,  # adjust based on model
     )
     doc_agent = DocChatAgent(
         DocChatAgentConfig(
