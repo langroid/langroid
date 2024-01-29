@@ -119,11 +119,6 @@ async def test_agents_with_recipient(
     # then the validator will ask for clarification
     task_planner.add_sub_task(task_multiplier)
 
-    # ... since human has nothing to say
-    master.default_human_response = ""
-    planner.default_human_response = ""
-    multiplier.default_human_response = ""
-
     result = await task_master.run_async()
 
     answers = [str(eval(e)) for e in EXPONENTIALS.split()]

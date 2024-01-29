@@ -160,6 +160,8 @@ class Task:
         self.name = name or agent.config.name
         self.value: str = self.name
         self.default_human_response = default_human_response
+        if default_human_response is not None and default_human_response == "":
+            interactive = False
         self.interactive = interactive
         self.message_history_idx = -1
         if interactive:
