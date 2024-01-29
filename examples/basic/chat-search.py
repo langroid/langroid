@@ -1,6 +1,6 @@
 """
 This is a basic example of a chatbot that uses the GoogleSearchTool
-or SciPhiSearchRAGTool to answer questions.
+or SciPhiSearchRAGTool or MetaphorSearchTool to answer questions.
 When the LLM doesn't know the answer to a question, it will use the tool to
 search the web for relevant results, and then use the results to answer the
 question.
@@ -11,7 +11,7 @@ python3 examples/basic/chat-search.py
 
 There are optional args, especially note these:
 
--p or --provider: google or sciphi (default: google)
+-p or --provider: google or sciphi or metaphor (default: google)
 -m <model_name>: to run with a different LLM model (default: gpt4-turbo)
 
 See the comments at the top of this script for more on how to specify local LLMs:
