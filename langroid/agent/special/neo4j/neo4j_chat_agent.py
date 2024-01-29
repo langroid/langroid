@@ -2,7 +2,7 @@ import json
 import logging
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
-from pydantic import BaseSettings
+from pydantic import BaseModel, BaseSettings
 from rich import print
 from rich.console import Console
 
@@ -56,22 +56,9 @@ class Neo4jSettings(BaseSettings):
         env_prefix = "NEO4J_"
 
 
-class QueryResult:
-    def __init__(
-        self, success: bool, data: Optional[Union[str, List[Dict[Any, Any]]]] = None
-    ):
-        """
-        A class to encapsulate the result of a database query,
-        for both read and write operations.
-
-        Attributes:
-            success (bool): True if the query was executed successfully,
-            False otherwise.
-            data (Optional[Union[str, List[Dict]]]): The result of the query
-                        if successful, or an error message if the query failed.
-        """
-        self.success = success
-        self.data = data
+class QueryResult(BaseModel):
+    success: bool
+    data: Optional[Union[str, List[Dict[Any, Any]]]] = None
 
 
 class Neo4jChatAgentConfig(ChatAgentConfig):

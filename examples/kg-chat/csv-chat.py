@@ -31,16 +31,12 @@ def main(
         False, "--tools", "-t", help="use langroid tools instead of function-calling"
     ),
     nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
-    cache_type: str = typer.Option(
-        "redis", "--cachetype", "-ct", help="redis or momento"
-    ),
 ) -> None:
     set_global(
         Settings(
             debug=debug,
             cache=nocache,
             stream=not no_stream,
-            cache_type=cache_type,
         )
     )
     print(
@@ -60,7 +56,10 @@ def main(
             use_tools=tools,
             use_functions_api=not tools,
             llm=OpenAIGPTConfig(
-                chat_model=OpenAIChatModel.GPT4_TURBO,
+                chat_model=model or OpenAIChatModel.GPT4_TURBO,
+                chat_context_length=16_000,  # adjust based on model
+                temperature=0.2,
+                timeout=45,
             ),
         ),
     )
@@ -69,10 +68,12 @@ def main(
 
     buid_kg = Prompt.ask(
         "Do you want to build the graph database from a CSV file? (y/n)",
+        default="y",
     )
     if buid_kg == "y":
         csv_location = Prompt.ask(
             "Please provide the path/URL to the CSV",
+            default="examples/docqa/data/imdb-drama.csv",
         )
 
         csv_dataframe = _load_csv_dataset(csv_location)
