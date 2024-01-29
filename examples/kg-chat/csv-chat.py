@@ -116,7 +116,7 @@ def main(
 
             csv_kg_chat_agent.csv_dataframe = csv_dataframe
             csv_kg_chat_agent.csv_location = csv_location
-            print(csv_dataframe.head(3))
+
             build_kg_instructions = f"""
                 Your task is to build a knowledge graph based on a CSV file. 
                 
