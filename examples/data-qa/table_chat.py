@@ -5,6 +5,22 @@ csv, tsv, or any other pandas-readable.
 Run like this
 
 python3 examples/data-qa/table_chat.py
+
+Optional args:
+* -d or --debug to enable debug mode
+* -ns or --nostream to disable streaming
+* -nc or --nocache to disable caching
+* -m or --model to specify a model name
+
+To run with a local model via ollama, do this:
+```
+ollama run dolphin-mixtral # best model for this script
+
+python3 examples/data-qa/table_chat.py -m litellm/ollama_chat/dolphin-mixtral:latest
+```
+
+For more info on running Langroid with local LLM, see here:
+https://langroid.github.io/langroid/tutorials/local-llm-setup/
 """
 import typer
 from rich.prompt import Prompt
