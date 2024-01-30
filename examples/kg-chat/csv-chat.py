@@ -27,7 +27,7 @@ To run with a local model via ollama, do this:
 ```
 ollama run dolphin-mixtral # best model for this script
 
-python3 examples/data-qa/table_chat.py -m litellm/ollama_chat/dolphin-mixtral:latest
+python3 examples/kg-chat/csv-chat.py -m litellm/ollama_chat/dolphin-mixtral:latest
 ```
 
 For more info on running Langroid with local LLM, see here:
