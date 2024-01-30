@@ -86,12 +86,18 @@ infromation.
 This example uses a `CSVGraphAgent` 
 (derived from [`Neo4jChatAgent`](https://github.com/langroid/langroid/blob/main/langroid/agent/special/neo4j/neo4j_chat_agent.py)).
 
-The `CSVGraphAgent` allows users to ask questions about a CSV file by converting it into a knowledge graph. This enables capturing complex relationships that cannot be easily handled by libraries like `pandas`.
+The `CSVGraphAgent` allows users to ask questions about a CSV file by 
+automatically converting it into a Neo4j knowledge graph using Cypher queries. 
+This enables capturing complex relationships that cannot be easily
+handled by libraries like `pandas`.
 
-If the CSV knowledge graph has not been constructed beforehand, the `CSVGraphAgent` provides the `pandas_to_kg` tool/function-call to create the necessary nodes and relationships from the CSV file. Once the CSV knowledge graph is constructed, the `CSVGraphAgent` can answer questions related to the CSV knowledge graph. The `CSVGraphAgent` has access to this tools/function-calls:
+If the CSV knowledge graph has not been constructed beforehand, the `CSVGraphAgent`
+provides the `pandas_to_kg` tool/function-call to create the necessary nodes and
+relationships from the CSV file. Once the CSV knowledge graph is constructed,
+the `CSVGraphAgent` can answer questions related to the CSV knowledge graph.
+The `CSVGraphAgent` has access to this tool/function-call:
 
 - `PandasToKGTool`: convert a `pandas` DataFrame into a CSV knowledge graph.
-
 
 ### Running the example
 
@@ -100,15 +106,30 @@ Run like this:
 python3 examples/kg-chat/csv-chat.py
 ```
 
-The `CSVGraphAgent` will have a dialogue with the user to determine if they need to construct the knowledge graph. If the user chooses to construct the knowledge graph, they will be prompted to provide the location of the CSV file (URL or local file).
+The `CSVGraphAgent` will have a dialog with the user to determine if they need to
+construct the knowledge graph. If the user chooses to construct the knowledge graph, they
+will be prompted to provide the location of the CSV file (URL or local file).
 
 Under the hood, the agent will:
+
 - Attempt to clean the CSV file after parsing it as a `DataFrame`.
 - Determine node labels and relationships.
-- Create the nodes and relationships in the CSV knowledge graph.
+- Create the nodes and relationships in the Neo4j knowledge graph.
 
-After constructing the CSV knowledge graph, you can ask the `CSVGraphAgent` any question about the CSV knowledge graph. You can use [this IMDB CSV file](https://raw.githubusercontent.com/langroid/langroid-examples/main/examples/docqa/data/movies/IMDB.csv) or you can use your own CSV file.
+After constructing the CSV knowledge graph, you can ask the `CSVGraphAgent` any question
+about the CSV knowledge graph. You can use [this IMDB CSV file](https://raw.githubusercontent.com/langroid/langroid-examples/main/examples/docqa/data/movies/IMDB.csv) 
+or you can use your own CSV file.
 
 **NOTES:**
-- The agent will warn you if the CSV file is too large before proceeding with constructing the CSV knowledge graph. It will also give you the option to proceed with constructing the CSV knowledge graph based on a sample of the CSV file (i.e., a specified number of rows).
-- The agent uses the function `_preprocess_dataframe_for_neo4j()` to clean the CSV file by removing rows that have empty values. However, you can provide your own function to clean the CSV file.
+
+- Unlike some other CSV -> Neo4j examples out there, here we are relying on the LLM
+  to infer nodes and relationships from the CSV file, and generate the necessary
+    Cypher queries to create the CSV knowledge graph. This is more flexible than
+    a hard-coded approach.
+- The agent will warn you if the CSV file is too large before proceeding with
+  constructing the CSV knowledge graph. It will also give you the option to proceed with
+  constructing the CSV knowledge graph based on a sample of the CSV file (i.e., a
+  specified number of rows).
+- The agent uses the function `_preprocess_dataframe_for_neo4j()` to clean the CSV file
+  by removing rows that have empty values. However, you can provide your own function to
+  clean the CSV file.
