@@ -1,7 +1,7 @@
 from typing import List, Optional
 
+import pandas as pd
 import typer
-from pandas import DataFrame, read_csv
 from rich.console import Console
 
 from langroid.agent.special.neo4j.neo4j_chat_agent import (
@@ -9,37 +9,45 @@ from langroid.agent.special.neo4j.neo4j_chat_agent import (
     Neo4jChatAgentConfig,
 )
 from langroid.agent.tool_message import ToolMessage
+from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
+from langroid.parsing.table_loader import read_tabular_data
+from langroid.prompts.prompts_config import PromptsConfig
+from langroid.vector_store.base import VectorStoreConfig
 
 console = Console()
 app = typer.Typer()
 
 
-def _load_csv_dataset(csv_location: str) -> DataFrame:
-    """
-    Load a CSV dataset from a given file path or URL.
+BUILD_KG_INSTRUCTIONS = """
+    Your task is to build a knowledge graph based on a CSV file. 
+    
+    You need to generate the graph database based on this
+    header: 
+    
+    {header}
+    
+    and these sample rows: 
+    
+    {sample_rows}. 
+    
+    Leverage the above information to: 
+    - Define node labels and their properties
+    - Infer relationships
+    - Infer constraints 
+    ASK me if you need further information to figure out the schema.
+    You can use the tool/function `pandas_to_kg` to display and confirm 
+    the nodes and relationships.
+"""
 
-    This function reads a CSV file from the specified path or URL into a pandas
-        DataFrame. It handles exceptions that may occur during file reading.
-
-    Returns:
-    DataFrame: A DataFrame containing the data loaded from the CSV file.
-
-    Raises:
-    Exception: An error occurred while trying to read the CSV file.
-
-    Note:
-    The function assumes the CSV file has a header row.
-    """
-    try:
-        df = read_csv(csv_location)
-        return df
-    except Exception as e:
-        raise Exception(f"Error occurred while reading the CSV file: {e}")
+DEFAULT_CSV_KG_CHAT_SYSTEM_MESSAGE = """
+    You are an expert in Knowledge Graphs and analyzing them using Neo4j.
+    You will be asked to answer questions based on the knowledge graph.
+"""
 
 
 def _preprocess_dataframe_for_neo4j(
-    df: DataFrame, default_value: Optional[str] = None, remove_null_rows: bool = True
-) -> DataFrame:
+    df: pd.DataFrame, default_value: Optional[str] = None, remove_null_rows: bool = True
+) -> pd.DataFrame:
     """
     Preprocess a DataFrame for Neo4j import by fixing mismatched quotes in string
         columns and handling null or missing values.
@@ -72,6 +80,25 @@ def _preprocess_dataframe_for_neo4j(
     return df
 
 
+class CSVGraphAgentConfig(Neo4jChatAgentConfig):
+    system_message: str = DEFAULT_CSV_KG_CHAT_SYSTEM_MESSAGE
+    user_message: None | str = None
+    cache: bool = True  # cache results
+    debug: bool = False
+    stream: bool = True  # allow streaming where needed
+    data: str | pd.DataFrame | None  # data file, URL, or DataFrame
+    separator: None | str = None  # separator for data file
+    vecdb: None | VectorStoreConfig = None
+    llm: OpenAIGPTConfig = OpenAIGPTConfig(
+        type="openai",
+        chat_model=OpenAIChatModel.GPT4,
+        completion_model=OpenAIChatModel.GPT4,
+    )
+    prompts: PromptsConfig = PromptsConfig(
+        max_tokens=1000,
+    )
+
+
 class PandasToKGTool(ToolMessage):
     request: str = "pandas_to_kg"
     purpose: str = """Use this tool to create ONLY nodes and their relationships based
@@ -102,12 +129,33 @@ class PandasToKGTool(ToolMessage):
         ]
 
 
-class CSVChatGraphAgent(Neo4jChatAgent):
-    def __init__(self, config: Neo4jChatAgentConfig):
+class CSVGraphAgent(Neo4jChatAgent):
+    def __init__(self, config: CSVGraphAgentConfig):
+        formatted_build_instr = ""
+        if isinstance(config.data, pd.DataFrame):
+            df = config.data
+            self.df = df
+        else:
+            if config.data:
+                df = read_tabular_data(config.data, config.separator)
+                df_cleaned = _preprocess_dataframe_for_neo4j(df)
+
+                df_cleaned.columns = df_cleaned.columns.str.strip().str.replace(
+                    " +", "_", regex=True
+                )
+
+                self.df = df_cleaned
+
+                formatted_build_instr = BUILD_KG_INSTRUCTIONS.format(
+                    header=self.df.columns, sample_rows=self.df.head(3)
+                )
+
+        config.system_message = config.system_message + formatted_build_instr
         super().__init__(config)
+
         self.config: Neo4jChatAgentConfig = config
-        self.csv_location: None | str = None
-        self.csv_dataframe: None | DataFrame = None
+
+        self.enable_message(PandasToKGTool)
 
     def pandas_to_kg(self, msg: PandasToKGTool) -> str:
         """
@@ -122,10 +170,8 @@ class CSVChatGraphAgent(Neo4jChatAgent):
             str: A string indicating the success or failure of the operation.
         """
         with console.status("[cyan]Generating graph database..."):
-            if self.csv_dataframe is not None and hasattr(
-                self.csv_dataframe, "iterrows"
-            ):
-                for index, row in self.csv_dataframe.iterrows():
+            if self.df is not None and hasattr(self.df, "iterrows"):
+                for counter, (index, row) in enumerate(self.df.iterrows()):
                     row_dict = row.to_dict()
                     response = self.write_query(
                         msg.cypherQuery,
@@ -134,6 +180,6 @@ class CSVChatGraphAgent(Neo4jChatAgent):
                     # there is a possibility the generated cypher query is not correct
                     # so we need to check the response before continuing to the
                     # iteration
-                    if index == 0 and not response.success:
+                    if counter == 0 and not response.success:
                         return str(response.data)
             return "Graph database successfully generated"

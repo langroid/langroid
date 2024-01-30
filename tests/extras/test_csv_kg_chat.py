@@ -2,19 +2,26 @@ import pandas as pd
 import pytest
 from dotenv import load_dotenv
 
-from langroid.agent.special.neo4j.csv_kg_chat import CSVChatGraphAgent, PandasToKGTool
+from langroid.agent.special.neo4j.csv_kg_chat import (
+    CSVGraphAgent,
+    CSVGraphAgentConfig,
+    PandasToKGTool,
+)
 from langroid.agent.special.neo4j.neo4j_chat_agent import (
-    Neo4jChatAgentConfig,
     Neo4jSettings,
 )
+
+# Create a dummy DataFrame
+data = {"name": ["Alice", "Bob"], "age": [25, 30], "city": ["New York", "London"]}
+df = pd.DataFrame(data)
 
 
 @pytest.fixture
 def csv_chat_agent(request):
     load_dotenv()
     neo4j_settings = Neo4jSettings()
-    config = Neo4jChatAgentConfig(neo4j_settings=neo4j_settings)
-    agent = CSVChatGraphAgent(config)
+    config = CSVGraphAgentConfig(data=df, neo4j_settings=neo4j_settings)
+    agent = CSVGraphAgent(config)
 
     def teardown():
         # Remove the database
@@ -36,12 +43,8 @@ def test_pandas_to_kg(csv_chat_agent):
     # Create a mock PandasToKGTool object
     msg = PandasToKGTool(cypherQuery=cypher_query, args=df_columns)
 
-    # Create a dummy DataFrame
-    data = {"name": ["Alice", "Bob"], "age": [25, 30], "city": ["New York", "London"]}
-    df = pd.DataFrame(data)
-
-    # Set the DataFrame in the agent
-    csv_chat_agent.csv_dataframe = df
+    # # Set the DataFrame in the agent
+    # csv_chat_agent.df = df
 
     # Call the method being tested
     result = csv_chat_agent.pandas_to_kg(msg)

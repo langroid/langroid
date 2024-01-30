@@ -4,15 +4,10 @@ from rich import print
 from rich.console import Console
 from rich.prompt import Prompt
 
-from langroid.agent.special.neo4j.neo4j_chat_agent import (
-    Neo4jChatAgentConfig,
-    Neo4jSettings,
-)
+from langroid.agent.special.neo4j.neo4j_chat_agent import Neo4jSettings
 from langroid.agent.special.neo4j.csv_kg_chat import (
-    CSVChatGraphAgent,
-    PandasToKGTool,
-    _load_csv_dataset,
-    _preprocess_dataframe_for_neo4j,
+    CSVGraphAgent,
+    CSVGraphAgentConfig,
 )
 from langroid.agent.task import Task
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
@@ -46,26 +41,6 @@ def main(
         """
     )
 
-    load_dotenv()
-
-    neo4j_settings = Neo4jSettings()
-
-    csv_kg_chat_agent = CSVChatGraphAgent(
-        config=Neo4jChatAgentConfig(
-            neo4j_settings=neo4j_settings,
-            use_tools=tools,
-            use_functions_api=not tools,
-            llm=OpenAIGPTConfig(
-                chat_model=model or OpenAIChatModel.GPT4_TURBO,
-                chat_context_length=16_000,  # adjust based on model
-                temperature=0.2,
-                timeout=45,
-            ),
-        ),
-    )
-
-    build_kg_instructions = ""
-
     buid_kg = Prompt.ask(
         "Do you want to build the graph database from a CSV file? (y/n)",
         default="y",
@@ -75,14 +50,30 @@ def main(
             "Please provide the path/URL to the CSV",
             default="examples/docqa/data/imdb-drama.csv",
         )
+    else:
+        csv_location = None
 
-        csv_dataframe = _load_csv_dataset(csv_location)
-        headers = csv_dataframe.columns.tolist()
+    load_dotenv()
 
-        # clean the CSV file before loading it into Neo4j
-        csv_dataframe = _preprocess_dataframe_for_neo4j(csv_dataframe)
+    neo4j_settings = Neo4jSettings()
 
-        num_rows = len(csv_dataframe)
+    csv_kg_chat_agent = CSVGraphAgent(
+        config=CSVGraphAgentConfig(
+            data=csv_location,
+            neo4j_settings=neo4j_settings,
+            use_tools=tools,
+            use_functions_api=not tools,
+            llm=OpenAIGPTConfig(
+                chat_model=model or OpenAIChatModel.GPT4_TURBO,
+                chat_context_length=16_000,  # adjust based on model
+                timeout=45,
+                temperature=0.2,
+            ),
+        ),
+    )
+
+    if buid_kg == "y":
+        num_rows = len(csv_kg_chat_agent.df)
 
         if num_rows > 1000:
             print(
@@ -107,7 +98,8 @@ def main(
                     rows...
                     """
                 )
-                csv_dataframe = csv_dataframe.sample(n=sample_size)
+                csv_kg_chat_agent.df = csv_kg_chat_agent.df.sample(n=sample_size)
+
             elif user_input_continue == "y":
                 print(
                     """
@@ -115,42 +107,10 @@ def main(
                     """
                 )
 
-            csv_kg_chat_agent.csv_dataframe = csv_dataframe
-            csv_kg_chat_agent.csv_location = csv_location
-
-            build_kg_instructions = f"""
-                Your task is to build a knowledge graph based on a CSV file. 
-                
-                You need to generate the graph database based on this
-                header: 
-                ```
-                {headers} 
-                ```
-                and these sample rows: 
-                ```
-                {csv_dataframe.head(3)}. 
-                ```
-                Leverage the above information to: 
-                - Define node labels and their properties
-                - Infer relationships
-                - Infer constraints 
-                ASK me if you need further information to figure out the schema.
-                You can use the tool/function `pandas_to_kg` to display and confirm 
-                the nodes and relationships.
-            """
-
-    csv_kg_chat_agent.enable_message(PandasToKGTool)
-
-    system_message = f"""
-    You are an expert in Knowledge Graphs and analyzing them using Neo4j.
-    You will be asked to answer questions based on the knowledge graph.
-    {build_kg_instructions}.
-    """
-
     csv_kg_chat_task = Task(
         csv_kg_chat_agent,
         name="CSVChatKG",
-        system_message=system_message,
+        interactive=True,
     )
 
     csv_kg_chat_task.run()
