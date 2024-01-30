@@ -68,16 +68,12 @@ def main(
     ),
     no_stream: bool = typer.Option(False, "--nostream", "-ns", help="no streaming"),
     nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
-    cache_type: str = typer.Option(
-        "redis", "--cachetype", "-ct", help="redis or momento"
-    ),
 ) -> None:
     set_global(
         Settings(
             debug=debug,
             cache=not nocache,
             stream=not no_stream,
-            cache_type=cache_type,
         )
     )
     print(
@@ -99,7 +95,7 @@ def main(
     llm_config = lm.OpenAIGPTConfig(
         chat_model=model or lm.OpenAIChatModel.GPT4_TURBO,
         chat_context_length=8_000,
-        temperature=0.2,
+        temperature=0,
         max_output_tokens=200,
         timeout=45,
     )
@@ -132,10 +128,17 @@ def main(
         agent,
         system_message=f"""
         You are a helpful assistant. You will try your best to answer my questions.
-        If you cannot answer from your OWN knowledge, you can do a WEB SEARCH
-        using the `{search_tool_handler_method}` tool/function-call, 
-        (request up to 5 results) to help you with answering the question.
-        Be very concise in your responses, use no more than 1-2 sentences.
+        Here is how you should answer my questions:
+        - IF my question is about a topic you ARE CERTAIN about, answer it directly
+        - OTHERWISE, use the `{search_tool_handler_method}` tool/function-call to
+          get up to 5 results from a web-search, to help you answer the question.
+          I will show you the results from the web-search, and you can use those
+          to answer the question.
+        - If I EXPLICITLY ask you to search the web/internet, then use the 
+            `{search_tool_handler_method}` tool/function-call to get up to 5 results
+            from a web-search, to help you answer the question.
+
+        Be very CONCISE in your responses, use no more than 1-2 sentences.
         When you answer based on a web search, First show me your answer, 
         and then show me the SOURCE(s) and EXTRACT(s) to justify your answer,
         in this format:

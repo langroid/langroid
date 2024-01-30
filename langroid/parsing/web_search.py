@@ -93,12 +93,12 @@ def metaphor_search(query: str, num_results: int = 5) -> List[WebSearchResult]:
 
     load_dotenv()
 
-    api_key = os.getenv("METAPHOR_API_KEY")
+    api_key = os.getenv("METAPHOR_API_KEY") or os.getenv("EXA_API_KEY")
     if not api_key:
         raise ValueError(
             """
-            METAPHOR_API_KEY is not set. 
-            Please set the METAPHOR_API_KEY environment variable.
+            Neither METAPHOR_API_KEY nor EXA_API_KEY environment variables are set. 
+            Please set one of them to your API key, and try again.
             """
         )
 
