@@ -538,9 +538,21 @@ class Task:
             return error_doc
 
         responders: List[Responder] = self.non_human_responders.copy()
-        if Entity.USER in self.responders and not self.human_tried:
-            # give human first chance if they haven't been tried in last step:
-            # ensures human gets chance at each turn.
+
+        if (
+            Entity.USER in self.responders
+            and not self.human_tried
+            and not self.agent.has_tool_message_attempt(self.pending_message)
+        ):
+            # Give human first chance if they haven't been tried in last step,
+            # and the msg is not a tool-call attempt;
+            # This ensures human gets a chance to respond,
+            #   other than to a LLM tool-call.
+            # When there's a tool msg attempt we want the
+            #  Agent to be the next responder; this only makes a difference in an
+            #  interactive setting: LLM generates tool, then we don't want user to
+            #  have to respond, and instead let the agent_response handle the tool.
+
             responders.insert(0, Entity.USER)
 
         found_response = False
@@ -620,9 +632,20 @@ class Task:
             return error_doc
 
         responders: List[Responder] = self.non_human_responders_async.copy()
-        if Entity.USER in self.responders_async and not self.human_tried:
-            # give human first chance if they haven't been tried in last step:
-            # ensures human gets chance at each turn.
+
+        if (
+            Entity.USER in self.responders
+            and not self.human_tried
+            and not self.agent.has_tool_message_attempt(self.pending_message)
+        ):
+            # Give human first chance if they haven't been tried in last step,
+            # and the msg is not a tool-call attempt;
+            # This ensures human gets a chance to respond,
+            #   other than to a LLM tool-call.
+            # When there's a tool msg attempt we want the
+            #  Agent to be the next responder; this only makes a difference in an
+            #  interactive setting: LLM generates tool, then we don't want user to
+            #  have to respond, and instead let the agent_response handle the tool.
             responders.insert(0, Entity.USER)
 
         found_response = False
