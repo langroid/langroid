@@ -212,6 +212,7 @@ class OpenAIGPTConfig(LLMConfig):
     # a string that roughly matches a HuggingFace chat_template,
     # e.g. "mistral-instruct-v0.2 (a fuzzy search is done to find the closest match)
     formatter: str | None = None
+    hf_formatter: HFFormatter | None = None
 
     def __init__(self, **kwargs) -> None:  # type: ignore
         local_model = "api_base" in kwargs and kwargs["api_base"] is not None
@@ -264,6 +265,7 @@ class OpenAIGPTConfig(LLMConfig):
                 """
             )
         litellm.telemetry = False
+        litellm.drop_params = True  # drop un-supported params without crashing
         self.seed = None  # some local mdls don't support seed
         keys_dict = litellm.validate_environment(self.chat_model)
         missing_keys = keys_dict.get("missing_keys", [])
@@ -367,6 +369,11 @@ class OpenAIGPT(LanguageModel):
             else:
                 # e.g. "local/localhost:8000/v1//mistral-instruct-v0.2"
                 self.config.formatter = formatter
+
+        if self.config.formatter is not None:
+            self.config.hf_formatter = HFFormatter(
+                HFPromptFormatterConfig(model_name=self.config.formatter)
+            )
 
         # if model name starts with "litellm",
         # set the actual model name by stripping the "litellm/" prefix
@@ -952,15 +959,12 @@ class OpenAIGPT(LanguageModel):
             )
         if self.config.use_completion_for_chat and not self.is_openai_chat_model():
             # only makes sense for non-OpenAI models
-            if self.config.formatter is None:
+            if self.config.formatter is None or self.config.hf_formatter is None:
                 raise ValueError(
                     """
                     `formatter` must be specified in config to use completion for chat.
                     """
                 )
-            formatter = HFFormatter(
-                HFPromptFormatterConfig(model_name=self.config.formatter)
-            )
             if isinstance(messages, str):
                 messages = [
                     LLMMessage(
@@ -968,7 +972,7 @@ class OpenAIGPT(LanguageModel):
                     ),
                     LLMMessage(role=Role.USER, content=messages),
                 ]
-            prompt = formatter.format(messages)
+            prompt = self.config.hf_formatter.format(messages)
             return self.generate(prompt=prompt, max_tokens=max_tokens)
         try:
             return self._chat(messages, max_tokens, functions, function_call)

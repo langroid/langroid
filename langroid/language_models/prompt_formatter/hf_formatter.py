@@ -63,6 +63,16 @@ class HFFormatter(PromptFormatter):
             raise ValueError(
                 f"Model {config.model_name} does not support chat template"
             )
+        else:
+            logger.warning(
+                f"""
+            Using HuggingFace {mdl.id} for prompt formatting: 
+            This is the CHAT TEMPLATE. If this is not what you intended,
+            consider specifying a more complete model name for the formatter.
+             
+            {self.tokenizer.chat_template}
+            """
+            )
 
     def format(self, messages: List[LLMMessage]) -> str:
         sys_msg, chat_msgs, user_msg = LanguageModel.get_chat_history_components(
