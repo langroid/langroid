@@ -536,6 +536,19 @@ class Agent(ABC):
         cdoc.metadata.tool_ids = [] if isinstance(msg, str) else msg.metadata.tool_ids
         return cdoc
 
+    def has_tool_message_attempt(self, msg: str | ChatDocument | None) -> bool:
+        """Check whether msg contains a Tool/fn-call attempt (by the LLM)"""
+        if msg is None:
+            return False
+        try:
+            tools = self.get_tool_messages(msg)
+            return len(tools) > 0
+        except ValidationError:
+            # there is a tool/fn-call attempt but had a validation error,
+            # so we still consider this a tool message "attempt"
+            return True
+        return False
+
     def get_tool_messages(self, msg: str | ChatDocument) -> List[ToolMessage]:
         if isinstance(msg, str):
             return self.get_json_tool_messages(msg)

@@ -1,7 +1,7 @@
 """
 Function-calling example using a local LLM, with ollama.
 
-"Function-calling" refers to the ability to ability of the LLM to generate
+"Function-calling" refers to the ability of the LLM to generate
 a structured response, typically a JSON object, instead of a plain text response,
 which is then interpreted by your code to perform some action.
 This is also referred to in various scenarios as "Tools", "Actions" or "Plugins".
@@ -43,6 +43,7 @@ from typing import List
 import fire
 
 import langroid as lr
+from langroid.language_models.openai_gpt import OpenAICallParams
 from langroid.utils.configuration import settings
 from langroid.agent.tool_message import ToolMessage
 import langroid.language_models as lm
@@ -125,9 +126,13 @@ def app(
         chat_model=m or DEFAULT_LLM,
         chat_context_length=16_000,  # for dolphin-mixtral
         max_output_tokens=100,
+        params=OpenAICallParams(
+            presence_penalty=0.8,
+            frequency_penalty=0.8,
+        ),
         temperature=0,
         stream=True,
-        timeout=45,
+        timeout=100,
     )
 
     # Recommended: First test if basic chat works with this llm setup as below:
@@ -191,7 +196,7 @@ def app(
 
     # (5) Create task and run it to start an interactive loop
     task = lr.Task(agent)
-    task.run("ONLY say this: 'What can I help with?' say NOTHING ELSE.")
+    task.run("Can you help me with some questions?")
 
 
 if __name__ == "__main__":

@@ -24,6 +24,41 @@ e.g.
 python3 examples/basic/chat-local.py -m litellm/ollama_chat/mistral:7b-instruct-v0.2-q8_0
 ```
 
+## Setup Ollama with a GGUF model from HuggingFace
+
+E.g. download the GGUF version of `dolphin-mixtral` from here:
+https://huggingface.co/TheBloke/dolphin-2.7-mixtral-8x7b-GGUF
+
+(specifically, download this file `dolphin-2.7-mixtral-8x7b.Q4_K_M.gguf`)
+
+To set up a custom ollama model based on this:
+
+- Save this model at a convenient place, e.g. `~/.ollama/models/`
+- Create a modelfile for this model. First see what an existing modelfile 
+  for a similar model looks like, e.g. by running: 
+
+```
+ollama show --modelfile dolphin-mixtral:latest
+```
+You will notice this file has a FROM line followed by a prompt template and other settings.
+Create a new file with these contents. 
+Only  change the  `FROM ...` line with the path to the model you downloaded, e.g.
+```
+FROM /Users/blah/.ollama/models/dolphin-2.7-mixtral-8x7b.Q4_K_M.gguf
+```
+- Save this modelfile somewhere, e.g. `~/.ollama/modelfiles/dolphin-mixtral-gguf`
+- Create a new ollama model based on this file:
+```
+ollama create dolphin-mixtral-gguf -f ~/.ollama/modelfiles/dolphin-mixtral-gguf
+``` 
+
+- Run this new model using `ollama run dolphin-mixtral-gguf`
+
+To use this model with Langroid you can then specify `dolphin-mixtral-gguf` 
+as the `chat_model` param in the `OpenAIGPTConfig` as in the previous section.
+When a script supports it, you can also pass in the model name via 
+`-m litellm/ollama_chat/dolphin-mixtral-gguf`
+
 
 ## Harder: with oobabooga
 Unlike Ollama, oobabooga provides an OpenAI-API-compatible API server, see 
