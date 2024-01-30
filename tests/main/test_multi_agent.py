@@ -160,11 +160,6 @@ def test_multi_agent(test_settings: Settings):
     # multiplier helps planner...
     task_planner.add_sub_task(task_multiplier)
 
-    # ... since human has nothing to say
-    master.default_human_response = ""
-    planner.default_human_response = ""
-    multiplier.default_human_response = ""
-
     result = task_master.run()
 
     answers = [str(eval(e)) for e in EXPONENTIALS.split()]
@@ -205,7 +200,7 @@ def test_multi_agent_directed(test_settings: Settings):
     task_b = Task(
         agent_b,
         system_message=f"your job is to always say '{B_RESPONSE}'",
-        default_human_response="",
+        interactive=False,
         done_if_no_response=[Entity.LLM],
         done_if_response=[Entity.LLM],
     )

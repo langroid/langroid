@@ -10,7 +10,7 @@ the code and returns the result as a string.
 import io
 import logging
 import sys
-from typing import List, no_type_check
+from typing import List, Optional, no_type_check
 
 import numpy as np
 import pandas as pd
@@ -23,7 +23,7 @@ from langroid.agent.tool_message import ToolMessage
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
 from langroid.parsing.table_loader import read_tabular_data
 from langroid.prompts.prompts_config import PromptsConfig
-from langroid.utils.constants import DONE, PASS
+from langroid.utils.constants import DONE
 from langroid.vector_store.base import VectorStoreConfig
 
 logger = logging.getLogger(__name__)
@@ -34,7 +34,7 @@ DEFAULT_TABLE_CHAT_SYSTEM_MESSAGE = f"""
 You are a savvy data scientist, with expertise in analyzing tabular datasets,
 using Python and the Pandas library for dataframe manipulation.
 Since you do not have access to the dataframe 'df', you
-will need to use the `run_code` tool/function-call to answer the question.
+will need to use the `run_code` tool/function-call to answer my questions.
 Here is a summary of the dataframe:
 {{summary}}
 Do not assume any columns other than those shown.
@@ -48,9 +48,9 @@ If you receive a null or other unexpected result, see if you have made an assump
 in your code, and try another way, or use `run_code` to explore the dataframe 
 before submitting your final code. 
 
-Once you have the answer to the question, say {DONE} and show me the answer.
-If you receive an error message, try using the `run_code` tool/function 
-again with the corrected code. 
+Once you have the answer to the question, possibly after a few steps,
+say {DONE} and show me the answer. If you receive an error message, 
+try using the `run_code` tool/function again with the corrected code. 
 
 VERY IMPORTANT: When using the `run_code` tool/function, DO NOT EXPLAIN ANYTHING,
    SIMPLY USE THE TOOL, with the CODE.
@@ -129,6 +129,7 @@ class RunCodeTool(ToolMessage):
     purpose: str = """
             To run <code> on the dataframe 'df' and 
             return the results to answer a question.
+            IMPORTANT: ALL the code should be in the <code> field.
             """
     code: str
 
@@ -144,6 +145,8 @@ class TableChatAgent(ChatAgent):
     """
     Agent for chatting with a collection of documents.
     """
+
+    sent_code: bool = False
 
     def __init__(self, config: TableChatAgentConfig):
         if isinstance(config.data, pd.DataFrame):
@@ -169,6 +172,15 @@ class TableChatAgent(ChatAgent):
         # enable the agent to use and handle the RunCodeTool
         self.enable_message(RunCodeTool)
 
+    def user_response(
+        self,
+        msg: Optional[str | ChatDocument] = None,
+    ) -> Optional[ChatDocument]:
+        response = super().user_response(msg)
+        if response is not None and response.content != "":
+            self.sent_code = False
+        return response
+
     def run_code(self, msg: RunCodeTool) -> str:
         """
         Handle a RunCodeTool message by running the code and returning the result.
@@ -178,6 +190,7 @@ class TableChatAgent(ChatAgent):
         Returns:
             str: The result of running the code along with any print output.
         """
+        self.sent_code = True
         code = msg.code
         # Create a dictionary that maps 'df' to the actual DataFrame
         local_vars = {"df": self.df}
@@ -230,14 +243,13 @@ class TableChatAgent(ChatAgent):
     ) -> str | ChatDocument | None:
         """Handle scenario where LLM forgets to say DONE or forgets to use run_code"""
         if isinstance(msg, ChatDocument) and msg.metadata.sender == lr.Entity.LLM:
-            return f"""
-                You either:
-                
-                (A) forgot to use the `run_code` tool/function to find the answer,
-                        ==> In this case re-try using the `run_code` tool/function. 
-                OR 
-                
-                (B) forgot to say {DONE} after you found the answer.
-                        ==> In this case say "{DONE} {PASS}"
-                """
+            if self.sent_code:
+                return DONE
+            else:
+                return """
+                    You forgot to use the `run_code` tool/function to find the answer.
+                    Try again using the `run_code` tool/function.
+                    Remember that ALL your code, including imports, 
+                    should be in the `code` field.
+                    """
         return None
