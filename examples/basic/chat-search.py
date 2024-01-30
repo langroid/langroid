@@ -1,6 +1,9 @@
 """
-This is a basic example of a chatbot that uses the GoogleSearchTool
-or SciPhiSearchRAGTool or MetaphorSearchTool to answer questions.
+This is a basic example of a chatbot that uses one of these web-search Tools to
+answer questions:
+ - GoogleSearchTool
+ - SciPhiSearchRAGTool
+ - MetaphorSearchTool
 When the LLM doesn't know the answer to a question, it will use the tool to
 search the web for relevant results, and then use the results to answer the
 question.
@@ -14,9 +17,9 @@ There are optional args, especially note these:
 -p or --provider: google or sciphi or metaphor (default: google)
 -m <model_name>: to run with a different LLM model (default: gpt4-turbo)
 
-See the comments at the top of this script for more on how to specify local LLMs:
-https://github.com/langroid/langroid/blob/main/examples/docqa/rag-local-simple.py
-
+You can specify a local in a few different ways, e.g. `-m local/localhost:8000/v1`
+or `-m litellm/ollama_chat/mistral` etc. See here how to use Langroid with local LLMs:
+https://langroid.github.io/langroid/tutorials/local-llm-setup/
 
 
 NOTE:
@@ -24,12 +27,22 @@ NOTE:
 environment variables in your `.env` file, as explained in the
 [README](https://github.com/langroid/langroid#gear-installation-and-setup).
 
-(b) Alternatively, you can use the SciPhiSearchRAGTool, you need to have the
+(b) If using the SciPhiSearchRAGTool, you need to have the
 SCIPHI_API_KEY environment variable in your `.env` file.
 See here for more info: https://www.sciphi.ai/
 This tool requires installing langroid with the `sciphi` extra, e.g.
 `pip install langroid[sciphi]` or `poetry add langroid[sciphi]`
 (it installs the `agent-search` package from pypi).
+
+(c) If using MetaphorSearchTool, you need to:
+* set the METAPHOR_API_KEY environment variables in
+your `.env` file, e.g. `METAPHOR_API_KEY=your_api_key_here`
+* install langroid with the `metaphor` extra, e.g.
+`pip install langroid[metaphor]` or `poetry add langroid[metaphor]`
+(it installs the `metaphor-python` package from pypi).
+For more information, please refer to the official docs:
+https://metaphor.systems/
+
 """
 
 import typer
@@ -85,6 +98,10 @@ def main(
 
     llm_config = lm.OpenAIGPTConfig(
         chat_model=model or lm.OpenAIChatModel.GPT4_TURBO,
+        chat_context_length=8_000,
+        temperature=0.2,
+        max_output_tokens=200,
+        timeout=45,
     )
 
     config = ChatAgentConfig(
@@ -115,9 +132,9 @@ def main(
         agent,
         system_message=f"""
         You are a helpful assistant. You will try your best to answer my questions.
-        If you cannot answer from your own knowledge, you can use up to 5 
-        results from the {search_tool_handler_method} tool/function-call to help 
-        you with answering the question.
+        If you cannot answer from your OWN knowledge, you can do a WEB SEARCH
+        using the `{search_tool_handler_method}` tool/function-call, 
+        (request up to 5 results) to help you with answering the question.
         Be very concise in your responses, use no more than 1-2 sentences.
         When you answer based on a web search, First show me your answer, 
         and then show me the SOURCE(s) and EXTRACT(s) to justify your answer,
@@ -131,10 +148,11 @@ def main(
         EXTRACT: ...
         
         For the EXTRACT, ONLY show up to first 3 words, and last 3 words.
+        DO NOT MAKE UP YOUR OWN SOURCES; ONLY USE SOURCES YOU FIND FROM A WEB SEARCH.
         """,
     )
     # local models do not like the first message to be empty
-    user_message = "Hello." if (model != "") else None
+    user_message = "Can you help me with some questions?"
     task.run(user_message)
 
 

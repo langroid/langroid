@@ -1,14 +1,17 @@
 """
-A tool to trigger a metaphor search for a given query, and return the top results with
-their titles, links, summaries. Since the tool is stateless (i.e. does not need
+A tool to trigger a Metaphor search for a given query,
+(https://docs.exa.ai/reference/getting-started)
+and return the top results with their titles, links, summaries.
+Since the tool is stateless (i.e. does not need
 access to agent state), it can be enabled for any agent, without having to define a
 special method inside the agent: `agent.enable_message(MetaphorSearchTool)`
 
-NOTE: Using this tool requires setting the METAPHOR_API_KEY environment variables in 
-your `.env` file, as explained in the
-[README](https://github.com/langroid/langroid#gear-installation-and-setup).
+NOTE: To use this tool, you need to:
 
-This tool requires installing langroid with the `metaphor` extra, e.g.
+* set the METAPHOR_API_KEY environment variables in
+your `.env` file, e.g. `METAPHOR_API_KEY=your_api_key_here`
+
+* install langroid with the `metaphor` extra, e.g.
 `pip install langroid[metaphor]` or `poetry add langroid[metaphor]`
 (it installs the `metaphor-python` package from pypi).
 
@@ -23,7 +26,7 @@ from langroid.parsing.web_search import metaphor_search
 class MetaphorSearchTool(ToolMessage):
     request: str = "metaphor_search"
     purpose: str = """
-            To search the web by metaphor api and return up to <num_results> 
+            To search the web and return up to <num_results> 
             links relevant to the given <query>. 
             """
     query: str
@@ -36,7 +39,7 @@ class MetaphorSearchTool(ToolMessage):
 
         Returns:
             str: A formatted string containing the titles, links, and
-            summaries of each search result, separated by two newlines.
+                summaries of each search result, separated by two newlines.
         """
 
         search_results = metaphor_search(self.query, self.num_results)
