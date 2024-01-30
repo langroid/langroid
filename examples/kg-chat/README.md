@@ -1,4 +1,30 @@
-# PyPi Packages Dependency Chatbot
+# Reterival over Knwoledge Graphs
+
+This folder contains two examples to demonistrate how to use `langroid` to build a chatbot that can answer questions about a knowledge graph.
+The first example is a **PyPi Packages Dependency Chatbot** that can answer questions about a dependency graph of a `PyPi` package. 
+The second example is a **CSV Chat** that can answer questions about a CSV knowledge graph.
+
+## Requirements:
+
+This example relies on the `neo4j` Database. The easiest way to get access to neo4j is
+by creating a cloud account at [Neo4j Aura](https://neo4j.com/cloud/platform/aura-graph-database/). OR you
+can use Neo4j Docker image using this command:
+
+```bash
+docker run --rm \
+    --name neo4j \
+    -p 7474:7474 -p 7687:7687 \
+    -e NEO4J_AUTH=neo4j/password \
+    neo4j:latest
+```
+
+Upon creating the account successfully, neo4j will create a text file contains
+account settings, please provide the following information (uri, username,
+password, and database), while creating the constructor `Neo4jChatAgentConfig`. 
+These settings can be set inside the `.env` file as shown in [`.env-template`](../../.env-template)
+
+
+## 1- PyPi Packages Dependency Chatbot
 
 This example uses a `DependencyGraphAgent` 
 (derived from [`Neo4jChatAgent`](https://github.com/langroid/langroid/blob/main/langroid/agent/special/neo4j/neo4j_chat_agent.py)).
@@ -22,27 +48,7 @@ The `Neo4jChatAgent` has access to these tools/function-calls:
 - `CypherQueryTool`: generate cypher queries to get information from
    Neo4j knowledge-graph (Cypher is the query language for Neo4j)
 
-
-## Requirements:
-
-This example relies on the `neo4j` Database. The easiest way to get access to neo4j is
-by creating a cloud account at [Neo4j Aura](https://neo4j.com/cloud/platform/aura-graph-database/). OR you
-can use Neo4j Docker image using this command:
-
-```bash
-docker run --rm \
-    --name neo4j \
-    -p 7474:7474 -p 7687:7687 \
-    -e NEO4J_AUTH=neo4j/password \
-    neo4j:latest
-```
-
-Upon creating the account successfully, neo4j will create a text file contains
-account settings, please provide the following information (uri, username,
-password, and database), while creating the constructor `Neo4jChatAgentConfig`. 
-These settings can be set inside the `.env` file as shown in [`.env-template`](../../.env-template)
-
-## Running the example
+### Running the example
 
 Run like this:
 ```
@@ -75,36 +81,33 @@ on [DepsDev API](https://deps.dev/). Therefore, the Chatbot will not be able to
 construct the dependency graph if this API doesn't provide dependency metadata
 infromation. 
 
-# CSV Knowledge Graph RAG
+## 2- CSV Chat
 
-This example uses a `CSVChatGraphAgent` 
+This example uses a `CSVGraphAgent` 
 (derived from [`Neo4jChatAgent`](https://github.com/langroid/langroid/blob/main/langroid/agent/special/neo4j/neo4j_chat_agent.py)).
 
-The `CSVChatGraphAgent` allows users to ask questions about a CSV file by converting it into a knowledge graph. This enables capturing complex relationships that cannot be easily handled by libraries like `pandas`.
+The `CSVGraphAgent` allows users to ask questions about a CSV file by converting it into a knowledge graph. This enables capturing complex relationships that cannot be easily handled by libraries like `pandas`.
 
-If the CSV knowledge graph has not been constructed beforehand, the `CSVChatGraphAgent` provides the `pandas_to_kg` tool/function-call to create the necessary nodes and relationships from the CSV file. Once the CSV knowledge graph is constructed, the `CSVChatGraphAgent` can answer questions related to the CSV knowledge graph. The `CSVChatGraphAgent` has access to these tools/function-calls:
+If the CSV knowledge graph has not been constructed beforehand, the `CSVGraphAgent` provides the `pandas_to_kg` tool/function-call to create the necessary nodes and relationships from the CSV file. Once the CSV knowledge graph is constructed, the `CSVGraphAgent` can answer questions related to the CSV knowledge graph. The `CSVGraphAgent` has access to this tools/function-calls:
 
 - `PandasToKGTool`: convert a `pandas` DataFrame into a CSV knowledge graph.
 
-## Requirements:
 
-Same as the above example.
-
-## Running the example
+### Running the example
 
 Run like this:
 ```
-python3 examples/kg-chat/csv_kg_chat.py
+python3 examples/kg-chat/csv-chat.py
 ```
 
-The `CSVChatGraphAgent` will have a dialogue with the user to determine if they need to construct the knowledge graph. If the user chooses to construct the knowledge graph, they will be prompted to provide the location of the CSV file (URL or local file).
+The `CSVGraphAgent` will have a dialogue with the user to determine if they need to construct the knowledge graph. If the user chooses to construct the knowledge graph, they will be prompted to provide the location of the CSV file (URL or local file).
 
 Under the hood, the agent will:
 - Attempt to clean the CSV file after parsing it as a `DataFrame`.
 - Determine node labels and relationships.
 - Create the nodes and relationships in the CSV knowledge graph.
 
-After constructing the CSV knowledge graph, you can ask the `CSVChatGraphAgent` any question about the CSV knowledge graph. You can use [this IMDB CSV file](https://raw.githubusercontent.com/langroid/langroid-examples/main/examples/docqa/data/movies/IMDB.csv) or you can use your own CSV file.
+After constructing the CSV knowledge graph, you can ask the `CSVGraphAgent` any question about the CSV knowledge graph. You can use [this IMDB CSV file](https://raw.githubusercontent.com/langroid/langroid-examples/main/examples/docqa/data/movies/IMDB.csv) or you can use your own CSV file.
 
 **NOTES:**
 - The agent will warn you if the CSV file is too large before proceeding with constructing the CSV knowledge graph. It will also give you the option to proceed with constructing the CSV knowledge graph based on a sample of the CSV file (i.e., a specified number of rows).
