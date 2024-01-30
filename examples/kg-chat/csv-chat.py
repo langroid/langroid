@@ -15,7 +15,7 @@ described here
 
 Run like this
 
-python3 examples/data-qa/table_chat.py
+python3 examples/kg-chat/csv-chat.py
 
 Optional args:
 * -d or --debug to enable debug mode
