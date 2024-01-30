@@ -1,11 +1,11 @@
-# Settig up a local LLM to work with Langroid
+# Setting up a local LLM to work with Langroid
 
 ## Easiest: with Ollama
 
 ```
 ollama pull mistral:7b-instruct-v0.2-q8_0
 ```
-This provides an API server for the LLM. However this API is _not_ OpenAI-compatible,
+This provides an API server for the LLM. However, this API is _not_ OpenAI-compatible,
 so Langroid's code (which is written to "talk" to any API that is OpenAI-API-compatible)
 will not work directly with the Ollama API. 
 Fortunately, we can use the `litellm` library for this. 
@@ -26,8 +26,8 @@ python3 examples/basic/chat-local.py -m litellm/ollama_chat/mistral:7b-instruct-
 
 ## Setup Ollama with a GGUF model from HuggingFace
 
-E.g. download the GGUF version of `dolphin-mixtral` from here:
-https://huggingface.co/TheBloke/dolphin-2.7-mixtral-8x7b-GGUF
+E.g. download the GGUF version of `dolphin-mixtral` from 
+[here](https://huggingface.co/TheBloke/dolphin-2.7-mixtral-8x7b-GGUF)
 
 (specifically, download this file `dolphin-2.7-mixtral-8x7b.Q4_K_M.gguf`)
 
