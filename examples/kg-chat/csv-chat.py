@@ -1,3 +1,38 @@
+"""
+Example showing how to chat with a graph database generated from
+csv, tsv, or any other pandas-readable.
+
+This example will automatically generate all the required Cypher queries for Neo4j
+to answer user's questions.
+
+This example relies on neo4j. The easiest way to get access to neo4j is by
+creating a cloud account at `https://neo4j.com/cloud/platform/aura-graph-database/`
+
+Upon creating the account successfully, neo4j will create a text file that contains
+account settings, please provide the following information (uri, username, password) as
+described here
+`https://github.com/langroid/langroid/tree/main/examples/kg-chat#requirements`
+
+Run like this
+
+python3 examples/data-qa/table_chat.py
+
+Optional args:
+* -d or --debug to enable debug mode
+* -ns or --nostream to disable streaming
+* -nc or --nocache to disable caching
+* -m or --model to specify a model name
+
+To run with a local model via ollama, do this:
+```
+ollama run dolphin-mixtral # best model for this script
+
+python3 examples/data-qa/table_chat.py -m litellm/ollama_chat/dolphin-mixtral:latest
+```
+
+For more info on running Langroid with local LLM, see here:
+https://langroid.github.io/langroid/tutorials/local-llm-setup/
+"""
 import typer
 from dotenv import load_dotenv
 from rich import print

@@ -14,8 +14,9 @@ This example relies on neo4j. The easiest way to get access to neo4j is by
 creating a cloud account at `https://neo4j.com/cloud/platform/aura-graph-database/`
 
 Upon creating the account successfully, neo4j will create a text file that contains
-account settings, please provide the following information (uri, username, password),
-while creating the constructor `Neo4jConfig`.
+account settings, please provide the following information (uri, username, password) as
+described here
+`https://github.com/langroid/langroid/tree/main/examples/kg-chat#requirements`
 
 Run like this:
 ```
