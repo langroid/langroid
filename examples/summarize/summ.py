@@ -4,7 +4,7 @@ First see instructions to install langroid (with the litellm and other extras)
 in the README of the langroid-examples repo:
 https://github.com/langroid/langroid-examples
 
-Run like this --
+Run like this from the root of the project repo:
 
 python3 examples/summarize/summ.py -m <model_name>
 
@@ -79,7 +79,7 @@ def app(
     print(
         f"""
     Generated Summary: 
-    {summary}
+    {summary.content}
     """
     )
 

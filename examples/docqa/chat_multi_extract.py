@@ -162,7 +162,8 @@ def main(
         done_if_response=[Entity.LLM],  # done if non-null response from LLM
         system_message="""You are an expert on Commercial Leases. 
         You will receive various questions about a Commercial 
-        Lease contract, and your job is to answer them concisely in at most 2 sentences.
+        Lease contract, along with some excerpts from the Lease.
+        Your job is to answer them concisely in at most 2 sentences.
         """,
     )
 
