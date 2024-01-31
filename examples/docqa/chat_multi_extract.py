@@ -135,6 +135,8 @@ def main(
     llm_cfg = OpenAIGPTConfig(
         chat_model=model or lm.OpenAIChatModel.GPT4_TURBO,
         chat_context_length=16_000,  # adjust based on model
+        temperature=0,
+        timeout=45,
     )
     doc_agent = DocChatAgent(
         DocChatAgentConfig(
