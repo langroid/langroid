@@ -30,9 +30,10 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 PATH = "examples/summarize/data/news.csv"
 
+
 def app(
-    m: str ="", # litellm/ollama_chat/mistral:7b-instruct-v0.2-q8_0",
-    d: bool = False, # debug
+    m: str = "",  # litellm/ollama_chat/mistral:7b-instruct-v0.2-q8_0",
+    d: bool = False,  # debug
 ):
     settings.debug = d
     # Create the llm config object.
@@ -41,10 +42,10 @@ def app(
         # chat_model="litellm/ollama/mistral:7b-instruct-v0.2-q4_K_M",
         chat_model=m or lm.OpenAIChatModel.GPT4_TURBO,
         chat_context_length=32_000,  # set this based on model
-        max_output_tokens=500, # increase this if you want longer summaries
-        temperature=0.2, # lower -> less variability
+        max_output_tokens=500,  # increase this if you want longer summaries
+        temperature=0.2,  # lower -> less variability
         stream=True,
-        timeout=45, # increase if model is timing out
+        timeout=45,  # increase if model is timing out
     )
 
     # Recommended: First test if basic chat works with this llm setup as below:
@@ -75,18 +76,19 @@ def app(
 
     agent = lr.ChatAgent(config)
     summary = agent.llm_response()
-    print(f"""
+    print(
+        f"""
     Generated Summary: 
     {summary}
     """
     )
 
-    print(f"""
+    print(
+        f"""
     Gold Summary:
     {highlights}
     """
     )
-
 
 
 if __name__ == "__main__":
