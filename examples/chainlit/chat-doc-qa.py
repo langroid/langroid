@@ -25,36 +25,14 @@ https://langroid.github.io/langroid/tutorials/local-llm-setup/
 import chainlit as cl
 import langroid as lr
 import langroid.parsing.parser as lp
-import langroid.language_models as lm
 from langroid.agent.special.doc_chat_agent import DocChatAgent, DocChatAgentConfig
 from langroid.agent.callbacks.chainlit import (
     add_instructions,
-    make_chat_settings,
-    inform_chat_settings,
+    make_llm_settings_widgets,
+    setup_llm,
+    update_agent,
 )
 from textwrap import dedent
-
-
-async def setup_llm() -> None:
-    model = cl.user_session.get("settings", {}).get("chat_model")
-    context_length = cl.user_session.get("settings", {}).get("context_length", 16_000)
-    temperature = cl.user_session.get("settings", {}).get("temperature", 0.2)
-    timeout = cl.user_session.get("settings", {}).get("timeout", 90)
-    print(f"Using model: {model}")
-    llm_config = lm.OpenAIGPTConfig(
-        chat_model=model or lm.OpenAIChatModel.GPT4_TURBO,
-        # or, other possibilities for example:
-        # "litellm/bedrock/anthropic.claude-instant-v1"
-        # "litellm/ollama/llama2"
-        # "local/localhost:8000/v1"
-        # "local/localhost:8000"
-        chat_context_length=context_length,  # adjust based on model
-        temperature=temperature,
-        timeout=timeout,
-    )
-    llm = lm.OpenAIGPT(llm_config)
-    cl.user_session.set("llm_config", llm_config)
-    cl.user_session.set("llm", llm)
 
 
 async def setup_agent() -> None:
@@ -100,13 +78,8 @@ async def setup_agent() -> None:
 
 
 @cl.on_settings_update
-async def update_agent(settings):
-    cl.user_session.set("settings", settings)
-    await inform_chat_settings()
-    await setup_llm()
-    agent = cl.user_session.get("agent")
-    agent.llm = cl.user_session.get("llm")
-    agent.config.llm = cl.user_session.get("llm_config")
+async def on_update(settings):
+    await update_agent(settings)
 
 
 @cl.on_chat_start
@@ -122,7 +95,7 @@ async def on_chat_start():
         ),
     )
 
-    await make_chat_settings()
+    await make_llm_settings_widgets()
 
     # get file
     files = None

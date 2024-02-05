@@ -9,7 +9,7 @@ from rich import print
 from rich.console import Console
 from rich.markup import escape
 
-from langroid.agent.base import Agent, AgentConfig
+from langroid.agent.base import Agent, AgentConfig, noop_fn
 from langroid.agent.chat_document import ChatDocument
 from langroid.agent.tool_message import ToolMessage
 from langroid.language_models.base import (
@@ -666,7 +666,7 @@ class ChatAgent(Agent):
         """
         assert self.config.llm is not None and self.llm is not None
         output_len = output_len or self.config.llm.max_output_tokens
-        streamer = None
+        streamer = noop_fn
         if self.llm.get_stream():
             streamer = self.callbacks.start_llm_stream()
         self.llm.config.streamer = streamer
@@ -692,7 +692,7 @@ class ChatAgent(Agent):
                     ChatDocument.from_LLMResponse(response, displayed=True)
                 ),
             )
-        self.llm.config.streamer = None
+        self.llm.config.streamer = noop_fn
         if response.cached:
             self.callbacks.cancel_llm_stream()
 
@@ -736,7 +736,7 @@ class ChatAgent(Agent):
             )
         assert self.llm is not None
 
-        streamer = None
+        streamer = noop_fn
         if self.llm.get_stream():
             streamer = self.callbacks.start_llm_stream()
         self.llm.config.streamer = streamer
@@ -754,7 +754,7 @@ class ChatAgent(Agent):
                     ChatDocument.from_LLMResponse(response, displayed=True)
                 ),
             )
-        self.llm.config.streamer = None
+        self.llm.config.streamer = noop_fn
         if response.cached:
             self.callbacks.cancel_llm_stream()
         if not self.llm.get_stream() or response.cached:

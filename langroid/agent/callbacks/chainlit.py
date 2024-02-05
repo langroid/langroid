@@ -27,6 +27,7 @@ from chainlit import run_sync
 from chainlit.config import config
 
 import langroid as lr
+import langroid.language_models as lm
 from langroid.utils.configuration import settings
 
 logger = logging.getLogger(__name__)
@@ -44,7 +45,44 @@ async def ask_helper(func, **kwargs):
     return res
 
 
-async def make_chat_settings() -> None:
+@no_type_check
+async def setup_llm() -> None:
+    llm_settings = cl.user_session.get("llm_settings", {})
+    model = llm_settings.get("chat_model")
+    context_length = llm_settings.get("context_length", 16_000)
+    temperature = llm_settings.get("temperature", 0.2)
+    timeout = llm_settings.get("timeout", 90)
+    print(f"Using model: {model}")
+    llm_config = lm.OpenAIGPTConfig(
+        chat_model=model or lm.OpenAIChatModel.GPT4_TURBO,
+        # or, other possibilities for example:
+        # "litellm/ollama_chat/mistral"
+        # "litellm/ollama_chat/mistral:7b-instruct-v0.2-q8_0"
+        # "litellm/ollama/llama2"
+        # "local/localhost:8000/v1"
+        # "local/localhost:8000"
+        chat_context_length=context_length,  # adjust based on model
+        temperature=temperature,
+        timeout=timeout,
+    )
+    llm = lm.OpenAIGPT(llm_config)
+    cl.user_session.set("llm_config", llm_config)
+    cl.user_session.set("llm", llm)
+
+
+@no_type_check
+async def update_agent(settings: Dict[str, Any], agent="agent") -> None:
+    cl.user_session.set("llm_settings", settings)
+    await inform_llm_settings()
+    await setup_llm()
+    agent = cl.user_session.get(agent)
+    if agent is None:
+        raise ValueError(f"Agent {agent} not found in user session")
+    agent.llm = cl.user_session.get("llm")
+    agent.config.llm = cl.user_session.get("llm_config")
+
+
+async def make_llm_settings_widgets() -> None:
     await cl.ChatSettings(
         [
             cl.input_widget.TextInput(
@@ -83,17 +121,17 @@ async def make_chat_settings() -> None:
 
 
 @no_type_check
-async def inform_chat_settings() -> None:
-    chat_settings: Dict[str, Any] = cl.user_session.get("settings", {})
+async def inform_llm_settings() -> None:
+    llm_settings: Dict[str, Any] = cl.user_session.get("llm_settings", {})
     settings_dict = dict(
-        model=chat_settings.get("chat_model"),
-        context_length=chat_settings.get("context_length"),
-        temperature=chat_settings.get("temperature"),
-        timeout=chat_settings.get("timeout"),
+        model=llm_settings.get("chat_model"),
+        context_length=llm_settings.get("context_length"),
+        temperature=llm_settings.get("temperature"),
+        timeout=llm_settings.get("timeout"),
     )
     await cl.Message(
         author="System",
-        content="Chat settings updated",
+        content="LLM settings updated",
         elements=[
             cl.Text(
                 name="settings",
