@@ -20,12 +20,27 @@ from .agent.base import (
     AgentConfig,
 )
 
+from .agent.chat_document import (
+    ChatDocument,
+    ChatDocMetaData,
+)
+
+from .agent.tool_message import (
+    ToolMessage,
+)
+
 from .agent.chat_agent import (
     ChatAgent,
     ChatAgentConfig,
 )
 
 from .agent.task import Task
+
+from .agent.callbacks.chainlit import (
+    ChainlitAgentCallbacks,
+    ChainlitTaskCallbacks,
+)
+
 
 from .mytypes import (
     DocMetaData,
@@ -47,8 +62,13 @@ __all__ = [
     "AgentConfig",
     "ChatAgent",
     "ChatAgentConfig",
+    "ChatDocument",
+    "ChatDocMetaData",
     "Task",
     "DocMetaData",
     "Document",
     "Entity",
+    "ToolMessage",
+    "ChainlitAgentCallbacks",
+    "ChainlitTaskCallbacks",
 ]

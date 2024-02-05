@@ -1,3 +1,4 @@
+import copy
 import inspect
 import logging
 import textwrap
@@ -133,6 +134,27 @@ class ChatAgent(Agent):
         self.llm_functions_handled: Set[str] = set()
         self.llm_functions_usable: Set[str] = set()
         self.llm_function_force: Optional[Dict[str, str]] = None
+
+    def clone(self, i: int = 0) -> "ChatAgent":
+        """Create i'th clone of this agent, ensuring tool use/handling is cloned.
+        Important: We assume all member variables are in the __init__ method here
+        and in the Agent class.
+        TODO: We are attempting to close an agent after its state has been
+        changed in possibly many ways. Below is an imperfect solution. Caution advised.
+        Revisit later.
+        """
+        agent_cls = type(self)
+        config_copy = copy.deepcopy(self.config)
+        config_copy.name = f"{config_copy.name}-{i}"
+        new_agent = agent_cls(config_copy)
+        new_agent.system_tool_instructions = self.system_tool_instructions
+        new_agent.system_json_tool_instructions = self.system_json_tool_instructions
+        new_agent.llm_tools_map = self.llm_tools_map
+        new_agent.llm_functions_map = self.llm_functions_map
+        new_agent.llm_functions_handled = self.llm_functions_handled
+        new_agent.llm_functions_usable = self.llm_functions_usable
+        new_agent.llm_function_force = self.llm_function_force
+        return new_agent
 
     def _fn_call_available(self) -> bool:
         """Does this agent's LLM support function calling?"""
@@ -644,6 +666,10 @@ class ChatAgent(Agent):
         """
         assert self.config.llm is not None and self.llm is not None
         output_len = output_len or self.config.llm.max_output_tokens
+        streamer = None
+        if self.llm.get_stream():
+            streamer = self.callbacks.start_llm_stream()
+        self.llm.config.streamer = streamer
         with ExitStack() as stack:  # for conditionally using rich spinner
             if not self.llm.get_stream() and not settings.quiet:
                 # show rich spinner only if not streaming!
@@ -659,17 +685,31 @@ class ChatAgent(Agent):
                 functions=functions,
                 function_call=fun_call,
             )
+        if self.llm.get_stream():
+            self.callbacks.finish_llm_stream(
+                content=str(response),
+                is_tool=self.has_tool_message_attempt(
+                    ChatDocument.from_LLMResponse(response, displayed=True)
+                ),
+            )
+        self.llm.config.streamer = None
+        if response.cached:
+            self.callbacks.cancel_llm_stream()
+
         if not self.llm.get_stream() or response.cached:
             # We would have already displayed the msg "live" ONLY if
             # streaming was enabled, AND we did not find a cached response.
             # If we are here, it means the response has not yet been displayed.
             cached = f"[red]{self.indent}(cached)[/red]" if response.cached else ""
-            if response.function_call is not None:
-                response_str = str(response.function_call)
-            else:
-                response_str = response.message
             if not settings.quiet:
-                print(cached + "[green]" + escape(response_str))
+                print(cached + "[green]" + escape(str(response)))
+                cached = "[cached] " if response.cached else ""
+                self.callbacks.show_llm_response(
+                    content=cached + " " + str(response),
+                    is_tool=self.has_tool_message_attempt(
+                        ChatDocument.from_LLMResponse(response, displayed=True)
+                    ),
+                )
         self.update_token_usage(
             response,
             messages,
@@ -695,24 +735,42 @@ class ChatAgent(Agent):
                 "auto" if self.llm_function_force is None else self.llm_function_force
             )
         assert self.llm is not None
+
+        streamer = None
+        if self.llm.get_stream():
+            streamer = self.callbacks.start_llm_stream()
+        self.llm.config.streamer = streamer
+
         response = await self.llm.achat(
             messages,
             output_len,
             functions=functions,
             function_call=fun_call,
         )
-
+        if self.llm.get_stream():
+            self.callbacks.finish_llm_stream(
+                content=str(response),
+                is_tool=self.has_tool_message_attempt(
+                    ChatDocument.from_LLMResponse(response, displayed=True)
+                ),
+            )
+        self.llm.config.streamer = None
+        if response.cached:
+            self.callbacks.cancel_llm_stream()
         if not self.llm.get_stream() or response.cached:
             # We would have already displayed the msg "live" ONLY if
             # streaming was enabled, AND we did not find a cached response.
             # If we are here, it means the response has not yet been displayed.
             cached = f"[red]{self.indent}(cached)[/red]" if response.cached else ""
-            if response.function_call is not None:
-                response_str = str(response.function_call)
-            else:
-                response_str = response.message
             if not settings.quiet:
-                print(cached + "[green]" + escape(response_str))
+                print(cached + "[green]" + escape(str(response)))
+                cached = "[cached] " if response.cached else ""
+                self.callbacks.show_llm_response(
+                    content=cached + " " + str(response),
+                    is_tool=self.has_tool_message_attempt(
+                        ChatDocument.from_LLMResponse(response, displayed=True)
+                    ),
+                )
 
         self.update_token_usage(
             response,

@@ -58,7 +58,7 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 
 class PolinskyTool(lr.agent.ToolMessage):
-    """A fictitious number transformation tool. We intentially use
+    """A fictitious number transformation tool. We intentionally use
     a fictitious tool rather than something like "square" or "double"
     to prevent the LLM from trying to answer the question directly.
     """
@@ -69,15 +69,6 @@ class PolinskyTool(lr.agent.ToolMessage):
     )
     number: int
 
-    def handle(self) -> str:
-        """Handle LLM's structured output if it matches Polinsky tool"""
-        result = self.number * 3 + 1
-        msg = f"""
-        SUCCESS! The Polinksy transform of {self.number} is {result}.
-        Present this result to me, and ask for another number.
-        """
-        return msg
-
     @classmethod
     def json_instructions(cls) -> str:
         inst = super().json_instructions()
@@ -86,20 +77,6 @@ class PolinskyTool(lr.agent.ToolMessage):
         
         ONLY USE THIS TOOL AFTER THE USER ASKS FOR A POLINSKY TRANSFORM.
         """
-
-    @staticmethod
-    def handle_message_fallback(
-        agent: lr.ChatAgent, msg: str | ChatDocument
-    ) -> str | ChatDocument | None:
-        """Fallback method when LLM forgets to generate a tool"""
-        if isinstance(msg, ChatDocument) and msg.metadata.sender == "LLM":
-            return """
-                You must use the "polinsky" tool/function to 
-                request the Polinsky transform of a number.
-                You either forgot to use it, or you used it with the wrong format.
-                Make sure all fields are filled out and pay attention to the 
-                required types of the fields.
-                """
 
     @classmethod
     def examples(cls) -> List["ToolMessage"]:
@@ -112,6 +89,38 @@ class PolinskyTool(lr.agent.ToolMessage):
                 number=5,
             ),
         ]
+
+
+class MyChatAgent(lr.ChatAgent):
+    tool_called: bool = False
+
+    def polinsky(self, msg: PolinskyTool) -> str:
+        """Handle LLM's structured output if it matches Polinsky tool"""
+        self.tool_called = True
+        result = msg.number * 3 + 1
+        response = f"""
+        SUCCESS! The Polinksy transform of {msg.number} is {result}.
+        Present this result to me, and ask for another number.
+        """
+        return response
+
+    def handle_message_fallback(
+        self, msg: str | ChatDocument
+    ) -> str | ChatDocument | None:
+        """Fallback method when LLM does not generate a tool,
+        and agent ends up handling the msg"""
+        if isinstance(msg, ChatDocument) and msg.metadata.sender == "LLM":
+            if self.tool_called:
+                self.tool_called = False
+                return "Ask the user what they need help with"
+            else:
+                return """
+                    You must use the "polinsky" tool/function to 
+                    request the Polinsky transform of a number.
+                    You either forgot to use it, or you used it with the wrong format.
+                    Make sure all fields are filled out and pay attention to the 
+                    required types of the fields.
+                    """
 
 
 def app(
@@ -188,7 +197,7 @@ def app(
         """,
     )
 
-    agent = lr.ChatAgent(config)
+    agent = MyChatAgent(config)
 
     # (4) Enable the Tool for this agent --> this auto-inserts JSON instructions
     # and few-shot examples into the system message

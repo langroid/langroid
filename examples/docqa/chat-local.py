@@ -19,7 +19,6 @@ from rich import print
 from rich.prompt import Prompt
 import os
 
-import langroid as lr
 import langroid.language_models as lm
 from langroid.agent.special.doc_chat_agent import (
     DocChatAgent,
@@ -51,11 +50,6 @@ def main(
         timeout=90,
     )
 
-    relevance_extractor_config = lr.agent.special.RelevanceExtractorAgentConfig(
-        llm=llm_config,  # or this could be a different llm_config
-        # system_message="...override default RelevanceExtractorAgent system msg here",
-    )
-
     config = DocChatAgentConfig(
         n_query_rephrases=0,
         cross_encoder_reranking_model="cross-encoder/ms-marco-MiniLM-L-6-v2",
@@ -63,7 +57,6 @@ def main(
         # set it to > 0 to retrieve a window of k chunks on either side of a match
         n_neighbor_chunks=0,
         llm=llm_config,
-        relevance_extractor_config=relevance_extractor_config,  # or None to turn off
         # system_message="...override default DocChatAgent system msg here",
         # user_message="...override default DocChatAgent user msg here",
         # summarize_prompt="...override default DocChatAgent summarize prompt here",

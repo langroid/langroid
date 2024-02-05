@@ -580,17 +580,21 @@ class OpenAIGPT(LanguageModel):
             if not is_async:
                 sys.stdout.write(Colors().GREEN + event_text)
                 sys.stdout.flush()
+                self.config.streamer(event_text)
         if event_fn_name:
             function_name = event_fn_name
             has_function = True
             if not is_async:
                 sys.stdout.write(Colors().GREEN + "FUNC: " + event_fn_name + ": ")
                 sys.stdout.flush()
+                self.config.streamer(event_fn_name)
+
         if event_args:
             function_args += event_args
             if not is_async:
                 sys.stdout.write(Colors().GREEN + event_args)
                 sys.stdout.flush()
+                self.config.streamer(event_args)
         if choices[0].get("finish_reason", "") in ["stop", "function_call"]:
             # for function_call, finish_reason does not necessarily
             # contain "function_call" as mentioned in the docs.
