@@ -36,10 +36,17 @@ from .agent.chat_agent import (
 
 from .agent.task import Task
 
-from .agent.callbacks.chainlit import (
-    ChainlitAgentCallbacks,
-    ChainlitTaskCallbacks,
-)
+try:
+    from .agent.callbacks.chainlit import (
+        ChainlitAgentCallbacks,
+        ChainlitTaskCallbacks,
+    )
+
+    chainlit_available = True
+    ChainlitAgentCallbacks
+    ChainlitTaskCallbacks
+except ImportError:
+    chainlit_available = False
 
 
 from .mytypes import (
@@ -69,6 +76,11 @@ __all__ = [
     "Document",
     "Entity",
     "ToolMessage",
-    "ChainlitAgentCallbacks",
-    "ChainlitTaskCallbacks",
 ]
+if chainlit_available:
+    __all__.extend(
+        [
+            "ChainlitAgentCallbacks",
+            "ChainlitTaskCallbacks",
+        ]
+    )
