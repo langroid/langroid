@@ -3,9 +3,16 @@ RAG example using a local LLM, with ollama
 
 Run like this --
 
-python3 examples/docqa/rag-local-simple.py -m <model_name_with_formatter_after//>
+python3 examples/docqa/rag-local-simple.py -m <model_name>
 
-See here for how to set up a Local LLM to work with Langroid:
+For example, you can get good results using:
+```
+ollama run mistral:7b-instruct-v0.2-q8_0
+
+python3 examples/docqa/rag-local-simple.py -m litellm/ollama_chat/mistral:7b-instruct-v0.2-q8_0
+
+
+See here for more on how to set up a local LLM to work with Langroid:
 https://langroid.github.io/langroid/tutorials/local-llm-setup/
 """
 

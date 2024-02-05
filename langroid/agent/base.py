@@ -4,6 +4,7 @@ import json
 import logging
 from abc import ABC
 from contextlib import ExitStack
+from types import SimpleNamespace
 from typing import (
     Any,
     Callable,
@@ -63,6 +64,10 @@ class AgentConfig(BaseSettings):
     show_stats: bool = True  # show token usage/cost stats?
 
 
+def noop_fn(*args: List[Any], **kwargs: Dict[str, Any]) -> None:
+    pass
+
+
 class Agent(ABC):
     """
     An Agent is an abstraction that encapsulates mainly two components:
@@ -90,6 +95,16 @@ class Agent(ABC):
         self.vecdb = VectorStore.create(config.vecdb) if config.vecdb else None
         self.parser: Optional[Parser] = (
             Parser(config.parsing) if config.parsing else None
+        )
+        self.callbacks = SimpleNamespace(
+            start_llm_stream=lambda: noop_fn,
+            cancel_llm_stream=noop_fn,
+            finish_llm_stream=noop_fn,
+            show_llm_response=noop_fn,
+            show_agent_response=noop_fn,
+            get_user_response=None,
+            get_last_step=noop_fn,
+            set_parent_agent=noop_fn,
         )
 
     def entity_responders(
@@ -295,6 +310,7 @@ class Agent(ABC):
         if not settings.quiet:
             console.print(f"[red]{self.indent}", end="")
             print(f"[red]Agent: {results}")
+            self.callbacks.show_agent_response(content=results)
         sender_name = self.config.name
         if isinstance(msg, ChatDocument) and msg.function_call is not None:
             # if result was from handling an LLM `function_call`,
@@ -353,11 +369,18 @@ class Agent(ABC):
         elif not settings.interactive:
             user_msg = ""
         else:
-            user_msg = Prompt.ask(
-                f"[blue]{self.indent}Human "
-                "(respond or q, x to exit current level, "
-                f"or hit enter to continue)\n{self.indent}",
-            ).strip()
+            if self.callbacks.get_user_response is not None:
+                # ask user with empty prompt: no need for prompt
+                # since user has seen the conversation so far.
+                # But non-empty prompt can be useful when Agent
+                # uses a tool that requires user input, or in other scenarios.
+                user_msg = self.callbacks.get_user_response(prompt="")
+            else:
+                user_msg = Prompt.ask(
+                    f"[blue]{self.indent}Human "
+                    "(respond or q, x to exit current level, "
+                    f"or hit enter to continue)\n{self.indent}",
+                ).strip()
 
         tool_ids = []
         if msg is not None and isinstance(msg, ChatDocument):

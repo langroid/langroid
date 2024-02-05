@@ -58,7 +58,6 @@ google-api-python-client = "^2.95.0"
 lxml = "^4.9.3"
 unstructured = {extras = ["docx", "pptx", "pdf"], version = ">=0.10.16,<0.10.18"}
 
-# optional; see extras section below
 sentence-transformers = {version="2.2.2", optional=true}
 torch = {version="2.0.0", optional=true}
 psycopg2 = {version="^2.9.7", optional=true}
@@ -76,7 +75,7 @@ docstring-parser = "^0.15"
 farm-haystack = {extras = ["ocr", "preprocessing", "file-conversion", "pdf"], version = "^1.21.1"}
 meilisearch = "^0.28.3"
 meilisearch-python-sdk = "^2.2.3"
-litellm = {version = "^1.20.6", optional = true}
+litellm = {version = "^1.22.3", optional = true}
 scrapy = "^2.11.0"
 async-generator = "^1.10"
 lancedb = "^0.4.1"
@@ -86,9 +85,11 @@ agent-search = {version = "^0.0.7", optional = true}
 python-docx = "^1.1.0"
 aiohttp = "^3.9.1"
 metaphor-python = {version = "^0.1.23", optional = true}
+chainlit = {version = "^1.0.200", optional = true}
 
 [tool.poetry.extras]
 # install these using `poetry install -E [...]` where [...] is one of the extras below
+# or install multiple extras using, e.g.,  `poetry install -E "litellm mysql"
 hf-embeddings = ["sentence-transformers", "torch"]
 postgres = ["psycopg2", "pytest-postgresql"]
 mysql = ["pymysql", "pytest-mysql"]
@@ -96,6 +97,7 @@ litellm = ["litellm"]
 neo4j = ["neo4j"]
 sciphi = ["agent-search"]
 metaphor = ["metaphor-python"]
+chainlit = ["chainlit"]
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.3.1"
@@ -121,6 +123,8 @@ exclude = [
     "notebooks",
     "langroid/parsing/repo_loader.py",
     "langroid/embedding_models/clustering.py",
+    #TODO revisit why mypy keeps failing on gh actions, but works fine locally
+    "langroid/agent/callbacks/chainlit.py",
 ]
 files=["langroid/*"]
 plugins = [

@@ -77,7 +77,7 @@ class Task:
         restart: bool = True,
         default_human_response: Optional[str] = None,
         interactive: bool = True,
-        only_user_quits_root: bool = True,
+        only_user_quits_root: bool = False,
         erase_substeps: bool = False,
         allow_null_result: bool = True,
         max_stalled_steps: int = 5,
@@ -114,7 +114,8 @@ class Task:
                 response (prevents infinite loop of non-human responses).
                 Default is true. If false, then `default_human_response` is set to ""
             only_user_quits_root (bool): if true, only user can quit the root task.
-                [Instead of this, setting `interactive` usually suffices]
+                [This param is ignored & deprecated; Keeping for backward compatibility.
+                Instead of this, setting `interactive` suffices]
             erase_substeps (bool): if true, when task completes, erase intermediate
                 conversation with subtasks from this agent's `message_history`, and also
                 erase all subtask agents' `message_history`.
@@ -133,6 +134,20 @@ class Task:
         """
         if agent is None:
             agent = ChatAgent()
+
+        # copy the agent's config, so that we don't modify the original agent's config,
+        # which may be shared by other agents.
+        try:
+            config_copy = copy.deepcopy(agent.config)
+            agent.config = config_copy
+        except Exception:
+            logger.warning(
+                """
+                Failed to deep-copy Agent config during task creation, 
+                proceeding with original config. Be aware that changes to 
+                the config may affect other agents using the same config.
+                """
+            )
 
         if isinstance(agent, ChatAgent) and len(agent.message_history) == 0 or restart:
             agent = cast(ChatAgent, agent)
@@ -157,6 +172,9 @@ class Task:
         self.is_done = False  # is task done (based on response)?
         self.is_pass_thru = False  # is current response a pass-thru?
         self.task_progress = False  # progress in current task (since run or run_async)?
+        if name:
+            # task name overrides name in agent config
+            agent.config.name = name
         self.name = name or agent.config.name
         self.value: str = self.name
         self.default_human_response = default_human_response
@@ -229,11 +247,7 @@ class Task:
         Returns a copy of this task, with a new agent.
         """
         assert isinstance(self.agent, ChatAgent), "Task clone only works for ChatAgent"
-
-        agent_cls = type(self.agent)
-        config_copy = copy.deepcopy(self.agent.config)
-        config_copy.name = f"{config_copy.name}-{i}"
-        agent: ChatAgent = agent_cls(config_copy)
+        agent: ChatAgent = self.agent.clone(i)
         return Task(
             agent,
             name=self.name + f"-{i}",
@@ -244,7 +258,6 @@ class Task:
             restart=False,
             default_human_response=self.default_human_response,
             interactive=self.interactive,
-            only_user_quits_root=self.only_user_quits_root,
             erase_substeps=self.erase_substeps,
             allow_null_result=self.allow_null_result,
             max_stalled_steps=self.max_stalled_steps,
@@ -784,6 +797,8 @@ class Task:
         """
         if isinstance(e, Task):
             actual_turns = e.turns if e.turns > 0 else turns
+            if e.agent.callbacks.set_parent_agent is not None:
+                e.agent.callbacks.set_parent_agent(self.agent)
             result = e.run(
                 self.pending_message,
                 turns=actual_turns,
@@ -846,6 +861,8 @@ class Task:
         """
         if isinstance(e, Task):
             actual_turns = e.turns if e.turns > 0 else turns
+            if e.agent.callbacks.set_parent_agent is not None:
+                e.agent.callbacks.set_parent_agent(self.agent)
             result = await e.run_async(
                 self.pending_message,
                 turns=actual_turns,
