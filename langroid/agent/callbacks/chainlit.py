@@ -9,7 +9,20 @@ import logging
 import textwrap
 from typing import Any, Callable, Dict, List, Literal, Optional, no_type_check
 
-import chainlit as cl
+try:
+    import chainlit as cl
+except ImportError:
+    raise ImportError(
+        """
+        You are attempting to use `chainlit`, which is not installed 
+        by default with `langroid`.
+        Please install langroid with the `chainlit` extra using:
+        `pip install langroid[chainlit]` or 
+        `poetry install -E chainlit`
+        depending on your scenario
+        """
+    )
+
 from chainlit import run_sync
 from chainlit.config import config
 
