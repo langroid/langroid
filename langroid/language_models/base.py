@@ -25,8 +25,10 @@ from langroid.utils.output.printing import show_if_debug
 
 logger = logging.getLogger(__name__)
 
+
 def noop_fn(*args: List[Any], **kwargs: Dict[str, Any]) -> None:
     pass
+
 
 class LLMConfig(BaseSettings):
     type: str = "openai"
