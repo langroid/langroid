@@ -25,10 +25,12 @@ from langroid.utils.output.printing import show_if_debug
 
 logger = logging.getLogger(__name__)
 
+def noop_fn(*args: List[Any], **kwargs: Dict[str, Any]) -> None:
+    pass
 
 class LLMConfig(BaseSettings):
     type: str = "openai"
-    streamer: Optional[Callable[[Any], None]] = None
+    streamer: Optional[Callable[[Any], None]] = noop_fn
     api_base: str | None = None
     formatter: None | str = None
     timeout: int = 20  # timeout for API requests
