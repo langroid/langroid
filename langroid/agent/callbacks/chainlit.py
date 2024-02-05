@@ -1,7 +1,5 @@
 """
 Callbacks for Chainlit integration.
-Adapted from chainlit source code:
-https://github.com/Chainlit/chainlit/blob/main/backend/chainlit/haystack/callbacks.py
 """
 
 import json
@@ -32,7 +30,9 @@ import langroid.language_models as lm
 from langroid.utils.configuration import settings
 from langroid.utils.constants import NO_ANSWER
 
-logger.setLevel(logging.INFO if settings.debug else logging.WARNING)
+# Attempt to reconfigure the root logger to your desired settings
+log_level = logging.INFO if settings.debug else logging.INFO
+logger.setLevel(log_level)
 
 USER_TIMEOUT = 60_000
 

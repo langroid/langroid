@@ -137,7 +137,17 @@ class Task:
 
         # copy the agent's config, so that we don't modify the original agent's config,
         # which may be shared by other agents.
-        agent.config = copy.deepcopy(agent.config)
+        try:
+            config_copy = copy.deepcopy(agent.config)
+            agent.config = config_copy
+        except Exception:
+            logger.warning(
+                """
+                Failed to deep-copy Agent config during task creation, 
+                proceeding with original config. Be aware that changes to 
+                the config may affect other agents using the same config.
+                """
+            )
 
         if isinstance(agent, ChatAgent) and len(agent.message_history) == 0 or restart:
             agent = cast(ChatAgent, agent)
