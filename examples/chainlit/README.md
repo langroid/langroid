@@ -21,6 +21,30 @@ chainlit hello
 
 and you should see the `hello app` open in your browser.
 
+## General usage
+See [chainlit docs](https://docs.chainlit.io/get-started/overview) to learn the basics.
+
+Generally speaking to use Langroid `ChatAgents` or `Tasks` with 
+`chainlit`, you simply need to wrap your `ChatAgent` or `Task` in the appropriate 
+"callback injection" class, e.g. either
+```
+import langroid as lr
+agent = lr.ChatAgent(...)
+lr.ChainlitAgentCallbacks(agent) 
+```
+or 
+```
+task = lr.Task(...)
+lr.ChainlitTaskCallbacks(task) 
+```
+The `ChainlitTaskCallbacks` class recursively injects callbacks into 
+`ChatAgents` belonging to the task, and any sub-tasks.
+The callback classes are defined 
+[here](https://github.com/langroid/langroid/blob/main/langroid/agent/callbacks/chainlit.py).
+
+You also need to write an `on_chat_start` function and possibly an `on_message`
+function to start off the app. See the examples to learn more.
+
 ## Configuration
 
 You can configure some aspects of the chainlit app via these files,

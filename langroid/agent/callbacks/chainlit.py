@@ -31,7 +31,7 @@ from langroid.utils.configuration import settings
 from langroid.utils.constants import NO_ANSWER
 
 # Attempt to reconfigure the root logger to your desired settings
-log_level = logging.INFO if settings.debug else logging.INFO
+log_level = logging.INFO if settings.debug else logging.WARNING
 logger.setLevel(log_level)
 
 USER_TIMEOUT = 60_000
