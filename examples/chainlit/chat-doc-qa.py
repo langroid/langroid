@@ -26,6 +26,7 @@ import chainlit as cl
 import langroid as lr
 import langroid.parsing.parser as lp
 from langroid.agent.special.doc_chat_agent import DocChatAgent, DocChatAgentConfig
+from langroid.utils.constants import NO_ANSWER
 from langroid.agent.callbacks.chainlit import (
     add_instructions,
     make_llm_settings_widgets,
@@ -39,6 +40,7 @@ async def setup_agent() -> None:
     await setup_llm()
     llm_config = cl.user_session.get("llm_config")
     config = DocChatAgentConfig(
+        name="DocAgent",
         n_query_rephrases=0,
         cross_encoder_reranking_model="cross-encoder/ms-marco-MiniLM-L-6-v2",
         hypothetical_answer=False,
@@ -122,4 +124,13 @@ async def on_chat_start():
 @cl.on_message
 async def on_message(message: cl.Message):
     agent: lr.ChatAgent = cl.user_session.get("agent")
-    await cl.make_async(agent.llm_response)(message.content)
+    response: lr.ChatDocument | None = await cl.make_async(agent.llm_response)(
+        message.content
+    )
+    if response.content.strip() == NO_ANSWER:
+        # in this case there were not relevant extracts
+        # and we never called the LLM, so response was not shown in UI,
+        # hence we need to send it here
+        # TODO: It is possible the LLM might have already responded with NO_ANSWER,
+        # so we may be duplicating the response here.
+        agent.callbacks.show_llm_response(content=NO_ANSWER)

@@ -97,7 +97,7 @@ class Agent(ABC):
             Parser(config.parsing) if config.parsing else None
         )
         self.callbacks = SimpleNamespace(
-            start_llm_stream=noop_fn,
+            start_llm_stream=lambda: noop_fn,
             cancel_llm_stream=noop_fn,
             finish_llm_stream=noop_fn,
             show_llm_response=noop_fn,

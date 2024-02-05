@@ -25,12 +25,12 @@ except ImportError:
 
 from chainlit import run_sync
 from chainlit.config import config
+from chainlit.logger import logger
 
 import langroid as lr
 import langroid.language_models as lm
 from langroid.utils.configuration import settings
-
-logger = logging.getLogger(__name__)
+from langroid.utils.constants import NO_ANSWER
 
 logger.setLevel(logging.INFO if settings.debug else logging.WARNING)
 
@@ -339,24 +339,28 @@ class ChainlitAgentCallbacks:
         if self.stream is not None:
             run_sync(self.stream.remove())  # type: ignore
 
-    def finish_llm_stream(self, content: str, is_tool: bool) -> None:
+    def finish_llm_stream(self, content: str, is_tool: bool = False) -> None:
         """Update the stream, and display entire response in the right language."""
         tool_indicator = " =>  🛠️" if is_tool else ""
         if self.agent.llm is None or self.stream is None:
             raise ValueError("LLM or stream not initialized")
         model = self.agent.llm.config.chat_model
-        run_sync(self.stream.update())  # type: ignore
+        if content == "":
+            run_sync(self.stream.remove())  # type: ignore
+        else:
+            run_sync(self.stream.update())  # type: ignore
+        stream_id = self.stream.id if content else None
         step = cl.Step(
-            id=self.stream.id,
+            id=stream_id,
             name=self.agent.config.name + f"(LLM {model} 🧠{tool_indicator})",
             type="llm",
             parent_id=self._get_parent_id(),
             language="json" if is_tool else None,
         )
-        step.output = content
+        step.output = content or NO_ANSWER
         run_sync(step.update())  # type: ignore
 
-    def show_llm_response(self, content: str, is_tool: bool) -> None:
+    def show_llm_response(self, content: str, is_tool: bool = False) -> None:
         """Show non-streaming LLM response."""
         model = self.agent.llm is not None and self.agent.llm.config.chat_model
         tool_indicator = " =>  🛠️" if is_tool else ""
@@ -367,7 +371,7 @@ class ChainlitAgentCallbacks:
             language="json" if is_tool else None,
         )
         self.last_step = step
-        step.output = content
+        step.output = content or NO_ANSWER
         run_sync(step.send())  # type: ignore
 
     def show_agent_response(self, content: str) -> None:
