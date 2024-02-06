@@ -281,7 +281,7 @@ class DocChatAgent(ChatAgent):
         n_docs = len(docs)
         n_splits = self.ingest_docs(docs)
         if n_docs == 0:
-            return
+            return []
         n_urls = len(urls)
         n_paths = len(paths)
         print(
