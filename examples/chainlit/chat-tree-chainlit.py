@@ -1,6 +1,6 @@
 """
 Variant of chat-tree.py but with Chainlit UI.
-The ONLY change is we apply ChainlitTask(task) to the top-level task!
+The ONLY change is we apply ChainlitTaskCallbacks() to the top-level task!
 
 Run like this:
 
@@ -16,10 +16,10 @@ from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
 from langroid.utils.globals import GlobalState
 from langroid.utils.configuration import set_global, Settings
 from langroid.utils.constants import DONE
-from langroid.agent.callbacks.chainlit import ChainlitTaskCallbacks
+from langroid.agent.callbacks.chainlit import add_instructions
+import langroid as lr
 import chainlit as cl
-
-app = typer.Typer()
+from textwrap import dedent
 
 INTERACTIVE = False
 
@@ -204,6 +204,34 @@ async def chat() -> None:
     odd_task.add_sub_task(adder_task)
 
     # inject chainlit callbacks: this is the ONLY change to chat-tree.py
-    ChainlitTaskCallbacks(main_task)
+    lr.ChainlitTaskCallbacks(main_task)
+
+    await add_instructions(
+        title="Multi-agent chat for tree-structured computation with tools",
+        content=dedent(
+            """
+        This task consists of performing this calculation for a given input number n:
+        
+        ```python
+        def Main(n):
+            if n is odd:
+                return (3*n+1) + n
+            else:
+                If n is divisible by 10:
+                    return n/10 + n
+                else:
+                    return n/2 + n
+        ```
+        
+        See details in the [chat-tree.py](https://github.com/langroid/langroid/blob/main/examples/basic/chat-tree.py), 
+        and the writeup on 
+        [Hierarchical Agent Computation](https://langroid.github.io/langroid/examples/agent-tree/).
+        
+        The default mode is non-interactive. Initially the main agent
+        asks the user (you) to enter a number. Once you enter a number,
+        you can watch the computation unfold autonomously.
+        """
+        ),
+    )
     # start the chat
     await main_task.run_async()
