@@ -31,7 +31,7 @@ from langroid.agent.callbacks.chainlit import (
     add_instructions,
     make_llm_settings_widgets,
     setup_llm,
-    update_agent,
+    update_llm,
 )
 from textwrap import dedent
 
@@ -81,7 +81,8 @@ async def setup_agent() -> None:
 
 @cl.on_settings_update
 async def on_update(settings):
-    await update_agent(settings)
+    await update_llm(settings)
+    await setup_agent()
 
 
 @cl.on_chat_start

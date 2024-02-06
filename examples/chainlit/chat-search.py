@@ -19,27 +19,21 @@ import chainlit as cl
 import langroid as lr
 from langroid.agent.callbacks.chainlit import ChainlitTaskCallbacks
 from langroid.agent.tools.metaphor_search_tool import MetaphorSearchTool
-from langroid.agent.callbacks.chainlit import add_instructions
+from langroid.agent.callbacks.chainlit import (
+    add_instructions,
+    make_llm_settings_widgets,
+    setup_llm,
+    update_llm,
+)
 from textwrap import dedent
 
 
-@cl.on_chat_start
-async def on_chat_start():
-    await add_instructions(
-        title="Agent with access to a web search Tool",
-        content=dedent(
-            """
-        Agent uses the `MetaphorSearchTool` tool/fn-call to search the web using the 
-        [Metaphor Search API](https://docs.exa.ai/reference/getting-started).
-        - User asks question
-        - Agent LLM uses `MetaphorSearchTool` to generate search results
-        - Agent handler recognizes this tool and returns search results
-        - User hits `c` to continue
-        - Agent LLM composes answer
-        """
-        ),
-    )
+async def setup_agent_task():
+    """Set up Agent and Task from session settings state."""
 
+    # set up LLM and LLMConfig from settings state
+    await setup_llm()
+    llm_config = cl.user_session.get("llm_config")
     tool_name = MetaphorSearchTool.default_value("request")
     sys_msg = f"""
         You are an astute, self-aware AI assistant, and you are adept at 
@@ -51,6 +45,7 @@ async def on_chat_start():
           then compose a response to the user's question. 
     """
     config = lr.ChatAgentConfig(
+        llm=llm_config,
         name="Searcher",
         system_message=sys_msg,
     )
@@ -58,7 +53,39 @@ async def on_chat_start():
     agent.enable_message(MetaphorSearchTool)
     task = lr.Task(agent, interactive=True)
     ChainlitTaskCallbacks(task)
+    cl.user_session.set("agent", agent)
     cl.user_session.set("task", task)
+
+
+@cl.on_settings_update
+async def on_update(settings):
+    await update_llm(settings)
+    await setup_agent_task()
+
+
+@cl.on_chat_start
+async def on_chat_start():
+    await add_instructions(
+        title="Agent with access to a web search Tool",
+        content=dedent(
+            """
+        Agent uses the `MetaphorSearchTool` tool/fn-call to search the web using the 
+        [Metaphor Search API](https://docs.exa.ai/reference/getting-started).
+        
+        - User asks question
+        - Agent LLM uses `MetaphorSearchTool` to generate search results
+        - Agent handler recognizes this tool and returns search results
+        - User hits `c` to continue
+        - Agent LLM composes answer
+        
+        To change LLM settings, including model name, click the settings symbol on the 
+        left of the chat window.        
+        """
+        ),
+    )
+
+    await make_llm_settings_widgets()
+    await setup_agent_task()
 
 
 @cl.on_message

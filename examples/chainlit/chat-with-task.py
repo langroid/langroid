@@ -12,18 +12,26 @@ from langroid.agent.callbacks.chainlit import ChainlitTaskCallbacks
 from langroid.agent.callbacks.chainlit import (
     add_instructions,
     make_llm_settings_widgets,
-    update_agent,
+    update_llm,
+    setup_llm,
 )
 
 
 @cl.on_settings_update
 async def on_settings_update(settings: cl.ChatSettings):
-    await update_agent(settings, "agent")
-    setup_task()
+    await update_llm(settings, "agent")
+    setup_agent_task()
 
 
-def setup_task():
-    agent = cl.user_session.get("agent")
+async def setup_agent_task():
+    await setup_llm()
+    llm_config = cl.user_session.get("llm_config")
+    config = lr.ChatAgentConfig(
+        llm=llm_config,
+        name="Assistant",
+        system_message="You are a helpful assistant. Be concise in your answers.",
+    )
+    agent = lr.ChatAgent(config)
     task = lr.Task(
         agent,
         interactive=True,
@@ -35,18 +43,12 @@ def setup_task():
 
 @cl.on_chat_start
 async def on_chat_start():
-    config = lr.ChatAgentConfig(
-        name="Assistant",
-        system_message="You are a helpful assistant. Be concise in your answers.",
-    )
-    agent = lr.ChatAgent(config)
-    cl.user_session.set("agent", agent)
-    setup_task()
     await add_instructions(
         title="Instructions",
         content="Interact with a **Langroid Task**",
     )
     await make_llm_settings_widgets()
+    await setup_agent_task()
 
 
 @cl.on_message

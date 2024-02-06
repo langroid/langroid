@@ -7,8 +7,6 @@ Run like this:
 chainlit run examples/chainlit/chat-tree-chainlit.py
 """
 
-import typer
-
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
 from langroid.agent.tool_message import ToolMessage

@@ -47,6 +47,8 @@ async def ask_helper(func, **kwargs):
 
 @no_type_check
 async def setup_llm() -> None:
+    """From the session `llm_settings`, create new LLMConfig and LLM objects,
+    save them in session state."""
     llm_settings = cl.user_session.get("llm_settings", {})
     model = llm_settings.get("chat_model")
     context_length = llm_settings.get("context_length", 16_000)
@@ -71,15 +73,11 @@ async def setup_llm() -> None:
 
 
 @no_type_check
-async def update_agent(settings: Dict[str, Any], agent="agent") -> None:
+async def update_llm(settings: Dict[str, Any], agent="agent") -> None:
+    """Update LLMConfig and LLM from settings, and save in session state."""
     cl.user_session.set("llm_settings", settings)
     await inform_llm_settings()
     await setup_llm()
-    agent = cl.user_session.get(agent)
-    if agent is None:
-        raise ValueError(f"Agent {agent} not found in user session")
-    agent.llm = cl.user_session.get("llm")
-    agent.config.llm = cl.user_session.get("llm_config")
 
 
 async def make_llm_settings_widgets() -> None:
