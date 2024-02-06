@@ -14,6 +14,7 @@ from langroid.agent.callbacks.chainlit import (
     make_llm_settings_widgets,
     update_llm,
     setup_llm,
+    show_first_user_message,
 )
 
 
@@ -28,7 +29,7 @@ async def setup_agent_task():
     llm_config = cl.user_session.get("llm_config")
     config = lr.ChatAgentConfig(
         llm=llm_config,
-        name="Assistant",
+        name="Demo",
         system_message="You are a helpful assistant. Be concise in your answers.",
     )
     agent = lr.ChatAgent(config)
@@ -54,4 +55,5 @@ async def on_chat_start():
 @cl.on_message
 async def on_message(message: cl.Message):
     task = cl.user_session.get("task")
+    await show_first_user_message(message, agent_name=task.agent.config.name)
     await task.run_async(message.content)

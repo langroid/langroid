@@ -24,6 +24,7 @@ from langroid.agent.callbacks.chainlit import (
     make_llm_settings_widgets,
     setup_llm,
     update_llm,
+    show_first_user_message,
 )
 from textwrap import dedent
 
@@ -91,4 +92,5 @@ async def on_chat_start():
 @cl.on_message
 async def on_message(message: cl.Message):
     task = cl.user_session.get("task")
+    await show_first_user_message(message, agent_name=task.agent.config.name)
     task.run(message.content)

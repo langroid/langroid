@@ -54,7 +54,7 @@ async def setup_llm() -> None:
     context_length = llm_settings.get("context_length", 16_000)
     temperature = llm_settings.get("temperature", 0.2)
     timeout = llm_settings.get("timeout", 90)
-    print(f"Using model: {model}")
+    logger.info(f"Using model: {model}")
     llm_config = lm.OpenAIGPTConfig(
         chat_model=model or lm.OpenAIChatModel.GPT4_TURBO,
         # or, other possibilities for example:
@@ -244,6 +244,20 @@ async def ask_user_step(
     return res["output"]
 
 
+async def show_first_user_message(message: cl.Message, agent_name: str):
+    """Display first user message, which is not yet part of an Agent step,
+    using the Agent's name, so it is displayed with a title
+    consistent with subsequent user responses within the Agent's steps."""
+
+    step = cl.Step(
+        name=f"{agent_name} (You 😃)",
+        type="run",
+        id=message.id,
+    )
+    step.output = message.content
+    await step.update()
+
+
 def wrap_text_preserving_structure(text: str, width: int = 90) -> str:
     """Wrap text preserving paragraph breaks. Typically used to
     format an agent_response output, which may have long lines
@@ -310,6 +324,7 @@ class ChainlitAgentCallbacks:
 
     def start_llm_stream(self) -> Callable[[str], None]:
         """Returns a streaming fn that can be passed to the LLM class"""
+        model = self.agent.llm.config.chat_model
         logger.info(
             f"""
             Starting LLM stream for {self.agent.config.name} 
@@ -317,7 +332,7 @@ class ChainlitAgentCallbacks:
         """
         )
         self.stream = cl.Step(
-            name=self.agent.config.name + "(LLM 🧠)",
+            name=self.agent.config.name + f"(LLM {model} 🧠)",
             type="llm",
             parent_id=self._get_parent_id(),
         )
@@ -429,6 +444,17 @@ class ChainlitAgentCallbacks:
                 suppress_values=["c"],
             )
         )
+
+    def show_user_response(self, message: str) -> None:
+        """Show user response as a step."""
+        step = cl.Step(
+            id=cl.context.current_step.id,
+            name=self.agent.config.name + "(You 😃)",
+            type="run",
+            parent_id=self._get_parent_id(),
+        )
+        step.output = message
+        run_sync(step.send())
 
 
 class ChainlitTaskCallbacks:
