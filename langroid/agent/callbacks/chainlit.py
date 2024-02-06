@@ -244,20 +244,6 @@ async def ask_user_step(
     return res["output"]
 
 
-async def show_first_user_message(message: cl.Message, agent_name: str):
-    """Display first user message, which is not yet part of an Agent step,
-    using the Agent's name, so it is displayed with a title
-    consistent with subsequent user responses within the Agent's steps."""
-
-    step = cl.Step(
-        name=f"{agent_name} (You 😃)",
-        type="run",
-        id=message.id,
-    )
-    step.output = message.content
-    await step.update()
-
-
 def wrap_text_preserving_structure(text: str, width: int = 90) -> str:
     """Wrap text preserving paragraph breaks. Typically used to
     format an agent_response output, which may have long lines
@@ -285,7 +271,10 @@ class ChainlitAgentCallbacks:
     stream: Optional[cl.Step] = None  # pushed into openai_gpt.py to stream tokens
     parent_agent: Optional[lr.Agent] = None  # used to get parent id, for step nesting
 
-    def __init__(self, agent: lr.Agent):
+    def __init__(self, agent: lr.Agent, msg: cl.Message = None):
+        """Add callbacks to the agent, and save the initial message,
+        so we can alter the display of the first user message.
+        """
         agent.callbacks.start_llm_stream = self.start_llm_stream
         agent.callbacks.cancel_llm_stream = self.cancel_llm_stream
         agent.callbacks.finish_llm_stream = self.finish_llm_stream
@@ -294,8 +283,11 @@ class ChainlitAgentCallbacks:
         agent.callbacks.get_user_response = self.get_user_response
         agent.callbacks.get_last_step = self.get_last_step
         agent.callbacks.set_parent_agent = self.set_parent_agent
+        agent.callbacks.show_error_message = self.show_error_message
         self.agent: lr.Agent = agent
         self.name = agent.config.name
+        if msg is not None:
+            self.show_first_user_message(msg)
 
     def _get_parent_id(self) -> str | None:
         """Get step id under which we need to nest the current step:
@@ -387,6 +379,18 @@ class ChainlitAgentCallbacks:
         step.output = content or NO_ANSWER
         run_sync(step.send())  # type: ignore
 
+    def show_error_message(self, error: str) -> None:
+        """Show error message as a step."""
+        step = cl.Step(
+            name=self.agent.config.name + "(Error 🚫)",
+            type="run",
+            parent_id=self._get_parent_id(),
+            language="text",
+        )
+        self.last_step = step
+        step.output = error
+        run_sync(step.send())
+
     def show_agent_response(self, content: str) -> None:
         """Show message from agent (typically tool handler).
         Agent response can be considered as a "step"
@@ -456,19 +460,33 @@ class ChainlitAgentCallbacks:
         step.output = message
         run_sync(step.send())
 
+    def show_first_user_message(self, msg: cl.Message):
+        """Show first user message as a step."""
+        step = cl.Step(
+            id=msg.id,
+            name=self.agent.config.name + "(You 😃)",
+            type="run",
+            parent_id=self._get_parent_id(),
+        )
+        self.last_step = step
+        step.output = msg.content
+        run_sync(step.update())
+
 
 class ChainlitTaskCallbacks:
     """
-    Inject ChainlitCallbacks into a Langroid Task's agent and
+    Recursively inject ChainlitAgentCallbacks into a Langroid Task's agent and
     agents of sub-tasks.
     """
 
-    def __init__(self, task: lr.Task):
-        ChainlitTaskCallbacks._inject_callbacks(task)
+    def __init__(self, task: lr.Task, msg: cl.Message = None):
+        """Inject callbacks recursively, ensuring msg is passed to the
+        top-level agent"""
+        ChainlitTaskCallbacks._inject_callbacks(task, msg)
 
     @staticmethod
-    def _inject_callbacks(task: lr.Task) -> None:
-        # recursively apply ChainlitCallbacks to agents of sub-tasks
-        ChainlitAgentCallbacks(task.agent)
+    def _inject_callbacks(task: lr.Task, msg: cl.Message = None) -> None:
+        # recursively apply ChainlitAgentCallbacks to agents of sub-tasks
+        ChainlitAgentCallbacks(task.agent, msg)
         for t in task.sub_tasks:
             ChainlitTaskCallbacks._inject_callbacks(t)

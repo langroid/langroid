@@ -17,14 +17,12 @@ chainlit run examples/chainlit/chat-search.py
 
 import chainlit as cl
 import langroid as lr
-from langroid.agent.callbacks.chainlit import ChainlitTaskCallbacks
 from langroid.agent.tools.metaphor_search_tool import MetaphorSearchTool
 from langroid.agent.callbacks.chainlit import (
     add_instructions,
     make_llm_settings_widgets,
     setup_llm,
     update_llm,
-    show_first_user_message,
 )
 from textwrap import dedent
 
@@ -53,7 +51,6 @@ async def setup_agent_task():
     agent = lr.ChatAgent(config)
     agent.enable_message(MetaphorSearchTool)
     task = lr.Task(agent, interactive=True)
-    ChainlitTaskCallbacks(task)
     cl.user_session.set("agent", agent)
     cl.user_session.set("task", task)
 
@@ -92,5 +89,5 @@ async def on_chat_start():
 @cl.on_message
 async def on_message(message: cl.Message):
     task = cl.user_session.get("task")
-    await show_first_user_message(message, agent_name=task.agent.config.name)
+    lr.ChainlitTaskCallbacks(task, message)
     task.run(message.content)

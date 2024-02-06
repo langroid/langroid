@@ -9,8 +9,7 @@ chainlit run examples/chainlit/chat-tool.py
 """
 import langroid as lr
 import chainlit as cl
-from langroid.agent.callbacks.chainlit import ChainlitTaskCallbacks
-from langroid.agent.callbacks.chainlit import add_instructions, show_first_user_message
+from langroid.agent.callbacks.chainlit import add_instructions
 from textwrap import dedent
 
 
@@ -57,12 +56,11 @@ async def on_chat_start():
         agent,
         interactive=True,
     )
-    ChainlitTaskCallbacks(task)
     cl.user_session.set("task", task)
 
 
 @cl.on_message
 async def on_message(message: cl.Message):
     task = cl.user_session.get("task")
-    await show_first_user_message(message, agent_name=task.agent.config.name)
+    lr.ChainlitTaskCallbacks(task, message)
     await task.run_async(message.content)
