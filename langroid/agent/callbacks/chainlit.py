@@ -322,7 +322,6 @@ class ChainlitAgentCallbacks:
         agent.callbacks.set_parent_agent = self.set_parent_agent
         agent.callbacks.show_error_message = self.show_error_message
         self.agent: lr.Agent = agent
-        self.name = agent.config.name
         if msg is not None:
             self.show_first_user_message(msg)
 
@@ -331,10 +330,11 @@ class ChainlitAgentCallbacks:
         This should be the parent Agent's last_step.
         """
         if self.parent_agent is None:
-            logger.info(f"No parent agent found for {self.name}")
+            logger.info(f"No parent agent found for {self.agent.config.name}")
             return None
         logger.info(
-            f"Parent agent found for {self.name} = {self.parent_agent.config.name}"
+            f"Parent agent found for {self.agent.config.name} = "
+            f"{self.parent_agent.config.name}"
         )
         last_step = self.parent_agent.callbacks.get_last_step()
         if last_step is None:
@@ -510,52 +510,39 @@ class ChainlitAgentCallbacks:
         run_sync(step.update())
 
 
-class ChainlitTaskCallbacks:
+class ChainlitTaskCallbacks(ChainlitAgentCallbacks):
     """
     Recursively inject ChainlitAgentCallbacks into a Langroid Task's agent and
     agents of sub-tasks.
     """
 
-    parent_agent: lr.Agent | None = None
-
     def __init__(self, task: lr.Task, msg: cl.Message = None):
         """Inject callbacks recursively, ensuring msg is passed to the
         top-level agent"""
-        ChainlitTaskCallbacks._inject_callbacks(task, msg)
+
+        super().__init__(task.agent, msg)
+        ChainlitTaskCallbacks._inject_callbacks(task)
         self.task = task
         self.task.callbacks.show_subtask_response = self.show_subtask_response
-        self.task.callbacks.set_parent_agent = self.set_parent_agent
 
-    def set_parent_agent(self, parent: lr.Agent) -> None:
-        """Set the parent agent for this task"""
-        self.parent_agent = parent
-
-    def _get_parent_id(self) -> str | None:
-        return (
-            self.parent_agent
-            and (last_parent_step := self.parent_agent.callbacks.get_last_step())
-            and last_parent_step.id
-        )
+    @staticmethod
+    def _inject_callbacks(task: lr.Task) -> None:
+        # recursively apply ChainlitAgentCallbacks to agents of sub-tasks
+        for t in task.sub_tasks:
+            ChainlitTaskCallbacks(t)
 
     def show_subtask_response(
         self, task: lr.Task, content: str, is_tool: bool = False
     ) -> None:
-        """Show sub-task response as a step."""
-        # TODO assume a task can have just one parent for now (i.e. tree struc)
+        """Show sub-task response as a step, nested at the right level."""
 
-        # we should nest this step under the calling task's agent's last step, if any
+        # The step should nest under the calling agent's last step
         step = cl.Step(
-            name=self.task.agent.config.name + f"(<= {task.agent.config.name})",
+            name=self.task.agent.config.name + f"( ⏎ {task.agent.config.name})",
             type="run",
             parent_id=self._get_parent_id(),
             language="json" if is_tool else None,
         )
         step.output = content or NO_ANSWER
+        self.last_step = step
         run_sync(step.send())
-
-    @staticmethod
-    def _inject_callbacks(task: lr.Task, msg: cl.Message = None) -> None:
-        # recursively apply ChainlitAgentCallbacks to agents of sub-tasks
-        ChainlitAgentCallbacks(task.agent, msg)
-        for t in task.sub_tasks:
-            ChainlitTaskCallbacks(t)

@@ -808,7 +808,7 @@ class Task:
         if isinstance(e, Task):
             actual_turns = e.turns if e.turns > 0 else turns
             e.agent.callbacks.set_parent_agent(self.agent)
-            e.callbacks.set_parent_agent(self.agent)
+            # e.callbacks.set_parent_agent(self.agent)
             result = e.run(
                 self.pending_message,
                 turns=actual_turns,
@@ -883,7 +883,7 @@ class Task:
         if isinstance(e, Task):
             actual_turns = e.turns if e.turns > 0 else turns
             e.agent.callbacks.set_parent_agent(self.agent)
-            e.callbacks.set_parent_agent(self.agent)
+            # e.callbacks.set_parent_agent(self.agent)
             result = await e.run_async(
                 self.pending_message,
                 turns=actual_turns,
