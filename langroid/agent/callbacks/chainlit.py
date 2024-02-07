@@ -33,8 +33,14 @@ from langroid.utils.constants import NO_ANSWER
 # Attempt to reconfigure the root logger to your desired settings
 log_level = logging.INFO if settings.debug else logging.WARNING
 logger.setLevel(log_level)
+logging.basicConfig(level=log_level)
 
 USER_TIMEOUT = 60_000
+SYSTEM = "System 🖥️"
+LLM = "LLM 🧠"
+AGENT = "Agent <>"
+YOU = "You 😃"
+ERROR = "Error 🚫"
 
 
 @no_type_check
@@ -80,7 +86,10 @@ async def update_llm(settings: Dict[str, Any], agent="agent") -> None:
     await setup_llm()
 
 
-async def make_llm_settings_widgets() -> None:
+async def make_llm_settings_widgets(
+    config: lm.OpenAIGPTConfig | None = None,
+) -> None:
+    config = config or lm.OpenAIGPTConfig()
     await cl.ChatSettings(
         [
             cl.input_widget.TextInput(
@@ -93,7 +102,7 @@ async def make_llm_settings_widgets() -> None:
             cl.input_widget.NumberInput(
                 id="context_length",
                 label="Chat Context Length",
-                initial=16_000,
+                initial=config.chat_context_length,
                 placeholder="E.g. 16000",
             ),
             cl.input_widget.Slider(
@@ -102,7 +111,7 @@ async def make_llm_settings_widgets() -> None:
                 min=0.0,
                 max=1.0,
                 step=0.1,
-                initial=0.2,
+                initial=config.temperature,
                 tooltip="Adjust based on model",
             ),
             cl.input_widget.Slider(
@@ -111,7 +120,7 @@ async def make_llm_settings_widgets() -> None:
                 min=10,
                 max=200,
                 step=10,
-                initial=90,
+                initial=config.timeout,
                 tooltip="Timeout for LLM response, in seconds.",
             ),
         ]
@@ -128,7 +137,7 @@ async def inform_llm_settings() -> None:
         timeout=llm_settings.get("timeout"),
     )
     await cl.Message(
-        author="System",
+        author=SYSTEM,
         content="LLM settings updated",
         elements=[
             cl.Text(
@@ -157,6 +166,34 @@ async def add_instructions(
             )
         ],
     ).send()
+
+
+async def add_image(
+    path: str,
+    name: str,
+    display: Literal["side", "inline", "page"] = "inline",
+) -> None:
+    await cl.Message(
+        author="",
+        content=name if display == "side" else "",
+        elements=[
+            cl.Image(
+                name=name,
+                path=path,
+                display=display,
+            )
+        ],
+    ).send()
+
+
+async def get_text_files(
+    message: cl.Message,
+    extensions: List[str] = [".txt", ".pdf", ".doc", ".docx"],
+) -> Dict[str, str]:
+    """Get dict (file_name -> file_path) from files uploaded in chat msg"""
+
+    files = [file for file in message.elements if file.path.endswith(tuple(extensions))]
+    return {file.name: file.path for file in files}
 
 
 async def ask_user_step(
@@ -285,7 +322,6 @@ class ChainlitAgentCallbacks:
         agent.callbacks.set_parent_agent = self.set_parent_agent
         agent.callbacks.show_error_message = self.show_error_message
         self.agent: lr.Agent = agent
-        self.name = agent.config.name
         if msg is not None:
             self.show_first_user_message(msg)
 
@@ -294,10 +330,11 @@ class ChainlitAgentCallbacks:
         This should be the parent Agent's last_step.
         """
         if self.parent_agent is None:
-            logger.info(f"No parent agent found for {self.name}")
+            logger.info(f"No parent agent found for {self.agent.config.name}")
             return None
         logger.info(
-            f"Parent agent found for {self.name} = {self.parent_agent.config.name}"
+            f"Parent agent found for {self.agent.config.name} = "
+            f"{self.parent_agent.config.name}"
         )
         last_step = self.parent_agent.callbacks.get_last_step()
         if last_step is None:
@@ -324,7 +361,7 @@ class ChainlitAgentCallbacks:
         """
         )
         self.stream = cl.Step(
-            name=self.agent.config.name + f"(LLM {model} 🧠)",
+            name=self.agent.config.name + f"({LLM} {model})",
             type="llm",
             parent_id=self._get_parent_id(),
         )
@@ -357,12 +394,12 @@ class ChainlitAgentCallbacks:
         stream_id = self.stream.id if content else None
         step = cl.Step(
             id=stream_id,
-            name=self.agent.config.name + f"(LLM {model} 🧠{tool_indicator})",
+            name=self.agent.config.name + f"({LLM} {model} {tool_indicator})",
             type="llm",
             parent_id=self._get_parent_id(),
             language="json" if is_tool else None,
         )
-        step.output = content or NO_ANSWER
+        step.output = textwrap.dedent(content) or NO_ANSWER
         run_sync(step.update())  # type: ignore
 
     def show_llm_response(self, content: str, is_tool: bool = False) -> None:
@@ -370,19 +407,19 @@ class ChainlitAgentCallbacks:
         model = self.agent.llm is not None and self.agent.llm.config.chat_model
         tool_indicator = " =>  🛠️" if is_tool else ""
         step = cl.Step(
-            name=self.agent.config.name + f"(LLM {model} 🧠{tool_indicator})",
+            name=self.agent.config.name + f"({LLM} {model} {tool_indicator})",
             type="llm",
             parent_id=self._get_parent_id(),
             language="json" if is_tool else None,
         )
         self.last_step = step
-        step.output = content or NO_ANSWER
+        step.output = textwrap.dedent(content) or NO_ANSWER
         run_sync(step.send())  # type: ignore
 
     def show_error_message(self, error: str) -> None:
         """Show error message as a step."""
         step = cl.Step(
-            name=self.agent.config.name + "(Error 🚫)",
+            name=self.agent.config.name + f"({ERROR})",
             type="run",
             parent_id=self._get_parent_id(),
             language="text",
@@ -397,7 +434,7 @@ class ChainlitAgentCallbacks:
         between LLM response and user response
         """
         step = cl.Step(
-            name=self.agent.config.name + "(Agent <>)",
+            name=self.agent.config.name + f"({AGENT})",
             type="tool",
             parent_id=self._get_parent_id(),
             language="text",
@@ -453,7 +490,7 @@ class ChainlitAgentCallbacks:
         """Show user response as a step."""
         step = cl.Step(
             id=cl.context.current_step.id,
-            name=self.agent.config.name + "(You 😃)",
+            name=self.agent.config.name + f"({YOU})",
             type="run",
             parent_id=self._get_parent_id(),
         )
@@ -464,7 +501,7 @@ class ChainlitAgentCallbacks:
         """Show first user message as a step."""
         step = cl.Step(
             id=msg.id,
-            name=self.agent.config.name + "(You 😃)",
+            name=self.agent.config.name + f"({YOU})",
             type="run",
             parent_id=self._get_parent_id(),
         )
@@ -473,7 +510,7 @@ class ChainlitAgentCallbacks:
         run_sync(step.update())
 
 
-class ChainlitTaskCallbacks:
+class ChainlitTaskCallbacks(ChainlitAgentCallbacks):
     """
     Recursively inject ChainlitAgentCallbacks into a Langroid Task's agent and
     agents of sub-tasks.
@@ -482,11 +519,30 @@ class ChainlitTaskCallbacks:
     def __init__(self, task: lr.Task, msg: cl.Message = None):
         """Inject callbacks recursively, ensuring msg is passed to the
         top-level agent"""
-        ChainlitTaskCallbacks._inject_callbacks(task, msg)
+
+        super().__init__(task.agent, msg)
+        ChainlitTaskCallbacks._inject_callbacks(task)
+        self.task = task
+        self.task.callbacks.show_subtask_response = self.show_subtask_response
 
     @staticmethod
-    def _inject_callbacks(task: lr.Task, msg: cl.Message = None) -> None:
+    def _inject_callbacks(task: lr.Task) -> None:
         # recursively apply ChainlitAgentCallbacks to agents of sub-tasks
-        ChainlitAgentCallbacks(task.agent, msg)
         for t in task.sub_tasks:
-            ChainlitTaskCallbacks._inject_callbacks(t)
+            ChainlitTaskCallbacks(t)
+
+    def show_subtask_response(
+        self, task: lr.Task, content: str, is_tool: bool = False
+    ) -> None:
+        """Show sub-task response as a step, nested at the right level."""
+
+        # The step should nest under the calling agent's last step
+        step = cl.Step(
+            name=self.task.agent.config.name + f"( ⏎ {task.agent.config.name})",
+            type="run",
+            parent_id=self._get_parent_id(),
+            language="json" if is_tool else None,
+        )
+        step.output = content or NO_ANSWER
+        self.last_step = step
+        run_sync(step.send())

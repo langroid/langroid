@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import logging
 from collections import Counter
+from types import SimpleNamespace
 from typing import (
     Any,
     Callable,
@@ -27,6 +28,7 @@ from langroid.agent.chat_document import (
     ChatDocument,
 )
 from langroid.mytypes import Entity
+from langroid.parsing.json import extract_top_level_json
 from langroid.utils.configuration import settings
 from langroid.utils.constants import DONE, NO_ANSWER, PASS, PASS_TO, SEND_TO, USER_QUIT
 from langroid.utils.logging import RichFileLogger, setup_file_logger
@@ -34,6 +36,10 @@ from langroid.utils.logging import RichFileLogger, setup_file_logger
 logger = logging.getLogger(__name__)
 
 Responder = Entity | Type["Task"]
+
+
+def noop_fn(*args: List[Any], **kwargs: Dict[str, Any]) -> None:
+    pass
 
 
 class Task:
@@ -135,6 +141,10 @@ class Task:
         if agent is None:
             agent = ChatAgent()
 
+        self.callbacks = SimpleNamespace(
+            show_subtask_response=noop_fn,
+            set_parent_agent=noop_fn,
+        )
         # copy the agent's config, so that we don't modify the original agent's config,
         # which may be shared by other agents.
         try:
@@ -797,17 +807,28 @@ class Task:
         """
         if isinstance(e, Task):
             actual_turns = e.turns if e.turns > 0 else turns
-            if e.agent.callbacks.set_parent_agent is not None:
-                e.agent.callbacks.set_parent_agent(self.agent)
+            e.agent.callbacks.set_parent_agent(self.agent)
+            # e.callbacks.set_parent_agent(self.agent)
             result = e.run(
                 self.pending_message,
                 turns=actual_turns,
                 caller=self,
             )
+            result_str = str(ChatDocument.to_LLMMessage(result))
+            maybe_tool = len(extract_top_level_json(result_str)) > 0
+            self.callbacks.show_subtask_response(
+                task=e,
+                result=result,
+                is_tool=maybe_tool,
+            )
         else:
             response_fn = self._entity_responder_map[cast(Entity, e)]
             result = response_fn(self.pending_message)
+        return self._process_result_routing(result)
 
+    def _process_result_routing(
+        self, result: ChatDocument | None
+    ) -> ChatDocument | None:
         # process result in case there is a routing instruction
         if result is None:
             return None
@@ -861,18 +882,24 @@ class Task:
         """
         if isinstance(e, Task):
             actual_turns = e.turns if e.turns > 0 else turns
-            if e.agent.callbacks.set_parent_agent is not None:
-                e.agent.callbacks.set_parent_agent(self.agent)
+            e.agent.callbacks.set_parent_agent(self.agent)
+            # e.callbacks.set_parent_agent(self.agent)
             result = await e.run_async(
                 self.pending_message,
                 turns=actual_turns,
                 caller=self,
             )
-            return result
+            result_str = str(ChatDocument.to_LLMMessage(result))
+            maybe_tool = len(extract_top_level_json(result_str)) > 0
+            self.callbacks.show_subtask_response(
+                task=e,
+                content=result_str,
+                is_tool=maybe_tool,
+            )
         else:
             response_fn = self._entity_responder_async_map[cast(Entity, e)]
             result = await response_fn(self.pending_message)
-            return result
+        return self._process_result_routing(result)
 
     def result(self) -> ChatDocument:
         """

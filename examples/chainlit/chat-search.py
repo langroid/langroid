@@ -90,4 +90,4 @@ async def on_chat_start():
 async def on_message(message: cl.Message):
     task = cl.user_session.get("task")
     lr.ChainlitTaskCallbacks(task, message)
-    task.run(message.content)
+    await task.run_async(message.content)

@@ -30,18 +30,6 @@ class AskNumTool(ToolMessage):
     request = "ask_num"
     purpose = "Ask user for the initial number"
 
-    def handle(self) -> str:
-        """
-        This is a stateless tool (i.e. does not use any Agent member vars), so we can
-        define the handler right here, instead of defining an `ask_num`
-        method in the agent.
-        """
-        res = cl.run_sync(cl.AskUserMessage(content="Please enter a number").send())
-        # record this in global state, so other agents can access it
-        num = res["output"]
-        MyGlobalState.set_values(number=num)
-        return str(num)
-
 
 class AddNumTool(ToolMessage):
     request = "add_num"
@@ -55,6 +43,15 @@ class AddNumTool(ToolMessage):
         method in the agent.
         """
         return str(int(MyGlobalState.get_value("number")) + int(self.number))
+
+
+class MainChatAgent(ChatAgent):
+    def ask_num(self, msg: AskNumTool) -> str:
+        res = self.callbacks.get_user_response(prompt="Please enter a number")
+        # record this in global state, so other agents can access it
+        num = res
+        MyGlobalState.set_values(number=num)
+        return str(num)
 
 
 @cl.on_chat_start
@@ -74,7 +71,7 @@ async def chat() -> None:
         vecdb=None,
     )
 
-    main_agent = ChatAgent(config)
+    main_agent = MainChatAgent(config)
     main_task = Task(
         main_agent,
         name="Main",

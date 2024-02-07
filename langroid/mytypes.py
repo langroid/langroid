@@ -1,6 +1,7 @@
 import hashlib
 import uuid
 from enum import Enum
+from textwrap import dedent
 from typing import Any, Callable, Dict, List, Union
 
 from pydantic import BaseModel, Extra
@@ -89,4 +90,9 @@ class Document(BaseModel):
     def __str__(self) -> str:
         # TODO: make metadata a pydantic model to enforce "source"
         self.metadata.json()
-        return f"{self.content} {self.metadata.json()}"
+        return dedent(
+            f"""
+        CONTENT: {self.content}         
+        SOURCE:{self.metadata.source}
+        """
+        )
