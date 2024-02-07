@@ -12,6 +12,7 @@ from typing import Dict, List
 import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
+from duckduckgo_search import DDGS
 from googleapiclient.discovery import Resource, build
 from requests.models import Response
 
@@ -122,4 +123,30 @@ def metaphor_search(query: str, num_results: int = 5) -> List[WebSearchResult]:
 
     return [
         WebSearchResult(result.title, result.url, 3500, 300) for result in raw_results
+    ]
+
+
+def duckduckgo_search(query: str, num_results: int = 5) -> List[WebSearchResult]:
+    """
+    Method that makes an API call by DuckDuckGo client that queries
+    the top `num_results` links that matche the query. Returns a list
+    of WebSearchResult objects.
+
+    Args:
+        query (str): The query body that users wants to make.
+        num_results (int): Number of top matching results that we want
+            to grab
+    """
+
+    with DDGS() as ddgs:
+        search_results = [r for r in ddgs.text(query, max_results=num_results)]
+
+    return [
+        WebSearchResult(
+            title=result["title"],
+            link=result["href"],
+            max_content_length=3500,
+            max_summary_length=300,
+        )
+        for result in search_results
     ]
