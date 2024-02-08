@@ -402,12 +402,18 @@ class ChainlitAgentCallbacks:
         step.output = textwrap.dedent(content) or NO_ANSWER
         run_sync(step.update())  # type: ignore
 
-    def show_llm_response(self, content: str, is_tool: bool = False) -> None:
+    def show_llm_response(
+        self,
+        content: str,
+        is_tool: bool = False,
+        cached: bool = False,
+    ) -> None:
         """Show non-streaming LLM response."""
         model = self.agent.llm is not None and self.agent.llm.config.chat_model
         tool_indicator = " =>  🛠️" if is_tool else ""
+        cached = "(cached)" if cached else ""
         step = cl.Step(
-            name=self.agent.config.name + f"({LLM} {model} {tool_indicator})",
+            name=self.agent.config.name + f"({LLM} {model} {tool_indicator}){cached}",
             type="llm",
             parent_id=self._get_parent_id(),
             language="json" if is_tool else None,
@@ -428,7 +434,7 @@ class ChainlitAgentCallbacks:
         step.output = error
         run_sync(step.send())
 
-    def show_agent_response(self, content: str) -> None:
+    def show_agent_response(self, content: str, language="text") -> None:
         """Show message from agent (typically tool handler).
         Agent response can be considered as a "step"
         between LLM response and user response
@@ -437,10 +443,12 @@ class ChainlitAgentCallbacks:
             name=self.agent.config.name + f"({AGENT})",
             type="tool",
             parent_id=self._get_parent_id(),
-            language="text",
+            language=language,
         )
+        if language == "text":
+            content = wrap_text_preserving_structure(content, width=90)
         self.last_step = step
-        step.output = wrap_text_preserving_structure(content, width=90)
+        step.output = content
         run_sync(step.send())  # type: ignore
 
     def _get_user_response_buttons(self, prompt: str) -> str:
@@ -538,7 +546,7 @@ class ChainlitTaskCallbacks(ChainlitAgentCallbacks):
 
         # The step should nest under the calling agent's last step
         step = cl.Step(
-            name=self.task.agent.config.name + f"( ⏎ {task.agent.config.name})",
+            name=self.task.agent.config.name + f"( ⏎ From {task.agent.config.name})",
             type="run",
             parent_id=self._get_parent_id(),
             language="json" if is_tool else None,

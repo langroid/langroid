@@ -818,7 +818,7 @@ class Task:
             maybe_tool = len(extract_top_level_json(result_str)) > 0
             self.callbacks.show_subtask_response(
                 task=e,
-                result=result,
+                content=result_str,
                 is_tool=maybe_tool,
             )
         else:

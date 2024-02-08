@@ -706,12 +706,12 @@ class ChatAgent(Agent):
             cached = f"[red]{self.indent}(cached)[/red]" if response.cached else ""
             if not settings.quiet:
                 print(cached + "[green]" + escape(str(response)))
-                cached = "[cached] " if response.cached else ""
                 self.callbacks.show_llm_response(
-                    content=cached + " " + str(response),
+                    content=str(response),
                     is_tool=self.has_tool_message_attempt(
                         ChatDocument.from_LLMResponse(response, displayed=True)
                     ),
+                    cached=response.cached,
                 )
         self.update_token_usage(
             response,
@@ -767,12 +767,12 @@ class ChatAgent(Agent):
             cached = f"[red]{self.indent}(cached)[/red]" if response.cached else ""
             if not settings.quiet:
                 print(cached + "[green]" + escape(str(response)))
-                cached = "[cached] " if response.cached else ""
                 self.callbacks.show_llm_response(
                     content=cached + " " + str(response),
                     is_tool=self.has_tool_message_attempt(
                         ChatDocument.from_LLMResponse(response, displayed=True)
                     ),
+                    cached=response.cached,
                 )
 
         self.update_token_usage(
