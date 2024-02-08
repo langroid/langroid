@@ -106,6 +106,7 @@ class Agent(ABC):
             get_last_step=noop_fn,
             set_parent_agent=noop_fn,
             show_error_message=noop_fn,
+            show_start_response=noop_fn,
         )
 
     def entity_responders(

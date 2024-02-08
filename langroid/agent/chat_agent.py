@@ -768,7 +768,7 @@ class ChatAgent(Agent):
             if not settings.quiet:
                 print(cached + "[green]" + escape(str(response)))
                 self.callbacks.show_llm_response(
-                    content=cached + " " + str(response),
+                    content=str(response),
                     is_tool=self.has_tool_message_attempt(
                         ChatDocument.from_LLMResponse(response, displayed=True)
                     ),

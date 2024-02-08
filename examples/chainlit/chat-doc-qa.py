@@ -107,6 +107,7 @@ async def on_chat_start():
 async def on_message(message: cl.Message):
     agent: DocChatAgent = cl.user_session.get("agent")
     file2path = await get_text_files(message)
+    agent.callbacks.show_start_response(entity="llm")
     if len(file2path) > 0:
         n_files = len(file2path)
         waiting = cl.Message(

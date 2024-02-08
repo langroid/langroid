@@ -305,6 +305,7 @@ class ChainlitAgentCallbacks:
     """Inject Chainlit callbacks into a Langroid Agent"""
 
     last_step: Optional[cl.Step] = None  # used to display sub-steps under this
+    curr_step: Optional[cl.Step] = None  # used to update an initiated step
     stream: Optional[cl.Step] = None  # pushed into openai_gpt.py to stream tokens
     parent_agent: Optional[lr.Agent] = None  # used to get parent id, for step nesting
 
@@ -321,6 +322,8 @@ class ChainlitAgentCallbacks:
         agent.callbacks.get_last_step = self.get_last_step
         agent.callbacks.set_parent_agent = self.set_parent_agent
         agent.callbacks.show_error_message = self.show_error_message
+        agent.callbacks.show_start_response = self.show_start_response
+
         self.agent: lr.Agent = agent
         if msg is not None:
             self.show_first_user_message(msg)
@@ -353,7 +356,6 @@ class ChainlitAgentCallbacks:
 
     def start_llm_stream(self) -> Callable[[str], None]:
         """Returns a streaming fn that can be passed to the LLM class"""
-        model = self.agent.llm.config.chat_model
         logger.info(
             f"""
             Starting LLM stream for {self.agent.config.name} 
@@ -361,11 +363,13 @@ class ChainlitAgentCallbacks:
         """
         )
         self.stream = cl.Step(
-            name=self.agent.config.name + f"({LLM} {model})",
+            id=self.curr_step.id if self.curr_step is not None else None,
+            name=self._entity_name("llm"),
             type="llm",
             parent_id=self._get_parent_id(),
         )
         self.last_step = self.stream
+        self.curr_step = None
         run_sync(self.stream.send())  # type: ignore
 
         def stream_token(t: str) -> None:
@@ -383,10 +387,8 @@ class ChainlitAgentCallbacks:
 
     def finish_llm_stream(self, content: str, is_tool: bool = False) -> None:
         """Update the stream, and display entire response in the right language."""
-        tool_indicator = " =>  🛠️" if is_tool else ""
         if self.agent.llm is None or self.stream is None:
             raise ValueError("LLM or stream not initialized")
-        model = self.agent.llm.config.chat_model
         if content == "":
             run_sync(self.stream.remove())  # type: ignore
         else:
@@ -394,7 +396,7 @@ class ChainlitAgentCallbacks:
         stream_id = self.stream.id if content else None
         step = cl.Step(
             id=stream_id,
-            name=self.agent.config.name + f"({LLM} {model} {tool_indicator})",
+            name=self._entity_name("llm", tool=is_tool),
             type="llm",
             parent_id=self._get_parent_id(),
             language="json" if is_tool else None,
@@ -409,16 +411,15 @@ class ChainlitAgentCallbacks:
         cached: bool = False,
     ) -> None:
         """Show non-streaming LLM response."""
-        model = self.agent.llm is not None and self.agent.llm.config.chat_model
-        tool_indicator = " =>  🛠️" if is_tool else ""
-        cached = "(cached)" if cached else ""
         step = cl.Step(
-            name=self.agent.config.name + f"({LLM} {model} {tool_indicator}){cached}",
+            id=self.curr_step.id if self.curr_step is not None else None,
+            name=self._entity_name("llm", tool=is_tool, cached=cached),
             type="llm",
             parent_id=self._get_parent_id(),
             language="json" if is_tool else None,
         )
         self.last_step = step
+        self.curr_step = None
         step.output = textwrap.dedent(content) or NO_ANSWER
         run_sync(step.send())  # type: ignore
 
@@ -440,7 +441,8 @@ class ChainlitAgentCallbacks:
         between LLM response and user response
         """
         step = cl.Step(
-            name=self.agent.config.name + f"({AGENT})",
+            id=self.curr_step.id if self.curr_step is not None else None,
+            name=self._entity_name("agent"),
             type="tool",
             parent_id=self._get_parent_id(),
             language=language,
@@ -448,8 +450,44 @@ class ChainlitAgentCallbacks:
         if language == "text":
             content = wrap_text_preserving_structure(content, width=90)
         self.last_step = step
+        self.curr_step = None
         step.output = content
         run_sync(step.send())  # type: ignore
+
+    def show_start_response(self, entity: str) -> None:
+        """When there's a potentially long-running process, start a step,
+        so that the UI displays a spinner while the process is running."""
+        if self.curr_step is not None:
+            run_sync(self.curr_step.remove())  # type: ignore
+        step = cl.Step(
+            name=self._entity_name(entity),
+            type="run",
+            parent_id=self._get_parent_id(),
+            language="text",
+        )
+        step.output = ""
+        self.last_step = step
+        self.curr_step = step
+        run_sync(step.send())  # type: ignore
+
+    def _entity_name(
+        self, entity: str, tool: bool = False, cached: bool = False
+    ) -> str:
+        """Construct name of entity to display as Author of a step"""
+        tool_indicator = " =>  🛠️" if tool else ""
+        cached = "(cached)" if cached else ""
+        match entity:
+            case "llm":
+                model = self.agent.llm.config.chat_model
+                return (
+                    self.agent.config.name + f"({LLM} {model} {tool_indicator}){cached}"
+                )
+            case "agent":
+                return self.agent.config.name + f"({AGENT})"
+            case "user":
+                return self.agent.config.name + f"({YOU})"
+            case _:
+                return self.agent.config.name + f"({entity})"
 
     def _get_user_response_buttons(self, prompt: str) -> str:
         """Not used. Save for future reference"""

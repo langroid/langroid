@@ -104,6 +104,7 @@ class DDGSearchDocChatAgent(DocChatAgent):
     def relevant_extracts(self, msg: RelevantExtractsTool) -> str:
         """Get docs/extracts relevant to the query, from vecdb"""
         self.tried_vecdb = True
+        self.callbacks.show_start_response(entity="agent")
         query = msg.query
         _, extracts = self.get_relevant_extracts(query)
         if len(extracts) == 0:
@@ -120,6 +121,7 @@ class DDGSearchDocChatAgent(DocChatAgent):
         self.tried_vecdb = False
         query = msg.query
         num_results = msg.num_results
+        self.callbacks.show_start_response(entity="agent")
         results = duckduckgo_search(query, num_results)
         links = [r.link for r in results]
         self.config.doc_paths = links
