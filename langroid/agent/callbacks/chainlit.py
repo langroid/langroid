@@ -7,6 +7,8 @@ import logging
 import textwrap
 from typing import Any, Callable, Dict, List, Literal, Optional, no_type_check
 
+from pydantic import BaseSettings
+
 try:
     import chainlit as cl
 except ImportError:
@@ -198,91 +200,6 @@ async def get_text_files(
     return {file.name: file.path for file in files}
 
 
-async def ask_user_step(
-    name: str,
-    prompt: str,
-    parent_id: str | None = None,
-    timeout: int = USER_TIMEOUT,
-    suppress_values: List[str] = ["c"],
-) -> str:
-    """
-    Ask user for input, as a step nested under parent_id.
-    Rather than rely entirely on AskUserMessage (which doesn't let us
-    nest the question + answer under a step), we instead create fake
-    steps for the question and answer, and only rely on AskUserMessage
-    with an empty prompt to await user response.
-
-    Args:
-        name (str): Name of the agent
-        prompt (str): Prompt to display to user
-        parent_id (str): Id of the parent step under which this step should be nested
-            (If None, the step will be shown at root level)
-        timeout (int): Timeout in seconds
-        suppress_values (List[str]): List of values to suppress from display
-            (e.g. "c" for continue)
-
-    Returns:
-        str: User response
-    """
-
-    # save hide_cot status to restore later
-    # (We should probably use a ctx mgr for this)
-    hide_cot = config.ui.hide_cot
-
-    # force hide_cot to False so that the user question + response is visible
-    config.ui.hide_cot = False
-
-    if prompt != "":
-        # Create a question step to ask user
-        question_step = cl.Step(
-            name=f"{name} (AskUser ❓)",
-            type="run",
-            parent_id=parent_id,
-        )
-        question_step.output = prompt
-        await question_step.send()  # type: ignore
-
-    # Use AskUserMessage to await user response,
-    # but with an empty prompt so the question is not visible,
-    # but still pauses for user input in the input box.
-    res = await cl.AskUserMessage(
-        content="",
-        timeout=timeout,
-    ).send()
-
-    if res is None:
-        run_sync(
-            cl.Message(
-                content=f"Timed out after {USER_TIMEOUT} seconds. Exiting."
-            ).send()
-        )
-        return "x"
-
-    # The above will try to display user response in res
-    # but we create fake step with same id as res and
-    # erase it using empty output so it's not displayed
-    step = cl.Step(
-        id=res["id"], name="TempUserResponse", type="run", parent_id=parent_id
-    )
-    step.output = ""
-    await step.update()  # type: ignore
-
-    # Finally, reproduce the user response at right nesting level
-    if res["output"] in suppress_values:
-        config.ui.hide_cot = hide_cot  # restore original value
-        return ""
-
-    step = cl.Step(
-        name=f"{name}(You 😃)",
-        type="run",
-        parent_id=parent_id,
-    )
-    step.output = res["output"]
-    await step.send()  # type: ignore
-    config.ui.hide_cot = hide_cot  # restore original value
-    return res["output"]
-
-
 def wrap_text_preserving_structure(text: str, width: int = 90) -> str:
     """Wrap text preserving paragraph breaks. Typically used to
     format an agent_response output, which may have long lines
@@ -303,6 +220,10 @@ def wrap_text_preserving_structure(text: str, width: int = 90) -> str:
     return "\n\n".join(wrapped_text)
 
 
+class ChainlitCallbackConfig(BaseSettings):
+    user_has_agent_name: bool = True  # show agent name in front of "YOU" ?
+
+
 class ChainlitAgentCallbacks:
     """Inject Chainlit callbacks into a Langroid Agent"""
 
@@ -311,7 +232,12 @@ class ChainlitAgentCallbacks:
     stream: Optional[cl.Step] = None  # pushed into openai_gpt.py to stream tokens
     parent_agent: Optional[lr.Agent] = None  # used to get parent id, for step nesting
 
-    def __init__(self, agent: lr.Agent, msg: cl.Message = None):
+    def __init__(
+        self,
+        agent: lr.Agent,
+        msg: cl.Message = None,
+        config: ChainlitCallbackConfig = ChainlitCallbackConfig(),
+    ):
         """Add callbacks to the agent, and save the initial message,
         so we can alter the display of the first user message.
         """
@@ -325,6 +251,7 @@ class ChainlitAgentCallbacks:
         agent.callbacks.set_parent_agent = self.set_parent_agent
         agent.callbacks.show_error_message = self.show_error_message
         agent.callbacks.show_start_response = self.show_start_response
+        self.config = config
 
         self.agent: lr.Agent = agent
         if msg is not None:
@@ -487,7 +414,10 @@ class ChainlitAgentCallbacks:
             case "agent":
                 return self.agent.config.name + f"({AGENT})"
             case "user":
-                return self.agent.config.name + f"({YOU})"
+                if self.config.user_has_agent_name:
+                    return self.agent.config.name + f"({YOU})"
+                else:
+                    return YOU
             case _:
                 return self.agent.config.name + f"({entity})"
 
@@ -525,20 +455,13 @@ class ChainlitAgentCallbacks:
         as a cl.Step rather than as a cl.Message so we can nest it
         under the parent step.
         """
-        return run_sync(
-            ask_user_step(
-                name=self.agent.config.name,
-                prompt=prompt,
-                parent_id=self._get_parent_id(),
-                suppress_values=["c"],
-            )
-        )
+        return run_sync(self.ask_user_step(prompt=prompt, suppress_values=["c"]))
 
     def show_user_response(self, message: str) -> None:
         """Show user response as a step."""
         step = cl.Step(
             id=cl.context.current_step.id,
-            name=self.agent.config.name + f"({YOU})",
+            name=self._entity_name("user"),
             type="run",
             parent_id=self._get_parent_id(),
         )
@@ -549,13 +472,96 @@ class ChainlitAgentCallbacks:
         """Show first user message as a step."""
         step = cl.Step(
             id=msg.id,
-            name=self.agent.config.name + f"({YOU})",
+            name=self._entity_name("user"),
             type="run",
             parent_id=self._get_parent_id(),
         )
         self.last_step = step
         step.output = msg.content
         run_sync(step.update())
+
+    async def ask_user_step(
+        self,
+        prompt: str,
+        timeout: int = USER_TIMEOUT,
+        suppress_values: List[str] = ["c"],
+    ) -> str:
+        """
+        Ask user for input, as a step nested under parent_id.
+        Rather than rely entirely on AskUserMessage (which doesn't let us
+        nest the question + answer under a step), we instead create fake
+        steps for the question and answer, and only rely on AskUserMessage
+        with an empty prompt to await user response.
+
+        Args:
+            prompt (str): Prompt to display to user
+            timeout (int): Timeout in seconds
+            suppress_values (List[str]): List of values to suppress from display
+                (e.g. "c" for continue)
+
+        Returns:
+            str: User response
+        """
+
+        # save hide_cot status to restore later
+        # (We should probably use a ctx mgr for this)
+        hide_cot = config.ui.hide_cot
+
+        # force hide_cot to False so that the user question + response is visible
+        config.ui.hide_cot = False
+
+        if prompt != "":
+            # Create a question step to ask user
+            question_step = cl.Step(
+                name=f"{self.agent.config.name} (AskUser ❓)",
+                type="run",
+                parent_id=self._get_parent_id(),
+            )
+            question_step.output = prompt
+            await question_step.send()  # type: ignore
+
+        # Use AskUserMessage to await user response,
+        # but with an empty prompt so the question is not visible,
+        # but still pauses for user input in the input box.
+        res = await cl.AskUserMessage(
+            content="",
+            timeout=timeout,
+        ).send()
+
+        if res is None:
+            run_sync(
+                cl.Message(
+                    content=f"Timed out after {USER_TIMEOUT} seconds. Exiting."
+                ).send()
+            )
+            return "x"
+
+        # The above will try to display user response in res
+        # but we create fake step with same id as res and
+        # erase it using empty output so it's not displayed
+        step = cl.Step(
+            id=res["id"],
+            name="TempUserResponse",
+            type="run",
+            parent_id=self._get_parent_id(),
+        )
+        step.output = ""
+        await step.update()  # type: ignore
+
+        # Finally, reproduce the user response at right nesting level
+        if res["output"] in suppress_values:
+            config.ui.hide_cot = hide_cot  # restore original value
+            return ""
+
+        step = cl.Step(
+            name=self._entity_name(entity="user"),
+            type="run",
+            parent_id=self._get_parent_id(),
+        )
+        step.output = res["output"]
+        await step.send()  # type: ignore
+        config.ui.hide_cot = hide_cot  # restore original value
+        return res["output"]
 
 
 class ChainlitTaskCallbacks(ChainlitAgentCallbacks):
@@ -564,20 +570,27 @@ class ChainlitTaskCallbacks(ChainlitAgentCallbacks):
     agents of sub-tasks.
     """
 
-    def __init__(self, task: lr.Task, msg: cl.Message = None):
+    def __init__(
+        self,
+        task: lr.Task,
+        msg: cl.Message = None,
+        config: ChainlitCallbackConfig = ChainlitCallbackConfig(),
+    ):
         """Inject callbacks recursively, ensuring msg is passed to the
         top-level agent"""
 
-        super().__init__(task.agent, msg)
+        super().__init__(task.agent, msg, config)
         ChainlitTaskCallbacks._inject_callbacks(task)
         self.task = task
         self.task.callbacks.show_subtask_response = self.show_subtask_response
 
     @staticmethod
-    def _inject_callbacks(task: lr.Task) -> None:
+    def _inject_callbacks(
+        task: lr.Task, config: ChainlitCallbackConfig = ChainlitCallbackConfig()
+    ) -> None:
         # recursively apply ChainlitAgentCallbacks to agents of sub-tasks
         for t in task.sub_tasks:
-            ChainlitTaskCallbacks(t)
+            ChainlitTaskCallbacks(t, config=config)
 
     def show_subtask_response(
         self, task: lr.Task, content: str, is_tool: bool = False
