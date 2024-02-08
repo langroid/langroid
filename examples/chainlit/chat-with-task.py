@@ -41,8 +41,8 @@ async def setup_agent_task():
 @cl.on_chat_start
 async def on_chat_start():
     await add_instructions(
-        title="Instructions",
-        content="Interact with a **Langroid Task**",
+        title="Basic Langroid Chatbot",
+        content="Uses Langroid's `Task.run()`",
     )
     await make_llm_settings_widgets()
     await setup_agent_task()

@@ -35,6 +35,8 @@ log_level = logging.INFO if settings.debug else logging.WARNING
 logger.setLevel(log_level)
 logging.basicConfig(level=log_level)
 
+logging.getLogger().setLevel(log_level)
+
 USER_TIMEOUT = 60_000
 SYSTEM = "System 🖥️"
 LLM = "LLM 🧠"
