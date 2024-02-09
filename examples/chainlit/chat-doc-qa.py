@@ -24,6 +24,7 @@ https://langroid.github.io/langroid/tutorials/local-llm-setup/
 
 import chainlit as cl
 import langroid as lr
+import langroid.language_models as lm
 import langroid.parsing.parser as lp
 from langroid.agent.special.doc_chat_agent import DocChatAgent, DocChatAgentConfig
 from langroid.utils.constants import NO_ANSWER
@@ -32,11 +33,13 @@ from langroid.agent.callbacks.chainlit import (
     make_llm_settings_widgets,
     setup_llm,
     update_llm,
+    get_text_files,
+    SYSTEM,
 )
 from textwrap import dedent
 
 
-async def setup_agent() -> None:
+async def initialize_agent() -> None:
     await setup_llm()
     llm_config = cl.user_session.get("llm_config")
     config = DocChatAgentConfig(
@@ -67,21 +70,17 @@ async def setup_agent() -> None:
         ),
     )
     agent = DocChatAgent(config)
-
-    file = cl.user_session.get("file")
-    msg = cl.Message(content="")
-    await msg.send()
-    agent.ingest_doc_paths([file.path])
-    msg.content = f"Processing `{file.name}` done. Ask questions!"
-    await msg.update()
-
     cl.user_session.set("agent", agent)
 
 
 @cl.on_settings_update
 async def on_update(settings):
     await update_llm(settings)
-    await setup_agent()
+    llm_config = cl.user_session.get("llm_config")
+    llm = lm.OpenAIGPT(llm_config)
+    agent: DocChatAgent = cl.user_session.get("agent")
+    agent.llm = llm
+    agent.config.relevance_extractor_config.llm = llm_config
 
 
 @cl.on_chat_start
@@ -90,46 +89,53 @@ async def on_chat_start():
         title="Basic Doc-Question-Answering using RAG (Retrieval Augmented Generation).",
         content=dedent(
             """
-        Upload a document and ask questions.
-        Change LLM settings by clicking the settings symbol on the 
-        left of the chat window.
+        **Upload** a document (click the attachment button in the chat dialog) and ask questions.
+        **Change LLM settings** by clicking the settings symbol on the left of the chat window.
+        
+        You can keep uploading more documents, and questions will be answered based on all documents.
         """
         ),
     )
 
     await make_llm_settings_widgets()
 
-    # get file
-    files = None
-    # Wait for the user to upload a file
-    while files is None:
-        files = await cl.AskFileMessage(
-            content="Please upload a text file to begin! (`txt`, `pdf`, `doc`, `docx`)",
-            accept=[
-                "text/plain",
-                "application/pdf",
-                "application/msword",
-                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            ],
-            max_size_mb=20,
-            timeout=180,
-        ).send()
-
-    file = files[0]
-    print(f"got file: {file.name}")
-    cl.user_session.set("file", file)
-    await setup_agent()
+    cl.user_session.set("callbacks_inserted", False)
+    await initialize_agent()
 
 
 @cl.on_message
 async def on_message(message: cl.Message):
-    agent: lr.ChatAgent = cl.user_session.get("agent")
-    lr.ChainlitAgentCallbacks(agent, message)
+    agent: DocChatAgent = cl.user_session.get("agent")
+    file2path = await get_text_files(message)
+    agent.callbacks.show_start_response(entity="llm")
+    if len(file2path) > 0:
+        n_files = len(file2path)
+        waiting = cl.Message(
+            author=SYSTEM, content=f"Received {n_files} files. Ingesting..."
+        )
+        await waiting.send()
+        agent.ingest_doc_paths(list(file2path.values()))
+        file_or_files = "file" if n_files == 1 else "files"
+        file_list = "\n".join([f"- `{file}`" for file in file2path.keys()])
+        waiting.content = dedent(
+            f"""
+            Ingested `{n_files}` {file_or_files}:
+            {file_list}
+            """
+        )
+        await waiting.update()
+
+    if not cl.user_session.get("callbacks_inserted", False):
+        # first time user entered a msg, so inject callbacks and display first msg
+        lr.ChainlitAgentCallbacks(agent, message)
+
+    # Note DocChatAgent has no llm_response_async,
+    # so we use llm_response with make_async
     response: lr.ChatDocument | None = await cl.make_async(agent.llm_response)(
         message.content
     )
     if response.content.strip() == NO_ANSWER:
-        # in this case there were not relevant extracts
+        # in this case there were no relevant extracts
         # and we never called the LLM, so response was not shown in UI,
         # hence we need to send it here
         # TODO: It is possible the LLM might have already responded with NO_ANSWER,

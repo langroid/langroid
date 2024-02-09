@@ -607,6 +607,7 @@ class DocChatAgent(ChatAgent):
         ):
             return self.summarize_docs()
         else:
+            self.callbacks.show_start_response(entity="llm")
             response = self.answer_from_docs(query_str)
             return ChatDocument(
                 content=response.content,

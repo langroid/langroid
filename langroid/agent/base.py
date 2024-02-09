@@ -106,6 +106,7 @@ class Agent(ABC):
             get_last_step=noop_fn,
             set_parent_agent=noop_fn,
             show_error_message=noop_fn,
+            show_start_response=noop_fn,
         )
 
     def entity_responders(
@@ -311,7 +312,11 @@ class Agent(ABC):
         if not settings.quiet:
             console.print(f"[red]{self.indent}", end="")
             print(f"[red]Agent: {results}")
-            self.callbacks.show_agent_response(content=results)
+            maybe_json = len(extract_top_level_json(results)) > 0
+            self.callbacks.show_agent_response(
+                content=results,
+                language="json" if maybe_json else "text",
+            )
         sender_name = self.config.name
         if isinstance(msg, ChatDocument) and msg.function_call is not None:
             # if result was from handling an LLM `function_call`,

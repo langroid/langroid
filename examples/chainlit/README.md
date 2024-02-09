@@ -21,6 +21,7 @@ chainlit hello
 
 and you should see the `hello app` open in your browser.
 
+
 ## General usage
 See [chainlit docs](https://docs.chainlit.io/get-started/overview) to learn the basics.
 
@@ -54,4 +55,8 @@ the Chainlit [customization docs](https://docs.chainlit.io/customisation/overvie
 - `.chainlit/translations/en-US.json` for various ["translations"](https://docs.chainlit.io/customisation/translation) and language-specific
    customizations. In particular, the default text in the input box is customized here.
 - `chainlit.md`, which contains the initial "Readme" content
+- [Logo, favicons](https://docs.chainlit.io/customisation/custom-logo-and-favicon) should be placed in a directory
+  named `public` adjacent to the apps. 
 
+Depending on how you organize your apps, you may need to run the `chainlit` command 
+from the directory where the above customization files/dirs are placed.

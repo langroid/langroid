@@ -166,6 +166,9 @@ class ChatAgent(Agent):
 
     def set_system_message(self, msg: str) -> None:
         self.system_message = msg
+        if len(self.message_history) > 0:
+            # if there is message history, update the system message in it
+            self.message_history[0].content = msg
 
     def set_user_message(self, msg: str) -> None:
         self.user_message = msg
@@ -448,10 +451,10 @@ class ChatAgent(Agent):
             message_class: The only ToolMessage class to allow
         """
         request = message_class.__fields__["request"].default
-        for r in self.llm_functions_usable:
-            if r != request:
-                self.llm_tools_usable.discard(r)
-                self.llm_functions_usable.discard(r)
+        to_remove = [r for r in self.llm_tools_usable if r != request]
+        for r in to_remove:
+            self.llm_tools_usable.discard(r)
+            self.llm_functions_usable.discard(r)
 
     def llm_response(
         self, message: Optional[str | ChatDocument] = None
@@ -703,12 +706,12 @@ class ChatAgent(Agent):
             cached = f"[red]{self.indent}(cached)[/red]" if response.cached else ""
             if not settings.quiet:
                 print(cached + "[green]" + escape(str(response)))
-                cached = "[cached] " if response.cached else ""
                 self.callbacks.show_llm_response(
-                    content=cached + " " + str(response),
+                    content=str(response),
                     is_tool=self.has_tool_message_attempt(
                         ChatDocument.from_LLMResponse(response, displayed=True)
                     ),
+                    cached=response.cached,
                 )
         self.update_token_usage(
             response,
@@ -764,12 +767,12 @@ class ChatAgent(Agent):
             cached = f"[red]{self.indent}(cached)[/red]" if response.cached else ""
             if not settings.quiet:
                 print(cached + "[green]" + escape(str(response)))
-                cached = "[cached] " if response.cached else ""
                 self.callbacks.show_llm_response(
-                    content=cached + " " + str(response),
+                    content=str(response),
                     is_tool=self.has_tool_message_attempt(
                         ChatDocument.from_LLMResponse(response, displayed=True)
                     ),
+                    cached=response.cached,
                 )
 
         self.update_token_usage(

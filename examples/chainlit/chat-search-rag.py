@@ -3,9 +3,11 @@ Single-agent question-answering system that has access to DuckDuckGo (DDG) Searc
 and in case a DDG Search is used, ingests contents into a vector-db,
 and uses Retrieval Augmentation to answer the question.
 
+This is a chainlit UI version of examples/docqa/chat-search.py
+
 Run like this:
 
-    python3 examples/docqa/chat-search.py
+    chainlit run examples/chainlit/chat-search-rag.py
 
 Optional args:
     -nc : turn off caching (i.e. don't retrieve cached LLM responses)
@@ -17,15 +19,10 @@ Optional args:
 (See here for guide to using local LLMs with Langroid:)
 https://langroid.github.io/langroid/tutorials/local-llm-setup/
 """
-
-import re
 from typing import List
 
 import typer
-from rich import print
-from rich.prompt import Prompt
-
-from pydantic import BaseSettings
+import langroid as lr
 import langroid.language_models as lm
 from langroid.agent.tool_message import ToolMessage
 from langroid.agent.chat_agent import ChatAgent, ChatDocument
@@ -35,15 +32,25 @@ from langroid.agent.special.doc_chat_agent import (
 )
 from langroid.parsing.web_search import duckduckgo_search
 from langroid.agent.task import Task
+from langroid.parsing.parser import ParsingConfig, PdfParsingConfig, Splitter
 from langroid.utils.constants import NO_ANSWER
 from langroid.utils.configuration import set_global, Settings
+
+import chainlit as cl
+from langroid.agent.callbacks.chainlit import (
+    add_instructions,
+    make_llm_settings_widgets,
+    setup_llm,
+    update_llm,
+)
+from textwrap import dedent
 
 app = typer.Typer()
 
 
 class RelevantExtractsTool(ToolMessage):
     request = "relevant_extracts"
-    purpose = "Get docs/extracts relevant to the <query>"
+    purpose = "Get docs/extracts relevant to the <query>, from prior search results"
     query: str
 
     @classmethod
@@ -61,7 +68,11 @@ class RelevantExtractsTool(ToolMessage):
 
 class RelevantSearchExtractsTool(ToolMessage):
     request = "relevant_search_extracts"
-    purpose = "Get docs/extracts relevant to the <query> from a web search"
+    purpose = (
+        "Perform an internet search for up to <num_results> results "
+        "relevant to the <query>"
+    )
+
     query: str
     num_results: int = 3
 
@@ -93,6 +104,7 @@ class DDGSearchDocChatAgent(DocChatAgent):
     def relevant_extracts(self, msg: RelevantExtractsTool) -> str:
         """Get docs/extracts relevant to the query, from vecdb"""
         self.tried_vecdb = True
+        self.callbacks.show_start_response(entity="agent")
         query = msg.query
         _, extracts = self.get_relevant_extracts(query)
         if len(extracts) == 0:
@@ -109,68 +121,56 @@ class DDGSearchDocChatAgent(DocChatAgent):
         self.tried_vecdb = False
         query = msg.query
         num_results = msg.num_results
+        self.callbacks.show_start_response(entity="agent")
         results = duckduckgo_search(query, num_results)
         links = [r.link for r in results]
         self.config.doc_paths = links
         self.ingest()
         _, extracts = self.get_relevant_extracts(query)
+        if len(extracts) == 0:
+            return """
+            No release search results found! You can try 
+            rephrasing your query to see if results improve, using the
+            `relevant_search_extracts` tool/function-call.
+            """
         return "\n".join(str(e) for e in extracts)
 
 
-class CLIOptions(BaseSettings):
-    fn_api: bool = False
-    model: str = ""
+async def setup_agent_task():
+    """Set up Agent and Task from session settings state."""
 
+    # set up LLM and LLMConfig from settings state
+    await setup_llm()
+    llm_config = cl.user_session.get("llm_config")
 
-def chat(opts: CLIOptions) -> None:
-    print(
-        """
-        [blue]Welcome to the Internet Search chatbot!
-        I will try to answer your questions, relying on (full content of links from) 
-        Duckduckgo (DDG) Search when needed.
-        
-        Enter x or q to quit, or ? for evidence
-        """
-    )
-
-    system_msg = Prompt.ask(
-        """
-    [blue] Tell me who I am (give me a role) by completing this sentence: 
-    You are...
-    [or hit enter for default]
-    [blue] Human
-    """,
-        default="a helpful assistant.",
-    )
-    system_msg = re.sub("you are", "", system_msg, flags=re.IGNORECASE)
-
-    llm_config = lm.OpenAIGPTConfig(
-        chat_model=opts.model or lm.OpenAIChatModel.GPT4_TURBO,
-        # or, other possibilities for example:
-        # "litellm/bedrock/anthropic.claude-instant-v1"
-        # "litellm/ollama/llama2"
-        # "local/localhost:8000/v1"
-        # "local/localhost:8000"
-        chat_context_length=2048,  # adjust based on model
+    set_global(
+        Settings(
+            debug=False,
+            cache=True,
+        )
     )
 
     config = DocChatAgentConfig(
-        use_functions_api=opts.fn_api,
-        use_tools=not opts.fn_api,
+        name="Searcher",
         llm=llm_config,
         system_message=f"""
-        {system_msg} You will try your best to answer my questions,
+        You are a savvy, tenacious, persistent researcher, who knows when to search the 
+        internet for an answer.
+        
+        You will try your best to answer my questions,
         in this order of preference:
         1. If you can answer from your own knowledge, simply return the answer
-        2. Otherwise, ask me for some relevant text, and I will send you. Use the 
-            `relevant_extracts` tool/function-call for this purpose. Once you receive 
-            the text, you can use it to answer my question. 
+        2. Otherwise, use the `relevant_extracts` tool/function to
+            ask me for some relevant text, and I will send you.  
+            Then answer based on the relevant text.
             If I say {NO_ANSWER}, it means I found no relevant docs, and you can try 
             the next step, using a web search.
         3. If you are still unable to answer, you can use the `relevant_search_extracts`
-           tool/function-call to get some text from a web search. Once you receive the
-           text, you can use it to answer my question.
+           tool/function-call to get some text from a web search. Answer the question
+           based on these text pieces.
         4. If you still can't answer, simply say {NO_ANSWER} 
+        5. Be tenacious and persistent, DO NOT GIVE UP. Try asking your questions
+        differently to arrive at an answer.
         
         Remember to always FIRST try `relevant_extracts` to see if there are already 
         any relevant docs, before trying web-search with `relevant_search_extracts`.
@@ -184,52 +184,76 @@ def chat(opts: CLIOptions) -> None:
         
         For the EXTRACT, ONLY show up to first 3 words, and last 3 words.
         """,
+        parsing=ParsingConfig(  # modify as needed
+            splitter=Splitter.TOKENS,
+            chunk_size=200,  # aim for this many tokens per chunk
+            overlap=30,  # overlap between chunks
+            max_chunks=10_000,
+            n_neighbor_ids=5,  # store ids of window of k chunks around each chunk.
+            # aim to have at least this many chars per chunk when
+            # truncating due to punctuation
+            min_chunk_chars=200,
+            discard_chunk_chars=5,  # discard chunks with fewer than this many chars
+            n_similar_docs=3,
+            # NOTE: PDF parsing is extremely challenging, each library has its own
+            # strengths and weaknesses. Try one that works for your use case.
+            pdf=PdfParsingConfig(
+                # alternatives: "haystack", "unstructured", "pdfplumber", "fitz"
+                library="pdfplumber",
+            ),
+        ),
     )
 
     agent = DDGSearchDocChatAgent(config)
     agent.enable_message(RelevantExtractsTool)
     agent.enable_message(RelevantSearchExtractsTool)
-    collection_name = Prompt.ask(
-        "Name a collection to use",
-        default="docqa-chat-search",
-    )
-    replace = (
-        Prompt.ask(
-            "Would you like to replace (i.e. erase) this collection?",
-            choices=["y", "n"],
-            default="n",
-        )
-        == "y"
-    )
+    collection_name = "chainlit-chat-search-rag"
 
-    print(f"[red]Using {collection_name}")
-
-    agent.vecdb.set_collection(collection_name, replace=replace)
+    agent.vecdb.set_collection(collection_name, replace=True)
 
     task = Task(agent)
-    task.run("Can you help me answer some questions, possibly using web search?")
+    cl.user_session.set("agent", agent)
+    cl.user_session.set("task", task)
 
 
-@app.command()
-def main(
-    debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
-    nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
-    model: str = typer.Option("", "--model", "-m", help="model name"),
-    fn_api: bool = typer.Option(False, "--fn_api", "-f", help="use functions api"),
-) -> None:
-    cli_opts = CLIOptions(
-        fn_api=fn_api,
-        model=model,
+@cl.on_settings_update
+async def on_update(settings):
+    await update_llm(settings)
+    await setup_agent_task()
+
+
+@cl.on_chat_start
+async def chat() -> None:
+    await add_instructions(
+        title="Welcome to the Internet Search + RAG chatbot!",
+        content=dedent(
+            """
+        Ask me anything, especially about recent events that I may not have been trained on.
+        
+        I have access to two Tools, which I will try to use in order of priority:
+        - `relevant_extracts` to try to answer your question using Retrieval Augmented Generation
+           from prior search results ingested into a vector-DB (from prior searches in this session),
+           and failing this, I will use my second tool:
+        - `relevant_search_extracts` to do a web search (Using DuckDuckGo or DDG)
+        and ingest the results into the vector-DB, and then use 
+        Retrieval Augmentation Generation (RAG) to answer the question.
+        """
+        ),
     )
 
-    set_global(
-        Settings(
-            debug=debug,
-            cache=not nocache,
+    await make_llm_settings_widgets(
+        lm.OpenAIGPTConfig(
+            timeout=180,
+            chat_context_length=16_000,
+            chat_model="",
+            temperature=0.1,
         )
     )
-    chat(cli_opts)
+    await setup_agent_task()
 
 
-if __name__ == "__main__":
-    app()
+@cl.on_message
+async def on_message(message: cl.Message):
+    task = cl.user_session.get("task")
+    lr.ChainlitTaskCallbacks(task, message)
+    await task.run_async(message.content)

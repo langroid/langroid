@@ -41,8 +41,8 @@ async def setup_agent_task():
 @cl.on_chat_start
 async def on_chat_start():
     await add_instructions(
-        title="Instructions",
-        content="Interact with a **Langroid Task**",
+        title="Basic Langroid Chatbot",
+        content="Uses Langroid's `Task.run()`",
     )
     await make_llm_settings_widgets()
     await setup_agent_task()
@@ -51,5 +51,8 @@ async def on_chat_start():
 @cl.on_message
 async def on_message(message: cl.Message):
     task = cl.user_session.get("task")
-    lr.ChainlitTaskCallbacks(task, message)
+    # sometimes we may want the User to NOT have agent name in front,
+    # and just show them as YOU.
+    callback_config = lr.ChainlitCallbackConfig(user_has_agent_name=False)
+    lr.ChainlitTaskCallbacks(task, message, config=callback_config)
     await task.run_async(message.content)
