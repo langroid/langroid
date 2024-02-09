@@ -14,6 +14,7 @@ from typing import (
     Set,
     Tuple,
     Type,
+    TypeVar,
     cast,
 )
 
@@ -35,6 +36,32 @@ from langroid.utils.logging import RichFileLogger, setup_file_logger
 logger = logging.getLogger(__name__)
 
 Responder = Entity | Type["Task"]
+
+T1 = TypeVar("T1")
+T2 = TypeVar("T2")
+
+
+def add_grouped(
+    groups: List[Tuple[T1, List[T2]]], key: T1, value: T2, pos: Optional[int] = None
+) -> None:
+    """
+    Incrementally constructs lists grouped by a key value. The value
+    is added to the group in position pos if the key matches; else a
+    new group is created. If pos is unspecified, adds the group at the
+    end, else inserts it at position pos.
+    """
+    if len(groups) == 0:
+        groups.append((key, [value]))
+    else:
+        idx = pos if pos is not None else len(groups) - 1
+        idx_add = pos if pos is not None else len(groups)
+
+        group_key = groups[idx][0]
+
+        if key == group_key:
+            groups[idx][1].append(value)
+        else:
+            groups.insert(idx_add, (key, [value]))
 
 
 class Task:
@@ -81,6 +108,8 @@ class Task:
         only_user_quits_root: bool = False,
         erase_substeps: bool = False,
         concurrent: bool = False,
+        concurrent_agent: bool = False,
+        concurrent_llm: bool = False,
         allow_null_result: bool = True,
         max_stalled_steps: int = 5,
         done_if_no_response: List[Responder] = [],
@@ -123,8 +152,14 @@ class Task:
                 erase all subtask agents' `message_history`.
                 Note: erasing can reduce prompt sizes, but results in repetitive
                 sub-task delegation.
-            concurrent (bool): if true, all non-human responders are executed
-                concurrently; we keep the first valid response.
+            concurrent (bool): controls the default behavior for subtasks: if true,
+                sub-tasks will be executed concurrently by default; we keep the first
+                valid response. Only applies to asynchronous execution. Important:
+                concurrent sub-tasks will be set to non-interactive.
+            concurrent_agent (bool): Controls whether the task's agent's agent responder
+                is executed concurrently. If set, concurrent_llm is forced true.
+            concurrent_llm (bool): Controls whether the task's agent's llm responder
+                is executed concurrently.
             allow_null_result (bool): [Deprecated, may be removed in future.]
                 If true, allow null (empty or NO_ANSWER)
                 as the result of a step or overall task result.
@@ -198,7 +233,6 @@ class Task:
         # just the first outgoing message and last incoming message.
         # Note this also completely erases sub-task agents' message_history.
         self.erase_substeps = erase_substeps
-        self.concurrent = concurrent
         self.allow_null_result = allow_null_result
 
         agent_entity_responders = agent.entity_responders()
@@ -210,9 +244,31 @@ class Task:
         self.non_human_responders: List[Responder] = [
             r for r in self.responders if r != Entity.USER
         ]
-        self.non_human_responders_async: List[Responder] = [
-            r for r in self.responders_async if r != Entity.USER
+
+        # Handle concurrency
+        self.concurrent = concurrent
+        self.concurrent_agent = concurrent_agent
+        self.concurrent_llm = concurrent_llm or self.concurrent_agent
+
+        self.non_human_responders_async: List[Tuple[bool, List[Responder]]] = [
+            (
+                False,
+                [
+                    r
+                    for r in self.responders_async
+                    if r not in {Entity.USER, Entity.LLM, Entity.AGENT}
+                ],
+            )
         ]
+
+        if Entity.AGENT in self.responders_async:
+            add_grouped(
+                self.non_human_responders_async, self.concurrent_agent, Entity.AGENT
+            )
+        if Entity.LLM in self.responders_async:
+            add_grouped(
+                self.non_human_responders_async, self.concurrent_llm, Entity.LLM
+            )
 
         self.human_tried = False  # did human get a chance to respond in last step?
         self._entity_responder_map: Dict[
@@ -294,7 +350,9 @@ class Task:
     def _leave(self) -> str:
         return self._indent + "<<<"
 
-    def add_sub_task(self, task: Task | List[Task]) -> None:
+    def add_sub_task(
+        self, task: Task | List[Task], concurrent: Optional[bool] = None
+    ) -> None:
         """
         Add a sub-task (or list of subtasks) that this task can delegate
         (or fail-over) to. Note that the sequence of sub-tasks is important,
@@ -304,6 +362,8 @@ class Task:
         Args:
             task (Task|List[Task]): sub-task(s) to add
         """
+        if concurrent is None:
+            concurrent = self.concurrent
 
         if isinstance(task, list):
             for t in task:
@@ -317,7 +377,7 @@ class Task:
         self.responders.append(cast(Responder, task))
         self.responders_async.append(cast(Responder, task))
         self.non_human_responders.append(cast(Responder, task))
-        self.non_human_responders_async.append(cast(Responder, task))
+        add_grouped(self.non_human_responders_async, concurrent, cast(Responder, task))
 
     def init(self, msg: None | str | ChatDocument = None) -> ChatDocument | None:
         """
@@ -593,6 +653,16 @@ class Task:
             result = self.response(r, turns)
             self.is_done = self._is_done_response(result, r)
             self.is_pass_thru = PASS in result.content if result else False
+
+            {
+                "cannot_respond": False,
+                "is_done": self.is_done,
+                "is_valid": self.valid(result, r),
+                "is_pass_thru": self.is_pass_thru,
+                "responder": r,
+                "result": result,
+            }
+
             if self.valid(result, r):
                 found_response = True
                 assert result is not None
@@ -610,11 +680,13 @@ class Task:
 
     async def step_async(self, turns: int = -1) -> ChatDocument | None:
         """
-        A single "turn" in the task conversation: The "allowed" responders in this
-        turn (which can be either the 3 "entities", or one of the sub-tasks) are
+        A single "turn" in the task conversation: The groups of "allowed" responders in
+        this turn (which can be either the 3 "entities", or one of the sub-tasks) are
         tried in sequence, until a _valid_ response is obtained; a _valid_
         response is one that contributes to the task, either by ending it,
-        or producing a response to be further acted on.
+        or producing a response to be further acted on. Each group is executed
+        sequentially or concurrently, depending on the settings with which its
+        responders were added.
         Update `self.pending_message` to the latest valid response (or NO_ANSWER
         if no valid response was obtained from any responder).
 
@@ -649,12 +721,9 @@ class Task:
             self._process_valid_responder_result(Entity.AGENT, parent, error_doc)
             return error_doc
 
-        responders: List[Responder] = self.non_human_responders_async.copy()
-
-        if self.concurrent:
-            concurrent_start = 0
-        else:
-            concurrent_start = len(responders)
+        responders: List[Tuple[bool, List[Responder]]] = [
+            (key, values.copy()) for (key, values) in self.non_human_responders_async
+        ]
 
         if (
             Entity.USER in self.responders
@@ -669,11 +738,8 @@ class Task:
             #  Agent to be the next responder; this only makes a difference in an
             #  interactive setting: LLM generates tool, then we don't want user to
             #  have to respond, and instead let the agent_response handle the tool.
-            responders.insert(0, Entity.USER)
-            concurrent_start += 1  # We always wait for the human response if available
-
-        sequential_responders = responders[:concurrent_start]
-        concurrent_responders = responders[concurrent_start:]
+            # We always wait on a human response
+            add_grouped(responders, False, Entity.USER, pos=0)
 
         # Asynchronously returns the results from a responder and checks for validity
         async def response(cls: Task, r: Responder) -> Dict[str, Any]:
@@ -699,16 +765,17 @@ class Task:
 
             result = await cls.response_async(r, turns)
             is_done = cls._is_done_response(result, r)
-            is_valid = cls.valid(result, r)
 
-            if is_valid:
-                is_done = True
+            # TODO: remove dependency on global state
+            cls.is_done = is_done
+            is_valid = cls.valid(result, r)
 
             is_pass_thru = PASS in result.content if result else False
 
             return {
                 "cannot_respond": False,
                 "is_done": is_done,
+                "end_step": is_done or is_valid,
                 "is_valid": is_valid,
                 "is_pass_thru": is_pass_thru,
                 "responder": r,
@@ -716,18 +783,19 @@ class Task:
             }
 
         found_response = False
+        end_step = False
         result = None
 
         # Update task state using response
         def handle_response(response: Dict[str, Any]) -> None:
-            nonlocal found_response, result
+            nonlocal found_response, result, end_step
 
             r = response["responder"]
 
             if response["cannot_respond"]:
                 self.log_message(r, response["log_doc"])
             else:
-                self.is_done = responder_result["is_done"]
+                end_step = responder_result["end_step"]
 
                 if "is_pass_thru" in responder_result:
                     self.is_pass_thru = responder_result["is_pass_thru"]
@@ -741,40 +809,53 @@ class Task:
                 else:
                     self.log_message(r, result)
 
-        # Evaluate the responders to be executed sequentially in order
-        for r in sequential_responders:
-            responder_result = await response(self, r)
-            handle_response(responder_result)
+        for concurrent, group in responders:
+            if concurrent:
+                concurrent_tasks = set(
+                    map(
+                        lambda r: asyncio.create_task(response(self, r)),
+                        group,
+                    )
+                )
 
-            if self.is_done:
-                # skip trying other responders this step
+                #  Run the remaining responders concurrently; retain
+                #  the first successful result
+                while not end_step and len(concurrent_tasks) > 0:
+                    # Wait for a result from some responder
+                    done, concurrent_tasks = await asyncio.wait(
+                        concurrent_tasks, return_when=asyncio.FIRST_COMPLETED
+                    )
+
+                    for task in done:
+                        responder_result = task.result()
+                        handle_response(responder_result)
+
+                        if end_step:
+                            # set done flag
+                            self.is_done = responder_result["is_done"]
+
+                            # skip trying other responders this step
+                            break
+
+                # Cancel remaining tasks
+                for task in concurrent_tasks:
+                    task.cancel()
+            else:
+                # Evaluate the responders to be executed sequentially in order
+                for r in group:
+                    responder_result = await response(self, r)
+                    handle_response(responder_result)
+
+                    if end_step:
+                        # set done flag
+                        self.is_done = responder_result["is_done"]
+
+                        # skip trying other responders this step
+                        break
+
+            # skip trying other responders this step
+            if end_step:
                 break
-
-        concurrent_tasks = set(
-            map(
-                lambda r: asyncio.create_task(response(self, r)),
-                concurrent_responders,
-            )
-        )
-
-        #  Run the remaining responders concurrently; retain the first successful result
-        while not self.is_done and len(concurrent_tasks) > 0:
-            # Wait for a result from some responder
-            done, concurrent_tasks = await asyncio.wait(
-                concurrent_tasks, return_when=asyncio.FIRST_COMPLETED
-            )
-
-            for task in done:
-                responder_result = task.result()
-                handle_response(responder_result)
-
-                if self.is_done:
-                    # skip trying other responders this step
-                    break
-
-        # Cancel remaining tasks
-        for task in concurrent_tasks:
-            task.cancel()
 
         if not found_response:
             self._process_invalid_step_result(parent)

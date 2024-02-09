@@ -14,6 +14,7 @@ python3 examples/docqa/rag-local-simple.py -m litellm/ollama_chat/mistral:7b-ins
 
 See here for more on how to set up a local LLM to work with Langroid:
 https://langroid.github.io/langroid/tutorials/local-llm-setup/
+"""
 
 import os
 import fire

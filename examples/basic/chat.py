@@ -27,6 +27,7 @@ import langroid.language_models as lm
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
 from langroid.utils.configuration import set_global, Settings
+from langroid.utils.logging import setup_colored_logging
 
 setup_colored_logging()
 
