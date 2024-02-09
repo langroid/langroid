@@ -40,11 +40,13 @@ try:
     from .agent.callbacks.chainlit import (
         ChainlitAgentCallbacks,
         ChainlitTaskCallbacks,
+        ChainlitCallbackConfig,
     )
 
     chainlit_available = True
     ChainlitAgentCallbacks
     ChainlitTaskCallbacks
+    ChainlitCallbackConfig
 except ImportError:
     chainlit_available = False
 
@@ -82,5 +84,6 @@ if chainlit_available:
         [
             "ChainlitAgentCallbacks",
             "ChainlitTaskCallbacks",
+            "ChainlitCallbackConfig",
         ]
     )

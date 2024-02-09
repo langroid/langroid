@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "langroid"
-version = "0.1.186"
+version = "0.1.190"
 description = "Harness LLMs with Multi-Agent Programming"
 authors = ["Prasad Chalasani <pchalasani@gmail.com>"]
 readme = "README.md"
@@ -75,7 +75,7 @@ docstring-parser = "^0.15"
 farm-haystack = {extras = ["ocr", "preprocessing", "file-conversion", "pdf"], version = "^1.21.1"}
 meilisearch = "^0.28.3"
 meilisearch-python-sdk = "^2.2.3"
-litellm = {version = "^1.22.5", optional = true}
+litellm = {version = "^1.23.0", optional = true}
 scrapy = "^2.11.0"
 async-generator = "^1.10"
 lancedb = "^0.4.1"
@@ -87,6 +87,7 @@ aiohttp = "^3.9.1"
 metaphor-python = {version = "^0.1.23", optional = true}
 chainlit = {version = "^1.0.200", optional = true}
 python-socketio = {version="^5.11.0", optional=true}
+duckduckgo-search = "^4.4"
 
 [tool.poetry.extras]
 # install these using `poetry install -E [...]` where [...] is one of the extras below

@@ -15,11 +15,18 @@ import langroid as lr
 import chainlit as cl
 from langroid.agent.callbacks.chainlit import ChainlitTaskCallbacks
 from langroid.agent.callbacks.chainlit import add_instructions
+from langroid.utils.configuration import settings
 from textwrap import dedent
 
 
 @cl.on_chat_start
-async def on_chat_start():
+async def on_chat_start(
+    debug: bool = False,
+    no_cache: bool = False,
+):
+    settings.debug = debug
+    settings.cache = not no_cache
+
     await add_instructions(
         title="Two-Agent Demo",
         content=dedent(
