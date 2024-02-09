@@ -1,7 +1,8 @@
+import json
 import logging
-from typing import TYPE_CHECKING, Any, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
-from pydantic import BaseSettings
+from pydantic import BaseModel, BaseSettings
 from rich import print
 from rich.console import Console
 
@@ -26,20 +27,12 @@ console = Console()
 
 NEO4J_ERROR_MSG = "There was an error in your Cypher Query"
 
-empty_nodes = "'nodes': []"
-empty_relationships = "'relationships': []"
-not_valid_query_response = [
-    empty_nodes,
-    empty_relationships,
-    NEO4J_ERROR_MSG,
-]
-
 
 # TOOLS to be used by the agent
 
 
 class CypherQueryTool(ToolMessage):
-    request: str = "make_query"
+    request: str = "retrieval_query"
     purpose: str = """Use this tool to send the Generated Cypher query based on 
     provided text description and schema."""
     cypher_query: str
@@ -61,6 +54,11 @@ class Neo4jSettings(BaseSettings):
         # e.g. NEO4J_URI, NEO4J_USERNAME, etc.,
         # which can either be set in a .env file or in the shell via export cmds.
         env_prefix = "NEO4J_"
+
+
+class QueryResult(BaseModel):
+    success: bool
+    data: Optional[Union[str, List[Dict[Any, Any]]]] = None
 
 
 class Neo4jChatAgentConfig(ChatAgentConfig):
@@ -146,31 +144,32 @@ class Neo4jChatAgent(ChatAgent):
         logger.error(f"Cypher Query failed: {query}\nException: {e}")
 
         # Construct the error message
-        error_message_template = f"""
-        There were some errors running your Cypher query:
+        error_message_template = f"""\
         {NEO4J_ERROR_MSG}: '{query}'
         {str(e)}
-        Send a new query, correcting the errors.
+        Run a new query, correcting the errors.
         """
 
         return error_message_template
 
     def read_query(
         self, query: str, parameters: Optional[Dict[Any, Any]] = None
-    ) -> str:
+    ) -> QueryResult:
         """
         Executes a given Cypher query with parameters on the Neo4j database.
 
         Args:
             query (str): The Cypher query string to be executed.
-            parameters (Optional[Dict[Any, Any]]): A dictionary of parameters for the
-            query. Defaults to None.
+            parameters (Optional[Dict[Any, Any]]): A dictionary of parameters for
+                                                    the query.
 
         Returns:
-            str: The result of executing the Cypher query.
+            QueryResult: An object representing the outcome of the query execution.
         """
         if not self.driver:
-            raise ValueError("No database connection is established.")
+            return QueryResult(
+                success=False, data="No database connection is established."
+            )
 
         try:
             assert isinstance(self.config, Neo4jChatAgentConfig)
@@ -178,56 +177,51 @@ class Neo4jChatAgent(ChatAgent):
                 database=self.config.neo4j_settings.database
             ) as session:
                 result = session.run(query, parameters)
-                # Check if there are records in the result
                 if result.peek():
-                    # TODO: change `read_query` to return a list of dictionaries
-                    # when query returns valid results, or return a tuple of flag,
-                    # list of dictionaries.
-                    response_message = ", ".join(
-                        [str(record.data()) for record in result]
-                    )
+                    records = [record.data() for record in result]
+                    return QueryResult(success=True, data=records)
                 else:
-                    response_message = "No records found."
+                    return QueryResult(success=True, data=[])
         except Exception as e:
             logger.error(f"Failed to execute query: {query}\n{e}")
-            response_message = self.retry_query(e, query)
+            error_message = self.retry_query(e, query)
+            return QueryResult(success=False, data=error_message)
         finally:
             self.close()
 
-        return response_message
-
     def write_query(
         self, query: str, parameters: Optional[Dict[Any, Any]] = None
-    ) -> bool:
+    ) -> QueryResult:
         """
         Executes a write transaction using a given Cypher query on the Neo4j database.
         This method should be used for queries that modify the database.
 
         Args:
             query (str): The Cypher query string to be executed.
-            parameters (dict, optional): A dict of parameters for the Cypher query
+            parameters (dict, optional): A dict of parameters for the Cypher query.
 
         Returns:
-            bool: True if the query was executed successfully, False otherwise.
+            QueryResult: An object representing the outcome of the query execution.
+                         It contains a success flag and an optional error message.
         """
         if not self.driver:
-            raise ValueError("No database connection is established.")
-        response = False
+            return QueryResult(
+                success=False, data="No database connection is established."
+            )
+
         try:
             assert isinstance(self.config, Neo4jChatAgentConfig)
             with self.driver.session(
                 database=self.config.neo4j_settings.database
             ) as session:
-                # Execute the query within a write transaction
                 session.write_transaction(lambda tx: tx.run(query, parameters))
-                response = True
+                return QueryResult(success=True)
         except Exception as e:
-            logging.warning(
-                f"An unexpected error occurred while executing the write query: {e}"
-            )
+            logging.warning(f"An error occurred: {e}")
+            error_message = self.retry_query(e, query)
+            return QueryResult(success=False, data=error_message)
         finally:
             self.close()
-        return response
 
     # TODO: test under enterprise edition because community edition doesn't allow
     # database creation/deletion
@@ -237,12 +231,14 @@ class Neo4jChatAgent(ChatAgent):
                 MATCH (n)
                 DETACH DELETE n
             """
-        if self.write_query(delete_query):
+        response = self.write_query(delete_query)
+
+        if response.success:
             print("[green]Database is deleted!")
         else:
             print("[red]Database is not deleted!")
 
-    def make_query(self, msg: CypherQueryTool) -> str:
+    def retrieval_query(self, msg: CypherQueryTool) -> str:
         """ "
         Handle a CypherQueryTool message by executing a Cypher query and
         returning the result.
@@ -255,7 +251,11 @@ class Neo4jChatAgent(ChatAgent):
         query = msg.cypher_query
 
         logger.info(f"Executing Cypher query: {query}")
-        return self.read_query(query)
+        response = self.read_query(query)
+        if response.success:
+            return json.dumps(response.data)
+        else:
+            return str(response.data)
 
     # TODO: There are various ways to get the schema. The current one uses the func
     # `read_query`, which requires post processing to identify whether the response upon
@@ -280,14 +280,16 @@ class Neo4jChatAgent(ChatAgent):
             behavior of 'self.read_query' method, which might raise exceptions related
              to database connectivity or query execution.
         """
-        schema = self.read_query("CALL db.schema.visualization()")
-        if not any(element in schema for element in not_valid_query_response):
-            return schema
+        schema_result = self.read_query("CALL db.schema.visualization()")
+        if schema_result.success:
+            # ther is a possibility that the schema is empty, which is a valid response
+            # the schema.data will be: [{"nodes": [], "relationships": []}]
+            return json.dumps(schema_result.data)
         else:
-            return "The database schema does not have any nodes or relationships."
+            return f"Failed to retrieve schema: {schema_result.data}"
 
     def _init_tool_messages(self) -> None:
-        """Attach ToolMessages to the Agent."""
+        """Initialize message tools used for chatting."""
         message = self._format_message()
         self.config.system_message = self.config.system_message.format(mode=message)
         super().__init__(self.config)

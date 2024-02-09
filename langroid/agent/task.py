@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import logging
 from collections import Counter
+from types import SimpleNamespace
 from typing import (
     Any,
     Callable,
@@ -27,6 +28,7 @@ from langroid.agent.chat_document import (
     ChatDocument,
 )
 from langroid.mytypes import Entity
+from langroid.parsing.json import extract_top_level_json
 from langroid.utils.configuration import settings
 from langroid.utils.constants import DONE, NO_ANSWER, PASS, PASS_TO, SEND_TO, USER_QUIT
 from langroid.utils.logging import RichFileLogger, setup_file_logger
@@ -34,6 +36,10 @@ from langroid.utils.logging import RichFileLogger, setup_file_logger
 logger = logging.getLogger(__name__)
 
 Responder = Entity | Type["Task"]
+
+
+def noop_fn(*args: List[Any], **kwargs: Dict[str, Any]) -> None:
+    pass
 
 
 class Task:
@@ -77,7 +83,7 @@ class Task:
         restart: bool = True,
         default_human_response: Optional[str] = None,
         interactive: bool = True,
-        only_user_quits_root: bool = True,
+        only_user_quits_root: bool = False,
         erase_substeps: bool = False,
         allow_null_result: bool = True,
         max_stalled_steps: int = 5,
@@ -114,7 +120,8 @@ class Task:
                 response (prevents infinite loop of non-human responses).
                 Default is true. If false, then `default_human_response` is set to ""
             only_user_quits_root (bool): if true, only user can quit the root task.
-                [Instead of this, setting `interactive` usually suffices]
+                [This param is ignored & deprecated; Keeping for backward compatibility.
+                Instead of this, setting `interactive` suffices]
             erase_substeps (bool): if true, when task completes, erase intermediate
                 conversation with subtasks from this agent's `message_history`, and also
                 erase all subtask agents' `message_history`.
@@ -133,6 +140,24 @@ class Task:
         """
         if agent is None:
             agent = ChatAgent()
+
+        self.callbacks = SimpleNamespace(
+            show_subtask_response=noop_fn,
+            set_parent_agent=noop_fn,
+        )
+        # copy the agent's config, so that we don't modify the original agent's config,
+        # which may be shared by other agents.
+        try:
+            config_copy = copy.deepcopy(agent.config)
+            agent.config = config_copy
+        except Exception:
+            logger.warning(
+                """
+                Failed to deep-copy Agent config during task creation, 
+                proceeding with original config. Be aware that changes to 
+                the config may affect other agents using the same config.
+                """
+            )
 
         if isinstance(agent, ChatAgent) and len(agent.message_history) == 0 or restart:
             agent = cast(ChatAgent, agent)
@@ -157,9 +182,14 @@ class Task:
         self.is_done = False  # is task done (based on response)?
         self.is_pass_thru = False  # is current response a pass-thru?
         self.task_progress = False  # progress in current task (since run or run_async)?
+        if name:
+            # task name overrides name in agent config
+            agent.config.name = name
         self.name = name or agent.config.name
         self.value: str = self.name
         self.default_human_response = default_human_response
+        if default_human_response is not None and default_human_response == "":
+            interactive = False
         self.interactive = interactive
         self.message_history_idx = -1
         if interactive:
@@ -227,11 +257,7 @@ class Task:
         Returns a copy of this task, with a new agent.
         """
         assert isinstance(self.agent, ChatAgent), "Task clone only works for ChatAgent"
-
-        agent_cls = type(self.agent)
-        config_copy = copy.deepcopy(self.agent.config)
-        config_copy.name = f"{config_copy.name}-{i}"
-        agent: ChatAgent = agent_cls(config_copy)
+        agent: ChatAgent = self.agent.clone(i)
         return Task(
             agent,
             name=self.name + f"-{i}",
@@ -242,7 +268,6 @@ class Task:
             restart=False,
             default_human_response=self.default_human_response,
             interactive=self.interactive,
-            only_user_quits_root=self.only_user_quits_root,
             erase_substeps=self.erase_substeps,
             allow_null_result=self.allow_null_result,
             max_stalled_steps=self.max_stalled_steps,
@@ -536,9 +561,21 @@ class Task:
             return error_doc
 
         responders: List[Responder] = self.non_human_responders.copy()
-        if Entity.USER in self.responders and not self.human_tried:
-            # give human first chance if they haven't been tried in last step:
-            # ensures human gets chance at each turn.
+
+        if (
+            Entity.USER in self.responders
+            and not self.human_tried
+            and not self.agent.has_tool_message_attempt(self.pending_message)
+        ):
+            # Give human first chance if they haven't been tried in last step,
+            # and the msg is not a tool-call attempt;
+            # This ensures human gets a chance to respond,
+            #   other than to a LLM tool-call.
+            # When there's a tool msg attempt we want the
+            #  Agent to be the next responder; this only makes a difference in an
+            #  interactive setting: LLM generates tool, then we don't want user to
+            #  have to respond, and instead let the agent_response handle the tool.
+
             responders.insert(0, Entity.USER)
 
         found_response = False
@@ -618,9 +655,20 @@ class Task:
             return error_doc
 
         responders: List[Responder] = self.non_human_responders_async.copy()
-        if Entity.USER in self.responders_async and not self.human_tried:
-            # give human first chance if they haven't been tried in last step:
-            # ensures human gets chance at each turn.
+
+        if (
+            Entity.USER in self.responders
+            and not self.human_tried
+            and not self.agent.has_tool_message_attempt(self.pending_message)
+        ):
+            # Give human first chance if they haven't been tried in last step,
+            # and the msg is not a tool-call attempt;
+            # This ensures human gets a chance to respond,
+            #   other than to a LLM tool-call.
+            # When there's a tool msg attempt we want the
+            #  Agent to be the next responder; this only makes a difference in an
+            #  interactive setting: LLM generates tool, then we don't want user to
+            #  have to respond, and instead let the agent_response handle the tool.
             responders.insert(0, Entity.USER)
 
         found_response = False
@@ -759,15 +807,28 @@ class Task:
         """
         if isinstance(e, Task):
             actual_turns = e.turns if e.turns > 0 else turns
+            e.agent.callbacks.set_parent_agent(self.agent)
+            # e.callbacks.set_parent_agent(self.agent)
             result = e.run(
                 self.pending_message,
                 turns=actual_turns,
                 caller=self,
             )
+            result_str = str(ChatDocument.to_LLMMessage(result))
+            maybe_tool = len(extract_top_level_json(result_str)) > 0
+            self.callbacks.show_subtask_response(
+                task=e,
+                content=result_str,
+                is_tool=maybe_tool,
+            )
         else:
             response_fn = self._entity_responder_map[cast(Entity, e)]
             result = response_fn(self.pending_message)
+        return self._process_result_routing(result)
 
+    def _process_result_routing(
+        self, result: ChatDocument | None
+    ) -> ChatDocument | None:
         # process result in case there is a routing instruction
         if result is None:
             return None
@@ -821,16 +882,24 @@ class Task:
         """
         if isinstance(e, Task):
             actual_turns = e.turns if e.turns > 0 else turns
+            e.agent.callbacks.set_parent_agent(self.agent)
+            # e.callbacks.set_parent_agent(self.agent)
             result = await e.run_async(
                 self.pending_message,
                 turns=actual_turns,
                 caller=self,
             )
-            return result
+            result_str = str(ChatDocument.to_LLMMessage(result))
+            maybe_tool = len(extract_top_level_json(result_str)) > 0
+            self.callbacks.show_subtask_response(
+                task=e,
+                content=result_str,
+                is_tool=maybe_tool,
+            )
         else:
             response_fn = self._entity_responder_async_map[cast(Entity, e)]
             result = await response_fn(self.pending_message)
-            return result
+        return self._process_result_routing(result)
 
     def result(self) -> ChatDocument:
         """
@@ -957,8 +1026,6 @@ class Task:
             bool: True if task is done, False otherwise
         """
         result = result or self.pending_message
-        if self.is_done:
-            return True
         user_quit = (
             result is not None
             and result.content in USER_QUIT
@@ -967,6 +1034,9 @@ class Task:
         if self._level == 0 and self.only_user_quits_root:
             # for top-level task, only user can quit out
             return user_quit
+
+        if self.is_done:
+            return True
 
         if self.n_stalled_steps >= self.max_stalled_steps:
             # we are stuck, so bail to avoid infinite loop

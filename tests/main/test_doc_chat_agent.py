@@ -233,7 +233,7 @@ def test_doc_chat_followup(test_settings: Settings, agent, conv_mode: bool):
     set_global(test_settings)
     task = Task(
         agent,
-        default_human_response="",
+        interactive=False,
         restart=True,
         done_if_response=[Entity.LLM],
         done_if_no_response=[Entity.LLM],

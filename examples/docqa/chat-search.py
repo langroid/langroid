@@ -1,6 +1,6 @@
 """
-Single-agent question-answering system that has access to Google Search when needed,
-and in case a Google Search is used, ingests contents into a vector-db,
+Single-agent question-answering system that has access to DuckDuckGo (DDG) Search when needed,
+and in case a DDG Search is used, ingests contents into a vector-db,
 and uses Retrieval Augmentation to answer the question.
 
 Run like this:
@@ -11,15 +11,11 @@ Optional args:
     -nc : turn off caching (i.e. don't retrieve cached LLM responses)
     -d: debug mode, to show all intermediate results
     -f: use OpenAI functions api instead of tools
-    -m <model_name>:  (e.g. -m litellm/ollama/mistral:7b-instruct-v0.2-q4_K_M)
+    -m <model_name>:  (e.g. -m litellm/ollama_chat/mistral:7b-instruct-v0.2-q4_K_M)
     (defaults to GPT4-Turbo if blank)
 
-(See here for guide to using non-OpenAI LLMs:
-https://langroid.github.io/langroid/tutorials/non-openai-llms/)
-
-NOTE: running this example requires setting the GOOGLE_API_KEY and GOOGLE_CSE_ID
-environment variables in your `.env` file, as explained in the
-[README](https://github.com/langroid/langroid#gear-installation-and-setup).
+(See here for guide to using local LLMs with Langroid:)
+https://langroid.github.io/langroid/tutorials/local-llm-setup/
 """
 
 import re
@@ -30,7 +26,6 @@ from rich import print
 from rich.prompt import Prompt
 
 from pydantic import BaseSettings
-import langroid as lr
 import langroid.language_models as lm
 from langroid.agent.tool_message import ToolMessage
 from langroid.agent.chat_agent import ChatAgent, ChatDocument
@@ -38,15 +33,12 @@ from langroid.agent.special.doc_chat_agent import (
     DocChatAgent,
     DocChatAgentConfig,
 )
-from langroid.parsing.web_search import google_search
+from langroid.parsing.web_search import duckduckgo_search
 from langroid.agent.task import Task
 from langroid.utils.constants import NO_ANSWER
 from langroid.utils.configuration import set_global, Settings
-from langroid.utils.logging import setup_colored_logging
 
 app = typer.Typer()
-
-setup_colored_logging()
 
 
 class RelevantExtractsTool(ToolMessage):
@@ -89,7 +81,7 @@ class RelevantSearchExtractsTool(ToolMessage):
         """
 
 
-class GoogleSearchDocChatAgent(DocChatAgent):
+class DDGSearchDocChatAgent(DocChatAgent):
     tried_vecdb: bool = False
 
     def llm_response(
@@ -112,12 +104,12 @@ class GoogleSearchDocChatAgent(DocChatAgent):
 
     def relevant_search_extracts(self, msg: RelevantSearchExtractsTool) -> str:
         """Get docs/extracts relevant to the query, from a web search"""
-        if not self.tried_vecdb:
+        if not self.tried_vecdb and len(self.original_docs) > 0:
             return "Please try the `relevant_extracts` tool, before using this tool"
         self.tried_vecdb = False
         query = msg.query
         num_results = msg.num_results
-        results = google_search(query, num_results)
+        results = duckduckgo_search(query, num_results)
         links = [r.link for r in results]
         self.config.doc_paths = links
         self.ingest()
@@ -133,9 +125,9 @@ class CLIOptions(BaseSettings):
 def chat(opts: CLIOptions) -> None:
     print(
         """
-        [blue]Welcome to the Google Search chatbot!
+        [blue]Welcome to the Internet Search chatbot!
         I will try to answer your questions, relying on (full content of links from) 
-        Google Search when needed.
+        Duckduckgo (DDG) Search when needed.
         
         Enter x or q to quit, or ? for evidence
         """
@@ -166,9 +158,6 @@ def chat(opts: CLIOptions) -> None:
         use_functions_api=opts.fn_api,
         use_tools=not opts.fn_api,
         llm=llm_config,
-        relevance_extractor_config=lr.agent.special.RelevanceExtractorAgentConfig(
-            llm=llm_config
-        ),
         system_message=f"""
         {system_msg} You will try your best to answer my questions,
         in this order of preference:
@@ -197,7 +186,7 @@ def chat(opts: CLIOptions) -> None:
         """,
     )
 
-    agent = GoogleSearchDocChatAgent(config)
+    agent = DDGSearchDocChatAgent(config)
     agent.enable_message(RelevantExtractsTool)
     agent.enable_message(RelevantSearchExtractsTool)
     collection_name = Prompt.ask(

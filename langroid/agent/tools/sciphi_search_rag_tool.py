@@ -35,6 +35,8 @@ For more information, please refer to the official docs:
 https://agent-search.readthedocs.io/en/latest/
 """
 
+from typing import List
+
 try:
     from agent_search import SciPhi
 except ImportError:
@@ -55,22 +57,23 @@ class SciPhiSearchRAGTool(ToolMessage):
             return a response summary with llm model <llm_model> the given <query>. 
             """
     query: str
-    search_provider: str = "bing"  # bing or agent-search
-    include_related_queries: bool = True
-    llm_model: str = "SciPhi/Sensei-7B-V1"
-    recursive_mode: bool = True
 
     def handle(self) -> str:
         rag_response = SciPhi().get_search_rag_response(
-            query=self.query,
-            search_provider=self.search_provider,
-            llm_model=self.llm_model,
+            query=self.query, search_provider="bing", llm_model="SciPhi/Sensei-7B-V1"
         )
         result = rag_response["response"]
-        if self.include_related_queries:
-            result = (
-                f"### RAG Response:\n{result}\n\n"
-                + "### Related Queries:\n"
-                + "\n".join(rag_response["related_queries"])
-            )
+        result = (
+            f"### RAG Response:\n{result}\n\n"
+            + "### Related Queries:\n"
+            + "\n".join(rag_response["related_queries"])
+        )
         return result  # type: ignore
+
+    @classmethod
+    def examples(cls) -> List["ToolMessage"]:
+        return [
+            cls(
+                query="When was the Llama2 Large Language Model (LLM) released?",
+            ),
+        ]

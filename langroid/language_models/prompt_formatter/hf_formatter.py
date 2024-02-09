@@ -6,7 +6,7 @@ models will have the same tokenizer, so we just use the first one.
 """
 import logging
 import re
-from typing import List
+from typing import List, Set
 
 from huggingface_hub import HfApi, ModelFilter
 from jinja2.exceptions import TemplateError
@@ -44,6 +44,8 @@ def find_hf_formatter(model_name: str) -> str:
 
 
 class HFFormatter(PromptFormatter):
+    models: Set[str] = set()  # which models have been used for formatting
+
     def __init__(self, config: HFPromptFormatterConfig):
         super().__init__(config)
         self.config: HFPromptFormatterConfig = config
@@ -63,6 +65,18 @@ class HFFormatter(PromptFormatter):
             raise ValueError(
                 f"Model {config.model_name} does not support chat template"
             )
+        elif mdl.id not in HFFormatter.models:
+            # only warn if this is the first time we've used this mdl.id
+            logger.warning(
+                f"""
+            Using HuggingFace {mdl.id} for prompt formatting: 
+            This is the CHAT TEMPLATE. If this is not what you intended,
+            consider specifying a more complete model name for the formatter.
+             
+            {self.tokenizer.chat_template}
+            """
+            )
+        HFFormatter.models.add(mdl.id)
 
     def format(self, messages: List[LLMMessage]) -> str:
         sys_msg, chat_msgs, user_msg = LanguageModel.get_chat_history_components(

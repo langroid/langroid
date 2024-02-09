@@ -42,7 +42,6 @@ def app(
         chat_context_length=4096,  # set this based on model
         max_output_tokens=100,
         temperature=0.2,
-        stream=True,
         timeout=45,
     )
 

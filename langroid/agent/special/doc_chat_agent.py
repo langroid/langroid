@@ -239,7 +239,7 @@ class DocChatAgent(ChatAgent):
         self,
         paths: List[str],
         metadata: List[Dict[str, Any]] | Dict[str, Any] = [],
-    ) -> None:
+    ) -> List[Document]:
         """Split, ingest docs from specified paths,
         do not add these to config.doc_paths.
 
@@ -247,6 +247,8 @@ class DocChatAgent(ChatAgent):
             paths: List of file/folder paths or URLs
             metadata: List of metadata dicts, one for each path.
                 If a single dict is passed in, it is used for all paths.
+        Returns:
+            List of Document objects
         """
         paths_meta: Dict[str, Any] = {}
         urls_meta: Dict[str, Any] = {}
@@ -279,7 +281,7 @@ class DocChatAgent(ChatAgent):
         n_docs = len(docs)
         n_splits = self.ingest_docs(docs)
         if n_docs == 0:
-            return
+            return []
         n_urls = len(urls)
         n_paths = len(paths)
         print(
@@ -290,6 +292,7 @@ class DocChatAgent(ChatAgent):
         )
         print("\n".join(urls))
         print("\n".join(paths))
+        return docs
 
     def ingest_docs(
         self,
@@ -604,6 +607,7 @@ class DocChatAgent(ChatAgent):
         ):
             return self.summarize_docs()
         else:
+            self.callbacks.show_start_response(entity="llm")
             response = self.answer_from_docs(query_str)
             return ChatDocument(
                 content=response.content,

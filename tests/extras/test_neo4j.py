@@ -33,40 +33,45 @@ neo4j_settings = Neo4jSettings()
 
 
 @pytest.fixture
-def agent():
-    return Neo4jChatAgent(
+def neo4j_agent(request):
+    load_dotenv()
+    neo4j_settings = Neo4jSettings()
+    agent = Neo4jChatAgent(
         Neo4jChatAgentConfig(
             neo4j_settings=neo4j_settings,
         )
     )
 
+    def teardown():
+        # Remove the database
+        agent.remove_database()
 
-def test_write_then_retrieval(agent):
-    try:
-        write_query = """
-        CREATE (m:Movie {title: 'Inception', releaseYear: 2010})
-        CREATE (a:Actor {name: 'Leonardo DiCaprio'})
-        MERGE (a)-[:ACTED_IN]->(m)
-        RETURN m, a
-        """
-        write_result = agent.write_query(write_query)
-        assert write_result is True
-        retrieval_query = """
-        MATCH (a:Actor)-[r:ACTED_IN]->(m:Movie)
-        WHERE a.name = 'Leonardo DiCaprio' AND m.title = 'Inception'
-        RETURN a.name, m.title, m.releaseYear, type(r) AS relationship
-        """
-        read_result = agent.read_query(retrieval_query)
-        name_record = "'a.name': 'Leonardo DiCaprio'"
-        title_record = "'m.title': 'Inception'"
-        assert name_record in read_result
-        assert title_record in read_result
+    request.addfinalizer(teardown)
+    return agent
 
-    finally:
-        # Cleanup - Remove the created records
-        cleanup_query = """
-        MATCH (a:Actor {name: 'Leonardo DiCaprio'})-[r:ACTED_IN]->
-        (m:Movie {title: 'Inception'})
-        DELETE r, a, m
-        """
-        agent.write_query(cleanup_query)
+
+def test_write_then_retrieval(neo4j_agent):
+    write_query = """
+    CREATE (m:Movie {title: 'Inception', releaseYear: 2010})
+    CREATE (a:Actor {name: 'Leonardo DiCaprio'})
+    MERGE (a)-[:ACTED_IN]->(m)
+    RETURN m, a
+    """
+    write_result = neo4j_agent.write_query(write_query)
+    assert write_result.success is True
+
+    retrieval_query = """
+    MATCH (a:Actor)-[r:ACTED_IN]->(m:Movie)
+    WHERE a.name = 'Leonardo DiCaprio' AND m.title = 'Inception'
+    RETURN a.name, m.title, m.releaseYear, type(r) AS relationship
+    """
+    read_result = neo4j_agent.read_query(retrieval_query)
+    assert read_result.success is True
+    assert read_result.data == [
+        {
+            "a.name": "Leonardo DiCaprio",
+            "m.title": "Inception",
+            "m.releaseYear": 2010,
+            "relationship": "ACTED_IN",
+        }
+    ]

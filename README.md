@@ -122,6 +122,9 @@ teacher_task.run()
 <details>
 <summary> <b>Click to expand</b></summary>
 
+- **Feb 2024:** 
+  - **0.1.183:** Added Chainlit support via [callbacks](https://github.com/langroid/langroid/blob/main/langroid/agent/callbacks/chainlit.py). 
+   See [examples](https://github.com/langroid/langroid/tree/main/examples/chainlit).
 - **Jan 2024:**
   - **0.1.175** 
     - [Neo4jChatAgent](https://github.com/langroid/langroid/tree/main/langroid/agent/special/neo4j) to chat with a neo4j knowledge-graph.
