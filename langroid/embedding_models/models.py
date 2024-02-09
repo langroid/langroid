@@ -6,7 +6,6 @@ from dotenv import load_dotenv
 from openai import OpenAI
 
 from langroid.embedding_models.base import EmbeddingModel, EmbeddingModelsConfig
-from langroid.language_models.utils import retry_with_exponential_backoff
 from langroid.mytypes import Embeddings
 from langroid.parsing.utils import batched
 
@@ -50,7 +49,7 @@ class EmbeddingFunctionCallable:
         """
         self.model = model
 
-    @retry_with_exponential_backoff
+    # @retry_with_exponential_backoff
     def __call__(self, input: List[str]) -> Embeddings:
         """
         Generate embeddings for a given list of input texts using the OpenAI API,
