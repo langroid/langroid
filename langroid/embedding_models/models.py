@@ -28,7 +28,7 @@ class SentenceTransformerEmbeddingsConfig(EmbeddingModelsConfig):
 
 class EmbeddingFunctionCallable:
     """
-    A callable class designed to generate embeddings for a list of texts using 
+    A callable class designed to generate embeddings for a list of texts using
     the OpenAI API, with automatic retries on failure.
 
     Attributes:
@@ -36,16 +36,16 @@ class EmbeddingFunctionCallable:
                                 configuration and utilities for generating embeddings.
 
     Methods:
-        __call__(input: List[str]) -> Embeddings: Generate embeddings for 
+        __call__(input: List[str]) -> Embeddings: Generate embeddings for
                                 a list of input texts.
     """
 
-    def __init__(self, model):
+    def __init__(self, model: "OpenAIEmbeddings"):
         """
         Initialize the EmbeddingFunctionCallable with a specific model.
 
         Args:
-            model (OpenAIEmbeddings): An instance of OpenAIEmbeddings to use for 
+            model (OpenAIEmbeddings): An instance of OpenAIEmbeddings to use for
             generating embeddings.
         """
         self.model = model
@@ -53,13 +53,13 @@ class EmbeddingFunctionCallable:
     @retry_with_exponential_backoff
     def __call__(self, input: List[str]) -> Embeddings:
         """
-        Generate embeddings for a given list of input texts using the OpenAI API, 
+        Generate embeddings for a given list of input texts using the OpenAI API,
         with retries on failure.
 
         This method:
         - Truncates each text in the input list to the model's maximum context length.
         - Processes the texts in batches to generate embeddings efficiently.
-        - Automatically retries the embedding generation process with exponential 
+        - Automatically retries the embedding generation process with exponential
         backoff in case of failures.
 
         Args:
