@@ -1,28 +1,11 @@
 """
 Single agent to use to chat with an LLM using  Retrieval-Augmented Generation (RAG).
 Similar to chat.py but allows specifying a local LLM.
-You must either have:
- - (A) a local LLM running at an OpenAI-compatible API endpoint, e.g. localhost:8000, or
- - (B) use a local-LLM library supported by litellm, e.g. ollama, and do `ollama pull mistral`,
-     (for this scenario you have to have the `litellm` extra installed,
-     via `pip install langroid[ollama]` or equivalent)
 
-For scenario (A) you can specify the local model on the cmd line for example as:
-`-m "local/localhost:8000"`
-And for scenario (B) you can specify the local model on the cmd line for example as:
-`-m "litellm/ollama/mistral"`
+See here for how to set up a Local LLM to work with Langroid:
+https://langroid.github.io/langroid/tutorials/local-llm-setup/
 
-See docs here: https://langroid.github.io/langroid/tutorials/non-openai-llms/
-
-Run like this for example in scenario (A):
-
-python3 examples/docqa/chat-local.py -m "local/localhost:8000"
-
-and for scenario (B):
-
-python3 examples/docqa/chat-local.py -m "litellm/ollama/llama2"
-
-CAVEAT:
+NOTES:
 (1) The app works best with GPT4/Turbo, but results may be mixed with local LLMs.
 You may have to tweak the system_message, use_message, and summarize_prompt
 as indicated in comments below, to get good results.
@@ -36,7 +19,6 @@ from rich import print
 from rich.prompt import Prompt
 import os
 
-import langroid as lr
 import langroid.language_models as lm
 from langroid.agent.special.doc_chat_agent import (
     DocChatAgent,
@@ -68,11 +50,6 @@ def main(
         timeout=90,
     )
 
-    relevance_extractor_config = lr.agent.special.RelevanceExtractorAgentConfig(
-        llm=llm_config,  # or this could be a different llm_config
-        # system_message="...override default RelevanceExtractorAgent system msg here",
-    )
-
     config = DocChatAgentConfig(
         n_query_rephrases=0,
         cross_encoder_reranking_model="cross-encoder/ms-marco-MiniLM-L-6-v2",
@@ -80,7 +57,6 @@ def main(
         # set it to > 0 to retrieve a window of k chunks on either side of a match
         n_neighbor_chunks=0,
         llm=llm_config,
-        relevance_extractor_config=relevance_extractor_config,  # or None to turn off
         # system_message="...override default DocChatAgent system msg here",
         # user_message="...override default DocChatAgent user msg here",
         # summarize_prompt="...override default DocChatAgent summarize prompt here",

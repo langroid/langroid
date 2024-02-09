@@ -134,11 +134,3 @@ def async_retry_with_exponential_backoff(
                 raise e
 
     return wrapper
-
-
-# @retry_with_exponential_backoff
-# def completions_with_backoff(**kwargs):
-#     return openai.Completion.create(**kwargs)
-
-
-# completions_with_backoff(model="text-davinci-002", prompt="Once upon a time,")

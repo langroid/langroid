@@ -14,8 +14,9 @@ This example relies on neo4j. The easiest way to get access to neo4j is by
 creating a cloud account at `https://neo4j.com/cloud/platform/aura-graph-database/`
 
 Upon creating the account successfully, neo4j will create a text file that contains
-account settings, please provide the following information (uri, username, password),
-while creating the constructor `Neo4jConfig`.
+account settings, please provide the following information (uri, username, password) as
+described here
+`https://github.com/langroid/langroid/tree/main/examples/kg-chat#requirements`
 
 Run like this:
 ```
@@ -60,8 +61,6 @@ class DepGraphTool(ToolMessage):
 
 
 class DependencyGraphAgent(Neo4jChatAgent):
-    package_name: str
-
     def construct_dependency_graph(self, msg: DepGraphTool) -> None:
         check_db_exist = (
             "MATCH (n) WHERE n.name = $name AND n.version = $version RETURN n LIMIT 1"
@@ -69,8 +68,8 @@ class DependencyGraphAgent(Neo4jChatAgent):
         response = self.read_query(
             check_db_exist, {"name": msg.package_name, "version": msg.package_version}
         )
-        if "No records found" not in response:
-            self.config.database_created = True
+        if response.success and response.data:
+            # self.config.database_created = True
             return "Database Exists"
         else:
             construct_dependency_graph = CONSTRUCT_DEPENDENCY_GRAPH.format(
@@ -78,7 +77,8 @@ class DependencyGraphAgent(Neo4jChatAgent):
                 package_name=msg.package_name,
                 package_version=msg.package_version,
             )
-            if self.write_query(construct_dependency_graph):
+            response = self.write_query(construct_dependency_graph)
+            if response.success:
                 self.config.database_created = True
                 return "Database is created!"
             else:
@@ -123,6 +123,7 @@ def main(
     dependency_agent = DependencyGraphAgent(
         config=Neo4jChatAgentConfig(
             neo4j_settings=neo4j_settings,
+            show_stats=False,
             use_tools=tools,
             use_functions_api=not tools,
             llm=OpenAIGPTConfig(
@@ -154,7 +155,7 @@ def main(
     You will try your best to answer my questions. Note that:
     1. You can use the tool `get_schema` to get node label and relationships in the
     dependency graph. 
-    2. You can use the tool `make_query` to get relevant information from the
+    2. You can use the tool `retrieval_query` to get relevant information from the
       graph database. I will execute this query and send you back the result.
       Make sure your queries comply with the database schema.
     3. Use the `web_search` tool/function to get information if needed.

@@ -65,11 +65,14 @@ Sponsorship is also accepted via [GitHub Sponsors](https://github.com/sponsors/l
 This is just a teaser; there's much more, like function-calling/tools, 
 Multi-Agent Collaboration, Structured Information Extraction, DocChatAgent 
 (RAG), SQLChatAgent, non-OpenAI local/remote LLMs, etc. Scroll down or see docs for more.
+See the Langroid Quick-Start [Colab](https://colab.research.google.com/github/langroid/langroid/blob/main/examples/Langroid_quick_start.ipynb)
+that builds up to a 2-agent information-extraction example using the OpenAI ChatCompletion API. 
+See also this [version](https://colab.research.google.com/drive/190Tk7t4AdY1P9F_NlZ33-YEoGnHweQQ0) that uses the OpenAI Assistants API instead.
 
-:fire: Just released! Updated Langroid Quick-Start [Colab](https://colab.research.google.com/github/langroid/langroid/blob/main/examples/Langroid_quick_start.ipynb)
-that builds up to a 2-agent chat example using the OpenAI ChatCompletion API. 
-See also this [version](https://colab.research.google.com/drive/190Tk7t4AdY1P9F_NlZ33-YEoGnHweQQ0) 
-that uses the OpenAI Assistants API instead.
+:fire: just released! [Example](https://github.com/langroid/langroid-examples/blob/main/examples/docqa/chat-multi-extract-local.py) 
+script showing how you can use Langroid multi-agents and tools
+to extract structured information from a document using **only a local LLM**
+(Mistral-7b-instruct-v0.2).
 
 ```python
 import langroid as lr
@@ -119,7 +122,19 @@ teacher_task.run()
 <details>
 <summary> <b>Click to expand</b></summary>
 
+- **Feb 2024:** 
+  - **0.1.183:** Added Chainlit support via [callbacks](https://github.com/langroid/langroid/blob/main/langroid/agent/callbacks/chainlit.py). 
+   See [examples](https://github.com/langroid/langroid/tree/main/examples/chainlit).
 - **Jan 2024:**
+  - **0.1.175** 
+    - [Neo4jChatAgent](https://github.com/langroid/langroid/tree/main/langroid/agent/special/neo4j) to chat with a neo4j knowledge-graph.
+      (Thanks to [Mohannad](https://github.com/Mohannadcse)!). The agent uses tools to query the Neo4j schema and translate user queries to Cypher queries,
+      and the tool handler executes these queries, returning them to the LLM to compose
+      a natural language response (analogous to how `SQLChatAgent` works).
+      See example [script](https://github.com/langroid/langroid/tree/main/examples/kg-chat) using this Agent to answer questions about Python pkg dependencies.
+    - Support for `.doc` file parsing (in addition to `.docx`)
+    - Specify optional [`formatter` param](https://github.com/langroid/langroid/releases/tag/0.1.171) 
+      in `OpenAIGPTConfig` to ensure accurate chat formatting for local LLMs. 
   - **[0.1.157](https://github.com/langroid/langroid/releases/tag/0.1.157):** `DocChatAgentConfig` 
      has a new param: `add_fields_to_content`, to specify additional document fields to insert into 
      the main `content` field, to help improve retrieval.
@@ -221,6 +236,8 @@ See [this test](tests/main/test_recipient_tool.py) for example usage.
 Suppose you want to extract structured information about the key terms 
 of a commercial lease document. You can easily do this with Langroid using a two-agent system,
 as we show in the [langroid-examples](https://github.com/langroid/langroid-examples/blob/main/examples/docqa/chat_multi_extract.py) repo.
+(See [this script](https://github.com/langroid/langroid-examples/blob/main/examples/docqa/chat-multi-extract-local.py)
+for a version with the same functionality using a local Mistral-7b model.)
 The demo showcases just a few of the many features of Langroid, such as:
 - Multi-agent collaboration: `LeaseExtractor` is in charge of the task, and its LLM (GPT4) generates questions 
 to be answered by the `DocAgent`.
@@ -237,7 +254,9 @@ Here is what it looks like in action
 
 
 # :zap: Highlights
-
+(For a more up-to-date list see the 
+[release](https://github.com/langroid/langroid?tab=readme-ov-file#fire-updatesreleases) 
+section above)
 - **Agents as first-class citizens:** The [Agent](https://langroid.github.io/langroid/reference/agent/base/#langroid.agent.base.Agent) class encapsulates LLM conversation state,
   and optionally a vector-store and tools. Agents are a core abstraction in Langroid;
   Agents act as _message transformers_, and by default provide 3 _responder_ methods, one corresponding to each entity: LLM, Agent, User.

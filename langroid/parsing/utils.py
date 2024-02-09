@@ -1,4 +1,5 @@
 import difflib
+import logging
 import random
 import re
 from functools import cache
@@ -8,8 +9,16 @@ from typing import Any, Iterable, List
 import nltk
 from faker import Faker
 
+from langroid.mytypes import Document
+from langroid.parsing.parser import Parser, ParsingConfig
+from langroid.parsing.repo_loader import RepoLoader
+from langroid.parsing.url_loader import URLLoader
+from langroid.parsing.urls import get_urls_and_paths
+
 Faker.seed(23)
 random.seed(43)
+
+logger = logging.getLogger(__name__)
 
 
 # Ensures the NLTK resource is available
@@ -298,3 +307,42 @@ def extract_numbered_segments(s: str, specs: str) -> str:
             extracted_paragraphs.append(" ".join(extracted_segments))
 
     return "\n\n".join(extracted_paragraphs)
+
+
+def extract_content_from_path(
+    path: str | List[str], parsing: ParsingConfig
+) -> str | List[str]:
+    """
+    Extract the content from a file path or URL, or a list of file paths or URLs.
+
+    Args:
+        path (str | List[str]): The file path or URL, or a list of file paths or URLs.
+        parsing (ParsingConfig): The parsing configuration.
+
+    Returns:
+        str | List[str]: The extracted content if a single file path or URL is provided,
+                or a list of extracted contents if a
+                list of file paths or URLs is provided.
+    """
+    if isinstance(path, str):
+        path = [path]
+    elif isinstance(path, list) and len(path) == 0:
+        return ""
+    urls, path_list = get_urls_and_paths(path)
+    parser = Parser(parsing)
+    docs: List[Document] = []
+    try:
+        if len(urls) > 0:
+            loader = URLLoader(urls=urls, parser=parser)
+            docs = loader.load()
+        if len(path_list) > 0:
+            for p in path_list:
+                path_docs = RepoLoader.get_documents(p, parser=parser)
+                docs.extend(path_docs)
+    except Exception as e:
+        logger.warning(f"Error loading path {path}: {e}")
+        return ""
+    if len(docs) == 1:
+        return docs[0].content
+    else:
+        return [d.content for d in docs]

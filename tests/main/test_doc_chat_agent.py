@@ -233,7 +233,7 @@ def test_doc_chat_followup(test_settings: Settings, agent, conv_mode: bool):
     set_global(test_settings)
     task = Task(
         agent,
-        default_human_response="",
+        interactive=False,
         restart=True,
         done_if_response=[Entity.LLM],
         done_if_no_response=[Entity.LLM],
@@ -476,3 +476,189 @@ def test_doc_chat_add_content_fields(
         """
     )
     assert "2084" in response.content and "1989" in response.content
+
+
+@pytest.mark.parametrize("vecdb", ["chroma", "qdrant_local", "lancedb"], indirect=True)
+@pytest.mark.parametrize(
+    "splitter", [Splitter.PARA_SENTENCE, Splitter.SIMPLE, Splitter.TOKENS]
+)
+def test_doc_chat_incremental_ingest(
+    test_settings: Settings, vecdb, splitter: Splitter
+):
+    """
+    Check that we are able ingest documents incrementally.
+    """
+    agent = DocChatAgent(
+        _MyDocChatAgentConfig(
+            parsing=ParsingConfig(
+                splitter=splitter,
+                n_similar_docs=3,
+            )
+        )
+    )
+    agent.vecdb = vecdb
+
+    set_global(test_settings)
+
+    phrases = SimpleNamespace(
+        CATS="Cats are quiet and clean.",
+        DOGS="Dogs are loud and messy.",
+        PIGS="Pigs cannot fly.",
+        GIRAFFES="Giraffes are tall and vegetarian.",
+        BATS="Bats are blind.",
+        COWS="Cows are peaceful.",
+        GIRAFFES2="Giraffes are really strange animals.",
+        HYENAS="Hyenas are dangerous and fast.",
+        ZEBRAS="Zebras are bizarre with stripes.",
+    )
+    sentences = list(vars(phrases).values())
+    docs1 = [
+        Document(content=s, metadata=dict(source="animals")) for s in sentences[:4]
+    ]
+
+    docs2 = [
+        Document(content=s, metadata=dict(source="animals")) for s in sentences[4:]
+    ]
+    agent.ingest_docs(docs1)
+    agent.ingest_docs(docs2)
+    results = agent.get_relevant_chunks("What do we know about Pigs?")
+    assert any("fly" in r.content for r in results)
+
+    results = agent.get_relevant_chunks("What do we know about Hyenas?")
+    assert any("fast" in r.content for r in results) or any(
+        "dangerous" in r.content for r in results
+    )
+
+
+@pytest.mark.parametrize("vecdb", ["chroma", "qdrant_local", "lancedb"], indirect=True)
+@pytest.mark.parametrize(
+    "splitter", [Splitter.PARA_SENTENCE, Splitter.SIMPLE, Splitter.TOKENS]
+)
+def test_doc_chat_ingest_paths(test_settings: Settings, vecdb, splitter: Splitter):
+    """
+    Test DocChatAgent.ingest_doc_paths
+    """
+    agent = DocChatAgent(
+        _MyDocChatAgentConfig(
+            parsing=ParsingConfig(
+                splitter=splitter,
+                n_similar_docs=3,
+            )
+        )
+    )
+    agent.vecdb = vecdb
+
+    set_global(test_settings)
+
+    phrases = SimpleNamespace(
+        CATS="Cats are quiet and clean.",
+        DOGS="Dogs are loud and messy.",
+        PIGS="Pigs cannot fly.",
+        GIRAFFES="Giraffes are tall and vegetarian.",
+        BATS="Bats are blind.",
+        COWS="Cows are peaceful.",
+        GIRAFFES2="Giraffes are really strange animals.",
+        HYENAS="Hyenas are dangerous and fast.",
+        ZEBRAS="Zebras are bizarre with stripes.",
+    )
+    sentences = list(vars(phrases).values())
+
+    # create temp files containing each sentence, using tempfile pkg
+    import tempfile
+
+    for s in sentences:
+        with tempfile.NamedTemporaryFile(mode="w", delete=False) as f:
+            f.write(s)
+            f.close()
+            agent.ingest_doc_paths([f.name])
+
+    results = agent.get_relevant_chunks("What do we know about Pigs?")
+    assert any("fly" in r.content for r in results)
+
+    results = agent.get_relevant_chunks("What do we know about Hyenas?")
+    assert any("fast" in r.content for r in results) or any(
+        "dangerous" in r.content for r in results
+    )
+
+
+@pytest.mark.parametrize("vecdb", ["lancedb", "chroma", "qdrant_local"], indirect=True)
+@pytest.mark.parametrize(
+    "splitter", [Splitter.PARA_SENTENCE, Splitter.SIMPLE, Splitter.TOKENS]
+)
+def test_doc_chat_ingest_path_metadata(
+    test_settings: Settings, vecdb, splitter: Splitter
+):
+    """
+    Test DocChatAgent.ingest_doc_paths
+    """
+    agent = DocChatAgent(
+        _MyDocChatAgentConfig(
+            parsing=ParsingConfig(
+                splitter=splitter,
+                n_similar_docs=3,
+            )
+        )
+    )
+    agent.vecdb = vecdb
+
+    set_global(test_settings)
+
+    # create a list of dicts, each containing a sentence about an animal
+    # and a metadata field indicating the animal's name, species, and diet
+    animals = [
+        {
+            "content": "Cats are quiet and clean.",
+            "metadata": {
+                "name": "cat",
+                "species": "feline",
+                "diet": "carnivore",
+            },
+        },
+        {
+            "content": "Dogs are loud and messy.",
+            "metadata": {
+                "name": "dog",
+                "species": "canine",
+                "diet": "omnivore",
+            },
+        },
+        {
+            "content": "Pigs cannot fly.",
+            "metadata": {
+                "name": "pig",
+                "species": "porcine",
+                "diet": "omnivore",
+            },
+        },
+    ]
+
+    # put each animal content in a separate file
+    import tempfile
+
+    for animal in animals:
+        with tempfile.NamedTemporaryFile(mode="w", delete=False) as f:
+            f.write(animal["content"])
+            f.close()
+            animal["path"] = f.name
+
+    # ingest with per-file metadata
+    agent.ingest_doc_paths(
+        [a["path"] for a in animals], metadata=[a["metadata"] for a in animals]
+    )
+
+    results = agent.get_relevant_chunks("What do we know about Pigs?")
+    assert any("fly" in r.content for r in results)
+    # assert about metadata
+    assert any("porcine" in r.metadata.species for r in results)
+
+    # clear out the agent docs and the underlying vecdb collection
+    agent.clear()
+
+    # ingest with single metadata for ALL animals
+    agent.ingest_doc_paths(
+        [a["path"] for a in animals], metadata=dict(type="animal", category="living")
+    )
+
+    results = agent.get_relevant_chunks("What do we know about dogs?")
+    assert any("messy" in r.content for r in results)
+    assert all(r.metadata.type == "animal" for r in results)

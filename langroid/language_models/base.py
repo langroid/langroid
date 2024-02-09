@@ -5,7 +5,7 @@ import logging
 from abc import ABC, abstractmethod
 from datetime import datetime
 from enum import Enum
-from typing import Any, Dict, List, Optional, Tuple, Type, Union
+from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union
 
 import aiohttp
 from pydantic import BaseModel, BaseSettings, Field
@@ -26,8 +26,13 @@ from langroid.utils.output.printing import show_if_debug
 logger = logging.getLogger(__name__)
 
 
+def noop_fn(*args: List[Any], **kwargs: Dict[str, Any]) -> None:
+    pass
+
+
 class LLMConfig(BaseSettings):
     type: str = "openai"
+    streamer: Optional[Callable[[Any], None]] = noop_fn
     api_base: str | None = None
     formatter: None | str = None
     timeout: int = 20  # timeout for API requests
@@ -72,8 +77,11 @@ class LLMFunctionCall(BaseModel):
         fun_args_str = message["arguments"]
         # sometimes may be malformed with invalid indents,
         # so we try to be safe by removing newlines.
-        fun_args_str = fun_args_str.replace("\n", "").strip()
-        fun_args = ast.literal_eval(fun_args_str)
+        if fun_args_str is not None:
+            fun_args_str = fun_args_str.replace("\n", "").strip()
+            fun_args = ast.literal_eval(fun_args_str)
+        else:
+            fun_args = None
         fun_call.arguments = fun_args
 
         return fun_call
@@ -180,6 +188,12 @@ class LLMResponse(BaseModel):
     function_call: Optional[LLMFunctionCall] = None
     usage: Optional[LLMTokenUsage]
     cached: bool = False
+
+    def __str__(self) -> str:
+        if self.function_call is not None:
+            return str(self.function_call)
+        else:
+            return self.message
 
     def to_LLMMessage(self) -> LLMMessage:
         content = self.message

@@ -60,7 +60,8 @@ class OpenAIChatModel(str, Enum):
 
     GPT3_5_TURBO = "gpt-3.5-turbo-1106"
     GPT4 = "gpt-4"
-    GPT4_TURBO = "gpt-4-1106-preview"
+    GPT4_32K = "gpt-4-32k"
+    GPT4_TURBO = "gpt-4-turbo-preview"
 
 
 class OpenAICompletionModel(str, Enum):
@@ -72,8 +73,9 @@ class OpenAICompletionModel(str, Enum):
 
 _context_length: Dict[str, int] = {
     # can add other non-openAI models here
-    OpenAIChatModel.GPT3_5_TURBO: 4096,
+    OpenAIChatModel.GPT3_5_TURBO: 16_385,
     OpenAIChatModel.GPT4: 8192,
+    OpenAIChatModel.GPT4_32K: 32_768,
     OpenAIChatModel.GPT4_TURBO: 128_000,
     OpenAICompletionModel.TEXT_DA_VINCI_003: 4096,
 }
@@ -81,7 +83,7 @@ _context_length: Dict[str, int] = {
 _cost_per_1k_tokens: Dict[str, Tuple[float, float]] = {
     # can add other non-openAI models here.
     # model => (prompt cost, generation cost) in USD
-    OpenAIChatModel.GPT3_5_TURBO: (0.0015, 0.002),
+    OpenAIChatModel.GPT3_5_TURBO: (0.001, 0.002),
     OpenAIChatModel.GPT4: (0.03, 0.06),  # 8K context
     OpenAIChatModel.GPT4_TURBO: (0.01, 0.03),  # 128K context
 }
@@ -197,7 +199,7 @@ class OpenAIGPTConfig(LLMConfig):
     api_base: str | None = None  # used for local or other non-OpenAI models
     litellm: bool = False  # use litellm api?
     max_output_tokens: int = 1024
-    min_output_tokens: int = 64
+    min_output_tokens: int = 1
     use_chat_for_completion = True  # do not change this, for OpenAI models!
     timeout: int = 20
     temperature: float = 0.2
@@ -210,6 +212,7 @@ class OpenAIGPTConfig(LLMConfig):
     # a string that roughly matches a HuggingFace chat_template,
     # e.g. "mistral-instruct-v0.2 (a fuzzy search is done to find the closest match)
     formatter: str | None = None
+    hf_formatter: HFFormatter | None = None
 
     def __init__(self, **kwargs) -> None:  # type: ignore
         local_model = "api_base" in kwargs and kwargs["api_base"] is not None
@@ -262,6 +265,7 @@ class OpenAIGPTConfig(LLMConfig):
                 """
             )
         litellm.telemetry = False
+        litellm.drop_params = True  # drop un-supported params without crashing
         self.seed = None  # some local mdls don't support seed
         keys_dict = litellm.validate_environment(self.chat_model)
         missing_keys = keys_dict.get("missing_keys", [])
@@ -366,6 +370,11 @@ class OpenAIGPT(LanguageModel):
                 # e.g. "local/localhost:8000/v1//mistral-instruct-v0.2"
                 self.config.formatter = formatter
 
+        if self.config.formatter is not None:
+            self.config.hf_formatter = HFFormatter(
+                HFPromptFormatterConfig(model_name=self.config.formatter)
+            )
+
         # if model name starts with "litellm",
         # set the actual model name by stripping the "litellm/" prefix
         # and set the litellm flag to True
@@ -386,7 +395,9 @@ class OpenAIGPT(LanguageModel):
             self.config.litellm = False
             self.config.seed = None  # some models raise an error when seed is set
             # Extract the api_base from the model name after the "local/" prefix
-            self.api_base = "http://" + self.config.chat_model.split("/", 1)[1]
+            self.api_base = self.config.chat_model.split("/", 1)[1]
+            if not self.api_base.startswith("http"):
+                self.api_base = "http://" + self.api_base
         else:
             self.api_base = self.config.api_base
 
@@ -569,17 +580,21 @@ class OpenAIGPT(LanguageModel):
             if not is_async:
                 sys.stdout.write(Colors().GREEN + event_text)
                 sys.stdout.flush()
+                self.config.streamer(event_text)
         if event_fn_name:
             function_name = event_fn_name
             has_function = True
             if not is_async:
                 sys.stdout.write(Colors().GREEN + "FUNC: " + event_fn_name + ": ")
                 sys.stdout.flush()
+                self.config.streamer(event_fn_name)
+
         if event_args:
             function_args += event_args
             if not is_async:
                 sys.stdout.write(Colors().GREEN + event_args)
                 sys.stdout.flush()
+                self.config.streamer(event_args)
         if choices[0].get("finish_reason", "") in ["stop", "function_call"]:
             # for function_call, finish_reason does not necessarily
             # contain "function_call" as mentioned in the docs.
@@ -948,15 +963,12 @@ class OpenAIGPT(LanguageModel):
             )
         if self.config.use_completion_for_chat and not self.is_openai_chat_model():
             # only makes sense for non-OpenAI models
-            if self.config.formatter is None:
+            if self.config.formatter is None or self.config.hf_formatter is None:
                 raise ValueError(
                     """
                     `formatter` must be specified in config to use completion for chat.
                     """
                 )
-            formatter = HFFormatter(
-                HFPromptFormatterConfig(model_name=self.config.formatter)
-            )
             if isinstance(messages, str):
                 messages = [
                     LLMMessage(
@@ -964,7 +976,7 @@ class OpenAIGPT(LanguageModel):
                     ),
                     LLMMessage(role=Role.USER, content=messages),
                 ]
-            prompt = formatter.format(messages)
+            prompt = self.config.hf_formatter.format(messages)
             return self.generate(prompt=prompt, max_tokens=max_tokens)
         try:
             return self._chat(messages, max_tokens, functions, function_call)

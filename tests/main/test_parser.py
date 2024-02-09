@@ -1,8 +1,10 @@
+import tempfile
+
 import pytest
 
 from langroid.mytypes import Document
 from langroid.parsing.parser import Parser, ParsingConfig, Splitter
-from langroid.parsing.utils import generate_random_text
+from langroid.parsing.utils import extract_content_from_path, generate_random_text
 
 CHUNK_SIZE = 100
 
@@ -85,3 +87,22 @@ def test_text_token_chunking(
     assert len(chunks) <= max_chunks
     assert all(len(c) >= discard_chunk_chars for c in chunks)
     assert all(parser.num_tokens(c) <= chunk_size + 5 for c in chunks)
+
+
+def test_extract_content():
+    parsing = ParsingConfig()
+
+    with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".txt") as file1:
+        file1.write("Hello world")
+
+    with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".txt") as file2:
+        file2.write("It was the best of times")
+
+    # extract from single path
+    content = extract_content_from_path(file1.name, parsing)
+    assert "Hello" in content
+
+    # extract from multiple paths
+    contents = extract_content_from_path([file1.name, file2.name], parsing)
+    assert "Hello" in contents[0]
+    assert "best" in contents[1]
