@@ -18,6 +18,8 @@ from langroid.utils.configuration import settings
 from langroid.utils.pydantic_utils import (
     dataframe_to_document_model,
     dataframe_to_documents,
+    extend_document_class,
+    extra_metadata,
     flatten_pydantic_instance,
     flatten_pydantic_model,
     nested_dict_from_flat,
@@ -33,6 +35,8 @@ class LanceDBConfig(VectorStoreConfig):
     storage_path: str = ".lancedb/data"
     embedding: EmbeddingModelsConfig = OpenAIEmbeddingsConfig()
     distance: str = "cosine"
+    # document_class is used to store in lancedb with right schema,
+    # and also to retrieve the right type of Documents when searching.
     document_class: Type[Document] = Document
     flatten: bool = False  # flatten Document class into LanceSchema ?
 
@@ -231,8 +235,30 @@ class LanceDB(VectorStore):
         ):
             # collection either doesn't exist or is empty, so replace it,
             # possibly with a new schema
-            doc_cls = type(documents[0])
-            self.config.document_class = doc_cls
+            extra_metadata_fields = extra_metadata(
+                documents[0], self.config.document_class
+            )
+            if len(extra_metadata_fields) > 0:
+                logger.warning(
+                    f"""
+                    Added documents contain extra metadata fields:
+                    {extra_metadata_fields}
+                    Trying to recreate the collection {coll_name} with a new schema:
+                    Overriding LanceDBConfig.document_class with an auto-generated 
+                    Pydantic class that includes these extra fields.
+                    If this fails, or you see odd results, it is recommended that you 
+                    define a subclass of Document, with metadata of class derived from 
+                    DocMetaData, with extra fields defined via 
+                    `Field(..., description="...")` declarations,
+                    and set this document class as the value of the 
+                    LanceDBConfig.document_class attribute.
+                    """
+                )
+
+                doc_cls = extend_document_class(documents[0])
+                self.config.document_class = doc_cls
+
+            doc_cls = self.config.document_class
             self._setup_schemas(doc_cls)
             self.create_collection(coll_name, replace=True)
 
