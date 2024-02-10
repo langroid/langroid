@@ -250,14 +250,15 @@ class DocChatAgent(ChatAgent):
         Returns:
             List of Document objects
         """
+        all_paths = paths
         paths_meta: Dict[str, Any] = {}
         urls_meta: Dict[str, Any] = {}
         urls, paths = get_urls_and_paths(paths)
         if len(metadata) > 0:
             if isinstance(metadata, list):
-                path2meta = {p: m for p, m in zip(paths, metadata)}
+                path2meta = {p: m for p, m in zip(all_paths, metadata)}
             else:
-                path2meta = {p: metadata for p in paths}
+                path2meta = {p: metadata for p in all_paths}
             urls_meta = {u: path2meta[u] for u in urls}
             paths_meta = {p: path2meta[p] for p in paths}
         docs: List[Document] = []
