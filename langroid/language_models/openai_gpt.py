@@ -759,7 +759,11 @@ class OpenAIGPT(LanguageModel):
         )
 
     def _cache_store(self, k: str, v: Any) -> None:
-        self.cache.store(k, v)
+        try:
+            self.cache.store(k, v)
+        except Exception as e:
+            logging.error(f"Error in OpenAIGPT._cache_store: {e}")
+            pass
 
     def _cache_lookup(self, fn_name: str, **kwargs: Dict[str, Any]) -> Tuple[str, Any]:
         # Use the kwargs as the cache key
@@ -773,7 +777,12 @@ class OpenAIGPT(LanguageModel):
             # when caching disabled, return the hashed_key and none result
             return hashed_key, None
         # Try to get the result from the cache
-        return hashed_key, self.cache.retrieve(hashed_key)
+        try:
+            cached_val = self.cache.retrieve(hashed_key)
+        except Exception as e:
+            logging.error(f"Error in OpenAIGPT._cache_lookup: {e}")
+            return hashed_key, None
+        return hashed_key, cached_val
 
     def _cost_chat_model(self, prompt: int, completion: int) -> float:
         price = self.chat_cost()
