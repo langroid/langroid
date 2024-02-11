@@ -150,42 +150,42 @@ def main(
     )
 
     metadata = dict(
-        beethoven=dict(
+        beethoven=MusicianMetadata(
             name="Beethoven",
             birth_year=1770,
             death_year=1827,
             type="composer",
             genre="classical",
         ),
-        mozart=dict(
+        mozart=MusicianMetadata(
             name="Mozart",
             birth_year=1756,
             death_year=1791,
             type="composer",
             genre="classical",
         ),
-        bach=dict(
+        bach=MusicianMetadata(
             name="Bach",
             birth_year=1685,
             death_year=1750,
             type="composer",
             genre="classical",
         ),
-        hendrix=dict(
+        hendrix=MusicianMetadata(
             name="Hendrix",
             birth_year=1942,
             death_year=1970,
             type="musician",
             genre="rock",
         ),
-        prince=dict(
+        prince=MusicianMetadata(
             name="Prince",
             birth_year=1958,
             death_year=2016,
             type="musician",
             genre="rock",
         ),
-        jackson=dict(
+        jackson=MusicianMetadata(
             name="Jackson",
             birth_year=1958,
             death_year=2009,
