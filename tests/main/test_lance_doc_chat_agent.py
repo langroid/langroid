@@ -1,3 +1,5 @@
+from typing import Type
+
 import pandas as pd
 import pytest
 from pydantic import Field
@@ -7,6 +9,7 @@ from langroid.agent.special.lance_doc_chat_agent import LanceDocChatAgent
 from langroid.agent.special.lance_rag.lance_rag_task import LanceRAGTaskCreator
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
 from langroid.mytypes import DocMetaData, Document
+from langroid.parsing.parser import ParsingConfig, Splitter
 from langroid.utils.configuration import Settings, set_global
 from langroid.utils.constants import NO_ANSWER
 from langroid.utils.system import rmdir
@@ -33,6 +36,8 @@ movie_docs = [
         content="""
         The Vector is a 1999 science fiction action film written and 
         directed by Jomes Winkowski.
+        
+        It was a movie full of projections of vectors in 3D space.
         """,
         metadata=MovieMetadata(
             year=1999,
@@ -45,6 +50,8 @@ movie_docs = [
         content="""
         Sparse Odyssey is a 1968 science fiction film produced and directed
         by Stanley Hendrick.
+        
+        The sparseness of the alien landscape was a key feature of the movie.
         """,
         metadata=MovieMetadata(
             year=1968, director="Stanley Hendrick", genre="Science Fiction", rating=8.9
@@ -53,6 +60,8 @@ movie_docs = [
     MovieDoc(
         content="""
         The Godfeather is a 1972 American crime film directed by Frank Copula.
+        
+        Copulas were used in the computer graphics to simulate the crime scenes.
         """,
         metadata=MovieMetadata(
             year=1972, director="Frank Copula", genre="Crime", rating=9.2
@@ -61,6 +70,8 @@ movie_docs = [
     MovieDoc(
         content="""
         The Lamb Shank Redemption is a 1994 American drama film directed by Garth Brook.
+        
+        The Lamb shanks were used as a metaphor for the prison bars.
         """,
         metadata=MovieMetadata(
             year=1994, director="Garth Brook", genre="Drama", rating=9.3
@@ -88,12 +99,16 @@ embed_cfg = OpenAIEmbeddingsConfig()
         ),
     ],
 )
-@pytest.mark.parametrize("flatten", [True, False])
+@pytest.mark.parametrize("flatten", [False, True])
+@pytest.mark.parametrize("split", [True, False])
+@pytest.mark.parametrize("doc_cls", [Document, MovieDoc])
 def test_lance_doc_chat_agent(
     test_settings: Settings,
     flatten: bool,
+    split: bool,
     query: str,
     expected: str,
+    doc_cls: Type[Document],
 ):
     # note that the (query, ans) pairs are accumulated into the
     # internal dialog history of the agent.
@@ -106,15 +121,20 @@ def test_lance_doc_chat_agent(
         collection_name="test-lance-2",
         storage_path=ldb_dir,
         embedding=embed_cfg,
-        document_class=MovieDoc,
+        document_class=doc_cls,
         flatten=flatten,
     )
 
     cfg = DocChatAgentConfig(
         vecdb=ldb_cfg,
+        parsing=ParsingConfig(
+            splitter=Splitter.SIMPLE,
+            n_similar_docs=3,
+        ),
     )
+
     agent = LanceDocChatAgent(cfg)
-    agent.ingest_docs(movie_docs, split=False)
+    agent.ingest_docs(movie_docs, split=split)
     task = LanceRAGTaskCreator.new(agent, interactive=False)
 
     result = task.run(query)

@@ -585,11 +585,15 @@ def test_doc_chat_ingest_paths(test_settings: Settings, vecdb, splitter: Splitte
 @pytest.mark.parametrize(
     "splitter", [Splitter.PARA_SENTENCE, Splitter.SIMPLE, Splitter.TOKENS]
 )
+@pytest.mark.parametrize("metadata_dict", [False, True])
 def test_doc_chat_ingest_path_metadata(
-    test_settings: Settings, vecdb, splitter: Splitter
+    test_settings: Settings,
+    vecdb,
+    splitter: Splitter,
+    metadata_dict: bool,  # whether metadata is dict or DocMetaData
 ):
     """
-    Test DocChatAgent.ingest_doc_paths
+    Test DocChatAgent.ingest_doc_paths, with metadata
     """
     agent = DocChatAgent(
         _MyDocChatAgentConfig(
@@ -632,6 +636,13 @@ def test_doc_chat_ingest_path_metadata(
         },
     ]
 
+    class AnimalMetadata(DocMetaData):
+        name: str
+        species: str
+        diet: str
+
+    animal_metadata_list = [AnimalMetadata(**a["metadata"]) for a in animals]
+
     # put each animal content in a separate file
     import tempfile
 
@@ -643,7 +654,10 @@ def test_doc_chat_ingest_path_metadata(
 
     # ingest with per-file metadata
     agent.ingest_doc_paths(
-        [a["path"] for a in animals], metadata=[a["metadata"] for a in animals]
+        [a["path"] for a in animals],
+        metadata=[a["metadata"] for a in animals]
+        if metadata_dict
+        else animal_metadata_list,
     )
 
     results = agent.get_relevant_chunks("What do we know about Pigs?")
@@ -656,7 +670,10 @@ def test_doc_chat_ingest_path_metadata(
 
     # ingest with single metadata for ALL animals
     agent.ingest_doc_paths(
-        [a["path"] for a in animals], metadata=dict(type="animal", category="living")
+        [a["path"] for a in animals],
+        metadata=dict(type="animal", category="living")
+        if metadata_dict
+        else DocMetaData(type="animal", category="living"),
     )
 
     results = agent.get_relevant_chunks("What do we know about dogs?")
