@@ -17,7 +17,7 @@ import pandas as pd
 
 from langroid.agent.special.doc_chat_agent import DocChatAgent, DocChatAgentConfig
 from langroid.agent.special.lance_rag.lance_tools import QueryPlanTool
-from langroid.mytypes import Document
+from langroid.mytypes import DocMetaData, Document
 from langroid.parsing.table_loader import describe_dataframe
 from langroid.utils.constants import DONE, NO_ANSWER
 from langroid.utils.pydantic_utils import (
@@ -162,7 +162,10 @@ class LanceDocChatAgent(DocChatAgent):
         self,
         docs: List[Document],
         split: bool = True,
-        metadata: List[Dict[str, Any]] | Dict[str, Any] = [],
+        metadata: List[Dict[str, Any]]
+        | Dict[str, Any]
+        | DocMetaData
+        | List[DocMetaData] = [],
     ) -> int:
         n = super().ingest_docs(docs, split, metadata)
         tbl = self.vecdb.client.open_table(self.vecdb.config.collection_name)

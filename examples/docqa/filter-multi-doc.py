@@ -19,7 +19,6 @@ as indicated in comments below, to get good results.
     supported vector-dbs, e.g. qdrant or chroma.
 
 """
-import re
 import typer
 from rich import print
 from rich.prompt import Prompt
@@ -34,7 +33,6 @@ from langroid.agent.special.lance_doc_chat_agent import LanceDocChatAgent
 from langroid.parsing.parser import ParsingConfig, PdfParsingConfig, Splitter
 from langroid.vector_store.lancedb import LanceDBConfig
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
-from langroid.agent.task import Task
 from langroid.utils.configuration import set_global, Settings
 
 app = typer.Typer()
@@ -132,7 +130,7 @@ def main(
     # need a LanceDocChatAgent to use LanceRAgTaskCreator below
     agent = LanceDocChatAgent(config)
 
-    ## INGEST DOCS with META DATA
+    # INGEST DOCS with META DATA
     beethoven_path = (
         "https://en.wikipedia.org/wiki/Ludwig_van_Beethoven"  # or can be local dir
     )

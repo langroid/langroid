@@ -34,7 +34,7 @@ from langroid.agent.task import Task
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
 from langroid.language_models.base import StreamingIfAllowed
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
-from langroid.mytypes import Document, Entity
+from langroid.mytypes import DocMetaData, Document, Entity
 from langroid.parsing.parser import Parser, ParsingConfig, PdfParsingConfig, Splitter
 from langroid.parsing.repo_loader import RepoLoader
 from langroid.parsing.search import (
@@ -238,7 +238,10 @@ class DocChatAgent(ChatAgent):
     def ingest_doc_paths(
         self,
         paths: List[str],
-        metadata: List[Dict[str, Any]] | Dict[str, Any] = [],
+        metadata: List[Dict[str, Any]]
+        | Dict[str, Any]
+        | DocMetaData
+        | List[DocMetaData] = [],
     ) -> List[Document]:
         """Split, ingest docs from specified paths,
         do not add these to config.doc_paths.
@@ -254,11 +257,20 @@ class DocChatAgent(ChatAgent):
         paths_meta: Dict[str, Any] = {}
         urls_meta: Dict[str, Any] = {}
         urls, paths = get_urls_and_paths(paths)
-        if len(metadata) > 0:
+        if (isinstance(metadata, list) and len(metadata) > 0) or not isinstance(
+            metadata, list
+        ):
             if isinstance(metadata, list):
-                path2meta = {p: m for p, m in zip(all_paths, metadata)}
-            else:
+                path2meta = {
+                    p: m
+                    if isinstance(m, dict)
+                    else (isinstance(m, DocMetaData) and m.dict())  # appease mypy
+                    for p, m in zip(all_paths, metadata)
+                }
+            elif isinstance(metadata, dict):
                 path2meta = {p: metadata for p in all_paths}
+            else:
+                path2meta = {p: metadata.dict() for p in all_paths}
             urls_meta = {u: path2meta[u] for u in urls}
             paths_meta = {p: path2meta[p] for p in paths}
         docs: List[Document] = []
@@ -299,7 +311,10 @@ class DocChatAgent(ChatAgent):
         self,
         docs: List[Document],
         split: bool = True,
-        metadata: List[Dict[str, Any]] | Dict[str, Any] = [],
+        metadata: List[Dict[str, Any]]
+        | Dict[str, Any]
+        | DocMetaData
+        | List[DocMetaData] = [],
     ) -> int:
         """
         Chunk docs into pieces, map each chunk to vec-embedding, store in vec-db
@@ -315,10 +330,15 @@ class DocChatAgent(ChatAgent):
         """
         if isinstance(metadata, list) and len(metadata) > 0:
             for d, m in zip(docs, metadata):
-                d.metadata = d.metadata.copy(update=m)
+                d.metadata = d.metadata.copy(
+                    update=m if isinstance(m, dict) else m.dict()  # type: ignore
+                )
         elif isinstance(metadata, dict):
             for d in docs:
                 d.metadata = d.metadata.copy(update=metadata)
+        elif isinstance(metadata, DocMetaData):
+            for d in docs:
+                d.metadata = d.metadata.copy(update=metadata.dict())
 
         self.original_docs.extend(docs)
         if self.parser is None:
