@@ -1,5 +1,29 @@
 """
-Simple text to knowledge graph example, using the Neo4jChatAgent
+Example showing how to chat with a graph database generated from
+unstructured data.
+
+This example will automatically:
+- create triplets that represent various entities and relationships from the text
+- generate the cypher query to populate the triplets in the graph database
+- generate all the required Cypher queries for Neo4j to answer user's questions.
+
+This example relies on neo4j. The easiest way to get access to neo4j is by
+creating a cloud account at `https://neo4j.com/cloud/platform/aura-graph-database/`
+
+Upon creating the account successfully, neo4j will create a text file that contains
+account settings, please provide the following information (uri, username, password) as
+described here
+`https://github.com/langroid/langroid/tree/main/examples/kg-chat#requirements`
+
+Run like this
+
+python3 examples/kg-chat/text-kg.py
+
+Optional args:
+* -d or --debug to enable debug mode
+* -nc or --nocache to disable caching
+* -m or --model to specify a model name
+
 """
 
 import typer
@@ -68,8 +92,8 @@ def main(
         system_message=system_message,
         neo4j_settings=neo4j_settings,
         show_stats=False,
-        llm=lm.AzureConfig(
-            chat_model=lm.OpenAIChatModel.GPT4_TURBO,
+        llm=lm.OpenAIGPTConfig(
+            chat_model=model or lm.OpenAIChatModel.GPT4_TURBO,
         ),
     )
 
