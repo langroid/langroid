@@ -13,7 +13,6 @@ from langroid.agent.special.neo4j.neo4j_chat_agent import (
 )
 import langroid as lr
 import langroid.language_models as lm
-from langroid.utils.constants import NO_ANSWER
 from langroid.utils.configuration import set_global, Settings
 
 app = typer.Typer()
@@ -41,26 +40,36 @@ def main(
     load_dotenv()
 
     # Look inside Neo4jSettings and explicit set each param based on your Neo4j instance
-    neo4j_settings = Neo4jSettings(database="text-kg-test")
+    neo4j_settings = Neo4jSettings(database="neo4j")
 
-    config = Neo4jChatAgentConfig(
-        name="TextNeo",
-        system_message="""
+    system_message = """
         You are an information representation expert, and you are especially 
         knowledgeable about representing information in a Knowledge Graph such as Neo4j.
         
-        When the user gives you a TEXT and the CURRENT SCHEMA (possibly empty), 
-        your task is to generate a Cypher query that will add the entities/relationships
-        from the TEXT to the Neo4j database, taking the CURRENT SCHEMA into account.
-        In particular, SEE IF YOU CAN REUSE EXISTING ENTITIES/RELATIONSHIPS,
-        and create NEW ONES ONLY IF NECESSARY.
-        
-        To present the Cypher query, you can use the `retrieval_query` tool/function
-        """,
+        When the user gives you a TEXT, you should INFER the triplets from the TEXT.
+        Each triplet is a tuple of the form `(subject, relationship, object)`.
+        SHOW me the triplets you inferred as a list and ask the user to confirm them,
+        then you should generate a Cypher query that will create the 
+        entities/relationships based on the triplets. USE the `create_query` 
+        tool/function to create the entities/relationships, 
+
+        Here is an example:
+        ```
+        TEXT: "Albert Einstein, born in Ulm, won the Nobel Prize in Physics in 1921."
+        Triplets:
+        (Albert Einstein, born in, Ulm)
+        (Albert Einstein, won, Nobel Prize in Physics)
+        (Nobel Prize in Physics, awarded in, 1921)
+        ```
+        """
+
+    config = Neo4jChatAgentConfig(
+        name="TextNeo",
+        system_message=system_message,
         neo4j_settings=neo4j_settings,
         show_stats=False,
-        llm=lm.OpenAIGPTConfig(
-            chat_model=model or lm.OpenAIChatModel.GPT4_TURBO,
+        llm=lm.AzureConfig(
+            chat_model=lm.OpenAIChatModel.GPT4_TURBO,
         ),
     )
 
@@ -83,23 +92,19 @@ def main(
     Amazon, Meta (the parent company of Facebook), and Microsoft.    
     """
 
-    CURRENT_SCHEMA = ""
-
     task = lr.Task(
         agent,
-        interactive=False,
-        single_round=True,
+        interactive=True,
+        single_round=False,
     )
-    result = task.run(
+    task.run(
         f"""
     TEXT: {TEXT}
-    
-    CURRENT SCHEMA: {CURRENT_SCHEMA}
     """
     )
 
-    schema = agent.get_schema(None)
-    print(f"SCHEMA: {schema}")
+    # schema = agent.get_schema(None)
+    # print(f"SCHEMA: {schema}")
 
     # for subsequent text -> conversions, you can use the `schema` obtained above,
     # and insert it into as the value of CURRENT_SCHEMA in the next run.
