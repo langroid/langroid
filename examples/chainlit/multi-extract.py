@@ -13,15 +13,11 @@ chainlit run examples/chainlit/multi-extract.py
 
 This uses GPT4-turbo by default, but works very well with the `dolphin-mixtral`
 local LLM, which you can specify in the llm_config below
-using `chat_model = "litellm/ollama_chat/dolphin-mixtral:latest"`,
+using `chat_model = "ollama/dolphin-mixtral:latest"`,
 provided you've already spun it up with ollama:
 ```
 ollama run dolphin-mixtral
 ```
-
-(You need to have the `litellm` extra installed with Langroid, e.g.
-`pip install langroid[litellm]`, or if you're installing with poetry,
-something like `poetry add langroid[litellm]`.)
 
 See here for more on setting up LLMs to work with Langroid:
 https://langroid.github.io/langroid/tutorials/local-llm-setup/
@@ -125,7 +121,7 @@ class LeaseExtractorAgent(ChatAgent):
 @cl.on_chat_start
 async def main(
     debug: bool = False,
-    model: str = "",  # or "litellm/ollama_chat/dolphin-mixtral:latest"
+    model: str = "",  # or "ollama/dolphin-mixtral:latest"
     nocache: bool = False,
 ) -> None:
     set_global(

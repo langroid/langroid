@@ -31,7 +31,7 @@ python3 examples/basic/fn-call-local-numerical.py -m <local_model_name>
 Local model with best results is dolphin-mixtral:
 ```
 ollama run dolphin-mixtral
-python3 examples/basic/fn-call-local-numerical.py -m litellm/ollama_chat/dolphin-mixtral:latest
+python3 examples/basic/fn-call-local-numerical.py -m ollama/dolphin-mixtral:latest
 ```
 
 See here for how to set up a Local LLM to work with Langroid:

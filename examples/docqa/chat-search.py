@@ -11,7 +11,7 @@ Optional args:
     -nc : turn off caching (i.e. don't retrieve cached LLM responses)
     -d: debug mode, to show all intermediate results
     -f: use OpenAI functions api instead of tools
-    -m <model_name>:  (e.g. -m litellm/ollama_chat/mistral:7b-instruct-v0.2-q4_K_M)
+    -m <model_name>:  (e.g. -m ollama/mistral:7b-instruct-v0.2-q4_K_M)
     (defaults to GPT4-Turbo if blank)
 
 (See here for guide to using local LLMs with Langroid:)
@@ -148,7 +148,7 @@ def chat(opts: CLIOptions) -> None:
         chat_model=opts.model or lm.OpenAIChatModel.GPT4_TURBO,
         # or, other possibilities for example:
         # "litellm/bedrock/anthropic.claude-instant-v1"
-        # "litellm/ollama/llama2"
+        # "ollama/llama2"
         # "local/localhost:8000/v1"
         # "local/localhost:8000"
         chat_context_length=2048,  # adjust based on model

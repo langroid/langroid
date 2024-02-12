@@ -1,6 +1,6 @@
 """
 Summarize a doc, loaded into context, using a local LLM, with ollama.
-First see instructions to install langroid (with the litellm and other extras)
+First see instructions to install langroid
 in the README of the langroid-examples repo:
 https://github.com/langroid/langroid-examples
 
@@ -12,7 +12,7 @@ Omitting -m will use the default model, which is OpenAI GPT4-turbo.
 
 A local LLM can be specified as follows:
 ```
-python3 examples/summarize/summ.py -m litellm/ollama_chat/mistral:7b-instruct-v0.2-q8_0
+python3 examples/summarize/summ.py -m ollama/mistral:7b-instruct-v0.2-q8_0
 ```
 
 See here for more details on how to set up a Local LLM to work with Langroid:
@@ -32,14 +32,14 @@ PATH = "examples/summarize/data/news.csv"
 
 
 def app(
-    m: str = "",  # litellm/ollama_chat/mistral:7b-instruct-v0.2-q8_0",
+    m: str = "",  # ollama/mistral:7b-instruct-v0.2-q8_0",
     d: bool = False,  # debug
 ):
     settings.debug = d
     # Create the llm config object.
     llm_config = lm.OpenAIGPTConfig(
         # if you comment out `chat_model`, it will default to OpenAI GPT4-turbo
-        # chat_model="litellm/ollama/mistral:7b-instruct-v0.2-q4_K_M",
+        # chat_model="ollama/mistral:7b-instruct-v0.2-q4_K_M",
         chat_model=m or lm.OpenAIChatModel.GPT4_TURBO,
         chat_context_length=32_000,  # set this based on model
         max_output_tokens=500,  # increase this if you want longer summaries

@@ -13,7 +13,7 @@ Optional args:
     -nc : turn off caching (i.e. don't retrieve cached LLM responses)
     -d: debug mode, to show all intermediate results
     -f: use OpenAI functions api instead of tools
-    -m <model_name>:  (e.g. -m litellm/ollama_chat/mistral:7b-instruct-v0.2-q4_K_M)
+    -m <model_name>:  (e.g. -m ollama/mistral:7b-instruct-v0.2-q4_K_M)
     (defaults to GPT4-Turbo if blank)
 
 (See here for guide to using local LLMs with Langroid:)

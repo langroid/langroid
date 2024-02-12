@@ -9,7 +9,7 @@ chainlit run examples/chainlit/chat-doc-qa.py
 Note, to run this with a local LLM, you can click the settings symbol
 on the left of the chat window and enter the model name, e.g.:
 
-litellm/ollama_chat/mistral:7b-instruct-v0.2-q8_0
+ollama/mistral:7b-instruct-v0.2-q8_0
 
 or
 
