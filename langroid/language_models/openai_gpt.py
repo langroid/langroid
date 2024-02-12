@@ -225,11 +225,6 @@ class OpenAIGPTConfig(LLMConfig):
         local_prefixes = ["local/", "litellm/", "ollama/"]
         if any(chat_model.startswith(prefix) for prefix in local_prefixes):
             local_model = True
-            if chat_model.startswith("ollama"):
-                self.ollama = True
-                self.chat_model = chat_model.replace("ollama/", "")
-                self.api_base = OLLAMA_BASE_URL
-                self.api_key = OLLAMA_API_KEY
 
         warn_gpt_3_5 = (
             "chat_model" not in kwargs.keys()

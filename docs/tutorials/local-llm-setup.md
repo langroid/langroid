@@ -2,31 +2,32 @@
 
 ## Easiest: with Ollama
 
+As of version 1.0.24, Ollama provides an OpenAI-compatible API server for the LLMs it supports,
+which massively simplifies running these LLMs with Langroid. Example below.
+
 ```
 ollama pull mistral:7b-instruct-v0.2-q8_0
 ```
-This provides an API server for the LLM. However, this API is _not_ OpenAI-compatible,
-so Langroid's code (which is written to "talk" to any API that is OpenAI-API-compatible)
-will not work directly with the Ollama API. 
-Fortunately, we can use the `litellm` library for this. 
-Ensure you have the `litellm` extra installed, via `pip install langroid[litellm]` or equivalent.
+This provides an OpenAI-compatible 
+server for the `mistral:7b-instruct-v0.2-q8_0` model.
 
-Now in any Langroid script you can specify your LLM config as
-```
-OpenAIGPTConfig(
-    chat_model="litellm/ollama_chat/mistral:7b-instruct-v0.2-q8_0",
-    chat_context_length=8000, # adjust based on model
+You can run any Langroid script using this model, by setting the `chat_model`
+in the `OpenAIGPTConfig` to `ollama/mistral:7b-instruct-v0.2-q8_0`, e.g.
+
+```python
+llm_config = OpenAIGPTConfig(
+    chat_model="ollama/mistral:7b-instruct-v0.2-q8_0",
+    chat_context_length=16_000, # adjust based on model
 )
-```
-For convenience, many of the example scripts have a `-m` arg that accepts a model name,
-e.g. 
-```
-python3 examples/basic/chat-local.py -m litellm/ollama_chat/mistral:7b-instruct-v0.2-q8_0
 ```
 
 ## Setup Ollama with a GGUF model from HuggingFace
 
-E.g. download the GGUF version of `dolphin-mixtral` from 
+Some models are not directly supported by Ollama out of the box. To server a GGUF
+model with Ollama, you can download the model from HuggingFace and set up a custom
+Modelfile for it.
+
+E.g. download the GGUF version of `dolphin-mixtral` from
 [here](https://huggingface.co/TheBloke/dolphin-2.7-mixtral-8x7b-GGUF)
 
 (specifically, download this file `dolphin-2.7-mixtral-8x7b.Q4_K_M.gguf`)
@@ -34,14 +35,14 @@ E.g. download the GGUF version of `dolphin-mixtral` from
 To set up a custom ollama model based on this:
 
 - Save this model at a convenient place, e.g. `~/.ollama/models/`
-- Create a modelfile for this model. First see what an existing modelfile 
-  for a similar model looks like, e.g. by running: 
+- Create a modelfile for this model. First see what an existing modelfile
+  for a similar model looks like, e.g. by running:
 
 ```
 ollama show --modelfile dolphin-mixtral:latest
 ```
 You will notice this file has a FROM line followed by a prompt template and other settings.
-Create a new file with these contents. 
+Create a new file with these contents.
 Only  change the  `FROM ...` line with the path to the model you downloaded, e.g.
 ```
 FROM /Users/blah/.ollama/models/dolphin-2.7-mixtral-8x7b.Q4_K_M.gguf
@@ -54,10 +55,24 @@ ollama create dolphin-mixtral-gguf -f ~/.ollama/modelfiles/dolphin-mixtral-gguf
 
 - Run this new model using `ollama run dolphin-mixtral-gguf`
 
-To use this model with Langroid you can then specify `dolphin-mixtral-gguf` 
+To use this model with Langroid you can then specify `dolphin-mixtral-gguf`
 as the `chat_model` param in the `OpenAIGPTConfig` as in the previous section.
-When a script supports it, you can also pass in the model name via 
+When a script supports it, you can also pass in the model name via
 `-m litellm/ollama_chat/dolphin-mixtral-gguf`
+
+## Other non-Ollama LLMs supported by LiteLLM
+
+For other scenarios of running local/remote LLMs, it is possible that the `LiteLLM` library
+supports an "OpenAI adaptor" for these models (see their [docs](https://litellm.vercel.app/docs/providers)).
+
+Depending on the specific model, the `litellm` docs may say you need to 
+specify a model in the form `<provider>/<model>`, e.g. `palm/chat-bison`. 
+To use the model with Langroid, simply prepend `litellm/` to this string, e.g. `litellm/palm/chat-bison`,
+when you specify the `chat_model` in the `OpenAIGPTConfig`.
+
+To use `litellm`, ensure you have the `litellm` extra installed, 
+via `pip install langroid[litellm]` or equivalent.
+
 
 
 ## Harder: with oobabooga
