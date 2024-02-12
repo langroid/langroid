@@ -239,7 +239,7 @@ class Neo4jChatAgent(ChatAgent):
             print("[red]Database is not deleted!")
 
     def retrieval_query(self, msg: CypherQueryTool) -> str:
-        """ "
+        """
         Handle a CypherQueryTool message by executing a Cypher query and
         returning the result.
         Args:

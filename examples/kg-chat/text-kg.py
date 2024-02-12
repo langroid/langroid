@@ -39,8 +39,9 @@ def main(
 
     load_dotenv()
 
-    # Look inside Neo4jSettings and explicit set each param based on your Neo4j instance
-    neo4j_settings = Neo4jSettings(database="text-kg-test")
+    # Look inside Neo4jSettings and explicitly
+    # set each param (including database) based on your Neo4j instance
+    neo4j_settings = Neo4jSettings(database="neo4j")
 
     config = Neo4jChatAgentConfig(
         name="TextNeo",
@@ -54,7 +55,7 @@ def main(
         In particular, SEE IF YOU CAN REUSE EXISTING ENTITIES/RELATIONSHIPS,
         and create NEW ONES ONLY IF NECESSARY.
         
-        To present the Cypher query, you can use the `retrieval_query` tool/function
+        To present the Cypher query, you can use the `retrieval_query` tool/function        
         """,
         neo4j_settings=neo4j_settings,
         show_stats=False,
@@ -97,11 +98,54 @@ def main(
     """
     )
 
-    schema = agent.get_schema(None)
-    print(f"SCHEMA: {schema}")
+    curr_schema = agent.get_schema(None)
+    print(f"SCHEMA: {curr_schema}")
 
-    # for subsequent text -> conversions, you can use the `schema` obtained above,
-    # and insert it into as the value of CURRENT_SCHEMA in the next run.
+    # now feed in the schema to the next run, with new text
+
+    TEXT = """
+    Apple was founded as Apple Computer Company on April 1, 1976, to produce and market 
+    Steve Wozniak's Apple I personal computer. The company was incorporated by Wozniak 
+    and Steve Jobs in 1977. Its second computer, the Apple II, became a best seller as 
+    one of the first mass-produced microcomputers. Apple introduced the Lisa in 1983 and 
+    the Macintosh in 1984, as some of the first computers to use a graphical user 
+    interface and a mouse.
+    """
+
+    task.run(
+        f"""
+        TEXT: {TEXT}
+
+        CURRENT SCHEMA: {curr_schema}
+        """
+    )
+    updated_schema = agent.get_schema(None)
+    print(f"UPDATED SCHEMA: {updated_schema}")
+
+    # We can now ask a question that can be answered based on the schema
+
+    config = Neo4jChatAgentConfig(
+        name="TextNeoQA",
+        system_message="""
+        You will get a question about some information that is represented within
+        a Neo4j graph database. You will use the `retrieval_query` tool/function to
+        generate a Cypher query that will answer the question. Do not explain
+        your query, just present it using the `retrieval_query` tool/function.
+        """,
+        neo4j_settings=neo4j_settings,
+        show_stats=False,
+        llm=lm.OpenAIGPTConfig(
+            chat_model=model or lm.OpenAIChatModel.GPT4_TURBO,
+        ),
+    )
+
+    agent = Neo4jChatAgent(config=config)
+
+    task = lr.Task(agent)
+
+    print("[blue] Now you can ask questions ")
+
+    task.run()
 
 
 if __name__ == "__main__":
