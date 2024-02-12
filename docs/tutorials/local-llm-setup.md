@@ -2,7 +2,7 @@
 
 ## Easiest: with Ollama
 
-As of version 1.0.24, Ollama provides an OpenAI-compatible API server for the LLMs it supports,
+As of version 0.1.24, Ollama provides an OpenAI-compatible API server for the LLMs it supports,
 which massively simplifies running these LLMs with Langroid. Example below.
 
 ```
