@@ -54,6 +54,9 @@ from langroid.utils.system import friendly_error
 
 logging.getLogger("openai").setLevel(logging.ERROR)
 
+OLLAMA_BASE_URL = "http://localhost:11434/v1"
+OLLAMA_API_KEY = "ollama"
+
 
 class OpenAIChatModel(str, Enum):
     """Enum for OpenAI Chat models"""
@@ -198,6 +201,7 @@ class OpenAIGPTConfig(LLMConfig):
     organization: str = ""
     api_base: str | None = None  # used for local or other non-OpenAI models
     litellm: bool = False  # use litellm api?
+    ollama: bool = False  # use ollama's OpenAI-compatible endpoint?
     max_output_tokens: int = 1024
     min_output_tokens: int = 1
     use_chat_for_completion = True  # do not change this, for OpenAI models!
@@ -218,8 +222,14 @@ class OpenAIGPTConfig(LLMConfig):
         local_model = "api_base" in kwargs and kwargs["api_base"] is not None
 
         chat_model = kwargs.get("chat_model", "")
-        if chat_model.startswith("litellm/") or chat_model.startswith("local/"):
+        local_prefixes = ["local/", "litellm/", "ollama/"]
+        if any(chat_model.startswith(prefix) for prefix in local_prefixes):
             local_model = True
+            if chat_model.startswith("ollama"):
+                self.ollama = True
+                self.chat_model = chat_model.replace("ollama/", "")
+                self.api_base = OLLAMA_BASE_URL
+                self.api_key = OLLAMA_API_KEY
 
         warn_gpt_3_5 = (
             "chat_model" not in kwargs.keys()
@@ -398,6 +408,11 @@ class OpenAIGPT(LanguageModel):
             self.api_base = self.config.chat_model.split("/", 1)[1]
             if not self.api_base.startswith("http"):
                 self.api_base = "http://" + self.api_base
+        elif self.config.chat_model.startswith("ollama/"):
+            self.config.ollama = True
+            self.api_base = OLLAMA_BASE_URL
+            self.api_key = OLLAMA_API_KEY
+            self.config.chat_model = self.config.chat_model.replace("ollama/", "")
         else:
             self.api_base = self.config.api_base
 

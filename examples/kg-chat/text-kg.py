@@ -13,7 +13,6 @@ from langroid.agent.special.neo4j.neo4j_chat_agent import (
 )
 import langroid as lr
 import langroid.language_models as lm
-from langroid.utils.constants import NO_ANSWER
 from langroid.utils.configuration import set_global, Settings
 
 app = typer.Typer()
@@ -90,7 +89,7 @@ def main(
         interactive=False,
         single_round=True,
     )
-    result = task.run(
+    task.run(
         f"""
     TEXT: {TEXT}
     
