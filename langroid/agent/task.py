@@ -229,18 +229,21 @@ class Task:
         self.default_human_response = default_human_response
         if default_human_response is not None and default_human_response == "":
             interactive = False
-        self.interactive = interactive
         self.message_history_idx = -1
-        if interactive:
-            only_user_quits_root = True
-        else:
-            default_human_response = default_human_response or ""
-            only_user_quits_root = False
-        if default_human_response is not None:
-            self.agent.default_human_response = default_human_response
-        if self.interactive:
-            self.agent.default_human_response = None
-        self.only_user_quits_root = only_user_quits_root
+
+        # other sub_tasks this task can delegate to
+        self.sub_tasks: List[Task] = []
+        self.parent_task: Set[Task] = set()
+        self.caller: Task | None = None  # which task called this task's `run` method
+
+        # This will be set to true if this task is a sub-task of a concurrently
+        # executed task; all subtasks of concurrently executed tasks will be set
+        # to non-interactive (including sequentially-executed subtasks)
+        self.recurse_noninteractive = False
+
+        # Set the task and agent to be interactive or non-interactive
+        self.set_interactivity(interactive)
+
         # set to True if we want to collapse multi-turn conversation with sub-tasks into
         # just the first outgoing message and last incoming message.
         # Note this also completely erases sub-task agents' message_history.
@@ -310,11 +313,6 @@ class Task:
             if self.single_round:
                 self.turns = 1  # 0: User asks, 1: LLM replies.
 
-        # other sub_tasks this task can delegate to
-        self.sub_tasks: List[Task] = []
-        self.parent_task: Set[Task] = set()
-        self.caller: Task | None = None  # which task called this task's `run` method
-
     def clone(self, i: int) -> "Task":
         """
         Returns a copy of this task, with a new agent.
@@ -337,6 +335,30 @@ class Task:
             done_if_no_response=[Entity(s) for s in self.done_if_no_response],
             done_if_response=[Entity(s) for s in self.done_if_response],
         )
+
+    def set_interactivity(self, interactive: bool):
+        """
+        Sets the task and agent to be interactive or non-interactive.
+        If recursively non-interactive, recursively sets sub-tasks to
+        non-interactive.
+        """
+        self.interactive = interactive
+        default_human_response = self.default_human_response
+        if interactive:
+            only_user_quits_root = True
+        else:
+            default_human_response = default_human_response or ""
+            only_user_quits_root = False
+        if default_human_response is not None:
+            self.agent.default_human_response = default_human_response
+        if self.interactive:
+            self.agent.default_human_response = None
+        self.only_user_quits_root = only_user_quits_root
+
+        if self.recurse_noninteractive:
+            for t in self.sub_tasks:
+                t.recurse_noninteractive = True
+                t.set_interactivity(False)
 
     def __repr__(self) -> str:
         return f"{self.name}"
@@ -366,13 +388,19 @@ class Task:
         self, task: Task | List[Task], concurrent: Optional[bool] = None
     ) -> None:
         """
-        Add a sub-task (or list of subtasks) that this task can delegate
-        (or fail-over) to. Note that the sequence of sub-tasks is important,
-        since these are tried in order, as the parent task searches for a valid
-        response.
+        Add a sub-task (or list of subtasks) that this task can
+        delegate (or fail-over) to. Note that the sequence of
+        sub-tasks is important, since these are tried in order, as the
+        parent task searches for a valid response. If in concurrent
+        mode (controlled by `self.concurrent` unless overridden), the
+        group of sub-tasks added after the most recently added
+        sequential sub-task are executed concurrently; furthermore,
+        all concurrently-executed sub-tasks and their sub-tasks will
+        be set to non-interactive.
 
         Args:
             task (Task|List[Task]): sub-task(s) to add
+            concurrent (Optional[bool]): if set, overrides self.concurrent
         """
         if concurrent is None:
             concurrent = self.concurrent
@@ -382,6 +410,10 @@ class Task:
                 self.add_sub_task(t)
             return
         assert isinstance(task, Task), f"added task must be a Task, not {type(task)}"
+
+        if concurrent:
+            task.recurse_noninteractive = True
+            task.set_interactivity(False)
 
         task.parent_task.add(self)  # add myself to set of parent tasks of `task`
         self.sub_tasks.append(task)

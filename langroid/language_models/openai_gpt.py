@@ -54,9 +54,12 @@ from langroid.utils.system import friendly_error
 
 logging.getLogger("openai").setLevel(logging.ERROR)
 
-OLLAMA_BASE_URL = "http://localhost:11434/v1"
-OLLAMA_API_KEY = "ollama"
+if "OLLAMA_HOST" in os.environ:
+    OLLAMA_BASE_URL = f"http://{os.environ['OLLAMA_HOST']}/v1"
+else:
+    OLLAMA_BASE_URL = "http://localhost:11434/v1"
 
+OLLAMA_API_KEY = "ollama"
 
 class OpenAIChatModel(str, Enum):
     """Enum for OpenAI Chat models"""
@@ -118,6 +121,9 @@ if "OPENAI_API_KEY" in os.environ:
             """
             )
         availableModels = set()
+    except Exception as e:
+        if settings.debug:
+            logging.warning(f"OpenAI error: {e}")
 else:
     availableModels = set()
 

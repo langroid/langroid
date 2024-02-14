@@ -520,3 +520,52 @@ async def test_task_2_agent_2_tool_async(
     response = await requestor_task.run_async()
     strings = "100 200 500 1000".split()
     assert all(s in response.content for s in strings)
+
+
+async def test_interactivity(
+    test_settings: Settings,
+):    
+    """
+    Tests that, when concurrent tasks are added, they and all sub-tasks
+    are non-interactive.
+    """
+
+    set_global(test_settings)
+
+    top_level = Task(concurrent=True)
+    seq_sub_task = Task(concurrent=False)
+    concurrent_sub_task = Task(concurrent=True)
+    subtasks = [seq_sub_task, concurrent_sub_task]
+    top_level.add_sub_task(subtasks)
+
+    seq_sub_task.add_sub_task([Task(interactive=True), Task(interactive=False)])
+    concurrent_sub_task.add_sub_task([Task(interactive=True), Task(interactive=False)])
+
+    def tree_noninteractive(task: Task, ignore_top_level: bool=False) -> bool:
+        noninteractive = True if ignore_top_level else not task.interactive
+
+        for st in task.sub_tasks:
+            noninteractive = noninteractive and tree_noninteractive(
+                st, ignore_top_level=False
+            )
+
+            if not noninteractive:
+                return False
+
+        return noninteractive
+
+    assert all(tree_noninteractive(t) for t in subtasks)
+    
+    top_level = Task(concurrent=False)
+    seq_sub_task = Task(concurrent=False)
+    concurrent_sub_task = Task(concurrent=True)
+    subtasks = [seq_sub_task, concurrent_sub_task]
+    top_level.add_sub_task(subtasks)
+
+    seq_sub_task.add_sub_task([Task(interactive=True), Task(interactive=False)])
+    concurrent_sub_task.add_sub_task([Task(interactive=True), Task(interactive=False)])
+    assert tree_noninteractive(concurrent_sub_task, ignore_top_level=True)
+    assert seq_sub_task.sub_tasks[0].interactive
+    assert not seq_sub_task.sub_tasks[1].interactive
+
+
