@@ -48,6 +48,18 @@ function to start off the app. See the examples to learn more.
 
 ## Configuration
 
+⚠️ It is very important that you download the `.chainlit` directory from the `langroid` repo
+(or the `langroid-examples` repo) and place it *in the directory from
+which you run the `chainlit` command*. E.g. if you run the `chainlit` command from the
+root of the repo, then the `.chainlit` directory should be placed there.
+This directory contains various customizations, but most importantly, it contains the
+file `translations/en-US.json`, where the default placeholder text in the chat box is defined
+(as described below as well). If you've correctly placed this directory, this default text should say
+something like 
+```
+Ask, respond, give feedback, or just 'c' for continue...
+```
+
 You can configure some aspects of the chainlit app via these files,
 which are included in this repo at the root level (see
 the Chainlit [customization docs](https://docs.chainlit.io/customisation/overview) for more details):

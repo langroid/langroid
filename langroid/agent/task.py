@@ -238,6 +238,8 @@ class Task:
             only_user_quits_root = False
         if default_human_response is not None:
             self.agent.default_human_response = default_human_response
+        if self.interactive:
+            self.agent.default_human_response = None
         self.only_user_quits_root = only_user_quits_root
         # set to True if we want to collapse multi-turn conversation with sub-tasks into
         # just the first outgoing message and last incoming message.

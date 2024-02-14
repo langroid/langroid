@@ -498,3 +498,78 @@ def dataframe_to_documents(
         for _, row in df.iterrows()
     ]
     return [m for m in docs if m is not None]
+
+
+def extra_metadata(document: Document, doc_cls: Type[Document] = Document) -> List[str]:
+    """
+    Checks for extra fields in a document's metadata that are not defined in the
+    original metadata schema.
+
+    Args:
+        document (Document): The document instance to check for extra fields.
+        doc_cls (Type[Document]): The class type derived from Document, used
+            as a reference to identify extra fields in the document's metadata.
+
+    Returns:
+        List[str]: A list of strings representing the keys of the extra fields found
+        in the document's metadata.
+    """
+    # Convert metadata to dict, including extra fields.
+    metadata_fields = set(document.metadata.dict().keys())
+
+    # Get defined fields in the metadata of doc_cls
+    defined_fields = set(doc_cls.__fields__["metadata"].type_.__fields__.keys())
+
+    # Identify extra fields not in defined fields.
+    extra_fields = list(metadata_fields - defined_fields)
+
+    return extra_fields
+
+
+def extend_document_class(d: Document) -> Type[Document]:
+    """Generates a new pydantic class based on a given document instance.
+
+    This function dynamically creates a new pydantic class with additional
+    fields based on the "extra" metadata fields present in the given document
+    instance. The new class is a subclass of the original Document class, with
+    the original metadata fields retained and extra fields added as normal
+    fields to the metadata.
+
+    Args:
+        d: An instance of the Document class.
+
+    Returns:
+        A new subclass of the Document class that includes the additional fields
+        found in the metadata of the given document instance.
+    """
+    # Extract the fields from the original metadata class, including types,
+    # correctly handling special types like List[str].
+    original_metadata_fields = {
+        k: (v.outer_type_ if v.shape != 1 else v.type_, ...)
+        for k, v in DocMetaData.__fields__.items()
+    }
+    # Extract extra fields from the metadata instance with their types
+    extra_fields = {
+        k: (type(v), ...)
+        for k, v in d.metadata.__dict__.items()
+        if k not in DocMetaData.__fields__
+    }
+
+    # Combine original and extra fields for the new metadata class
+    combined_fields = {**original_metadata_fields, **extra_fields}
+
+    # Create a new metadata class with combined fields
+    NewMetadataClass = create_model(  # type: ignore
+        "ExtendedDocMetadata", **combined_fields, __base__=DocMetaData
+    )
+    # NewMetadataClass.__config__.arbitrary_types_allowed = True
+
+    # Create a new document class using the new metadata class
+    NewDocumentClass = create_model(
+        "ExtendedDocument",
+        content=(str, ...),
+        metadata=(NewMetadataClass, ...),
+        __base__=Document,
+    )
+
+    return NewDocumentClass

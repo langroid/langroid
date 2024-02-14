@@ -38,7 +38,7 @@ def test_openai_gpt(test_settings: Settings, streaming, country, capital):
             else OpenAIChatModel.GPT4  # or GPT4_TURBO
         ),
         completion_model=OpenAICompletionModel.GPT3_5_TURBO_INSTRUCT,
-        cache_config=RedisCacheConfig(fake=True),
+        cache_config=RedisCacheConfig(fake=False),
     )
 
     mdl = OpenAIGPT(config=cfg)
@@ -95,7 +95,7 @@ def _test_context_length_error(test_settings: Settings, mode: str, max_tokens: i
         max_output_tokens=max_tokens,
         chat_model=OpenAIChatModel.GPT4,  # or GPT4_TURBO,
         completion_model=OpenAICompletionModel.TEXT_DA_VINCI_003,
-        cache_config=RedisCacheConfig(fake=True),
+        cache_config=RedisCacheConfig(fake=False),
     )
     parser = Parser(config=ParsingConfig())
     llm = OpenAIGPT(config=cfg)
