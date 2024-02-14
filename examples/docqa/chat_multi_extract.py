@@ -16,7 +16,7 @@ local LLM, which you can specify via the -m arg:
 ```
 ollama run dolphin-mixtral
 
-python3 examples/docqa/chat_multi_extract.py -m litellm/ollama_chat/dolphin-mixtral:latest
+python3 examples/docqa/chat_multi_extract.py -m ollama/dolphin-mixtral:latest
 ```
 
 The challenging parts in this script are agent-to-agent delegation, and the extractor
