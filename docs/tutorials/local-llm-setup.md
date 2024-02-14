@@ -76,7 +76,8 @@ via `pip install langroid[litellm]` or equivalent.
 
 
 ## Harder: with oobabooga
-Unlike Ollama, oobabooga provides an OpenAI-API-compatible API server, see 
+Like Ollama, oobabooga provides an OpenAI-API-compatible API server, but the setup 
+is significantly more involved. See 
 https://github.com/oobabooga/text-generation-webui for installation and model-download instructions.
 
 Once you have finished the installation, you can spin up the server for an LLM using
