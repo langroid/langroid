@@ -61,6 +61,7 @@ else:
 
 OLLAMA_API_KEY = "ollama"
 
+
 class OpenAIChatModel(str, Enum):
     """Enum for OpenAI Chat models"""
 

@@ -1,7 +1,8 @@
 """
 Other tests for Task are in test_chat_agent_async.py
 """
-from typing import List
+import time
+from typing import Any, Callable, List, TypeVar
 
 import pytest
 
@@ -12,7 +13,7 @@ from langroid.agent.task import Task
 from langroid.agent.tool_message import ToolMessage
 from langroid.mytypes import Entity
 from langroid.utils.configuration import Settings, set_global
-from langroid.utils.constants import DONE, PASS
+from langroid.utils.constants import DONE, NO_ANSWER, PASS
 
 
 @pytest.mark.parametrize("concurrent", [True, False])
@@ -522,9 +523,10 @@ async def test_task_2_agent_2_tool_async(
     assert all(s in response.content for s in strings)
 
 
+@pytest.mark.asyncio
 async def test_interactivity(
     test_settings: Settings,
-):    
+):
     """
     Tests that, when concurrent tasks are added, they and all sub-tasks
     are non-interactive.
@@ -541,7 +543,7 @@ async def test_interactivity(
     seq_sub_task.add_sub_task([Task(interactive=True), Task(interactive=False)])
     concurrent_sub_task.add_sub_task([Task(interactive=True), Task(interactive=False)])
 
-    def tree_noninteractive(task: Task, ignore_top_level: bool=False) -> bool:
+    def tree_noninteractive(task: Task, ignore_top_level: bool = False) -> bool:
         noninteractive = True if ignore_top_level else not task.interactive
 
         for st in task.sub_tasks:
@@ -555,7 +557,7 @@ async def test_interactivity(
         return noninteractive
 
     assert all(tree_noninteractive(t) for t in subtasks)
-    
+
     top_level = Task(concurrent=False)
     seq_sub_task = Task(concurrent=False)
     concurrent_sub_task = Task(concurrent=True)
@@ -569,3 +571,127 @@ async def test_interactivity(
     assert not seq_sub_task.sub_tasks[1].interactive
 
 
+T = TypeVar("T")
+
+
+def const(value: T) -> Callable[[Any], T]:
+    def fun(_: Any) -> T:
+        return value
+
+    return fun
+
+
+@pytest.mark.parametrize("use_fn_api", [True])  # , False])
+@pytest.mark.asyncio
+async def test_concurrency(
+    test_settings: Settings,
+    use_fn_api: bool,
+):
+    """
+    Test concurrent and sequential task execution.
+    """
+
+    set_global(test_settings)
+
+    class WeatherSimulation(ToolMessage):
+        request = "weather_simulation"
+        purpose = """
+            Given tomorrow's <temperature> in degrees C, simulate future weather
+            patterns and respond with the predicted temperature in one year.
+            """
+        temperature: float
+
+    class Requestor(ChatAgent):
+        def __init__(self, config: ChatAgentConfig):
+            super().__init__(config)
+            self.enable_message(WeatherSimulation, use=True, handle=False)
+
+    requestor_agent = Requestor(
+        ChatAgentConfig(
+            name="Requestor",
+            use_functions_api=use_fn_api,
+            use_tools=not use_fn_api,
+            system_message=f"""
+                    Your goal is to predict the temperature one year from today.
+                    This is a very difficult task which you do not know how to solve,
+                    but you have access to a powerful supercomputer which can derive
+                    an accurate prediction given the temperature tomorrow.
+                    There are three possible values for the temperature tomorrow,
+                    10, 20, and 30 degrees, so you will use the `weather_simulation`
+                    tool/function twice to derive three estimates, one for each.
+
+                    When you have found out the two possible future temperatures,
+                    say {DONE} and summarize the results in this format:
+                    '(tomorrow_temp1, one_year_temp1),
+                    (tomorrow_temp2, one_year_temp2),
+                    (tomorrow_temp_3, one_year_temp3)'
+                """,
+        )
+    )
+
+    # Returns an task that always guesses response as the future temperature
+    # but the time to complete the task varies with the input
+    # fails if fail_fn
+    def simulator(
+        prediction: float,
+        time_fn: Callable[[float], float],
+        fail_fn: Callable[[float], bool] = const(False),
+    ) -> Task:
+        class Simulator(ChatAgent):
+            def __init__(self, config: ChatAgentConfig):
+                super().__init__(config)
+                self.enable_message(WeatherSimulation, use=False, handle=True)
+
+            def weather_simulation(self, msg: WeatherSimulation) -> str:
+                """
+                If successful, wait a variable amount of time and
+                respond with a prediction.
+                """
+                if fail_fn(msg.temperature):
+                    return NO_ANSWER
+
+                time.sleep(time_fn(msg.temperature))
+
+                return f"The temperature in one year will be {prediction}"
+
+        return Task(
+            Simulator(
+                ChatAgentConfig(
+                    name=f"Simulator {prediction}",
+                    use_functions_api=use_fn_api,
+                    use_tools=not use_fn_api,
+                )
+            ),
+            interactive=False,
+            single_round=True,
+        )
+
+    # Run concurrently
+    requestor_task = Task(requestor_agent, concurrent=True, interactive=False)
+    requestor_task.add_sub_task(
+        [
+            simulator(2, const(2)),
+            simulator(1, const(1), lambda t: t > 20),
+            simulator(0, const(0), lambda t: t > 10),
+        ]
+    )
+    response = await requestor_task.run_async()
+    expected = [(10, 0), (20, 1), (30, 2)]
+
+    for current, predicted in expected:
+        assert f"({current}, {predicted})" in response.content
+
+    # Run sequentially
+    requestor_task = Task(requestor_agent, concurrent=False, interactive=False)
+    requestor_task.add_sub_task(
+        [
+            simulator(2, const(2), lambda t: t > 20),
+            simulator(1, const(1), lambda t: t < 30),
+            simulator(0, const(0)),
+        ]
+    )
+    response = await requestor_task.run_async()
+    expected = [(10, 2), (20, 0), (30, 1)]
+
+    for current, predicted in expected:
+        assert f"({current}, {predicted})" in response.content

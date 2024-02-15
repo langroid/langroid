@@ -336,7 +336,7 @@ class Task:
             done_if_response=[Entity(s) for s in self.done_if_response],
         )
 
-    def set_interactivity(self, interactive: bool):
+    def set_interactivity(self, interactive: bool) -> None:
         """
         Sets the task and agent to be interactive or non-interactive.
         If recursively non-interactive, recursively sets sub-tasks to
@@ -407,11 +407,11 @@ class Task:
 
         if isinstance(task, list):
             for t in task:
-                self.add_sub_task(t)
+                self.add_sub_task(t, concurrent=concurrent)
             return
         assert isinstance(task, Task), f"added task must be a Task, not {type(task)}"
 
-        if concurrent:
+        if concurrent or self.recurse_noninteractive:
             task.recurse_noninteractive = True
             task.set_interactivity(False)
 
