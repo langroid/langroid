@@ -86,10 +86,20 @@ def test_write_then_retrieval(neo4j_agent):
         interactive=False,
     )
     result = task.init(english_query)  # init pending msg
-    result = task.step()  # llm -> get schema
-    result = task.step()  # agent returns schema
-    result = task.step()  # llm -> cypher query for the question
-    result = task.step()  # agent returns query result
-    result = task.step()  # llm -> formulates english answer
+    result = task.step()  # 1. llm -> get schema
+    result = task.step()  # 2. agent returns schema
+    result = task.step()  # 3. llm -> cypher query for the question
+    result = task.step()  # 4. agent returns query result
+    result = task.step()  # 5. llm -> formulates english answer
     # english answer
+    assert "inception" in result.content.lower()
+
+    # run it as a task for 5 turns
+    task = lr.Task(
+        neo4j_agent,
+        restart=True,
+        name="Neo",
+        interactive=False,
+    )
+    result = task.run(english_query, turns=5)
     assert "inception" in result.content.lower()
