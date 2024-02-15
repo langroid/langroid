@@ -1,6 +1,7 @@
 import pytest
 from dotenv import load_dotenv
 
+import langroid as lr
 from langroid.agent.special.neo4j.neo4j_chat_agent import (
     Neo4jChatAgent,
     Neo4jChatAgentConfig,
@@ -75,3 +76,20 @@ def test_write_then_retrieval(neo4j_agent):
             "relationship": "ACTED_IN",
         }
     ]
+
+    english_query = """
+    What are the movies that Leonardo DiCaprio acted in?
+    """
+    task = lr.Task(
+        neo4j_agent,
+        name="Neo",
+        interactive=False,
+    )
+    result = task.init(english_query)  # init pending msg
+    result = task.step()  # llm -> get schema
+    result = task.step()  # agent returns schema
+    result = task.step()  # llm -> cypher query for the question
+    result = task.step()  # agent returns query result
+    result = task.step()  # llm -> formulates english answer
+    # english answer
+    assert "inception" in result.content.lower()
