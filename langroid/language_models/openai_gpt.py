@@ -110,7 +110,7 @@ openAICompletionModelPreferenceList = [
 
 if "OPENAI_API_KEY" in os.environ:
     try:
-        availableModels = set(map(lambda m: m.id, OpenAI().models.list()))
+        available_models = set(map(lambda m: m.id, OpenAI().models.list()))
     except openai.AuthenticationError as e:
         if settings.debug:
             logging.warning(
@@ -121,17 +121,23 @@ if "OPENAI_API_KEY" in os.environ:
             otherwise you can ignore this warning.
             """
             )
-        availableModels = set()
+        available_models = set()
     except Exception as e:
         if settings.debug:
-            logging.warning(f"OpenAI error: {e}")
+            logging.warning(
+                f"""
+            Error while fetching available OpenAI models: {e}.
+            Proceeding with an empty set of available models.
+            """
+            )
+        available_models = set()
 else:
-    availableModels = set()
+    available_models = set()
 
 defaultOpenAIChatModel = next(
     chain(
         filter(
-            lambda m: m.value in availableModels,
+            lambda m: m.value in available_models,
             openAIChatModelPreferenceList,
         ),
         [OpenAIChatModel.GPT4_TURBO],
@@ -140,7 +146,7 @@ defaultOpenAIChatModel = next(
 defaultOpenAICompletionModel = next(
     chain(
         filter(
-            lambda m: m.value in availableModels,
+            lambda m: m.value in available_models,
             openAICompletionModelPreferenceList,
         ),
         [OpenAICompletionModel.GPT3_5_TURBO_INSTRUCT],

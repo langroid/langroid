@@ -66,7 +66,7 @@ class Neo4jChatAgentConfig(ChatAgentConfig):
     system_message: str = DEFAULT_NEO4J_CHAT_SYSTEM_MESSAGE
     kg_schema: Optional[List[Dict[str, Any]]]
     database_created: bool = False
-    use_schema_tools: bool = False
+    use_schema_tools: bool = True
     use_functions_api: bool = True
     use_tools: bool = False
 
@@ -301,9 +301,9 @@ class Neo4jChatAgent(ChatAgent):
             raise ValueError("Database driver None")
         assert isinstance(self.config, Neo4jChatAgentConfig)
         return (
-            SCHEMA_TOOLS_SYS_MSG.format(schema=self.get_schema(None))
+            SCHEMA_TOOLS_SYS_MSG
             if self.config.use_schema_tools
-            else DEFAULT_SYS_MSG
+            else DEFAULT_SYS_MSG.format(schema=self.get_schema(None))
         )
 
     def agent_response(

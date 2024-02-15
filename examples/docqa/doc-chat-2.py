@@ -112,7 +112,7 @@ def main(
             splitter=Splitter.TOKENS,
             chunk_size=100,  # aim for this many tokens per chunk
             n_neighbor_ids=5,
-            overlap=200,  # overlap between chunks
+            overlap=20,  # overlap between chunks
             max_chunks=10_000,
             # aim to have at least this many chars per chunk when
             # truncating due to punctuation
