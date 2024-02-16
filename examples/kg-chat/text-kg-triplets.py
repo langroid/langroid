@@ -17,7 +17,7 @@ described here
 
 Run like this
 
-python3 examples/kg-chat/text-kg.py
+python3 examples/kg-chat/text-kg-triplets.py
 
 Optional args:
 * -d or --debug to enable debug mode
@@ -68,16 +68,20 @@ def main(
 
     system_message = """
         You are an information representation expert, and you are especially 
-        knowledgeable about representing information in a Knowledge Graph such as Neo4j.
+        knowledgeable about representing information in a Knowledge Graph such as Neo4j
+        based on text data.
         
-        When the user gives you a TEXT, you should INFER the triplets from the TEXT.
-        Each triplet is a tuple of the form `(subject, relationship, object)`.
-        SHOW me the triplets you inferred as a list and ask the user to confirm them,
-        then you should generate a Cypher query that will create the 
-        entities/relationships based on the triplets. USE the `create_query` 
-        tool/function to create the entities/relationships, 
+        When the user gives you a TEXT and CURRENT SCHEMA, your task is to generate 
+        triplets from the TEXT and then USE the approporiate function/tool to
+        create the entities/relationships based on the generated triplets. 
+        Take into account the CURRENT SCHEMA:
+        1. If the CURRENT SCHEMA is empty, you should INFER the triplets from the TEXT.
+        2. If the CURRENT SCHEMA is not empty, INFER the triplets by considering the 
+        CURRENT SCHEMA. Importantly, SEE IF YOU CAN REUSE EXISTING 
+        ENTITIES/RELATIONSHIPS and create NEW ONES ONLY IF NECESSARY.
 
-        Here is an example:
+        Each triplet is a tuple of the form `(subject, relationship, object)`.
+        Here is an example how you should infer triplets from the TEXT:
         ```
         TEXT: "Albert Einstein, born in Ulm, won the Nobel Prize in Physics in 1921."
         Triplets:
@@ -85,6 +89,7 @@ def main(
         (Albert Einstein, won, Nobel Prize in Physics)
         (Nobel Prize in Physics, awarded in, 1921)
         ```
+        SEND `DONE` after successfuly converting the triplets to a Knowledge graph.
         """
 
     config = Neo4jChatAgentConfig(
@@ -92,9 +97,7 @@ def main(
         system_message=system_message,
         neo4j_settings=neo4j_settings,
         show_stats=False,
-        llm=lm.OpenAIGPTConfig(
-            chat_model=model or lm.OpenAIChatModel.GPT4_TURBO,
-        ),
+        llm=lm.AzureConfig(),
     )
 
     agent = Neo4jChatAgent(config=config)
@@ -116,6 +119,8 @@ def main(
     Amazon, Meta (the parent company of Facebook), and Microsoft.    
     """
 
+    CURRENT_SCHEMA = ""
+
     task = lr.Task(
         agent,
         interactive=True,
@@ -124,14 +129,57 @@ def main(
     task.run(
         f"""
     TEXT: {TEXT}
+    
+    CURRENT SCHEMA: {CURRENT_SCHEMA}
     """
     )
 
-    # schema = agent.get_schema(None)
-    # print(f"SCHEMA: {schema}")
+    curr_schema = agent.get_schema(None)
+    print(f"SCHEMA: {curr_schema}")
 
-    # for subsequent text -> conversions, you can use the `schema` obtained above,
-    # and insert it into as the value of CURRENT_SCHEMA in the next run.
+    # now feed in the schema to the next run, with new text
+
+    TEXT = """
+    Apple was founded as Apple Computer Company on April 1, 1976, to produce and market 
+    Steve Wozniak's Apple I personal computer. The company was incorporated by Wozniak 
+    and Steve Jobs in 1977. Its second computer, the Apple II, became a best seller as 
+    one of the first mass-produced microcomputers. Apple introduced the Lisa in 1983 and 
+    the Macintosh in 1984, as some of the first computers to use a graphical user 
+    interface and a mouse.
+    """
+
+    task.run(
+        f"""
+        TEXT: {TEXT}
+
+        CURRENT SCHEMA: {curr_schema}
+        """
+    )
+    updated_schema = agent.get_schema(None)
+    print(f"UPDATED SCHEMA: {updated_schema}")
+
+    # We can now ask a question that can be answered based on the schema
+
+    config = Neo4jChatAgentConfig(
+        name="TextNeoQA",
+        system_message="""
+        You will get a question about some information that is represented within
+        a Neo4j graph database. You will use the `retrieval_query` tool/function to
+        generate a Cypher query that will answer the question. Do not explain
+        your query, just present it using the `retrieval_query` tool/function.
+        """,
+        neo4j_settings=neo4j_settings,
+        show_stats=False,
+        llm=lm.AzureConfig(),
+    )
+
+    agent = Neo4jChatAgent(config=config)
+
+    task = lr.Task(agent)
+
+    print("[blue] Now you can ask questions ")
+
+    task.run()
 
 
 if __name__ == "__main__":
