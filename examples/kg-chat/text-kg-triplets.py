@@ -17,7 +17,7 @@ described here
 
 Run like this
 
-python3 examples/kg-chat/text-kg.py
+python3 examples/kg-chat/text-kg-triplets.py
 
 Optional args:
 * -d or --debug to enable debug mode
@@ -63,23 +63,38 @@ def main(
 
     load_dotenv()
 
-    # Look inside Neo4jSettings and explicitly
-    # set each param (including database) based on your Neo4j instance
+    # Look inside Neo4jSettings and explicit set each param based on your Neo4j instance
     neo4j_settings = Neo4jSettings(database="neo4j")
+
+    system_message = """
+        You are an information representation expert, and you are especially 
+        knowledgeable about representing information in a Knowledge Graph such as Neo4j
+        based on text data.
+        
+        When the user gives you a TEXT and CURRENT SCHEMA, your task is to generate 
+        triplets from the TEXT and then USE the approporiate function/tool to
+        create the entities/relationships based on the generated triplets. 
+        Take into account the CURRENT SCHEMA:
+        1. If the CURRENT SCHEMA is empty, you should INFER the triplets from the TEXT.
+        2. If the CURRENT SCHEMA is not empty, INFER the triplets by considering the 
+        CURRENT SCHEMA. Importantly, SEE IF YOU CAN REUSE EXISTING 
+        ENTITIES/RELATIONSHIPS and create NEW ONES ONLY IF NECESSARY.
+
+        Each triplet is a tuple of the form `(subject, relationship, object)`.
+        Here is an example how you should infer triplets from the TEXT:
+        ```
+        TEXT: "Albert Einstein, born in Ulm, won the Nobel Prize in Physics in 1921."
+        Triplets:
+        (Albert Einstein, born in, Ulm)
+        (Albert Einstein, won, Nobel Prize in Physics)
+        (Nobel Prize in Physics, awarded in, 1921)
+        ```
+        SEND `DONE` after successfuly converting the triplets to a Knowledge graph.
+        """
 
     config = Neo4jChatAgentConfig(
         name="TextNeo",
-        system_message="""
-        You are an information representation expert, and you are especially 
-        knowledgeable about representing information in a Knowledge Graph such as Neo4j.        
-        When the user gives you a TEXT and the CURRENT SCHEMA (possibly empty), 
-        your task is to generate a Cypher query that will add the entities/relationships
-        from the TEXT to the Neo4j database, taking the CURRENT SCHEMA into account.
-        In particular, SEE IF YOU CAN REUSE EXISTING ENTITIES/RELATIONSHIPS,
-        and create NEW ONES ONLY IF NECESSARY.
-        
-        To present the Cypher query, you can use the `retrieval_query` tool/function        
-        """,
+        system_message=system_message,
         neo4j_settings=neo4j_settings,
         show_stats=False,
         llm=lm.OpenAIGPTConfig(

@@ -43,6 +43,8 @@ def neo4j_agent(request):
         )
     )
 
+    agent.remove_database()
+
     def teardown():
         # Remove the database
         agent.remove_database()
