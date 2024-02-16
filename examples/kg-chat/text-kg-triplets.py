@@ -97,7 +97,9 @@ def main(
         system_message=system_message,
         neo4j_settings=neo4j_settings,
         show_stats=False,
-        llm=lm.AzureConfig(),
+        llm=lm.OpenAIGPTConfig(
+            chat_model=model or lm.OpenAIChatModel.GPT4_TURBO,
+        ),
     )
 
     agent = Neo4jChatAgent(config=config)
@@ -170,7 +172,9 @@ def main(
         """,
         neo4j_settings=neo4j_settings,
         show_stats=False,
-        llm=lm.AzureConfig(),
+        llm=lm.OpenAIGPTConfig(
+            chat_model=model or lm.OpenAIChatModel.GPT4_TURBO,
+        ),
     )
 
     agent = Neo4jChatAgent(config=config)
