@@ -55,10 +55,10 @@ ollama create dolphin-mixtral-gguf -f ~/.ollama/modelfiles/dolphin-mixtral-gguf
 
 - Run this new model using `ollama run dolphin-mixtral-gguf`
 
-To use this model with Langroid you can then specify `dolphin-mixtral-gguf`
+To use this model with Langroid you can then specify `ollama/dolphin-mixtral-gguf`
 as the `chat_model` param in the `OpenAIGPTConfig` as in the previous section.
 When a script supports it, you can also pass in the model name via
-`-m litellm/ollama_chat/dolphin-mixtral-gguf`
+`-m ollama/dolphin-mixtral-gguf`
 
 ## Other non-Ollama LLMs supported by LiteLLM
 

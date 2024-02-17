@@ -81,7 +81,7 @@ import langroid.language_models as lm
 # set up LLM
 llm_cfg = lm.OpenAIGPTConfig( # or OpenAIAssistant to use Assistant API 
   # any model served via an OpenAI-compatible API
-  chat_model=lm.OpenAIChatModel.GPT4_TURBO, # or, e.g., "litellm/ollama/mistral"
+  chat_model=lm.OpenAIChatModel.GPT4_TURBO, # or, e.g., "ollama/mistral"
 )
 # use LLM directly
 mdl = lm.OpenAIGPT(llm_cfg)
