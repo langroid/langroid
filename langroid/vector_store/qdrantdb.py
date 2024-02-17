@@ -3,7 +3,7 @@ import json
 import logging
 import os
 import uuid
-from typing import List, Optional, Sequence, Tuple, TypeVar
+from typing import List, Optional, Sequence, Tuple
 
 from dotenv import load_dotenv
 from qdrant_client import QdrantClient
@@ -24,19 +24,10 @@ from langroid.embedding_models.base import (
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
 from langroid.mytypes import Document, EmbeddingFunction
 from langroid.utils.configuration import settings
+from langroid.utils.general import from_optional
 from langroid.vector_store.base import VectorStore, VectorStoreConfig
 
 logger = logging.getLogger(__name__)
-
-
-T = TypeVar("T")
-
-
-def from_optional(x: Optional[T], default: T) -> T:
-    if x is None:
-        return default
-
-    return x
 
 
 def is_valid_uuid(uuid_to_test: str) -> bool:

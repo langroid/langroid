@@ -2,7 +2,7 @@
 Other tests for Task are in test_chat_agent_async.py
 """
 import asyncio
-from typing import Any, Callable, List, TypeVar
+from typing import Callable, List
 
 import pytest
 
@@ -14,17 +14,7 @@ from langroid.agent.tool_message import ToolMessage
 from langroid.mytypes import Entity
 from langroid.utils.configuration import Settings, set_global
 from langroid.utils.constants import DONE, NO_ANSWER, PASS
-
-T = TypeVar("T")
-
-
-def const(value: T) -> Callable[[Any], T]:
-    """Returns a constant function."""
-
-    def fun(_: Any) -> T:
-        return value
-
-    return fun
+from langroid.utils.general import const
 
 
 @pytest.mark.parametrize("concurrent", [True, False])
@@ -607,7 +597,8 @@ async def test_concurrency(
             super().__init__(config)
             self.enable_message(WeatherSimulation, use=True, handle=True)
 
-        async def weather_simulation_async(self, _: WeatherSimulation) -> str:
+        # As we don't specify a async implementation, we use this
+        def weather_simulation(self, _: WeatherSimulation) -> str:
             return PASS
 
     requestor_agent = Requestor(

@@ -15,7 +15,6 @@ from typing import (
     Set,
     Tuple,
     Type,
-    TypeVar,
     cast,
 )
 
@@ -33,41 +32,12 @@ from langroid.mytypes import Entity
 from langroid.parsing.json import extract_top_level_json
 from langroid.utils.configuration import settings
 from langroid.utils.constants import DONE, NO_ANSWER, PASS, PASS_TO, SEND_TO, USER_QUIT
+from langroid.utils.general import add_grouped, noop
 from langroid.utils.logging import RichFileLogger, setup_file_logger
 
 logger = logging.getLogger(__name__)
 
 Responder = Entity | Type["Task"]
-
-T1 = TypeVar("T1")
-T2 = TypeVar("T2")
-
-
-def add_grouped(
-    groups: List[Tuple[T1, List[T2]]], key: T1, value: T2, pos: Optional[int] = None
-) -> None:
-    """
-    Incrementally constructs lists grouped by a key value. The value
-    is added to the group in position pos if the key matches; else a
-    new group is created. If pos is unspecified, adds the group at the
-    end, else inserts it at position pos.
-    """
-    if len(groups) == 0:
-        groups.append((key, [value]))
-    else:
-        idx = pos if pos is not None else len(groups) - 1
-        idx_add = pos if pos is not None else len(groups)
-
-        group_key = groups[idx][0]
-
-        if key == group_key:
-            groups[idx][1].append(value)
-        else:
-            groups.insert(idx_add, (key, [value]))
-
-
-def noop_fn(*args: List[Any], **kwargs: Dict[str, Any]) -> None:
-    pass
 
 
 class Task:
@@ -181,8 +151,8 @@ class Task:
             agent = ChatAgent()
 
         self.callbacks = SimpleNamespace(
-            show_subtask_response=noop_fn,
-            set_parent_agent=noop_fn,
+            show_subtask_response=noop,
+            set_parent_agent=noop,
         )
         # copy the agent's config, so that we don't modify the original agent's config,
         # which may be shared by other agents.
@@ -783,11 +753,11 @@ class Task:
             #  interactive setting: LLM generates tool, then we don't want user to
             #  have to respond, and instead let the agent_response handle the tool.
             # We always wait on a human response
-            add_grouped(responders, False, Entity.USER, pos=0)
+            add_grouped(responders, False, Entity.USER, pos=0, group_pos=0)
 
         # Asynchronously returns the results from a responder and checks for validity
-        async def response(cls: Task, r: Responder) -> Dict[str, Any]:
-            if not cls._can_respond(r):
+        async def response(r: Responder) -> Dict[str, Any]:
+            if not self._can_respond(r):
                 # create dummy msg for logging
                 log_doc = ChatDocument(
                     content="[CANNOT RESPOND]",
@@ -805,16 +775,14 @@ class Task:
                     "responder": r,
                 }
 
-            cls.human_tried = r == Entity.USER
+            self.human_tried = r == Entity.USER
 
-            print(f"start {r}")
-            result = await cls.response_async(r, turns)
-            print(f"end {r}")
-            is_done = cls._is_done_response(result, r)
+            result = await self.response_async(r, turns)
+            is_done = self._is_done_response(result, r)
 
             # TODO: remove dependency on global state
-            cls.is_done = is_done
-            is_valid = cls.valid(result, r)
+            self.is_done = is_done
+            is_valid = self.valid(result, r)
 
             is_pass_thru = PASS in result.content if result else False
 
@@ -859,7 +827,7 @@ class Task:
             if concurrent:
                 concurrent_tasks = set(
                     map(
-                        lambda r: asyncio.create_task(response(self, r)),
+                        lambda r: asyncio.create_task(response(r)),
                         group,
                     )
                 )
@@ -889,7 +857,7 @@ class Task:
             else:
                 # Evaluate the responders to be executed sequentially in order
                 for r in group:
-                    responder_result = await response(self, r)
+                    responder_result = await response(r)
                     handle_response(responder_result)
 
                     if end_step:

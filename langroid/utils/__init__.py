@@ -1,3 +1,4 @@
+from . import general
 from . import configuration
 from . import globals
 from . import constants
@@ -7,6 +8,7 @@ from . import system
 from . import output
 
 __all__ = [
+    "general",
     "configuration",
     "globals",
     "constants",

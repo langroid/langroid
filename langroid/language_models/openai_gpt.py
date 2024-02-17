@@ -50,6 +50,7 @@ from langroid.language_models.utils import (
 )
 from langroid.utils.configuration import settings
 from langroid.utils.constants import NO_ANSWER, Colors
+from langroid.utils.general import noop
 from langroid.utils.system import friendly_error
 
 logging.getLogger("openai").setLevel(logging.ERROR)
@@ -168,11 +169,6 @@ def gpt_3_5_warning() -> None:
         """,
         AccessWarning,
     )
-
-
-def noop() -> None:
-    """Does nothing."""
-    return None
 
 
 class OpenAICallParams(BaseModel):
