@@ -605,7 +605,10 @@ async def test_concurrency(
     class Requestor(ChatAgent):
         def __init__(self, config: ChatAgentConfig):
             super().__init__(config)
-            self.enable_message(WeatherSimulation, use=True, handle=False)
+            self.enable_message(WeatherSimulation, use=True, handle=True)
+
+        async def weather_simulation_async(self, _: WeatherSimulation) -> str:
+            return PASS
 
     requestor_agent = Requestor(
         ChatAgentConfig(
@@ -643,12 +646,6 @@ async def test_concurrency(
                 super().__init__(config)
                 self.enable_message(WeatherSimulation, use=False, handle=True)
 
-            def weather_simulation(self, _: WeatherSimulation) -> str:
-                """
-                We are only running in async mode so this should not be reached.
-                """
-                return NO_ANSWER
-
             async def weather_simulation_async(self, msg: WeatherSimulation) -> str:
                 """
                 If successful, wait a variable amount of time and
@@ -677,9 +674,9 @@ async def test_concurrency(
     requestor_task = Task(requestor_agent, concurrent=True, interactive=False)
     requestor_task.add_sub_task(
         [
-            simulator(2, const(2)),
-            simulator(1, const(1), lambda t: t > 20),
-            simulator(0, const(0), lambda t: t > 10),
+            simulator(2, lambda t: 0 if t > 20 else 2),
+            simulator(1, lambda t: 0.1 if t > 10 and t < 30 else 2),
+            simulator(0, lambda t: 0 if t < 20 else 2),
         ]
     )
     response = await requestor_task.run_async()
@@ -692,8 +689,8 @@ async def test_concurrency(
     requestor_task = Task(requestor_agent, concurrent=False, interactive=False)
     requestor_task.add_sub_task(
         [
-            simulator(2, const(2), lambda t: t > 20),
-            simulator(1, const(1), lambda t: t < 30),
+            simulator(2, const(0.2), lambda t: t > 10),
+            simulator(1, const(0.1), lambda t: t < 30),
             simulator(0, const(0)),
         ]
     )

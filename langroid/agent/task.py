@@ -863,8 +863,6 @@ class Task:
                         group,
                     )
                 )
-                print(group)
-                print(concurrent_tasks)
 
                 #  Run the remaining responders concurrently; retain
                 #  the first successful result

@@ -231,41 +231,43 @@ class Agent(ABC):
         async_tool_defined = hasattr(self, async_tool_name)
 
         def setup_default_async_handler() -> None:
-            """Makes an asynchronous copy of the synchronous handler."""
+            """Makes an asynchronous copy of the synchronous handler if it exists."""
+            if hasattr(self, tool):
 
-            @no_type_check
-            async def handler(obj):
-                return getattr(self, tool)(obj)
+                @no_type_check
+                async def handler(obj):
+                    return getattr(self, tool)(obj)
 
-            setattr(self, async_tool_name, handler)
+                setattr(self, async_tool_name, handler)
 
         # If the agent has overriden the synchronous but not the
         # asynchronous handler, we preserve the synchronous handler.
         # Otherwise, we use the same precedence as the synchronous
         # path.
-        if not (async_tool_defined or sync_tool_defined):
-            if hasattr(message_class, "handle_async") and inspect.isfunction(
-                message_class.handle_async
-            ):
+        if not async_tool_defined:
+            if not sync_tool_defined:
+                if hasattr(message_class, "handle_async") and inspect.isfunction(
+                    message_class.handle_async
+                ):
 
-                @no_type_check
-                async def handler(obj):
-                    return await obj.handle_async()
+                    @no_type_check
+                    async def handler(obj):
+                        return await obj.handle_async()
 
-                setattr(self, async_tool_name, handler)
-            elif hasattr(message_class, "response_async") and inspect.isfunction(
-                message_class.response_async
-            ):
+                    setattr(self, async_tool_name, handler)
+                elif hasattr(message_class, "response_async") and inspect.isfunction(
+                    message_class.response_async
+                ):
 
-                @no_type_check
-                async def handler(obj):
-                    return await obj.response_async(self)
+                    @no_type_check
+                    async def handler(obj):
+                        return await obj.response_async(self)
 
-                setattr(self, async_tool_name, handler)
+                    setattr(self, async_tool_name, handler)
+                else:
+                    setup_default_async_handler()
             else:
                 setup_default_async_handler()
-        else:
-            setup_default_async_handler()
 
         return [tool]
 
