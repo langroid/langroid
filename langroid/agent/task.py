@@ -807,7 +807,9 @@ class Task:
 
             cls.human_tried = r == Entity.USER
 
+            print(f"start {r}")
             result = await cls.response_async(r, turns)
+            print(f"end {r}")
             is_done = cls._is_done_response(result, r)
 
             # TODO: remove dependency on global state
@@ -861,6 +863,8 @@ class Task:
                         group,
                     )
                 )
+                print(group)
+                print(concurrent_tasks)
 
                 #  Run the remaining responders concurrently; retain
                 #  the first successful result

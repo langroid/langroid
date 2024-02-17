@@ -1,7 +1,7 @@
 """
 Other tests for Task are in test_chat_agent_async.py
 """
-import time
+import asyncio
 from typing import Any, Callable, List, TypeVar
 
 import pytest
@@ -14,6 +14,17 @@ from langroid.agent.tool_message import ToolMessage
 from langroid.mytypes import Entity
 from langroid.utils.configuration import Settings, set_global
 from langroid.utils.constants import DONE, NO_ANSWER, PASS
+
+T = TypeVar("T")
+
+
+def const(value: T) -> Callable[[Any], T]:
+    """Returns a constant function."""
+
+    def fun(_: Any) -> T:
+        return value
+
+    return fun
 
 
 @pytest.mark.parametrize("concurrent", [True, False])
@@ -571,17 +582,7 @@ async def test_interactivity(
     assert not seq_sub_task.sub_tasks[1].interactive
 
 
-T = TypeVar("T")
-
-
-def const(value: T) -> Callable[[Any], T]:
-    def fun(_: Any) -> T:
-        return value
-
-    return fun
-
-
-@pytest.mark.parametrize("use_fn_api", [True])  # , False])
+@pytest.mark.parametrize("use_fn_api", [True, False])
 @pytest.mark.asyncio
 async def test_concurrency(
     test_settings: Settings,
@@ -642,7 +643,13 @@ async def test_concurrency(
                 super().__init__(config)
                 self.enable_message(WeatherSimulation, use=False, handle=True)
 
-            def weather_simulation(self, msg: WeatherSimulation) -> str:
+            def weather_simulation(self, _: WeatherSimulation) -> str:
+                """
+                We are only running in async mode so this should not be reached.
+                """
+                return NO_ANSWER
+
+            async def weather_simulation_async(self, msg: WeatherSimulation) -> str:
                 """
                 If successful, wait a variable amount of time and
                 respond with a prediction.
@@ -650,7 +657,7 @@ async def test_concurrency(
                 if fail_fn(msg.temperature):
                     return NO_ANSWER
 
-                time.sleep(time_fn(msg.temperature))
+                await asyncio.sleep(time_fn(msg.temperature))
 
                 return f"The temperature in one year will be {prediction}"
 

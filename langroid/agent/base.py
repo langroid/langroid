@@ -192,10 +192,12 @@ class Agent(ABC):
             raise ValueError("message_class must be a subclass of ToolMessage")
         tool = message_class.default_value("request")
         self.llm_tools_map[tool] = message_class
+
+        sync_tool_defined = hasattr(self, tool)
         if (
             hasattr(message_class, "handle")
             and inspect.isfunction(message_class.handle)
-            and not hasattr(self, tool)
+            and not sync_tool_defined
         ):
             """
             If the message class has a `handle` method,
@@ -211,7 +213,7 @@ class Agent(ABC):
         elif (
             hasattr(message_class, "response")
             and inspect.isfunction(message_class.response)
-            and not hasattr(self, tool)
+            and not sync_tool_defined
         ):
             setattr(self, tool, lambda obj: obj.response(self))
 
@@ -223,6 +225,47 @@ class Agent(ABC):
                 "handle_message_fallback",
                 lambda msg: message_class.handle_message_fallback(self, msg),
             )
+
+        # Set up the asynchronous handlers
+        async_tool_name = f"{tool}_async"
+        async_tool_defined = hasattr(self, async_tool_name)
+
+        def setup_default_async_handler() -> None:
+            """Makes an asynchronous copy of the synchronous handler."""
+
+            @no_type_check
+            async def handler(obj):
+                return getattr(self, tool)(obj)
+
+            setattr(self, async_tool_name, handler)
+
+        # If the agent has overriden the synchronous but not the
+        # asynchronous handler, we preserve the synchronous handler.
+        # Otherwise, we use the same precedence as the synchronous
+        # path.
+        if not (async_tool_defined or sync_tool_defined):
+            if hasattr(message_class, "handle_async") and inspect.isfunction(
+                message_class.handle_async
+            ):
+
+                @no_type_check
+                async def handler(obj):
+                    return await obj.handle_async()
+
+                setattr(self, async_tool_name, handler)
+            elif hasattr(message_class, "response_async") and inspect.isfunction(
+                message_class.response_async
+            ):
+
+                @no_type_check
+                async def handler(obj):
+                    return await obj.response_async(self)
+
+                setattr(self, async_tool_name, handler)
+            else:
+                setup_default_async_handler()
+        else:
+            setup_default_async_handler()
 
         return [tool]
 
@@ -279,7 +322,14 @@ class Agent(ABC):
         self,
         msg: Optional[str | ChatDocument] = None,
     ) -> Optional[ChatDocument]:
-        return self.agent_response(msg)
+        """
+        Async version of `agent_response`. See there for details.
+        """
+        if msg is None:
+            return None
+
+        results = await self.handle_message_async(msg)
+        return self._process_agent_response(msg, results)
 
     def agent_response(
         self,
@@ -301,6 +351,14 @@ class Agent(ABC):
             return None
 
         results = self.handle_message(msg)
+        return self._process_agent_response(msg, results)
+
+    def _process_agent_response(
+        self,
+        msg: str | ChatDocument,
+        results: None | str | ChatDocument = None,
+    ) -> Optional[ChatDocument]:
+        """Processes the results from the message handler."""
         if results is None:
             return None
         if isinstance(results, ChatDocument):
@@ -658,6 +716,87 @@ class Agent(ABC):
         Please write your message again, correcting the errors.
         """
 
+    async def handle_message_async(
+        self, msg: str | ChatDocument
+    ) -> None | str | ChatDocument:
+        """
+        Async version of `handle_message`; see there for details.
+        Unless async tool handlers are defined (the `ToolMessage`'s
+        `handle_async` method or `self.tool_name_async`), generally
+        behaves the same as `handle_message`.
+        """
+        try:
+            tools = self.get_tool_messages(msg)
+        except ValidationError as ve:
+            # correct tool name but bad fields
+            return self.tool_validation_error(ve)
+        except ValueError:
+            # invalid tool name
+            # We return None since returning "invalid tool name" would
+            # be considered a valid result in task loop, and would be treated
+            # as a response to the tool message even though the tool was not intended
+            # for this agent.
+            return None
+        if len(tools) == 0:
+            return self.handle_message_fallback(msg)
+
+        tasks = set(
+            map(
+                lambda t: asyncio.create_task(self.handle_tool_message_async(t)),
+                tools,
+            )
+        )
+
+        found_chat_doucument = False
+        results = []
+
+        # Get the results from the tool handlers, stopping
+        # at the first ChatDocument
+        while not found_chat_doucument and len(tasks) > 0:
+            done, tasks = await asyncio.wait(tasks, return_when=asyncio.FIRST_COMPLETED)
+
+            for task in done:
+                result = task.result()
+                results.append(result)
+
+                if isinstance(result, ChatDocument):
+                    found_chat_doucument = True
+                    break
+
+        for task in tasks:
+            task.cancel()
+
+        return self._process_tool_handler_results(results)
+
+    def _process_tool_handler_results(
+        self,
+        results: List[None | str | ChatDocument],
+    ) -> None | str | ChatDocument:
+        """
+        Takes the list of tool handler responses and returns the
+        result of the handler method in string form so it can be sent
+        back to the LLM, or None if none was successful.
+        """
+        results_list = [r for r in results if r is not None]
+
+        if len(results_list) == 0:
+            return None  # self.handle_message_fallback(msg)
+        # there was a non-None result
+        chat_doc_results = [r for r in results_list if isinstance(r, ChatDocument)]
+        if len(chat_doc_results) > 1:
+            logger.warning(
+                """There were multiple ChatDocument results from tools,
+                which is unexpected. The first one will be returned, and the others
+                will be ignored.
+                """
+            )
+        if len(chat_doc_results) > 0:
+            return chat_doc_results[0]
+
+        str_doc_results = [r for r in results_list if isinstance(r, str)]
+        final = "\n".join(str_doc_results)
+        return final
+
     def handle_message(self, msg: str | ChatDocument) -> None | str | ChatDocument:
         """
         Handle a "tool" message either a string containing one or more
@@ -691,24 +830,7 @@ class Agent(ABC):
 
         results = [self.handle_tool_message(t) for t in tools]
 
-        results_list = [r for r in results if r is not None]
-        if len(results_list) == 0:
-            return None  # self.handle_message_fallback(msg)
-        # there was a non-None result
-        chat_doc_results = [r for r in results_list if isinstance(r, ChatDocument)]
-        if len(chat_doc_results) > 1:
-            logger.warning(
-                """There were multiple ChatDocument results from tools,
-                which is unexpected. The first one will be returned, and the others
-                will be ignored.
-                """
-            )
-        if len(chat_doc_results) > 0:
-            return chat_doc_results[0]
-
-        str_doc_results = [r for r in results_list if isinstance(r, str)]
-        final = "\n".join(str_doc_results)
-        return final
+        return self._process_tool_handler_results(results)
 
     def handle_message_fallback(
         self, msg: str | ChatDocument
@@ -746,6 +868,26 @@ class Agent(ABC):
         except ValidationError as ve:
             raise ve
         return message
+
+    async def handle_tool_message_async(
+        self, tool: ToolMessage
+    ) -> None | str | ChatDocument:
+        """
+        Async version of `handle_tool_message`; see there for details.
+        """
+        tool_name = f'{tool.default_value("request")}_async'
+        handler_method = getattr(self, tool_name, None)
+        if handler_method is None:
+            return None
+
+        try:
+            result = await handler_method(tool)
+        except Exception as e:
+            # raise the error here since we are sure it's
+            # not a pydantic validation error,
+            # which we check in `handle_message`
+            raise e
+        return result  # type: ignore
 
     def handle_tool_message(self, tool: ToolMessage) -> None | str | ChatDocument:
         """
