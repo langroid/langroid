@@ -39,8 +39,8 @@ class LLMConfig(BaseSettings):
     chat_model: str = ""
     completion_model: str = ""
     temperature: float = 0.0
-    chat_context_length: int = 1024
-    completion_context_length: int = 1024
+    chat_context_length: int = 8000
+    completion_context_length: int = 8000
     max_output_tokens: int = 1024  # generate at most this many tokens
     # if input length + max_output_tokens > context length of model,
     # we will try shortening requested output

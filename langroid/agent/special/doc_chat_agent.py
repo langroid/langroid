@@ -22,7 +22,6 @@ from rich import print
 from rich.console import Console
 from rich.prompt import Prompt
 
-from langroid.agent.base import Agent
 from langroid.agent.batch import run_batch_tasks
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.chat_document import ChatDocMetaData, ChatDocument
@@ -1219,11 +1218,13 @@ class DocChatAgent(ChatAgent):
             )
         prompt = f"""
         {instruction}
+        
+        FULL TEXT:
         {full_text}
         """.strip()
         with StreamingIfAllowed(self.llm):
-            summary = Agent.llm_response(self, prompt)
-            return summary  # type: ignore
+            summary = ChatAgent.llm_response(self, prompt)
+            return summary
 
     def justify_response(self) -> ChatDocument | None:
         """Show evidence for last response"""
