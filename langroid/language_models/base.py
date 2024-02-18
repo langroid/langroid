@@ -391,7 +391,7 @@ class LanguageModel(ABC):
         messages: Union[str, List[LLMMessage]],
         max_tokens: int = 200,
         functions: Optional[List[LLMFunctionSpec]] = None,
-        function_call: str | Dict[str, str] = "auto",
+        function_call: str | Dict[str, str | Dict[str, str]] = "auto",
     ) -> LLMResponse:
         pass
 
@@ -401,7 +401,7 @@ class LanguageModel(ABC):
         messages: Union[str, List[LLMMessage]],
         max_tokens: int = 200,
         functions: Optional[List[LLMFunctionSpec]] = None,
-        function_call: str | Dict[str, str] = "auto",
+        function_call: str | Dict[str, str | Dict[str, str]] = "auto",
     ) -> LLMResponse:
         pass
 

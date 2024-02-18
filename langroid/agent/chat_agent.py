@@ -133,7 +133,7 @@ class ChatAgent(Agent):
         self.llm_functions_map: Dict[str, LLMFunctionSpec] = {}
         self.llm_functions_handled: Set[str] = set()
         self.llm_functions_usable: Set[str] = set()
-        self.llm_function_force: Optional[Dict[str, str]] = None
+        self.llm_function_force: Optional[Dict[str, str | Dict[str, str]]] = None
 
     def clone(self, i: int = 0) -> "ChatAgent":
         """Create i'th clone of this agent, ensuring tool use/handling is cloned.
@@ -390,7 +390,10 @@ class ChatAgent(Agent):
             llm_function = message_class.llm_function_schema(defaults=include_defaults)
             self.llm_functions_map[request] = llm_function
             if force:
-                self.llm_function_force = dict(name=request)
+                self.llm_function_force = {
+                    "type": "function",
+                    "function": dict(name=request),
+                }
             else:
                 self.llm_function_force = None
 
@@ -645,9 +648,9 @@ class ChatAgent(Agent):
 
     def _function_args(
         self,
-    ) -> Tuple[Optional[List[LLMFunctionSpec]], str | Dict[str, str]]:
+    ) -> Tuple[Optional[List[LLMFunctionSpec]], str | Dict[str, str | Dict[str, str]]]:
         functions: Optional[List[LLMFunctionSpec]] = None
-        fun_call: str | Dict[str, str] = "none"
+        fun_call: str | Dict[str, str | Dict[str, str]] = "none"
         if self.config.use_functions_api and len(self.llm_functions_usable) > 0:
             functions = [self.llm_functions_map[f] for f in self.llm_functions_usable]
             fun_call = (
@@ -731,7 +734,7 @@ class ChatAgent(Agent):
         assert self.config.llm is not None and self.llm is not None
         output_len = output_len or self.config.llm.max_output_tokens
         functions: Optional[List[LLMFunctionSpec]] = None
-        fun_call: str | Dict[str, str] = "none"
+        fun_call: str | Dict[str, str | Dict[str, str]] = "none"
         if self.config.use_functions_api and len(self.llm_functions_usable) > 0:
             functions = [self.llm_functions_map[f] for f in self.llm_functions_usable]
             fun_call = (

@@ -975,7 +975,7 @@ class OpenAIGPT(LanguageModel):
         messages: Union[str, List[LLMMessage]],
         max_tokens: int = 200,
         functions: Optional[List[LLMFunctionSpec]] = None,
-        function_call: str | Dict[str, str] = "auto",
+        function_call: str | Dict[str, str | Dict[str, str]] = "auto",
     ) -> LLMResponse:
         self.run_on_first_use()
 
@@ -1018,7 +1018,7 @@ class OpenAIGPT(LanguageModel):
         messages: Union[str, List[LLMMessage]],
         max_tokens: int = 200,
         functions: Optional[List[LLMFunctionSpec]] = None,
-        function_call: str | Dict[str, str] = "auto",
+        function_call: str | Dict[str, str | Dict[str, str]] = "auto",
     ) -> LLMResponse:
         self.run_on_first_use()
 
@@ -1123,7 +1123,7 @@ class OpenAIGPT(LanguageModel):
         messages: Union[str, List[LLMMessage]],
         max_tokens: int,
         functions: Optional[List[LLMFunctionSpec]] = None,
-        function_call: str | Dict[str, str] = "auto",
+        function_call: str | Dict[str, str | Dict[str, str]] = "auto",
     ) -> Dict[str, Any]:
         if isinstance(messages, str):
             llm_messages = [
@@ -1152,10 +1152,17 @@ class OpenAIGPT(LanguageModel):
         if functions is not None:
             args.update(
                 dict(
-                    functions=[f.dict() for f in functions],
-                    function_call=function_call,
+                    tools=[
+                        {
+                            "type": "function",
+                            "function": f.dict(),
+                        }
+                        for f in functions
+                    ],
+                    tool_choice=function_call,
                 )
             )
+
         return args
 
     def _process_chat_completion_response(
@@ -1223,7 +1230,7 @@ class OpenAIGPT(LanguageModel):
         messages: Union[str, List[LLMMessage]],
         max_tokens: int,
         functions: Optional[List[LLMFunctionSpec]] = None,
-        function_call: str | Dict[str, str] = "auto",
+        function_call: str | Dict[str, str | Dict[str, str]] = "auto",
     ) -> LLMResponse:
         """
         ChatCompletion API call to OpenAI.
@@ -1265,7 +1272,7 @@ class OpenAIGPT(LanguageModel):
         messages: Union[str, List[LLMMessage]],
         max_tokens: int,
         functions: Optional[List[LLMFunctionSpec]] = None,
-        function_call: str | Dict[str, str] = "auto",
+        function_call: str | Dict[str, str | Dict[str, str]] = "auto",
     ) -> LLMResponse:
         """
         Async version of _chat(). See that function for details.
