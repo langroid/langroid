@@ -7,11 +7,11 @@ Functionality includes:
 - asking a question about a SQL schema
 """
 import logging
-from typing import Any, Dict, Optional, Sequence, Union
+from typing import Any, Dict, List, Optional, Sequence, Union
 
 from rich import print
 from rich.console import Console
-from sqlalchemy import MetaData, Row, create_engine, text
+from sqlalchemy import MetaData, Row, create_engine, inspect, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, sessionmaker
@@ -73,6 +73,7 @@ class SQLChatAgentConfig(ChatAgentConfig):
     vecdb: None | VectorStoreConfig = None
     context_descriptions: Dict[str, Dict[str, Union[str, Dict[str, str]]]] = {}
     use_schema_tools: bool = False
+    multi_schema: bool = False
 
     """
     Optional, but strongly recommended, context descriptions for tables, columns, 
@@ -143,14 +144,24 @@ class SQLChatAgent(ChatAgent):
         """Initialize the database metadata."""
         if self.engine is None:
             raise ValueError("Database engine is None")
+        self.metadata: MetaData | List[MetaData] = []
 
-        self.metadata = MetaData()
-        self.metadata.reflect(self.engine)
-        logger.info(
-            "SQLChatAgent initialized with database: %s and tables: %s",
-            self.engine,
-            self.metadata.tables,
-        )
+        if self.config.multi_schema:
+            self.metadata = []
+            inspector = inspect(self.engine)
+
+            for schema in inspector.get_schema_names():
+                metadata = MetaData(schema=schema)
+                metadata.reflect(self.engine)
+                self.metadata.append(metadata)
+        else:
+            self.metadata = MetaData()
+            self.metadata.reflect(self.engine)
+            logger.info(
+                "SQLChatAgent initialized with database: %s and tables: %s",
+                self.engine,
+                self.metadata.tables,
+            )
 
     def _init_table_metadata(self) -> None:
         """Initialize metadata for the tables present in the database."""
@@ -319,6 +330,10 @@ class SQLChatAgent(ChatAgent):
         Returns:
             str: The names of all tables in the database.
         """
+        if isinstance(self.metadata, list):
+            table_names = [", ".join(md.tables.keys()) for md in self.metadata]
+            return ", ".join(table_names)
+
         return ", ".join(self.metadata.tables.keys())
 
     def get_table_schema(self, msg: GetTableSchemaTool) -> str:
