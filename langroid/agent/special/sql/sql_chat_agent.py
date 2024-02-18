@@ -88,6 +88,9 @@ class SQLChatAgentConfig(ChatAgentConfig):
     is another table name and the value is a description of the relationship to 
     that table.
 
+    If multi_schema support is enabled, the tables names in the description
+    should be of the form 'schema_name.table_name'.
+
     For example:
     {
         'table1': {
@@ -147,6 +150,11 @@ class SQLChatAgent(ChatAgent):
         self.metadata: MetaData | List[MetaData] = []
 
         if self.config.multi_schema:
+            logger.info(
+                "Initializing SQLChatAgent with database: %s",
+                self.engine,
+            )
+
             self.metadata = []
             inspector = inspect(self.engine)
 
@@ -154,6 +162,14 @@ class SQLChatAgent(ChatAgent):
                 metadata = MetaData(schema=schema)
                 metadata.reflect(self.engine)
                 self.metadata.append(metadata)
+
+                logger.info(
+                    "Initializing SQLChatAgent with database: %s, schema: %s, "
+                    "and tables: %s",
+                    self.engine,
+                    schema,
+                    metadata.tables,
+                )
         else:
             self.metadata = MetaData()
             self.metadata.reflect(self.engine)
