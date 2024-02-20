@@ -159,7 +159,7 @@ class LanceQueryPlanAgent(ChatAgent):
         # then we know there was no tool, so we run below code
         if (
             isinstance(msg, ChatDocument)
-            and msg.metadata.sender_name == self.config.doc_agent_name
+            and self.curr_query_plan is not None
             and msg.metadata.parent is not None
         ):
             # save result, to be used in query_plan_feedback()
@@ -175,5 +175,6 @@ class LanceQueryPlanAgent(ChatAgent):
             response_tmpl.tool_messages = [query_plan_answer_tool]
             # set the recipient to the Critic so it can give feedback
             response_tmpl.metadata.recipient = self.config.critic_name
+            self.curr_query_plan = None  # reset
             return response_tmpl
         return None

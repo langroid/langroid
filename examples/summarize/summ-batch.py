@@ -1,12 +1,14 @@
 """
-Summarize a doc, loaded into context, using a local LLM, with ollama.
+Batch version of summ.py.
+
+Summarize a collection of docs, loaded into context, using a local LLM, with ollama.
 First see instructions to install langroid
 in the README of the langroid-examples repo:
 https://github.com/langroid/langroid-examples
 
 Run like this from the root of the project repo:
 
-python3 examples/summarize/summ.py -m <model_name>
+python3 examples/summarize/summ-batch.py -m <model_name>
 
 Omitting -m will use the default model, which is OpenAI GPT4-turbo.
 
@@ -28,7 +30,7 @@ from langroid.utils.configuration import settings
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-PATH = "examples/summarize/data/news.csv"
+PATH = "examples/summarize/data/hf-cnn-daily-news/news10.csv"
 
 
 def app(
@@ -61,34 +63,43 @@ def app(
     #
 
     df = pd.read_csv(PATH)
-    full_doc = str(df["article"][0])
-    highlights = str(df["highlights"][0])
+    # get column "article" as list of strings, from first few rows
+    full_docs = [str(row) for row in df["article"][:10]]
+    # get column "highlights" as list of strings, from first few rows
+    highlights = [str(row) for row in df["highlights"][:10]]
+
+    print(f"Found {len(full_docs)} documents to summarize.")
+
     config = lr.ChatAgentConfig(
         llm=llm_config,
-        system_message=f"""
+        system_message="""
         You are an expert in finding the main points in a document,
         and generating concise summaries of them.
-        Summarize the article below in at most 3 (THREE) sentences:
-        
-        {full_doc}
+        When user gives you a document, summarize it in at most 3 sentences.
         """,
     )
 
     agent = lr.ChatAgent(config)
-    summary = agent.llm_response()
-    print(
-        f"""
-    Generated Summary: 
-    {summary.content}
-    """
+    summaries = lr.llm_response_batch(
+        agent,
+        full_docs,
+        output_map=lambda x: x.content,
     )
 
-    print(
-        f"""
-    Gold Summary:
-    {highlights}
-    """
-    )
+    for i, summary in enumerate(summaries):
+        print(
+            f"""
+        Generated Summary {i}:
+        {summary}
+        """
+        )
+
+        print(
+            f"""
+        Gold Summary {i}:
+        {highlights[i]}
+        """
+        )
 
 
 if __name__ == "__main__":

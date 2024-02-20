@@ -5,7 +5,7 @@ from langroid.cachedb.redis_cachedb import RedisCache, RedisCacheConfig
 
 @pytest.fixture
 def fake_redis_cache():
-    config = RedisCacheConfig(fake=True)
+    config = RedisCacheConfig(fake=False)
     cache = RedisCache(config=config)
     return cache
 

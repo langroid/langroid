@@ -31,10 +31,17 @@ NEO4J_ERROR_MSG = "There was an error in your Cypher Query"
 # TOOLS to be used by the agent
 
 
-class CypherQueryTool(ToolMessage):
+class CypherRetrievalTool(ToolMessage):
     request: str = "retrieval_query"
-    purpose: str = """Use this tool to send the Generated Cypher query based on 
-    provided text description and schema."""
+    purpose: str = """Use this tool to send the Cypher query to retreive data from the 
+    graph database based provided text description and schema."""
+    cypher_query: str
+
+
+class CypherCreationTool(ToolMessage):
+    request: str = "create_query"
+    purpose: str = """Use this tool to send the Cypher query to create 
+    entities/relationships in the graph database."""
     cypher_query: str
 
 
@@ -66,7 +73,7 @@ class Neo4jChatAgentConfig(ChatAgentConfig):
     system_message: str = DEFAULT_NEO4J_CHAT_SYSTEM_MESSAGE
     kg_schema: Optional[List[Dict[str, Any]]]
     database_created: bool = False
-    use_schema_tools: bool = False
+    use_schema_tools: bool = True
     use_functions_api: bool = True
     use_tools: bool = False
 
@@ -238,12 +245,12 @@ class Neo4jChatAgent(ChatAgent):
         else:
             print("[red]Database is not deleted!")
 
-    def retrieval_query(self, msg: CypherQueryTool) -> str:
+    def retrieval_query(self, msg: CypherRetrievalTool) -> str:
         """ "
-        Handle a CypherQueryTool message by executing a Cypher query and
+        Handle a CypherRetrievalTool message by executing a Cypher query and
         returning the result.
         Args:
-            msg (CypherQueryTool): The tool-message to handle.
+            msg (CypherRetrievalTool): The tool-message to handle.
 
         Returns:
             str: The result of executing the cypher_query.
@@ -254,6 +261,25 @@ class Neo4jChatAgent(ChatAgent):
         response = self.read_query(query)
         if response.success:
             return json.dumps(response.data)
+        else:
+            return str(response.data)
+
+    def create_query(self, msg: CypherCreationTool) -> str:
+        """ "
+        Handle a CypherCreationTool message by executing a Cypher query and
+        returning the result.
+        Args:
+            msg (CypherCreationTool): The tool-message to handle.
+
+        Returns:
+            str: The result of executing the cypher_query.
+        """
+        query = msg.cypher_query
+
+        logger.info(f"Executing Cypher query: {query}")
+        response = self.write_query(query)
+        if response.success:
+            return "Cypher query executed successfully"
         else:
             return str(response.data)
 
@@ -293,7 +319,8 @@ class Neo4jChatAgent(ChatAgent):
         message = self._format_message()
         self.config.system_message = self.config.system_message.format(mode=message)
         super().__init__(self.config)
-        self.enable_message(CypherQueryTool)
+        self.enable_message(CypherRetrievalTool)
+        self.enable_message(CypherCreationTool)
         self.enable_message(GraphSchemaTool)
 
     def _format_message(self) -> str:
@@ -301,9 +328,9 @@ class Neo4jChatAgent(ChatAgent):
             raise ValueError("Database driver None")
         assert isinstance(self.config, Neo4jChatAgentConfig)
         return (
-            SCHEMA_TOOLS_SYS_MSG.format(schema=self.get_schema(None))
+            SCHEMA_TOOLS_SYS_MSG
             if self.config.use_schema_tools
-            else DEFAULT_SYS_MSG
+            else DEFAULT_SYS_MSG.format(schema=self.get_schema(None))
         )
 
     def agent_response(

@@ -1,6 +1,7 @@
 """
 Two-agent system to use to chat with multiple docs,
-and use a combination of Filtering + RAG to answer questions.
+and use a combination of Filtering + RAG to answer questions,
+where the filter is manually set via the LanceDocChatAgentConfig.filter field.
 
 Works with LanceDB vector-db.
 
@@ -28,7 +29,6 @@ from pydantic import Field
 import langroid as lr
 import langroid.language_models as lm
 from langroid.agent.special.doc_chat_agent import DocChatAgentConfig
-from langroid.agent.special.lance_rag.lance_rag_task import LanceRAGTaskCreator
 from langroid.agent.special.lance_doc_chat_agent import LanceDocChatAgent
 from langroid.parsing.parser import ParsingConfig, PdfParsingConfig, Splitter
 from langroid.vector_store.lancedb import LanceDBConfig
@@ -63,7 +63,7 @@ def main(
         chat_model=model or lm.OpenAIChatModel.GPT4_TURBO,
         # or, other possibilities for example:
         # "litellm/bedrock/anthropic.claude-instant-v1"
-        # "litellm/ollama/llama2"
+        # "ollama/llama2"
         # "local/localhost:8000/v1"
         # "local/localhost:8000"
         chat_context_length=4096,  # adjust based on model
@@ -214,9 +214,22 @@ def main(
             )
         print("[blue]Done ingesting docs")
 
+    musician = Prompt.ask(
+        "[blue]which musician would you like to ask about?",
+        choices=list(metadata.keys()),
+        default="beethoven",
+    )
+    print(f"[blue]You chose {metadata[musician].name}")
+    # this filter setting will be used by the LanceDocChatAgent
+    # to restrict the docs searched from the vector-db
+    config.filter = f"metadata.name = '{metadata[musician].name}'"
+
     print("[blue]Reqdy for your questions...")
-    task = LanceRAGTaskCreator.new(agent, interactive=True)
-    task.run("Can you help me with some questions?")
+    task = lr.Task(
+        agent,
+        interactive=True,
+    )
+    task.run("Can you help me with some questions about musicians?")
 
 
 if __name__ == "__main__":

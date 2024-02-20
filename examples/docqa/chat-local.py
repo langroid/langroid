@@ -43,7 +43,7 @@ def main(
         chat_model=model or lm.OpenAIChatModel.GPT4_TURBO,
         # or, other possibilities for example:
         # "litellm/bedrock/anthropic.claude-instant-v1"
-        # "litellm/ollama/llama2"
+        # "ollama/llama2"
         # "local/localhost:8000/v1"
         # "local/localhost:8000"
         chat_context_length=4096,  # adjust based on model

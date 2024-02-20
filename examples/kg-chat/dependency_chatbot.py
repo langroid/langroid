@@ -92,21 +92,15 @@ class DependencyGraphAgent(Neo4jChatAgent):
 def main(
     debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
     model: str = typer.Option("", "--model", "-m", help="model name"),
-    no_stream: bool = typer.Option(False, "--nostream", "-ns", help="no streaming"),
     tools: bool = typer.Option(
         False, "--tools", "-t", help="use langroid tools instead of function-calling"
     ),
     nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
-    cache_type: str = typer.Option(
-        "redis", "--cachetype", "-ct", help="redis or momento"
-    ),
 ) -> None:
     set_global(
         Settings(
             debug=debug,
             cache=nocache,
-            stream=not no_stream,
-            cache_type=cache_type,
         )
     )
     print(
@@ -144,7 +138,7 @@ def main(
     
     DON'T forget to include the package name in your questions. 
       
-    After receiving this infomration, make sure the package version is a number and the
+    After receiving this information, make sure the package version is a number and the
     package type is PyPi.
     THEN ask the user if they want to construct the dependency graph,
     and if so, use the tool/function `construct_dependency_graph` to construct

@@ -83,7 +83,7 @@ async def setup_llm() -> None:
 
 
 @no_type_check
-async def update_llm(settings: Dict[str, Any], agent="agent") -> None:
+async def update_llm(settings: Dict[str, Any]) -> None:
     """Update LLMConfig and LLM from settings, and save in session state."""
     cl.user_session.set("llm_settings", settings)
     await inform_llm_settings()
@@ -100,8 +100,7 @@ async def make_llm_settings_widgets(
                 id="chat_model",
                 label="Model Name (Default GPT4-Turbo)",
                 initial="",
-                placeholder="E.g. litellm/ollama_chat/mistral or "
-                "local/localhost:8000/v1",
+                placeholder="E.g. ollama/mistral or " "local/localhost:8000/v1",
             ),
             cl.input_widget.NumberInput(
                 id="context_length",
@@ -407,7 +406,7 @@ class ChainlitAgentCallbacks:
         cached = "(cached)" if cached else ""
         match entity:
             case "llm":
-                model = self.agent.llm.config.chat_model
+                model = self.agent.config.llm.chat_model
                 return (
                     self.agent.config.name + f"({LLM} {model} {tool_indicator}){cached}"
                 )

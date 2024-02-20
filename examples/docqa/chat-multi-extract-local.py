@@ -4,7 +4,7 @@ using multiple agents, powered by a weaker/local LLM, combining tools/functions 
 
 TASK:
 Given a lease document, generate the lease terms, organized into
- a nested JSON structure defined by the Pydantic class Lease
+ a nested JSON structure defined by the Pydantic class `Lease`
 
 Solution with Langroid Agents and tools:
 1. QuestionGeneratorAgent: Lease JSON Spec -> list of questions to ask
@@ -15,13 +15,19 @@ Solution with Langroid Agents and tools:
 3. LeasePresenterAgent: List of (question, answer) pairs ->
         organized into specified Lease JSON structure
 
+Run like this:
+```
+python3 examples/docqa/chat-multi-extract-local.py -m ollama/mistral:7b-instruct-v0.2-q8_0
+```
 This works with a local mistral-instruct-v0.2 model.
+(To use with ollama, first do `ollama run <model>` then
+specify the model name as -m ollama/<model>)
 
 See here for how to set up a Local LLM to work with Langroid:
 https://langroid.github.io/langroid/tutorials/local-llm-setup/
 
 Optional script args:
--m <model_name_with_formatter_after//>, e.g. -m local/localhost:8000//mistral-instruct-v0.2
+-m <local-model-name>, e.g. -m ollama/mistral:7b-instruct-v0.2-q8_0
 (if omitted, defaults to GPT4_TURBO)
 -nc to disable cache retrieval
 -d to enable debug mode: see prompts, agent msgs etc.
@@ -90,8 +96,10 @@ class QuestionGeneratorAgent(ChatAgent):
         if isinstance(msg, ChatDocument) and msg.metadata.sender == Entity.LLM:
             return """
             You forgot to present the information in JSON format 
-            according to the `questions` tool specification,
+            according to the `questions_tool` specification,
             or you may have used a wrong tool name or field name.
+            Remember that you must include `request` and `questions` fields,
+            where `request` is "questions_tool" and `questions` is a list of questions.
             Try again.
             """
         return None
@@ -256,6 +264,7 @@ def main(
     doc_task = Task(
         doc_agent,
         name="DocAgent",
+        interactive=False,
         done_if_no_response=[Entity.LLM],  # done if null response from LLM
         done_if_response=[Entity.LLM],  # done if non-null response from LLM
         system_message="""You are an expert on Commercial Leases. 

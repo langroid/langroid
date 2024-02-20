@@ -14,23 +14,29 @@ from langroid.agent.callbacks.chainlit import (
     update_llm,
     setup_llm,
 )
+from textwrap import dedent
 
 
 @cl.on_settings_update
 async def on_settings_update(settings: cl.ChatSettings):
-    await update_llm(settings, "agent")
-    setup_agent_task()
+    await update_llm(settings)
+    await setup_agent_task()
 
 
 async def setup_agent_task():
     await setup_llm()
     llm_config = cl.user_session.get("llm_config")
+    if task := cl.user_session.get("task"):
+        task.agent.config.llm = llm_config
+        return
+
     config = lr.ChatAgentConfig(
         llm=llm_config,
         name="Demo",
         system_message="You are a helpful assistant. Be concise in your answers.",
     )
     agent = lr.ChatAgent(config)
+
     task = lr.Task(
         agent,
         interactive=True,
@@ -42,7 +48,13 @@ async def setup_agent_task():
 async def on_chat_start():
     await add_instructions(
         title="Basic Langroid Chatbot",
-        content="Uses Langroid's `Task.run()`",
+        content=dedent(
+            """
+        Uses Langroid's `Task.run()`. 
+        Before starting the chat, 
+        you can change LLM settings by clicking the settings icon next to the chat window.
+        """
+        ),
     )
     await make_llm_settings_widgets()
     await setup_agent_task()
