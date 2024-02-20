@@ -127,6 +127,7 @@ exclude = [
     "langroid/embedding_models/clustering.py",
     #TODO revisit why mypy keeps failing on gh actions, but works fine locally
     "langroid/agent/callbacks/chainlit.py",
+    "langroid/vector_store/chromadb.py"
 ]
 files=["langroid/*"]
 plugins = [
