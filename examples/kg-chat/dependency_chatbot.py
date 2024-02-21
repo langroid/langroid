@@ -28,10 +28,10 @@ from rich import print
 from rich.prompt import Prompt
 from dotenv import load_dotenv
 
-import json
-import ast
-import networkx as nx
-import plotly.graph_objects as go
+# from py2neo import Graph
+from pyvis.network import Network
+import webbrowser
+from pathlib import Path
 
 
 from langroid.agent.special.neo4j.neo4j_chat_agent import (
@@ -47,6 +47,8 @@ from langroid.agent.tools.google_search_tool import GoogleSearchTool
 
 from langroid.agent.task import Task
 from cypher_message import CONSTRUCT_DEPENDENCY_GRAPH
+
+# from pyvis.network import Network
 
 
 app = typer.Typer()
@@ -118,123 +120,88 @@ class DependencyGraphAgent(Neo4jChatAgent):
         # TODO: make this function more general to return customized graphs
         # i.e, displays paths or subgraphs
         query = """
-        MATCH (n)-[r]->(m) 
-        RETURN n.name, type(r), m.name
+            MATCH (n)
+            OPTIONAL MATCH (n)-[r]->(m)
+            RETURN n, r, m
         """
-        data_str = self.read_query(query)
-        # check if data_str contains { and } at the beginning and end
-        if data_str[0] == "{" and data_str[-1] == "}":
-            # Process the string to make it JSON compatible
-            data_str = "[" + data_str + "]"
-            data_str = data_str.replace("'", '"')
 
-            # Convert the string to a list of dictionaries
-            try:
-                data = json.loads(data_str)
-            except json.JSONDecodeError:
-                # Fallback for any parsing issues
-                data = ast.literal_eval(data_str)
+        query_result = self.read_query(query)
+        nt = Network(notebook=False, height="750px", width="100%", directed=True)
 
-            # Create a NetworkX graph
-            G = nx.DiGraph()
-            for row in data:
-                # Access values using dictionary keys
-                n_name = row["n.name"]
-                r_type = row["type(r)"]
-                m_name = row["m.name"]
+        node_set = set()  # To keep track of added nodes
 
-                G.add_edge(n_name, m_name, relationship=r_type)
+        for record in query_result.data:
+            # Process node 'n'
+            if "n" in record and record["n"] is not None:
+                node = record["n"]
+                # node_id = node.get("id", None)  # Assuming each node has a unique 'id'
+                node_label = node.get("name", "Unknown Node")
+                node_title = f"Version: {node.get('version', 'N/A')}"
+                node_color = "blue" if node.get("imported", False) else "green"
 
-            # Position the nodes using one of the NetworkX layout algorithms
-            pos = nx.spring_layout(G)
+                # Check if node has been added before
+                if node_label not in node_set:
+                    nt.add_node(
+                        node_label, label=node_label, title=node_title, color=node_color
+                    )
+                    node_set.add(node_label)
 
-            # Create Edges
-            edge_x = []
-            edge_y = []
-            for edge in G.edges():
-                x0, y0 = pos[edge[0]]
-                x1, y1 = pos[edge[1]]
-                edge_x.append(x0)
-                edge_x.append(x1)
-                edge_x.append(None)  # Prevents a line being drawn between edges
-                edge_y.append(y0)
-                edge_y.append(y1)
-                edge_y.append(None)
+            # Process relationships and node 'm'
+            if (
+                "r" in record
+                and record["r"] is not None
+                and "m" in record
+                and record["m"] is not None
+            ):
+                source = record["n"]
+                target = record["m"]
+                relationship = record["r"]
 
-            edge_trace = go.Scatter(
-                x=edge_x,
-                y=edge_y,
-                line=dict(width=0.5, color="#888"),
-                hoverinfo="none",
-                mode="lines",
-            )
+                source_label = source.get("name", "Unknown Node")
+                target_label = target.get("name", "Unknown Node")
+                relationship_label = (
+                    relationship[1]
+                    if isinstance(relationship, tuple) and len(relationship) > 1
+                    else "Unknown Relationship"
+                )
 
-            # Create Nodes
-            node_x = []
-            node_y = []
-            for node in G.nodes():
-                x, y = pos[node]
-                node_x.append(x)
-                node_y.append(y)
+                # Ensure both source and target nodes are added before adding the edge
+                if source_label not in node_set:
+                    source_title = f"Version: {source.get('version', 'N/A')}"
+                    source_color = "blue" if source.get("imported", False) else "green"
+                    nt.add_node(
+                        source_label,
+                        label=source_label,
+                        title=source_title,
+                        color=source_color,
+                    )
+                    node_set.add(source_label)
+                if target_label not in node_set:
+                    target_title = f"Version: {target.get('version', 'N/A')}"
+                    target_color = "blue" if target.get("imported", False) else "green"
+                    nt.add_node(
+                        target_label,
+                        label=target_label,
+                        title=target_title,
+                        color=target_color,
+                    )
+                    node_set.add(target_label)
 
-            node_trace = go.Scatter(
-                x=node_x,
-                y=node_y,
-                mode="markers",
-                hoverinfo="text",
-                marker=dict(
-                    showscale=True,
-                    colorscale="YlGnBu",
-                    size=10,
-                    colorbar=dict(
-                        thickness=15,
-                        title="Node Connections",
-                        xanchor="left",
-                        titleside="right",
-                    ),
-                    line_width=2,
-                ),
-            )
+                nt.add_edge(source_label, target_label, title=relationship_label)
 
-            # Add node labels
-            node_adjacencies = []
-            node_text = []
-            for node, adjacencies in enumerate(G.adjacency()):
-                node_adjacencies.append(len(adjacencies[1]))
-                node_text.append(adjacencies[0])
+        nt.options.edges.font = {"size": 12, "align": "top"}
+        nt.options.physics.enabled = True
+        nt.show_buttons(filter_=["physics"])
 
-            node_trace.marker.color = node_adjacencies
-            node_trace.text = node_text
+        output_file_path = "neo4j_graph.html"
+        nt.write_html(output_file_path)
 
-            # Create Network Graph
-            fig = go.Figure(
-                data=[edge_trace, node_trace],
-                layout=go.Layout(
-                    title="<br>Network graph",
-                    titlefont_size=16,
-                    showlegend=False,
-                    hovermode="closest",
-                    margin=dict(b=20, l=5, r=5, t=40),
-                    annotations=[
-                        dict(
-                            text="Python code to visualize an interactive graph using Plotly",
-                            showarrow=False,
-                            xref="paper",
-                            yref="paper",
-                            x=0.005,
-                            y=-0.002,
-                        )
-                    ],
-                    xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-                    yaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
-                ),
-            )
-
-            fig.show()
-
-            return "the graph is displayed"
-        else:
-            return data_str
+        # Try to open the HTML file in a browser
+        try:
+            abs_file_path = str(Path(output_file_path).resolve())
+            webbrowser.open("file://" + abs_file_path, new=2)
+        except Exception as e:
+            print(f"Failed to automatically open the graph in a browser: {e}")
 
 
 @app.command()
