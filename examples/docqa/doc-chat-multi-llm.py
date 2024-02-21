@@ -13,7 +13,7 @@ See this [script](https://github.com/langroid/langroid/blob/main/examples/docqa/
  for examples of specifying local models.
 
 See here for a guide on how to use Langroid with non-OpenAI LLMs (local/remote):
-https://langroid.github.io/langroid/tutorials/non-openai-llms/
+https://langroid.github.io/langroid/tutorials/local-llm-setup/
 
 """
 import typer
@@ -53,7 +53,7 @@ def main(
         chat_model=model_rag or model or lm.OpenAIChatModel.GPT4_TURBO,
         # or, other possibilities for example:
         # "litellm/bedrock/anthropic.claude-instant-v1"
-        # "litellm/ollama/llama2"
+        # "ollama/llama2"
         # "local/localhost:8000/v1"
         # "local/localhost:8000"
         chat_context_length=16_000,  # adjust based on model

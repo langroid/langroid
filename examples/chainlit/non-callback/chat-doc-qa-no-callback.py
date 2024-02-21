@@ -12,7 +12,7 @@ chainlit run examples/chainlit/chat-doc-qa-no-callback.py
 Note, to run this with a local LLM, you can click the settings symbol
 on the left of the chat window and enter the model name, e.g.:
 
-litellm/ollama_chat/mistral:7b-instruct-v0.2-q8_0
+ollama/mistral:7b-instruct-v0.2-q8_0
 
 or
 
@@ -38,7 +38,7 @@ async def setup_agent() -> None:
         chat_model=model or lm.OpenAIChatModel.GPT4_TURBO,
         # or, other possibilities for example:
         # "litellm/bedrock/anthropic.claude-instant-v1"
-        # "litellm/ollama/llama2"
+        # "ollama/llama2"
         # "local/localhost:8000/v1"
         # "local/localhost:8000"
         chat_context_length=16_000,  # adjust based on model

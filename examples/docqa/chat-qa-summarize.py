@@ -17,13 +17,10 @@ You can let it run and it will finish with 5 key bullet points about the documen
 
 There are optional args, especially note you can pass in a different LLM model, e.g.
 
-python examples/docqa/chat-qa-summarize.py -m litellm/ollama/mistral
+python examples/docqa/chat-qa-summarize.py -m ollama/mistral
 
-[To avail of this, remember to install the litellm extra, e.g.
-`pip install "langroid[litellm]"` or `poetry add langroid[litellm]`]
-
-See this example for more details on how to specify a different LLM model:
-https://github.com/langroid/langroid-examples/blob/main/examples/docqa/rag-local-simple.py
+See here for how to set up a Local LLM to work with Langroid:
+https://langroid.github.io/langroid/tutorials/local-llm-setup/
 
 """
 import typer
@@ -57,7 +54,7 @@ def main(
         "",
         "--model",
         "-m",
-        help="specify alternative LLM, e.g. litellm/ollama/mistral",
+        help="specify alternative LLM, e.g. ollama/mistral",
     ),
     cache_type: str = typer.Option(
         "redis", "--cachetype", "-ct", help="redis or momento"

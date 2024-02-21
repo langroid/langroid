@@ -81,7 +81,7 @@ import langroid.language_models as lm
 # set up LLM
 llm_cfg = lm.OpenAIGPTConfig( # or OpenAIAssistant to use Assistant API 
   # any model served via an OpenAI-compatible API
-  chat_model=lm.OpenAIChatModel.GPT4_TURBO, # or, e.g., "litellm/ollama/mistral"
+  chat_model=lm.OpenAIChatModel.GPT4_TURBO, # or, e.g., "ollama/mistral"
 )
 # use LLM directly
 mdl = lm.OpenAIGPT(llm_cfg)
@@ -123,6 +123,8 @@ teacher_task.run()
 <summary> <b>Click to expand</b></summary>
 
 - **Feb 2024:** 
+  - **0.1.193:** Support local LLMs using Ollama's new OpenAI-Compatible server: 
+     simply specify `chat_model="ollama/mistral"`. See [release notes](https://github.com/langroid/langroid/releases/tag/0.1.193).
   - **0.1.183:** Added Chainlit support via [callbacks](https://github.com/langroid/langroid/blob/main/langroid/agent/callbacks/chainlit.py). 
    See [examples](https://github.com/langroid/langroid/tree/main/examples/chainlit).
 - **Jan 2024:**

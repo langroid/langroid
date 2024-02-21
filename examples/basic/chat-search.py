@@ -18,7 +18,7 @@ There are optional args, especially note these:
 -m <model_name>: to run with a different LLM model (default: gpt4-turbo)
 
 You can specify a local in a few different ways, e.g. `-m local/localhost:8000/v1`
-or `-m litellm/ollama_chat/mistral` etc. See here how to use Langroid with local LLMs:
+or `-m ollama/mistral` etc. See here how to use Langroid with local LLMs:
 https://langroid.github.io/langroid/tutorials/local-llm-setup/
 
 

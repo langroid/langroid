@@ -54,6 +54,9 @@ from langroid.utils.system import friendly_error
 
 logging.getLogger("openai").setLevel(logging.ERROR)
 
+OLLAMA_BASE_URL = "http://localhost:11434/v1"
+OLLAMA_API_KEY = "ollama"
+
 
 class OpenAIChatModel(str, Enum):
     """Enum for OpenAI Chat models"""
@@ -103,7 +106,7 @@ openAICompletionModelPreferenceList = [
 
 if "OPENAI_API_KEY" in os.environ:
     try:
-        availableModels = set(map(lambda m: m.id, OpenAI().models.list()))
+        available_models = set(map(lambda m: m.id, OpenAI().models.list()))
     except openai.AuthenticationError as e:
         if settings.debug:
             logging.warning(
@@ -114,14 +117,23 @@ if "OPENAI_API_KEY" in os.environ:
             otherwise you can ignore this warning.
             """
             )
-        availableModels = set()
+        available_models = set()
+    except Exception as e:
+        if settings.debug:
+            logging.warning(
+                f"""
+            Error while fetching available OpenAI models: {e}.
+            Proceeding with an empty set of available models.
+            """
+            )
+        available_models = set()
 else:
-    availableModels = set()
+    available_models = set()
 
 defaultOpenAIChatModel = next(
     chain(
         filter(
-            lambda m: m.value in availableModels,
+            lambda m: m.value in available_models,
             openAIChatModelPreferenceList,
         ),
         [OpenAIChatModel.GPT4_TURBO],
@@ -130,7 +142,7 @@ defaultOpenAIChatModel = next(
 defaultOpenAICompletionModel = next(
     chain(
         filter(
-            lambda m: m.value in availableModels,
+            lambda m: m.value in available_models,
             openAICompletionModelPreferenceList,
         ),
         [OpenAICompletionModel.GPT3_5_TURBO_INSTRUCT],
@@ -198,6 +210,7 @@ class OpenAIGPTConfig(LLMConfig):
     organization: str = ""
     api_base: str | None = None  # used for local or other non-OpenAI models
     litellm: bool = False  # use litellm api?
+    ollama: bool = False  # use ollama's OpenAI-compatible endpoint?
     max_output_tokens: int = 1024
     min_output_tokens: int = 1
     use_chat_for_completion = True  # do not change this, for OpenAI models!
@@ -218,7 +231,8 @@ class OpenAIGPTConfig(LLMConfig):
         local_model = "api_base" in kwargs and kwargs["api_base"] is not None
 
         chat_model = kwargs.get("chat_model", "")
-        if chat_model.startswith("litellm/") or chat_model.startswith("local/"):
+        local_prefixes = ["local/", "litellm/", "ollama/"]
+        if any(chat_model.startswith(prefix) for prefix in local_prefixes):
             local_model = True
 
         warn_gpt_3_5 = (
@@ -398,6 +412,11 @@ class OpenAIGPT(LanguageModel):
             self.api_base = self.config.chat_model.split("/", 1)[1]
             if not self.api_base.startswith("http"):
                 self.api_base = "http://" + self.api_base
+        elif self.config.chat_model.startswith("ollama/"):
+            self.config.ollama = True
+            self.api_base = OLLAMA_BASE_URL
+            self.api_key = OLLAMA_API_KEY
+            self.config.chat_model = self.config.chat_model.replace("ollama/", "")
         else:
             self.api_base = self.config.api_base
 
@@ -759,7 +778,11 @@ class OpenAIGPT(LanguageModel):
         )
 
     def _cache_store(self, k: str, v: Any) -> None:
-        self.cache.store(k, v)
+        try:
+            self.cache.store(k, v)
+        except Exception as e:
+            logging.error(f"Error in OpenAIGPT._cache_store: {e}")
+            pass
 
     def _cache_lookup(self, fn_name: str, **kwargs: Dict[str, Any]) -> Tuple[str, Any]:
         # Use the kwargs as the cache key
@@ -773,7 +796,12 @@ class OpenAIGPT(LanguageModel):
             # when caching disabled, return the hashed_key and none result
             return hashed_key, None
         # Try to get the result from the cache
-        return hashed_key, self.cache.retrieve(hashed_key)
+        try:
+            cached_val = self.cache.retrieve(hashed_key)
+        except Exception as e:
+            logging.error(f"Error in OpenAIGPT._cache_lookup: {e}")
+            return hashed_key, None
+        return hashed_key, cached_val
 
     def _cost_chat_model(self, prompt: int, completion: int) -> float:
         price = self.chat_cost()

@@ -36,7 +36,7 @@ to interact with a Neo4j knowledge graph using natural language.
 This Agent has access to two key tools that enable it to handle a user's queries:
 
 - `GraphSchemaTool` to get the schema of a Neo4j knowledge graph.
-- `CypherQueryTool` to generate Cypher queries from a user's query.
+- `CypherRetrievalTool` to generate Cypher queries from a user's query.
 Cypher is a specialized query language for Neo4j, and even though it is not as widely known as SQL,
 most LLMs today can generate Cypher Queries.
 

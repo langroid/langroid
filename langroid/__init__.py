@@ -20,6 +20,12 @@ from .agent.base import (
     AgentConfig,
 )
 
+from .agent.batch import (
+    run_batch_tasks,
+    llm_response_batch,
+    agent_response_batch,
+)
+
 from .agent.chat_document import (
     ChatDocument,
     ChatDocMetaData,
@@ -78,6 +84,9 @@ __all__ = [
     "Document",
     "Entity",
     "ToolMessage",
+    "run_batch_tasks",
+    "llm_response_batch",
+    "agent_response_batch",
 ]
 if chainlit_available:
     __all__.extend(
