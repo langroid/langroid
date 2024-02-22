@@ -51,7 +51,7 @@ from langroid.agent.tool_message import ToolMessage
 from langroid.language_models.openai_gpt import OpenAIGPTConfig
 from langroid.utils.configuration import set_global, Settings
 from langroid.utils.constants import NO_ANSWER, DONE
-from langroid.utils.pydantic_utils import flatten_pydantic_model
+from langroid.utils.pydantic_utils import get_field_names
 
 app = typer.Typer()
 
@@ -105,11 +105,8 @@ class QuestionGeneratorAgent(ChatAgent):
         return None
 
     def questions_tool(self, msg: QuestionsTool) -> str:
-        # flatten the class and get field names
-        flat_mdl = flatten_pydantic_model(Lease)
-        fields = flat_mdl.__fields__.keys()
-        # field names can be like "period__start_date", so we only want the last part
-        fields = [f.split("__")[-1] for f in fields]
+        # get all the field names, including nested ones
+        fields = get_field_names(Lease)
         if len(msg.questions) < len(fields):
             return f"""
             ERROR: Expected {len(fields)} questions, but only got {len(msg.questions)}.
@@ -217,8 +214,9 @@ def main(
     )
     llm_cfg = OpenAIGPTConfig(
         chat_model=model or lm.OpenAIChatModel.GPT4_TURBO,
-        chat_context_length=32000,  # adjust based on model
+        chat_context_length=32_000,  # adjust based on model
         timeout=120,
+        temperature=0.2,
     )
 
     # (1) QUESTION GENERATOR
@@ -250,8 +248,8 @@ def main(
             assistant_mode=True,
             n_neighbor_chunks=2,
             parsing=ParsingConfig(
-                chunk_size=50,
-                overlap=10,
+                chunk_size=150,
+                overlap=30,
                 n_similar_docs=3,
                 n_neighbor_ids=4,
             ),

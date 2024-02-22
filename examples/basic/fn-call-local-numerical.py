@@ -70,7 +70,7 @@ class PolinskyTool(lr.agent.ToolMessage):
     number: int
 
     @classmethod
-    def json_instructions(cls) -> str:
+    def json_instructions(cls, tool: bool = True) -> str:
         inst = super().json_instructions()
         return f"""
         {inst}

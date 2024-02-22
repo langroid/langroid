@@ -92,8 +92,8 @@ class LeaseMessage(ToolMessage):
         return "DONE " + json.dumps(self.terms.dict())
 
     @classmethod
-    def json_instructions(cls) -> str:
-        instr = super().json_instructions()
+    def json_instructions(cls, tool: bool = True) -> str:
+        instr = super().json_instructions(tool)
         instr += """
         ------------------------------
         ASK ME QUESTIONS ONE BY ONE, to FILL IN THE FIELDS 
