@@ -6,67 +6,48 @@ Run like this:
 python3 examples/docqa/chat.py
 
 """
-import re
 import typer
 from rich import print
-from rich.prompt import Prompt
 import os
 
+import langroid as lr
+import langroid.language_models as lm
 from langroid.agent.special.doc_chat_agent import (
     DocChatAgent,
     DocChatAgentConfig,
 )
+
 from langroid.parsing.parser import ParsingConfig, PdfParsingConfig, Splitter
-from langroid.agent.task import Task
 from langroid.utils.configuration import set_global, Settings
-from langroid.utils.logging import setup_colored_logging
 
 app = typer.Typer()
 
-setup_colored_logging()
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
-
-
-def chat(config: DocChatAgentConfig) -> None:
-    agent = DocChatAgent(config)
-    print("[blue]Welcome to the document chatbot!")
-    agent.user_docs_ingest_dialog()
-    print("[cyan]Enter x or q to quit, or ? for evidence")
-
-    system_msg = Prompt.ask(
-        """
-    [blue] Tell me who I am; complete this sentence: You are...
-    [or hit enter for default] 
-    [blue] Human
-    """,
-        default="a helpful assistant.",
-    )
-    system_msg = re.sub("you are", "", system_msg, flags=re.IGNORECASE)
-    task = Task(
-        agent,
-        system_message="You are " + system_msg,
-    )
-    task.run()
 
 
 @app.command()
 def main(
     debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
+    model: str = typer.Option("", "--model", "-m", help="model name"),
     nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
-    cache_type: str = typer.Option(
-        "redis", "--cachetype", "-ct", help="redis or momento"
-    ),
 ) -> None:
+    llm_config = lm.OpenAIGPTConfig(
+        chat_model=model or lm.OpenAIChatModel.GPT4_TURBO,
+        chat_context_length=16_000,  # adjust as needed
+        temperature=0.2,
+    )
+
     config = DocChatAgentConfig(
+        llm=llm_config,
         n_query_rephrases=0,
         cross_encoder_reranking_model="cross-encoder/ms-marco-MiniLM-L-6-v2",
         hypothetical_answer=False,
         # set it to > 0 to retrieve a window of k chunks on either side of a match
-        n_neighbor_chunks=0,
+        n_neighbor_chunks=2,
         parsing=ParsingConfig(  # modify as needed
             splitter=Splitter.TOKENS,
-            chunk_size=1000,  # aim for this many tokens per chunk
-            overlap=100,  # overlap between chunks
+            chunk_size=200,  # aim for this many tokens per chunk
+            overlap=20,  # overlap between chunks
             max_chunks=10_000,
             n_neighbor_ids=5,  # store ids of window of k chunks around each chunk.
             # aim to have at least this many chars per chunk when
@@ -87,10 +68,20 @@ def main(
         Settings(
             debug=debug,
             cache=not nocache,
-            cache_type=cache_type,
         )
     )
-    chat(config)
+
+    agent = DocChatAgent(config)
+    print("[blue]Welcome to the document chatbot!")
+    agent.user_docs_ingest_dialog()
+    print("[cyan]Enter x or q to quit, or ? for evidence")
+
+    task = lr.Task(
+        agent,
+        system_message="You are a helpful assistant, "
+        "answering questions about some docs",
+    )
+    task.run()
 
 
 if __name__ == "__main__":
