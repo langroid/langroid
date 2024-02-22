@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import logging
+import re
 from collections import Counter
 from types import SimpleNamespace
 from typing import (
@@ -781,17 +782,20 @@ class Task:
         # handle routing instruction in result if any,
         # of the form PASS=<recipient>
         content = msg.content if isinstance(msg, ChatDocument) else msg
+        content = content.strip()
         if PASS in content and PASS_TO not in content:
             return True, None
         if PASS_TO in content and content.split(":")[1] != "":
             return True, content.split(":")[1]
-        if SEND_TO in content and content.split(":")[1] != "":
-            recipient = content.split(":")[1]
+        if SEND_TO in content and (send_parts := re.split(r"[,: ]", content))[1] != "":
+            # assume syntax is SEND_TO:<recipient> <content>
+            # or SEND_TO:<recipient>,<content> or SEND_TO:<recipient>:<content>
+            recipient = send_parts[1].strip()
             # get content to send, clean out routing instruction, and
             # start from 1 char after SEND_TO:<recipient>,
             # because we expect there is either a blank or some other separator
             # after the recipient
-            content_to_send = content.replace(f"{SEND_TO}:{recipient}", "").strip()[1:]
+            content_to_send = content.replace(f"{SEND_TO}{recipient}", "").strip()[1:]
             # if no content then treat same as PASS_TO
             if content_to_send == "":
                 return True, recipient
