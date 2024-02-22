@@ -135,6 +135,53 @@ def flatten_pydantic_model(
     return create_model("FlatModel", __base__=base_model, **flattened_fields)
 
 
+def get_field_names(model: Type[BaseModel]) -> List[str]:
+    """Get all field names from a possibly nested Pydantic model."""
+    mdl = flatten_pydantic_model(model)
+    fields = list(mdl.__fields__.keys())
+    # fields may be like a__b__c , so we only want the last part
+    return [f.split("__")[-1] for f in fields]
+
+
+def generate_simple_schema(
+    model: Type[BaseModel], exclude: List[str] = []
+) -> Dict[str, Any]:
+    """
+    Generates a JSON schema for a Pydantic model,
+    with options to exclude specific fields.
+
+    This function traverses the Pydantic model's fields, including nested models,
+    to generate a dictionary representing the JSON schema. Fields specified in
+    the exclude list will not be included in the generated schema.
+
+    Args:
+        model (Type[BaseModel]): The Pydantic model class to generate the schema for.
+        exclude (List[str]): A list of string field names to be excluded from the
+                             generated schema. Defaults to an empty list.
+
+    Returns:
+        Dict[str, Any]: A dictionary representing the JSON schema of the provided model,
+                        with specified fields excluded.
+    """
+    if hasattr(model, "__fields__"):
+        output: Dict[str, Any] = {}
+        for field_name, field in model.__fields__.items():
+            if field_name in exclude:
+                continue  # Skip excluded fields
+
+            field_type = field.type_
+            if issubclass(field_type, BaseModel):
+                # Recursively generate schema for nested models
+                output[field_name] = generate_simple_schema(field_type, exclude)
+            else:
+                # Represent the type as a string here
+                output[field_name] = {"type": field_type.__name__}
+        return output
+    else:
+        # Non-model type, return a simplified representation
+        return {"type": model.__name__}
+
+
 def flatten_pydantic_instance(
     instance: BaseModel,
     prefix: str = "",
