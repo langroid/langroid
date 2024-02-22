@@ -84,7 +84,7 @@ class ChatDocument(Document):
             json_data = json.loads(j)
             tool = json_data.get("request")
             if tool is not None:
-                tools.append(tool)
+                tools.append(str(tool))
         return tools
 
     def log_fields(self) -> ChatDocLoggerFields:
