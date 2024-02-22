@@ -235,9 +235,8 @@ class ChatAgent(Agent):
         # if any of the enabled classes has json_group_instructions, then use that,
         # else fall back to ToolMessage.json_group_instructions
         for msg_cls in enabled_classes:
-            if (
-                hasattr(msg_cls, "json_group_instructions")
-                and callable(getattr(msg_cls, "json_group_instructions"))
+            if hasattr(msg_cls, "json_group_instructions") and callable(
+                getattr(msg_cls, "json_group_instructions")
             ):
                 return msg_cls.json_group_instructions().format(
                     json_instructions=json_instructions
