@@ -1,4 +1,5 @@
 import json
+import re
 from typing import Any, Iterator, List
 
 from pyparsing import nestedExpr, originalTextFor
@@ -44,6 +45,40 @@ def get_json_candidates(s: str) -> List[str]:
         return []
 
 
+def replace_undefined(s: str, undefined_placeholder: str = '"<undefined>"') -> str:
+    """
+    Replace undefined values in a potential json str with a placeholder.
+
+    Args:
+    - s (str): The potential JSON string to parse.
+    - undefined_placeholder (str): The placeholder or error message
+        for undefined values.
+
+    Returns:
+    - str: The (potential) JSON string with undefined values
+        replaced by the placeholder.
+    """
+
+    # Preprocess the string to replace undefined values with the placeholder
+    # This regex looks for patterns like ": <identifier>" and replaces them
+    # with the placeholder.
+    # It's a simple approach and might need adjustments for complex cases
+    # This is an attempt to handle cases where a weak LLM may produce
+    # a JSON-like string without quotes around some values, e.g.
+    # {"rent": DO-NOT-KNOW }
+    preprocessed_s = re.sub(
+        r":\s*([a-zA-Z_][a-zA-Z_0-9\-]*)", f": {undefined_placeholder}", s
+    )
+
+    # Now, attempt to parse the preprocessed string as JSON
+    try:
+        return preprocessed_s
+    except Exception:
+        # If parsing fails, return an error message instead
+        # (this should be rare after preprocessing)
+        return s
+
+
 def extract_top_level_json(s: str) -> List[str]:
     """Extract all top-level JSON-formatted substrings from a given string.
 
@@ -53,15 +88,16 @@ def extract_top_level_json(s: str) -> List[str]:
     Returns:
         List[str]: A list of top-level JSON-formatted substrings.
     """
-    # Find JSON object and array candidates using regular expressions
+    # Find JSON object and array candidates
     json_candidates = get_json_candidates(s)
 
     normalized_candidates = [
         candidate.replace("\\{", "{").replace("\\}", "}").replace("\\_", "_")
         for candidate in json_candidates
     ]
+    candidates = [replace_undefined(candidate) for candidate in normalized_candidates]
     top_level_jsons = [
-        candidate for candidate in normalized_candidates if is_valid_json(candidate)
+        candidate for candidate in candidates if is_valid_json(candidate)
     ]
 
     return top_level_jsons
