@@ -16,7 +16,10 @@ from docstring_parser import parse
 from pydantic import BaseModel
 
 from langroid.language_models.base import LLMFunctionSpec
-from langroid.utils.pydantic_utils import _recursive_purge_dict_key
+from langroid.utils.pydantic_utils import (
+    _recursive_purge_dict_key,
+    generate_simple_schema,
+)
 
 
 class ToolMessage(ABC, BaseModel):
@@ -101,22 +104,30 @@ class ToolMessage(ABC, BaseModel):
         return properties.get(f, {}).get("default", None)
 
     @classmethod
-    def json_instructions(cls) -> str:
+    def json_instructions(cls, tool: bool = False) -> str:
         """
         Default Instructions to the LLM showing how to use the tool/function-call.
         Works for GPT4 but override this for weaker LLMs if needed.
+
+        Args:
+            tool: instructions for Langroid-native tool use? (e.g. for non-OpenAI LLM)
+                (or else it would be for OpenAI Function calls)
         Returns:
             str: instructions on how to use the message
         """
+        # TODO: when we attempt to use a "simpler schema"
+        # (i.e. all nested fields explicit without definitions),
+        # we seem to get worse results, so we turn it off for now
+        param_dict = (
+            # cls.simple_schema() if tool else
+            cls.llm_function_schema(request=True).parameters
+        )
         return textwrap.dedent(
             f"""
             TOOL: {cls.default_value("request")}
             PURPOSE: {cls.default_value("purpose")} 
             JSON FORMAT: {
-                json.dumps(
-                    cls.llm_function_schema(request=True).parameters,
-                    indent=4,
-                )
+                json.dumps(param_dict, indent=4)
             }
             {"EXAMPLE: " + cls.usage_example() if cls.examples() else ""}
             """.lstrip()
@@ -210,3 +221,14 @@ class ToolMessage(ABC, BaseModel):
             description=cls.default_value("purpose"),
             parameters=parameters,
         )
+
+    @classmethod
+    def simple_schema(cls) -> Dict[str, Any]:
+        """
+        Return a simplified schema for the message, with only the request and
+        required fields.
+        Returns:
+            Dict[str, Any]: simplified schema
+        """
+        schema = generate_simple_schema(cls, exclude=["result", "purpose"])
+        return schema
