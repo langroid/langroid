@@ -1,10 +1,12 @@
 import getpass
 import hashlib
+import importlib
 import inspect
 import logging
 import shutil
 import socket
 import traceback
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -13,6 +15,39 @@ DELETION_ALLOWED_PATHS = [
     ".chroma",
     ".lancedb",
 ]
+
+
+class LazyLoad:
+    """Lazy loading of modules or classes."""
+
+    def __init__(self, import_path: str) -> None:
+        self.import_path = import_path
+        self._target = None
+        self._is_target_loaded = False
+
+    def _load_target(self) -> None:
+        if not self._is_target_loaded:
+            try:
+                # Attempt to import as a module
+                self._target = importlib.import_module(self.import_path)  # type: ignore
+            except ImportError:
+                # If module import fails, attempt to import as a
+                # class or function from a module
+                module_path, attr_name = self.import_path.rsplit(".", 1)
+                module = importlib.import_module(module_path)
+                self._target = getattr(module, attr_name)
+            self._is_target_loaded = True
+
+    def __getattr__(self, name: str) -> Any:
+        self._load_target()
+        return getattr(self._target, name)
+
+    def __call__(self, *args: Any, **kwargs: Any) -> Any:
+        self._load_target()
+        if callable(self._target):
+            return self._target(*args, **kwargs)
+        else:
+            raise TypeError(f"{self.import_path!r} object is not callable")
 
 
 def rmdir(path: str) -> bool:
