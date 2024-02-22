@@ -225,14 +225,23 @@ class ChatAgent(Agent):
         enabled_classes: List[Type[ToolMessage]] = list(self.llm_tools_map.values())
         if len(enabled_classes) == 0:
             return "You can ask questions in natural language."
-
         json_instructions = "\n\n".join(
             [
-                msg_cls.json_instructions()
+                msg_cls.json_instructions(tool=self.config.use_tools)
                 for _, msg_cls in enumerate(enabled_classes)
                 if msg_cls.default_value("request") in self.llm_tools_usable
             ]
         )
+        # if any of the enabled classes has json_group_instructions, then use that,
+        # else fall back to ToolMessage.json_group_instructions
+        for msg_cls in enabled_classes:
+            if (
+                hasattr(msg_cls, "json_group_instructions")
+                and callable(getattr(msg_cls, "json_group_instructions"))
+            ):
+                return msg_cls.json_group_instructions().format(
+                    json_instructions=json_instructions
+                )
         return ToolMessage.json_group_instructions().format(
             json_instructions=json_instructions
         )
