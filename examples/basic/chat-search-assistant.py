@@ -159,7 +159,6 @@ def main(
     )
     assistant_task.add_sub_task(search_task)
     question = Prompt.ask("What do you want to know?")
-    # local models do not like the first message to be empty
     assistant_task.run(question)
 
 

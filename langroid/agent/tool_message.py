@@ -82,6 +82,9 @@ class ToolMessage(ABC, BaseModel):
         ex = choice(cls.examples())
         return ex.json_example()
 
+    def to_json(self):
+        return self.json(indent=4, exclude={"result", "purpose"})
+
     def json_example(self) -> str:
         return self.json(indent=4, exclude={"result", "purpose"})
 
