@@ -227,7 +227,7 @@ def main(
 
     assistant_config = lr.ChatAgentConfig(
         system_message="""
-        You are a resourceful assistant, able to think step by step to answer complex
+        You are a resourceful assistant, able to think step by step to answer
         complex questions from the user. You must break down complex questions into
         simpler questions that can be answered by a web search. You must ask me 
         (the user) each question ONE BY ONE, using the `question_tool` in
