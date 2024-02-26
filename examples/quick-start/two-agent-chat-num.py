@@ -14,18 +14,27 @@ For more explanation see the
 """
 
 import typer
-
+from rich.prompt import Prompt
 import langroid as lr
-
+import langroid.language_models as lm
 app = typer.Typer()
 
 lr.utils.logging.setup_colored_logging()
 
-
-def chat() -> None:
+@app.command()
+def main(
+    debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
+    nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
+) -> None:
+    lr.utils.configuration.set_global(
+        lr.utils.configuration.Settings(
+            debug=debug,
+            cache=not nocache,
+        )
+    )
     config = lr.ChatAgentConfig(
-        llm=lr.language_models.OpenAIGPTConfig(
-            chat_model=lr.language_models.OpenAIChatModel.GPT4,
+        llm=lm.OpenAIGPTConfig(
+            chat_model=lm.OpenAIChatModel.GPT4_TURBO,
         ),
         vecdb=None,
     )
@@ -45,10 +54,10 @@ def chat() -> None:
         e.g., simply say "1 + 2", etc, and say nothing else.
         Once you have added all the numbers in the list, 
         say DONE and give me the final sum. 
-        Start by asking me for the list of numbers.
         """,
         llm_delegate=True,
         single_round=False,
+        interactive=False,
     )
     adder_agent = lr.ChatAgent(config)
     adder_task = lr.Task(
@@ -59,25 +68,19 @@ def chat() -> None:
         When given numbers to add, simply return their sum, say nothing else
         """,
         single_round=True,  # task done after 1 step() with valid response
+        interactive=False,
+    )
+    nums = Prompt.ask(
+        """
+        Enter the list of numbers whose sum you want to calculate
+        """,
+        default="1 2 3 4 5"
     )
     student_task.add_sub_task(adder_task)
-    student_task.run()
+
+    student_task.run(nums)
 
 
-@app.command()
-def main(
-    debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
-    no_stream: bool = typer.Option(False, "--nostream", "-ns", help="no streaming"),
-    nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
-) -> None:
-    lr.utils.configuration.set_global(
-        lr.utils.configuration.Settings(
-            debug=debug,
-            cache=not nocache,
-            stream=not no_stream,
-        )
-    )
-    chat()
 
 
 if __name__ == "__main__":
