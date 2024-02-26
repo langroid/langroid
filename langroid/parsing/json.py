@@ -79,6 +79,26 @@ def replace_undefined(s: str, undefined_placeholder: str = '"<undefined>"') -> s
         return s
 
 
+def repair_newlines(s: str) -> str:
+    """
+    Attempt to load as json, and if it fails, try with newlines replaced by space.
+    Intended to handle cases where weak LLMs produce JSON-like strings where
+    some string-values contain explicit newlines, e.g.:
+    {"text": "This is a text\n with a newline"}
+    These would not be valid JSON, so we try to clean them up here.
+    """
+    try:
+        json.loads(s)
+        return s
+    except Exception:
+        try:
+            s = s.replace("\n", " ")
+            json.loads(s)
+            return s
+        except Exception:
+            return s
+
+
 def extract_top_level_json(s: str) -> List[str]:
     """Extract all top-level JSON-formatted substrings from a given string.
 
@@ -96,6 +116,7 @@ def extract_top_level_json(s: str) -> List[str]:
         for candidate in json_candidates
     ]
     candidates = [replace_undefined(candidate) for candidate in normalized_candidates]
+    candidates = [repair_newlines(candidate) for candidate in candidates]
     top_level_jsons = [
         candidate for candidate in candidates if is_valid_json(candidate)
     ]
