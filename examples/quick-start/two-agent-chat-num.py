@@ -17,9 +17,11 @@ import typer
 from rich.prompt import Prompt
 import langroid as lr
 import langroid.language_models as lm
+
 app = typer.Typer()
 
 lr.utils.logging.setup_colored_logging()
+
 
 @app.command()
 def main(
@@ -74,13 +76,11 @@ def main(
         """
         Enter the list of numbers whose sum you want to calculate
         """,
-        default="1 2 3 4 5"
+        default="1 2 3 4 5",
     )
     student_task.add_sub_task(adder_task)
 
     student_task.run(nums)
-
-
 
 
 if __name__ == "__main__":

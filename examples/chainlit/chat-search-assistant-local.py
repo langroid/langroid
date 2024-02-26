@@ -37,8 +37,15 @@ class QuestionTool(lr.ToolMessage):
         ]
 
 
+class FinalAnswerTool(lr.ToolMessage):
+    request: str = "final_answer_tool"
+    purpose: str = "Present the final <answer> to the user's original query."
+    answer: str
+
+
 class AssistantAgent(lr.ChatAgent):
-    n_questions: int = 0
+    n_questions: int = 0  # how many questions in THIS round
+    has_asked: bool = False  # has ANY question been asked
     original_query: str | None = None
 
     def handle_message_fallback(
@@ -49,30 +56,34 @@ class AssistantAgent(lr.ChatAgent):
             self.n_questions = 0  # reset search count
 
         if isinstance(msg, ChatDocument) and msg.metadata.sender == lr.Entity.LLM:
-            if self.original_query is not None:
-                if "yes" in msg.content.lower():
-                    return lr.utils.constants.DONE
-                else:
-                    return f"""
-                    Is this your final answer to the user's original query, which is:
-                    {self.original_query}
-                    then you must indicate so by saying you are done.
-                    
-                    Otherwise, continue asking questions to get more information,
-                    making sure to use the `question_tool` in the specified JSON format.
-                    """
-            return """
-            You must use the `question_tool` in the specified JSON format,
-            to ask a SINGLE question. 
-            """
+            if self.has_asked:
+                return f"""
+                You must do one of the following:
+                - If you are ready with the final answer to the user's ORIGINAL QUERY
+                    [ Remember it was: {self.original_query} ],
+                  then present this answer using the `final_answer_tool` in the 
+                  specified JSON format.
+                - If you still need to ask a question, then use the `question_tool`
+                  to ask a SINGLE question that can be answered from a web search.
+                """
+            elif self.original_query is not None:
+                return f"""
+                You must ask a question using the `question_tool` in the specified format,
+                to break down the user's original query: {self.original_query} into 
+                smaller questions that can be answered from a web search.
+                """
 
     def question_tool(self, msg: QuestionTool) -> str:
         self.n_questions += 1
+        self.has_asked = True
         if self.n_questions > 1:
             # there was already a search, so ignore this one
             return ""
         # valid question tool: re-create it so Searcher gets it
         return msg.to_json()
+
+    def final_answer_tool(self, msg: FinalAnswerTool) -> str:
+        return lr.utils.constants.DONE + " " + msg.answer
 
     async def llm_response_async(
         self, message: Optional[str | ChatDocument] = None
@@ -151,6 +162,8 @@ class SearcherAgent(lr.ChatAgent):
             self.n_searches = 0  # reset search count
 
             result = await super().llm_response_async(message)
+            # Augment the LLM's composed answer with a helpful nudge
+            # back to the Assistant
             result.content = f"""
             Here are the web-search results for the question: {self.curr_query}.
             ===
@@ -166,6 +179,7 @@ class SearcherAgent(lr.ChatAgent):
         result = await super().llm_response_async(message)
         tools = self.get_tool_messages(result)
         if all(not isinstance(t, self.config.search_tool_class) for t in tools):
+            # LLM did not use search tool;
             # make the response empty so curr pend msg doesn't get updated,
             # and the agent fallback_handler will remind the LLM
             result.content = lr.utils.constants.DONE
@@ -229,6 +243,7 @@ async def main(
     )
     assistant_agent = AssistantAgent(assistant_config)
     assistant_agent.enable_message(QuestionTool)
+    assistant_agent.enable_message(FinalAnswerTool)
 
     search_tool_handler_method = DuckduckgoSearchTool.default_value("request")
 
