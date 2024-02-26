@@ -10,12 +10,16 @@ Pre-requisites:
     poetry install -E "mysql postgres"
 """
 
+from functools import partial
+from typing import Generator
+
 import pytest
 from pytest_mysql import factories as mysql_factories
 from pytest_postgresql import factories as postgresql_factories
-from sqlalchemy import Column, ForeignKey, Integer, String, create_engine, text
+from sqlalchemy import Column, Engine, ForeignKey, Integer, String, create_engine, text
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import Session, relationship, sessionmaker
+from sqlalchemy.schema import CreateSchema
 
 from langroid.agent.special.sql.sql_chat_agent import (
     SQLChatAgent,
@@ -72,6 +76,58 @@ class Sale(Base):
     employee = relationship("Employee", back_populates="sales")
 
 
+class Product(Base):
+    __tablename__ = "product"
+    __table_args__ = {"schema": "inventories", "comment": "Table for storing products"}
+
+    id = Column(Integer, primary_key=True, comment="Unique identifier for the product")
+    name = Column(String(50), nullable=False, comment="Product name")
+    price = Column(Integer, nullable=False, comment="Product price")
+
+
+class Organization(Base):
+    __tablename__ = "organization"
+    __table_args__ = {
+        "schema": "inventories",
+        "comment": "Table for storing organizations",
+    }
+
+    id = Column(
+        Integer, primary_key=True, comment="Unique identifier for the organization"
+    )
+    name = Column(String(50), nullable=False, comment="Organization name")
+
+    inventory = relationship("Inventory", back_populates="organization")
+
+
+class Inventory(Base):
+    __tablename__ = "inventory"
+    __table_args__ = {
+        "schema": "inventories",
+        "comment": "Table for storing inventory information",
+    }
+
+    id = Column(
+        Integer, primary_key=True, comment="Unique identifier for the inventory item"
+    )
+    organization_id = Column(
+        Integer,
+        ForeignKey("inventories.organization.id"),
+        nullable=False,
+        comment="Foreign key to organization table",
+    )
+    count = Column(Integer, nullable=False, comment="Number of products")
+    product_id = Column(
+        Integer,
+        ForeignKey("inventories.product.id"),
+        nullable=False,
+        comment="Foreign key to product table",
+    )
+
+    organization = relationship("Organization", back_populates="inventory")
+    product = relationship("Product")
+
+
 def insert_test_data(session: Session) -> None:
     """Insert test data into the given database session."""
     sales_dept = Department(id=1, name="Sales")
@@ -83,7 +139,33 @@ def insert_test_data(session: Session) -> None:
     sale1 = Sale(id=1, amount=100, employee=alice)
     sale2 = Sale(id=2, amount=500, employee=bob)
 
-    session.add_all([sales_dept, marketing_dept, alice, bob, sale1, sale2])
+    gadget = Product(id=1, name="Gadget", price=100)
+    gizmo = Product(id=2, name="Gizmo", price=10)
+
+    widgets = Organization(id=1, name="ACME Widgets")
+    gizmos = Organization(id=2, name="Gizmo Corp")
+
+    inventory_item1 = Inventory(id=1, product=gadget, count=10, organization=widgets)
+    inventory_item2 = Inventory(id=2, product=gizmo, count=30, organization=widgets)
+    inventory_item3 = Inventory(id=3, product=gizmo, count=300, organization=gizmos)
+
+    session.add_all(
+        [
+            sales_dept,
+            marketing_dept,
+            alice,
+            bob,
+            sale1,
+            sale2,
+            gadget,
+            gizmo,
+            widgets,
+            gizmos,
+            inventory_item1,
+            inventory_item2,
+            inventory_item3,
+        ]
+    )
     session.commit()
 
 
@@ -93,7 +175,7 @@ postgresql = postgresql_factories.postgresql("postgresql_proc")
 
 
 @pytest.fixture(scope="function")
-def postgresql_engine(postgresql) -> create_engine:
+def postgresql_engine(postgresql) -> Engine:
     """Create engine for the PostgreSQL database.
 
     Args:
@@ -113,8 +195,14 @@ def postgresql_engine(postgresql) -> create_engine:
 
 
 @pytest.fixture(scope="function")
-def mock_postgresql_session(postgresql_engine: create_engine) -> Session:
+def mock_postgresql_session(
+    postgresql_engine: Engine,
+) -> Generator[Session, None, None]:
     """Create tables in the PostgreSQL database and add entries."""
+    with postgresql_engine.connect() as connection:
+        connection.execute(CreateSchema("inventories", if_not_exists=True))
+        connection.commit()
+
     Base.metadata.create_all(postgresql_engine)
 
     # Adding example entries
@@ -137,7 +225,7 @@ mysql = mysql_factories.mysql("mysql_proc", dbname="test")
 
 
 @pytest.fixture(scope="function")
-def mysql_engine(mysql) -> create_engine:
+def mysql_engine(mysql) -> Engine:
     """Create engine for the MySQL database.
     Args:
         mysql_proc: The MySQL process fixture.
@@ -161,8 +249,10 @@ def mysql_engine(mysql) -> create_engine:
 
 
 @pytest.fixture(scope="function")
-def mock_mysql_session(mysql_engine: create_engine) -> Session:
+def mock_mysql_session(mysql_engine: Engine) -> Generator[Session, None, None]:
     """Create tables in the MySQL database and add entries."""
+    with mysql_engine.connect() as connection:
+        connection.execute(CreateSchema("inventories", if_not_exists=True))
     Base.metadata.create_all(mysql_engine)
 
     # Adding example entries
@@ -183,6 +273,8 @@ def _test_sql_automatic_context_extraction(
     Test the SQLChatAgent with a uri as data source
     """
     set_global(test_settings)
+
+    # Test public schema only
     agent = SQLChatAgent(
         config=SQLChatAgentConfig(
             database_session=db_session,
@@ -216,6 +308,55 @@ def _test_sql_automatic_context_extraction(
     }
     print(agent.config.context_descriptions)
     assert agent.config.context_descriptions == expected_context
+
+    # Test multi-schema
+    agent = SQLChatAgent(
+        config=SQLChatAgentConfig(
+            database_session=db_session,
+            multi_schema=True,
+        )
+    )
+
+    expected_context = {
+        "public.departments": expected_context["departments"],
+        "public.employees": expected_context["employees"],
+        "public.sales": expected_context["sales"],
+        "inventories.product": {
+            "description": "Table for storing products",
+            "columns": {
+                "id": "Unique identifier for the product",
+                "name": "Product name",
+                "price": "Product price",
+            },
+        },
+        "inventories.organization": {
+            "description": "Table for storing organizations",
+            "columns": {
+                "id": "Unique identifier for the organization",
+                "name": "Organization name",
+            },
+        },
+        "inventories.inventory": {
+            "description": "Table for storing inventory information",
+            "columns": {
+                "id": "Unique identifier for the inventory item",
+                "organization_id": "Foreign key to organization table",
+                "count": "Number of products",
+                "product_id": "Foreign key to product table",
+            },
+        },
+    }
+
+    def filter_keys(d, f=lambda k: True):
+        return {k: v for k, v in d.items() if f(k)}
+
+    def non_internal(k):
+        return "information_schema" not in k
+
+    filter_non_internal = partial(filter_keys, f=non_internal)
+
+    print(agent.config.context_descriptions)
+    assert filter_non_internal(agent.config.context_descriptions) == expected_context
 
 
 def test_postgresql_automatic_context_extraction(mock_postgresql_session):
