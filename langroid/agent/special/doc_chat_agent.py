@@ -105,6 +105,7 @@ class DocChatAgentConfig(ChatAgentConfig):
     cache: bool = True  # cache results
     debug: bool = False
     stream: bool = True  # allow streaming where needed
+    split: bool = True  # use chunking
     relevance_extractor_config: None | RelevanceExtractorAgentConfig = (
         RelevanceExtractorAgentConfig(
             llm=None  # use the parent's llm unless explicitly set here
@@ -278,10 +279,11 @@ class DocChatAgent(ChatAgent):
             for u in urls:
                 meta = urls_meta.get(u, {})
                 loader = URLLoader(urls=[u], parser=parser)
-                docs = loader.load()
+                url_docs = loader.load()
                 # update metadata of each doc with meta
-                for d in docs:
+                for d in url_docs:
                     d.metadata = d.metadata.copy(update=meta)
+                docs.extend(url_docs)
         if len(paths) > 0:
             for p in paths:
                 meta = paths_meta.get(p, {})
@@ -291,7 +293,7 @@ class DocChatAgent(ChatAgent):
                     d.metadata = d.metadata.copy(update=meta)
                 docs.extend(path_docs)
         n_docs = len(docs)
-        n_splits = self.ingest_docs(docs)
+        n_splits = self.ingest_docs(docs, split=self.config.split)
         if n_docs == 0:
             return []
         n_urls = len(urls)
