@@ -6,17 +6,41 @@ models will have the same tokenizer, so we just use the first one.
 """
 import logging
 import re
-from typing import List, Set
+from typing import Any, List, Set, Type
 
 from huggingface_hub import HfApi, ModelFilter
 from jinja2.exceptions import TemplateError
-from transformers import AutoTokenizer
 
 from langroid.language_models.base import LanguageModel, LLMMessage, Role
 from langroid.language_models.config import HFPromptFormatterConfig
 from langroid.language_models.prompt_formatter.base import PromptFormatter
 
 logger = logging.getLogger(__name__)
+
+
+def try_import_AutoTokenizer() -> Type[Any]:
+    """
+    Attempts to import the AutoTokenizer class from the transformers package.
+    Returns:
+        The AutoTokenizer class if successful.
+    Raises:
+        ImportError: If the transformers package is not installed.
+    """
+    try:
+        from transformers import AutoTokenizer
+
+        return AutoTokenizer  # type: ignore
+    except ImportError:
+        raise ImportError(
+            """
+            You are trying to use the HuggingFace transformers.AutoTokenizer,
+            but the `transformers` package is not installed 
+            by default with Langroid. Please install langroid using the 
+            `transformers` extra, like so:
+            pip install "langroid[transformers]"
+            or equivalent.
+            """
+        )
 
 
 def find_hf_formatter(model_name: str) -> str:
@@ -37,6 +61,7 @@ def find_hf_formatter(model_name: str) -> str:
             mdl = next(models)
         except StopIteration:
             continue
+        AutoTokenizer = try_import_AutoTokenizer()
         tokenizer = AutoTokenizer.from_pretrained(mdl.id)
         if tokenizer.chat_template is not None:
             return str(mdl.id)
@@ -60,6 +85,7 @@ class HFFormatter(PromptFormatter):
             mdl = next(models)
         except StopIteration:
             raise ValueError(f"Model {config.model_name} not found on HuggingFace Hub")
+        AutoTokenizer = try_import_AutoTokenizer()
         self.tokenizer = AutoTokenizer.from_pretrained(mdl.id)
         if self.tokenizer.chat_template is None:
             raise ValueError(

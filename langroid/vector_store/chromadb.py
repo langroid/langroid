@@ -141,10 +141,16 @@ class ChromaDB(VectorStore):
         return self._docs_from_results(results)
 
     def get_documents_by_ids(self, ids: List[str]) -> List[Document]:
-        results = self.collection.get(ids=ids, include=["documents", "metadatas"])
-        results["documents"] = [results["documents"]]
-        results["metadatas"] = [results["metadatas"]]
-        return self._docs_from_results(results)
+        # get them one by one since chroma mangles the order of the results
+        # when fetched from a list of ids.
+        results = [
+            self.collection.get(ids=[id], include=["documents", "metadatas"])
+            for id in ids
+        ]
+        final_results = {}
+        final_results["documents"] = [[r["documents"][0] for r in results]]
+        final_results["metadatas"] = [[r["metadatas"][0] for r in results]]
+        return self._docs_from_results(final_results)
 
     def delete_collection(self, collection_name: str) -> None:
         self.client.delete_collection(name=collection_name)
