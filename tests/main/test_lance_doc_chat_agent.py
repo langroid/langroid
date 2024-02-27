@@ -233,6 +233,7 @@ def test_lance_doc_chat_agent_df(
     )
 
     cfg = DocChatAgentConfig(
+        cross_encoder_reranking_model="",
         vecdb=ldb_cfg,
         add_fields_to_content=["year", "director", "genre"],
         filter_fields=["year", "director", "genre", "rating"],

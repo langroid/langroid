@@ -586,11 +586,15 @@ def test_doc_chat_ingest_paths(test_settings: Settings, vecdb, splitter: Splitte
     )
 
 
-@pytest.mark.parametrize("vecdb", ["lancedb", "chroma", "qdrant_local"], indirect=True)
+@pytest.mark.parametrize(
+    "vecdb",
+    ["chroma", "lancedb", "qdrant_local"],
+    indirect=True
+)
 @pytest.mark.parametrize(
     "splitter", [Splitter.PARA_SENTENCE, Splitter.SIMPLE, Splitter.TOKENS]
 )
-@pytest.mark.parametrize("metadata_dict", [False, True])
+@pytest.mark.parametrize("metadata_dict", [True,False])
 def test_doc_chat_ingest_path_metadata(
     test_settings: Settings,
     vecdb,
@@ -684,3 +688,5 @@ def test_doc_chat_ingest_path_metadata(
     results = agent.get_relevant_chunks("What do we know about dogs?")
     assert any("messy" in r.content for r in results)
     assert all(r.metadata.type == "animal" for r in results)
+
+    agent.clear()
