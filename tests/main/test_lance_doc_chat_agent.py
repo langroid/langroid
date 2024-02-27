@@ -126,6 +126,8 @@ def test_lance_doc_chat_agent(
     )
 
     cfg = DocChatAgentConfig(
+        # turn cross-encoder off this off since it needs sentence-transformers
+        cross_encoder_reranking_model="",
         vecdb=ldb_cfg,
         parsing=ParsingConfig(
             splitter=Splitter.SIMPLE,
@@ -231,6 +233,7 @@ def test_lance_doc_chat_agent_df(
     )
 
     cfg = DocChatAgentConfig(
+        cross_encoder_reranking_model="",
         vecdb=ldb_cfg,
         add_fields_to_content=["year", "director", "genre"],
         filter_fields=["year", "director", "genre", "rating"],
@@ -262,6 +265,7 @@ def test_lance_doc_chat_df_direct(test_settings: Settings):
     )
 
     cfg = DocChatAgentConfig(
+        cross_encoder_reranking_model="",
         vecdb=ldb_cfg,
         add_fields_to_content=["state", "year"],
         filter_fields=["state", "year"],

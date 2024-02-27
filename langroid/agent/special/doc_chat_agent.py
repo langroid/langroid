@@ -156,7 +156,7 @@ class DocChatAgentConfig(ChatAgentConfig):
         collection_name="doc-chat-lancedb",
         replace_collection=True,
         storage_path=".lancedb/data/",
-        embedding=hf_embed_config,
+        embedding=oai_embed_config,
     )
     llm: OpenAIGPTConfig = OpenAIGPTConfig(
         type="openai",

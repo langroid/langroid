@@ -119,7 +119,7 @@ class _MyDocChatAgentConfig(DocChatAgentConfig):
 
 @pytest.mark.parametrize("vecdb", ["chroma", "qdrant_local", "lancedb"], indirect=True)
 @pytest.mark.parametrize(
-    "splitter", [Splitter.PARA_SENTENCE, Splitter.SIMPLE, Splitter.TOKENS]
+    "splitter", [Splitter.SIMPLE, Splitter.PARA_SENTENCE, Splitter.TOKENS]
 )
 @pytest.mark.parametrize("conv_mode", [True, False])
 def test_doc_chat_retrieval(
@@ -154,6 +154,7 @@ def test_doc_chat_retrieval(
         ZEBRAS="Zebras are bizarre with stripes.",
     )
     text = "\n\n".join(vars(phrases).values())
+    agent.clear()
     agent.ingest_docs([Document(content=text, metadata={"source": "animals"})])
     results = agent.get_relevant_chunks("What are giraffes like?")
 

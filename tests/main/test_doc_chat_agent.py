@@ -37,10 +37,9 @@ class MyDoc(Document):
     metadata: MyDocMetaData
 
 
-documents: List[Document] = (
-    [
-        Document(
-            content="""
+documents: List[Document] = [
+    Document(
+        content="""
         In the year 2050, GPT10 was released. 
         
         In 2057, paperclips were seen all over the world. 
@@ -54,10 +53,10 @@ documents: List[Document] = (
         
         There was one more ice age in 2040.
         """,
-            metadata=DocMetaData(source="wikipedia"),
-        ),
-        Document(
-            content="""
+        metadata=DocMetaData(source="wikipedia"),
+    ),
+    Document(
+        content="""
         We are living in an alternate universe where Paris is the capital of England.
         
         The capital of England used to be London. 
@@ -72,11 +71,17 @@ documents: List[Document] = (
         
         In the year 2050, all countries merged into Lithuania.
         """,
-            metadata=DocMetaData(source="almanac"),
-        ),
-    ]
-    + [Document(content=generate_random_text(5), metadata={"source": "random"})] * 100
-)
+        metadata=DocMetaData(source="almanac"),
+    ),
+]
+
+for _ in range(100):
+    documents.append(
+        Document(
+            content=generate_random_text(5),
+            metadata=DocMetaData(source="random"),
+        )
+    )
 
 
 @pytest.fixture(scope="function")
@@ -315,6 +320,7 @@ def test_doc_chat_retrieval(
         ZEBRAS="Zebras are bizarre with stripes.",
     )
     text = "\n\n".join(vars(phrases).values())
+    agent.clear()
     agent.ingest_docs([Document(content=text, metadata={"source": "animals"})])
     results = agent.get_relevant_chunks("What are giraffes like?")
 
@@ -327,6 +333,8 @@ def test_doc_chat_retrieval(
         sum(p in r.content for p in all_but_cats for r in results)
         == len(vars(phrases)) - 1
     )
+
+    agent.clear()
 
 
 @pytest.mark.parametrize("vecdb", ["qdrant_local", "chroma", "lancedb"], indirect=True)
@@ -431,6 +439,7 @@ def test_doc_chat_ingest_df(
     sys_msg = "You will be asked to answer questions based on short book descriptions."
     agent_cfg = DocChatAgentConfig(
         system_message=sys_msg,
+        cross_encoder_reranking_model="",
     )
     if isinstance(vecdb, LanceDB):
         agent = LanceDocChatAgent(agent_cfg)
@@ -462,6 +471,7 @@ def test_doc_chat_add_content_fields(
     sys_msg = "You will be asked to answer questions based on short movie descriptions."
     agent_cfg = DocChatAgentConfig(
         system_message=sys_msg,
+        cross_encoder_reranking_model="",
         add_fields_to_content=["year", "author", "title"],
     )
     if isinstance(vecdb, LanceDB):
@@ -581,11 +591,11 @@ def test_doc_chat_ingest_paths(test_settings: Settings, vecdb, splitter: Splitte
     )
 
 
-@pytest.mark.parametrize("vecdb", ["lancedb", "chroma", "qdrant_local"], indirect=True)
+@pytest.mark.parametrize("vecdb", ["chroma", "lancedb", "qdrant_local"], indirect=True)
 @pytest.mark.parametrize(
     "splitter", [Splitter.PARA_SENTENCE, Splitter.SIMPLE, Splitter.TOKENS]
 )
-@pytest.mark.parametrize("metadata_dict", [False, True])
+@pytest.mark.parametrize("metadata_dict", [True, False])
 def test_doc_chat_ingest_path_metadata(
     test_settings: Settings,
     vecdb,
@@ -652,6 +662,7 @@ def test_doc_chat_ingest_path_metadata(
             f.close()
             animal["path"] = f.name
 
+    agent.clear()
     # ingest with per-file metadata
     agent.ingest_doc_paths(
         [a["path"] for a in animals],
@@ -679,3 +690,5 @@ def test_doc_chat_ingest_path_metadata(
     results = agent.get_relevant_chunks("What do we know about dogs?")
     assert any("messy" in r.content for r in results)
     assert all(r.metadata.type == "animal" for r in results)
+
+    agent.clear()
