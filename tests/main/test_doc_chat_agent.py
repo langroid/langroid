@@ -586,15 +586,11 @@ def test_doc_chat_ingest_paths(test_settings: Settings, vecdb, splitter: Splitte
     )
 
 
-@pytest.mark.parametrize(
-    "vecdb",
-    ["chroma", "lancedb", "qdrant_local"],
-    indirect=True
-)
+@pytest.mark.parametrize("vecdb", ["chroma", "lancedb", "qdrant_local"], indirect=True)
 @pytest.mark.parametrize(
     "splitter", [Splitter.PARA_SENTENCE, Splitter.SIMPLE, Splitter.TOKENS]
 )
-@pytest.mark.parametrize("metadata_dict", [True,False])
+@pytest.mark.parametrize("metadata_dict", [True, False])
 def test_doc_chat_ingest_path_metadata(
     test_settings: Settings,
     vecdb,
