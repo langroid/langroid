@@ -112,7 +112,7 @@ def main(
             # NOTE: PDF parsing is extremely challenging, each library has its own
             # strengths and weaknesses. Try one that works for your use case.
             pdf=PdfParsingConfig(
-                # alternatives: "haystack", "unstructured", "pdfplumber", "fitz"
+                # alternatives: "unstructured", "pdfplumber", "fitz"
                 library="pdfplumber",
             ),
         ),

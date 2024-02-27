@@ -136,7 +136,7 @@ class DocChatAgentConfig(ChatAgentConfig):
             # NOTE: PDF parsing is extremely challenging, and each library
             # has its own strengths and weaknesses.
             # Try one that works for your use case.
-            # or "haystack", "unstructured", "pdfplumber", "fitz", "pypdf"
+            # or "unstructured", "pdfplumber", "fitz", "pypdf"
             library="pdfplumber",
         ),
     )

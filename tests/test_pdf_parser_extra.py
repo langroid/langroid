@@ -6,7 +6,7 @@ from langroid.parsing.document_parser import DocumentParser
 from langroid.parsing.parser import ParsingConfig, PdfParsingConfig
 
 
-@pytest.mark.parametrize("pdflib", ["fitz", "pypdf", "pdfplumber"])
+@pytest.mark.parametrize("pdflib", ["unstructured"])
 def test_get_pdf_doc_url(pdflib: str):
     url = "https://arxiv.org/pdf/2104.05490.pdf"
     pdf_parser = DocumentParser.create(
@@ -36,7 +36,7 @@ def test_get_pdf_doc_url(pdflib: str):
         assert len(docs[n // 2].metadata.window_ids) == 2 * k + 1
 
 
-@pytest.mark.parametrize("pdflib", ["fitz", "pypdf", "pdfplumber"])
+@pytest.mark.parametrize("pdflib", ["unstructured"])
 def test_get_pdf_doc_path(pdflib: str):
     current_dir = os.path.dirname(os.path.abspath(__file__))
 
