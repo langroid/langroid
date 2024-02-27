@@ -37,10 +37,9 @@ class MyDoc(Document):
     metadata: MyDocMetaData
 
 
-documents: List[Document] = (
-    [
-        Document(
-            content="""
+documents: List[Document] = [
+    Document(
+        content="""
         In the year 2050, GPT10 was released. 
         
         In 2057, paperclips were seen all over the world. 
@@ -54,10 +53,10 @@ documents: List[Document] = (
         
         There was one more ice age in 2040.
         """,
-            metadata=DocMetaData(source="wikipedia"),
-        ),
-        Document(
-            content="""
+        metadata=DocMetaData(source="wikipedia"),
+    ),
+    Document(
+        content="""
         We are living in an alternate universe where Paris is the capital of England.
         
         The capital of England used to be London. 
@@ -72,11 +71,17 @@ documents: List[Document] = (
         
         In the year 2050, all countries merged into Lithuania.
         """,
-            metadata=DocMetaData(source="almanac"),
-        ),
-    ]
-    + [Document(content=generate_random_text(5), metadata={"source": "random"})] * 100
-)
+        metadata=DocMetaData(source="almanac"),
+    ),
+]
+
+for _ in range(100):
+    documents.append(
+        Document(
+            content=generate_random_text(5),
+            metadata=DocMetaData(source="random"),
+        )
+    )
 
 
 @pytest.fixture(scope="function")
