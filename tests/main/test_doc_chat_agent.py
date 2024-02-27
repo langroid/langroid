@@ -662,6 +662,7 @@ def test_doc_chat_ingest_path_metadata(
             f.close()
             animal["path"] = f.name
 
+    agent.clear()
     # ingest with per-file metadata
     agent.ingest_doc_paths(
         [a["path"] for a in animals],
