@@ -436,6 +436,7 @@ def test_doc_chat_ingest_df(
     sys_msg = "You will be asked to answer questions based on short book descriptions."
     agent_cfg = DocChatAgentConfig(
         system_message=sys_msg,
+        cross_encoder_reranking_model="",
     )
     if isinstance(vecdb, LanceDB):
         agent = LanceDocChatAgent(agent_cfg)
@@ -467,6 +468,7 @@ def test_doc_chat_add_content_fields(
     sys_msg = "You will be asked to answer questions based on short movie descriptions."
     agent_cfg = DocChatAgentConfig(
         system_message=sys_msg,
+        cross_encoder_reranking_model="",
         add_fields_to_content=["year", "author", "title"],
     )
     if isinstance(vecdb, LanceDB):
