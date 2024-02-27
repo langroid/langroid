@@ -30,7 +30,7 @@ class QuestionTool(lr.ToolMessage):
     question: str
 
     @classmethod
-    def examples(cls) -> List["ToolMessage"]:
+    def examples(cls) -> List["lr.ToolMessage"]:
         return [
             cls(question="Which superconductor material was discovered in 2023?"),
             cls(question="What AI innovation did Meta achieve in 2024?"),
@@ -47,7 +47,7 @@ class FinalAnswerTool(lr.ToolMessage):
     answer: str
 
     @classmethod
-    def examples(cls) -> List["ToolMessage"]:
+    def examples(cls) -> List["lr.ToolMessage"]:
         return [
             cls(
                 steps="1. Man is mortal. 2. Plato was a man.",
@@ -67,7 +67,7 @@ class FeedbackTool(lr.ToolMessage):
     feedback: str
 
     @classmethod
-    def examples(cls) -> List["ToolMessage"]:
+    def examples(cls) -> List["lr.ToolMessage"]:
         return [
             cls(feedback=""),
             cls(

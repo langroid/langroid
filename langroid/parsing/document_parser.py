@@ -311,8 +311,17 @@ class HaystackPDFParser(DocumentParser):
         Overrides the base class method to use the `haystack` library.
         See there for more details.
         """
-
-        from haystack.nodes import PDFToTextConverter, PreProcessor
+        try:
+            from haystack.nodes import PDFToTextConverter, PreProcessor
+        except ImportError:
+            raise ImportError(
+                """
+                The `haystack` library is not installed by default with langroid.
+                To include this library, please install langroid with the 
+                `haystack` extra by running `pip install "langroid[haystack]"`
+                or equivalent.
+                """
+            )
 
         converter = PDFToTextConverter(
             remove_numeric_tables=True,
@@ -353,7 +362,17 @@ class UnstructuredPDFParser(DocumentParser):
     """
 
     def iterate_pages(self) -> Generator[Tuple[int, Any], None, None]:  # type: ignore
-        from unstructured.partition.pdf import partition_pdf
+        try:
+            from unstructured.partition.pdf import partition_pdf
+        except ImportError:
+            raise ImportError(
+                """
+                The `unstructured` library is not installed by default with langroid.
+                To include this library, please install langroid with the 
+                `unstructured` extra by running `pip install "langroid[unstructured]"`
+                or equivalent.
+                """
+            )
 
         # from unstructured.chunking.title import chunk_by_title
 
@@ -406,7 +425,17 @@ class UnstructuredDocxParser(DocumentParser):
     """
 
     def iterate_pages(self) -> Generator[Tuple[int, Any], None, None]:  # type: ignore
-        from unstructured.partition.docx import partition_docx
+        try:
+            from unstructured.partition.docx import partition_docx
+        except ImportError:
+            raise ImportError(
+                """
+                The `unstructured` library is not installed by default with langroid.
+                To include this library, please install langroid with the 
+                `unstructured` extra by running `pip install "langroid[unstructured]"`
+                or equivalent.
+                """
+            )
 
         elements = partition_docx(file=self.doc_bytes, include_page_breaks=True)
 
@@ -447,7 +476,17 @@ class UnstructuredDocxParser(DocumentParser):
 
 class UnstructuredDocParser(UnstructuredDocxParser):
     def iterate_pages(self) -> Generator[Tuple[int, Any], None, None]:  # type: ignore
-        from unstructured.partition.doc import partition_doc
+        try:
+            from unstructured.partition.doc import partition_doc
+        except ImportError:
+            raise ImportError(
+                """
+                The `unstructured` library is not installed by default with langroid.
+                To include this library, please install langroid with the 
+                `unstructured` extra by running `pip install "langroid[unstructured]"`
+                or equivalent.
+                """
+            )
 
         elements = partition_doc(filename=self.source, include_page_breaks=True)
 

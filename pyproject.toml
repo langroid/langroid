@@ -56,7 +56,7 @@ prettytable = "^3.8.0"
 tantivy = "^0.21.0"
 google-api-python-client = "^2.95.0"
 lxml = "^4.9.3"
-unstructured = {extras = ["docx", "pptx", "pdf"], version = ">=0.10.16,<0.10.18"}
+unstructured = {extras = ["docx", "pptx", "pdf"], version = ">=0.10.16,<0.10.18", optional=true}
 
 sentence-transformers = {version="2.2.2", optional=true}
 torch = {version="2.0.0", optional=true}
@@ -72,7 +72,7 @@ pymupdf = "^1.23.3"
 jinja2 = "^3.1.2"
 pytest-asyncio = "^0.21.1"
 docstring-parser = "^0.15"
-farm-haystack = {extras = ["ocr", "preprocessing", "file-conversion", "pdf"], version = "^1.21.1"}
+farm-haystack = {extras = ["ocr", "preprocessing", "file-conversion", "pdf"], version = "^1.21.1", optional = true}
 meilisearch = "^0.28.3"
 meilisearch-python-sdk = "^2.2.3"
 litellm = {version = "^1.23.0", optional = true}
@@ -93,6 +93,8 @@ duckduckgo-search = "^4.4"
 # install these using `poetry install -E [...]` where [...] is one of the extras below
 # or install multiple extras using, e.g.,  `poetry install -E "litellm mysql"
 hf-embeddings = ["sentence-transformers", "torch"]
+unstructured = ["unstructured"]
+haysack = ["farm-haystack"]
 postgres = ["psycopg2", "pytest-postgresql"]
 mysql = ["pymysql", "pytest-mysql"]
 litellm = ["litellm"]
