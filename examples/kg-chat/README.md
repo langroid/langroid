@@ -37,7 +37,7 @@ This example uses a `DependencyGraphAgent`
 (derived from [`Neo4jChatAgent`](https://github.com/langroid/langroid/blob/main/langroid/agent/special/neo4j/neo4j_chat_agent.py)).
 It auto-generates a `neo4j` knowledge-graph based on the dependency
 structure of a given `PyPi` package. You can then ask the chatbot questions
-about the dependency graph. This agent uses two tools in addition to those 
+about the dependency graph. This agent uses three tools in addition to those 
 already available to `Neo4jChatAgent`:
 
 - DepGraphTool to build the dependency graph for a given pkg version, using the API
@@ -54,6 +54,7 @@ The `Neo4jChatAgent` has access to these tools/function-calls:
 - `GraphSchemaTool`: get schema of Neo4j knowledge-graph
 - `CypherRetrievalTool`: generate cypher queries to get information from
    Neo4j knowledge-graph (Cypher is the query language for Neo4j)
+- `VisualizeGraph`: supports only visualizing the the whole dependency graph
 
 ### Running the example
 
