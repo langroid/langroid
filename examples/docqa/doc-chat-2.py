@@ -104,7 +104,6 @@ def main(
 ) -> None:
     config = DocChatAgentConfig(
         n_query_rephrases=0,
-        cross_encoder_reranking_model="cross-encoder/ms-marco-MiniLM-L-6-v2",
         hypothetical_answer=False,
         assistant_mode=True,
         n_neighbor_chunks=2,

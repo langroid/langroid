@@ -63,7 +63,6 @@ def main(
     config = DocChatAgentConfig(
         llm=llm_config_rag,
         n_query_rephrases=0,
-        cross_encoder_reranking_model="cross-encoder/ms-marco-MiniLM-L-6-v2",
         hypothetical_answer=False,
         assistant_mode=True,
         parsing=ParsingConfig(  # modify as needed
