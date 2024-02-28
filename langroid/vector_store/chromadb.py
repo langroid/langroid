@@ -2,8 +2,6 @@ import json
 import logging
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-import chromadb
-
 from langroid.embedding_models.base import (
     EmbeddingModel,
     EmbeddingModelsConfig,
@@ -28,6 +26,17 @@ class ChromaDBConfig(VectorStoreConfig):
 class ChromaDB(VectorStore):
     def __init__(self, config: ChromaDBConfig = ChromaDBConfig()):
         super().__init__(config)
+        try:
+            import chromadb
+        except ImportError:
+            raise ImportError(
+                """
+                ChromaDB is not installed by default with Langroid.
+                If you want to use it, please install it with the `chromadb` extra, e.g.
+                pip install "langroid[chromadb]"
+                or an equivalent command.
+                """
+            )
         self.config = config
         emb_model = EmbeddingModel.create(config.embedding)
         self.embedding_fn = emb_model.embedding_fn()

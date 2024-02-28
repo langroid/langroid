@@ -9,7 +9,6 @@ from langroid.mytypes import DocMetaData, Document
 from langroid.parsing.parser import Parser, ParsingConfig, Splitter
 from langroid.utils.system import rmdir
 from langroid.vector_store.base import VectorStore
-from langroid.vector_store.chromadb import ChromaDB, ChromaDBConfig
 from langroid.vector_store.lancedb import LanceDB, LanceDBConfig
 from langroid.vector_store.meilisearch import MeiliSearch, MeiliSearchConfig
 from langroid.vector_store.momento import MomentoVI, MomentoVIConfig
@@ -77,6 +76,11 @@ def vecdb(request) -> VectorStore:
         return
 
     if request.param == "chroma":
+        try:
+            from langroid.vector_store.chromadb import ChromaDB, ChromaDBConfig
+        except ImportError:
+            pytest.skip("Chroma not installed")
+            return
         cd_dir = ".chroma/" + embed_cfg.model_type
         rmdir(cd_dir)
         cd_cfg = ChromaDBConfig(
