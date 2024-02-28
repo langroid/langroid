@@ -6,9 +6,8 @@ models will have the same tokenizer, so we just use the first one.
 """
 import logging
 import re
-from typing import Any, List, Set, Type
+from typing import Any, List, Set, Tuple, Type
 
-from huggingface_hub import HfApi, ModelFilter
 from jinja2.exceptions import TemplateError
 
 from langroid.language_models.base import LanguageModel, LLMMessage, Role
@@ -18,7 +17,7 @@ from langroid.language_models.prompt_formatter.base import PromptFormatter
 logger = logging.getLogger(__name__)
 
 
-def try_import_AutoTokenizer() -> Type[Any]:
+def try_import_hf_modules() -> Tuple[Type[Any], Type[Any], Type[Any]]:
     """
     Attempts to import the AutoTokenizer class from the transformers package.
     Returns:
@@ -27,14 +26,18 @@ def try_import_AutoTokenizer() -> Type[Any]:
         ImportError: If the transformers package is not installed.
     """
     try:
+        from huggingface_hub import HfApi, ModelFilter
         from transformers import AutoTokenizer
 
-        return AutoTokenizer  # type: ignore
+        return AutoTokenizer, HfApi, ModelFilter
     except ImportError:
         raise ImportError(
             """
-            You are trying to use the HuggingFace transformers.AutoTokenizer,
-            but the `transformers` package is not installed 
+            You are trying to use some/all of:
+            HuggingFace transformers.AutoTokenizer,
+            huggingface_hub.HfApi, 
+            huggingface_hub.ModelFilter,
+            but these are not not installed 
             by default with Langroid. Please install langroid using the 
             `transformers` extra, like so:
             pip install "langroid[transformers]"
@@ -44,6 +47,7 @@ def try_import_AutoTokenizer() -> Type[Any]:
 
 
 def find_hf_formatter(model_name: str) -> str:
+    AutoTokenizer, HfApi, ModelFilter = try_import_hf_modules()
     hf_api = HfApi()
     # try to find a matching model, with progressivly shorter prefixes of model_name
     model_name = model_name.lower().split("/")[-1]
@@ -61,7 +65,7 @@ def find_hf_formatter(model_name: str) -> str:
             mdl = next(models)
         except StopIteration:
             continue
-        AutoTokenizer = try_import_AutoTokenizer()
+
         tokenizer = AutoTokenizer.from_pretrained(mdl.id)
         if tokenizer.chat_template is not None:
             return str(mdl.id)
@@ -73,6 +77,7 @@ class HFFormatter(PromptFormatter):
 
     def __init__(self, config: HFPromptFormatterConfig):
         super().__init__(config)
+        AutoTokenizer, HfApi, ModelFilter = try_import_hf_modules()
         self.config: HFPromptFormatterConfig = config
         hf_api = HfApi()
         models = hf_api.list_models(
@@ -85,7 +90,7 @@ class HFFormatter(PromptFormatter):
             mdl = next(models)
         except StopIteration:
             raise ValueError(f"Model {config.model_name} not found on HuggingFace Hub")
-        AutoTokenizer = try_import_AutoTokenizer()
+
         self.tokenizer = AutoTokenizer.from_pretrained(mdl.id)
         if self.tokenizer.chat_template is None:
             raise ValueError(
