@@ -18,6 +18,9 @@ account settings, please provide the following information (uri, username, passw
 described here
 `https://github.com/langroid/langroid/tree/main/examples/kg-chat#requirements`
 
+The rest of requirements are described in
+ `https://github.com/langroid/langroid/blob/main/examples/kg-chat/README.md`
+
 Run like this:
 ```
 python3 examples/kg-chat/dependency_chatbot.py
@@ -28,7 +31,6 @@ from rich import print
 from rich.prompt import Prompt
 from dotenv import load_dotenv
 
-# from py2neo import Graph
 from pyvis.network import Network
 import webbrowser
 from pathlib import Path
@@ -47,9 +49,6 @@ from langroid.agent.tools.google_search_tool import GoogleSearchTool
 
 from langroid.agent.task import Task
 from cypher_message import CONSTRUCT_DEPENDENCY_GRAPH
-
-# from pyvis.network import Network
-
 
 app = typer.Typer()
 

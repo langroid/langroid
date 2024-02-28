@@ -8,11 +8,13 @@ Run like this:
 ```
 chainlit run examples/kg-chat/dependency_chatbot.py
 ```
+
+The requirements are described in
+ `https://github.com/langroid/langroid/blob/main/examples/kg-chat/README.md`
 """
 import typer
 from rich import print
 
-# from py2neo import Graph
 from pyvis.network import Network
 import webbrowser
 from pathlib import Path
@@ -40,9 +42,6 @@ from langroid.agent.tools.google_search_tool import GoogleSearchTool
 
 from langroid.agent.task import Task
 from cypher_message import CONSTRUCT_DEPENDENCY_GRAPH
-
-# from pyvis.network import Network
-
 
 app = typer.Typer()
 
