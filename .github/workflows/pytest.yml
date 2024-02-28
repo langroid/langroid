@@ -68,7 +68,7 @@ jobs:
         echo "$HOME/.local/bin" >> $GITHUB_PATH
         python -m pip install --upgrade pip
         
-        poetry install
+        poetry install -E chromadb
 
     - name: Dump dependencies to file
       run: pip freeze > requirements_github.txt
