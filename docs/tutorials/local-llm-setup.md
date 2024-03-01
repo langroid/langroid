@@ -15,10 +15,22 @@ You can run any Langroid script using this model, by setting the `chat_model`
 in the `OpenAIGPTConfig` to `ollama/mistral:7b-instruct-v0.2-q8_0`, e.g.
 
 ```python
-llm_config = OpenAIGPTConfig(
+import langroid.language_models as lm
+import langroid as lr
+
+llm_config = lm.OpenAIGPTConfig(
     chat_model="ollama/mistral:7b-instruct-v0.2-q8_0",
     chat_context_length=16_000, # adjust based on model
 )
+agent_config = lr.ChatAgentConfig(
+    llm=llm_config,
+    system_message="You are helpful but concise",
+)
+agent = lr.ChatAgent(agent_config)
+# directly invoke agent's llm_response method
+# response = agent.llm_response("What is the capital of Russia?")
+task = lr.Task(agent, interactive=True)
+task.run() # for an interactive chat loop
 ```
 
 ## Setup Ollama with a GGUF model from HuggingFace
@@ -103,3 +115,31 @@ python examples/docqa/rag-local-simple.py -m local/127.0.0.1:5000/v1//mistral-in
 ```
   (no need to include the full model name, as long as you include enough to
    uniquely identify the model's chat formatting template)
+
+
+## Other local LLM scenarios
+
+There may be scenarios where the above `local/...` or `ollama/...` syntactic shorthand
+does not work.(e.g. when using vLLM to spin up a local LLM at an OpenAI-compatible
+endpoint). For these scenarios, you will have to explicitly create an instance of 
+`lm.OpenAIGPTConfig` and set *both* the `chat_model` and `api_base` parameters.
+For example, suppose you are able to get responses from this endpoint using something like:
+```bash
+curl http://192.168.0.5:5078/v1/chat/completions \
+    -H "Content-Type: application/json" \
+    -d '{
+        "model": "Mistral-7B-Instruct-v0.2",
+        "messages": [
+             {"role": "user", "content": "Who won the world series in 2020?"}
+        ]
+    }'
+```
+To use this endpoint with Langroid, you would create an `OpenAIGPTConfig` like this:
+```python
+import langroid.language_models as lm
+llm_config = lm.OpenAIGPTConfig(
+    chat_model="Mistral-7B-Instruct-v0.2",
+    api_base="http://192.168.0.5:5078/v1",
+)
+```
+

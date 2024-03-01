@@ -9,7 +9,6 @@ from langroid.mytypes import DocMetaData, Document
 from langroid.parsing.parser import Parser, ParsingConfig, Splitter
 from langroid.utils.system import rmdir
 from langroid.vector_store.base import VectorStore
-from langroid.vector_store.chromadb import ChromaDB, ChromaDBConfig
 from langroid.vector_store.lancedb import LanceDB, LanceDBConfig
 from langroid.vector_store.meilisearch import MeiliSearch, MeiliSearchConfig
 from langroid.vector_store.momento import MomentoVI, MomentoVIConfig
@@ -77,6 +76,11 @@ def vecdb(request) -> VectorStore:
         return
 
     if request.param == "chroma":
+        try:
+            from langroid.vector_store.chromadb import ChromaDB, ChromaDBConfig
+        except ImportError:
+            pytest.skip("Chroma not installed")
+            return
         cd_dir = ".chroma/" + embed_cfg.model_type
         rmdir(cd_dir)
         cd_cfg = ChromaDBConfig(
@@ -142,7 +146,7 @@ def vecdb(request) -> VectorStore:
 # add "momento" when their API docs are ready
 @pytest.mark.parametrize(
     "vecdb",
-    ["lancedb", "qdrant_cloud", "qdrant_local", "chroma"],
+    ["chroma", "lancedb", "qdrant_cloud", "qdrant_local"],
     indirect=True,
 )
 def test_vector_stores_search(
@@ -162,7 +166,7 @@ def test_vector_stores_search(
 # add "momento" when their API docs are ready.
 @pytest.mark.parametrize(
     "vecdb",
-    ["lancedb", "qdrant_local", "qdrant_cloud", "chroma"],
+    ["chroma", "lancedb", "qdrant_local", "qdrant_cloud"],
     indirect=True,
 )
 def test_vector_stores_access(vecdb):
@@ -194,7 +198,7 @@ def test_vector_stores_access(vecdb):
 
 @pytest.mark.parametrize(
     "vecdb",
-    ["qdrant_cloud", "lancedb", "chroma", "qdrant_local"],
+    ["chroma", "qdrant_cloud", "lancedb", "qdrant_local"],
     indirect=True,
 )
 def test_vector_stores_context_window(vecdb):
@@ -252,7 +256,7 @@ def test_vector_stores_context_window(vecdb):
 
 @pytest.mark.parametrize(
     "vecdb",
-    ["lancedb", "chroma", "qdrant_cloud", "qdrant_local"],
+    ["chroma", "lancedb", "qdrant_cloud", "qdrant_local"],
     indirect=True,
 )
 def test_vector_stores_overlapping_matches(vecdb):
