@@ -16,7 +16,7 @@ from typing import Any, Dict, List, Tuple
 import pandas as pd
 
 from langroid.agent.special.doc_chat_agent import DocChatAgent, DocChatAgentConfig
-from langroid.agent.special.lance_rag.lance_tools import QueryPlanTool
+from langroid.agent.special.lance_tools import QueryPlanTool
 from langroid.mytypes import DocMetaData, Document
 from langroid.parsing.table_loader import describe_dataframe
 from langroid.utils.constants import DONE, NO_ANSWER
