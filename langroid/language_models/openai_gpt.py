@@ -21,6 +21,7 @@ from typing import (
 )
 
 import openai
+from dotenv import load_dotenv
 from httpx import Timeout
 from openai import AsyncOpenAI, OpenAI
 from pydantic import BaseModel
@@ -207,6 +208,10 @@ class OpenAIGPTConfig(LLMConfig):
 
     type: str = "openai"
     api_key: str = ""  # CAUTION: set this ONLY via env var OPENAI_API_KEY
+    api_version: str = "2023-05-15"  # To support Azure
+    deployment_name: str = ""  # To support Azure
+    model_name: str = ""  # To support Azure
+    model_version: str = ""  # To support Azure
     organization: str = ""
     api_base: str | None = None  # used for local or other non-OpenAI models
     litellm: bool = False  # use litellm api?
@@ -228,8 +233,8 @@ class OpenAIGPTConfig(LLMConfig):
     hf_formatter: HFFormatter | None = None
 
     def __init__(self, **kwargs) -> None:  # type: ignore
+        super().__init__(**kwargs)
         local_model = "api_base" in kwargs and kwargs["api_base"] is not None
-
         chat_model = kwargs.get("chat_model", "")
         local_prefixes = ["local/", "litellm/", "ollama/"]
         if any(chat_model.startswith(prefix) for prefix in local_prefixes):
@@ -250,7 +255,24 @@ class OpenAIGPTConfig(LLMConfig):
 
             kwargs["run_on_first_use"] = with_warning
 
-        super().__init__(**kwargs)
+        # super().__init__(**kwargs)
+        self.switch_to_azure()
+
+    def switch_to_azure(self) -> None:
+        if self.chat_model.startswith("azure"):
+            prefix = "AZURE_OPENAI_"
+            self.type = "azure"
+            # TODO: we need to distinguish openai/azure. Currently, isn't updated
+            self.chat_model = "Azure/" + defaultOpenAIChatModel
+        else:
+            prefix = "OPENAI_"
+
+        # Here, manually load and apply environment variables based on the
+        # determined prefix
+        load_dotenv()
+        for key in os.environ:
+            if key.startswith(prefix):
+                setattr(self, key[len(prefix) :].lower(), os.environ[key])
 
     # all of the vars above can be set via env vars,
     # by upper-casing the name and prefixing with OPENAI_, e.g.
@@ -258,7 +280,7 @@ class OpenAIGPTConfig(LLMConfig):
     # This is either done in the .env file, or via an explicit
     # `export OPENAI_MAX_OUTPUT_TOKENS=1000` or `setenv OPENAI_MAX_OUTPUT_TOKENS 1000`
     class Config:
-        env_prefix = "OPENAI_"
+        pass
 
     def _validate_litellm(self) -> None:
         """
