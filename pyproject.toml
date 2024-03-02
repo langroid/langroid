@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "langroid"
-version = "0.1.197"
+version = "0.1.200"
 description = "Harness LLMs with Multi-Agent Programming"
 authors = ["Prasad Chalasani <pchalasani@gmail.com>"]
 readme = "README.md"
@@ -8,15 +8,16 @@ license = "MIT"
 
 [tool.poetry.dependencies]
 python = ">=3.9.1,<3.12"
-mkdocs = "^1.4.2"
-mkdocs-material = "^9.1.5"
-mkdocstrings = {extras = ["python"], version = "^0.21.2"}
-mkdocs-awesome-pages-plugin = "^2.8.0"
-mkdocs-gen-files = "^0.4.0"
-mkdocs-literate-nav = "^0.6.0"
-mkdocs-section-index = "^0.3.5"
-mkdocs-jupyter = "^0.24.1"
-chromadb = "0.3.21"
+mkdocs = {version="^1.4.2", optional=true}
+mkdocs-material = {version="^9.1.5", optional=true}
+mkdocstrings = {extras = ["python"], version = "^0.21.2", optional=true}
+mkdocs-awesome-pages-plugin = {version="^2.8.0", optional=true}
+mkdocs-rss-plugin = {version="^1.8.0", optional=true}
+mkdocs-gen-files = {version="^0.4.0", optional=true}
+mkdocs-literate-nav = {version="^0.6.0", optional=true}
+mkdocs-section-index = {version="^0.3.5", optional=true}
+mkdocs-jupyter = {version="^0.24.1", optional=true}
+chromadb = {version=">=0.4.21, <=0.4.23", optional=true}
 onnxruntime = "1.16.1"
 fire = "^0.5.0"
 black = {extras = ["jupyter"], version = "^23.3.0"}
@@ -56,7 +57,7 @@ prettytable = "^3.8.0"
 tantivy = "^0.21.0"
 google-api-python-client = "^2.95.0"
 lxml = "^4.9.3"
-unstructured = {extras = ["docx", "pptx", "pdf"], version = ">=0.10.16,<0.10.18"}
+unstructured = {extras = ["docx", "pptx", "pdf"], version = ">=0.10.16,<0.10.18", optional=true}
 
 sentence-transformers = {version="2.2.2", optional=true}
 torch = {version="2.0.0", optional=true}
@@ -64,7 +65,7 @@ psycopg2 = {version="^2.9.7", optional=true}
 pymysql = {version = "^1.1.0", optional = true}
 pytest-postgresql = {version = "^5.0.0", optional = true}
 pytest-mysql = {version = "^2.4.2", optional = true}
-mkdocs-rss-plugin = "^1.8.0"
+
 rank-bm25 = "^0.2.2"
 thefuzz = "^0.20.0"
 pdfplumber = "^0.10.2"
@@ -72,7 +73,6 @@ pymupdf = "^1.23.3"
 jinja2 = "^3.1.2"
 pytest-asyncio = "^0.21.1"
 docstring-parser = "^0.15"
-farm-haystack = {extras = ["ocr", "preprocessing", "file-conversion", "pdf"], version = "^1.21.1"}
 meilisearch = "^0.28.3"
 meilisearch-python-sdk = "^2.2.3"
 litellm = {version = "^1.23.0", optional = true}
@@ -88,11 +88,14 @@ metaphor-python = {version = "^0.1.23", optional = true}
 chainlit = {version = "^1.0.301", optional = true}
 python-socketio = {version="^5.11.0", optional=true}
 duckduckgo-search = "^4.4"
+huggingface-hub = {version="^0.21.2", optional=true}
 
 [tool.poetry.extras]
 # install these using `poetry install -E [...]` where [...] is one of the extras below
 # or install multiple extras using, e.g.,  `poetry install -E "litellm mysql"
 hf-embeddings = ["sentence-transformers", "torch"]
+transformers = ["transformers", "huggingface-hub"]
+unstructured = ["unstructured"]
 postgres = ["psycopg2", "pytest-postgresql"]
 mysql = ["pymysql", "pytest-mysql"]
 litellm = ["litellm"]
@@ -100,6 +103,10 @@ neo4j = ["neo4j"]
 sciphi = ["agent-search"]
 metaphor = ["metaphor-python"]
 chainlit = ["chainlit", "python-socketio"]
+chromadb = ["chromadb"]
+mkdocs = ["mkdocs", "mkdocs-material", "mkdocstrings", "mkdocs-awesome-pages-plugin",
+    "mkdocs-gen-files", "mkdocs-literate-nav",
+    "mkdocs-section-index", "mkdocs-jupyter", "mkdocs-rss-plugin"]
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^7.3.1"
@@ -127,6 +134,7 @@ exclude = [
     "langroid/embedding_models/clustering.py",
     #TODO revisit why mypy keeps failing on gh actions, but works fine locally
     "langroid/agent/callbacks/chainlit.py",
+    "langroid/vector_store/chromadb.py"
 ]
 files=["langroid/*"]
 plugins = [

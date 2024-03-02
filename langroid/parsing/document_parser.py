@@ -11,7 +11,6 @@ import requests
 
 from langroid.mytypes import DocMetaData, Document
 from langroid.parsing.parser import Parser, ParsingConfig
-from langroid.parsing.urls import url_to_tempfile
 
 logger = logging.getLogger(__name__)
 
@@ -54,8 +53,6 @@ class DocumentParser(Parser):
                 return PDFPlumberParser(source, config)
             elif config.pdf.library == "unstructured":
                 return UnstructuredPDFParser(source, config)
-            elif config.pdf.library == "haystack":
-                return HaystackPDFParser(source, config)
             else:
                 raise ValueError(
                     f"Unsupported PDF library specified: {config.pdf.library}"
@@ -301,59 +298,23 @@ class PDFPlumberParser(DocumentParser):
         return self.fix_text(page.extract_text())
 
 
-class HaystackPDFParser(DocumentParser):
-    """
-    Parser for processing PDFs using the `haystack` library.
-    """
-
-    def get_doc_chunks(self) -> List[Document]:
-        """
-        Overrides the base class method to use the `haystack` library.
-        See there for more details.
-        """
-
-        from haystack.nodes import PDFToTextConverter, PreProcessor
-
-        converter = PDFToTextConverter(
-            remove_numeric_tables=True,
-        )
-        path = self.source
-        if path.startswith(("http://", "https://")):
-            path = url_to_tempfile(path)
-        doc = converter.convert(file_path=path, meta=None)
-        # note self.config.chunk_size is in token units,
-        # and we use an approximation of 75 words per 100 tokens
-        # to convert to word units
-        preprocessor = PreProcessor(
-            clean_empty_lines=True,
-            clean_whitespace=True,
-            clean_header_footer=False,
-            split_by="word",
-            split_length=int(0.75 * self.config.chunk_size),
-            split_overlap=int(0.75 * self.config.overlap),
-            split_respect_sentence_boundary=True,
-            add_page_number=True,
-        )
-        chunks = preprocessor.process(doc)
-        return [
-            Document(
-                content=chunk.content,
-                metadata=DocMetaData(
-                    source=f"{self.source} page {chunk.meta['page']}",
-                    is_chunk=True,
-                ),
-            )
-            for chunk in chunks
-        ]
-
-
 class UnstructuredPDFParser(DocumentParser):
     """
     Parser for processing PDF files using the `unstructured` library.
     """
 
     def iterate_pages(self) -> Generator[Tuple[int, Any], None, None]:  # type: ignore
-        from unstructured.partition.pdf import partition_pdf
+        try:
+            from unstructured.partition.pdf import partition_pdf
+        except ImportError:
+            raise ImportError(
+                """
+                The `unstructured` library is not installed by default with langroid.
+                To include this library, please install langroid with the 
+                `unstructured` extra by running `pip install "langroid[unstructured]"`
+                or equivalent.
+                """
+            )
 
         # from unstructured.chunking.title import chunk_by_title
 
@@ -367,7 +328,7 @@ class UnstructuredPDFParser(DocumentParser):
                 Please try a different library by setting the `library` field
                 in the `pdf` section of the `parsing` field in the config file.
                 Supported libraries are: 
-                fitz, pypdf, pdfplumber, unstructured, haystack 
+                fitz, pypdf, pdfplumber, unstructured
                 """
             )
 
@@ -406,7 +367,17 @@ class UnstructuredDocxParser(DocumentParser):
     """
 
     def iterate_pages(self) -> Generator[Tuple[int, Any], None, None]:  # type: ignore
-        from unstructured.partition.docx import partition_docx
+        try:
+            from unstructured.partition.docx import partition_docx
+        except ImportError:
+            raise ImportError(
+                """
+                The `unstructured` library is not installed by default with langroid.
+                To include this library, please install langroid with the 
+                `unstructured` extra by running `pip install "langroid[unstructured]"`
+                or equivalent.
+                """
+            )
 
         elements = partition_docx(file=self.doc_bytes, include_page_breaks=True)
 
@@ -447,7 +418,17 @@ class UnstructuredDocxParser(DocumentParser):
 
 class UnstructuredDocParser(UnstructuredDocxParser):
     def iterate_pages(self) -> Generator[Tuple[int, Any], None, None]:  # type: ignore
-        from unstructured.partition.doc import partition_doc
+        try:
+            from unstructured.partition.doc import partition_doc
+        except ImportError:
+            raise ImportError(
+                """
+                The `unstructured` library is not installed by default with langroid.
+                To include this library, please install langroid with the 
+                `unstructured` extra by running `pip install "langroid[unstructured]"`
+                or equivalent.
+                """
+            )
 
         elements = partition_doc(filename=self.source, include_page_breaks=True)
 

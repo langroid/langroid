@@ -47,7 +47,6 @@ async def setup_agent() -> None:
 
     config = DocChatAgentConfig(
         n_query_rephrases=0,
-        cross_encoder_reranking_model="cross-encoder/ms-marco-MiniLM-L-6-v2",
         hypothetical_answer=False,
         # set it to > 0 to retrieve a window of k chunks on either side of a match
         n_neighbor_chunks=0,
@@ -66,7 +65,7 @@ async def setup_agent() -> None:
             # NOTE: PDF parsing is extremely challenging, each library has its own
             # strengths and weaknesses. Try one that works for your use case.
             pdf=lp.PdfParsingConfig(
-                # alternatives: "haystack", "unstructured", "pdfplumber", "fitz"
+                # alternatives: "unstructured", "pdfplumber", "fitz"
                 library="pdfplumber",
             ),
         ),

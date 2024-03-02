@@ -6,7 +6,6 @@ from dotenv import load_dotenv
 from openai import OpenAI
 
 from langroid.embedding_models.base import EmbeddingModel, EmbeddingModelsConfig
-from langroid.language_models.utils import retry_with_exponential_backoff
 from langroid.mytypes import Embeddings
 from langroid.parsing.utils import batched
 
@@ -24,6 +23,58 @@ class SentenceTransformerEmbeddingsConfig(EmbeddingModelsConfig):
     model_type: str = "sentence-transformer"
     model_name: str = "BAAI/bge-large-en-v1.5"
     context_length: int = 512
+
+
+class EmbeddingFunctionCallable:
+    """
+    A callable class designed to generate embeddings for a list of texts using
+    the OpenAI API, with automatic retries on failure.
+
+    Attributes:
+        model (OpenAIEmbeddings): An instance of OpenAIEmbeddings that provides
+                                configuration and utilities for generating embeddings.
+
+    Methods:
+        __call__(input: List[str]) -> Embeddings: Generate embeddings for
+                                a list of input texts.
+    """
+
+    def __init__(self, model: "OpenAIEmbeddings"):
+        """
+        Initialize the EmbeddingFunctionCallable with a specific model.
+
+        Args:
+            model (OpenAIEmbeddings): An instance of OpenAIEmbeddings to use for
+            generating embeddings.
+        """
+        self.model = model
+
+    def __call__(self, input: List[str]) -> Embeddings:
+        """
+        Generate embeddings for a given list of input texts using the OpenAI API,
+        with retries on failure.
+
+        This method:
+        - Truncates each text in the input list to the model's maximum context length.
+        - Processes the texts in batches to generate embeddings efficiently.
+        - Automatically retries the embedding generation process with exponential
+        backoff in case of failures.
+
+        Args:
+            input (List[str]): A list of input texts to generate embeddings for.
+
+        Returns:
+            Embeddings: A list of embedding vectors corresponding to the input texts.
+        """
+        tokenized_texts = self.model.truncate_texts(input)
+        embeds = []
+        for batch in batched(tokenized_texts, 500):
+            result = self.model.client.embeddings.create(
+                input=batch, model=self.model.config.model_name
+            )
+            batch_embeds = [d.embedding for d in result.data]
+            embeds.extend(batch_embeds)
+        return embeds
 
 
 class OpenAIEmbeddings(EmbeddingModel):
@@ -56,19 +107,7 @@ class OpenAIEmbeddings(EmbeddingModel):
         ]
 
     def embedding_fn(self) -> Callable[[List[str]], Embeddings]:
-        @retry_with_exponential_backoff
-        def fn(texts: List[str]) -> Embeddings:
-            tokenized_texts = self.truncate_texts(texts)
-            embeds = []
-            for batch in batched(tokenized_texts, 500):
-                result = self.client.embeddings.create(
-                    input=batch, model=self.config.model_name
-                )
-                batch_embeds = [d.embedding for d in result.data]
-                embeds.extend(batch_embeds)
-            return embeds
-
-        return fn
+        return EmbeddingFunctionCallable(self)
 
     @property
     def embedding_dims(self) -> int:

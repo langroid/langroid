@@ -68,6 +68,14 @@ DEFAULT_DOC_CHAT_SYSTEM_MESSAGE = """
 You are a helpful assistant, helping me understand a collection of documents.
 """
 
+has_sentence_transformers = False
+try:
+    from sentence_transformer import SentenceTransformer  # noqa: F401
+
+    has_sentence_transformers = True
+except ImportError:
+    pass
+
 
 class DocChatAgentConfig(ChatAgentConfig):
     system_message: str = DEFAULT_DOC_CHAT_SYSTEM_MESSAGE
@@ -98,7 +106,9 @@ class DocChatAgentConfig(ChatAgentConfig):
     n_fuzzy_neighbor_words: int = 100  # num neighbor words to retrieve for fuzzy match
     use_fuzzy_match: bool = True
     use_bm25_search: bool = True
-    cross_encoder_reranking_model: str = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+    cross_encoder_reranking_model: str = (
+        "cross-encoder/ms-marco-MiniLM-L-6-v2" if has_sentence_transformers else ""
+    )
     rerank_diversity: bool = True  # rerank to maximize diversity?
     rerank_periphery: bool = True  # rerank to avoid Lost In the Middle effect?
     embed_batch_size: int = 500  # get embedding of at most this many at a time
@@ -136,7 +146,7 @@ class DocChatAgentConfig(ChatAgentConfig):
             # NOTE: PDF parsing is extremely challenging, and each library
             # has its own strengths and weaknesses.
             # Try one that works for your use case.
-            # or "haystack", "unstructured", "pdfplumber", "fitz", "pypdf"
+            # or "unstructured", "pdfplumber", "fitz", "pypdf"
             library="pdfplumber",
         ),
     )
@@ -157,7 +167,7 @@ class DocChatAgentConfig(ChatAgentConfig):
         collection_name="doc-chat-lancedb",
         replace_collection=True,
         storage_path=".lancedb/data/",
-        embedding=hf_embed_config,
+        embedding=hf_embed_config if has_sentence_transformers else oai_embed_config,
     )
     llm: OpenAIGPTConfig = OpenAIGPTConfig(
         type="openai",

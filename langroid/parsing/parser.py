@@ -19,9 +19,7 @@ class Splitter(str, Enum):
 
 
 class PdfParsingConfig(BaseSettings):
-    library: Literal[
-        "fitz", "pdfplumber", "pypdf", "unstructured", "haystack"
-    ] = "pdfplumber"
+    library: Literal["fitz", "pdfplumber", "pypdf", "unstructured"] = "pdfplumber"
 
 
 class DocxParsingConfig(BaseSettings):

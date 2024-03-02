@@ -39,8 +39,44 @@ class QuestionTool(lr.ToolMessage):
 
 class FinalAnswerTool(lr.ToolMessage):
     request: str = "final_answer_tool"
-    purpose: str = "Present the final <answer> to the user's original query."
+    purpose: str = """
+        Present the intermediate <steps> and 
+        final <answer> to the user's original query.
+        """
+    steps: str
     answer: str
+
+    @classmethod
+    def examples(cls) -> List["lr.ToolMessage"]:
+        return [
+            cls(
+                steps="1. Man is mortal. 2. Plato was a man.",
+                answer="Plato was mortal.",
+            ),
+            cls(
+                steps="1. The moon landing was in 1969. 2. Kennedy was president "
+                "during 1969.",
+                answer="Kennedy was president during the moon landing.",
+            ),
+        ]
+
+
+class FeedbackTool(lr.ToolMessage):
+    request: str = "feedback_tool"
+    purpose: str = "Provide <feedback> on the user's answer."
+    feedback: str
+
+    @classmethod
+    def examples(cls) -> List["lr.ToolMessage"]:
+        return [
+            cls(feedback=""),
+            cls(
+                feedback="""
+                The answer is invalid because the conclusion does not follow from the
+                steps. Please check your reasoning and try again.
+                """
+            ),
+        ]
 
 
 class AssistantAgent(lr.ChatAgent):
@@ -58,11 +94,13 @@ class AssistantAgent(lr.ChatAgent):
         if isinstance(msg, ChatDocument) and msg.metadata.sender == lr.Entity.LLM:
             if self.has_asked:
                 return f"""
-                You must do one of the following:
+                You may have intended to use a tool, but your JSON format may be wrong.
+                
+                REMINDER: You must do one of the following:
                 - If you are ready with the final answer to the user's ORIGINAL QUERY
                     [ Remember it was: {self.original_query} ],
-                  then present this answer using the `final_answer_tool` in the 
-                  specified JSON format.
+                  then present your reasoning steps and final answer using the 
+                  `final_answer_tool` in the specified JSON format.
                 - If you still need to ask a question, then use the `question_tool`
                   to ask a SINGLE question that can be answered from a web search.
                 """
@@ -83,7 +121,27 @@ class AssistantAgent(lr.ChatAgent):
         return msg.to_json()
 
     def final_answer_tool(self, msg: FinalAnswerTool) -> str:
-        return lr.utils.constants.DONE + " " + msg.answer
+        if not self.has_asked or self.n_questions > 1:
+            # not yet asked any questions, or LLM is currently asking
+            # a question (and this is the second one in this turn, and so should
+            # be ignored), ==>
+            # cannot present final answer yet (LLM may have hallucinated this json)
+            return ""
+        # valid final answer tool: PASS it on so Critic gets it
+        return lr.utils.constants.PASS_TO + "Critic"
+
+    def feedback_tool(self, msg: FeedbackTool) -> str:
+        if msg.feedback == "":
+            return lr.utils.constants.DONE
+        else:
+            return f"""
+            Below is feedback about your answer. Take it into account to 
+            improve your answer, and present it again using the `final_answer_tool`.
+            
+            FEEDBACK:
+            
+            {msg.feedback}
+            """
 
     async def llm_response_async(
         self, message: Optional[str | ChatDocument] = None
@@ -108,6 +166,27 @@ class AssistantAgent(lr.ChatAgent):
             return result
 
         return result
+
+
+class CriticAgent(lr.ChatAgent):
+    def final_answer_tool(self, msg: FinalAnswerTool) -> str:
+        # received from Assistant. Extract the components as plain text,
+        # so that the Critic LLM can provide feedback
+        return f"""
+        The user has presented the following intermediate steps and final answer
+        shown below. Please provide feedback using the `feedback_tool`.
+        Remember to set the `feedback` field to an empty string if the answer is valid,
+        otherwise give specific feedback on what the issues are and how the answer 
+        can be improved.
+        
+        STEPS: {msg.steps}
+        
+        ANSWER: {msg.answer}
+        """
+
+    def feedback_tool(self, msg: FeedbackTool) -> str:
+        # say DONE and PASS to the feedback goes back to Assistant to handle
+        return lr.utils.constants.DONE + " " + lr.utils.constants.PASS
 
 
 class SearcherAgentConfig(lr.ChatAgentConfig):
@@ -136,6 +215,9 @@ class SearcherAgent(lr.ChatAgent):
             return f"""
             You forgot to use the web search tool to answer the 
             user's question : {self.curr_query}.
+            REMEMBER - you must ONLY answer the user's questions based on 
+             results from a web-search, and you MUST NOT ANSWER them yourself.
+             
             Please use the `{search_tool_name}` tool 
             using the specified JSON format, then compose your answer.
             """
@@ -161,7 +243,7 @@ class SearcherAgent(lr.ChatAgent):
             # so let the LLM compose a response based on the search results
             self.n_searches = 0  # reset search count
 
-            result = await super().llm_response_async(message)
+            result = await super().llm_response_forget_async(message)
             # Augment the LLM's composed answer with a helpful nudge
             # back to the Assistant
             result.content = f"""
@@ -176,13 +258,15 @@ class SearcherAgent(lr.ChatAgent):
             return result
 
         # Handling query from user (or other agent)
-        result = await super().llm_response_async(message)
+        result = await super().llm_response_forget_async(message)
+        if result is None:
+            return result
         tools = self.get_tool_messages(result)
         if all(not isinstance(t, self.config.search_tool_class) for t in tools):
             # LLM did not use search tool;
-            # make the response empty so curr pend msg doesn't get updated,
+            # Replace its response with a placeholder message
             # and the agent fallback_handler will remind the LLM
-            result.content = lr.utils.constants.DONE
+            result.content = "Did not use web-search tool."
             return result
 
         self.n_searches += 1
@@ -224,19 +308,22 @@ async def main(
         chat_model=model or lm.OpenAIChatModel.GPT4_TURBO,
         chat_context_length=16_000,
         temperature=0.2,
-        max_output_tokens=200,
+        max_output_tokens=500,
         timeout=45,
     )
 
     assistant_config = lr.ChatAgentConfig(
         system_message="""
-        You are a resourceful assistant, able to think step by step to answer complex
+        You are a resourceful assistant, able to think step by step to answer
         complex questions from the user. You must break down complex questions into
         simpler questions that can be answered by a web search. You must ask me 
         (the user) each question ONE BY ONE, using the `question_tool` in
          the specified format, and I will do a web search and send you
         a brief answer. Once you have enough information to answer my original
-        (complex) question, you MUST say DONE and present the answer to me.
+        (complex) question, you MUST present your INTERMEDIATE STEPS and FINAL ANSWER
+        using the `final_answer_tool` in the specified JSON format.
+        You will then receive FEEDBACK from the Critic, and if needed
+        you should try to improve your answer based on this feedback.
         """,
         llm=llm_config,
         vecdb=None,
@@ -244,6 +331,7 @@ async def main(
     assistant_agent = AssistantAgent(assistant_config)
     assistant_agent.enable_message(QuestionTool)
     assistant_agent.enable_message(FinalAnswerTool)
+    assistant_agent.enable_message(FeedbackTool, use=False, handle=True)
 
     search_tool_handler_method = DuckduckgoSearchTool.default_value("request")
 
@@ -279,7 +367,30 @@ async def main(
         single_round=False,
         interactive=False,
     )
-    assistant_task.add_sub_task(search_task)
+
+    critic_agent_config = lr.ChatAgentConfig(
+        llm=llm_config,
+        vecdb=None,
+        system_message="""
+        You excel at logical reasoning and combining pieces of information.
+        The user will send you a summary of the intermediate steps and final answer.
+        You must examine these and provide feedback to the user, using the 
+        `feedback_tool`, as follows:
+        - If you think the answer is valid, 
+            simply set the `feedback` field to an empty string "".
+        - Otherwise set the `feedback` field to a reason why the answer is invalid,
+            and suggest how the user can improve the answer.
+        """,
+    )
+    critic_agent = CriticAgent(critic_agent_config)
+    critic_agent.enable_message(FeedbackTool)
+    critic_agent.enable_message(FinalAnswerTool, use=False, handle=True)
+    critic_task = lr.Task(
+        critic_agent,
+        name="Critic",
+        interactive=False,
+    )
+    assistant_task.add_sub_task([search_task, critic_task])
     cl.user_session.set("assistant_task", assistant_task)
 
 

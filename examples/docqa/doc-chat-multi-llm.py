@@ -63,7 +63,6 @@ def main(
     config = DocChatAgentConfig(
         llm=llm_config_rag,
         n_query_rephrases=0,
-        cross_encoder_reranking_model="cross-encoder/ms-marco-MiniLM-L-6-v2",
         hypothetical_answer=False,
         assistant_mode=True,
         parsing=ParsingConfig(  # modify as needed
@@ -79,7 +78,7 @@ def main(
             # NOTE: PDF parsing is extremely challenging, each library has its own
             # strengths and weaknesses. Try one that works for your use case.
             pdf=PdfParsingConfig(
-                # alternatives: "haystack", "unstructured", "pdfplumber", "fitz"
+                # alternatives: "unstructured", "pdfplumber", "fitz"
                 library="pdfplumber",
             ),
         ),

@@ -1,8 +1,6 @@
 """
 Extract structured information from a passage using a tool/function.
 
-Inspired by this Haystack example, showing how it is much simpler in Langroid:
-https://haystack.deepset.ai/tutorials/28_structured_output_with_loop
 
 python3 examples/extract/capitals.py
 
