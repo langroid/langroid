@@ -29,7 +29,7 @@ class AzureConfig(OpenAIGPTConfig):
 
     api_key: str = ""  # CAUTION: set this ONLY via env var AZURE_OPENAI_API_KEY
     type: str = "azure"
-    api_version: str = "2023-05-15"
+    api_version: str = "2024-02-15-preview"
     deployment_name: str = ""
     model_name: str = ""
     model_version: str = ""  # is used to determine the cost of using the model
