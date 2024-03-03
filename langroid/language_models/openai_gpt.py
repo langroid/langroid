@@ -54,7 +54,11 @@ from langroid.utils.system import friendly_error
 
 logging.getLogger("openai").setLevel(logging.ERROR)
 
-OLLAMA_BASE_URL = "http://localhost:11434/v1"
+if "OLLAMA_HOST" in os.environ:
+    OLLAMA_BASE_URL = f"http://{os.environ['OLLAMA_HOST']}/v1"
+else:
+    OLLAMA_BASE_URL = "http://localhost:11434/v1"
+
 OLLAMA_API_KEY = "ollama"
 
 

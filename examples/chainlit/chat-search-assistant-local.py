@@ -30,7 +30,7 @@ class QuestionTool(lr.ToolMessage):
     question: str
 
     @classmethod
-    def examples(cls) -> List["lr.ToolMessage"]:
+    def examples(cls) -> List[lr.ToolMessage]:
         return [
             cls(question="Which superconductor material was discovered in 2023?"),
             cls(question="What AI innovation did Meta achieve in 2024?"),

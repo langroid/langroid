@@ -182,7 +182,9 @@ class SQLChatAgent(ChatAgent):
     def _init_table_metadata(self) -> None:
         """Initialize metadata for the tables present in the database."""
         if not self.config.context_descriptions and isinstance(self.engine, Engine):
-            self.config.context_descriptions = extract_schema_descriptions(self.engine)
+            self.config.context_descriptions = extract_schema_descriptions(
+                self.engine, self.config.multi_schema
+            )
 
         if self.config.use_schema_tools:
             self.table_metadata = populate_metadata_with_schema_tools(
