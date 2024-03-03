@@ -41,7 +41,7 @@ redis = "^5.0.1"
 fakeredis = "^2.12.1"
 faker = "^18.9.0"
 requests = "^2.31.0"
-ruff = "^0.0.270"
+ruff = "^0.2.2"
 pre-commit = "^3.3.2"
 types-redis = "^4.5.5.2"
 types-requests = "^2.31.0.1"
@@ -144,17 +144,17 @@ plugins = [
 [tool.ruff]
 line-length = 88
 # Allow unused variables when underscore-prefixed.
-dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+lint.dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
 # Assume Python 3.11.
 target-version = "py311"
-select = [
+lint.select = [
     "E",  # pycodestyle
     "F",  # pyflakes
     "I",  # isort
 ]
 exclude = ["docs", ".venv", "venv", "examples", "examples_dev", "langroid/utils/web", "notebooks", "__init__.py"]
-fixable = ["A", "B", "C", "D", "E", "F", "G", "I", "N", "Q", "S", "T", "W", "ANN", "ARG", "BLE", "COM", "DJ", "DTZ", "EM", "ERA", "EXE", "FBT", "ICN", "INP", "ISC", "NPY", "PD", "PGH", "PIE", "PL", "PT", "PTH", "PYI", "RET", "RSE", "RUF", "SIM", "SLF", "TCH", "TID", "TRY", "UP", "YTT"]
-unfixable = []
+lint.fixable = ["A", "B", "C", "D", "E", "F", "G", "I", "N", "Q", "S", "T", "W", "ANN", "ARG", "BLE", "COM", "DJ", "DTZ", "EM", "ERA", "EXE", "FBT", "ICN", "INP", "ISC", "NPY", "PD", "PGH", "PIE", "PL", "PT", "PTH", "PYI", "RET", "RSE", "RUF", "SIM", "SLF", "TCH", "TID", "TRY", "UP", "YTT"]
+lint.unfixable = []
 
 [tool.pytest.ini_options]
 filterwarnings = ["ignore::DeprecationWarning"]
