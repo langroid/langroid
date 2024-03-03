@@ -2,46 +2,39 @@
 Single-agent to use to chat with a Neo4j knowledge-graph (KG)
 that models a dependency graph of Python packages.
 
-User specifies package name
--> agent gets version number and type of package using google search
--> agent builds dependency graph using Neo4j
--> user asks natural language query about dependencies
--> LLM translates to Cypher query to get info from KG
--> Query results returned to LLM
--> LLM translates to natural language response
-
-This example relies on neo4j. The easiest way to get access to neo4j is by
-creating a cloud account at `https://neo4j.com/cloud/platform/aura-graph-database/`
-
-Upon creating the account successfully, neo4j will create a text file that contains
-account settings, please provide the following information (uri, username, password) as
-described here
-`https://github.com/langroid/langroid/tree/main/examples/kg-chat#requirements`
-
-The rest of requirements are described in
- `https://github.com/langroid/langroid/blob/main/examples/kg-chat/README.md`
+This is a chainlit UI version of examples/kg-chat/dependency_chatbot.py
 
 Run like this:
 ```
-python3 examples/kg-chat/dependency_chatbot.py
+chainlit run examples/kg-chat/dependency_chatbot.py
 ```
+
+The requirements are described in
+ `https://github.com/langroid/langroid/blob/main/examples/kg-chat/README.md`
 """
 import typer
 from rich import print
-from rich.prompt import Prompt
-from dotenv import load_dotenv
 
 from pyvis.network import Network
 import webbrowser
 from pathlib import Path
 
+import langroid as lr
+import langroid.language_models as lm
+import chainlit as cl
+from langroid.agent.callbacks.chainlit import (
+    add_instructions,
+    make_llm_settings_widgets,
+    setup_llm,
+    update_llm,
+)
+from textwrap import dedent
 
 from langroid.agent.special.neo4j.neo4j_chat_agent import (
     Neo4jChatAgent,
     Neo4jChatAgentConfig,
     Neo4jSettings,
 )
-from langroid.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
 from langroid.utils.constants import NO_ANSWER
 from langroid.utils.configuration import set_global, Settings
 from langroid.agent.tool_message import ToolMessage
@@ -203,29 +196,23 @@ class DependencyGraphAgent(Neo4jChatAgent):
             print(f"Failed to automatically open the graph in a browser: {e}")
 
 
-@app.command()
-def main(
-    debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
-    model: str = typer.Option("", "--model", "-m", help="model name"),
-    tools: bool = typer.Option(
-        False, "--tools", "-t", help="use langroid tools instead of function-calling"
-    ),
-    nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
-) -> None:
+async def setup_agent_task():
+    """Set up Agent and Task from session settings state."""
+
+    # set up LLM and LLMConfig from settings state
+    await setup_llm()
+    llm_config = cl.user_session.get("llm_config")
+    if task := cl.user_session.get("task"):
+        # task already exists and is running, so we just update the agent's llm config
+        task.agent.config.llm = llm_config
+        return
+
     set_global(
         Settings(
-            debug=debug,
-            cache=nocache,
+            debug=False,
+            cache=True,
         )
     )
-    print(
-        """
-        [blue]Welcome to Dependency Analysis chatbot!
-        Enter x or q to quit at any point.
-        """
-    )
-
-    load_dotenv()
 
     neo4j_settings = Neo4jSettings()
 
@@ -233,11 +220,7 @@ def main(
         config=Neo4jChatAgentConfig(
             neo4j_settings=neo4j_settings,
             show_stats=False,
-            use_tools=tools,
-            use_functions_api=not tools,
-            llm=OpenAIGPTConfig(
-                chat_model=model or OpenAIChatModel.GPT4_TURBO,
-            ),
+            llm=llm_config,
         ),
     )
 
@@ -280,13 +263,47 @@ def main(
     dependency_agent.enable_message(GoogleSearchTool)
     dependency_agent.enable_message(VisualizeGraph)
 
-    task.run()
-
-    # check if the user wants to delete the database
-    if dependency_agent.config.database_created:
-        if Prompt.ask("[blue] Do you want to delete the database? (y/n)") == "y":
-            dependency_agent.remove_database()
+    cl.user_session.set("dependency_agent", dependency_agent)
+    cl.user_session.set("task", task)
 
 
-if __name__ == "__main__":
-    app()
+@cl.on_settings_update
+async def on_update(settings):
+    await update_llm(settings)
+    await setup_agent_task()
+
+
+@cl.on_chat_start
+async def chat() -> None:
+    await add_instructions(
+        title="Welcome to Python Dependency chatbot!",
+        content=dedent(
+            """
+        Ask any questions about Python packages, and I will try my best to answer them.
+        But first, the user specifies package name
+        -> agent gets version number and type of package using google search
+        -> agent builds dependency graph using Neo4j
+        -> user asks natural language query about dependencies
+        -> LLM translates to Cypher query to get info from KG
+        -> Query results returned to LLM
+        -> LLM translates to natural language response
+        """
+        ),
+    )
+
+    await make_llm_settings_widgets(
+        lm.OpenAIGPTConfig(
+            timeout=180,
+            chat_context_length=16_000,
+            chat_model="",
+            temperature=0.1,
+        )
+    )
+    await setup_agent_task()
+
+
+@cl.on_message
+async def on_message(message: cl.Message):
+    task = cl.user_session.get("task")
+    lr.ChainlitTaskCallbacks(task, message)
+    await task.run_async(message.content)
