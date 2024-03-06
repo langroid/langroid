@@ -44,6 +44,7 @@ async def main(
         Enter a complex question; 
         - The Assistant will break it down into smaller questions for the Searcher
         - The Searcher will search the web and compose a concise answer
+        
         Once the Assistant has enough information, it will say DONE and present the answer.        
         """
         ),
