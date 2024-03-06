@@ -44,6 +44,7 @@ async def main(
         Enter a complex question; 
         - The Assistant will break it down into smaller questions for the Searcher
         - The Searcher will search the web and compose a concise answer
+        
         Once the Assistant has enough information, it will say DONE and present the answer.        
         """
         ),
@@ -59,7 +60,7 @@ async def main(
 
     assistant_config = lr.ChatAgentConfig(
         system_message="""
-        You are a resourceful assistant, able to think step by step to answer complex
+        You are a resourceful assistant, able to think step by step to answer
         complex questions from the user. You must break down complex questions into
         simpler questions that can be answered by a web search. You must ask me 
         (the user) each question ONE BY ONE, and I will do a web search and send you

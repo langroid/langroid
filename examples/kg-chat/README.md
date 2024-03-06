@@ -6,6 +6,8 @@ The second example is a **CSV Chat** that can answer questions about a CSV knowl
 
 ## Requirements:
 
+**1. NEO4j:**
+
 This example relies on the `neo4j` Database. The easiest way to get access to neo4j is
 by creating a cloud account at [Neo4j Aura](https://neo4j.com/cloud/platform/aura-graph-database/). OR you
 can use Neo4j Docker image using this command:
@@ -23,6 +25,13 @@ account settings, please provide the following information (uri, username,
 password, and database), while creating the constructor `Neo4jChatAgentConfig`. 
 These settings can be set inside the `.env` file as shown in [`.env-template`](../../.env-template)
 
+**2. Google Custom Search API Credentials** 
+needed to enable an Agent to use the `GoogleSearchTool`. 
+Follow the [instruction](https://github.com/langroid/langroid?tab=readme-ov-file#gear-installation-and-setup) under `Optional Setup Instructions` to get these API credentials. 
+
+**3. Visualization**
+The package `pyvis` is required to enable the visualization tool `VisualizeGraph`. 
+Run ``pip install pyvis`` to install this package.
 
 ## 1- PyPi Packages Dependency Chatbot
 
@@ -30,7 +39,7 @@ This example uses a `DependencyGraphAgent`
 (derived from [`Neo4jChatAgent`](https://github.com/langroid/langroid/blob/main/langroid/agent/special/neo4j/neo4j_chat_agent.py)).
 It auto-generates a `neo4j` knowledge-graph based on the dependency
 structure of a given `PyPi` package. You can then ask the chatbot questions
-about the dependency graph. This agent uses two tools in addition to those 
+about the dependency graph. This agent uses three tools in addition to those 
 already available to `Neo4jChatAgent`:
 
 - DepGraphTool to build the dependency graph for a given pkg version, using the API
@@ -47,6 +56,7 @@ The `Neo4jChatAgent` has access to these tools/function-calls:
 - `GraphSchemaTool`: get schema of Neo4j knowledge-graph
 - `CypherRetrievalTool`: generate cypher queries to get information from
    Neo4j knowledge-graph (Cypher is the query language for Neo4j)
+- `VisualizeGraph`: supports only visualizing the the whole dependency graph
 
 ### Running the example
 
