@@ -178,13 +178,31 @@ def test_vector_stores_access(vecdb):
     vecdb.delete_collection(collection_name=coll_name)
     vecdb.create_collection(collection_name=coll_name)
 
-    vecdb.add_documents(stored_docs)
+    # create random string of 10 arbitrary characters, not necessarily ascii
+    import random
+    import string
+
+    # Generate a random string of 10 characters
+    ingested_docs = [
+        Document(
+            content=''.join(
+                random.choices(
+                    string.ascii_letters + string.digits, k=10
+                )
+            ),
+            metadata=DocMetaData(id=str(i)),
+        )
+        for i in range(533)
+    ]
+
+    vecdb.add_documents(ingested_docs)
     all_docs = vecdb.get_all_documents()
     ids = [doc.id() for doc in all_docs]
-    assert len(all_docs) == len(stored_docs)
+    assert len(set(ids)) == len(ids)
+    assert len(all_docs) == len(ingested_docs)
 
-    docs = vecdb.get_documents_by_ids(ids[:3])
-    assert len(docs) == 3
+    docs = vecdb.get_documents_by_ids(ids)
+    assert len(docs) == len(ingested_docs)
 
     coll_names = [f"test_junk_{i}" for i in range(3)]
     for coll in coll_names:

@@ -139,7 +139,7 @@ class LanceDB(VectorStore):
         Args:
             empty (bool, optional): Whether to include empty collections.
         """
-        colls = self.client.table_names()
+        colls = self.client.table_names(limit=None)
         if len(colls) == 0:
             return []
         if empty:  # include empty tbls
@@ -271,11 +271,11 @@ class LanceDB(VectorStore):
             for i in range(0, len(ids), b):
                 batch = [
                     self.unflattened_schema(
-                        id=ids[i],
-                        vector=embedding_vecs[i],
+                        id=ids[i+j],
+                        vector=embedding_vecs[i+j],
                         **doc.dict(),
                     )
-                    for i, doc in enumerate(documents[i : i + b])
+                    for j, doc in enumerate(documents[i : i + b])
                 ]
                 if self.config.flatten:
                     batch = [
@@ -409,7 +409,7 @@ class LanceDB(VectorStore):
         if self.config.collection_name is None:
             raise ValueError("No collection name set, cannot retrieve docs")
         tbl = self.client.open_table(self.config.collection_name)
-        pre_result = tbl.search(None).where(where or None)
+        pre_result = tbl.search(None).where(where or None).limit(None)
         return self._lance_result_to_docs(pre_result)
 
     def get_documents_by_ids(self, ids: List[str]) -> List[Document]:
@@ -417,10 +417,12 @@ class LanceDB(VectorStore):
             raise ValueError("No collection name set, cannot retrieve docs")
         _ids = [str(id) for id in ids]
         tbl = self.client.open_table(self.config.collection_name)
-        docs = [
-            self._lance_result_to_docs(tbl.search().where(f"id == '{_id}'"))[0]
-            for _id in _ids
-        ]
+        docs = []
+        for _id in _ids:
+            results = self._lance_result_to_docs(tbl.search().where(f"id == '{_id}'"))
+            if len(results) == 0:
+                raise ValueError(f"Document with id {_id} not found")
+            docs.append(results[0])
         return docs
 
     def similar_texts_with_scores(

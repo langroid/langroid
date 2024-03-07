@@ -60,6 +60,10 @@ class Parser:
         """Chunks may belong to multiple docs, but for each doc,
         they appear consecutively. Add window_ids in metadata"""
 
+        # discard empty chunks
+        chunks = [c for c in chunks if c.content.strip() != ""]
+        if len(chunks) == 0:
+            return
         # The original metadata.id (if any) is ignored since it will be same for all
         # chunks and is useless. We want a distinct id for each chunk.
         orig_ids = [c.metadata.id for c in chunks]
@@ -82,8 +86,6 @@ class Parser:
             window_ids = [ids[max(0, i - k) : min(n, i + k + 1)] for i in range(n)]
             for i, _ in enumerate(ids):
                 c = id2chunk[ids[i]]
-                if c.content.strip() == "":
-                    continue
                 c.metadata.window_ids = window_ids[i]
                 c.metadata.id = ids[i]
                 c.metadata.is_chunk = True
