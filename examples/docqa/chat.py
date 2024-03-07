@@ -33,6 +33,13 @@ def main(
     vecdb: str = typer.Option(
         "lancedb", "--vecdb", "-v", help="vector db name (default: lancedb)"
     ),
+    embed: str = typer.Option(
+        "openai",
+        "--embed",
+        "-e",
+        help="sentence transformer model name",
+        # e.g. NeuML/pubmedbert-base-embeddings
+    ),
 ) -> None:
     llm_config = lm.OpenAIGPTConfig(
         chat_model=model or lm.OpenAIChatModel.GPT4_TURBO,
@@ -46,18 +53,18 @@ def main(
         n_query_rephrases=0,
         hypothetical_answer=False,
         # set it to > 0 to retrieve a window of k chunks on either side of a match
-        n_neighbor_chunks=10,
+        n_neighbor_chunks=2,
         parsing=ParsingConfig(  # modify as needed
             splitter=Splitter.TOKENS,
             chunk_size=200,  # aim for this many tokens per chunk
             overlap=50,  # overlap between chunks
             max_chunks=10_000,
-            n_neighbor_ids=25,  # store ids of window of k chunks around each chunk.
+            n_neighbor_ids=5,  # store ids of window of k chunks around each chunk.
             # aim to have at least this many chars per chunk when
             # truncating due to punctuation
             min_chunk_chars=200,
             discard_chunk_chars=5,  # discard chunks with fewer than this many chars
-            n_similar_docs=3,
+            n_similar_docs=5,
             # NOTE: PDF parsing is extremely challenging, each library has its own
             # strengths and weaknesses. Try one that works for your use case.
             pdf=PdfParsingConfig(
@@ -67,11 +74,22 @@ def main(
         ),
     )
 
-    embed_cfg = lr.embedding_models.OpenAIEmbeddingsConfig()
+    if embed == "openai":
+        embed_cfg = lr.embedding_models.OpenAIEmbeddingsConfig()
+    else:
+        embed_cfg = lr.embedding_models.SentenceTransformerEmbeddingsConfig(
+            model_type="sentence-transformer",
+            model_name=embed,
+        )
 
     match vecdb:
         case "lance" | "lancedb":
-            pass  # this is the default, nothing to do
+            config.vecdb = lr.vector_store.LanceDBConfig(
+                collection_name="doc-chat-lancedb",
+                replace_collection=True,
+                storage_path=".lancedb/data/",
+                embedding=embed_cfg,
+            )
         case "qdrant" | "qdrantdb":
             config.vecdb = lr.vector_store.QdrantDBConfig(
                 cloud=True,
