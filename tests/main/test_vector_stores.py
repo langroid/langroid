@@ -185,11 +185,7 @@ def test_vector_stores_access(vecdb):
     # Generate a random string of 10 characters
     ingested_docs = [
         Document(
-            content=''.join(
-                random.choices(
-                    string.ascii_letters + string.digits, k=10
-                )
-            ),
+            content="".join(random.choices(string.ascii_letters + string.digits, k=10)),
             metadata=DocMetaData(id=str(i)),
         )
         for i in range(533)

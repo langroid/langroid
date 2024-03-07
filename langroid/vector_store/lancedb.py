@@ -271,8 +271,8 @@ class LanceDB(VectorStore):
             for i in range(0, len(ids), b):
                 batch = [
                     self.unflattened_schema(
-                        id=ids[i+j],
-                        vector=embedding_vecs[i+j],
+                        id=ids[i + j],
+                        vector=embedding_vecs[i + j],
                         **doc.dict(),
                     )
                     for j, doc in enumerate(documents[i : i + b])
