@@ -30,6 +30,9 @@ def main(
     debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
     model: str = typer.Option("", "--model", "-m", help="model name"),
     nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
+    vecdb: str = typer.Option(
+        "lancedb", "--vecdb", "-v", help="vector db name (default: lancedb)"
+    ),
 ) -> None:
     llm_config = lm.OpenAIGPTConfig(
         chat_model=model or lm.OpenAIChatModel.GPT4_TURBO,
@@ -63,6 +66,23 @@ def main(
             ),
         ),
     )
+
+    embed_cfg = lr.embedding_models.OpenAIEmbeddingsConfig()
+
+    match vecdb:
+        case "lance" | "lancedb":
+            pass  # this is the default, nothing to do
+        case "qdrant" | "qdrantdb":
+            config.vecdb = lr.vector_store.QdrantDBConfig(
+                cloud=True,
+                storage_path=".qdrant/doc-chat",
+                embedding=embed_cfg,
+            )
+        case "chroma" | "chromadb":
+            config.vecdb = lr.vector_store.ChromaDBConfig(
+                storage_path=".chroma/doc-chat",
+                embedding=embed_cfg,
+            )
 
     set_global(
         Settings(

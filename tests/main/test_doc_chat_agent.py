@@ -98,6 +98,18 @@ def vecdb(request) -> VectorStore:
         yield qd
         return
 
+    if request.param == "qdrant_cloud":
+        qd_dir = ".qdrant/cloud/test-" + embed_cfg.model_type
+        qd_cfg_cloud = QdrantDBConfig(
+            cloud=True,
+            collection_name="test-" + embed_cfg.model_type,
+            storage_path=qd_dir,
+            embedding=embed_cfg,
+        )
+        qd_cloud = QdrantDB(qd_cfg_cloud)
+        yield qd_cloud
+        return
+
     if request.param == "chroma":
         cd_dir = ".chroma/" + embed_cfg.model_type
         rmdir(cd_dir)
@@ -191,7 +203,9 @@ QUERY_EXPECTED_PAIRS = [
 ]
 
 
-@pytest.mark.parametrize("vecdb", ["qdrant_local", "chroma", "lancedb"], indirect=True)
+@pytest.mark.parametrize(
+    "vecdb", ["qdrant_cloud", "qdrant_local", "chroma", "lancedb"], indirect=True
+)
 @pytest.mark.parametrize("query, expected", QUERY_EXPECTED_PAIRS)
 def test_doc_chat_agent_llm(test_settings: Settings, agent, query: str, expected: str):
     """
