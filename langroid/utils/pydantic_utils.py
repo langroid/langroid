@@ -17,10 +17,24 @@ from typing import (
 import numpy as np
 import pandas as pd
 from pydantic import BaseModel, ValidationError, create_model
+from pydantic.config import JsonDict, JsonSchemaExtraCallable
 
 from langroid.mytypes import DocMetaData, Document
 
 logger = logging.getLogger(__name__)
+
+
+def exclude(*args: str) -> JsonSchemaExtraCallable:
+    """
+    Returns a function which removes the provded keys from a dictionary.
+    Use to remove keys from the JSON schema for a Pydantic model.
+    """
+
+    def f(d: JsonDict) -> None:
+        for arg in args:
+            d.pop(arg)
+
+    return f
 
 
 def has_field(model_class: Type[BaseModel], field_name: str) -> bool:

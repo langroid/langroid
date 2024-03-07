@@ -23,7 +23,8 @@ from typing import (
 import openai
 from httpx import Timeout
 from openai import AsyncOpenAI, OpenAI
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel
+from pydantic_settings import SettingsConfigDict
 from rich import print
 from rich.markup import escape
 
@@ -261,7 +262,7 @@ class OpenAIGPTConfig(LLMConfig):
     # OPENAI_MAX_OUTPUT_TOKENS=1000.
     # This is either done in the .env file, or via an explicit
     # `export OPENAI_MAX_OUTPUT_TOKENS=1000` or `setenv OPENAI_MAX_OUTPUT_TOKENS 1000`
-    model_config = ConfigDict(env_prefix="OPENAI_")
+    model_config = SettingsConfigDict(env_prefix="OPENAI_")
 
     def _validate_litellm(self) -> None:
         """

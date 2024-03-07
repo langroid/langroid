@@ -18,6 +18,7 @@ from pydantic import BaseModel, ConfigDict
 from langroid.language_models.base import LLMFunctionSpec
 from langroid.utils.pydantic_utils import (
     _recursive_purge_dict_key,
+    exclude,
     generate_simple_schema,
 )
 
@@ -47,7 +48,7 @@ class ToolMessage(ABC, BaseModel):
         validate_assignment=True,
         # do not include these fields in the generated schema
         # since we don't require the LLM to specify them
-        json_schema_extra={"exclude": {"purpose", "result"}},
+        json_schema_extra=exclude("purpose", "result"),
     )
 
     @classmethod

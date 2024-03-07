@@ -16,7 +16,7 @@ from langroid.agent.chat_agent import ChatAgent
 from langroid.agent.chat_document import ChatDocMetaData, ChatDocument
 from langroid.agent.tool_message import ToolMessage
 from langroid.mytypes import Entity
-from langroid.utils.pydantic_utils import has_field
+from langroid.utils.pydantic_utils import exclude, has_field
 
 
 class AddRecipientTool(ToolMessage):
@@ -36,7 +36,7 @@ class AddRecipientTool(ToolMessage):
     model_config = ConfigDict(
         # do not include these fields in the generated schema
         # since we don't require the LLM to specify them
-        json_schema_extra={"exclude": {"saved_content", "purpose"}}
+        json_schema_extra=exclude("saved_content", "purpose")
     )
 
     def response(self, agent: ChatAgent) -> ChatDocument:
