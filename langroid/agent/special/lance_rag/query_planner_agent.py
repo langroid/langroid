@@ -18,7 +18,7 @@ import logging
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.chat_document import ChatDocument
-from langroid.agent.special.lance_rag.lance_tools import (
+from langroid.agent.special.lance_tools import (
     QueryPlan,
     QueryPlanAnswerTool,
     QueryPlanFeedbackTool,

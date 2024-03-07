@@ -19,12 +19,12 @@ import logging
 
 from langroid.agent.chat_agent import ChatAgent
 from langroid.agent.chat_document import ChatDocument
-from langroid.agent.special.lance_rag.lance_tools import (
-    QueryPlanAnswerTool,
-    QueryPlanFeedbackTool,
-)
 from langroid.agent.special.lance_rag.query_planner_agent import (
     LanceQueryPlanAgentConfig,
+)
+from langroid.agent.special.lance_tools import (
+    QueryPlanAnswerTool,
+    QueryPlanFeedbackTool,
 )
 from langroid.mytypes import Entity
 from langroid.utils.constants import DONE, NO_ANSWER, PASS
