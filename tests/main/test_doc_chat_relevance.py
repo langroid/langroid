@@ -87,12 +87,12 @@ warnings.filterwarnings(
 # setup config for retrieval test, with n_neighbor_chunks=2
 # and parser.n_neighbor_ids = 5
 class _MyDocChatAgentConfig(DocChatAgentConfig):
-    cross_encoder_reranking_model = ""
-    n_query_rephrases = 0
-    n_neighbor_chunks = 2
+    cross_encoder_reranking_model: str = ""
+    n_query_rephrases: int = 0
+    n_neighbor_chunks: int = 2
     debug: bool = False
     stream: bool = True  # allow streaming where needed
-    conversation_mode = True
+    conversation_mode: bool = True
     vecdb: VectorStoreConfig = QdrantDBConfig(
         collection_name="test-data",
         replace_collection=True,

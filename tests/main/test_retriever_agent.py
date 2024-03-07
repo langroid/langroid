@@ -64,8 +64,8 @@ class _TestRetrieverAgentConfig(DocChatAgentConfig):
         Your task is to match a profile description to a list of records in a table.
         """
     data: Optional[List[Dict[str, Any]]] = None
-    retrieve_only = True
-    retrieval_granularity = -1  # extract whole content
+    retrieve_only: bool = True
+    extraction_granularity: int = -1  # extract whole content
     vecdb: QdrantDBConfig = QdrantDBConfig(
         collection_name="test-retriever",
         storage_path=":memory:",
@@ -73,7 +73,7 @@ class _TestRetrieverAgentConfig(DocChatAgentConfig):
     parsing: ParsingConfig = ParsingConfig(
         n_similar_docs=5,
     )
-    cross_encoder_reranking_model = ""  # turn off cross-encoder reranking
+    cross_encoder_reranking_model: str = ""  # turn off cross-encoder reranking
 
 
 class _TestRetrieverAgent(RetrieverAgent):

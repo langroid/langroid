@@ -65,14 +65,14 @@ class RunStatus(str, Enum):
 class OpenAIAssistantConfig(ChatAgentConfig):
     use_cached_assistant: bool = False  # set in script via user dialog
     assistant_id: str | None = None
-    use_tools = False
-    use_functions_api = True
+    use_tools: bool = False
+    use_functions_api: bool = True
     use_cached_thread: bool = False  # set in script via user dialog
     thread_id: str | None = None
     # set to True once we can add Assistant msgs in threads
     cache_responses: bool = True
     timeout: int = 30  # can be different from llm.timeout
-    llm = OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT4_TURBO)
+    llm: OpenAIGPTConfig = OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT4_TURBO)
     tools: List[AssistantTool] = []
     files: List[str] = []
 

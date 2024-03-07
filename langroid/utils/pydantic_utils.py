@@ -29,10 +29,10 @@ def exclude(*args: str) -> JsonSchemaExtraCallable:
     Returns a function which removes the provded keys from a dictionary.
     Use to remove keys from the JSON schema for a Pydantic model.
     """
-
     def f(d: JsonDict) -> None:
         for arg in args:
-            d.pop(arg)
+            if arg in d:
+                d.pop(arg)
 
     return f
 
