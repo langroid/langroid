@@ -79,6 +79,7 @@ litellm = {version = "^1.29.5", optional = true}
 scrapy = "^2.11.0"
 async-generator = "^1.10"
 lancedb = "^0.6.2"
+pyarrow = "15.0.0"
 pytest-redis = "^3.0.2"
 neo4j = {version = "^5.14.1", optional = true}
 agent-search = {version = "^0.0.7", optional = true}
