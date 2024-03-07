@@ -9,6 +9,7 @@ See usage examples in `tests/main/test_multi_agent_complex.py` and
 """
 from typing import List, Type
 
+from pydantic import ConfigDict
 from rich import print
 
 from langroid.agent.chat_agent import ChatAgent
@@ -32,11 +33,11 @@ class AddRecipientTool(ToolMessage):
     )
     intended_recipient: str
     saved_content: str = ""
-
-    class Config:
+    model_config = ConfigDict(
         # do not include these fields in the generated schema
         # since we don't require the LLM to specify them
-        schema_extra = {"exclude": {"saved_content", "purpose"}}
+        json_schema_extra={"exclude": {"saved_content", "purpose"}}
+    )
 
     def response(self, agent: ChatAgent) -> ChatDocument:
         """

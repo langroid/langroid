@@ -1,7 +1,7 @@
 import json
 from typing import List, Optional, Union
 
-from pydantic import BaseModel, Extra
+from pydantic import BaseModel, ConfigDict
 
 from langroid.agent.tool_message import ToolMessage
 from langroid.language_models.base import (
@@ -19,8 +19,7 @@ from langroid.utils.output.printing import shorten_text
 
 class ChatDocAttachment(BaseModel):
     # any additional data that should be attached to the document
-    class Config:
-        extra = Extra.allow
+    model_config = ConfigDict(extra="allow")
 
 
 class ChatDocMetaData(DocMetaData):
@@ -32,7 +31,7 @@ class ChatDocMetaData(DocMetaData):
     block: None | Entity = None
     sender_name: str = ""
     recipient: str = ""
-    usage: Optional[LLMTokenUsage]
+    usage: Optional[LLMTokenUsage] = None
     cached: bool = False
     displayed: bool = False
 

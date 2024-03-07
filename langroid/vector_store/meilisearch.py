@@ -28,7 +28,7 @@ class MeiliSearchConfig(VectorStoreConfig):
     cloud: bool = False
     collection_name: str | None = None
     primary_key: str = "id"
-    port = 7700
+    port: int = 7700
 
 
 class MeiliSearch(VectorStore):

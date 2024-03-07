@@ -10,16 +10,16 @@ https://langroid.github.io/langroid/tutorials/local-llm-setup/
 
 
 """
+from textwrap import dedent
 from typing import List, Optional, Type
 
-from dotenv import load_dotenv
-from textwrap import dedent
-
 import chainlit as cl
+from dotenv import load_dotenv
+
 import langroid as lr
-from langroid.agent.callbacks.chainlit import add_instructions
 import langroid.language_models as lm
 from langroid import ChatDocument
+from langroid.agent.callbacks.chainlit import add_instructions
 from langroid.agent.tools.duckduckgo_search_tool import DuckduckgoSearchTool
 from langroid.utils.configuration import Settings, set_global
 

@@ -1,6 +1,7 @@
 from dotenv import load_dotenv
 from httpx import Timeout
 from openai import AsyncAzureOpenAI, AzureOpenAI
+from pydantic import ConfigDict
 
 from langroid.language_models.openai_gpt import (
     OpenAIChatModel,
@@ -34,14 +35,12 @@ class AzureConfig(OpenAIGPTConfig):
     model_name: str = ""
     model_version: str = ""  # is used to determine the cost of using the model
     api_base: str = ""
-
     # all of the vars above can be set via env vars,
     # by upper-casing the name and prefixing with `env_prefix`, e.g.
     # AZURE_OPENAI_API_VERSION=2023-05-15
     # This is either done in the .env file, or via an explicit
     # `export AZURE_OPENAI_API_VERSION=...`
-    class Config:
-        env_prefix = "AZURE_OPENAI_"
+    model_config = ConfigDict(env_prefix="AZURE_OPENAI_")
 
 
 class AzureGPT(OpenAIGPT):

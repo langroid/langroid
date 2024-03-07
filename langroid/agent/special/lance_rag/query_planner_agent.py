@@ -34,10 +34,10 @@ class LanceQueryPlanAgentConfig(ChatAgentConfig):
     critic_name: str = "QueryPlanCritic"
     doc_agent_name: str = "LanceRAG"
     doc_schema: str = ""
-    use_tools = False
-    use_functions_api = True
+    use_tools: bool = False
+    use_functions_api: bool = True
 
-    system_message = f"""
+    system_message: str = f"""
     You will receive a QUERY, to be answered based on an EXTREMELY LARGE collection
     of documents you DO NOT have access to, but your ASSISTANT does.
     You only know that these documents have a special `content` field

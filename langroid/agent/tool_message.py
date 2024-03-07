@@ -13,7 +13,7 @@ from random import choice
 from typing import Any, Dict, List, Type
 
 from docstring_parser import parse
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from langroid.language_models.base import LLMFunctionSpec
 from langroid.utils.pydantic_utils import (
@@ -41,14 +41,14 @@ class ToolMessage(ABC, BaseModel):
     request: str
     purpose: str
     result: str = ""
-
-    class Config:
-        arbitrary_types_allowed = False
-        validate_all = True
-        validate_assignment = True
+    model_config = ConfigDict(
+        arbitrary_types_allowed=False,
+        validate_default=True,
+        validate_assignment=True,
         # do not include these fields in the generated schema
         # since we don't require the LLM to specify them
-        schema_extra = {"exclude": {"purpose", "result"}}
+        json_schema_extra={"exclude": {"purpose", "result"}},
+    )
 
     @classmethod
     def instructions(cls) -> str:

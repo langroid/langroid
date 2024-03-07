@@ -4,7 +4,7 @@ from enum import Enum
 from textwrap import dedent
 from typing import Any, Callable, Dict, List, Union
 
-from pydantic import BaseModel, Extra
+from pydantic import BaseModel, ConfigDict
 
 Number = Union[int, float]
 Embedding = List[Number]
@@ -45,8 +45,7 @@ class DocMetaData(BaseModel):
 
         return original_dict
 
-    class Config:
-        extra = Extra.allow
+    model_config = ConfigDict(extra="allow")
 
 
 class Document(BaseModel):

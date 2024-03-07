@@ -8,7 +8,8 @@ from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union
 
 import aiohttp
-from pydantic import BaseModel, BaseSettings, Field
+from pydantic import BaseModel, Field
+from pydantic_settings import BaseSettings
 
 from langroid.cachedb.momento_cachedb import MomentoCacheConfig
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
@@ -186,7 +187,7 @@ class LLMResponse(BaseModel):
     message: str
     tool_id: str = ""  # used by OpenAIAssistant
     function_call: Optional[LLMFunctionCall] = None
-    usage: Optional[LLMTokenUsage]
+    usage: Optional[LLMTokenUsage] = None
     cached: bool = False
 
     def __str__(self) -> str:

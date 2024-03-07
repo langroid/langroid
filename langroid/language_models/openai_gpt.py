@@ -23,7 +23,7 @@ from typing import (
 import openai
 from httpx import Timeout
 from openai import AsyncOpenAI, OpenAI
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from rich import print
 from rich.markup import escape
 
@@ -217,7 +217,7 @@ class OpenAIGPTConfig(LLMConfig):
     ollama: bool = False  # use ollama's OpenAI-compatible endpoint?
     max_output_tokens: int = 1024
     min_output_tokens: int = 1
-    use_chat_for_completion = True  # do not change this, for OpenAI models!
+    use_chat_for_completion: bool = True  # do not change this, for OpenAI models!
     timeout: int = 20
     temperature: float = 0.2
     seed: int | None = 42
@@ -261,8 +261,7 @@ class OpenAIGPTConfig(LLMConfig):
     # OPENAI_MAX_OUTPUT_TOKENS=1000.
     # This is either done in the .env file, or via an explicit
     # `export OPENAI_MAX_OUTPUT_TOKENS=1000` or `setenv OPENAI_MAX_OUTPUT_TOKENS 1000`
-    class Config:
-        env_prefix = "OPENAI_"
+    model_config = ConfigDict(env_prefix="OPENAI_")
 
     def _validate_litellm(self) -> None:
         """

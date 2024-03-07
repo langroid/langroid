@@ -4,7 +4,7 @@ from contextlib import contextmanager
 from typing import Iterator, List, Literal
 
 from dotenv import find_dotenv, load_dotenv
-from pydantic import BaseSettings
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -20,9 +20,7 @@ class Settings(BaseSettings):
     chat_model: str = ""  # language model name, e.g. litellm/ollama/llama2
     quiet: bool = False  # quiet mode (i.e. suppress all output)?
     notebook: bool = False  # running in a notebook?
-
-    class Config:
-        extra = "forbid"
+    model_config = SettingsConfigDict(extra="forbid")
 
 
 load_dotenv(find_dotenv(usecwd=True))  # get settings from .env file

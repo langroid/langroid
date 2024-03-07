@@ -30,7 +30,10 @@ from langroid.agent.special.relevance_extractor_agent import (
     RelevanceExtractorAgentConfig,
 )
 from langroid.agent.task import Task
-from langroid.embedding_models.models import OpenAIEmbeddingsConfig
+from langroid.embedding_models.models import (
+    OpenAIEmbeddingsConfig,
+    SentenceTransformerEmbeddingsConfig,
+)
 from langroid.language_models.base import StreamingIfAllowed
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
 from langroid.mytypes import DocMetaData, Document, Entity
@@ -150,14 +153,15 @@ class DocChatAgentConfig(ChatAgentConfig):
             library="pdfplumber",
         ),
     )
-    from langroid.embedding_models.models import SentenceTransformerEmbeddingsConfig
 
-    hf_embed_config = SentenceTransformerEmbeddingsConfig(
-        model_type="sentence-transformer",
-        model_name="BAAI/bge-large-en-v1.5",
+    hf_embed_config: SentenceTransformerEmbeddingsConfig = (
+        SentenceTransformerEmbeddingsConfig(
+            model_type="sentence-transformer",
+            model_name="BAAI/bge-large-en-v1.5",
+        )
     )
 
-    oai_embed_config = OpenAIEmbeddingsConfig(
+    oai_embed_config: OpenAIEmbeddingsConfig = OpenAIEmbeddingsConfig(
         model_type="openai",
         model_name="text-embedding-ada-002",
         dims=1536,

@@ -19,7 +19,8 @@ from typing import (
     no_type_check,
 )
 
-from pydantic import BaseSettings, ValidationError
+from pydantic import ValidationError
+from pydantic_settings import BaseSettings
 from rich import print
 from rich.console import Console
 from rich.markup import escape

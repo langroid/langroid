@@ -48,7 +48,8 @@ types-requests = "^2.31.0.1"
 pyparsing = "^3.0.9"
 nltk = "^3.8.1"
 qdrant-client = "^1.7.0"
-pydantic = "1.10.13"
+pydantic = "^2.6.2"
+pydantic-settings = "^2.2.1"
 pypdf = "^3.12.2"
 momento = "^1.10.2"
 pandas = "^2.0.3"
@@ -81,7 +82,7 @@ async-generator = "^1.10"
 lancedb = "^0.6.2"
 pytest-redis = "^3.0.2"
 neo4j = {version = "^5.14.1", optional = true}
-agent-search = {version = "^0.0.7", optional = true}
+# agent-search = {version = "^0.0.7", optional = true}
 python-docx = "^1.1.0"
 aiohttp = "^3.9.1"
 metaphor-python = {version = "^0.1.23", optional = true}
@@ -100,7 +101,7 @@ postgres = ["psycopg2", "pytest-postgresql"]
 mysql = ["pymysql", "pytest-mysql"]
 litellm = ["litellm"]
 neo4j = ["neo4j"]
-sciphi = ["agent-search"]
+#sciphi = ["agent-search"]
 metaphor = ["metaphor-python"]
 chainlit = ["chainlit", "python-socketio"]
 chromadb = ["chromadb"]
@@ -144,17 +145,17 @@ plugins = [
 [tool.ruff]
 line-length = 88
 # Allow unused variables when underscore-prefixed.
-dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
+lint.dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
 # Assume Python 3.11.
 target-version = "py311"
-select = [
+lint.select = [
     "E",  # pycodestyle
     "F",  # pyflakes
     "I",  # isort
 ]
-exclude = ["docs", ".venv", "venv", "examples", "examples_dev", "langroid/utils/web", "notebooks", "__init__.py"]
-fixable = ["A", "B", "C", "D", "E", "F", "G", "I", "N", "Q", "S", "T", "W", "ANN", "ARG", "BLE", "COM", "DJ", "DTZ", "EM", "ERA", "EXE", "FBT", "ICN", "INP", "ISC", "NPY", "PD", "PGH", "PIE", "PL", "PT", "PTH", "PYI", "RET", "RSE", "RUF", "SIM", "SLF", "TCH", "TID", "TRY", "UP", "YTT"]
-unfixable = []
+lint.exclude = ["docs", ".venv", "venv", "examples", "examples_dev", "langroid/utils/web", "notebooks", "__init__.py"]
+lint.fixable = ["A", "B", "C", "D", "E", "F", "G", "I", "N", "Q", "S", "T", "W", "ANN", "ARG", "BLE", "COM", "DJ", "DTZ", "EM", "ERA", "EXE", "FBT", "ICN", "INP", "ISC", "NPY", "PD", "PGH", "PIE", "PL", "PT", "PTH", "PYI", "RET", "RSE", "RUF", "SIM", "SLF", "TCH", "TID", "TRY", "UP", "YTT"]
+lint.unfixable = []
 
 [tool.pytest.ini_options]
 filterwarnings = ["ignore::DeprecationWarning"]
