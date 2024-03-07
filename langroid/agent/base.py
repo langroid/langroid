@@ -809,7 +809,7 @@ class Agent(ABC):
             max_out = self.config.llm.max_output_tokens
 
             llm_model = (
-                "no-LLM" if self.config.llm is None else self.config.llm.chat_model
+                "no-LLM" if self.config.llm is None else self.llm.config.chat_model
             )
 
             return (

@@ -26,7 +26,9 @@ set_global(Settings(stream=True))
     [(True, "France", "Paris"), (False, "India", "Delhi")],
 )
 def test_openai_gpt(test_settings: Settings, streaming, country, capital):
+    test_settings.cache = False
     set_global(test_settings)
+
     cfg = OpenAIGPTConfig(
         stream=streaming,  # use streaming output if enabled globally
         type="openai",
@@ -43,8 +45,6 @@ def test_openai_gpt(test_settings: Settings, streaming, country, capital):
 
     mdl = OpenAIGPT(config=cfg)
     question = "What is the capital of " + country + "?"
-
-    set_global(Settings(cache=False))
     # chat mode via `generate`,
     # i.e. use same call as for completion, but the setting below
     # actually calls `chat` under the hood
@@ -66,7 +66,8 @@ def test_openai_gpt(test_settings: Settings, streaming, country, capital):
     assert capital in response.message
     assert not response.cached
 
-    set_global(Settings(cache=True))
+    test_settings.cache = True
+    set_global(test_settings)
     # should be from cache this time
     response = mdl.chat(messages=messages, max_tokens=10)
     assert capital in response.message

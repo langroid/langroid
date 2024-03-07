@@ -1,28 +1,16 @@
 import asyncio
-from typing import Optional
 
 import pytest
 
 import langroid as lr
+import langroid.language_models as lm
 
 
 class CustomAgentConfig(lr.AgentConfig):
     max_tokens: int = 10000
-    vecdb: Optional[lr.vector_store.base.VectorStoreConfig] = None
-    llm: lr.language_models.openai_gpt.OpenAIGPTConfig = (
-        lr.language_models.OpenAIGPTConfig(
-            type="openai",
-            chat_model=lr.language_models.OpenAIChatModel.GPT4,
-            use_chat_for_completion=True,
-            cache_config=lr.cachedb.redis_cachedb.RedisCacheConfig(fake=False),
-        )
-    )
-    parsing: lr.parsing.parser.ParsingConfig = lr.parsing.parser.ParsingConfig()
-
-    prompts: lr.prompts.prompts_config.PromptsConfig = (
-        lr.prompts.prompts_config.PromptsConfig(
-            max_tokens=1000,
-        )
+    llm = lm.OpenAIGPTConfig(
+        chat_model=lm.OpenAIChatModel.GPT4,
+        cache_config=lr.cachedb.redis_cachedb.RedisCacheConfig(fake=False),
     )
 
 
