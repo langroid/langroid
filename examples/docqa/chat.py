@@ -35,6 +35,7 @@ def main(
         chat_model=model or lm.OpenAIChatModel.GPT4_TURBO,
         chat_context_length=16_000,  # adjust as needed
         temperature=0.2,
+        max_output_tokens=300,
     )
 
     config = DocChatAgentConfig(
@@ -42,13 +43,13 @@ def main(
         n_query_rephrases=0,
         hypothetical_answer=False,
         # set it to > 0 to retrieve a window of k chunks on either side of a match
-        n_neighbor_chunks=2,
+        n_neighbor_chunks=10,
         parsing=ParsingConfig(  # modify as needed
             splitter=Splitter.TOKENS,
             chunk_size=200,  # aim for this many tokens per chunk
-            overlap=20,  # overlap between chunks
+            overlap=50,  # overlap between chunks
             max_chunks=10_000,
-            n_neighbor_ids=5,  # store ids of window of k chunks around each chunk.
+            n_neighbor_ids=25,  # store ids of window of k chunks around each chunk.
             # aim to have at least this many chars per chunk when
             # truncating due to punctuation
             min_chunk_chars=200,

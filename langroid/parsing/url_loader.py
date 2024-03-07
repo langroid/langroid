@@ -1,6 +1,9 @@
 import logging
+import os
+from tempfile import NamedTemporaryFile
 from typing import List, no_type_check
 
+import requests
 import trafilatura
 from trafilatura.downloads import (
     add_to_compressed_dict,
@@ -55,15 +58,49 @@ class URLLoader:
                     )
                     docs.extend(doc_parser.get_doc_chunks())
                 else:
-                    text = trafilatura.extract(
-                        result,
-                        no_fallback=False,
-                        favor_recall=True,
-                    )
-                    if text is None and result is not None and isinstance(result, str):
-                        text = result
-                    if text is not None and text != "":
-                        docs.append(
-                            Document(content=text, metadata=DocMetaData(source=url))
+                    # Try to detect content type and handle accordingly
+                    headers = requests.head(url).headers
+                    content_type = headers.get("Content-Type", "").lower()
+                    temp_file_suffix = None
+                    if "application/pdf" in content_type:
+                        temp_file_suffix = ".pdf"
+                    elif (
+                        "application/vnd.openxmlformats-officedocument.wordprocessingml.document"
+                        in content_type
+                    ):
+                        temp_file_suffix = ".docx"
+                    elif "application/msword" in content_type:
+                        temp_file_suffix = ".doc"
+
+                    if temp_file_suffix:
+                        # Download the document content
+                        response = requests.get(url)
+                        with NamedTemporaryFile(
+                            delete=False, suffix=temp_file_suffix
+                        ) as temp_file:
+                            temp_file.write(response.content)
+                            temp_file_path = temp_file.name
+                        # Process the downloaded document
+                        doc_parser = DocumentParser.create(
+                            temp_file_path, self.parser.config
                         )
+                        docs.extend(doc_parser.get_doc_chunks())
+                        # Clean up the temporary file
+                        os.remove(temp_file_path)
+                    else:
+                        text = trafilatura.extract(
+                            result,
+                            no_fallback=False,
+                            favor_recall=True,
+                        )
+                        if (
+                            text is None
+                            and result is not None
+                            and isinstance(result, str)
+                        ):
+                            text = result
+                        if text is not None and text != "":
+                            docs.append(
+                                Document(content=text, metadata=DocMetaData(source=url))
+                            )
         return docs
