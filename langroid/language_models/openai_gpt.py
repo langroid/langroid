@@ -210,7 +210,7 @@ class OpenAIGPTConfig(LLMConfig):
     """
 
     type: str = "openai"
-    api_key: str = ""  # CAUTION: set this ONLY via env var OPENAI_API_KEY
+    api_key: str = "xxx"  # CAUTION: set this ONLY via env var OPENAI_API_KEY
     organization: str = ""
     api_base: str | None = None  # used for local or other non-OpenAI models
     litellm: bool = False  # use litellm api?
