@@ -25,6 +25,7 @@ def retry_with_exponential_backoff(
         requests.exceptions.RequestException,
         openai.APITimeoutError,
         openai.RateLimitError,
+        openai.AuthenticationError,
         openai.APIError,
         aiohttp.ServerTimeoutError,
         asyncio.TimeoutError,
@@ -45,6 +46,10 @@ def retry_with_exponential_backoff(
             except openai.BadRequestError as e:
                 # do not retry when the request itself is invalid,
                 # e.g. when context is too long
+                logger.error(f"OpenAI API request failed with error: {e}.")
+                raise e
+            except openai.AuthenticationError as e:
+                # do not retry when there's an auth error
                 logger.error(f"OpenAI API request failed with error: {e}.")
                 raise e
 
@@ -85,6 +90,7 @@ def async_retry_with_exponential_backoff(
     errors: tuple = (  # type: ignore
         openai.APITimeoutError,
         openai.RateLimitError,
+        openai.AuthenticationError,
         openai.APIError,
         aiohttp.ServerTimeoutError,
         asyncio.TimeoutError,
@@ -108,7 +114,10 @@ def async_retry_with_exponential_backoff(
                 # e.g. when context is too long
                 logger.error(f"OpenAI API request failed with error: {e}.")
                 raise e
-
+            except openai.AuthenticationError as e:
+                # do not retry when there's an auth error
+                logger.error(f"OpenAI API request failed with error: {e}.")
+                raise e
             # Retry on specified errors
             except errors as e:
                 # Increment retries
