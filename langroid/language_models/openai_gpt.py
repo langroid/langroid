@@ -60,7 +60,7 @@ else:
     OLLAMA_BASE_URL = "http://localhost:11434/v1"
 
 OLLAMA_API_KEY = "ollama"
-
+DUMMY_API_KEY = "xxx"
 
 class OpenAIChatModel(str, Enum):
     """Enum for OpenAI Chat models"""
@@ -210,7 +210,7 @@ class OpenAIGPTConfig(LLMConfig):
     """
 
     type: str = "openai"
-    api_key: str = "xxx"  # CAUTION: set this ONLY via env var OPENAI_API_KEY
+    api_key: str = DUMMY_API_KEY  # CAUTION: set this ONLY via env var OPENAI_API_KEY
     organization: str = ""
     api_base: str | None = None  # used for local or other non-OpenAI models
     litellm: bool = False  # use litellm api?
@@ -441,7 +441,9 @@ class OpenAIGPT(LanguageModel):
         # Pydantic's BaseSettings will automatically pick it up from the
         # .env file
         # The config.api_key is ignored when not using an OpenAI model
-        self.api_key = config.api_key if self.is_openai_chat_model() else "xxx"
+        self.api_key = config.api_key if self.is_openai_chat_model() else DUMMY_API_KEY
+        if self.api_key == DUMMY_API_KEY:
+            self.api_key = os.getenv("OPENAI_API_KEY", DUMMY_API_KEY)
         self.client = OpenAI(
             api_key=self.api_key,
             base_url=self.api_base,
