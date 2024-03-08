@@ -133,10 +133,6 @@ class VectorStore(ABC):
         """Compute a result on a set of documents,
         using a dataframe calc string like `df.groupby('state')['income'].mean()`.
         """
-        # docs may be missing some fields since they may have come from
-        # DocChatAgent retrieval, so we use the ids to get the full docs
-        ids = [str(doc.id()) for doc in docs]
-        docs = self.get_documents_by_ids(ids)
         dicts = [doc.dict() for doc in docs]
         df = pd.DataFrame(dicts)
 

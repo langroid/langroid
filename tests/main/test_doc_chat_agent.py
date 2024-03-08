@@ -242,7 +242,7 @@ def test_doc_chat_agent_task(test_settings: Settings, agent):
         assert task.pending_message.metadata.sender == Entity.LLM
 
 
-@pytest.mark.parametrize("vecdb", ["qdrant_local", "chroma", "lancedb"], indirect=True)
+@pytest.mark.parametrize("vecdb", ["lancedb", "qdrant_local", "chroma"], indirect=True)
 @pytest.mark.parametrize("conv_mode", [True, False])
 def test_doc_chat_followup(test_settings: Settings, agent, conv_mode: bool):
     """
