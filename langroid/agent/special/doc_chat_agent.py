@@ -927,6 +927,13 @@ class DocChatAgent(ChatAgent):
         """
         if self.vecdb is None or self.config.n_neighbor_chunks == 0:
             return docs_scores
+        if len(docs_scores) == 0:
+            return []
+        if set(docs_scores[0][0].__fields__) != {"content", "metadata"}:
+            # Do not add context window when there are other fields besides just
+            # content and metadata, since we do not know how to set those other fields
+            # for newly created docs with combined content.
+            return docs_scores
         return self.vecdb.add_context_window(docs_scores, self.config.n_neighbor_chunks)
 
     def get_semantic_search_results(
@@ -1005,11 +1012,11 @@ class DocChatAgent(ChatAgent):
         # keep only docs with unique d.id()
         id2doc_score = {d.id(): (d, s) for d, s in docs_and_scores}
         docs_and_scores = list(id2doc_score.values())
-
-        passages = [
-            Document(content=d.content, metadata=d.metadata)
-            for (d, _) in docs_and_scores
-        ]
+        passages = [d for (d, _) in docs_and_scores]
+        # passages = [
+        #     Document(content=d.content, metadata=d.metadata)
+        #     for (d, _) in docs_and_scores
+        # ]
 
         if self.config.use_bm25_search:
             docs_scores = self.get_similar_chunks_bm25(query, retrieval_multiple)
@@ -1138,13 +1145,19 @@ class DocChatAgent(ChatAgent):
             input_map=lambda msg: msg.content,
             output_map=lambda ans: ans.content if ans is not None else NO_ANSWER,
         )
-        metadatas = [P.metadata for P in passages]
-        # return with metadata so we can use it downstream, e.g. to cite sources
-        return [
-            Document(content=e, metadata=m)
-            for e, m in zip(extracts, metadatas)
-            if (e != NO_ANSWER and len(e) > 0)
-        ]
+
+        # Caution: Retain ALL other fields in the Documents (which could be
+        # other than just `content` and `metadata`), while simply replacing
+        # `content` with the extracted portions
+        passage_extracts = []
+        for p, e in zip(passages, extracts):
+            if e == NO_ANSWER or len(e) == 0:
+                continue
+            p_copy = p.copy()
+            p_copy.content = e
+            passage_extracts.append(p_copy)
+
+        return passage_extracts
 
     def answer_from_docs(self, query: str) -> ChatDocument:
         """
