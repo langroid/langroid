@@ -62,6 +62,7 @@ else:
 OLLAMA_API_KEY = "ollama"
 DUMMY_API_KEY = "xxx"
 
+
 class OpenAIChatModel(str, Enum):
     """Enum for OpenAI Chat models"""
 
@@ -441,9 +442,12 @@ class OpenAIGPT(LanguageModel):
         # Pydantic's BaseSettings will automatically pick it up from the
         # .env file
         # The config.api_key is ignored when not using an OpenAI model
-        self.api_key = config.api_key if self.is_openai_chat_model() else DUMMY_API_KEY
-        if self.api_key == DUMMY_API_KEY:
-            self.api_key = os.getenv("OPENAI_API_KEY", DUMMY_API_KEY)
+        if self.is_openai_completion_model() or self.is_openai_chat_model():
+            self.api_key = config.api_key
+            if self.api_key == DUMMY_API_KEY:
+                self.api_key = os.getenv("OPENAI_API_KEY", DUMMY_API_KEY)
+        else:
+            self.api_key = DUMMY_API_KEY
         self.client = OpenAI(
             api_key=self.api_key,
             base_url=self.api_base,
