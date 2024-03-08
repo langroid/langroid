@@ -420,9 +420,8 @@ class LanceDB(VectorStore):
         docs = []
         for _id in _ids:
             results = self._lance_result_to_docs(tbl.search().where(f"id == '{_id}'"))
-            if len(results) == 0:
-                raise ValueError(f"Document with id {_id} not found")
-            docs.append(results[0])
+            if len(results) > 0:
+                docs.append(results[0])
         return docs
 
     def similar_texts_with_scores(
