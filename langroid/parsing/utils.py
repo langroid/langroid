@@ -284,7 +284,8 @@ def extract_numbered_segments(s: str, specs: str) -> str:
 
     # Regular expression to identify numbered segments like
     # <#1#> Hello world! This is me. <#2#> How are you? <#3#> Have a good day.
-    segment_pattern = re.compile(r"<#(\d+)#> ((?:(?!<#).)+)")
+    # Note we match any character between segment markers, including newlines.
+    segment_pattern = re.compile(r"<#(\d+)#>([\s\S]*?)(?=<#\d+#>|$)")
 
     # Split the text into paragraphs while preserving their boundaries
     paragraphs = split_paragraphs(s)

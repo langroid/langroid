@@ -83,9 +83,9 @@ def test_relevance_extractor_agent(
     numbered_passage = number_segments(passage, granularity=agent_cfg.segment_length)
     expected_sentences = extract_numbered_segments(numbered_passage, expected)
     # the result should be the expected sentences, modulo whitespace
-    assert set(nltk.sent_tokenize(result.content)) == set(
-        nltk.sent_tokenize(expected_sentences)
-    )
+    result_sentences = [s.strip() for s in nltk.sent_tokenize(result.content)]
+    expected_sentences = [s.strip() for s in nltk.sent_tokenize(expected_sentences)]
+    assert set(result_sentences) == set(expected_sentences)
 
 
 @pytest.mark.asyncio
@@ -160,6 +160,8 @@ async def test_relevance_extractor_concurrent(
         if s != ""
     ]
 
+    expected_sentences = [s.strip() for s in expected_sentences]
+    extracted_sentences = [s.strip() for s in extracted_sentences]
     assert set(extracted_sentences) == set(expected_sentences)
 
 
@@ -232,4 +234,33 @@ def test_relevance_extractor_batch(
         if s != ""
     ]
 
+    expected_sentences = [s.strip() for s in expected_sentences]
+    extracted_sentences = [s.strip() for s in extracted_sentences]
     assert set(extracted_sentences) == set(expected_sentences)
+
+
+@pytest.mark.parametrize(
+    "passage, spec, expected",
+    [
+        (
+            """
+            <#1#> Whales are big. Dogs are very friendly. <#2#>They are also very 
+            loyal.
+            Buffaloes are very strong. 
+            
+            <#3#> They are also kind. But so are giraffes.
+            
+            <#10#> Cats like to be clean. They also like to be petted. And when they
+            are hungry they like to meow. <#11#> Dogs are very friendly. They are also 
+            very dirty. But not cats. Dogs bark.
+            """,
+            "2,3,11",
+            "loyal,Buffaloes,kind,giraffes,Dogs,friendly,dirty,bark",
+        )
+    ],
+)
+def test_extract_numbered_segments(test_settings: Settings, passage, spec, expected):
+    set_global(test_settings)
+    extract = extract_numbered_segments(passage, spec)
+    pieces = expected.split(",")
+    assert all(piece.strip() in extract for piece in pieces)
