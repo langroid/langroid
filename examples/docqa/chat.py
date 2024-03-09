@@ -52,6 +52,11 @@ def main(
         llm=llm_config,
         n_query_rephrases=0,
         hypothetical_answer=False,
+        # how many sentences in each segment, for relevance-extraction:
+        # increase this if you find that relevance extraction is losing context
+        extraction_granularity=3,
+        # for relevance extraction
+        # relevance_extractor_config=None,  # set to None to disable relevance extraction
         # set it to > 0 to retrieve a window of k chunks on either side of a match
         n_neighbor_chunks=2,
         parsing=ParsingConfig(  # modify as needed
