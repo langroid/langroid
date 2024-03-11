@@ -122,6 +122,20 @@ teacher_task.run()
 <details>
 <summary> <b>Click to expand</b></summary>
 
+- **Mar 2024:**
+  - **0.1.194 - 0.1.211:** Misc fixes, improvements, and features:
+    - Big enhancement in RAG performance (mainly, recall) due to a [fix in Relevance 
+      Extractor](https://github.com/langroid/langroid/releases/tag/0.1.209)
+    - `DocChatAgent` [context-window fixes](https://github.com/langroid/langroid/releases/tag/0.1.208)
+    - Anthropic/Claude3 support via Litellm
+    - `URLLoader`: detect file time from header when URL doesn't end with a 
+      recognizable suffix like `.pdf`, `.docx`, etc.
+    - Misc lancedb integration fixes
+    - Auto-select embedding config based on whether `sentence_transformer` module is available.
+    - Slim down dependencies, make some heavy ones optional, e.g. `unstructured`, 
+      `haystack`, `chromadb`, `mkdocs`, `huggingface-hub`, `sentence-transformers`.
+    - Easier top-level imports from `import langroid as lr`
+    - Improve JSON detection, esp from weak LLMs
 - **Feb 2024:** 
   - **0.1.193:** Support local LLMs using Ollama's new OpenAI-Compatible server: 
      simply specify `chat_model="ollama/mistral"`. See [release notes](https://github.com/langroid/langroid/releases/tag/0.1.193).
