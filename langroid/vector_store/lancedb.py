@@ -175,8 +175,11 @@ class LanceDB(VectorStore):
         # Prepare fields for the new model
         fields = {"id": (str, ...), "vector": (Vector(n), ...)}
 
+        sorted_fields = dict(
+            sorted(doc_cls.__fields__.items(), key=lambda item: item[0])
+        )
         # Add both statically and dynamically defined fields from doc_cls
-        for field_name, field in doc_cls.__fields__.items():
+        for field_name, field in sorted_fields.items():
             fields[field_name] = (field.outer_type_, field.default)
 
         # Create the new model with dynamic fields

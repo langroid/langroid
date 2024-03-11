@@ -386,7 +386,7 @@ def test_lance_metadata():
     # set to the SAME collection, so we don't create a new one
     vecdb.set_collection(collection_name=ACTUAL_COLLECTION, replace=False)
 
-    # adding a new doc to an existing collecion, it has a structure
+    # adding a new doc to an existing collection, it has a structure
     # consistent with the previous doc added to this collection,
     # BUT NOT consistent with the DEFAULT_COLLECTION.
     # We want to check that this goes well, i.e. in Lancedb.py we
@@ -394,11 +394,22 @@ def test_lance_metadata():
     doc = Document(
         content="abc",
         metadata=DocMetaData(
-            id="0",
-            source="wiki",
             category="main",  # this is an extra field not defined in DocMetaData
+            id="1",
+            source="wiki",
         ),
     )
     vecdb.add_documents([doc])
+
+    doc = Document(
+        content="abc",
+        metadata=DocMetaData(
+            id="2",
+            category="rumor",  # this is an extra field not defined in DocMetaData
+            source="web",
+        ),
+    )
+    vecdb.add_documents([doc])
+
     all_docs = vecdb.get_all_documents()
-    assert len(all_docs) == 2
+    assert len(all_docs) == 3
