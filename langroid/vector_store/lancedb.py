@@ -220,30 +220,20 @@ class LanceDB(VectorStore):
             logger.setLevel(logging.INFO)
             logger.setLevel(level)
 
-    def add_documents(self, documents: Sequence[Document]) -> None:
-        super().maybe_add_ids(documents)
-        colls = self.list_collections(empty=True)
-        if len(documents) == 0:
-            return
-        embedding_vecs = self.embedding_fn([doc.content for doc in documents])
-        coll_name = self.config.collection_name
-        if coll_name is None:
-            raise ValueError("No collection name set, cannot ingest docs")
-        if (
-            coll_name not in colls
-            or self.client.open_table(coll_name).head(1).shape[0] == 0
-        ):
-            # collection either doesn't exist or is empty, so replace it,
-            # possibly with a new schema
-            extra_metadata_fields = extra_metadata(
-                documents[0], self.config.document_class
-            )
-            if len(extra_metadata_fields) > 0:
-                logger.warning(
-                    f"""
+    def _maybe_set_doc_class_schema(self, doc: Document) -> None:
+        """
+        Set the config.document_class and self.schema based on doc if needed
+        Args:
+            doc: an instance of Document, to be added to a collection
+        """
+        extra_metadata_fields = extra_metadata(doc, self.config.document_class)
+        if len(extra_metadata_fields) > 0:
+            logger.warning(
+                f"""
                     Added documents contain extra metadata fields:
                     {extra_metadata_fields}
-                    Trying to recreate the collection {coll_name} with a new schema:
+                    which were not present in the original config.document_class.
+                    Trying to change document_class and corresponding schemas.
                     Overriding LanceDBConfig.document_class with an auto-generated 
                     Pydantic class that includes these extra fields.
                     If this fails, or you see odd results, it is recommended that you 
@@ -253,13 +243,27 @@ class LanceDB(VectorStore):
                     and set this document class as the value of the 
                     LanceDBConfig.document_class attribute.
                     """
-                )
+            )
 
-                doc_cls = extend_document_class(documents[0])
-                self.config.document_class = doc_cls
-
-            doc_cls = self.config.document_class
+            doc_cls = extend_document_class(doc)
+            self.config.document_class = doc_cls
             self._setup_schemas(doc_cls)
+
+    def add_documents(self, documents: Sequence[Document]) -> None:
+        super().maybe_add_ids(documents)
+        colls = self.list_collections(empty=True)
+        if len(documents) == 0:
+            return
+        embedding_vecs = self.embedding_fn([doc.content for doc in documents])
+        coll_name = self.config.collection_name
+        if coll_name is None:
+            raise ValueError("No collection name set, cannot ingest docs")
+        self._maybe_set_doc_class_schema(documents[0])
+        if (
+            coll_name not in colls
+            or self.client.open_table(coll_name).head(1).shape[0] == 0
+        ):
+            # collection either doesn't exist or is empty, so replace it,
             self.create_collection(coll_name, replace=True)
 
         ids = [str(d.id()) for d in documents]
