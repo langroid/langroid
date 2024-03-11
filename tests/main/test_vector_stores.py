@@ -337,3 +337,68 @@ def test_vector_stores_overlapping_matches(vecdb):
         indices = [content.find(p) for p in sentences]
         indices = [i for i in indices if i >= 0]
         assert indices == sorted(indices)
+
+
+def test_lance_metadata():
+    """
+    Test that adding documents with extra fields in metadata
+    (that are absent in the metadata of LanceDBConfig.document_class)
+    works as expected, i.e. the internal schemas and config.document_class
+    are dynamically updated as expected.
+    """
+
+    ldb_dir = ".lancedb/data/test"
+    rmdir(ldb_dir)
+    DEFAULT_COLLECTION = "test-dummy"
+    ACTUAL_COLLECTION = "test-metadata"
+    ldb_cfg = LanceDBConfig(
+        cloud=False,
+        collection_name=DEFAULT_COLLECTION,
+        storage_path=ldb_dir,
+        embedding=embed_cfg,
+        document_class=Document,
+    )
+    vecdb = LanceDB(ldb_cfg)
+    vecdb.set_collection(collection_name=ACTUAL_COLLECTION, replace=True)
+    doc = Document(
+        content="xyz",
+        metadata=DocMetaData(
+            id="0",
+            source="wiki",
+            category="other",  # this is an extra field not defined in DocMetaData
+        ),
+    )
+    # since we're adding a document whose metadata has an extra field,
+    # the config.document_class is updated to reflect the new schema.
+    # and the schema is updated to accommodate the extra field,
+    vecdb.add_documents([doc])
+
+    # re-init the vecdb like above
+    ldb_cfg = LanceDBConfig(
+        cloud=False,
+        collection_name=DEFAULT_COLLECTION,
+        storage_path=ldb_dir,
+        embedding=embed_cfg,
+        document_class=Document,
+    )
+    vecdb = LanceDB(ldb_cfg)
+
+    # set to the SAME collection, so we don't create a new one
+    vecdb.set_collection(collection_name=ACTUAL_COLLECTION, replace=False)
+
+    # adding a new doc to an existing collecion, it has a structure
+    # consistent with the previous doc added to this collection,
+    # BUT NOT consistent with the DEFAULT_COLLECTION.
+    # We want to check that this goes well, i.e. in Lancedb.py we
+    # update the schema and config.document_class to accommodate this structure.
+    doc = Document(
+        content="abc",
+        metadata=DocMetaData(
+            id="0",
+            source="wiki",
+            category="main",  # this is an extra field not defined in DocMetaData
+        ),
+    )
+    vecdb.add_documents([doc])
+    all_docs = vecdb.get_all_documents()
+    assert len(all_docs) == 2
