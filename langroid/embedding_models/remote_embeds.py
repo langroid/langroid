@@ -58,7 +58,6 @@ class RemoteEmbeddings(em.SentenceTransformerEmbeddings):
     def embedding_fn(self) -> Callable[[list[str]], lr.mytypes.Embeddings]:
         def fn(texts: list[str]) -> lr.mytypes.Embeddings:
             url = f"{self.config.api_base}:{self.config.port}"
-            print(f"Attempting to connect to {url}")
             with grpc.insecure_channel(url) as channel:
                 stub = embeddings_grpc.EmbeddingStub(channel)  # type: ignore
                 response = stub.Embed(
