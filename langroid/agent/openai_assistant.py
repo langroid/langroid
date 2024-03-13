@@ -8,7 +8,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple, Type, cast, no_type_check
 
 from openai.types.beta import Assistant, Thread
-from openai.types.beta.threads import Run, ThreadMessage
+from openai.types.beta.threads import Message, Run
 from openai.types.beta.threads.runs import RunStep
 from pydantic import BaseModel
 from rich import print
@@ -41,6 +41,10 @@ class AssistantTool(BaseModel):
     def dct(self) -> Dict[str, Any]:
         d = super().dict()
         d["type"] = d["type"].value
+
+        if type != "function":
+            del d["function"]
+
         return d
 
 
@@ -257,22 +261,22 @@ class OpenAIAssistant(ChatAgent):
         self.llm.cache.store(assistant_key, self.assistant.id)
 
     @staticmethod
-    def thread_msg_to_llm_msg(msg: ThreadMessage) -> LLMMessage:
+    def thread_msg_to_llm_msg(msg: Message) -> LLMMessage:
         """
-        Convert a ThreadMessage to an LLMMessage
+        Convert a Message to an LLMMessage
         """
         return LLMMessage(
             content=msg.content[0].text.value,  # type: ignore
-            role=msg.role,
+            role=Role(msg.role),
         )
 
-    def _update_messages_hash(self, msg: ThreadMessage | LLMMessage) -> None:
+    def _update_messages_hash(self, msg: Message | LLMMessage) -> None:
         """
         Update the hash-state in the thread with the given message.
         """
         if self.thread is None:
             raise ValueError("Thread is None")
-        if isinstance(msg, ThreadMessage):
+        if isinstance(msg, Message):
             llm_msg = self.thread_msg_to_llm_msg(msg)
         else:
             llm_msg = msg
@@ -491,7 +495,7 @@ class OpenAIAssistant(ChatAgent):
             LLMMessage(
                 # TODO: could be image, deal with it later
                 content=m.content[0].text.value,  # type: ignore
-                role=m.role,
+                role=Role(m.role),
             )
             for m in thread_msgs
         ]
@@ -646,7 +650,7 @@ class OpenAIAssistant(ChatAgent):
             tool_outputs=tool_outputs,  # type: ignore
         )
 
-    def process_citations(self, thread_msg: ThreadMessage) -> None:
+    def process_citations(self, thread_msg: Message) -> None:
         """
         Process citations in the thread message.
         Modifies the thread message in-place.

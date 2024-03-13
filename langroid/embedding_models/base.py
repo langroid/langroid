@@ -13,7 +13,7 @@ class EmbeddingModelsConfig(BaseSettings):
     model_type: str = "openai"
     dims: int = 0
     context_length: int = 512
-    batch_size: int = 500
+    batch_size: int = 512
 
 
 class EmbeddingModel(ABC):

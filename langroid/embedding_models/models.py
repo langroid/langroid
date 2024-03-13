@@ -42,7 +42,7 @@ class EmbeddingFunctionCallable:
                                 a list of input texts.
     """
 
-    def __init__(self, model: "OpenAIEmbeddings", batch_size: int = 500):
+    def __init__(self, model: "OpenAIEmbeddings", batch_size: int = 512):
         """
         Initialize the EmbeddingFunctionCallable with a specific model.
 
