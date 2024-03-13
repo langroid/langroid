@@ -18,7 +18,7 @@ import grpc
 from fire import Fire
 
 import langroid as lr
-import langroid.embedding_models as em
+import langroid.embedding_models.models as em
 import langroid.embedding_models.protoc.embeddings_pb2 as embeddings_pb
 import langroid.embedding_models.protoc.embeddings_pb2_grpc as embeddings_grpc
 
