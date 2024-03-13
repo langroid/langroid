@@ -42,7 +42,7 @@ class AssistantTool(BaseModel):
         d = super().dict()
         d["type"] = d["type"].value
 
-        if type != "function":
+        if self.type != ToolType.FUNCTION:
             del d["function"]
 
         return d
