@@ -13,6 +13,7 @@ class EmbeddingModelsConfig(BaseSettings):
     model_type: str = "openai"
     dims: int = 0
     context_length: int = 512
+    batch_size: int = 500
 
 
 class EmbeddingModel(ABC):
@@ -28,8 +29,14 @@ class EmbeddingModel(ABC):
             SentenceTransformerEmbeddings,
             SentenceTransformerEmbeddingsConfig,
         )
+        from langroid.embedding_models.remote_embeds import (
+            RemoteEmbeddings,
+            RemoteEmbeddingsConfig,
+        )
 
-        if isinstance(config, OpenAIEmbeddingsConfig):
+        if isinstance(config, RemoteEmbeddingsConfig):
+            return RemoteEmbeddings(config)
+        elif isinstance(config, OpenAIEmbeddingsConfig):
             return OpenAIEmbeddings(config)
         elif isinstance(config, SentenceTransformerEmbeddingsConfig):
             return SentenceTransformerEmbeddings(config)

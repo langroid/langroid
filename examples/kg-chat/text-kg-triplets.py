@@ -27,17 +27,17 @@ Optional args:
 """
 
 import typer
-from rich import print
 from dotenv import load_dotenv
+from rich import print
 
+import langroid as lr
+import langroid.language_models as lm
 from langroid.agent.special.neo4j.neo4j_chat_agent import (
     Neo4jChatAgent,
     Neo4jChatAgentConfig,
     Neo4jSettings,
 )
-import langroid as lr
-import langroid.language_models as lm
-from langroid.utils.configuration import set_global, Settings
+from langroid.utils.configuration import Settings, set_global
 
 app = typer.Typer()
 

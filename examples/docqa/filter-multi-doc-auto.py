@@ -20,21 +20,22 @@ as indicated in comments below, to get good results.
     supported vector-dbs, e.g. qdrant or chroma.
 
 """
-import typer
-from rich import print
-from rich.prompt import Prompt
 import os
 
+import typer
 from pydantic import Field
+from rich import print
+from rich.prompt import Prompt
+
 import langroid as lr
 import langroid.language_models as lm
 from langroid.agent.special.doc_chat_agent import DocChatAgentConfig
-from langroid.agent.special.lance_rag.lance_rag_task import LanceRAGTaskCreator
 from langroid.agent.special.lance_doc_chat_agent import LanceDocChatAgent
-from langroid.parsing.parser import ParsingConfig, PdfParsingConfig, Splitter
-from langroid.vector_store.lancedb import LanceDBConfig
+from langroid.agent.special.lance_rag.lance_rag_task import LanceRAGTaskCreator
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
-from langroid.utils.configuration import set_global, Settings
+from langroid.parsing.parser import ParsingConfig, PdfParsingConfig, Splitter
+from langroid.utils.configuration import Settings, set_global
+from langroid.vector_store.lancedb import LanceDBConfig
 
 app = typer.Typer()
 

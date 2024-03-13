@@ -9,15 +9,16 @@ Run like this:
 chainlit run examples/chainlit/chat-search-assistant.py
 """
 
-from dotenv import load_dotenv
 from textwrap import dedent
 
 import chainlit as cl
+from dotenv import load_dotenv
+
 import langroid as lr
-from langroid.agent.callbacks.chainlit import add_instructions
 import langroid.language_models as lm
-from langroid.agent.tools.google_search_tool import GoogleSearchTool
+from langroid.agent.callbacks.chainlit import add_instructions
 from langroid.agent.tools.duckduckgo_search_tool import DuckduckgoSearchTool
+from langroid.agent.tools.google_search_tool import GoogleSearchTool
 from langroid.utils.configuration import Settings, set_global
 
 

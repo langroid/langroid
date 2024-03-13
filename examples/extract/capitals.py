@@ -6,9 +6,11 @@ python3 examples/extract/capitals.py
 
 """
 
-from rich import print
-from pydantic import BaseModel
 from typing import List
+
+from pydantic import BaseModel
+from rich import print
+
 import langroid as lr
 
 

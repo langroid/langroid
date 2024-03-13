@@ -1,0 +1,19 @@
+syntax = "proto3";
+
+service Embedding {
+    rpc Embed (EmbeddingRequest) returns (BatchEmbeds) {};
+}
+
+message EmbeddingRequest {
+    string model_name = 1;
+    int32 batch_size = 2;
+    repeated string strings = 3;
+}
+
+message BatchEmbeds {
+    repeated Embed embeds = 1;
+}
+
+message Embed {
+    repeated float embed = 1;
+}

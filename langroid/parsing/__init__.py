@@ -13,6 +13,15 @@ from . import search
 from . import web_search
 from . import spider
 
+from .parser import (
+    Splitter,
+    PdfParsingConfig,
+    DocxParsingConfig,
+    DocParsingConfig,
+    ParsingConfig,
+    Parser,
+)
+
 __all__ = [
     "parser",
     "agent_chats",
@@ -28,4 +37,10 @@ __all__ = [
     "search",
     "web_search",
     "spider",
+    "Splitter",
+    "PdfParsingConfig",
+    "DocxParsingConfig",
+    "DocParsingConfig",
+    "ParsingConfig",
+    "Parser",
 ]

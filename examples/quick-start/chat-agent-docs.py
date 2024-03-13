@@ -14,6 +14,7 @@ For more explanation see
 """
 import typer
 from rich import print
+
 import langroid as lr
 
 app = typer.Typer()

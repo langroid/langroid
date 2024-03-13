@@ -13,20 +13,21 @@ as indicated in comments below, to get good results.
     supported vector-dbs, e.g. qdrant or chroma.
 
 """
+import os
 import re
+
 import typer
 from rich import print
 from rich.prompt import Prompt
-import os
 
 import langroid.language_models as lm
 from langroid.agent.special.doc_chat_agent import (
     DocChatAgent,
     DocChatAgentConfig,
 )
-from langroid.parsing.parser import ParsingConfig, PdfParsingConfig, Splitter
 from langroid.agent.task import Task
-from langroid.utils.configuration import set_global, Settings
+from langroid.parsing.parser import ParsingConfig, PdfParsingConfig, Splitter
+from langroid.utils.configuration import Settings, set_global
 
 app = typer.Typer()
 
