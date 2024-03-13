@@ -2,7 +2,8 @@
 If run as a script, starts an RPC server which handles remote
 embedding requests:
 
-python3 -m langroid.embedding_models.remote_embeds `port`
+For example:
+python3 -m langroid.embedding_models.remote_embeds localhost `port`
 
 where `port` is the port at which the service is exposed.  Currently,
 supports insecure connections only, and this should NOT be exposed to
