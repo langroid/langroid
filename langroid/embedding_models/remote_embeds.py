@@ -11,6 +11,7 @@ the internet.
 
 import subprocess
 from concurrent import futures
+from time import sleep
 from typing import Callable
 
 import grpc
@@ -43,12 +44,16 @@ class RemoteEmbeddingRPCs(embeddings_grpc.EmbeddingServicer):
 class RemoteEmbeddingsConfig(em.SentenceTransformerEmbeddingsConfig):
     api_base: str = "localhost"
     port: int = 50052
+    # The below are used only when waiting for server creation
+    poll_delay: float = 0.01
+    max_retries: int = 100
 
 
 class RemoteEmbeddings(em.SentenceTransformerEmbeddings):
     def __init__(self, config: RemoteEmbeddingsConfig = RemoteEmbeddingsConfig()):
         super().__init__(config)
         self.config: RemoteEmbeddingsConfig = config
+        self.have_started_server: bool = False
 
     def embedding_fn(self) -> Callable[[list[str]], lr.mytypes.Embeddings]:
         def fn(texts: list[str]) -> lr.mytypes.Embeddings:
@@ -67,28 +72,50 @@ class RemoteEmbeddings(em.SentenceTransformerEmbeddings):
                 return [list(emb.embed) for emb in response.embeds]
 
         def with_handling(texts: list[str]) -> lr.mytypes.Embeddings:
-            try:
-                return fn(texts)
-            # Occurs when the server hasn't been started
-            except grpc.RpcError:
-                # Start the server
-                subprocess.run(
-                    ["python3", __file__, self.config.api_base, str(self.config.port)]
-                )
-                return fn(texts)
+            # In local mode, start the server if it has not already
+            # been started
+            if self.config.api_base == "localhost" and not self.have_started_server:
+                try:
+                    return fn(texts)
+                # Occurs when the server hasn't been started
+                except grpc.RpcError:
+                    self.have_started_server = True
+                    # Start the server
+                    subprocess.Popen(
+                        [
+                            "python3",
+                            __file__,
+                            self.config.api_base,
+                            str(self.config.port),
+                        ]
+                    )
+
+                    for _ in range(self.config.max_retries - 1):
+                        try:
+                            return fn(texts)
+                        except grpc.RpcError:
+                            sleep(self.config.poll_delay)
+                            return fn(texts)
+
+            # The remote is not local or we have exhausted retries
+            # We should now raise an error if the server is not accessible
+            return fn(texts)
 
         return with_handling
 
 
 def serve(
-    bind_address: str = "localhost", port: int = 50052, max_workers: int = 10
+    bind_address: str = "localhost",
+    port: int = 50052,
+    max_workers: int = 10,
 ) -> None:
     """Starts the RPC server."""
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=max_workers))
     embeddings_grpc.add_EmbeddingServicer_to_server(RemoteEmbeddingRPCs(), server)  # type: ignore
-    server.add_insecure_port(f"{bind_address}:{port}")
+    url = f"{bind_address}:{port}"
+    server.add_insecure_port(url)
     server.start()
-    print(f"Embedding server started, listening on localhost:{port}")
+    print(f"Embedding server started, listening on {url}")
     server.wait_for_termination()
 
 

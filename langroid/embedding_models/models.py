@@ -2,7 +2,6 @@ import os
 from typing import Callable, List, Optional
 
 import tiktoken
-import torch
 from dotenv import load_dotenv
 from openai import OpenAI
 
@@ -25,10 +24,8 @@ class SentenceTransformerEmbeddingsConfig(EmbeddingModelsConfig):
     model_type: str = "sentence-transformer"
     model_name: str = "BAAI/bge-large-en-v1.5"
     context_length: int = 512
-    data_parallel: bool = torch.cuda.is_available() and torch.cuda.device_count() > 1
-    device_ids: list[int] = (
-        list(range(torch.cuda.device_count())) if torch.cuda.is_available() else []
-    )
+    data_parallel: Optional[bool] = None
+    device_ids: Optional[list[int]] = None
 
 
 class EmbeddingFunctionCallable:
@@ -129,6 +126,7 @@ class SentenceTransformerEmbeddings(EmbeddingModel):
     def __init__(self, config: STEC = STEC()):
         # this is an "extra" optional dependency, so we import it here
         try:
+            import torch
             from sentence_transformers import SentenceTransformer
             from transformers import AutoTokenizer
         except ImportError:
@@ -142,6 +140,19 @@ class SentenceTransformerEmbeddings(EmbeddingModel):
 
         super().__init__()
         self.config = config
+
+        if self.config.data_parallel is None:
+            self.config.data_parallel = (
+                torch.cuda.is_available() and torch.cuda.device_count() > 1
+            )
+
+        if self.config.device_ids is None:
+            self.config.device_ids = (
+                list(range(torch.cuda.device_count()))
+                if torch.cuda.is_available()
+                else []
+            )
+
         if self.config.data_parallel:
             self.model = torch.nn.DataParallel(
                 SentenceTransformer(
