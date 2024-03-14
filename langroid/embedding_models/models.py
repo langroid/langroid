@@ -25,7 +25,7 @@ class SentenceTransformerEmbeddingsConfig(EmbeddingModelsConfig):
     model_type: str = "sentence-transformer"
     model_name: str = "BAAI/bge-large-en-v1.5"
     context_length: int = 512
-    data_parallel: Optional[bool] = None
+    data_parallel: bool = False
     devices: Optional[list[str]] = None
 
 
@@ -127,7 +127,6 @@ class SentenceTransformerEmbeddings(EmbeddingModel):
     def __init__(self, config: STEC = STEC()):
         # this is an "extra" optional dependency, so we import it here
         try:
-            import torch
             from sentence_transformers import SentenceTransformer
             from transformers import AutoTokenizer
         except ImportError:
@@ -141,11 +140,6 @@ class SentenceTransformerEmbeddings(EmbeddingModel):
 
         super().__init__()
         self.config = config
-
-        if self.config.data_parallel is None:
-            self.config.data_parallel = (
-                torch.cuda.is_available() and torch.cuda.device_count() > 1
-            )
 
         self.model = SentenceTransformer(self.config.model_name)
         if self.config.data_parallel:

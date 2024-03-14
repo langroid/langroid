@@ -12,7 +12,7 @@ the internet.
 import atexit
 import subprocess
 import time
-from typing import Callable
+from typing import Callable, Optional
 
 import grpc
 from fire import Fire
@@ -24,13 +24,20 @@ from langroid.mytypes import Embeddings
 
 
 class RemoteEmbeddingRPCs(embeddings_grpc.EmbeddingServicer):
-    def __init__(self, model_name: str, batch_size: int):
+    def __init__(
+            self,
+            model_name: str,
+            batch_size: int,
+            data_parallel: bool,
+            devices: Optional[list[str]],
+    ):
         super().__init__()
-
         self.embedding_fn = em.SentenceTransformerEmbeddings(
             em.SentenceTransformerEmbeddingsConfig(
                 model_name=model_name,
                 batch_size=batch_size,
+                data_parallel=data_parallel,
+                devices=devices,
             )
         ).embedding_fn()
 
@@ -115,6 +122,8 @@ async def serve(
     bind_address_base: str = "localhost",
     port: int = 50052,
     batch_size: int = 512,
+    data_parallel: bool = False,
+    devices: Optional[list[str]] = None,
     model_name: str = "BAAI/bge-large-en-v1.5",
 ) -> None:
     """Starts the RPC server."""
@@ -123,6 +132,8 @@ async def serve(
         RemoteEmbeddingRPCs(
             model_name=model_name,
             batch_size=batch_size,
+            data_parallel=data_parallel,
+            devices=devices,
         ),
         server,
     )  # type: ignore
