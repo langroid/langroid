@@ -1,5 +1,4 @@
 from pathlib import Path
-
 import mkdocs_gen_files
 
 # -----------------------------------------------------#
