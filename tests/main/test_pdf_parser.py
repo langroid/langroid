@@ -56,3 +56,33 @@ def test_get_pdf_doc_path(pdflib: str):
     assert len(docs) > 0
     assert all(d.metadata.is_chunk for d in docs)
     assert all(path in d.metadata.source for d in docs)
+
+
+# @pytest.mark.skipif(
+#     os.environ.get("CI") == "true",
+#     reason="GH Actions/Ubuntu has issues with pdf2image/pyteseract",
+# )
+@pytest.mark.parametrize(
+    "path",
+    [
+        "https://nlsblog.org/wp-content/uploads/2020/06/image-based-pdf-sample.pdf",
+        "tests/main/data/image-based-pdf-sample.pdf",
+    ],
+)
+def test_image_pdf(path):
+    """
+    Test text extraction from an image-pdf
+    """
+    cfg = ParsingConfig(pdf=PdfParsingConfig(library="pdf2image"))
+    pdf_parser = DocumentParser.create(path, cfg)
+    doc = pdf_parser.get_doc()
+
+    # Check the results
+    assert isinstance(doc.content, str)
+    assert len(doc.content) > 0  # assuming the PDF is not empty
+    assert doc.metadata.source == path
+
+    docs = pdf_parser.get_doc_chunks()
+    assert len(docs) > 0
+    assert all(d.metadata.is_chunk for d in docs)
+    assert all(path in d.metadata.source for d in docs)

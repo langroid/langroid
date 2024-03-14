@@ -8,6 +8,7 @@ import fitz
 import pdfplumber
 import pypdf
 import requests
+from PIL import Image
 
 from langroid.mytypes import DocMetaData, Document
 from langroid.parsing.parser import Parser, ParsingConfig
@@ -53,6 +54,8 @@ class DocumentParser(Parser):
                 return PDFPlumberParser(source, config)
             elif config.pdf.library == "unstructured":
                 return UnstructuredPDFParser(source, config)
+            elif config.pdf.library == "pdf2image":
+                return ImagePdfParser(source, config)
             else:
                 raise ValueError(
                     f"Unsupported PDF library specified: {config.pdf.library}"
@@ -296,6 +299,36 @@ class PDFPlumberParser(DocumentParser):
             str: Extracted text from the page.
         """
         return self.fix_text(page.extract_text())
+
+
+class ImagePdfParser(DocumentParser):
+    """
+    Parser for processing PDFs that are images, i.e. not "true" PDFs.
+    """
+
+    def iterate_pages(
+        self,
+    ) -> Generator[Tuple[int, Image], None, None]:
+        from pdf2image import convert_from_bytes
+
+        images = convert_from_bytes(self.doc_bytes.getvalue())
+        for i, image in enumerate(images):
+            yield i, image
+
+    def extract_text_from_page(self, page: Image) -> str:
+        """
+        Extract text from a given `pdf2image` page.
+
+        Args:
+            page (Image): The PIL Image object.
+
+        Returns:
+            str: Extracted text from the image.
+        """
+        import pytesseract
+
+        text = pytesseract.image_to_string(page)
+        return self.fix_text(text)
 
 
 class UnstructuredPDFParser(DocumentParser):

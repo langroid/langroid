@@ -6,6 +6,7 @@ environment variables in your `.env` file, as explained in the
 """
 
 import pytest
+from duckduckgo_search.exceptions import DuckDuckGoSearchException
 
 import langroid as lr
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
@@ -71,7 +72,10 @@ def test_agent_google_search_tool(
         assert len(tools) == 1
         assert isinstance(tools[0], search_tool_cls)
 
-    agent_result = agent.handle_message(llm_msg)
+    try:
+        agent_result = agent.handle_message(llm_msg)
+    except DuckDuckGoSearchException as e:
+        pytest.skip(f"Skipping test: {e}")
     assert len(agent_result.split("\n\n")) == 3
     assert all(
         "lk-99" in x or "supercond" in x for x in agent_result.lower().split("\n\n")

@@ -41,10 +41,8 @@ class AssistantTool(BaseModel):
     def dct(self) -> Dict[str, Any]:
         d = super().dict()
         d["type"] = d["type"].value
-
         if self.type != ToolType.FUNCTION:
-            del d["function"]
-
+            d.pop("function")
         return d
 
 

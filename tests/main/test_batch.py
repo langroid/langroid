@@ -1,5 +1,6 @@
 import pytest
 
+from langroid import ChatDocument
 from langroid.agent.batch import (
     llm_response_batch,
     run_batch_agent_method,
@@ -11,6 +12,7 @@ from langroid.cachedb.redis_cachedb import RedisCacheConfig
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
 from langroid.mytypes import Entity
 from langroid.utils.configuration import Settings, set_global
+from langroid.utils.constants import DONE
 from langroid.vector_store.base import VectorStoreConfig
 
 
@@ -49,6 +51,49 @@ def test_task_batch(test_settings: Settings, sequential: bool):
         input_map=lambda x: str(x) + "+" + str(3),  # what to feed to each task
         output_map=lambda x: x,  # how to process the result of each task
         sequential=sequential,
+    )
+
+    # expected_answers are simple numbers, but
+    # actual answers may be more wordy like "sum of 1 and 3 is 4",
+    # so we just check if the expected answer is contained in the actual answer
+    for e in expected_answers:
+        assert any(str(e) in a.content.lower() for a in answers)
+
+
+class _TestChatAgent(ChatAgent):
+    def handle_message_fallback(
+        self, msg: str | ChatDocument
+    ) -> str | ChatDocument | None:
+        if isinstance(msg, ChatDocument) and msg.metadata.sender == Entity.LLM:
+            return DONE + " " + str(msg.content)
+
+
+@pytest.mark.parametrize("sequential", [True, False])
+def test_task_batch_turns(test_settings: Settings, sequential: bool):
+    """Test if `turns` param works as expected"""
+    set_global(test_settings)
+    cfg = _TestChatAgentConfig()
+
+    agent = _TestChatAgent(cfg)
+    task = Task(
+        agent,
+        name="Test",
+        interactive=False,
+    )
+
+    # run clones of this task on these inputs
+    N = 3
+    questions = list(range(N))
+    expected_answers = [(i + 3) for i in range(N)]
+
+    # batch run
+    answers = run_batch_tasks(
+        task,
+        questions,
+        input_map=lambda x: str(x) + "+" + str(3),  # what to feed to each task
+        output_map=lambda x: x,  # how to process the result of each task
+        sequential=sequential,
+        turns=2,
     )
 
     # expected_answers are simple numbers, but

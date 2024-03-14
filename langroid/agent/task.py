@@ -29,7 +29,7 @@ from langroid.agent.chat_document import (
     ChatDocument,
 )
 from langroid.mytypes import Entity
-from langroid.parsing.json import extract_top_level_json
+from langroid.parsing.parse_json import extract_top_level_json
 from langroid.utils.configuration import settings
 from langroid.utils.constants import DONE, NO_ANSWER, PASS, PASS_TO, SEND_TO, USER_QUIT
 from langroid.utils.logging import RichFileLogger, setup_file_logger

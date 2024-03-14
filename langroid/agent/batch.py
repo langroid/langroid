@@ -26,6 +26,7 @@ def run_batch_tasks(
     input_map: Callable[[Any], str | ChatDocument] = lambda x: str(x),
     output_map: Callable[[ChatDocument | None], Any] = lambda x: x,
     sequential: bool = True,
+    turns: int = -1,
 ) -> List[Any]:
     """
     Run copies of `task` async/concurrently one per item in `items` list.
@@ -40,6 +41,7 @@ def run_batch_tasks(
             to final result
         sequential (bool): whether to run sequentially
             (e.g. some APIs such as ooba don't support concurrent requests)
+        turns (int): number of turns to run, -1 for infinite
 
     Returns:
         List[Any]: list of final results
@@ -53,7 +55,7 @@ def run_batch_tasks(
             task_i.agent.llm.set_stream(False)
         task_i.agent.config.show_stats = False
 
-        result = await task_i.run_async(input)
+        result = await task_i.run_async(input, turns=turns)
         return output_map(result)
 
     async def _do_all() -> List[Any]:

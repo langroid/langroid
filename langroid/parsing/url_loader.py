@@ -12,7 +12,7 @@ from trafilatura.downloads import (
 )
 
 from langroid.mytypes import DocMetaData, Document
-from langroid.parsing.document_parser import DocumentParser
+from langroid.parsing.document_parser import DocumentParser, ImagePdfParser
 from langroid.parsing.parser import Parser, ParsingConfig
 
 logging.getLogger("trafilatura").setLevel(logging.ERROR)
@@ -56,7 +56,12 @@ class URLLoader:
                         url,
                         self.parser.config,
                     )
-                    docs.extend(doc_parser.get_doc_chunks())
+                    new_chunks = doc_parser.get_doc_chunks()
+                    if len(new_chunks) == 0:
+                        # If the document is empty, try to extract images
+                        img_parser = ImagePdfParser(url, self.parser.config)
+                        new_chunks = img_parser.get_doc_chunks()
+                    docs.extend(new_chunks)
                 else:
                     # Try to detect content type and handle accordingly
                     headers = requests.head(url).headers
