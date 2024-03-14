@@ -9,10 +9,9 @@ where `port` is the port at which the service is exposed.  Currently,
 supports insecure connections only, and this should NOT be exposed to
 the internet.
 """
-
+import atexit
 import subprocess
-from concurrent import futures
-from time import sleep
+import time
 from typing import Callable
 
 import grpc
@@ -50,7 +49,7 @@ class RemoteEmbeddingsConfig(em.SentenceTransformerEmbeddingsConfig):
     port: int = 50052
     # The below are used only when waiting for server creation
     poll_delay: float = 0.01
-    max_retries: int = 100
+    max_retries: int = 1000
 
 
 class RemoteEmbeddings(em.SentenceTransformerEmbeddings):
@@ -82,7 +81,7 @@ class RemoteEmbeddings(em.SentenceTransformerEmbeddings):
                 except grpc.RpcError:
                     self.have_started_server = True
                     # Start the server
-                    subprocess.Popen(
+                    proc = subprocess.Popen(
                         [
                             "python3",
                             __file__,
@@ -94,15 +93,16 @@ class RemoteEmbeddings(em.SentenceTransformerEmbeddings):
                             str(self.config.batch_size),
                             "--model_name",
                             self.config.model_name,
-                        ]
+                        ],
                     )
+
+                    atexit.register(lambda: proc.terminate())
 
                     for _ in range(self.config.max_retries - 1):
                         try:
                             return fn(texts)
                         except grpc.RpcError:
-                            sleep(self.config.poll_delay)
-                            return fn(texts)
+                            time.sleep(self.config.poll_delay)
 
             # The remote is not local or we have exhausted retries
             # We should now raise an error if the server is not accessible
@@ -111,15 +111,14 @@ class RemoteEmbeddings(em.SentenceTransformerEmbeddings):
         return with_handling
 
 
-def serve(
+async def serve(
     bind_address_base: str = "localhost",
     port: int = 50052,
-    max_workers: int = 10,
     batch_size: int = 512,
     model_name: str = "BAAI/bge-large-en-v1.5",
 ) -> None:
     """Starts the RPC server."""
-    server = grpc.server(futures.ThreadPoolExecutor(max_workers=max_workers))
+    server = grpc.aio.server()
     embeddings_grpc.add_EmbeddingServicer_to_server(
         RemoteEmbeddingRPCs(
             model_name=model_name,
@@ -129,9 +128,9 @@ def serve(
     )  # type: ignore
     url = f"{bind_address_base}:{port}"
     server.add_insecure_port(url)
-    server.start()
+    await server.start()
     print(f"Embedding server started, listening on {url}")
-    server.wait_for_termination()
+    await server.wait_for_termination()
 
 
 if __name__ == "__main__":
