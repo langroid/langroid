@@ -1,3 +1,4 @@
+import atexit
 import os
 from typing import Callable, List, Optional
 
@@ -25,7 +26,7 @@ class SentenceTransformerEmbeddingsConfig(EmbeddingModelsConfig):
     model_name: str = "BAAI/bge-large-en-v1.5"
     context_length: int = 512
     data_parallel: Optional[bool] = None
-    device_ids: Optional[list[int]] = None
+    devices: Optional[list[str]] = None
 
 
 class EmbeddingFunctionCallable:
@@ -146,33 +147,34 @@ class SentenceTransformerEmbeddings(EmbeddingModel):
                 torch.cuda.is_available() and torch.cuda.device_count() > 1
             )
 
-        if self.config.device_ids is None:
-            self.config.device_ids = (
-                list(range(torch.cuda.device_count()))
-                if torch.cuda.is_available()
-                else []
-            )
-
+        self.model = SentenceTransformer(self.config.model_name)
         if self.config.data_parallel:
-            self.model = torch.nn.DataParallel(
-                SentenceTransformer(
-                    self.config.model_name,
-                    device="cpu",
-                ),
-                device_ids=self.config.device_ids,
+            self.pool = self.model.start_multi_process_pool(
+                self.config.devices  # type: ignore
             )
-        else:
-            self.model = SentenceTransformer(self.config.model_name)
+            atexit.register(
+                lambda: SentenceTransformer.stop_multi_process_pool(self.pool)
+            )
 
         self.tokenizer = AutoTokenizer.from_pretrained(self.config.model_name)
         self.config.context_length = self.tokenizer.model_max_length
 
     def embedding_fn(self) -> Callable[[List[str]], Embeddings]:
         def fn(texts: List[str]) -> Embeddings:
-            embeds = []
-            for batch in batched(texts, self.config.batch_size):
-                batch_embeds = self.model.encode(batch, convert_to_numpy=True).tolist()
-                embeds.extend(batch_embeds)
+            if self.config.data_parallel:
+                embeds: Embeddings = self.model.encode_multi_process(
+                    texts,
+                    self.pool,
+                    batch_size=self.config.batch_size,
+                ).tolist()
+            else:
+                embeds = []
+                for batch in batched(texts, self.config.batch_size):
+                    batch_embeds = self.model.encode(
+                        batch, convert_to_numpy=True
+                    ).tolist()  # type: ignore
+                    embeds.extend(batch_embeds)
+
             return embeds
 
         return fn

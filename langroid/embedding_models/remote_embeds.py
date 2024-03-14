@@ -17,10 +17,10 @@ from typing import Callable
 import grpc
 from fire import Fire
 
-import langroid as lr
 import langroid.embedding_models.models as em
 import langroid.embedding_models.protoc.embeddings_pb2 as embeddings_pb
 import langroid.embedding_models.protoc.embeddings_pb2_grpc as embeddings_grpc
+from langroid.mytypes import Embeddings
 
 
 class RemoteEmbeddingRPCs(embeddings_grpc.EmbeddingServicer):
@@ -58,8 +58,8 @@ class RemoteEmbeddings(em.SentenceTransformerEmbeddings):
         self.config: RemoteEmbeddingsConfig = config
         self.have_started_server: bool = False
 
-    def embedding_fn(self) -> Callable[[list[str]], lr.mytypes.Embeddings]:
-        def fn(texts: list[str]) -> lr.mytypes.Embeddings:
+    def embedding_fn(self) -> Callable[[list[str]], Embeddings]:
+        def fn(texts: list[str]) -> Embeddings:
             url = f"{self.config.api_base}:{self.config.port}"
             with grpc.insecure_channel(url) as channel:
                 stub = embeddings_grpc.EmbeddingStub(channel)  # type: ignore
@@ -71,7 +71,7 @@ class RemoteEmbeddings(em.SentenceTransformerEmbeddings):
 
                 return [list(emb.embed) for emb in response.embeds]
 
-        def with_handling(texts: list[str]) -> lr.mytypes.Embeddings:
+        def with_handling(texts: list[str]) -> Embeddings:
             # In local mode, start the server if it has not already
             # been started
             if self.config.api_base == "localhost" and not self.have_started_server:
