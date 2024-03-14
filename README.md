@@ -123,6 +123,8 @@ teacher_task.run()
 <summary> <b>Click to expand</b></summary>
 
 - **Mar 2024:**
+  - **0.1.212:** ImagePdfParser: support for extracting text from image-based PDFs.
+    (this means `DocChatAgent` will now work with image-pdfs).
   - **0.1.194 - 0.1.211:** Misc fixes, improvements, and features:
     - Big enhancement in RAG performance (mainly, recall) due to a [fix in Relevance 
       Extractor](https://github.com/langroid/langroid/releases/tag/0.1.209)
