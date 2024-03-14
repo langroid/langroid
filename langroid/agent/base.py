@@ -37,7 +37,7 @@ from langroid.language_models.base import (
 )
 from langroid.language_models.openai_gpt import OpenAIGPTConfig
 from langroid.mytypes import Entity
-from langroid.parsing.json import extract_top_level_json
+from langroid.parsing.parse_json import extract_top_level_json
 from langroid.parsing.parser import Parser, ParsingConfig
 from langroid.prompts.prompts_config import PromptsConfig
 from langroid.utils.configuration import settings

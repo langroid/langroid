@@ -51,6 +51,7 @@ def test_openai_assistant(test_settings: Settings):
         name="Bot",
         system_message="You are a helpful assistant",
         done_if_response=[Entity.LLM],
+        interactive=False,
     )
     answer = task.run("What is the capital of China?")
     assert "Beijing" in answer.content

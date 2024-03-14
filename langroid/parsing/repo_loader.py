@@ -19,7 +19,7 @@ from github.Repository import Repository
 from pydantic import BaseModel, BaseSettings, Field
 
 from langroid.mytypes import DocMetaData, Document
-from langroid.parsing.document_parser import DocumentParser
+from langroid.parsing.document_parser import DocumentParser, ImagePdfParser
 from langroid.parsing.parser import Parser, ParsingConfig
 
 logger = logging.getLogger(__name__)
@@ -550,7 +550,11 @@ class RepoLoader:
                     file_path,
                     parser.config,
                 )
-                docs.extend(doc_parser.get_doc_chunks())
+                new_chunks = doc_parser.get_doc_chunks()
+                if len(new_chunks) == 0 and file_extension.lower() == ".pdf":
+                    doc_parser = ImagePdfParser(file_path, parser.config)
+                    new_chunks = doc_parser.get_doc_chunks()
+                docs.extend(new_chunks)
             else:
                 with open(file_path, "r") as f:
                     if lines is not None:

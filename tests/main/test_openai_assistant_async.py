@@ -48,6 +48,7 @@ async def test_openai_assistant_async(test_settings: Settings):
         system_message="You are a helpful assistant",
         done_if_no_response=[Entity.LLM],
         done_if_response=[Entity.LLM],
+        interactive=False,
     )
     answer = await task.run_async("What is the capital of China?", turns=6)
     assert "Beijing" in answer.content

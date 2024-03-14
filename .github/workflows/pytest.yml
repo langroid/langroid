@@ -59,6 +59,11 @@ jobs:
       with:
         python-version: 3.11  # Replace with your desired Python version
 
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y poppler-utils tesseract-ocr
+
     - name: Install Poetry
       uses: Gr1N/setup-poetry@v8
 
@@ -81,7 +86,7 @@ jobs:
 
     - name: Run tests with coverage
       run: |
-        poetry run coverage run --source=langroid -m pytest -k "not openai_assistant" tests/main
+        poetry run coverage run --source=langroid -m pytest tests/main
         poetry run coverage report
     - name: Generate XML coverage report
       run: |
