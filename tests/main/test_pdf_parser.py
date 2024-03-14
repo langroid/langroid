@@ -58,6 +58,10 @@ def test_get_pdf_doc_path(pdflib: str):
     assert all(path in d.metadata.source for d in docs)
 
 
+# @pytest.mark.skipif(
+#     os.environ.get("CI") == "true",
+#     reason="GH Actions/Ubuntu has issues with pdf2image/pyteseract",
+# )
 @pytest.mark.parametrize(
     "path",
     [

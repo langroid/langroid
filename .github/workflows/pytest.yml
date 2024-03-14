@@ -62,7 +62,7 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y poppler-utils 
+        sudo apt-get install -y poppler-utils tesseract-ocr
 
     - name: Install Poetry
       uses: Gr1N/setup-poetry@v8
