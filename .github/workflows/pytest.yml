@@ -59,6 +59,11 @@ jobs:
       with:
         python-version: 3.11  # Replace with your desired Python version
 
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y poppler-utils 
+
     - name: Install Poetry
       uses: Gr1N/setup-poetry@v8
 
