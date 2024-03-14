@@ -30,23 +30,22 @@ but uses a workflow where agents do not delegate to each other,
 and uses more agents to break down tasks into smaller parts.
 
 """
+import typer
+from rich import print
+from pydantic import BaseModel
+from typing import List
 import json
 import os
-from typing import List
-
-import typer
-from pydantic import BaseModel
-from rich import print
 
 import langroid.language_models as lm
-from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
+from langroid.mytypes import Entity
 from langroid.agent.special.doc_chat_agent import DocChatAgent, DocChatAgentConfig
+from langroid.parsing.parser import ParsingConfig
+from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
 from langroid.agent.tool_message import ToolMessage
 from langroid.language_models.openai_gpt import OpenAIGPTConfig
-from langroid.mytypes import Entity
-from langroid.parsing.parser import ParsingConfig
-from langroid.utils.configuration import Settings, set_global
+from langroid.utils.configuration import set_global, Settings
 from langroid.utils.constants import NO_ANSWER
 
 app = typer.Typer()

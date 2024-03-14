@@ -7,12 +7,10 @@ and you have your OpenAI API Key in the .env file, run like this:
 
 chainlit run examples/chainlit/chat-tool.py
 """
-from textwrap import dedent
-
-import chainlit as cl
-
 import langroid as lr
+import chainlit as cl
 from langroid.agent.callbacks.chainlit import add_instructions
+from textwrap import dedent
 
 
 class CapitalTool(lr.ToolMessage):

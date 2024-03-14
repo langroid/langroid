@@ -15,14 +15,13 @@ and you have your OpenAI API Key in the .env file, run like this:
 
 chainlit run examples/chainlit/chat-stream.py
 """
-import asyncio
-import re
-import sys
-
 import chainlit as cl
-
 from langroid import ChatAgent, ChatAgentConfig
 from langroid.utils.configuration import settings
+
+import re
+import sys
+import asyncio
 
 settings.stream = True  # works if False as well
 

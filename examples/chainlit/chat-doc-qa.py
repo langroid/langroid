@@ -22,23 +22,21 @@ https://langroid.github.io/langroid/tutorials/local-llm-setup/
 
 """
 
-from textwrap import dedent
-
 import chainlit as cl
-
 import langroid as lr
 import langroid.language_models as lm
 import langroid.parsing.parser as lp
+from langroid.agent.special.doc_chat_agent import DocChatAgent, DocChatAgentConfig
+from langroid.utils.constants import NO_ANSWER
 from langroid.agent.callbacks.chainlit import (
-    SYSTEM,
     add_instructions,
-    get_text_files,
     make_llm_settings_widgets,
     setup_llm,
     update_llm,
+    get_text_files,
+    SYSTEM,
 )
-from langroid.agent.special.doc_chat_agent import DocChatAgent, DocChatAgentConfig
-from langroid.utils.constants import NO_ANSWER
+from textwrap import dedent
 
 
 async def initialize_agent() -> None:

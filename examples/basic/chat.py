@@ -19,14 +19,15 @@ For details on running with local or non-OpenAI models, see:
 https://langroid.github.io/langroid/tutorials/local-llm-setup/
 """
 import typer
-from dotenv import load_dotenv
 from rich import print
 from rich.prompt import Prompt
+from dotenv import load_dotenv
 
 import langroid.language_models as lm
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
-from langroid.utils.configuration import Settings, set_global
+from langroid.utils.configuration import set_global, Settings
+
 
 app = typer.Typer()
 

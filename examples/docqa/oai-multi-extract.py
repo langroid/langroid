@@ -11,24 +11,23 @@ python3 examples/docqa/chat_multi_extract.py
 
 Use -f option to use OpenAI function calling API instead of Langroid tool.
 """
+import typer
+from rich import print
+from pydantic import BaseModel
 import json
 import os
 
-import typer
-from pydantic import BaseModel
-from rich import print
-
-import langroid as lr
 from langroid.agent.openai_assistant import (
-    AssistantTool,
-    OpenAIAssistant,
     OpenAIAssistantConfig,
+    OpenAIAssistant,
+    AssistantTool,
 )
+import langroid as lr
 from langroid.agent.task import Task
 from langroid.agent.tool_message import ToolMessage
-from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
-from langroid.utils.constants import DONE, NO_ANSWER
+from langroid.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
 from langroid.utils.logging import setup_colored_logging
+from langroid.utils.constants import NO_ANSWER, DONE
 
 app = typer.Typer()
 

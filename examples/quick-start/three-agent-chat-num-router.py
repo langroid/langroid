@@ -26,7 +26,6 @@ For more explanation, see the
 """
 
 import typer
-
 import langroid as lr
 
 app = typer.Typer()

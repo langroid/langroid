@@ -33,15 +33,15 @@ https://langroid.github.io/langroid/tutorials/local-llm-setup/
 
 """
 import typer
-from dotenv import load_dotenv
 from rich import print
+from dotenv import load_dotenv
 
-import langroid as lr
 import langroid.language_models as lm
-from examples.privacy.privacy_agent import PrivacyAgent, PrivacyAgentConfig
-from examples.privacy.privacy_annotator import PrivacyAnnotator, PrivacyAnnotatorConfig
+import langroid as lr
 from langroid.mytypes import Entity
-from langroid.utils.configuration import Settings, set_global
+from examples.privacy.privacy_annotator import PrivacyAnnotator, PrivacyAnnotatorConfig
+from examples.privacy.privacy_agent import PrivacyAgent, PrivacyAgentConfig
+from langroid.utils.configuration import set_global, Settings
 
 app = typer.Typer()
 

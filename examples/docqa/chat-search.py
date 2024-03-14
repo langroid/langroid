@@ -22,21 +22,21 @@ import re
 from typing import List
 
 import typer
-from pydantic import BaseSettings
 from rich import print
 from rich.prompt import Prompt
 
+from pydantic import BaseSettings
 import langroid.language_models as lm
+from langroid.agent.tool_message import ToolMessage
 from langroid.agent.chat_agent import ChatAgent, ChatDocument
 from langroid.agent.special.doc_chat_agent import (
     DocChatAgent,
     DocChatAgentConfig,
 )
-from langroid.agent.task import Task
-from langroid.agent.tool_message import ToolMessage
 from langroid.parsing.web_search import duckduckgo_search
-from langroid.utils.configuration import Settings, set_global
+from langroid.agent.task import Task
 from langroid.utils.constants import NO_ANSWER
+from langroid.utils.configuration import set_global, Settings
 
 app = typer.Typer()
 

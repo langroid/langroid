@@ -53,8 +53,8 @@ from rich.prompt import Prompt
 import langroid.language_models as lm
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
-from langroid.agent.tools.duckduckgo_search_tool import DuckduckgoSearchTool
 from langroid.agent.tools.google_search_tool import GoogleSearchTool
+from langroid.agent.tools.duckduckgo_search_tool import DuckduckgoSearchTool
 from langroid.utils.configuration import Settings, set_global
 
 app = typer.Typer()

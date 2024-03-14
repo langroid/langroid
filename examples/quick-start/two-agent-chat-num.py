@@ -15,7 +15,6 @@ For more explanation see the
 
 import typer
 from rich.prompt import Prompt
-
 import langroid as lr
 import langroid.language_models as lm
 

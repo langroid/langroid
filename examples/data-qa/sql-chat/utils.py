@@ -1,10 +1,9 @@
-import logging
-import urllib.parse
-
 from rich import print
 from rich.prompt import Prompt
+import urllib.parse
 
 from langroid.parsing.utils import closest_string
+import logging
 
 logger = logging.getLogger(__name__)
 

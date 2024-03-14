@@ -8,24 +8,23 @@ Run like this:
 python3 examples/docqa/doc-chat-2.py
 
 """
-import os
-
 import typer
 from rich import print
+import os
 
-from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.special.doc_chat_agent import (
     DocChatAgent,
     DocChatAgentConfig,
 )
-from langroid.agent.task import Task
-from langroid.agent.tools.recipient_tool import RecipientTool
-from langroid.language_models.openai_gpt import OpenAIGPTConfig
 from langroid.mytypes import Entity
 from langroid.parsing.parser import ParsingConfig, PdfParsingConfig, Splitter
-from langroid.utils.configuration import Settings, set_global
-from langroid.utils.constants import NO_ANSWER
+from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
+from langroid.agent.task import Task
+from langroid.language_models.openai_gpt import OpenAIGPTConfig
+from langroid.agent.tools.recipient_tool import RecipientTool
+from langroid.utils.configuration import set_global, Settings
 from langroid.utils.logging import setup_colored_logging
+from langroid.utils.constants import NO_ANSWER
 
 app = typer.Typer()
 

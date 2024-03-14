@@ -24,16 +24,17 @@ Optional arguments:
 """
 
 
-import pandas as pd
 import typer
+import pandas as pd
 from rich.prompt import Prompt
-
+from langroid.parsing.repo_loader import RepoLoader
 from langroid.agent.special.doc_chat_agent import DocChatAgentConfig
 from langroid.agent.special.lance_doc_chat_agent import LanceDocChatAgent
 from langroid.agent.special.lance_rag.lance_rag_task import LanceRAGTaskCreator
+
+
+from langroid.utils.configuration import set_global, Settings
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
-from langroid.parsing.repo_loader import RepoLoader
-from langroid.utils.configuration import Settings, set_global
 from langroid.utils.system import rmdir
 from langroid.vector_store.lancedb import LanceDBConfig
 

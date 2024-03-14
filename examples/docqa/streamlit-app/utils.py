@@ -1,12 +1,10 @@
-import os
-
-import streamlit as st
-
 from langroid.agent.special import DocChatAgent, DocChatAgentConfig
-from langroid.embedding_models.models import OpenAIEmbeddingsConfig
-from langroid.language_models.openai_gpt import OpenAIGPTConfig
-from langroid.parsing.parser import ParsingConfig
 from langroid.vector_store.lancedb import LanceDBConfig
+from langroid.embedding_models.models import OpenAIEmbeddingsConfig
+from langroid.parsing.parser import ParsingConfig
+from langroid.language_models.openai_gpt import OpenAIGPTConfig
+import os
+import streamlit as st
 
 OPENAI_KEY = os.environ["OPENAI_API_KEY"]
 

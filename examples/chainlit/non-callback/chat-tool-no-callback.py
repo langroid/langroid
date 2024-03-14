@@ -14,7 +14,6 @@ chainlit run examples/chainlit/chat-tool-no-callback.py
 """
 
 import chainlit as cl
-
 import langroid as lr
 
 

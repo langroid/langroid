@@ -6,17 +6,15 @@ and you have your OpenAI API Key in the .env file, run like this:
 
 chainlit run examples/chainlit/chat-with-task.py
 """
-from textwrap import dedent
-
-import chainlit as cl
-
 import langroid as lr
+import chainlit as cl
 from langroid.agent.callbacks.chainlit import (
     add_instructions,
     make_llm_settings_widgets,
-    setup_llm,
     update_llm,
+    setup_llm,
 )
+from textwrap import dedent
 
 
 @cl.on_settings_update

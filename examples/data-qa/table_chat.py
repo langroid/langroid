@@ -23,13 +23,13 @@ For more info on running Langroid with local LLM, see here:
 https://langroid.github.io/langroid/tutorials/local-llm-setup/
 """
 import typer
-from rich import print
 from rich.prompt import Prompt
+from rich import print
 
 from langroid.agent.special.table_chat_agent import TableChatAgent, TableChatAgentConfig
 from langroid.agent.task import Task
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
-from langroid.utils.configuration import Settings, set_global
+from langroid.utils.configuration import set_global, Settings
 
 app = typer.Typer()
 

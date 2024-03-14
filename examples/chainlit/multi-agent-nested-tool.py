@@ -8,14 +8,13 @@ and you have your OpenAI API Key in the .env file, run like this:
 
 chainlit run examples/chainlit/multi-agent-nested-tool.py
 """
-from textwrap import dedent
-
-import chainlit as cl
-
 import langroid as lr
-from langroid.agent.callbacks.chainlit import ChainlitTaskCallbacks, add_instructions
-from langroid.utils.configuration import settings
+import chainlit as cl
+from langroid.agent.callbacks.chainlit import ChainlitTaskCallbacks
 from langroid.utils.constants import DONE
+from langroid.utils.configuration import settings
+from langroid.agent.callbacks.chainlit import add_instructions
+from textwrap import dedent
 
 settings.cache = False
 

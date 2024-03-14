@@ -10,7 +10,6 @@ chainlit run examples/chainlit/chat-with-agent.py
 """
 
 import chainlit as cl
-
 import langroid as lr
 from langroid.agent.callbacks.chainlit import add_instructions
 
