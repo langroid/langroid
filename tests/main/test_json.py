@@ -2,7 +2,7 @@ import json
 
 import pytest
 
-from langroid.parsing.json import extract_top_level_json
+from langroid.parsing.parse_json import extract_top_level_json
 
 
 @pytest.mark.parametrize(

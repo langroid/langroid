@@ -14,7 +14,7 @@ from langroid.cachedb.momento_cachedb import MomentoCacheConfig
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
 from langroid.mytypes import Document
 from langroid.parsing.agent_chats import parse_message
-from langroid.parsing.json import top_level_json_field
+from langroid.parsing.parse_json import top_level_json_field
 from langroid.prompts.dialog import collate_chat_history
 from langroid.prompts.templates import (
     EXTRACTION_PROMPT_GPT4,
