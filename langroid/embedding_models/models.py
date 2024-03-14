@@ -26,6 +26,9 @@ class SentenceTransformerEmbeddingsConfig(EmbeddingModelsConfig):
     model_name: str = "BAAI/bge-large-en-v1.5"
     context_length: int = 512
     data_parallel: bool = False
+    # Select device (e.g. "cuda", "cpu") when data parallel is disabled
+    device: Optional[str] = None
+    # Select devices when data parallel is enabled
     devices: Optional[list[str]] = None
 
 
@@ -141,7 +144,10 @@ class SentenceTransformerEmbeddings(EmbeddingModel):
         super().__init__()
         self.config = config
 
-        self.model = SentenceTransformer(self.config.model_name)
+        self.model = SentenceTransformer(
+            self.config.model_name,
+            device=self.config.device,
+        )
         if self.config.data_parallel:
             self.pool = self.model.start_multi_process_pool(
                 self.config.devices  # type: ignore
