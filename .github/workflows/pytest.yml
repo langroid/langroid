@@ -73,7 +73,7 @@ jobs:
         echo "$HOME/.local/bin" >> $GITHUB_PATH
         python -m pip install --upgrade pip
         
-        poetry install -E chromadb
+        poetry install -E "chromadb hf-embeddings"
 
     - name: Dump dependencies to file
       run: pip freeze > requirements_github.txt
@@ -86,7 +86,7 @@ jobs:
 
     - name: Run tests with coverage
       run: |
-        poetry run coverage run --source=langroid -m pytest tests/main
+        poetry run coverage run --source=langroid -m pytest tests/main tests/extras/test*hf*
         poetry run coverage report
     - name: Generate XML coverage report
       run: |
