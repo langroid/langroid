@@ -13,14 +13,21 @@ from . import search
 from . import web_search
 from . import spider
 
-parse_json  # appease mypy
+from .parser import (
+    Splitter,
+    PdfParsingConfig,
+    DocxParsingConfig,
+    DocParsingConfig,
+    ParsingConfig,
+    Parser,
+)
 
 __all__ = [
     "parser",
     "agent_chats",
     "code_parser",
     "document_parser",
-    "parse_json.py",
+    "parse_json",
     "para_sentence_split",
     "repo_loader",
     "url_loader",
@@ -30,4 +37,10 @@ __all__ = [
     "search",
     "web_search",
     "spider",
+    "Splitter",
+    "PdfParsingConfig",
+    "DocxParsingConfig",
+    "DocParsingConfig",
+    "ParsingConfig",
+    "Parser",
 ]

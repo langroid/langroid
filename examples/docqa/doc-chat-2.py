@@ -63,7 +63,6 @@ def main(
         )
     )
 
-
     doc_agent = DocChatAgent(config)
     print("[blue]Welcome to the document chatbot!")
     doc_agent.user_docs_ingest_dialog()

@@ -10,6 +10,7 @@ import pytest
 
 from langroid.embedding_models.base import EmbeddingModelsConfig
 from langroid.embedding_models.models import SentenceTransformerEmbeddingsConfig
+from langroid.embedding_models.remote_embeds import RemoteEmbeddingsConfig
 from langroid.mytypes import DocMetaData, Document
 from langroid.utils.system import rmdir
 from langroid.vector_store.base import VectorStore
@@ -19,9 +20,10 @@ from langroid.vector_store.qdrantdb import QdrantDB, QdrantDBConfig
 sentence_cfg = SentenceTransformerEmbeddingsConfig(
     model_type="sentence-transformer",
 )
+remote_cfg = RemoteEmbeddingsConfig()
 
 
-def generate_vecdbs(embed_cfg: EmbeddingModelsConfig) -> VectorStore:
+def generate_vecdbs(embed_cfg: EmbeddingModelsConfig) -> list[VectorStore]:
     qd_dir = ".qdrant-" + embed_cfg.model_type
     rmdir(qd_dir)
     qd_cfg = QdrantDBConfig(
@@ -53,7 +55,9 @@ def generate_vecdbs(embed_cfg: EmbeddingModelsConfig) -> VectorStore:
     return [qd, qd_cloud, cd]
 
 
-@pytest.mark.parametrize("vecdb", generate_vecdbs(sentence_cfg))
+@pytest.mark.parametrize(
+    "vecdb", generate_vecdbs(sentence_cfg) + generate_vecdbs(remote_cfg)
+)
 def test_vector_stores(vecdb: Union[ChromaDB, QdrantDB]):
     docs = [
         Document(content="hello", metadata=DocMetaData(id=1)),

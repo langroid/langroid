@@ -265,7 +265,7 @@ class OpenAIAssistant(ChatAgent):
         """
         return LLMMessage(
             content=msg.content[0].text.value,  # type: ignore
-            role=msg.role,
+            role=Role(msg.role),
         )
 
     def _update_messages_hash(self, msg: Message | LLMMessage) -> None:

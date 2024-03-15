@@ -1,5 +1,6 @@
+import atexit
 import os
-from typing import Callable, List
+from typing import Callable, List, Optional
 
 import tiktoken
 from dotenv import load_dotenv
@@ -14,6 +15,7 @@ class OpenAIEmbeddingsConfig(EmbeddingModelsConfig):
     model_type: str = "openai"
     model_name: str = "text-embedding-ada-002"
     api_key: str = ""
+    api_base: Optional[str] = None
     organization: str = ""
     dims: int = 1536
     context_length: int = 8192
@@ -23,6 +25,11 @@ class SentenceTransformerEmbeddingsConfig(EmbeddingModelsConfig):
     model_type: str = "sentence-transformer"
     model_name: str = "BAAI/bge-large-en-v1.5"
     context_length: int = 512
+    data_parallel: bool = False
+    # Select device (e.g. "cuda", "cpu") when data parallel is disabled
+    device: Optional[str] = None
+    # Select devices when data parallel is enabled
+    devices: Optional[list[str]] = None
 
 
 class EmbeddingFunctionCallable:
@@ -39,15 +46,17 @@ class EmbeddingFunctionCallable:
                                 a list of input texts.
     """
 
-    def __init__(self, model: "OpenAIEmbeddings"):
+    def __init__(self, model: "OpenAIEmbeddings", batch_size: int = 512):
         """
         Initialize the EmbeddingFunctionCallable with a specific model.
 
         Args:
             model (OpenAIEmbeddings): An instance of OpenAIEmbeddings to use for
             generating embeddings.
+            batch_size (int): Batch size
         """
         self.model = model
+        self.batch_size = batch_size
 
     def __call__(self, input: List[str]) -> Embeddings:
         """
@@ -68,7 +77,7 @@ class EmbeddingFunctionCallable:
         """
         tokenized_texts = self.model.truncate_texts(input)
         embeds = []
-        for batch in batched(tokenized_texts, 500):
+        for batch in batched(tokenized_texts, self.batch_size):
             result = self.model.client.embeddings.create(
                 input=batch, model=self.model.config.model_name
             )
@@ -91,7 +100,7 @@ class OpenAIEmbeddings(EmbeddingModel):
                 in your .env file.
                 """
             )
-        self.client = OpenAI(api_key=self.config.api_key)
+        self.client = OpenAI(base_url=self.config.api_base, api_key=self.config.api_key)
         self.tokenizer = tiktoken.encoding_for_model(self.config.model_name)
 
     def truncate_texts(self, texts: List[str]) -> List[List[int]]:
@@ -107,7 +116,7 @@ class OpenAIEmbeddings(EmbeddingModel):
         ]
 
     def embedding_fn(self) -> Callable[[List[str]], Embeddings]:
-        return EmbeddingFunctionCallable(self)
+        return EmbeddingFunctionCallable(self, self.config.batch_size)
 
     @property
     def embedding_dims(self) -> int:
@@ -134,16 +143,38 @@ class SentenceTransformerEmbeddings(EmbeddingModel):
 
         super().__init__()
         self.config = config
-        self.model = SentenceTransformer(self.config.model_name)
+
+        self.model = SentenceTransformer(
+            self.config.model_name,
+            device=self.config.device,
+        )
+        if self.config.data_parallel:
+            self.pool = self.model.start_multi_process_pool(
+                self.config.devices  # type: ignore
+            )
+            atexit.register(
+                lambda: SentenceTransformer.stop_multi_process_pool(self.pool)
+            )
+
         self.tokenizer = AutoTokenizer.from_pretrained(self.config.model_name)
         self.config.context_length = self.tokenizer.model_max_length
 
     def embedding_fn(self) -> Callable[[List[str]], Embeddings]:
         def fn(texts: List[str]) -> Embeddings:
-            embeds = []
-            for batch in batched(texts, 500):
-                batch_embeds = self.model.encode(batch, convert_to_numpy=True).tolist()
-                embeds.extend(batch_embeds)
+            if self.config.data_parallel:
+                embeds: Embeddings = self.model.encode_multi_process(
+                    texts,
+                    self.pool,
+                    batch_size=self.config.batch_size,
+                ).tolist()
+            else:
+                embeds = []
+                for batch in batched(texts, self.config.batch_size):
+                    batch_embeds = self.model.encode(
+                        batch, convert_to_numpy=True
+                    ).tolist()  # type: ignore
+                    embeds.extend(batch_embeds)
+
             return embeds
 
         return fn
