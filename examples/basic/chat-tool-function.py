@@ -17,18 +17,23 @@ import langroid.language_models as lm
 from pydantic import BaseModel, Field
 import json
 from fire import Fire
+
 # define a nested structure for Company information
+
 
 class CompanyFinancials(BaseModel):
     market_cap: float = Field(..., description="market capitalization of company")
     eps: float = Field(..., description="earnings per share of company")
+
 
 class CompanyInfo(BaseModel):
     name: str = Field(..., description="name of company")
     industry: str = Field(..., description="industry of company")
     financials: CompanyFinancials = Field(..., description="financials of company")
 
+
 # define a ToolMessage corresponding to the above structure
+
 
 class CompanyInfoTool(lr.agent.ToolMessage):
     request: str = "company_info_tool"
@@ -49,12 +54,10 @@ class CompanyInfoTool(lr.agent.ToolMessage):
             """
         )
 
-def run(
-    model: str = "" # or, e.g., "ollama/mistral:7b-instruct-v0.2-q8_0"
-):
 
+def run(model: str = ""):  # or, e.g., "ollama/mistral:7b-instruct-v0.2-q8_0"
     lm_config = lm.OpenAIGPTConfig(
-        chat_model=model or lm.OpenAIChatModel.GPT4_TURBO, # or
+        chat_model=model or lm.OpenAIChatModel.GPT4_TURBO,  # or
     )
     tool_name = CompanyInfoTool.default_value("request")
     agent_config = lr.ChatAgentConfig(
@@ -85,6 +88,7 @@ def run(
 
     task = lr.Task(agent, interactive=False)
     task.run(paragraph, turns=2)
+
 
 if __name__ == "__main__":
     Fire(run)
