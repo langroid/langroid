@@ -13,7 +13,7 @@ pip install "langroid[hf-embeddings]"
 
 """
 import logging
-from contextlib import ExitStack
+from contextlib import ExitStack, nullcontext
 from typing import Any, Dict, List, Optional, Set, Tuple, no_type_check
 
 import numpy as np
@@ -95,6 +95,7 @@ class DocChatAgentConfig(ChatAgentConfig):
     # and those will already be in stand-alone form, so in this mode
     # there is no need to convert them to stand-alone form.
     assistant_mode: bool = False
+    enable_rich_console_status: bool = True
     # Use LLM to generate hypothetical answer A to the query Q,
     # and use the embed(A) to find similar chunks in vecdb.
     # Referred to as HyDE in the paper:
@@ -198,6 +199,9 @@ class DocChatAgent(ChatAgent):
         self.chunked_docs: List[Document] = []
         self.chunked_docs_clean: List[Document] = []
         self.response: None | Document = None
+        self.console_status = (
+            console.status if self.config.enable_rich_console_status else nullcontext
+        )
         if len(config.doc_paths) > 0:
             self.ingest()
 
@@ -735,7 +739,7 @@ class DocChatAgent(ChatAgent):
     def llm_hypothetical_answer(self, query: str) -> str:
         if self.llm is None:
             raise ValueError("LLM not set")
-        with console.status("[cyan]LLM generating hypothetical answer..."):
+        with self.console_status("[cyan]LLM generating hypothetical answer..."):
             with StreamingIfAllowed(self.llm, False):
                 # TODO: provide an easy way to
                 # Adjust this prompt depending on context.
@@ -755,7 +759,7 @@ class DocChatAgent(ChatAgent):
     def llm_rephrase_query(self, query: str) -> List[str]:
         if self.llm is None:
             raise ValueError("LLM not set")
-        with console.status("[cyan]LLM generating rephrases of query..."):
+        with self.console_status("[cyan]LLM generating rephrases of query..."):
             with StreamingIfAllowed(self.llm, False):
                 rephrases = self.llm_response_forget(
                     f"""
@@ -771,7 +775,7 @@ class DocChatAgent(ChatAgent):
     ) -> List[Tuple[Document, float]]:
         # find similar docs using bm25 similarity:
         # these may sometimes be more likely to contain a relevant verbatim extract
-        with console.status("[cyan]Searching for similar chunks using bm25..."):
+        with self.console_status("[cyan]Searching for similar chunks using bm25..."):
             if self.chunked_docs is None or len(self.chunked_docs) == 0:
                 logger.warning("No chunked docs; cannot use bm25-similarity")
                 return []
@@ -789,7 +793,7 @@ class DocChatAgent(ChatAgent):
     def get_fuzzy_matches(self, query: str, multiple: int) -> List[Document]:
         # find similar docs using fuzzy matching:
         # these may sometimes be more likely to contain a relevant verbatim extract
-        with console.status("[cyan]Finding fuzzy matches in chunks..."):
+        with self.console_status("[cyan]Finding fuzzy matches in chunks..."):
             if self.chunked_docs is None:
                 logger.warning("No chunked docs; cannot use fuzzy matching")
                 return []
@@ -809,7 +813,9 @@ class DocChatAgent(ChatAgent):
     def rerank_with_cross_encoder(
         self, query: str, passages: List[Document]
     ) -> List[Document]:
-        with console.status("[cyan]Re-ranking retrieved chunks using cross-encoder..."):
+        with self.console_status(
+            "[cyan]Re-ranking retrieved chunks using cross-encoder..."
+        ):
             try:
                 from sentence_transformers import CrossEncoder
             except ImportError:
@@ -1002,7 +1008,7 @@ class DocChatAgent(ChatAgent):
         if self.vecdb is None:
             raise ValueError("VecDB not set")
 
-        with console.status("[cyan]Searching VecDB for relevant doc passages..."):
+        with self.console_status("[cyan]Searching VecDB for relevant doc passages..."):
             docs_and_scores: List[Tuple[Document, float]] = []
             for q in [query] + query_proxies:
                 docs_and_scores += self.get_semantic_search_results(
@@ -1078,7 +1084,7 @@ class DocChatAgent(ChatAgent):
             # Regardless of whether we are in conversation mode or not,
             # for relevant doc/chunk extraction, we must convert the query
             # to a standalone query to get more relevant results.
-            with console.status("[cyan]Converting to stand-alone query...[/cyan]"):
+            with self.console_status("[cyan]Converting to stand-alone query...[/cyan]"):
                 with StreamingIfAllowed(self.llm, False):
                     query = self.llm.followup_to_standalone(self.dialog, query)
             print(f"[orange2]New query: {query}")
@@ -1097,7 +1103,7 @@ class DocChatAgent(ChatAgent):
         if len(passages) == 0:
             return query, []
 
-        with console.status("[cyan]LLM Extracting verbatim passages..."):
+        with self.console_status("[cyan]LLM Extracting verbatim passages..."):
             with StreamingIfAllowed(self.llm, False):
                 # these are async calls, one per passage; turn off streaming
                 extracts = self.get_verbatim_extracts(query, passages)
@@ -1144,6 +1150,7 @@ class DocChatAgent(ChatAgent):
             passages,
             input_map=lambda msg: msg.content,
             output_map=lambda ans: ans.content if ans is not None else NO_ANSWER,
+            console_status=self.config.enable_rich_console_status,
         )
 
         # Caution: Retain ALL other fields in the Documents (which could be
@@ -1198,7 +1205,7 @@ class DocChatAgent(ChatAgent):
             cm = (
                 StreamingIfAllowed(self.llm)
                 if settings.stream
-                else (console.status("LLM Generating final answer..."))
+                else (self.console_status("LLM Generating final answer..."))
             )
             stack.enter_context(cm)  # type: ignore
             response = self.get_summary_answer(query, extracts)

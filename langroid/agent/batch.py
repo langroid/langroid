@@ -1,7 +1,8 @@
 import asyncio
 import copy
 import inspect
-from typing import Any, Callable, Coroutine, List
+from contextlib import nullcontext
+from typing import Any, Callable, Coroutine, List, Optional, TypeVar
 
 from dotenv import load_dotenv
 from rich.console import Console
@@ -9,6 +10,7 @@ from rich.console import Console
 from langroid.agent.base import Agent
 from langroid.agent.chat_document import ChatDocument
 from langroid.agent.task import Task
+from langroid.parsing.utils import batched
 from langroid.utils.configuration import quiet_mode, settings
 from langroid.utils.logging import setup_colored_logging
 from langroid.utils.output.printing import SuppressLoggerWarnings
@@ -19,38 +21,47 @@ setup_colored_logging()
 
 load_dotenv()
 
+T = TypeVar("T")
+U = TypeVar("U")
 
-def run_batch_tasks(
-    task: Task,
-    items: List[Any],
-    input_map: Callable[[Any], str | ChatDocument] = lambda x: str(x),
-    output_map: Callable[[ChatDocument | None], Any] = lambda x: x,
+
+def run_batch_task_gen(
+    gen_task: Callable[[int], Task],
+    items: list[T],
+    input_map: Callable[[T], str | ChatDocument] = lambda x: str(x),
+    output_map: Callable[[ChatDocument | None], U] = lambda x: x,
     sequential: bool = True,
+    batch_size: Optional[int] = None,
+    console_status: bool = True,
     turns: int = -1,
-) -> List[Any]:
+    message: Optional[str] = None,
+) -> list[U]:
     """
-    Run copies of `task` async/concurrently one per item in `items` list.
+    Generate and run copies of a task async/concurrently one per item in `items` list.
     For each item, apply `input_map` to get the initial message to process.
     For each result, apply `output_map` to get the final result.
     Args:
-        task (Task): task to run
-        items (List[Any]): list of items to process
-        input_map (Callable[[Any], str|ChatDocument]): function to map item to
+        gen_task (Callable[[int], Task]): generates the tasks to run
+        items (list[T]): list of items to process
+        input_map (Callable[[T], str|ChatDocument]): function to map item to
             initial message to process
-        output_map (Callable[[ChatDocument|str], Any]): function to map result
+        output_map (Callable[[ChatDocument|str], U]): function to map result
             to final result
         sequential (bool): whether to run sequentially
             (e.g. some APIs such as ooba don't support concurrent requests)
+        batch_size (Optional[int]): The number of tasks to run at a time,
+            if None, unbatched
+        console_status (bool): whether to enable rich spinner
         turns (int): number of turns to run, -1 for infinite
+        message (Optional[str]): optionally overrides the console status messages
 
     Returns:
-        List[Any]: list of final results
+        list[Any]: list of final results
     """
-
     inputs = [input_map(item) for item in items]
 
-    async def _do_task(input: str | ChatDocument, i: int) -> Any:
-        task_i = task.clone(i)
+    async def _do_task(input: str | ChatDocument, i: int) -> U:
+        task_i = gen_task(i)
         if task_i.agent.llm is not None:
             task_i.agent.llm.set_stream(False)
         task_i.agent.config.show_stats = False
@@ -58,25 +69,89 @@ def run_batch_tasks(
         result = await task_i.run_async(input, turns=turns)
         return output_map(result)
 
-    async def _do_all() -> List[Any]:
-        with quiet_mode(not settings.debug), SuppressLoggerWarnings():
-            if sequential:
-                results = []
-                for i, input in enumerate(inputs):
-                    result = await _do_task(input, i)
-                    results.append(result)
-                return results
-            return await asyncio.gather(
-                *(_do_task(input, i) for i, input in enumerate(inputs))
-            )
+    async def _do_all(inputs) -> list[U]:
+        if sequential:
+            results = []
+            for i, input in enumerate(inputs):
+                result = await _do_task(input, i)
+                results.append(result)
+            return results
+        return await asyncio.gather(
+            *(_do_task(input, i) for i, input in enumerate(inputs))
+        )
 
     # show rich console spinner
+    status = console.status if console_status else nullcontext
 
-    n = len(items)
-    with console.status(f"[bold green]Running {n} copies of {task.name}..."):
-        results = asyncio.run(_do_all())
+    with quiet_mode(not settings.debug), SuppressLoggerWarnings():
+        if batch_size is None:
+            msg = (
+                f"[bold green]Running {len(items)} tasks:"
+                if message is None
+                else message
+            )
+            with status(msg):
+                results = asyncio.run(_do_all(inputs))
+        else:
+            batches = batched(items, batch_size)
+            results = []
+
+            for batch in batches:
+                complete_str = f", {len(results)} complete" if len(results) > 0 else ""
+                msg = (
+                    f"[bold green]Running {len(items)} tasks{complete_str}:"
+                    if message is None
+                    else message
+                )
+                with status(msg):
+                    results.extend(asyncio.run(_do_all(batch)))
 
     return results
+
+
+def run_batch_tasks(
+    task: Task,
+    items: list[T],
+    input_map: Callable[[T], str | ChatDocument] = lambda x: str(x),
+    output_map: Callable[[ChatDocument | None], U] = lambda x: x,
+    sequential: bool = True,
+    batch_size: Optional[int] = None,
+    console_status: bool = True,
+    turns: int = -1,
+) -> List[U]:
+    """
+    Run copies of `task` async/concurrently one per item in `items` list.
+    For each item, apply `input_map` to get the initial message to process.
+    For each result, apply `output_map` to get the final result.
+    Args:
+        task (Task): task to run
+        items (list[T]): list of items to process
+        input_map (Callable[[T], str|ChatDocument]): function to map item to
+            initial message to process
+        output_map (Callable[[ChatDocument|str], U]): function to map result
+            to final result
+        sequential (bool): whether to run sequentially
+            (e.g. some APIs such as ooba don't support concurrent requests)
+        batch_size (Optional[int]): The number of tasks to run at a time,
+            if None, unbatched
+        console_status (bool): whether to enable rich spinner
+        turns (int): number of turns to run, -1 for infinite
+
+    Returns:
+        list[Any]: list of final results
+    """
+    message = f"[bold green]Running {len(items)} copies of {task.name}..."
+    return run_batch_task_gen(
+        lambda i: task.clone(i),
+        items,
+        input_map,
+        output_map,
+        sequential,
+        batch_size,
+        console_status,
+        turns,
+        message,
+    )
 
 
 def run_batch_agent_method(

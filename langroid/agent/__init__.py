@@ -13,6 +13,7 @@ from . import base
 from . import chat_document
 from . import chat_agent
 from . import task
+from . import batch
 from . import tool_message
 from . import tools
 from . import special
@@ -32,6 +33,7 @@ __all__ = [
     "chat_document",
     "chat_agent",
     "task",
+    "batch",
     "tool_message",
     "tools",
     "special",
