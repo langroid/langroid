@@ -6,6 +6,7 @@ from typing import Any, Callable, Coroutine, List, Optional, TypeVar
 
 from dotenv import load_dotenv
 from rich.console import Console
+from rich.status import Status
 
 from langroid.agent.base import Agent
 from langroid.agent.chat_document import ChatDocument
@@ -29,12 +30,13 @@ def run_batch_task_gen(
     gen_task: Callable[[int], Task],
     items: list[T],
     input_map: Callable[[T], str | ChatDocument] = lambda x: str(x),
-    output_map: Callable[[ChatDocument | None], U] = lambda x: x,
+    output_map: Callable[[ChatDocument | None], U] = lambda x: x,  # type: ignore
     sequential: bool = True,
     batch_size: Optional[int] = None,
     console_status: bool = True,
     turns: int = -1,
     message: Optional[str] = None,
+    drop_exceptions: bool = False,
 ) -> list[U]:
     """
     Generate and run copies of a task async/concurrently one per item in `items` list.
@@ -54,34 +56,55 @@ def run_batch_task_gen(
         console_status (bool): whether to enable rich spinner
         turns (int): number of turns to run, -1 for infinite
         message (Optional[str]): optionally overrides the console status messages
+        drop_exceptions: bool: Whether to replace exceptions with outputs of None
 
     Returns:
         list[Any]: list of final results
     """
     inputs = [input_map(item) for item in items]
 
-    async def _do_task(input: str | ChatDocument, i: int) -> U:
+    async def _do_task(input: str | ChatDocument, i: int) -> Optional[ChatDocument]:
         task_i = gen_task(i)
         if task_i.agent.llm is not None:
             task_i.agent.llm.set_stream(False)
         task_i.agent.config.show_stats = False
 
         result = await task_i.run_async(input, turns=turns)
-        return output_map(result)
+        return result
 
-    async def _do_all(inputs) -> list[U]:
+    async def _do_all(inputs: list[str | ChatDocument]) -> list[U]:
         if sequential:
-            results = []
+            results: list[Optional[ChatDocument | BaseException]] = []
             for i, input in enumerate(inputs):
-                result = await _do_task(input, i)
+                if drop_exceptions:
+                    try:
+                        result: Optional[ChatDocument | BaseException] = await _do_task(
+                            input, i
+                        )
+                    except BaseException as e:
+                        result = e
+                else:
+                    result = await _do_task(input, i)
                 results.append(result)
-            return results
-        return await asyncio.gather(
-            *(_do_task(input, i) for i, input in enumerate(inputs))
-        )
+        else:
+            results = await asyncio.gather(
+                *(_do_task(input, i) for i, input in enumerate(inputs)),
+                return_exceptions=drop_exceptions,
+            )
+
+        if drop_exceptions:
+            non_exception_results: list[Optional[ChatDocument]] = [
+                None if isinstance(r, BaseException) else r for r in results
+            ]
+        else:
+            non_exception_results: list[Optional[ChatDocument]] = results  # type: ignore
+
+        return list(map(output_map, non_exception_results))
 
     # show rich console spinner
-    status = console.status if console_status else nullcontext
+    status: Callable[[str], Status] | type[nullcontext[str]] = (
+        console.status if console_status else nullcontext  # type: ignore
+    )
 
     with quiet_mode(not settings.debug), SuppressLoggerWarnings():
         if batch_size is None:
@@ -113,7 +136,7 @@ def run_batch_tasks(
     task: Task,
     items: list[T],
     input_map: Callable[[T], str | ChatDocument] = lambda x: str(x),
-    output_map: Callable[[ChatDocument | None], U] = lambda x: x,
+    output_map: Callable[[ChatDocument | None], U] = lambda x: x,  # type: ignore
     sequential: bool = True,
     batch_size: Optional[int] = None,
     console_status: bool = True,

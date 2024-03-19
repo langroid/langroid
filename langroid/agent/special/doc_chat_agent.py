@@ -14,13 +14,14 @@ pip install "langroid[hf-embeddings]"
 """
 import logging
 from contextlib import ExitStack, nullcontext
-from typing import Any, Dict, List, Optional, Set, Tuple, no_type_check
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, no_type_check
 
 import numpy as np
 import pandas as pd
 from rich import print
 from rich.console import Console
 from rich.prompt import Prompt
+from rich.status import Status
 
 from langroid.agent.batch import run_batch_tasks
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
@@ -199,8 +200,8 @@ class DocChatAgent(ChatAgent):
         self.chunked_docs: List[Document] = []
         self.chunked_docs_clean: List[Document] = []
         self.response: None | Document = None
-        self.console_status = (
-            console.status if self.config.enable_rich_console_status else nullcontext
+        self.console_status: Callable[[str], Status] | type[nullcontext[str]] = (
+            console.status if self.config.enable_rich_console_status else nullcontext  # type: ignore
         )
         if len(config.doc_paths) > 0:
             self.ingest()
