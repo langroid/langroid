@@ -1,12 +1,9 @@
 import asyncio
 import copy
 import inspect
-from contextlib import nullcontext
 from typing import Any, Callable, Coroutine, List, Optional, TypeVar
 
 from dotenv import load_dotenv
-from rich.console import Console
-from rich.status import Status
 
 from langroid.agent.base import Agent
 from langroid.agent.chat_document import ChatDocument
@@ -14,9 +11,7 @@ from langroid.agent.task import Task
 from langroid.parsing.utils import batched
 from langroid.utils.configuration import quiet_mode, settings
 from langroid.utils.logging import setup_colored_logging
-from langroid.utils.output.printing import SuppressLoggerWarnings
-
-console = Console(quiet=settings.quiet)
+from langroid.utils.output import SuppressLoggerWarnings, status
 
 setup_colored_logging()
 
@@ -33,10 +28,9 @@ def run_batch_task_gen(
     output_map: Callable[[ChatDocument | None], U] = lambda x: x,  # type: ignore
     sequential: bool = True,
     batch_size: Optional[int] = None,
-    console_status: bool = True,
     turns: int = -1,
     message: Optional[str] = None,
-    drop_exceptions: bool = False,
+    handle_exceptions: bool = False,
 ) -> list[U]:
     """
     Generate and run copies of a task async/concurrently one per item in `items` list.
@@ -53,10 +47,9 @@ def run_batch_task_gen(
             (e.g. some APIs such as ooba don't support concurrent requests)
         batch_size (Optional[int]): The number of tasks to run at a time,
             if None, unbatched
-        console_status (bool): whether to enable rich spinner
         turns (int): number of turns to run, -1 for infinite
         message (Optional[str]): optionally overrides the console status messages
-        drop_exceptions: bool: Whether to replace exceptions with outputs of None
+        handle_exceptions: bool: Whether to replace exceptions with outputs of None
 
     Returns:
         list[Any]: list of final results
@@ -73,60 +66,46 @@ def run_batch_task_gen(
         return result
 
     async def _do_all(inputs: list[str | ChatDocument]) -> list[U]:
+        results: list[Optional[ChatDocument]] = []
         if sequential:
-            results: list[Optional[ChatDocument | BaseException]] = []
             for i, input in enumerate(inputs):
-                if drop_exceptions:
-                    try:
-                        result: Optional[ChatDocument | BaseException] = await _do_task(
-                            input, i
-                        )
-                    except BaseException as e:
-                        result = e
-                else:
+                try:
                     result = await _do_task(input, i)
+                except BaseException as e:
+                    if handle_exceptions:
+                        result = None
+                    else:
+                        raise e
                 results.append(result)
         else:
-            results = await asyncio.gather(
+            results_with_exceptions = await asyncio.gather(
                 *(_do_task(input, i) for i, input in enumerate(inputs)),
-                return_exceptions=drop_exceptions,
+                return_exceptions=handle_exceptions,
             )
 
-        if drop_exceptions:
-            non_exception_results: list[Optional[ChatDocument]] = [
-                None if isinstance(r, BaseException) else r for r in results
+            results = [
+                r if not isinstance(r, BaseException) else None
+                for r in results_with_exceptions
             ]
-        else:
-            non_exception_results: list[Optional[ChatDocument]] = results  # type: ignore
 
-        return list(map(output_map, non_exception_results))
+        return list(map(output_map, results))
 
-    # show rich console spinner
-    status: Callable[[str], Status] | type[nullcontext[str]] = (
-        console.status if console_status else nullcontext  # type: ignore
-    )
+    if batch_size is None:
+        msg = message or f"[bold green]Running {len(items)} tasks:"
 
-    with quiet_mode(not settings.debug), SuppressLoggerWarnings():
-        if batch_size is None:
-            msg = (
-                f"[bold green]Running {len(items)} tasks:"
-                if message is None
-                else message
-            )
-            with status(msg):
+        with status(msg):
+            with quiet_mode(not settings.debug), SuppressLoggerWarnings():
                 results = asyncio.run(_do_all(inputs))
-        else:
-            batches = batched(items, batch_size)
-            results = []
+    else:
+        batches = batched(items, batch_size)
+        results = []
 
-            for batch in batches:
-                complete_str = f", {len(results)} complete" if len(results) > 0 else ""
-                msg = (
-                    f"[bold green]Running {len(items)} tasks{complete_str}:"
-                    if message is None
-                    else message
-                )
-                with status(msg):
+        for batch in batches:
+            complete_str = f", {len(results)} complete" if len(results) > 0 else ""
+            msg = message or f"[bold green]Running {len(items)} tasks{complete_str}:"
+
+            with status(msg):
+                with quiet_mode(not settings.debug), SuppressLoggerWarnings():
                     results.extend(asyncio.run(_do_all(batch)))
 
     return results
@@ -139,7 +118,6 @@ def run_batch_tasks(
     output_map: Callable[[ChatDocument | None], U] = lambda x: x,  # type: ignore
     sequential: bool = True,
     batch_size: Optional[int] = None,
-    console_status: bool = True,
     turns: int = -1,
 ) -> List[U]:
     """
@@ -157,7 +135,6 @@ def run_batch_tasks(
             (e.g. some APIs such as ooba don't support concurrent requests)
         batch_size (Optional[int]): The number of tasks to run at a time,
             if None, unbatched
-        console_status (bool): whether to enable rich spinner
         turns (int): number of turns to run, -1 for infinite
 
     Returns:
@@ -171,7 +148,6 @@ def run_batch_tasks(
         output_map,
         sequential,
         batch_size,
-        console_status,
         turns,
         message,
     )
@@ -247,7 +223,7 @@ def run_batch_agent_method(
             )
 
     n = len(items)
-    with console.status(f"[bold green]Running {n} copies of {agent_name}..."):
+    with status(f"[bold green]Running {n} copies of {agent_name}..."):
         results = asyncio.run(_do_all())
 
     return results

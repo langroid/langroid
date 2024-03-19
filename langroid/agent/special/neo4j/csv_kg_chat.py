@@ -2,7 +2,6 @@ from typing import List, Optional
 
 import pandas as pd
 import typer
-from rich.console import Console
 
 from langroid.agent.special.neo4j.neo4j_chat_agent import (
     Neo4jChatAgent,
@@ -11,9 +10,9 @@ from langroid.agent.special.neo4j.neo4j_chat_agent import (
 from langroid.agent.tool_message import ToolMessage
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
 from langroid.parsing.table_loader import read_tabular_data
+from langroid.utils.output import status
 from langroid.vector_store.base import VectorStoreConfig
 
-console = Console()
 app = typer.Typer()
 
 
@@ -159,7 +158,7 @@ class CSVGraphAgent(Neo4jChatAgent):
         Returns:
             str: A string indicating the success or failure of the operation.
         """
-        with console.status("[cyan]Generating graph database..."):
+        with status("[cyan]Generating graph database..."):
             if self.df is not None and hasattr(self.df, "iterrows"):
                 for counter, (index, row) in enumerate(self.df.iterrows()):
                     row_dict = row.to_dict()

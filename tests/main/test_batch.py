@@ -4,10 +4,12 @@ from langroid import ChatDocument
 from langroid.agent.batch import (
     llm_response_batch,
     run_batch_agent_method,
+    run_batch_task_gen,
     run_batch_tasks,
 )
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
+from langroid.agent.tool_message import ToolMessage
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
 from langroid.mytypes import Entity
@@ -144,3 +146,113 @@ def test_agent_llm_response_batch(test_settings: Settings, sequential: bool):
     # so we just check if the expected answer is contained in the actual answer
     for e in expected_answers:
         assert any(str(e) in a.content.lower() for a in answers)
+
+
+@pytest.mark.parametrize("sequential", [True, False])
+def test_task_gen_batch(test_settings: Settings, sequential: bool):
+    set_global(test_settings)
+    cfg = _TestChatAgentConfig()
+
+    def task_gen(i: int) -> Task:
+        if i == 0:
+            return Task(
+                ChatAgent(cfg),
+                system_message="""
+                I will provide you with a value, and you will repeat it exactly.
+                """,
+                single_round=True,
+            )
+        elif i == 1:
+            return Task(
+                ChatAgent(cfg),
+                system_message="""
+                You will always respond with the word "hmm"
+                """,
+                single_round=True,
+            )
+        else:
+            return Task(
+                ChatAgent(cfg),
+                system_message="""
+                You will respond with twice the number I send you.
+                """,
+                single_round=True,
+            )
+
+    # run clones of this task on these inputs
+    N = 3
+    questions = list(range(N))
+    expected_answers = ["0", "hmm", "4"]
+
+    # batch run
+    answers = run_batch_task_gen(
+        task_gen,
+        questions,
+        sequential=sequential,
+    )
+
+    for answer, expected in zip(answers, expected_answers):
+        assert answer is not None
+        assert expected in answer.content.lower()
+
+
+@pytest.mark.parametrize("handle_exceptions", [True, False])
+@pytest.mark.parametrize("sequential", [True, False])
+def test_task_gen_batch_exceptions(
+    test_settings: Settings, sequential: bool, handle_exceptions: bool
+):
+    set_global(test_settings)
+    cfg = _TestChatAgentConfig()
+
+    class ComputeTool(ToolMessage):
+        request: str = "compute"
+        purpose: str = "To compute an unknown function of the input"
+        input: int
+
+    system_message = """
+    You will make a call with the `compute` tool/function with
+    `input` the value I provide. 
+    """
+
+    def task_gen(i: int) -> Task:
+        agent = ChatAgent(cfg)
+        agent.enable_message(ComputeTool)
+        task = Task(
+            agent,
+            system_message=system_message,
+            interactive=False,
+        )
+
+        def handle(_: ComputeTool) -> str:
+            if i != 1:
+                return f"{DONE} success"
+            else:
+                raise RuntimeError("disaster")
+
+        setattr(agent, "compute", handle)
+        return task
+
+    # run the generated tasks on these inputs
+    questions = list(range(3))
+
+    # batch run
+    try:
+        answers = run_batch_task_gen(
+            task_gen,
+            questions,
+            sequential=sequential,
+            handle_exceptions=handle_exceptions,
+        )
+        error_encountered = False
+
+        for i in [0, 2]:
+            a = answers[i]
+            assert a is not None
+            assert "success" in a.content.lower()
+
+        assert answers[1] is None
+    except RuntimeError as e:
+        error_encountered = True
+        assert "disaster" in str(e)
+
+    assert error_encountered != handle_exceptions
