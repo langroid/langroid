@@ -2,11 +2,12 @@
 Version of chat-search-assistant.py that uses local LLMs.
 Tested and works ok nous-hermes2-mixtral, but still has issues.
 
-2-Agent system where:
+3-Agent system where:
 - Assistant takes user's (complex) question, breaks it down into smaller pieces
     if needed
 - Searcher takes Assistant's question, uses the Search tool to search the web
     (using DuckDuckGo), and returns a coherent answer to the Assistant.
+- Critic takes Assistant's final answer, and provides feedback on it.
 
 Once the Assistant thinks it has enough info to answer the user's question, it
 says DONE and presents the answer to the user.

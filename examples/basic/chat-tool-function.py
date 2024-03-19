@@ -15,14 +15,14 @@ python3 examples/basic/chat-tool-function.py -m ollama/mistral:7b-instruct-v0.2-
 import langroid as lr
 import langroid.language_models as lm
 from pydantic import BaseModel, Field
-import json
 from fire import Fire
 
 # define a nested structure for Company information
 
 
 class CompanyFinancials(BaseModel):
-    market_cap: float = Field(..., description="market capitalization of company")
+    shares: int = Field(..., description="shares outstanding of company")
+    price: float = Field(..., description="price per share of company")
     eps: float = Field(..., description="earnings per share of company")
 
 
@@ -36,8 +36,10 @@ class CompanyInfo(BaseModel):
 
 
 class CompanyInfoTool(lr.agent.ToolMessage):
-    request: str = "company_info_tool"
-    purpose: str = "To extract <company_info> from a given text passage"
+    request: str = "company_info_tool"  # agent method that handles this tool
+    purpose: str = (
+        "To extract <company_info> from a passage and compute market-capitalization."
+    )
     company_info: CompanyInfo
 
     def handle(self) -> str:
@@ -47,10 +49,13 @@ class CompanyInfoTool(lr.agent.ToolMessage):
         instead of this `handle` method, define a `company_info_tool`
         method in the agent.
         """
+        mkt_cap = (
+            self.company_info.financials.shares * self.company_info.financials.price
+        )
         print(
             f"""
-            DONE! Got Valid Company Info:
-            {json.dumps(self.company_info.dict(), indent=4)}
+            DONE! Got Valid Company Info.
+            The market cap of {self.company_info.name} is ${mkt_cap/1e9}B.
             """
         )
 
@@ -75,8 +80,8 @@ def run(model: str = ""):  # or, e.g., "ollama/mistral:7b-instruct-v0.2-q8_0"
     paragraph = """
         Apple Inc. is an American multinational technology company that specializes in 
         consumer electronics, computer software, and online services.
-        It has a market capitalization of 2.5 trillion dollars and an earnings 
-        per share of 5.68.
+        It has shares outstanding of 16.82 billion, and a price per share of $149.15.
+        The earnings per share is $5.68.
         """
 
     # see that the LLM extracts the company information and presents it using the tool
