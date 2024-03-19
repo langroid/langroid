@@ -19,7 +19,6 @@ import os
 from fire import Fire
 
 from rich import print
-from rich.prompt import Prompt
 import langroid as lr
 import langroid.language_models as lm
 from langroid.mytypes import Entity
@@ -31,7 +30,6 @@ from langroid.agent.tool_message import ToolMessage
 from langroid.utils.configuration import set_global, Settings
 from langroid.utils.constants import NO_ANSWER, DONE, SEND_TO, PASS
 
-from textwrap import dedent
 from dotenv import load_dotenv
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -200,7 +198,7 @@ def chat(
         assistant_agent,
         name="Assistant",
         interactive=True,
-        system_message=f"""
+        system_message="""
         You are a helpful librarian, answering my (the user) questions about 
         books described in a certain document, and you do NOT know which 
         books are in the document.
