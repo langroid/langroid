@@ -179,9 +179,8 @@ def test_task_gen_batch(test_settings: Settings, sequential: bool):
                 single_round=True,
             )
 
-    # run clones of this task on these inputs
-    N = 3
-    questions = list(range(N))
+    # run the generated tasks on these inputs
+    questions = list(range(3))
     expected_answers = ["0", "hmm", "4"]
 
     # batch run
