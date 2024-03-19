@@ -199,7 +199,7 @@ async def on_chat_start():
         assistant_agent,
         name="Assistant",
         interactive=True,
-        system_message=f"""
+        system_message="""
         You are a helpful librarian, answering my (the user) questions about 
         books described in a certain document, and you do NOT know which 
         books are in the document.

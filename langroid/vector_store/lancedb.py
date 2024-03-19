@@ -440,7 +440,10 @@ class LanceDB(VectorStore):
         embedding = self.embedding_fn([text])[0]
         tbl = self.client.open_table(self.config.collection_name)
         result = (
-            tbl.search(embedding).metric(self.config.distance).where(where).limit(k)
+            tbl.search(embedding)
+            .metric(self.config.distance)
+            .where(where, prefilter=True)
+            .limit(k)
         )
         docs = self._lance_result_to_docs(result)
         # note _distance is 1 - cosine

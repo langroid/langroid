@@ -954,7 +954,7 @@ class DocChatAgent(ChatAgent):
         # Note: for dynamic filtering based on a query, users can
         # use the `temp_update` context-manager to pass in a `filter` to self.config,
         # e.g.:
-        # with temp_update(self.config, filter="metadata.source=='source1'"):
+        # with temp_update(self.config, {"filter": "metadata.source=='source1'"}):
         #     docs_scores = self.get_semantic_search_results(query, k=k)
         # This avoids having pass the `filter` argument to every function call
         # upstream of this one.

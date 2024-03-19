@@ -126,7 +126,7 @@ def main(
         query = Prompt.ask("[blue]How can I help?")
         if query in ["x", "q"]:
             break
-        answer = writer_task.run(query)
+        writer_task.run(query)
 
 
 if __name__ == "__main__":
