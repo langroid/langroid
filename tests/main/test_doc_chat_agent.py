@@ -6,7 +6,7 @@ from typing import List
 import pandas as pd
 import pytest
 
-from langroid.agent.batch import run_batch_task_gen
+from langroid.agent.batch import run_batch_task_gen, run_batch_tasks
 from langroid.agent.special.doc_chat_agent import DocChatAgent, DocChatAgentConfig
 from langroid.agent.special.lance_doc_chat_agent import LanceDocChatAgent
 from langroid.agent.task import Task
@@ -797,7 +797,16 @@ def test_doc_chat_batch(test_settings: Settings, vecdb):
         "Who wrote the book about the Karenina sisters?",
     ]
 
-    # create a task-generator fn
+    # (1) test that we can create a single task and use run_batch_tasks
+    task = Task(doc_agents[0], name="DocAgent", interactive=False, single_round=True)
+    results = run_batch_tasks(task, questions)
+
+    assert "Sebastian" in results[0].content
+    assert "Dinkoyevsky" in results[1].content
+
+    # (2) test that we can create a task-generator fn and use run_batch_task_gen
+
+    # create a task-generator fn, to create one per question
     def gen_task(i: int):
         return Task(
             doc_agents[i],
