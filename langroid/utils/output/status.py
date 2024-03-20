@@ -1,5 +1,6 @@
 import logging
-from contextlib import ExitStack
+from contextlib import AbstractContextManager, ExitStack
+from typing import Any
 
 from rich.console import Console
 
@@ -12,7 +13,7 @@ logger = logging.getLogger(__name__)
 def status(
     msg: str,
     log_if_quiet: bool = True,
-) -> ExitStack:
+) -> AbstractContextManager[Any]:
     """
     Displays a rich spinner if not in quiet mode, else optionally logs the message.
     """
