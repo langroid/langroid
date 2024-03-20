@@ -763,14 +763,6 @@ def test_doc_chat_batch(test_settings: Settings, vecdb):
     set_global(test_settings)
     doc_agents = [DocChatAgent(_MyDocChatAgentConfig()) for _ in range(2)]
 
-    # vecdb = QdrantDB(
-    #     QdrantDBConfig(
-    #         collection_name="test-batch",
-    #         storage_path=":memory:",
-    #         replace_collection=True,
-    #     )
-    # )
-
     # attach a common vector-db to all agents
     for a in doc_agents:
         coll = a.config.vecdb.collection_name
