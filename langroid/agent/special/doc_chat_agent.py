@@ -14,8 +14,10 @@ pip install "langroid[hf-embeddings]"
 """
 import logging
 from contextlib import ExitStack
+from functools import cache
 from typing import Any, Dict, List, Optional, Set, Tuple, no_type_check
 
+import nest_asyncio
 import numpy as np
 import pandas as pd
 from rich.prompt import Prompt
@@ -51,6 +53,12 @@ from langroid.utils.output import show_if_debug, status
 from langroid.utils.pydantic_utils import dataframe_to_documents, extract_fields
 from langroid.vector_store.base import VectorStore, VectorStoreConfig
 from langroid.vector_store.lancedb import LanceDBConfig
+
+
+@cache
+def apply_nest_asyncio() -> None:
+    nest_asyncio.apply()
+
 
 logger = logging.getLogger(__name__)
 
@@ -619,8 +627,51 @@ class DocChatAgent(ChatAgent):
             query_str = query_str[1:] if query_str is not None else None
             if self.llm is None:
                 raise ValueError("LLM not set")
-            with StreamingIfAllowed(self.llm):
+            with StreamingIfAllowed(self.llm, self.llm.get_stream()):
                 response = super().llm_response(query_str)
+            if query_str is not None:
+                self.update_dialog(
+                    query_str, "" if response is None else response.content
+                )
+            return response
+        if query_str == "":
+            return None
+        elif query_str == "?" and self.response is not None:
+            return self.justify_response()
+        elif (query_str.startswith(("summar", "?")) and self.response is None) or (
+            query_str == "??"
+        ):
+            return self.summarize_docs()
+        else:
+            self.callbacks.show_start_response(entity="llm")
+            response = self.answer_from_docs(query_str)
+            return ChatDocument(
+                content=response.content,
+                metadata=ChatDocMetaData(
+                    source=response.metadata.source,
+                    sender=Entity.LLM,
+                ),
+            )
+
+    async def llm_response_async(
+        self,
+        query: None | str | ChatDocument = None,
+    ) -> Optional[ChatDocument]:
+        apply_nest_asyncio()
+        if not self.llm_can_respond(query):
+            return None
+        query_str: str | None
+        if isinstance(query, ChatDocument):
+            query_str = query.content
+        else:
+            query_str = query
+        if query_str is None or query_str.startswith("!"):
+            # direct query to LLM
+            query_str = query_str[1:] if query_str is not None else None
+            if self.llm is None:
+                raise ValueError("LLM not set")
+            with StreamingIfAllowed(self.llm, self.llm.get_stream()):
+                response = await super().llm_response_async(query_str)
             if query_str is not None:
                 self.update_dialog(
                     query_str, "" if response is None else response.content

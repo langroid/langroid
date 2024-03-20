@@ -1,7 +1,7 @@
 import asyncio
 import copy
 import inspect
-from typing import Any, Callable, Coroutine, List, Optional, TypeVar
+from typing import Any, Callable, Coroutine, Iterable, List, Optional, TypeVar
 
 from dotenv import load_dotenv
 
@@ -9,7 +9,7 @@ from langroid.agent.base import Agent
 from langroid.agent.chat_document import ChatDocument
 from langroid.agent.task import Task
 from langroid.parsing.utils import batched
-from langroid.utils.configuration import quiet_mode, settings
+from langroid.utils.configuration import quiet_mode
 from langroid.utils.logging import setup_colored_logging
 from langroid.utils.output import SuppressLoggerWarnings, status
 
@@ -65,12 +65,14 @@ def run_batch_task_gen(
         result = await task_i.run_async(input, turns=turns)
         return result
 
-    async def _do_all(inputs: list[str | ChatDocument]) -> list[U]:
+    async def _do_all(
+        inputs: Iterable[str | ChatDocument], start_idx: int = 0
+    ) -> list[U]:
         results: list[Optional[ChatDocument]] = []
         if sequential:
             for i, input in enumerate(inputs):
                 try:
-                    result = await _do_task(input, i)
+                    result = await _do_task(input, i + start_idx)
                 except BaseException as e:
                     if handle_exceptions:
                         result = None
@@ -79,7 +81,7 @@ def run_batch_task_gen(
                 results.append(result)
         else:
             results_with_exceptions = await asyncio.gather(
-                *(_do_task(input, i) for i, input in enumerate(inputs)),
+                *(_do_task(input, i + start_idx) for i, input in enumerate(inputs)),
                 return_exceptions=handle_exceptions,
             )
 
@@ -93,20 +95,19 @@ def run_batch_task_gen(
     if batch_size is None:
         msg = message or f"[bold green]Running {len(items)} tasks:"
 
-        with status(msg):
-            with quiet_mode(not settings.debug), SuppressLoggerWarnings():
-                results = asyncio.run(_do_all(inputs))
+        with status(msg), SuppressLoggerWarnings():
+            results = asyncio.run(_do_all(inputs))
     else:
-        batches = batched(items, batch_size)
+        batches = batched(inputs, batch_size)
         results = []
 
         for batch in batches:
-            complete_str = f", {len(results)} complete" if len(results) > 0 else ""
+            start_idx = len(results)
+            complete_str = f", {start_idx} complete" if start_idx > 0 else ""
             msg = message or f"[bold green]Running {len(items)} tasks{complete_str}:"
 
-            with status(msg):
-                with quiet_mode(not settings.debug), SuppressLoggerWarnings():
-                    results.extend(asyncio.run(_do_all(batch)))
+            with status(msg), SuppressLoggerWarnings():
+                results.extend(asyncio.run(_do_all(batch, start_idx=start_idx)))
 
     return results
 

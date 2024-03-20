@@ -1,3 +1,5 @@
+from typing import Optional
+
 import pytest
 
 from langroid import ChatDocument
@@ -27,8 +29,11 @@ class _TestChatAgentConfig(ChatAgentConfig):
     )
 
 
+@pytest.mark.parametrize("batch_size", [1, 2, 3, None])
 @pytest.mark.parametrize("sequential", [True, False])
-def test_task_batch(test_settings: Settings, sequential: bool):
+def test_task_batch(
+    test_settings: Settings, sequential: bool, batch_size: Optional[int]
+):
     set_global(test_settings)
     cfg = _TestChatAgentConfig()
 
@@ -53,6 +58,7 @@ def test_task_batch(test_settings: Settings, sequential: bool):
         input_map=lambda x: str(x) + "+" + str(3),  # what to feed to each task
         output_map=lambda x: x,  # how to process the result of each task
         sequential=sequential,
+        batch_size=batch_size,
     )
 
     # expected_answers are simple numbers, but
@@ -70,8 +76,11 @@ class _TestChatAgent(ChatAgent):
             return DONE + " " + str(msg.content)
 
 
+@pytest.mark.parametrize("batch_size", [1, 2, 3, None])
 @pytest.mark.parametrize("sequential", [True, False])
-def test_task_batch_turns(test_settings: Settings, sequential: bool):
+def test_task_batch_turns(
+    test_settings: Settings, sequential: bool, batch_size: Optional[int]
+):
     """Test if `turns` param works as expected"""
     set_global(test_settings)
     cfg = _TestChatAgentConfig()
@@ -95,6 +104,7 @@ def test_task_batch_turns(test_settings: Settings, sequential: bool):
         input_map=lambda x: str(x) + "+" + str(3),  # what to feed to each task
         output_map=lambda x: x,  # how to process the result of each task
         sequential=sequential,
+        batch_size=batch_size,
         turns=2,
     )
 
@@ -148,15 +158,19 @@ def test_agent_llm_response_batch(test_settings: Settings, sequential: bool):
         assert any(str(e) in a.content.lower() for a in answers)
 
 
+@pytest.mark.parametrize("batch_size", [1, 2, 3, None])
 @pytest.mark.parametrize("sequential", [True, False])
-def test_task_gen_batch(test_settings: Settings, sequential: bool):
+def test_task_gen_batch(
+    test_settings: Settings, sequential: bool, batch_size: Optional[int]
+):
     set_global(test_settings)
-    cfg = _TestChatAgentConfig()
 
     def task_gen(i: int) -> Task:
+        cfg = _TestChatAgentConfig()
         if i == 0:
             return Task(
                 ChatAgent(cfg),
+                name=f"Test-{i}",
                 system_message="""
                 I will provide you with a value, and you will repeat it exactly.
                 """,
@@ -165,6 +179,7 @@ def test_task_gen_batch(test_settings: Settings, sequential: bool):
         elif i == 1:
             return Task(
                 ChatAgent(cfg),
+                name=f"Test-{i}",
                 system_message="""
                 You will always respond with the word "hmm"
                 """,
@@ -173,6 +188,7 @@ def test_task_gen_batch(test_settings: Settings, sequential: bool):
         else:
             return Task(
                 ChatAgent(cfg),
+                name=f"Test-{i}",
                 system_message="""
                 You will respond with twice the number I send you.
                 """,
@@ -188,6 +204,7 @@ def test_task_gen_batch(test_settings: Settings, sequential: bool):
         task_gen,
         questions,
         sequential=sequential,
+        batch_size=batch_size,
     )
 
     for answer, expected in zip(answers, expected_answers):
@@ -195,13 +212,16 @@ def test_task_gen_batch(test_settings: Settings, sequential: bool):
         assert expected in answer.content.lower()
 
 
+@pytest.mark.parametrize("batch_size", [1, 2, 3, None])
 @pytest.mark.parametrize("handle_exceptions", [True, False])
 @pytest.mark.parametrize("sequential", [True, False])
 def test_task_gen_batch_exceptions(
-    test_settings: Settings, sequential: bool, handle_exceptions: bool
+    test_settings: Settings,
+    sequential: bool,
+    handle_exceptions: bool,
+    batch_size: Optional[int],
 ):
     set_global(test_settings)
-    cfg = _TestChatAgentConfig()
 
     class ComputeTool(ToolMessage):
         request: str = "compute"
@@ -214,15 +234,17 @@ def test_task_gen_batch_exceptions(
     """
 
     def task_gen(i: int) -> Task:
+        cfg = _TestChatAgentConfig()
         agent = ChatAgent(cfg)
         agent.enable_message(ComputeTool)
         task = Task(
             agent,
+            name=f"Test-{i}",
             system_message=system_message,
             interactive=False,
         )
 
-        def handle(_: ComputeTool) -> str:
+        def handle(m: ComputeTool) -> str:
             if i != 1:
                 return f"{DONE} success"
             else:
@@ -241,6 +263,7 @@ def test_task_gen_batch_exceptions(
             questions,
             sequential=sequential,
             handle_exceptions=handle_exceptions,
+            batch_size=batch_size,
         )
         error_encountered = False
 

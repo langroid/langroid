@@ -1,10 +1,9 @@
 import logging
-from contextlib import nullcontext
+from contextlib import ExitStack
 
 from rich.console import Console
-from rich.status import Status
 
-from langroid.utils.configuration import settings
+from langroid.utils.configuration import quiet_mode, settings
 
 console = Console()
 logger = logging.getLogger(__name__)
@@ -13,11 +12,17 @@ logger = logging.getLogger(__name__)
 def status(
     msg: str,
     log_if_quiet: bool = True,
-) -> Status | nullcontext[None]:
-    if settings.quiet:
-        if log_if_quiet:
-            logger.info(msg)
+) -> ExitStack:
+    """
+    Displays a rich spinner if not in quiet mode, else optionally logs the message.
+    """
+    stack = ExitStack()
 
-        return nullcontext()
+    if settings.quiet and log_if_quiet:
+        logger.info(msg)
     else:
-        return console.status(msg)
+        stack.enter_context(console.status(msg))
+
+    stack.enter_context(quiet_mode(not settings.debug))
+
+    return stack

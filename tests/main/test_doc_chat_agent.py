@@ -221,6 +221,27 @@ def test_doc_chat_agent_llm(test_settings: Settings, agent, query: str, expected
     assert all([e in ans for e in expected])
 
 
+@pytest.mark.parametrize(
+    "vecdb", ["qdrant_cloud", "qdrant_local", "chroma", "lancedb"], indirect=True
+)
+@pytest.mark.parametrize("query, expected", QUERY_EXPECTED_PAIRS)
+@pytest.mark.asyncio
+async def test_doc_chat_agent_llm_async(
+    test_settings: Settings, agent, query: str, expected: str
+):
+    """
+    Test directly using `llm_response_async` method of DocChatAgent.
+    """
+
+    # note that the (query, ans) pairs are accumulated into the
+    # internal dialog history of the agent.
+    set_global(test_settings)
+    agent.config.conversation_mode = False
+    ans = (await agent.llm_response_async(query)).content
+    expected = [e.strip() for e in expected.split(",")]
+    assert all([e in ans for e in expected])
+
+
 @pytest.mark.parametrize("vecdb", ["qdrant_local", "chroma", "lancedb"], indirect=True)
 def test_doc_chat_agent_task(test_settings: Settings, agent):
     """
@@ -261,6 +282,29 @@ def test_doc_chat_followup(test_settings: Settings, agent, conv_mode: bool):
     assert "comedian" in result.content.lower()
 
     result = task.run("When was he born?")
+    assert "1889" in result.content
+
+
+@pytest.mark.parametrize("vecdb", ["lancedb", "qdrant_local", "chroma"], indirect=True)
+@pytest.mark.parametrize("conv_mode", [True, False])
+@pytest.mark.asyncio
+async def test_doc_chat_followup_async(test_settings: Settings, agent, conv_mode: bool):
+    """
+    Test whether follow-up question is handled correctly (in async mode).
+    """
+    agent.config.conversation_mode = conv_mode
+    set_global(test_settings)
+    task = Task(
+        agent,
+        interactive=False,
+        restart=True,
+        done_if_response=[Entity.LLM],
+        done_if_no_response=[Entity.LLM],
+    )
+    result = await task.run_async("Who was Charlie Chaplin?")
+    assert "comedian" in result.content.lower()
+
+    result = await task.run_async("When was he born?")
     assert "1889" in result.content
 
 
