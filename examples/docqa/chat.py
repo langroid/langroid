@@ -6,6 +6,7 @@ Run like this:
 python3 examples/docqa/chat.py
 
 """
+
 import typer
 from rich import print
 import os

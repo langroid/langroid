@@ -7,6 +7,7 @@ Single agent to chat with multiple docs, with filtering based on user query.
 - DocChatAgent answers question using RAG restricted to the filtered docs.
 
 """
+
 from typing import Optional
 
 from rich import print

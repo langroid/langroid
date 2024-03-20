@@ -13,6 +13,7 @@ as indicated in comments below, to get good results.
     supported vector-dbs, e.g. qdrant or chroma.
 
 """
+
 import re
 import typer
 from rich import print

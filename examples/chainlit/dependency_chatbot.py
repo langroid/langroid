@@ -12,6 +12,7 @@ chainlit run examples/kg-chat/dependency_chatbot.py
 The requirements are described in
  `https://github.com/langroid/langroid/blob/main/examples/kg-chat/README.md`
 """
+
 import typer
 from rich import print
 

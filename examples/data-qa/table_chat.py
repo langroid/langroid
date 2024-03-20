@@ -22,6 +22,7 @@ python3 examples/data-qa/table_chat.py -m ollama/dolphin-mixtral:latest
 For more info on running Langroid with local LLM, see here:
 https://langroid.github.io/langroid/tutorials/local-llm-setup/
 """
+
 import typer
 from rich.prompt import Prompt
 from rich import print

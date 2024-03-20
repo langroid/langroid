@@ -23,6 +23,7 @@ See here for how to set up a Local LLM to work with Langroid:
 https://langroid.github.io/langroid/tutorials/local-llm-setup/
 
 """
+
 import typer
 from rich import print
 import os

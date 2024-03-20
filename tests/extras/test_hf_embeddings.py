@@ -4,7 +4,6 @@ This depends on sentence-transformers being installed:
  poetry install -E hf-embeddings
 """
 
-
 from langroid.embedding_models.base import EmbeddingModel
 from langroid.embedding_models.models import SentenceTransformerEmbeddingsConfig
 from langroid.embedding_models.remote_embeds import RemoteEmbeddingsConfig

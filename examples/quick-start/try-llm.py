@@ -9,6 +9,7 @@ python3 examples/quick-start/try-llm.py
 For more explanation see the
 [Getting Started guide](https://langroid.github.io/langroid/quick-start/llm-interaction/)
 """
+
 import typer
 from rich import print
 from rich.prompt import Prompt

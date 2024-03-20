@@ -18,6 +18,7 @@ Use optional arguments to change the settings, e.g.:
 For details on running with local or non-OpenAI models, see:
 https://langroid.github.io/langroid/tutorials/local-llm-setup/
 """
+
 import typer
 from rich import print
 from rich.prompt import Prompt

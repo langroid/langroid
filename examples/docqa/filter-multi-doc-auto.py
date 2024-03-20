@@ -20,6 +20,7 @@ as indicated in comments below, to get good results.
     supported vector-dbs, e.g. qdrant or chroma.
 
 """
+
 import typer
 from rich import print
 from rich.prompt import Prompt

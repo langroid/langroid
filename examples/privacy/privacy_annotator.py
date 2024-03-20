@@ -1,6 +1,7 @@
 """
 Agent to detect and annotate sensitive information in text.
 """
+
 import textwrap
 from typing import List, Optional
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig

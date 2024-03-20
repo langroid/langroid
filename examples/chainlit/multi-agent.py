@@ -11,6 +11,7 @@ and you have your OpenAI API Key in the .env file, run like this:
 
 chainlit run examples/chainlit/multi-agent.py
 """
+
 import langroid as lr
 import chainlit as cl
 from langroid.agent.callbacks.chainlit import ChainlitTaskCallbacks

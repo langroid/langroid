@@ -15,6 +15,7 @@ https://langroid.github.io/langroid/tutorials/local-llm-setup/
 
 
 """
+
 import os
 from typing import List
 import fire

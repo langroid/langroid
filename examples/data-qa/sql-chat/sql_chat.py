@@ -10,6 +10,7 @@ Note if you are using this with a postgres db, you will need to:
     or `poetry add langroid[postgres]` or `poetry install -E postgres`.
     If this gives you an error, try `pip install psycopg2-binary` in your virtualenv.
 """
+
 import typer
 from rich import print
 from rich.prompt import Prompt

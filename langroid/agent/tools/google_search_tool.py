@@ -8,6 +8,7 @@ NOTE: Using this tool requires setting the GOOGLE_API_KEY and GOOGLE_CSE_ID
 environment variables in your `.env` file, as explained in the
 [README](https://github.com/langroid/langroid#gear-installation-and-setup).
 """
+
 from typing import List
 
 from langroid.agent.tool_message import ToolMessage

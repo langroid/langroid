@@ -11,6 +11,7 @@ generating final summary answer based on relevant extracts, it just returns
 those extracts.
 See test_retriever_agent.py for example usage.
 """
+
 import logging
 from typing import Sequence
 

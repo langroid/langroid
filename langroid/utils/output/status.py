@@ -8,6 +8,7 @@ from langroid.utils.configuration import quiet_mode, settings
 
 console = Console()
 logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
 
 
 def status(
@@ -19,6 +20,9 @@ def status(
     """
     stack = ExitStack()
 
+    if settings.quiet:
+        if log_if_quiet:
+            logger.info(msg)
     if settings.quiet and log_if_quiet:
         logger.info(msg)
     else:

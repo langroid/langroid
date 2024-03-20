@@ -12,6 +12,7 @@ python3 examples/quick-start/chat-agent-docs.py
 For more explanation see
 [the Getting Started guide](https://langroid.github.io/langroid/quick-start/chat-agent-docs/).
 """
+
 import typer
 from rich import print
 import langroid as lr

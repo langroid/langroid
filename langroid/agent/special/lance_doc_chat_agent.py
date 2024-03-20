@@ -9,6 +9,7 @@ For usage see:
  - example script `examples/docqa/lance_rag.py`.
 
 """
+
 import json
 import logging
 from typing import Any, Dict, List, Tuple
@@ -162,10 +163,9 @@ class LanceDocChatAgent(DocChatAgent):
         self,
         docs: List[Document],
         split: bool = True,
-        metadata: List[Dict[str, Any]]
-        | Dict[str, Any]
-        | DocMetaData
-        | List[DocMetaData] = [],
+        metadata: (
+            List[Dict[str, Any]] | Dict[str, Any] | DocMetaData | List[DocMetaData]
+        ) = [],
     ) -> int:
         n = super().ingest_docs(docs, split, metadata)
         tbl = self.vecdb.client.open_table(self.vecdb.config.collection_name)

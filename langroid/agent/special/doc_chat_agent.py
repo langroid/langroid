@@ -12,6 +12,7 @@ langroid with the [hf-embeddings] extra, e.g.:
 pip install "langroid[hf-embeddings]"
 
 """
+
 import logging
 from contextlib import ExitStack
 from functools import cache
@@ -252,10 +253,9 @@ class DocChatAgent(ChatAgent):
     def ingest_doc_paths(
         self,
         paths: List[str],
-        metadata: List[Dict[str, Any]]
-        | Dict[str, Any]
-        | DocMetaData
-        | List[DocMetaData] = [],
+        metadata: (
+            List[Dict[str, Any]] | Dict[str, Any] | DocMetaData | List[DocMetaData]
+        ) = [],
     ) -> List[Document]:
         """Split, ingest docs from specified paths,
         do not add these to config.doc_paths.
@@ -276,9 +276,11 @@ class DocChatAgent(ChatAgent):
         ):
             if isinstance(metadata, list):
                 path2meta = {
-                    p: m
-                    if isinstance(m, dict)
-                    else (isinstance(m, DocMetaData) and m.dict())  # appease mypy
+                    p: (
+                        m
+                        if isinstance(m, dict)
+                        else (isinstance(m, DocMetaData) and m.dict())
+                    )  # appease mypy
                     for p, m in zip(all_paths, metadata)
                 }
             elif isinstance(metadata, dict):
@@ -326,10 +328,9 @@ class DocChatAgent(ChatAgent):
         self,
         docs: List[Document],
         split: bool = True,
-        metadata: List[Dict[str, Any]]
-        | Dict[str, Any]
-        | DocMetaData
-        | List[DocMetaData] = [],
+        metadata: (
+            List[Dict[str, Any]] | Dict[str, Any] | DocMetaData | List[DocMetaData]
+        ) = [],
     ) -> int:
         """
         Chunk docs into pieces, map each chunk to vec-embedding, store in vec-db

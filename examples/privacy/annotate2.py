@@ -32,6 +32,7 @@ For details on running with local LLMs, see here:
 https://langroid.github.io/langroid/tutorials/local-llm-setup/
 
 """
+
 import typer
 from rich import print
 from dotenv import load_dotenv

@@ -24,6 +24,7 @@ Optional args:
 * -m or --model to specify a model name
 
 """
+
 import typer
 from dotenv import load_dotenv
 from rich import print
