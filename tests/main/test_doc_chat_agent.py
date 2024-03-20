@@ -6,6 +6,7 @@ from typing import List
 import pandas as pd
 import pytest
 
+from langroid.agent.batch import run_batch_task_gen
 from langroid.agent.special.doc_chat_agent import DocChatAgent, DocChatAgentConfig
 from langroid.agent.special.lance_doc_chat_agent import LanceDocChatAgent
 from langroid.agent.task import Task
@@ -750,3 +751,73 @@ def test_doc_chat_ingest_path_metadata(
     assert all(r.metadata.type == "animal" for r in results)
 
     agent.clear()
+
+
+@pytest.mark.parametrize("vecdb", ["chroma", "lancedb", "qdrant_local"], indirect=True)
+def test_doc_chat_batch(test_settings: Settings, vecdb):
+    """
+    Test batch run of queries to multiple instances of DocChatAgent,
+    which share the same vector-db.
+    """
+
+    set_global(test_settings)
+    doc_agents = [DocChatAgent(_MyDocChatAgentConfig()) for _ in range(2)]
+
+    # vecdb = QdrantDB(
+    #     QdrantDBConfig(
+    #         collection_name="test-batch",
+    #         storage_path=":memory:",
+    #         replace_collection=True,
+    #     )
+    # )
+
+    # attach a common vector-db to all agents
+    for a in doc_agents:
+        coll = a.config.vecdb.collection_name
+        vecdb.delete_collection(coll)
+        a.vecdb = vecdb
+
+    docs = [
+        Document(
+            content="""
+            Filidor Dinkoyevsky wrote a book called "The Sisters Karenina".
+            It is loosely based on the life of the Anya Karvenina,
+            from a book by Tolsitoy a few years earlier.
+            """,
+            metadata=DocMetaData(source="tweakipedia"),
+        ),
+        Document(
+            content="""
+            The novel "Searching for Sebastian Night" was written by Vlad Nabikov.
+            It is an intriguing tale about the author's search for his lost brother,
+            and is a meditation on the nature of loss and memory.
+            """,
+            metadata=DocMetaData(source="tweakipedia"),
+        ),
+    ]
+
+    # note we only only need to ingest docs using one of the agents,
+    # since they share the same vector-db
+    doc_agents[0].ingest_docs(docs, split=False)
+
+    questions = [
+        "What book did Vlad Nabikov write?",
+        "Who wrote the book about the Karenina sisters?",
+    ]
+
+    # create a task-generator fn
+    def gen_task(i: int):
+        return Task(
+            doc_agents[i],
+            name=f"DocAgent-{i}",
+            interactive=False,
+            single_round=True,
+        )
+
+    results = run_batch_task_gen(gen_task, questions)
+
+    assert "Sebastian" in results[0].content
+    assert "Dinkoyevsky" in results[1].content
+
+    for a in doc_agents:
+        a.clear()

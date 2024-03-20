@@ -366,7 +366,7 @@ class LanceDB(VectorStore):
             tbl.add(df)
 
     def delete_collection(self, collection_name: str) -> None:
-        self.client.drop_table(collection_name)
+        self.client.drop_table(collection_name, ignore_missing=True)
 
     def _lance_result_to_docs(self, result: LanceVectorQueryBuilder) -> List[Document]:
         if self.is_from_dataframe:
