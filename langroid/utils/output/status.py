@@ -23,6 +23,8 @@ def status(
     if settings.quiet:
         if log_if_quiet:
             logger.info(msg)
+    if settings.quiet and log_if_quiet:
+        logger.info(msg)
     else:
         stack.enter_context(console.status(msg))
 
