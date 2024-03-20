@@ -788,7 +788,7 @@ def test_doc_chat_batch(test_settings: Settings, vecdb):
         ),
     ]
 
-    # note we only only need to ingest docs using one of the agents,
+    # note we only need to ingest docs using one of the agents,
     # since they share the same vector-db
     doc_agents[0].ingest_docs(docs, split=False)
 

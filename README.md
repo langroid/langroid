@@ -123,6 +123,11 @@ teacher_task.run()
 <summary> <b>Click to expand</b></summary>
 
 - **Mar 2024:**
+  - **0.1.216:** Improvements to allow concurrent runs of `DocChatAgent`, see the
+    [`test_doc_chat_agent.py`](https://github.com/langroid/langroid/blob/main/tests/main/test_doc_chat_agent.py)
+    in particular the `test_doc_chat_batch()`;
+    New task run utility: [`run_batch_task_gen`](https://github.com/langroid/langroid/blob/main/langroid/agent/batch.py) 
+    where a task generator can be specified, to generate one task per input. 
   - **0.1.212:** ImagePdfParser: support for extracting text from image-based PDFs.
     (this means `DocChatAgent` will now work with image-pdfs).
   - **0.1.194 - 0.1.211:** Misc fixes, improvements, and features:
