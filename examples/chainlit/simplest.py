@@ -7,6 +7,7 @@ and you have your OpenAI API Key in the .env file, run like this:
 
 chainlit run examples/chainlit/simplest.py
 """
+
 import langroid as lr
 import langroid.language_models as lm
 import chainlit as cl

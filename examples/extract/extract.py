@@ -10,6 +10,7 @@ python3 examples/basic/extract.py -nc
 Use -f option to use OpenAI function calling API instead of Langroid tool.
 
 """
+
 import textwrap
 import json
 

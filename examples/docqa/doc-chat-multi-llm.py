@@ -16,6 +16,7 @@ See here for a guide on how to use Langroid with non-OpenAI LLMs (local/remote):
 https://langroid.github.io/langroid/tutorials/local-llm-setup/
 
 """
+
 import typer
 from rich import print
 import os

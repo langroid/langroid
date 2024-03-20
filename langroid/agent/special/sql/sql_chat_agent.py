@@ -6,6 +6,7 @@ Functionality includes:
 - adding table and column context
 - asking a question about a SQL schema
 """
+
 import logging
 from typing import Any, Dict, List, Optional, Sequence, Union
 

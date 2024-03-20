@@ -7,6 +7,7 @@ code to answer the query. The code is passed via the `run_code` tool/function-ca
 which is handled by the Agent's `run_code` method. This method executes/evaluates
 the code and returns the result as a string.
 """
+
 import io
 import logging
 import sys

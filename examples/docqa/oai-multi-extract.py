@@ -11,6 +11,7 @@ python3 examples/docqa/chat_multi_extract.py
 
 Use -f option to use OpenAI function calling API instead of Langroid tool.
 """
+
 import typer
 from rich import print
 from pydantic import BaseModel

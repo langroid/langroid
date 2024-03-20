@@ -2,6 +2,7 @@
 Agent to manage privacy annotation, using PrivacyAgent as assistant, 
 and checking its results for accuracy.
 """
+
 import textwrap
 from typing import List
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig

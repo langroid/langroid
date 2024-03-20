@@ -10,6 +10,7 @@ https://langroid.github.io/langroid/tutorials/local-llm-setup/
 
 
 """
+
 from typing import List, Optional, Type
 
 from dotenv import load_dotenv

@@ -12,6 +12,7 @@ Run like this:
 chainlit run examples/chainlit/extract-then-chat.py
 
 """
+
 from langroid import ChatDocument
 from pydantic import BaseModel
 from typing import List

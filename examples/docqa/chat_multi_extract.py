@@ -30,6 +30,7 @@ but uses a workflow where agents do not delegate to each other,
 and uses more agents to break down tasks into smaller parts.
 
 """
+
 import typer
 from rich import print
 from pydantic import BaseModel

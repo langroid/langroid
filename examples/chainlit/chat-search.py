@@ -14,6 +14,7 @@ and you have your OpenAI API Key in the .env file, run like this:
 
 chainlit run examples/chainlit/chat-search.py
 """
+
 from typing import Optional
 
 import chainlit as cl

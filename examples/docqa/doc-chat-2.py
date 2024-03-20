@@ -6,6 +6,7 @@ who has access to the docs via a vector-db.
 
 python3 examples/docqa/doc-chat-2.py
 """
+
 from rich import print
 from rich.prompt import Prompt
 import os

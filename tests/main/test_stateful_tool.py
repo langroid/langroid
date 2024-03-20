@@ -2,6 +2,7 @@
 Simple test of a stateful tool: enabling this tool on an agent
 allows it to change the agent's state.
 """
+
 import pytest
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig

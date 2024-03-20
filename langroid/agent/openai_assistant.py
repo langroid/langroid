@@ -80,7 +80,6 @@ class OpenAIAssistantConfig(ChatAgentConfig):
 
 
 class OpenAIAssistant(ChatAgent):
-
     """
     A ChatAgent powered by OpenAI Assistant API:
     mainly, in `llm_response` method, we avoid maintaining conversation state,

@@ -7,6 +7,7 @@ the method `_get_tool_list()`).
 See usage examples in `tests/main/test_multi_agent_complex.py` and
 `tests/main/test_recipient_tool.py`.
 """
+
 from typing import List, Type
 
 from rich import print

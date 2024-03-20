@@ -3,6 +3,7 @@ Agent to retrieve relevant segments from a body of text,
 that are relevant to a query.
 
 """
+
 import logging
 from typing import Optional, no_type_check
 

@@ -491,9 +491,7 @@ class ChatAgent(Agent):
         response.metadata.tool_ids = (
             []
             if isinstance(message, str)
-            else message.metadata.tool_ids
-            if message is not None
-            else []
+            else message.metadata.tool_ids if message is not None else []
         )
         return response
 
@@ -516,9 +514,7 @@ class ChatAgent(Agent):
         response.metadata.tool_ids = (
             []
             if isinstance(message, str)
-            else message.metadata.tool_ids
-            if message is not None
-            else []
+            else message.metadata.tool_ids if message is not None else []
         )
         return response
 

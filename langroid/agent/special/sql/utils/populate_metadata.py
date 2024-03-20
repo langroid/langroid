@@ -60,9 +60,9 @@ def populate_metadata(
         Dict: A dictionary containing populated metadata information.
     """
     # Fetch basic metadata info using available tools
-    db_info: Dict[
-        str, Dict[str, Union[str, Dict[str, str]]]
-    ] = populate_metadata_with_schema_tools(metadata=metadata, info=info)
+    db_info: Dict[str, Dict[str, Union[str, Dict[str, str]]]] = (
+        populate_metadata_with_schema_tools(metadata=metadata, info=info)
+    )
 
     # Iterate over tables to update column metadata
     for table_name in db_info.keys():

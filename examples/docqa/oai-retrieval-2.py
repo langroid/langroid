@@ -7,6 +7,7 @@ Run like this:
 python3 examples/docqa/oai-retrieval-2.py
 
 """
+
 import typer
 from rich import print
 from rich.prompt import Prompt

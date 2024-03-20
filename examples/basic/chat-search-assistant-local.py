@@ -30,6 +30,7 @@ https://langroid.github.io/langroid/tutorials/local-llm-setup/
 
 
 """
+
 from typing import List, Optional, Type
 
 import typer

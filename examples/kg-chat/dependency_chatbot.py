@@ -26,6 +26,7 @@ Run like this:
 python3 examples/kg-chat/dependency_chatbot.py
 ```
 """
+
 import typer
 from rich import print
 from rich.prompt import Prompt

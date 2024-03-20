@@ -23,7 +23,6 @@ Optional arguments:
 -d: debug mode, to show all intermediate results
 """
 
-
 import typer
 import pandas as pd
 from rich.prompt import Prompt

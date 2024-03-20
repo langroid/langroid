@@ -10,6 +10,7 @@ Run as follows:
 python3 examples/quick-start/two-agent-chat.py
 
 """
+
 import typer
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig

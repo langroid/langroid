@@ -2,6 +2,7 @@
 Momento Vector Index.
 https://docs.momentohq.com/vector-index/develop/api-reference
 """
+
 import logging
 import os
 from typing import List, Optional, Sequence, Tuple, no_type_check

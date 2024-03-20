@@ -725,9 +725,9 @@ def test_doc_chat_ingest_path_metadata(
     # ingest with per-file metadata
     agent.ingest_doc_paths(
         [a["path"] for a in animals],
-        metadata=[a["metadata"] for a in animals]
-        if metadata_dict
-        else animal_metadata_list,
+        metadata=(
+            [a["metadata"] for a in animals] if metadata_dict else animal_metadata_list
+        ),
     )
 
     results = agent.get_relevant_chunks("What do we know about Pigs?")
@@ -741,9 +741,11 @@ def test_doc_chat_ingest_path_metadata(
     # ingest with single metadata for ALL animals
     agent.ingest_doc_paths(
         [a["path"] for a in animals],
-        metadata=dict(type="animal", category="living")
-        if metadata_dict
-        else DocMetaData(type="animal", category="living"),
+        metadata=(
+            dict(type="animal", category="living")
+            if metadata_dict
+            else DocMetaData(type="animal", category="living")
+        ),
     )
 
     results = agent.get_relevant_chunks("What do we know about dogs?")

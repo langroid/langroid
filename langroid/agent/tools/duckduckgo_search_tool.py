@@ -20,6 +20,7 @@ your `.env` file, e.g. `METAPHOR_API_KEY=your_api_key_here`
 For more information, please refer to the official docs:
 https://metaphor.systems/
 """
+
 from typing import List
 
 from langroid.agent.tool_message import ToolMessage

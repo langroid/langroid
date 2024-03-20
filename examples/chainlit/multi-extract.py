@@ -29,6 +29,7 @@ The `dolphin-mixtral` model seems to handle this pretty well, however weaker mod
 may not be able to handle this.
 
 """
+
 from rich import print
 from pydantic import BaseModel
 from typing import List

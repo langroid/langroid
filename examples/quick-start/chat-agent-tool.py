@@ -15,7 +15,6 @@ For more explanation see
 [the Getting Started guide](https://langroid.github.io/langroid/quick-start/chat-agent-tool/).
 """
 
-
 import typer
 from rich import print
 from pydantic import BaseSettings

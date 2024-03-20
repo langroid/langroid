@@ -28,6 +28,7 @@ If you omit the -m arg, it will use the default GPT4-turbo model.
 For more on setting up local LLMs with Langroid, see here:
 https://langroid.github.io/langroid/tutorials/local-llm-setup/
 """
+
 import typer
 from rich import print
 from pydantic import BaseModel

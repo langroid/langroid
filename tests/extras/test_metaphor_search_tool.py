@@ -8,6 +8,7 @@ Or directly install the `metaphor-python` package from pypi via:
 `pip install metaphor-python`
 
 """
+
 import itertools
 
 import pytest
