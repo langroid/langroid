@@ -92,6 +92,7 @@ def run_batch_task_gen(
 
         return list(map(output_map, results))
 
+    results: List[U] = []
     if batch_size is None:
         msg = message or f"[bold green]Running {len(items)} tasks:"
 
@@ -99,7 +100,6 @@ def run_batch_task_gen(
             results = asyncio.run(_do_all(inputs))
     else:
         batches = batched(inputs, batch_size)
-        results = []
 
         for batch in batches:
             start_idx = len(results)
