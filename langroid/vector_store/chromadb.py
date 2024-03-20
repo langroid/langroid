@@ -162,7 +162,10 @@ class ChromaDB(VectorStore):
         return self._docs_from_results(final_results)
 
     def delete_collection(self, collection_name: str) -> None:
-        self.client.delete_collection(name=collection_name)
+        try:
+            self.client.delete_collection(name=collection_name)
+        except Exception:
+            pass
 
     def similar_texts_with_scores(
         self, text: str, k: int = 1, where: Optional[str] = None
@@ -198,7 +201,10 @@ class ChromaDB(VectorStore):
         metadatas = results["metadatas"][0]
         for m in metadatas:
             # restore the stringified list of window_ids into the original List[str]
-            m["window_ids"] = m["window_ids"].split(",")
+            if m["window_ids"].strip() == "":
+                m["window_ids"] = []
+            else:
+                m["window_ids"] = m["window_ids"].split(",")
         docs = [
             Document(content=d, metadata=DocMetaData(**m))
             for d, m in zip(contents, metadatas)

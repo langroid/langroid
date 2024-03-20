@@ -42,6 +42,7 @@ from langroid.parsing.parser import Parser, ParsingConfig
 from langroid.prompts.prompts_config import PromptsConfig
 from langroid.utils.configuration import settings
 from langroid.utils.constants import NO_ANSWER
+from langroid.utils.output import status
 from langroid.vector_store.base import VectorStore, VectorStoreConfig
 
 console = Console(quiet=settings.quiet)
@@ -517,7 +518,7 @@ class Agent(ABC):
         with ExitStack() as stack:  # for conditionally using rich spinner
             if not self.llm.get_stream():
                 # show rich spinner only if not streaming!
-                cm = console.status("LLM responding to message...")
+                cm = status("LLM responding to message...")
                 stack.enter_context(cm)
             output_len = self.config.llm.max_output_tokens
             if (

@@ -4,7 +4,7 @@ import random
 import re
 from functools import cache
 from itertools import islice
-from typing import Any, Iterable, List
+from typing import Iterable, List, Sequence, TypeVar
 
 import nltk
 from faker import Faker
@@ -30,7 +30,10 @@ def download_nltk_resource(resource: str) -> None:
         nltk.download(resource, quiet=True)
 
 
-def batched(iterable: Iterable[Any], n: int) -> Iterable[Any]:
+T = TypeVar("T")
+
+
+def batched(iterable: Iterable[T], n: int) -> Iterable[Sequence[T]]:
     """Batch data into tuples of length n. The last batch may be shorter."""
     # batched('ABCDEFG', 3) --> ABC DEF G
     if n < 1:

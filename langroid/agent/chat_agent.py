@@ -20,8 +20,9 @@ from langroid.language_models.base import (
 )
 from langroid.language_models.openai_gpt import OpenAIGPT
 from langroid.utils.configuration import settings
+from langroid.utils.output import status
 
-console = Console(quiet=settings.quiet)
+console = Console()
 
 logger = logging.getLogger(__name__)
 
@@ -682,9 +683,12 @@ class ChatAgent(Agent):
             streamer = self.callbacks.start_llm_stream()
         self.llm.config.streamer = streamer
         with ExitStack() as stack:  # for conditionally using rich spinner
-            if not self.llm.get_stream() and not settings.quiet:
+            if not self.llm.get_stream():
                 # show rich spinner only if not streaming!
-                cm = console.status("LLM responding to messages...")
+                cm = status(
+                    "LLM responding to messages...",
+                    log_if_quiet=False,
+                )
                 stack.enter_context(cm)
             if self.llm.get_stream() and not settings.quiet:
                 console.print(f"[green]{self.indent}", end="")

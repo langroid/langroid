@@ -14,12 +14,12 @@ pip install "langroid[hf-embeddings]"
 """
 import logging
 from contextlib import ExitStack
+from functools import cache
 from typing import Any, Dict, List, Optional, Set, Tuple, no_type_check
 
+import nest_asyncio
 import numpy as np
 import pandas as pd
-from rich import print
-from rich.console import Console
 from rich.prompt import Prompt
 
 from langroid.agent.batch import run_batch_tasks
@@ -49,14 +49,18 @@ from langroid.prompts.prompts_config import PromptsConfig
 from langroid.prompts.templates import SUMMARY_ANSWER_PROMPT_GPT4
 from langroid.utils.configuration import settings
 from langroid.utils.constants import NO_ANSWER
-from langroid.utils.output.printing import show_if_debug
+from langroid.utils.output import show_if_debug, status
 from langroid.utils.pydantic_utils import dataframe_to_documents, extract_fields
 from langroid.vector_store.base import VectorStore, VectorStoreConfig
 from langroid.vector_store.lancedb import LanceDBConfig
 
-logger = logging.getLogger(__name__)
 
-console = Console()
+@cache
+def apply_nest_asyncio() -> None:
+    nest_asyncio.apply()
+
+
+logger = logging.getLogger(__name__)
 
 DEFAULT_DOC_CHAT_INSTRUCTIONS = """
 Your task is to answer questions about various documents.
@@ -623,8 +627,51 @@ class DocChatAgent(ChatAgent):
             query_str = query_str[1:] if query_str is not None else None
             if self.llm is None:
                 raise ValueError("LLM not set")
-            with StreamingIfAllowed(self.llm):
+            with StreamingIfAllowed(self.llm, self.llm.get_stream()):
                 response = super().llm_response(query_str)
+            if query_str is not None:
+                self.update_dialog(
+                    query_str, "" if response is None else response.content
+                )
+            return response
+        if query_str == "":
+            return None
+        elif query_str == "?" and self.response is not None:
+            return self.justify_response()
+        elif (query_str.startswith(("summar", "?")) and self.response is None) or (
+            query_str == "??"
+        ):
+            return self.summarize_docs()
+        else:
+            self.callbacks.show_start_response(entity="llm")
+            response = self.answer_from_docs(query_str)
+            return ChatDocument(
+                content=response.content,
+                metadata=ChatDocMetaData(
+                    source=response.metadata.source,
+                    sender=Entity.LLM,
+                ),
+            )
+
+    async def llm_response_async(
+        self,
+        query: None | str | ChatDocument = None,
+    ) -> Optional[ChatDocument]:
+        apply_nest_asyncio()
+        if not self.llm_can_respond(query):
+            return None
+        query_str: str | None
+        if isinstance(query, ChatDocument):
+            query_str = query.content
+        else:
+            query_str = query
+        if query_str is None or query_str.startswith("!"):
+            # direct query to LLM
+            query_str = query_str[1:] if query_str is not None else None
+            if self.llm is None:
+                raise ValueError("LLM not set")
+            with StreamingIfAllowed(self.llm, self.llm.get_stream()):
+                response = await super().llm_response_async(query_str)
             if query_str is not None:
                 self.update_dialog(
                     query_str, "" if response is None else response.content
@@ -735,7 +782,7 @@ class DocChatAgent(ChatAgent):
     def llm_hypothetical_answer(self, query: str) -> str:
         if self.llm is None:
             raise ValueError("LLM not set")
-        with console.status("[cyan]LLM generating hypothetical answer..."):
+        with status("[cyan]LLM generating hypothetical answer..."):
             with StreamingIfAllowed(self.llm, False):
                 # TODO: provide an easy way to
                 # Adjust this prompt depending on context.
@@ -755,7 +802,7 @@ class DocChatAgent(ChatAgent):
     def llm_rephrase_query(self, query: str) -> List[str]:
         if self.llm is None:
             raise ValueError("LLM not set")
-        with console.status("[cyan]LLM generating rephrases of query..."):
+        with status("[cyan]LLM generating rephrases of query..."):
             with StreamingIfAllowed(self.llm, False):
                 rephrases = self.llm_response_forget(
                     f"""
@@ -771,7 +818,7 @@ class DocChatAgent(ChatAgent):
     ) -> List[Tuple[Document, float]]:
         # find similar docs using bm25 similarity:
         # these may sometimes be more likely to contain a relevant verbatim extract
-        with console.status("[cyan]Searching for similar chunks using bm25..."):
+        with status("[cyan]Searching for similar chunks using bm25..."):
             if self.chunked_docs is None or len(self.chunked_docs) == 0:
                 logger.warning("No chunked docs; cannot use bm25-similarity")
                 return []
@@ -789,7 +836,7 @@ class DocChatAgent(ChatAgent):
     def get_fuzzy_matches(self, query: str, multiple: int) -> List[Document]:
         # find similar docs using fuzzy matching:
         # these may sometimes be more likely to contain a relevant verbatim extract
-        with console.status("[cyan]Finding fuzzy matches in chunks..."):
+        with status("[cyan]Finding fuzzy matches in chunks..."):
             if self.chunked_docs is None:
                 logger.warning("No chunked docs; cannot use fuzzy matching")
                 return []
@@ -809,7 +856,7 @@ class DocChatAgent(ChatAgent):
     def rerank_with_cross_encoder(
         self, query: str, passages: List[Document]
     ) -> List[Document]:
-        with console.status("[cyan]Re-ranking retrieved chunks using cross-encoder..."):
+        with status("[cyan]Re-ranking retrieved chunks using cross-encoder..."):
             try:
                 from sentence_transformers import CrossEncoder
             except ImportError:
@@ -1002,7 +1049,7 @@ class DocChatAgent(ChatAgent):
         if self.vecdb is None:
             raise ValueError("VecDB not set")
 
-        with console.status("[cyan]Searching VecDB for relevant doc passages..."):
+        with status("[cyan]Searching VecDB for relevant doc passages..."):
             docs_and_scores: List[Tuple[Document, float]] = []
             for q in [query] + query_proxies:
                 docs_and_scores += self.get_semantic_search_results(
@@ -1078,7 +1125,7 @@ class DocChatAgent(ChatAgent):
             # Regardless of whether we are in conversation mode or not,
             # for relevant doc/chunk extraction, we must convert the query
             # to a standalone query to get more relevant results.
-            with console.status("[cyan]Converting to stand-alone query...[/cyan]"):
+            with status("[cyan]Converting to stand-alone query...[/cyan]"):
                 with StreamingIfAllowed(self.llm, False):
                     query = self.llm.followup_to_standalone(self.dialog, query)
             print(f"[orange2]New query: {query}")
@@ -1097,7 +1144,7 @@ class DocChatAgent(ChatAgent):
         if len(passages) == 0:
             return query, []
 
-        with console.status("[cyan]LLM Extracting verbatim passages..."):
+        with status("[cyan]LLM Extracting verbatim passages..."):
             with StreamingIfAllowed(self.llm, False):
                 # these are async calls, one per passage; turn off streaming
                 extracts = self.get_verbatim_extracts(query, passages)
@@ -1198,7 +1245,7 @@ class DocChatAgent(ChatAgent):
             cm = (
                 StreamingIfAllowed(self.llm)
                 if settings.stream
-                else (console.status("LLM Generating final answer..."))
+                else (status("LLM Generating final answer..."))
             )
             stack.enter_context(cm)  # type: ignore
             response = self.get_summary_answer(query, extracts)

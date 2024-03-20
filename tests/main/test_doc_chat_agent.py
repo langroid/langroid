@@ -6,6 +6,7 @@ from typing import List
 import pandas as pd
 import pytest
 
+from langroid.agent.batch import run_batch_task_gen
 from langroid.agent.special.doc_chat_agent import DocChatAgent, DocChatAgentConfig
 from langroid.agent.special.lance_doc_chat_agent import LanceDocChatAgent
 from langroid.agent.task import Task
@@ -221,6 +222,27 @@ def test_doc_chat_agent_llm(test_settings: Settings, agent, query: str, expected
     assert all([e in ans for e in expected])
 
 
+@pytest.mark.parametrize(
+    "vecdb", ["qdrant_cloud", "qdrant_local", "chroma", "lancedb"], indirect=True
+)
+@pytest.mark.parametrize("query, expected", QUERY_EXPECTED_PAIRS)
+@pytest.mark.asyncio
+async def test_doc_chat_agent_llm_async(
+    test_settings: Settings, agent, query: str, expected: str
+):
+    """
+    Test directly using `llm_response_async` method of DocChatAgent.
+    """
+
+    # note that the (query, ans) pairs are accumulated into the
+    # internal dialog history of the agent.
+    set_global(test_settings)
+    agent.config.conversation_mode = False
+    ans = (await agent.llm_response_async(query)).content
+    expected = [e.strip() for e in expected.split(",")]
+    assert all([e in ans for e in expected])
+
+
 @pytest.mark.parametrize("vecdb", ["qdrant_local", "chroma", "lancedb"], indirect=True)
 def test_doc_chat_agent_task(test_settings: Settings, agent):
     """
@@ -261,6 +283,29 @@ def test_doc_chat_followup(test_settings: Settings, agent, conv_mode: bool):
     assert "comedian" in result.content.lower()
 
     result = task.run("When was he born?")
+    assert "1889" in result.content
+
+
+@pytest.mark.parametrize("vecdb", ["lancedb", "qdrant_local", "chroma"], indirect=True)
+@pytest.mark.parametrize("conv_mode", [True, False])
+@pytest.mark.asyncio
+async def test_doc_chat_followup_async(test_settings: Settings, agent, conv_mode: bool):
+    """
+    Test whether follow-up question is handled correctly (in async mode).
+    """
+    agent.config.conversation_mode = conv_mode
+    set_global(test_settings)
+    task = Task(
+        agent,
+        interactive=False,
+        restart=True,
+        done_if_response=[Entity.LLM],
+        done_if_no_response=[Entity.LLM],
+    )
+    result = await task.run_async("Who was Charlie Chaplin?")
+    assert "comedian" in result.content.lower()
+
+    result = await task.run_async("When was he born?")
     assert "1889" in result.content
 
 
@@ -706,3 +751,65 @@ def test_doc_chat_ingest_path_metadata(
     assert all(r.metadata.type == "animal" for r in results)
 
     agent.clear()
+
+
+@pytest.mark.parametrize("vecdb", ["chroma", "lancedb", "qdrant_local"], indirect=True)
+def test_doc_chat_batch(test_settings: Settings, vecdb):
+    """
+    Test batch run of queries to multiple instances of DocChatAgent,
+    which share the same vector-db.
+    """
+
+    set_global(test_settings)
+    doc_agents = [DocChatAgent(_MyDocChatAgentConfig()) for _ in range(2)]
+
+    # attach a common vector-db to all agents
+    for a in doc_agents:
+        coll = a.config.vecdb.collection_name
+        vecdb.delete_collection(coll)
+        a.vecdb = vecdb
+
+    docs = [
+        Document(
+            content="""
+            Filidor Dinkoyevsky wrote a book called "The Sisters Karenina".
+            It is loosely based on the life of the Anya Karvenina,
+            from a book by Tolsitoy a few years earlier.
+            """,
+            metadata=DocMetaData(source="tweakipedia"),
+        ),
+        Document(
+            content="""
+            The novel "Searching for Sebastian Night" was written by Vlad Nabikov.
+            It is an intriguing tale about the author's search for his lost brother,
+            and is a meditation on the nature of loss and memory.
+            """,
+            metadata=DocMetaData(source="tweakipedia"),
+        ),
+    ]
+
+    # note we only need to ingest docs using one of the agents,
+    # since they share the same vector-db
+    doc_agents[0].ingest_docs(docs, split=False)
+
+    questions = [
+        "What book did Vlad Nabikov write?",
+        "Who wrote the book about the Karenina sisters?",
+    ]
+
+    # create a task-generator fn
+    def gen_task(i: int):
+        return Task(
+            doc_agents[i],
+            name=f"DocAgent-{i}",
+            interactive=False,
+            single_round=True,
+        )
+
+    results = run_batch_task_gen(gen_task, questions)
+
+    assert "Sebastian" in results[0].content
+    assert "Dinkoyevsky" in results[1].content
+
+    for a in doc_agents:
+        a.clear()

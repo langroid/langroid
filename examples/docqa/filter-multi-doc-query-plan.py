@@ -190,11 +190,8 @@ def main(
     beethoven_path = (
         "https://en.wikipedia.org/wiki/Ludwig_van_Beethoven"  # or can be local dir
     )
-    mozart_path = "https://en.wikipedia.org/wiki/Wolfgang_Amadeus_Mozart"
+
     bach_path = "https://en.wikipedia.org/wiki/Johann_Sebastian_Bach"
-    hendrix_path = "https://en.wikipedia.org/wiki/Pink_Floyd"
-    prince_path = "https://en.wikipedia.org/wiki/Prince_(musician)"
-    jackson_path = "https://en.wikipedia.org/wiki/Michael_Jackson"
 
     paths = dict(
         beethoven=beethoven_path,
