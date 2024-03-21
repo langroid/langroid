@@ -95,6 +95,7 @@ duckduckgo-search = "^4.4"
 huggingface-hub = {version="^0.21.2", optional=true}
 pdf2image = "^1.17.0"
 pytesseract = "^0.3.10"
+types-pyyaml = "^6.0.12.20240311"
 
 [tool.poetry.extras]
 # install these using `poetry install -E [...]` where [...] is one of the extras below

@@ -33,6 +33,29 @@ from langroid.parsing.parse_json import extract_top_level_json
         """,
             [],
         ),  # should not recognize array as json
+        (
+            """
+            {
+            key_no_quotes: "value",
+            "key": value_no_quote,
+            key1: value with spaces,
+            key2: 24,
+            key3: { "a": b, "c": d e, 
+               "f": g h k
+               } }
+            """,
+            [
+                """
+                {
+                "key_no_quotes": "value",
+                "key": "value_no_quote",
+                "key1": "value with spaces",
+                "key2": 24,
+                "key3": {"a": "b", "c": "d e", "f": "g h k"}
+                }
+                """
+            ],
+        ),
     ],
 )
 def test_extract_top_level_json(s, expected):
