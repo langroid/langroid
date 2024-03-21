@@ -33,6 +33,8 @@ from langroid.parsing.parse_json import extract_top_level_json
         """,
             [],
         ),  # should not recognize array as json
+        # The below case has lots of json headaches/failures:
+        # trailing commans and forgotten quotes
         (
             """
             {
@@ -41,8 +43,8 @@ from langroid.parsing.parse_json import extract_top_level_json
             key1: value with spaces,
             key2: 24,
             key3: { "a": b, "c": d e, 
-               "f": g h k
-               } }
+               "f": g h k,
+               }, },
             """,
             [
                 """
