@@ -388,6 +388,7 @@ class DocChatAgent(ChatAgent):
                         + ",content="
                         + d.content
                     )
+        docs = docs[: self.config.parsing.max_chunks]
         # add embeddings in batches, to stay under limit of embeddings API
         batches = list(batched(docs, self.config.embed_batch_size))
         for batch in batches:
