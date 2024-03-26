@@ -127,7 +127,7 @@ class DocChatAgentConfig(ChatAgentConfig):
             llm=None  # use the parent's llm unless explicitly set here
         )
     )
-    doc_paths: List[str] = []
+    doc_paths: List[str | bytes] = []
     default_paths: List[str] = [
         "https://news.ycombinator.com/item?id=35629033",
         "https://www.newyorker.com/tech/annals-of-technology/chatgpt-is-a-blurry-jpeg-of-the-web",
@@ -638,7 +638,7 @@ class DocChatAgent(ChatAgent):
         if len(inputs) == 0:
             if is_new_collection:
                 inputs = self.config.default_paths
-        self.config.doc_paths = inputs
+        self.config.doc_paths = inputs  # type: ignore
         self.ingest()
 
     def llm_response(
