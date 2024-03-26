@@ -252,7 +252,7 @@ class DocChatAgent(ChatAgent):
 
     def ingest_doc_paths(
         self,
-        paths: List[str],
+        paths: List[str] | str,
         metadata: (
             List[Dict[str, Any]] | Dict[str, Any] | DocMetaData | List[DocMetaData]
         ) = [],
@@ -267,6 +267,8 @@ class DocChatAgent(ChatAgent):
         Returns:
             List of Document objects
         """
+        if isinstance(paths, str):
+            paths = [paths]
         all_paths = paths
         paths_meta: Dict[str, Any] = {}
         urls_meta: Dict[str, Any] = {}
@@ -463,6 +465,10 @@ class DocChatAgent(ChatAgent):
         for d in docs:
             d.metadata.is_chunk = True
         return self.ingest_docs(docs)
+
+    def set_filter(self, filter: str) -> None:
+        self.config.filter = filter
+        self.setup_documents(filter=filter)
 
     def setup_documents(
         self,
