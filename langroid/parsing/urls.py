@@ -112,26 +112,35 @@ def is_url(s: str) -> bool:
         return False
 
 
-def get_urls_and_paths(inputs: List[str]) -> Tuple[List[str], List[str]]:
+def get_urls_paths_bytes_indices(
+    inputs: List[str | bytes],
+) -> Tuple[List[int], List[int], List[int]]:
     """
-    Given a list of inputs, return a list of URLs and a list of paths.
+    Given a list of inputs, return a
+    list of indices of URLs, list of indices of paths, list of indices of byte-contents.
     Args:
-        inputs: list of strings
+        inputs: list of strings or bytes
     Returns:
-        list of URLs, list of paths
+        list of Indices of URLs,
+        list of indices of paths,
+        list of indices of byte-contents
     """
     urls = []
     paths = []
-    for item in inputs:
+    byte_list = []
+    for i, item in enumerate(inputs):
+        if isinstance(item, bytes):
+            byte_list.append(i)
+            continue
         try:
-            m = Url(url=parse_obj_as(HttpUrl, item))
-            urls.append(str(m.url))
+            Url(url=parse_obj_as(HttpUrl, item))
+            urls.append(i)
         except ValidationError:
             if os.path.exists(item):
-                paths.append(item)
+                paths.append(i)
             else:
                 logger.warning(f"{item} is neither a URL nor a path.")
-    return urls, paths
+    return urls, paths, byte_list
 
 
 def crawl_url(url: str, max_urls: int = 1) -> List[str]:

@@ -35,6 +35,7 @@ from langroid.embedding_models.models import OpenAIEmbeddingsConfig
 from langroid.language_models.base import StreamingIfAllowed
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
 from langroid.mytypes import DocMetaData, Document, Entity
+from langroid.parsing.document_parser import DocumentType
 from langroid.parsing.parser import Parser, ParsingConfig, PdfParsingConfig, Splitter
 from langroid.parsing.repo_loader import RepoLoader
 from langroid.parsing.search import (
@@ -44,7 +45,7 @@ from langroid.parsing.search import (
 )
 from langroid.parsing.table_loader import describe_dataframe
 from langroid.parsing.url_loader import URLLoader
-from langroid.parsing.urls import get_list_from_user, get_urls_and_paths
+from langroid.parsing.urls import get_list_from_user, get_urls_paths_bytes_indices
 from langroid.parsing.utils import batched
 from langroid.prompts.prompts_config import PromptsConfig
 from langroid.prompts.templates import SUMMARY_ANSWER_PROMPT_GPT4
@@ -248,64 +249,84 @@ class DocChatAgent(ChatAgent):
                 raise ValueError("VecDB not set")
             self.setup_documents(filter=self.config.filter)
             return
-        self.ingest_doc_paths(self.config.doc_paths)
+        self.ingest_doc_paths(self.config.doc_paths)  # type: ignore
 
     def ingest_doc_paths(
         self,
-        paths: List[str] | str,
+        paths: str | bytes | List[str | bytes],
         metadata: (
             List[Dict[str, Any]] | Dict[str, Any] | DocMetaData | List[DocMetaData]
         ) = [],
+        doc_type: str | DocumentType | None = None,
     ) -> List[Document]:
         """Split, ingest docs from specified paths,
         do not add these to config.doc_paths.
 
         Args:
-            paths: List of file/folder paths or URLs
+            paths: document paths, urls or byte-content of docs.
+                The bytes option is intended to support cases where a document
+                has already been read in as bytes (e.g. from an API or a database),
+                and we want to avoid having to write it to a temporary file
+                just to read it back in.
             metadata: List of metadata dicts, one for each path.
                 If a single dict is passed in, it is used for all paths.
+            doc_type: DocumentType to use for parsing, if known.
+                MUST apply to all docs if specified.
+                This is especially useful when the `paths` are of bytes type,
+                to help with document type detection.
         Returns:
             List of Document objects
         """
-        if isinstance(paths, str):
+        if isinstance(paths, str) or isinstance(paths, bytes):
             paths = [paths]
         all_paths = paths
-        paths_meta: Dict[str, Any] = {}
-        urls_meta: Dict[str, Any] = {}
-        urls, paths = get_urls_and_paths(paths)
+        paths_meta: Dict[int, Any] = {}
+        urls_meta: Dict[int, Any] = {}
+        idxs = range(len(all_paths))
+        url_idxs, path_idxs, bytes_idxs = get_urls_paths_bytes_indices(all_paths)
+        urls = [all_paths[i] for i in url_idxs]
+        paths = [all_paths[i] for i in path_idxs]
+        bytes_list = [all_paths[i] for i in bytes_idxs]
+        path_idxs.extend(bytes_idxs)
+        paths.extend(bytes_list)
         if (isinstance(metadata, list) and len(metadata) > 0) or not isinstance(
             metadata, list
         ):
             if isinstance(metadata, list):
-                path2meta = {
+                idx2meta = {
                     p: (
                         m
                         if isinstance(m, dict)
                         else (isinstance(m, DocMetaData) and m.dict())
                     )  # appease mypy
-                    for p, m in zip(all_paths, metadata)
+                    for p, m in zip(idxs, metadata)
                 }
             elif isinstance(metadata, dict):
-                path2meta = {p: metadata for p in all_paths}
+                idx2meta = {p: metadata for p in idxs}
             else:
-                path2meta = {p: metadata.dict() for p in all_paths}
-            urls_meta = {u: path2meta[u] for u in urls}
-            paths_meta = {p: path2meta[p] for p in paths}
+                idx2meta = {p: metadata.dict() for p in idxs}
+            urls_meta = {u: idx2meta[u] for u in url_idxs}
+            paths_meta = {p: idx2meta[p] for p in path_idxs}
         docs: List[Document] = []
         parser = Parser(self.config.parsing)
         if len(urls) > 0:
-            for u in urls:
-                meta = urls_meta.get(u, {})
-                loader = URLLoader(urls=[u], parser=parser)
+            for ui in url_idxs:
+                meta = urls_meta.get(ui, {})
+                loader = URLLoader(urls=[all_paths[ui]], parser=parser)  # type: ignore
                 url_docs = loader.load()
                 # update metadata of each doc with meta
                 for d in url_docs:
                     d.metadata = d.metadata.copy(update=meta)
                 docs.extend(url_docs)
-        if len(paths) > 0:
-            for p in paths:
-                meta = paths_meta.get(p, {})
-                path_docs = RepoLoader.get_documents(p, parser=parser)
+        if len(paths) > 0:  # paths OR bytes are handled similarly
+            for pi in path_idxs:
+                meta = paths_meta.get(pi, {})
+                p = all_paths[pi]
+                path_docs = RepoLoader.get_documents(
+                    p,
+                    parser=parser,
+                    doc_type=doc_type,
+                )
                 # update metadata of each doc with meta
                 for d in path_docs:
                     d.metadata = d.metadata.copy(update=meta)
@@ -319,11 +340,12 @@ class DocChatAgent(ChatAgent):
         print(
             f"""
         [green]I have processed the following {n_urls} URLs 
-        and {n_paths} paths into {n_splits} parts:
+        and {n_paths} docs into {n_splits} parts:
         """.strip()
         )
-        print("\n".join(urls))
-        print("\n".join(paths))
+        path_reps = [p if isinstance(p, str) else "bytes" for p in paths]
+        print("\n".join([u for u in urls if isinstance(u, str)]))  # appease mypy
+        print("\n".join(path_reps))
         return docs
 
     def ingest_docs(
