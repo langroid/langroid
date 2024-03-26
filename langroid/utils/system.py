@@ -131,7 +131,7 @@ def generate_user_id(org: str = "") -> str:
 def update_hash(hash: str | None = None, s: str = "") -> str:
     """
     Takes a SHA256 hash string and a new string, updates the hash with the new string,
-    and returns the updated hash string along with the original string.
+    and returns the updated hash string.
 
     Args:
         hash (str): A SHA256 hash string.
