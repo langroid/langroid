@@ -1,3 +1,4 @@
+import itertools
 import logging
 import re
 from enum import Enum
@@ -8,6 +9,7 @@ import fitz
 import pdfplumber
 import pypdf
 import requests
+from bs4 import BeautifulSoup
 from PIL import Image
 
 from langroid.mytypes import DocMetaData, Document
@@ -20,6 +22,29 @@ class DocumentType(str, Enum):
     PDF = "pdf"
     DOCX = "docx"
     DOC = "doc"
+    TXT = "txt"
+
+
+def is_plain_text(path_or_bytes: str | bytes) -> bool:
+    if isinstance(path_or_bytes, str):
+        if path_or_bytes.startswith(("http://", "https://")):
+            response = requests.get(path_or_bytes)
+            response.raise_for_status()
+            content = response.content[:1024]
+        else:
+            with open(path_or_bytes, "rb") as f:
+                content = f.read(1024)
+    else:
+        content = path_or_bytes[:1024]
+    try:
+        # Attempt to decode the content as UTF-8
+        _ = content.decode("utf-8")
+        # Additional checks can go here, e.g., to verify that the content
+        # doesn't contain too many unusual characters for it to be considered text
+        return True
+    except UnicodeDecodeError:
+        # If decoding fails, it's likely not plain text (or not encoded in UTF-8)
+        return False
 
 
 class DocumentParser(Parser):
@@ -33,19 +58,26 @@ class DocumentParser(Parser):
     """
 
     @classmethod
-    def create(cls, source: str, config: ParsingConfig) -> "DocumentParser":
+    def create(
+        cls,
+        source: str | bytes,
+        config: ParsingConfig,
+        doc_type: str | DocumentType | None = None,
+    ) -> "DocumentParser":
         """
         Create a DocumentParser instance based on source type
             and config.<source_type>.library specified.
 
         Args:
-            source (str): The source of the PDF, either a URL or a file path.
+            source (str|bytes): The source, could be a URL, file path,
+                or bytes object.
             config (ParserConfig): The parser configuration.
+            doc_type (str|None): The type of document, if known
 
         Returns:
             DocumentParser: An instance of a DocumentParser subclass.
         """
-        if DocumentParser._document_type(source) == DocumentType.PDF:
+        if DocumentParser._document_type(source, doc_type) == DocumentType.PDF:
             if config.pdf.library == "fitz":
                 return FitzPDFParser(source, config)
             elif config.pdf.library == "pypdf":
@@ -60,7 +92,7 @@ class DocumentParser(Parser):
                 raise ValueError(
                     f"Unsupported PDF library specified: {config.pdf.library}"
                 )
-        elif DocumentParser._document_type(source) == DocumentType.DOCX:
+        elif DocumentParser._document_type(source, doc_type) == DocumentType.DOCX:
             if config.docx.library == "unstructured":
                 return UnstructuredDocxParser(source, config)
             elif config.docx.library == "python-docx":
@@ -69,42 +101,78 @@ class DocumentParser(Parser):
                 raise ValueError(
                     f"Unsupported DOCX library specified: {config.docx.library}"
                 )
-        elif DocumentParser._document_type(source) == DocumentType.DOC:
+        elif DocumentParser._document_type(source, doc_type) == DocumentType.DOC:
             return UnstructuredDocParser(source, config)
         else:
-            raise ValueError(f"Unsupported document type: {source}")
+            source_name = source if isinstance(source, str) else "bytes"
+            raise ValueError(f"Unsupported document type: {source_name}")
 
-    def __init__(self, source: str, config: ParsingConfig):
+    def __init__(self, source: str | bytes, config: ParsingConfig):
         """
-        Initialize the PDFParser.
-
         Args:
-            source (str): The source of the PDF, either a URL or a file path.
+            source (str|bytes): The source, which could be
+            a path, a URL or a bytes object.
         """
         super().__init__(config)
-        self.source = source
         self.config = config
-        self.doc_bytes = self._load_doc_as_bytesio()
+        if isinstance(source, bytes):
+            self.source = "bytes"
+            self.doc_bytes = BytesIO(source)
+        else:
+            self.source = source
+            self.doc_bytes = self._load_doc_as_bytesio()
 
     @staticmethod
-    def _document_type(source: str) -> DocumentType:
+    def _document_type(
+        source: str | bytes, doc_type: str | DocumentType | None = None
+    ) -> DocumentType:
         """
         Determine the type of document based on the source.
 
         Args:
-            source (str): The source of the PDF, either a URL or a file path.
+            source (str|bytes): The source, which could be a URL,
+                a file path, or a bytes object.
+            doc_type (str|DocumentType|None): The type of document, if known.
 
         Returns:
             str: The document type.
         """
-        if source.lower().endswith(".pdf"):
-            return DocumentType.PDF
-        elif source.lower().endswith(".docx"):
-            return DocumentType.DOCX
-        elif source.lower().endswith(".doc"):
-            return DocumentType.DOC
+        if isinstance(doc_type, DocumentType):
+            return doc_type
+        if doc_type:
+            return DocumentType(doc_type.lower())
+        if is_plain_text(source):
+            return DocumentType.TXT
+        if isinstance(source, str):
+            # detect file type from path extension
+            if source.lower().endswith(".pdf"):
+                return DocumentType.PDF
+            elif source.lower().endswith(".docx"):
+                return DocumentType.DOCX
+            elif source.lower().endswith(".doc"):
+                return DocumentType.DOC
+            else:
+                raise ValueError(f"Unsupported document type: {source}")
         else:
-            raise ValueError(f"Unsupported document type: {source}")
+            # must be bytes: attempt to detect type from content
+            # using magic mime type detection
+            import magic
+
+            mime_type = magic.from_buffer(source, mime=True)
+            if mime_type == "application/pdf":
+                return DocumentType.PDF
+            elif mime_type in [
+                "application/vnd.openxmlformats-officedocument"
+                ".wordprocessingml.document",
+                "application/zip",
+            ]:
+                # DOCX files are essentially ZIP files,
+                # but this might catch other ZIP-based formats too!
+                return DocumentType.DOCX
+            elif mime_type == "application/msword":
+                return DocumentType.DOC
+            else:
+                raise ValueError("Unsupported document type from bytes")
 
     def _load_doc_as_bytesio(self) -> BytesIO:
         """
@@ -120,6 +188,61 @@ class DocumentParser(Parser):
         else:
             with open(self.source, "rb") as f:
                 return BytesIO(f.read())
+
+    @staticmethod
+    def chunks_from_path_or_bytes(
+        source: str | bytes,
+        parser: Parser,
+        doc_type: str | DocumentType | None = None,
+        lines: int | None = None,
+    ) -> List[Document]:
+        """
+        Get document chunks from a file path or bytes object.
+        Args:
+            source (str|bytes): The source, which could be a URL, path or bytes object.
+            parser (Parser): The parser instance (for splitting the document).
+            doc_type (str|DocumentType|None): The type of document, if known.
+            lines (int|None): The number of lines to read from a plain text file.
+        Returns:
+            List[Document]: A list of `Document` objects,
+                each containing a chunk of text, determined by the
+                chunking and splitting settings in the parser config.
+        """
+        dtype: DocumentType = DocumentParser._document_type(source, doc_type)
+        if dtype in [DocumentType.PDF, DocumentType.DOC, DocumentType.DOCX]:
+            doc_parser = DocumentParser.create(
+                source,
+                parser.config,
+                doc_type=doc_type,
+            )
+            chunks = doc_parser.get_doc_chunks()
+            if len(chunks) == 0 and dtype == DocumentType.PDF:
+                doc_parser = ImagePdfParser(source, parser.config)
+                chunks = doc_parser.get_doc_chunks()
+            return chunks
+        else:
+            # try getting as plain text; these will be chunked downstream
+            # -- could be a bytes object or a path
+            if isinstance(source, bytes):
+                content = source.decode()
+                if lines is not None:
+                    file_lines = content.splitlines()[:lines]
+                    content = "\n".join(line.strip() for line in file_lines)
+            else:
+                with open(source, "r") as f:
+                    if lines is not None:
+                        file_lines = list(itertools.islice(f, lines))
+                        content = "\n".join(line.strip() for line in file_lines)
+                    else:
+                        content = f.read()
+            soup = BeautifulSoup(content, "html.parser")
+            text = soup.get_text()
+            source_name = source if isinstance(source, str) else "bytes"
+            doc = Document(
+                content=text,
+                metadata=DocMetaData(source=str(source_name)),
+            )
+            return parser.split([doc])
 
     def iterate_pages(self) -> Generator[Tuple[int, Any], None, None]:
         """Yield each page in the PDF."""
@@ -145,7 +268,7 @@ class DocumentParser(Parser):
 
     def get_doc(self) -> Document:
         """
-        Get entire text from pdf source as a single document.
+        Get entire text from source as a single document.
 
         Returns:
             a `Document` object containing the content of the pdf file,

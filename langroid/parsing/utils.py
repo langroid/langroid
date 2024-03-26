@@ -10,10 +10,11 @@ import nltk
 from faker import Faker
 
 from langroid.mytypes import Document
+from langroid.parsing.document_parser import DocumentType
 from langroid.parsing.parser import Parser, ParsingConfig
 from langroid.parsing.repo_loader import RepoLoader
 from langroid.parsing.url_loader import URLLoader
-from langroid.parsing.urls import get_urls_and_paths
+from langroid.parsing.urls import get_urls_paths_bytes_indices
 
 Faker.seed(23)
 random.seed(43)
@@ -314,37 +315,54 @@ def extract_numbered_segments(s: str, specs: str) -> str:
 
 
 def extract_content_from_path(
-    path: str | List[str], parsing: ParsingConfig
+    path: bytes | str | List[bytes | str],
+    parsing: ParsingConfig,
+    doc_type: str | DocumentType | None = None,
 ) -> str | List[str]:
     """
     Extract the content from a file path or URL, or a list of file paths or URLs.
 
     Args:
-        path (str | List[str]): The file path or URL, or a list of file paths or URLs.
+        path (bytes | str | List[str]): The file path or URL, or a list of file paths or
+            URLs, or bytes content. The bytes option is meant to support cases
+            where upstream code may have already loaded the content (e.g., from a
+            database or API) and we want to avoid having to copy the content to a
+            temporary file.
         parsing (ParsingConfig): The parsing configuration.
+        doc_type (str | DocumentType | None): The document type if known.
+            If multiple paths are given, this MUST apply to ALL docs.
 
     Returns:
         str | List[str]: The extracted content if a single file path or URL is provided,
                 or a list of extracted contents if a
                 list of file paths or URLs is provided.
     """
-    if isinstance(path, str):
-        path = [path]
+    if isinstance(path, str) or isinstance(path, bytes):
+        paths = [path]
     elif isinstance(path, list) and len(path) == 0:
         return ""
-    urls, path_list = get_urls_and_paths(path)
+    else:
+        paths = path
+
+    url_idxs, path_idxs, byte_idxs = get_urls_paths_bytes_indices(paths)
+    urls = [paths[i] for i in url_idxs]
+    path_list = [paths[i] for i in path_idxs]
+    byte_list = [paths[i] for i in byte_idxs]
+    path_list.extend(byte_list)
     parser = Parser(parsing)
     docs: List[Document] = []
     try:
         if len(urls) > 0:
-            loader = URLLoader(urls=urls, parser=parser)
+            loader = URLLoader(urls=urls, parser=parser)  # type: ignore
             docs = loader.load()
         if len(path_list) > 0:
             for p in path_list:
-                path_docs = RepoLoader.get_documents(p, parser=parser)
+                path_docs = RepoLoader.get_documents(
+                    p, parser=parser, doc_type=doc_type
+                )
                 docs.extend(path_docs)
     except Exception as e:
-        logger.warning(f"Error loading path {path}: {e}")
+        logger.warning(f"Error loading path {paths}: {e}")
         return ""
     if len(docs) == 1:
         return docs[0].content

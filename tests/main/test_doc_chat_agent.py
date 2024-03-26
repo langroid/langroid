@@ -603,7 +603,13 @@ def test_doc_chat_incremental_ingest(
 @pytest.mark.parametrize(
     "splitter", [Splitter.PARA_SENTENCE, Splitter.SIMPLE, Splitter.TOKENS]
 )
-def test_doc_chat_ingest_paths(test_settings: Settings, vecdb, splitter: Splitter):
+@pytest.mark.parametrize("source", ["bytes", "path"])
+def test_doc_chat_ingest_paths(
+    test_settings: Settings,
+    vecdb,
+    splitter: Splitter,
+    source,
+):
     """
     Test DocChatAgent.ingest_doc_paths
     """
@@ -636,10 +642,13 @@ def test_doc_chat_ingest_paths(test_settings: Settings, vecdb, splitter: Splitte
     import tempfile
 
     for s in sentences:
-        with tempfile.NamedTemporaryFile(mode="w", delete=False) as f:
-            f.write(s)
-            f.close()
-            agent.ingest_doc_paths([f.name])
+        if source == "path":
+            with tempfile.NamedTemporaryFile(mode="w", delete=False) as f:
+                f.write(s)
+                f.close()
+                agent.ingest_doc_paths([f.name])
+        else:
+            agent.ingest_doc_paths([s.encode()])
 
     results = agent.get_relevant_chunks("What do we know about Pigs?")
     assert any("fly" in r.content for r in results)

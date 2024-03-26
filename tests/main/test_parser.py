@@ -106,3 +106,17 @@ def test_extract_content():
     contents = extract_content_from_path([file1.name, file2.name], parsing)
     assert "Hello" in contents[0]
     assert "best" in contents[1]
+
+    # read bytes from file1
+    with open(file1.name, "rb") as file1:
+        bytes_content1 = file1.read()
+
+    with open(file2.name, "rb") as file2:
+        bytes_content2 = file2.read()
+
+    content = extract_content_from_path(bytes_content1, parsing)
+    assert "Hello" in content
+
+    contents = extract_content_from_path([bytes_content1, bytes_content2], parsing)
+    assert "Hello" in contents[0]
+    assert "best" in contents[1]

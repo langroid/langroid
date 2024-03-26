@@ -10,7 +10,6 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple, Union
 from urllib.parse import urlparse
 
-from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from github import Github
 from github.ContentFile import ContentFile
@@ -19,7 +18,7 @@ from github.Repository import Repository
 from pydantic import BaseModel, BaseSettings, Field
 
 from langroid.mytypes import DocMetaData, Document
-from langroid.parsing.document_parser import DocumentParser, ImagePdfParser
+from langroid.parsing.document_parser import DocumentParser, DocumentType
 from langroid.parsing.parser import Parser, ParsingConfig
 
 logger = logging.getLogger(__name__)
@@ -491,18 +490,25 @@ class RepoLoader:
 
     @staticmethod
     def get_documents(
-        path: str,
+        path: str | bytes,
         parser: Parser = Parser(ParsingConfig()),
         file_types: Optional[List[str]] = None,
         exclude_dirs: Optional[List[str]] = None,
         depth: int = -1,
         lines: Optional[int] = None,
+        doc_type: str | DocumentType | None = None,
     ) -> List[Document]:
         """
         Recursively get all files under a path as Document objects.
 
         Args:
-            path (str): The path to the directory or file.
+            path (str|bytes): The path to the directory or file, or bytes content.
+                The bytes option is meant to support the case where the content
+                has already been read from a file in an upstream process
+                (e.g. from an API or a database), and we want to avoid having to
+                write it to a temporary file just to read it again.
+                (which can be very slow for large files,
+                especially in a docker container)
             parser (Parser): Parser to use to parse files.
             file_types (List[str], optional): List of file extensions OR
                 filenames OR file_path_names to  include.
@@ -513,6 +519,7 @@ class RepoLoader:
                 which includes all depths.
             lines (int, optional): Number of lines to read from each file.
                 Defaults to None, which reads all lines.
+            doc_type (str|DocumentType, optional): The type of document to parse.
 
         Returns:
             List[Document]: List of Document objects representing files.
@@ -520,56 +527,69 @@ class RepoLoader:
         """
         docs = []
         file_paths = []
-        path_obj = Path(path).resolve()
-
-        if path_obj.is_file():
-            file_paths.append(str(path_obj))
+        if isinstance(path, bytes):
+            file_paths.append(path)
         else:
-            path_depth = len(path_obj.parts)
-            for root, dirs, files in os.walk(path):
-                # Exclude directories if needed
-                if exclude_dirs:
-                    dirs[:] = [d for d in dirs if d not in exclude_dirs]
+            path_obj = Path(path).resolve()
 
-                current_depth = len(Path(root).resolve().parts) - path_depth
-                if depth == -1 or current_depth <= depth:
-                    for file in files:
-                        file_path = str(Path(root) / file)
-                        if (
-                            file_types is None
-                            or RepoLoader._file_type(file_path) in file_types
-                            or os.path.basename(file_path) in file_types
-                            or file_path in file_types
-                        ):
-                            file_paths.append(file_path)
+            if path_obj.is_file():
+                file_paths.append(str(path_obj))
+            else:
+                path_depth = len(path_obj.parts)
+                for root, dirs, files in os.walk(path):
+                    # Exclude directories if needed
+                    if exclude_dirs:
+                        dirs[:] = [d for d in dirs if d not in exclude_dirs]
+
+                    current_depth = len(Path(root).resolve().parts) - path_depth
+                    if depth == -1 or current_depth <= depth:
+                        for file in files:
+                            file_path = str(Path(root) / file)
+                            if (
+                                file_types is None
+                                or RepoLoader._file_type(file_path) in file_types
+                                or os.path.basename(file_path) in file_types
+                                or file_path in file_types
+                            ):
+                                file_paths.append(file_path)
 
         for file_path in file_paths:
-            _, file_extension = os.path.splitext(file_path)
-            if file_extension.lower() in [".pdf", ".docx", ".doc"]:
-                doc_parser = DocumentParser.create(
+            docs.extend(
+                DocumentParser.chunks_from_path_or_bytes(
                     file_path,
-                    parser.config,
+                    parser,
+                    doc_type=doc_type,
+                    lines=lines,
                 )
-                new_chunks = doc_parser.get_doc_chunks()
-                if len(new_chunks) == 0 and file_extension.lower() == ".pdf":
-                    doc_parser = ImagePdfParser(file_path, parser.config)
-                    new_chunks = doc_parser.get_doc_chunks()
-                docs.extend(new_chunks)
-            else:
-                with open(file_path, "r") as f:
-                    if lines is not None:
-                        file_lines = list(itertools.islice(f, lines))
-                        content = "\n".join(line.strip() for line in file_lines)
-                    else:
-                        content = f.read()
-                soup = BeautifulSoup(content, "html.parser")
-                text = soup.get_text()
-                docs.append(
-                    Document(
-                        content=text,
-                        metadata=DocMetaData(source=str(file_path)),
-                    )
-                )
+            )
+            # dtype: DocumentType = DocumentParser._document_type(file_path, doc_type)
+            # if dtype in [DocumentType.PDF, DocumentType.DOC, DocumentType.DOCX]:
+            #     doc_parser = DocumentParser.create(
+            #         file_path,
+            #         parser.config,
+            #         doc_type=doc_type,
+            #     )
+            #     new_chunks = doc_parser.get_doc_chunks()
+            #     if len(new_chunks) == 0 and file_extension.lower() == ".pdf":
+            #         doc_parser = ImagePdfParser(file_path, parser.config)
+            #         new_chunks = doc_parser.get_doc_chunks()
+            #     docs.extend(new_chunks)
+            # else:
+            #     # try getting as plain text; these will be chunked downstream
+            #     with open(file_path, "r") as f:
+            #         if lines is not None:
+            #             file_lines = list(itertools.islice(f, lines))
+            #             content = "\n".join(line.strip() for line in file_lines)
+            #         else:
+            #             content = f.read()
+            #     soup = BeautifulSoup(content, "html.parser")
+            #     text = soup.get_text()
+            #     docs.append(
+            #         Document(
+            #             content=text,
+            #             metadata=DocMetaData(source=str(file_path)),
+            #         )
+            #     )
 
         return docs
 
