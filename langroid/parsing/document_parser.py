@@ -586,7 +586,7 @@ class UnstructuredDocParser(UnstructuredDocxParser):
                 """
             )
 
-        elements = partition_doc(filename=self.source, include_page_breaks=True)
+        elements = partition_doc(file=self.doc_bytes, include_page_breaks=True)
 
         page_number = 1
         page_elements = []  # type: ignore
