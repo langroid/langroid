@@ -18,9 +18,9 @@ logger.setLevel(logging.WARNING)
 def retry_with_exponential_backoff(
     func: Callable[..., Any],
     initial_delay: float = 1,
-    exponential_base: float = 2,
+    exponential_base: float = 1.3,
     jitter: bool = True,
-    max_retries: int = 10,
+    max_retries: int = 5,
     errors: tuple = (  # type: ignore
         requests.exceptions.RequestException,
         openai.APITimeoutError,
@@ -84,9 +84,9 @@ def retry_with_exponential_backoff(
 def async_retry_with_exponential_backoff(
     func: Callable[..., Any],
     initial_delay: float = 1,
-    exponential_base: float = 2,
+    exponential_base: float = 1.3,
     jitter: bool = True,
-    max_retries: int = 10,
+    max_retries: int = 5,
     errors: tuple = (  # type: ignore
         openai.APITimeoutError,
         openai.RateLimitError,
