@@ -86,6 +86,10 @@ embed_cfg = OpenAIEmbeddingsConfig()
     "query, expected",
     [
         (
+            "How many movies have rating above 9?",
+            "2",
+        ),
+        (
             "Which Science Fiction movie was directed by Winkowski?",
             "Vector",
         ),
@@ -99,8 +103,8 @@ embed_cfg = OpenAIEmbeddingsConfig()
         ),
     ],
 )
-@pytest.mark.parametrize("flatten", [False, True])
-@pytest.mark.parametrize("split", [True, False])
+@pytest.mark.parametrize("flatten", [True, False])
+@pytest.mark.parametrize("split", [False, True])
 @pytest.mark.parametrize("doc_cls", [Document, MovieDoc])
 def test_lance_doc_chat_agent(
     test_settings: Settings,

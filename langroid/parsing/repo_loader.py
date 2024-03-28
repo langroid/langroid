@@ -562,35 +562,6 @@ class RepoLoader:
                     lines=lines,
                 )
             )
-            # dtype: DocumentType = DocumentParser._document_type(file_path, doc_type)
-            # if dtype in [DocumentType.PDF, DocumentType.DOC, DocumentType.DOCX]:
-            #     doc_parser = DocumentParser.create(
-            #         file_path,
-            #         parser.config,
-            #         doc_type=doc_type,
-            #     )
-            #     new_chunks = doc_parser.get_doc_chunks()
-            #     if len(new_chunks) == 0 and file_extension.lower() == ".pdf":
-            #         doc_parser = ImagePdfParser(file_path, parser.config)
-            #         new_chunks = doc_parser.get_doc_chunks()
-            #     docs.extend(new_chunks)
-            # else:
-            #     # try getting as plain text; these will be chunked downstream
-            #     with open(file_path, "r") as f:
-            #         if lines is not None:
-            #             file_lines = list(itertools.islice(f, lines))
-            #             content = "\n".join(line.strip() for line in file_lines)
-            #         else:
-            #             content = f.read()
-            #     soup = BeautifulSoup(content, "html.parser")
-            #     text = soup.get_text()
-            #     docs.append(
-            #         Document(
-            #             content=text,
-            #             metadata=DocMetaData(source=str(file_path)),
-            #         )
-            #     )
-
         return docs
 
     def load_docs_from_github(
