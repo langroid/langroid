@@ -389,9 +389,7 @@ class DocChatAgent(ChatAgent):
         if split:
             docs = self.parser.split(docs)
         else:
-            # treat each doc as a chunk
-            for d in docs:
-                d.metadata.is_chunk = True
+            self.parser.add_window_ids(docs)
         if self.vecdb is None:
             raise ValueError("VecDB not set")
 
