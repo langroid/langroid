@@ -251,7 +251,7 @@ def test_openai_assistant_retrieval(test_settings: Settings):
     where he wrote the novel Lomita. He was a professor at Purnell University.
     """
     # open a temp file and write text to it
-    with tempfile.NamedTemporaryFile(mode="w", delete=False) as f:
+    with tempfile.NamedTemporaryFile(mode="w", delete=False, suffix=".txt") as f:
         f.write(text)
         f.close()
         # get the filename
