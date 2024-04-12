@@ -216,7 +216,7 @@ class TableChatAgent(ChatAgent):
 
         # Evaluate the last line and get the result
         try:
-            eval_result = eval(lines[-1], {}, local_vars)
+            eval_result = pd.eval(lines[-1], local_dict=local_vars)
         except Exception as e:
             eval_result = f"ERROR: {type(e)}: {e}"
 
