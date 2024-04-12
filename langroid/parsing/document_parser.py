@@ -431,14 +431,14 @@ class ImagePdfParser(DocumentParser):
 
     def iterate_pages(
         self,
-    ) -> Generator[Tuple[int, Image], None, None]:
+    ) -> Generator[Tuple[int, Image], None, None]:  # type: ignore
         from pdf2image import convert_from_bytes
 
         images = convert_from_bytes(self.doc_bytes.getvalue())
         for i, image in enumerate(images):
             yield i, image
 
-    def extract_text_from_page(self, page: Image) -> str:
+    def extract_text_from_page(self, page: Image) -> str:  # type: ignore
         """
         Extract text from a given `pdf2image` page.
 
