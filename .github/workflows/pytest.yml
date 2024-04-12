@@ -13,6 +13,15 @@ on:
       - main  # Replace with your default branch name
 
 jobs:
+  cancel:
+    name: Cancel Previous Runs
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    steps:
+      - name: Cancel Previous Workflow Runs
+        uses: styfle/cancel-workflow-action@0.9.1
+        with:
+          access_token: ${{ githun.token }}
   pytest:
     runs-on: ubuntu-latest
     services:
