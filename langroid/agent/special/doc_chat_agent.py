@@ -66,7 +66,7 @@ logger = logging.getLogger(__name__)
 
 DEFAULT_DOC_CHAT_INSTRUCTIONS = """
 Your task is to answer questions about various documents.
-You will be given various passages from these documents, and asked to answer questions 
+You will be given various passages from these documents, and asked to answer questions
 about them, or summarize them into coherent answers.
 """
 
@@ -76,7 +76,7 @@ You are a helpful assistant, helping me understand a collection of documents.
 
 has_sentence_transformers = False
 try:
-    from sentence_transformer import SentenceTransformer  # noqa: F401
+    from sentence_transformers import SentenceTransformer  # noqa: F401
 
     has_sentence_transformers = True
 except ImportError:
@@ -339,7 +339,7 @@ class DocChatAgent(ChatAgent):
         n_paths = len(paths)
         print(
             f"""
-        [green]I have processed the following {n_urls} URLs 
+        [green]I have processed the following {n_urls} URLs
         and {n_paths} docs into {n_splits} parts:
         """.strip()
         )
@@ -443,7 +443,7 @@ class DocChatAgent(ChatAgent):
         if content not in df.columns:
             raise ValueError(
                 f"""
-                Content column {content} not in dataframe, 
+                Content column {content} not in dataframe,
                 so we cannot ingest into the DocChatAgent.
                 Please specify the `content` parameter as a suitable
                 text-based column in the dataframe.
@@ -816,12 +816,12 @@ class DocChatAgent(ChatAgent):
                 # Adjust this prompt depending on context.
                 answer = self.llm_response_forget(
                     f"""
-                    Give an ideal answer to the following query, 
-                    in up to 3 sentences. Do not explain yourself, 
-                    and do not apologize, just show 
+                    Give an ideal answer to the following query,
+                    in up to 3 sentences. Do not explain yourself,
+                    and do not apologize, just show
                     a good possible answer, even if you do not have any information.
                     Preface your answer with "HYPOTHETICAL ANSWER: "
-                    
+
                     QUERY: {query}
                     """
                 ).content
@@ -1293,9 +1293,9 @@ class DocChatAgent(ChatAgent):
             logger.warning(
                 """
                 No docs to summarize! Perhaps you are re-using a previously
-                defined collection? 
+                defined collection?
                 In that case, we don't have access to the original docs.
-                To create a summary, use a new collection, and specify a list of docs. 
+                To create a summary, use a new collection, and specify a list of docs.
                 """
             )
             return None
@@ -1318,7 +1318,7 @@ class DocChatAgent(ChatAgent):
             )
         prompt = f"""
         {instruction}
-        
+
         FULL TEXT:
         {full_text}
         """.strip()
