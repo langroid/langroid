@@ -24,9 +24,12 @@ class DocumentType(str, Enum):
     DOC = "doc"
     TXT = "txt"
 
+
 def find_last_full_char(possible_unicode: bytes) -> int:
     """
     Find the index of the last full character in a byte string.
+    Args:
+        possible_unicode (bytes): The bytes to check.
     Returns:
         int: The index of the last full unicode character.
     """
@@ -36,7 +39,15 @@ def find_last_full_char(possible_unicode: bytes) -> int:
             return i
     return 0
 
+
 def is_plain_text(path_or_bytes: str | bytes) -> bool:
+    """
+    Check if a file is plain text by attempting to decode it as UTF-8.
+    Args:
+        path_or_bytes (str|bytes): The file path or bytes object.
+    Returns:
+        bool: True if the file is plain text, False otherwise.
+    """
     if isinstance(path_or_bytes, str):
         if path_or_bytes.startswith(("http://", "https://")):
             response = requests.get(path_or_bytes)
