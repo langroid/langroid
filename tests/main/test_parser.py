@@ -120,3 +120,20 @@ def test_extract_content():
     contents = extract_content_from_path([bytes_content1, bytes_content2], parsing)
     assert "Hello" in contents[0]
     assert "best" in contents[1]
+
+
+def test_utf8():
+    my_str = "abc﷽🤦🏻‍♂️🤦🏻‍♂️🤦🏻‍♂️"
+    print(len(my_str))  # 19
+    b = my_str.encode("utf-8")
+    print(len(b))  # 57 bytes that represent 19 chars
+    content = b[:50]  # choose to cut it off at 50 for this example
+
+    def find_last_full_char(str_to_test):
+        for i in range(len(str_to_test) - 1, 0, -1):
+            if (str_to_test[i] & 0xC0) != 0x80:
+                return i
+
+    content = content[: find_last_full_char(content)]
+
+    _ = content.decode("utf-8")
