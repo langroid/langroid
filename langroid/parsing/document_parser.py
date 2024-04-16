@@ -25,7 +25,29 @@ class DocumentType(str, Enum):
     TXT = "txt"
 
 
+def find_last_full_char(possible_unicode: bytes) -> int:
+    """
+    Find the index of the last full character in a byte string.
+    Args:
+        possible_unicode (bytes): The bytes to check.
+    Returns:
+        int: The index of the last full unicode character.
+    """
+
+    for i in range(len(possible_unicode) - 1, 0, -1):
+        if (possible_unicode[i] & 0xC0) != 0x80:
+            return i
+    return 0
+
+
 def is_plain_text(path_or_bytes: str | bytes) -> bool:
+    """
+    Check if a file is plain text by attempting to decode it as UTF-8.
+    Args:
+        path_or_bytes (str|bytes): The file path or bytes object.
+    Returns:
+        bool: True if the file is plain text, False otherwise.
+    """
     if isinstance(path_or_bytes, str):
         if path_or_bytes.startswith(("http://", "https://")):
             response = requests.get(path_or_bytes)
@@ -38,6 +60,8 @@ def is_plain_text(path_or_bytes: str | bytes) -> bool:
         content = path_or_bytes[:1024]
     try:
         # Attempt to decode the content as UTF-8
+        content = content[: find_last_full_char(content)]
+
         _ = content.decode("utf-8")
         # Additional checks can go here, e.g., to verify that the content
         # doesn't contain too many unusual characters for it to be considered text
@@ -466,7 +490,7 @@ class UnstructuredPDFParser(DocumentParser):
             raise ImportError(
                 """
                 The `unstructured` library is not installed by default with langroid.
-                To include this library, please install langroid with the 
+                To include this library, please install langroid with the
                 `unstructured` extra by running `pip install "langroid[unstructured]"`
                 or equivalent.
                 """
@@ -483,7 +507,7 @@ class UnstructuredPDFParser(DocumentParser):
                 The `unstructured` library failed to parse the pdf.
                 Please try a different library by setting the `library` field
                 in the `pdf` section of the `parsing` field in the config file.
-                Supported libraries are: 
+                Supported libraries are:
                 fitz, pypdf, pdfplumber, unstructured
                 """
             )
@@ -529,7 +553,7 @@ class UnstructuredDocxParser(DocumentParser):
             raise ImportError(
                 """
                 The `unstructured` library is not installed by default with langroid.
-                To include this library, please install langroid with the 
+                To include this library, please install langroid with the
                 `unstructured` extra by running `pip install "langroid[unstructured]"`
                 or equivalent.
                 """
@@ -580,7 +604,7 @@ class UnstructuredDocParser(UnstructuredDocxParser):
             raise ImportError(
                 """
                 The `unstructured` library is not installed by default with langroid.
-                To include this library, please install langroid with the 
+                To include this library, please install langroid with the
                 `unstructured` extra by running `pip install "langroid[unstructured]"`
                 or equivalent.
                 """
