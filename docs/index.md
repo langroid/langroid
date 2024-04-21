@@ -54,7 +54,7 @@ LLMs and vector-stores.
 - **Caching of LLM prompts, responses:** Langroid by default uses [Redis](https://redis.com/try-free/) for caching. 
   Caching with [Momento](https://www.gomomento.com/) is also supported.
 - **Vector-stores**: [Qdrant](https://qdrant.tech/) and [Chroma](https://www.trychroma.com/) are currently supported.
-  Vector stores allow for Retrieval-Augmented-Generaation (RAG).
+  Vector stores allow for Retrieval-Augmented-Generation (RAG).
 - **Grounding and source-citation:** Access to external documents via vector-stores
   allows for grounding and source-citation.
 - **Observability, Logging, Lineage:** Langroid generates detailed logs of multi-agent interactions and
