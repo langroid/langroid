@@ -28,7 +28,7 @@ class MeiliSearchConfig(VectorStoreConfig):
     cloud: bool = False
     collection_name: str | None = None
     primary_key: str = "id"
-    port = 7700
+    port: int = 7700
 
 
 class MeiliSearch(VectorStore):
@@ -42,10 +42,10 @@ class MeiliSearch(VectorStore):
         self.url = os.getenv("MEILISEARCH_API_URL") or f"http://{self.host}:{self.port}"
         if config.cloud and None in [self.key, self.url]:
             logger.warning(
-                f"""MEILISEARCH_API_KEY, MEILISEARCH_API_URL env variable must be set 
-                to use MeiliSearch in cloud mode. Please set these values 
-                in your .env file. Switching to local MeiliSearch at 
-                {self.url} 
+                f"""MEILISEARCH_API_KEY, MEILISEARCH_API_URL env variable must be set
+                to use MeiliSearch in cloud mode. Please set these values
+                in your .env file. Switching to local MeiliSearch at
+                {self.url}
                 """
             )
             config.cloud = False

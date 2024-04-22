@@ -15,23 +15,23 @@ class QueryPlan(BaseModel):
 
 
 class QueryPlanTool(ToolMessage):
-    request = "query_plan"  # the agent method name that handles this tool
-    purpose = """
+    request: str = "query_plan"  # the agent method name that handles this tool
+    purpose: str = """
     Given a user's query, generate a query <plan> consisting of:
     - <original_query> - the original query for reference
     - <filter> condition if needed (or empty string if no filter is needed)
     - <query> - a possibly rephrased query that can be used to match the CONTENT
         of the documents (can be same as <original_query> if no rephrasing is needed)
     - <dataframe_calc> - a Pandas-dataframe calculation/aggregation string
-        that can be used to calculate the answer 
+        that can be used to calculate the answer
         (or empty string if no calculation is needed).
     """
     plan: QueryPlan
 
 
 class QueryPlanAnswerTool(ToolMessage):
-    request = "query_plan_answer"  # the agent method name that handles this tool
-    purpose = """
+    request: str = "query_plan_answer"  # the agent method name that handles this tool
+    purpose: str = """
     Assemble query <plan> and <answer>
     """
     plan: QueryPlan
@@ -39,6 +39,6 @@ class QueryPlanAnswerTool(ToolMessage):
 
 
 class QueryPlanFeedbackTool(ToolMessage):
-    request = "query_plan_feedback"
-    purpose = "To give <feedback> regarding the query plan."
+    request: str = "query_plan_feedback"
+    purpose: str = "To give <feedback> regarding the query plan."
     feedback: str

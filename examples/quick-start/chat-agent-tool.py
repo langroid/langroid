@@ -17,7 +17,7 @@ For more explanation see
 
 import typer
 from rich import print
-from pydantic import BaseSettings
+from pydantic_settings import BaseSettings
 
 import langroid as lr
 

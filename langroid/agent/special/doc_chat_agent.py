@@ -21,6 +21,7 @@ from typing import Any, Dict, List, Optional, Set, Tuple, no_type_check
 import nest_asyncio
 import numpy as np
 import pandas as pd
+from pydantic import ConfigDict
 from rich.prompt import Prompt
 
 from langroid.agent.batch import run_batch_tasks
@@ -81,6 +82,11 @@ try:
     has_sentence_transformers = True
 except ImportError:
     pass
+
+
+def import_sentence_transformer_embeddings_config():
+    from langroid.embedding_models.models import SentenceTransformerEmbeddingsConfig
+    return SentenceTransformerEmbeddingsConfig
 
 
 class DocChatAgentConfig(ChatAgentConfig):
@@ -156,14 +162,12 @@ class DocChatAgentConfig(ChatAgentConfig):
             library="pdfplumber",
         ),
     )
-    from langroid.embedding_models.models import SentenceTransformerEmbeddingsConfig
-
-    hf_embed_config = SentenceTransformerEmbeddingsConfig(
+    hf_embed_config: Any = import_sentence_transformer_embeddings_config()(
         model_type="sentence-transformer",
         model_name="BAAI/bge-large-en-v1.5",
     )
 
-    oai_embed_config = OpenAIEmbeddingsConfig(
+    oai_embed_config: OpenAIEmbeddingsConfig = OpenAIEmbeddingsConfig(
         model_type="openai",
         model_name="text-embedding-ada-002",
         dims=1536,

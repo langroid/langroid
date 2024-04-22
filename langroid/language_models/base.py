@@ -8,7 +8,8 @@ from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union
 
 import aiohttp
-from pydantic import BaseModel, BaseSettings, Field
+from pydantic import BaseModel, Field
+from pydantic_settings import BaseSettings
 
 from langroid.cachedb.momento_cachedb import MomentoCacheConfig
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
@@ -275,9 +276,9 @@ class LanguageModel(ABC):
         if type(config) is LLMConfig:
             raise ValueError(
                 """
-                Cannot create a Language Model object from LLMConfig. 
-                Please specify a specific subclass of LLMConfig e.g., 
-                OpenAIGPTConfig. If you are creating a ChatAgent from 
+                Cannot create a Language Model object from LLMConfig.
+                Please specify a specific subclass of LLMConfig e.g.,
+                OpenAIGPTConfig. If you are creating a ChatAgent from
                 a ChatAgentConfig, please specify the `llm` field of this config
                 as a specific subclass of LLMConfig, e.g., OpenAIGPTConfig.
                 """
@@ -469,11 +470,11 @@ class LanguageModel(ABC):
         history = collate_chat_history(chat_history)
 
         prompt = f"""
-        Given the conversationn below, and a follow-up question, rephrase the follow-up 
+        Given the conversationn below, and a follow-up question, rephrase the follow-up
         question as a standalone question.
-        
+
         Chat history: {history}
-        Follow-up question: {question} 
+        Follow-up question: {question}
         """.strip()
         show_if_debug(prompt, "FOLLOWUP->STANDALONE-PROMPT= ")
         standalone = self.generate(prompt=prompt, max_tokens=1024).message.strip()

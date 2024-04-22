@@ -7,7 +7,7 @@ import logging
 import textwrap
 from typing import Any, Callable, Dict, List, Literal, Optional, no_type_check
 
-from pydantic import BaseSettings
+from pydantic_settings import BaseSettings
 
 try:
     import chainlit as cl

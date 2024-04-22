@@ -34,74 +34,74 @@ class LanceQueryPlanAgentConfig(ChatAgentConfig):
     critic_name: str = "QueryPlanCritic"
     doc_agent_name: str = "LanceRAG"
     doc_schema: str = ""
-    use_tools = False
-    use_functions_api = True
+    use_tools: bool = False
+    use_functions_api: bool = True
 
-    system_message = f"""
+    system_message: str = f"""
     You will receive a QUERY, to be answered based on an EXTREMELY LARGE collection
     of documents you DO NOT have access to, but your ASSISTANT does.
     You only know that these documents have a special `content` field
-    and additional FILTERABLE fields in the SCHEMA below:  
-    
+    and additional FILTERABLE fields in the SCHEMA below:
+
     {{doc_schema}}
-    
+
     Based on the QUERY and the above SCHEMA, your task is to determine a QUERY PLAN,
     consisting of:
     -  a FILTER (can be empty string) that would help the ASSISTANT to answer the query.
         Remember the FILTER can refer to ANY fields in the above SCHEMA
-        EXCEPT the `content` field of the documents. 
+        EXCEPT the `content` field of the documents.
         ONLY USE A FILTER IF EXPLICITLY MENTIONED IN THE QUERY.
         TO get good results, for STRING MATCHES, consider using LIKE instead of =, e.g.
         "CEO LIKE '%Jobs%'" instead of "CEO = 'Steve Jobs'"
     - a possibly REPHRASED QUERY to be answerable given the FILTER.
         Keep in mind that the ASSISTANT does NOT know anything about the FILTER fields,
         so the REPHRASED QUERY should NOT mention ANY FILTER fields.
-        The answer will answer based on documents whose CONTENTS match the QUERY, 
-        possibly REPHRASED. 
+        The answer will answer based on documents whose CONTENTS match the QUERY,
+        possibly REPHRASED.
     - a Pandas-dataframe calculation/aggregation string that can be used to calculate
         the answer to the original query, e.g. "df["rating"].mean()",
         or "df.groupby("director").mean()["rating"]", etc, or empty string if no calc
-        is needed. The dataframe calc CAN refer to the `content` field. 
-    
-    
+        is needed. The dataframe calc CAN refer to the `content` field.
+
+
     EXAMPLE:
-    ------- 
+    -------
     Suppose there is a document-set about crime reports, where:
      CONTENT = crime report,
      Filterable SCHEMA consists of City, Year, num_deaths.
-    
-    Then given this ORIGINAL QUERY: 
-    
+
+    Then given this ORIGINAL QUERY:
+
         Total deaths in shoplifting crimes in Los Angeles in 2023?
-    
+
     A POSSIBLE QUERY PLAN could be:
-    
+
     FILTER: "City LIKE '%Los Angeles%' AND Year = 2023"
     REPHRASED QUERY: "shoplifting crime" --> this will be used to MATCH content of docs
-         [NOTE: we dropped the FILTER fields City and Year since the 
-         ASSISTANT does not know about them and only uses the query to 
+         [NOTE: we dropped the FILTER fields City and Year since the
+         ASSISTANT does not know about them and only uses the query to
          match the CONTENT of the docs.]
     DATAFRAME CALCULATION: "df["num_deaths"].sum()"
 
     ------------- END OF EXAMPLE ----------------
-    
-    The FILTER must be a SQL-like condition, e.g. 
+
+    The FILTER must be a SQL-like condition, e.g.
     "year > 2000 AND genre = 'ScienceFiction'".
-    To ensure you get useful results, you should make your FILTER 
+    To ensure you get useful results, you should make your FILTER
     NOT TOO STRICT, e.g. look for approximate match using LIKE, etc.
     E.g. "CEO LIKE '%Jobs%'" instead of "CEO = 'Steve Jobs'"
-    Use DOT NOTATION to refer to nested fields, e.g. `metadata.year`, etc. 
-        
+    Use DOT NOTATION to refer to nested fields, e.g. `metadata.year`, etc.
+
     You must FIRST present the QUERY PLAN using the `query_plan` tool/function.
     This will be handled by your document assistant, who will produce an ANSWER.
-            
+
     You may receive FEEDBACK on your QUERY PLAN and received ANSWER,
     from the 'QueryPlanCritic' who may offer suggestions for
     a better FILTER, REPHRASED QUERY, or DATAFRAME CALCULATION.
-            
+
     If you keep getting feedback or keep getting a {NO_ANSWER} from the assistant
     at least 3 times, then simply say '{DONE} {NO_ANSWER}' and nothing else.
-      
+
     At the BEGINNING if there is no query, ASK the user what they want to know.
     """
 

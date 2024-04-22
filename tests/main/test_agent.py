@@ -8,7 +8,7 @@ import langroid.language_models as lm
 
 class CustomAgentConfig(lr.AgentConfig):
     max_tokens: int = 10000
-    llm = lm.OpenAIGPTConfig(
+    llm: lm.LLMConfig = lm.OpenAIGPTConfig(
         chat_model=lm.OpenAIChatModel.GPT4,
         cache_config=lr.cachedb.redis_cachedb.RedisCacheConfig(fake=False),
     )

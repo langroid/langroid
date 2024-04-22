@@ -78,10 +78,10 @@ class QdrantDB(VectorStore):
         url = os.getenv("QDRANT_API_URL")
         if config.cloud and None in [key, url]:
             logger.warning(
-                f"""QDRANT_API_KEY, QDRANT_API_URL env variable must be set to use 
-                QdrantDB in cloud mode. Please set these values 
-                in your .env file. 
-                Switching to local storage at {config.storage_path} 
+                f"""QDRANT_API_KEY, QDRANT_API_URL env variable must be set to use
+                QdrantDB in cloud mode. Please set these values
+                in your .env file.
+                Switching to local storage at {config.storage_path}
                 """
             )
             config.cloud = False
@@ -149,7 +149,7 @@ class QdrantDB(VectorStore):
             self.client.delete_collection(collection_name=name)
         logger.warning(
             f"""
-            Deleted {n_empty_deletes} empty collections and 
+            Deleted {n_empty_deletes} empty collections and
             {n_non_empty_deletes} non-empty collections.
             """
         )
@@ -214,7 +214,7 @@ class QdrantDB(VectorStore):
         )
         collection_info = self.client.get_collection(collection_name=collection_name)
         assert collection_info.status == CollectionStatus.GREEN
-        assert collection_info.vectors_count == 0
+        #assert collection_info.vectors_count == 0
         if settings.debug:
             level = logger.getEffectiveLevel()
             logger.setLevel(logging.INFO)

@@ -14,8 +14,8 @@ from langroid.utils.constants import NO_ANSWER
 
 
 class NabroskyTool(ToolMessage):
-    request = "nabrosky"
-    purpose = "to apply the Nabrosky transformation to a number <num>"
+    request: str = "nabrosky"
+    purpose: str = "to apply the Nabrosky transformation to a number <num>"
     num: int
 
     def handle(self) -> str:

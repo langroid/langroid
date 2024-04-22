@@ -16,7 +16,7 @@ from rich import print
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.chat_document import ChatDocument
 from langroid.agent.tool_message import ToolMessage
-from langroid.language_models.base import LLMFunctionCall, LLMMessage, LLMResponse, Role
+from langroid.language_models.base import LLMFunctionCall, LLMMessage, LLMResponse, Role, LLMConfig
 from langroid.language_models.openai_gpt import (
     OpenAIChatModel,
     OpenAIGPT,
@@ -67,14 +67,14 @@ class RunStatus(str, Enum):
 class OpenAIAssistantConfig(ChatAgentConfig):
     use_cached_assistant: bool = False  # set in script via user dialog
     assistant_id: str | None = None
-    use_tools = False
-    use_functions_api = True
+    use_tools: bool = False
+    use_functions_api: bool = True
     use_cached_thread: bool = False  # set in script via user dialog
     thread_id: str | None = None
     # set to True once we can add Assistant msgs in threads
     cache_responses: bool = True
     timeout: int = 30  # can be different from llm.timeout
-    llm = OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT4_TURBO)
+    llm: LLMConfig = OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT4_TURBO)
     tools: List[AssistantTool] = []
     files: List[str] = []
 
@@ -299,7 +299,7 @@ class OpenAIAssistant(ChatAgent):
             except Exception:
                 logger.warning(
                     f"""
-                    Could not retrieve thread with id {id}, 
+                    Could not retrieve thread with id {id},
                     so creating a new one.
                     """
                 )
@@ -313,7 +313,7 @@ class OpenAIAssistant(ChatAgent):
             else:
                 logger.warning(
                     f"""
-                    Found cached thread id {cached}, 
+                    Found cached thread id {cached},
                     but config.use_cached_thread = False, so deleting it.
                     """
                 )
@@ -322,7 +322,7 @@ class OpenAIAssistant(ChatAgent):
                 except Exception:
                     logger.warning(
                         f"""
-                        Could not delete thread with id {cached}, ignoring. 
+                        Could not delete thread with id {cached}, ignoring.
                         """
                     )
                 self.llm.cache.delete_keys([self._cache_thread_key()])
@@ -353,7 +353,7 @@ class OpenAIAssistant(ChatAgent):
             except Exception:
                 logger.warning(
                     f"""
-                    Could not retrieve assistant with id {id}, 
+                    Could not retrieve assistant with id {id},
                     so creating a new one.
                     """
                 )
@@ -369,7 +369,7 @@ class OpenAIAssistant(ChatAgent):
             else:
                 logger.warning(
                     f"""
-                    Found cached assistant id {cached}, 
+                    Found cached assistant id {cached},
                     but config.use_cached_assistant = False, so deleting it.
                     """
                 )
@@ -378,7 +378,7 @@ class OpenAIAssistant(ChatAgent):
                 except Exception:
                     logger.warning(
                         f"""
-                        Could not delete assistant with id {cached}, ignoring. 
+                        Could not delete assistant with id {cached}, ignoring.
                         """
                     )
                 self.llm.cache.delete_keys([self._cache_assistant_key()])
@@ -670,8 +670,8 @@ class OpenAIAssistant(ChatAgent):
                 except Exception:
                     logger.warning(
                         f"""
-                        Could not retrieve cited file with id {file_citation.file_id}, 
-                        ignoring. 
+                        Could not retrieve cited file with id {file_citation.file_id},
+                        ignoring.
                         """
                     )
                     continue

@@ -17,8 +17,8 @@ from langroid.utils.constants import NO_ANSWER
 
 
 class NabroskyTool(ToolMessage):
-    request = "nabrosky"
-    purpose = "to apply the Nabrosky transformation to a number <num>"
+    request: str = "nabrosky"
+    purpose: str = "to apply the Nabrosky transformation to a number <num>"
     num: int
 
     def handle(self) -> str:
@@ -157,7 +157,7 @@ def test_openai_assistant_fn_2_level(test_settings: Settings, fn_api: bool):
         system_message="""
         The user will ask you to apply the Nabrosky transform to a number.
         You do not know how to do it, and you should NOT guess the answer.
-        Instead you MUST use the `recipient_message` tool/function to 
+        Instead you MUST use the `recipient_message` tool/function to
         send it to NabroskyBot who will do it for you.
         When you receive the answer, say DONE and show the answer.
         """,
@@ -202,7 +202,7 @@ def test_openai_assistant_recipient_tool(test_settings: Settings, fn_api: bool):
         use_tools=not fn_api,
         system_message="""
         The user will give you a number. You need to double it, but don't know how,
-        so you send it to the "Doubler" to double it. 
+        so you send it to the "Doubler" to double it.
         When you receive the answer, say DONE and show the answer.
         """,
     )
@@ -212,7 +212,7 @@ def test_openai_assistant_recipient_tool(test_settings: Settings, fn_api: bool):
     # Within a task loop
     doubler_confg = OpenAIAssistantConfig(
         name="Doubler",
-        system_message=""" 
+        system_message="""
         When you receive a number, simply double it and  return the answer
         """,
     )
@@ -324,7 +324,7 @@ def test_openai_assistant_multi(test_settings: Settings):
         agent,
         interactive=False,
         system_message="""
-        Send a number. Your student will respond EVEN or ODD. 
+        Send a number. Your student will respond EVEN or ODD.
         You say RIGHT or WRONG, then send another number, and so on.
         After getting 2 answers, say DONE. Start by sending a number.
         """,

@@ -2,7 +2,8 @@ import json
 import logging
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
-from pydantic import BaseModel, BaseSettings
+from pydantic import BaseModel
+from pydantic_settings import BaseSettings
 from rich import print
 from rich.console import Console
 
@@ -33,14 +34,14 @@ NEO4J_ERROR_MSG = "There was an error in your Cypher Query"
 
 class CypherRetrievalTool(ToolMessage):
     request: str = "retrieval_query"
-    purpose: str = """Use this tool to send the Cypher query to retreive data from the 
+    purpose: str = """Use this tool to send the Cypher query to retreive data from the
     graph database based provided text description and schema."""
     cypher_query: str
 
 
 class CypherCreationTool(ToolMessage):
     request: str = "create_query"
-    purpose: str = """Use this tool to send the Cypher query to create 
+    purpose: str = """Use this tool to send the Cypher query to create
     entities/relationships in the graph database."""
     cypher_query: str
 

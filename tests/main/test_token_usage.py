@@ -21,8 +21,8 @@ class _TestChatAgentConfig(ChatAgentConfig):
 
 
 class CapitalTool(ToolMessage):
-    request = "capital"
-    purpose = "To present the <capital> of an <entity> (state or country)"
+    request: str = "capital"
+    purpose: str = "To present the <capital> of an <entity> (state or country)"
     entity: str
     capital: str
 

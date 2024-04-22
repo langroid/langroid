@@ -83,10 +83,10 @@ class ToolMessage(ABC, BaseModel):
         return ex.json_example()
 
     def to_json(self) -> str:
-        return self.json(indent=4, exclude={"result", "purpose"})
+        return self.model_dump_json(indent=4, exclude={"result", "purpose"})
 
     def json_example(self) -> str:
-        return self.json(indent=4, exclude={"result", "purpose"})
+        return self.model_dump_json(indent=4, exclude={"result", "purpose"})
 
     def dict_example(self) -> Dict[str, Any]:
         return self.dict(exclude={"result", "purpose"})
@@ -128,7 +128,7 @@ class ToolMessage(ABC, BaseModel):
         return textwrap.dedent(
             f"""
             TOOL: {cls.default_value("request")}
-            PURPOSE: {cls.default_value("purpose")} 
+            PURPOSE: {cls.default_value("purpose")}
             JSON FORMAT: {
                 json.dumps(param_dict, indent=4)
             }
@@ -147,8 +147,8 @@ class ToolMessage(ABC, BaseModel):
             You have access to the following TOOLS to accomplish your task:
 
             {json_instructions}
-            
-            When one of the above TOOLs is applicable, you must express your 
+
+            When one of the above TOOLs is applicable, you must express your
             request as "TOOL:" followed by the request in the above JSON format.
             """
         )
@@ -216,7 +216,8 @@ class ToolMessage(ABC, BaseModel):
                     f"the required parameters with correct types"
                 )
 
-        parameters.pop("exclude")
+        if "exclude" in parameters:
+            parameters.pop("exclude")
         _recursive_purge_dict_key(parameters, "title")
         _recursive_purge_dict_key(parameters, "additionalProperties")
         return LLMFunctionSpec(

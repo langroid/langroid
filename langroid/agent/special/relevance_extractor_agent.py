@@ -26,10 +26,10 @@ class RelevanceExtractorAgentConfig(ChatAgentConfig):
     llm: LLMConfig | None = OpenAIGPTConfig()
     segment_length: int = 1  # number of sentences per segment
     query: str = ""  # query for relevance extraction
-    system_message = """
-    The user will give you a PASSAGE containing segments numbered as  
+    system_message: str = """
+    The user will give you a PASSAGE containing segments numbered as
     <#1#>, <#2#>, <#3#>, etc.,
-    followed by a QUERY. Extract ONLY the segment-numbers from 
+    followed by a QUERY. Extract ONLY the segment-numbers from
     the PASSAGE that are RELEVANT to the QUERY.
     Present the extracted segment-numbers using the `extract_segments` tool/function.
     """
@@ -65,7 +65,7 @@ class RelevanceExtractorAgent(ChatAgent):
         prompt = f"""
         PASSAGE:
         {self.numbered_passage}
-        
+
         QUERY: {self.config.query}
         """
         # send to LLM
@@ -95,7 +95,7 @@ class RelevanceExtractorAgent(ChatAgent):
         prompt = f"""
         PASSAGE:
         {self.numbered_passage}
-        
+
         QUERY: {self.config.query}
         """
         # send to LLM

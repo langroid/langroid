@@ -218,7 +218,7 @@ class OpenAIGPTConfig(LLMConfig):
     ollama: bool = False  # use ollama's OpenAI-compatible endpoint?
     max_output_tokens: int = 1024
     min_output_tokens: int = 1
-    use_chat_for_completion = True  # do not change this, for OpenAI models!
+    use_chat_for_completion: bool = True  # do not change this, for OpenAI models!
     timeout: int = 20
     temperature: float = 0.2
     seed: int | None = 42
@@ -380,8 +380,8 @@ class OpenAIGPT(LanguageModel):
                     self.config.formatter = formatter
                     logging.warning(
                         f"""
-                        Using completions (not chat) endpoint with HuggingFace 
-                        chat_template for {formatter} for 
+                        Using completions (not chat) endpoint with HuggingFace
+                        chat_template for {formatter} for
                         model {self.config.chat_model}
                         """
                     )
@@ -995,7 +995,7 @@ class OpenAIGPT(LanguageModel):
                 `functions` can only be specified for OpenAI chat models;
                 {self.config.chat_model} does not support function-calling.
                 Instead, please use Langroid's ToolMessages, which are equivalent.
-                In the ChatAgentConfig, set `use_functions_api=False` 
+                In the ChatAgentConfig, set `use_functions_api=False`
                 and `use_tools=True`, this will enable ToolMessages.
                 """
             )
@@ -1038,7 +1038,7 @@ class OpenAIGPT(LanguageModel):
                 `functions` can only be specified for OpenAI chat models;
                 {self.config.chat_model} does not support function-calling.
                 Instead, please use Langroid's ToolMessages, which are equivalent.
-                In the ChatAgentConfig, set `use_functions_api=False` 
+                In the ChatAgentConfig, set `use_functions_api=False`
                 and `use_tools=True`, this will enable ToolMessages.
                 """
             )

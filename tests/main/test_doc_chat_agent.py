@@ -41,17 +41,17 @@ class MyDoc(Document):
 documents: List[Document] = [
     Document(
         content="""
-        In the year 2050, GPT10 was released. 
-        
-        In 2057, paperclips were seen all over the world. 
-        
-        Global warming was solved in 2060. 
-        
-        In 2061, the world was taken over by paperclips. 
-        
+        In the year 2050, GPT10 was released.
+
+        In 2057, paperclips were seen all over the world.
+
+        Global warming was solved in 2060.
+
+        In 2061, the world was taken over by paperclips.
+
         In 2045, the Tour de France was still going on.
-        They were still using bicycles. 
-        
+        They were still using bicycles.
+
         There was one more ice age in 2040.
         """,
         metadata=DocMetaData(source="wikipedia"),
@@ -59,17 +59,17 @@ documents: List[Document] = [
     Document(
         content="""
         We are living in an alternate universe where Paris is the capital of England.
-        
-        The capital of England used to be London. 
-        
+
+        The capital of England used to be London.
+
         The capital of France used to be Paris.
-        
+
         Charlie Chaplin was a great comedian.
-        
+
         Charlie Chaplin was born in 1889.
-        
+
         Beethoven was born in 1770.
-        
+
         In the year 2050, all countries merged into Lithuania.
         """,
         metadata=DocMetaData(source="almanac"),
@@ -141,11 +141,11 @@ def vecdb(request) -> VectorStore:
 
 
 class _TestDocChatAgentConfig(DocChatAgentConfig):
-    cross_encoder_reranking_model = ""
-    n_query_rephrases = 0
+    cross_encoder_reranking_model: str = ""
+    n_query_rephrases: int = 0
     debug: bool = False
     stream: bool = True  # allow streaming where needed
-    conversation_mode = True
+    conversation_mode: bool = True
     # vecdb: VectorStoreConfig = QdrantDBConfig(
     #     collection_name="test-data",
     #     replace_collection=True,
@@ -312,12 +312,12 @@ async def test_doc_chat_followup_async(test_settings: Settings, agent, conv_mode
 # setup config for retrieval test, with n_neighbor_chunks=2
 # and parser.n_neighbor_ids = 5
 class _MyDocChatAgentConfig(DocChatAgentConfig):
-    cross_encoder_reranking_model = ""
-    n_query_rephrases = 0
-    n_neighbor_chunks = 2
+    cross_encoder_reranking_model: str = ""
+    n_query_rephrases: int = 0
+    n_neighbor_chunks: int = 2
     debug: bool = False
     stream: bool = True  # allow streaming where needed
-    conversation_mode = True
+    conversation_mode: bool = True
     vecdb: VectorStoreConfig = QdrantDBConfig(
         collection_name="test-data",
         replace_collection=True,
