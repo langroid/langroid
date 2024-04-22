@@ -246,7 +246,7 @@ class QdrantDB(VectorStore):
             logger.info(collection_info)
             logger.setLevel(level)
     
-    def get_sparse_embeddings(self, inputs):
+    def get_sparse_embeddings(self, inputs: List[str]) -> List[SparseVector]:
         if not self.config.use_sparse_embeddings: return []
         sparse_embeddings = []
         for embedding in self.sparse_model.embed(inputs, batch_size=6):
