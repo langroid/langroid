@@ -768,8 +768,6 @@ def test_doc_chat_batch(test_settings: Settings, vecdb):
 
     # attach a common vector-db to all agents
     for a in doc_agents:
-        coll = a.config.vecdb.collection_name
-        vecdb.delete_collection(coll)
         a.vecdb = vecdb
 
     docs = [
