@@ -26,7 +26,7 @@ async def main(
     debug: bool = False,
     # e.g. ollama/mistral or local/localhost:5000/v1 default is GPT4_TURBO
     model: str = "",
-    provider: str = "ddg",  # or "google", "sciphi", "metaphor"
+    provider: str = "ddg",  # or "google", "metaphor"
     nocache: bool = False,
 ):
     set_global(
@@ -75,10 +75,6 @@ async def main(
     match provider:
         case "google":
             search_tool_class = GoogleSearchTool
-        case "sciphi":
-            from langroid.agent.tools.sciphi_search_rag_tool import SciPhiSearchRAGTool
-
-            search_tool_class = SciPhiSearchRAGTool
         case "metaphor":
             from langroid.agent.tools.metaphor_search_tool import MetaphorSearchTool
 
