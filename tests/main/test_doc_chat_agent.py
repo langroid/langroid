@@ -205,7 +205,7 @@ QUERY_EXPECTED_PAIRS = [
 
 
 @pytest.mark.parametrize(
-    "vecdb", ["qdrant_cloud", "qdrant_local", "chroma", "lancedb"], indirect=True
+    "vecdb", ["qdrant_local", "qdrant_cloud", "chroma", "lancedb"], indirect=True
 )
 @pytest.mark.parametrize("query, expected", QUERY_EXPECTED_PAIRS)
 def test_doc_chat_agent_llm(test_settings: Settings, agent, query: str, expected: str):
