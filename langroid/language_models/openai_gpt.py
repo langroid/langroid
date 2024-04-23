@@ -69,7 +69,7 @@ class OpenAIChatModel(str, Enum):
     GPT3_5_TURBO = "gpt-3.5-turbo-1106"
     GPT4 = "gpt-4"
     GPT4_32K = "gpt-4-32k"
-    GPT4_TURBO = "gpt-4-turbo-preview"
+    GPT4_TURBO = "gpt-4-turbo"
 
 
 class OpenAICompletionModel(str, Enum):
