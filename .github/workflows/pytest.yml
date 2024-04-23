@@ -96,7 +96,7 @@ jobs:
 
     - name: Run tests with coverage
       run: |
-        poetry run coverage run --source=langroid -m pytest tests/main tests/extras/test_hf_embeddings.py
+        poetry run coverage run --source=langroid -m pytest -x tests/main tests/extras/test_hf_embeddings.py
         poetry run coverage report
     - name: Generate XML coverage report
       run: |
