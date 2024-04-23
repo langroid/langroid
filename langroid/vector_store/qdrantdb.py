@@ -204,6 +204,7 @@ class QdrantDB(VectorStore):
                     return
                 else:
                     logger.warning("Recreating fresh collection")
+            self.client.delete_collection(collection_name=collection_name)
         self.client.create_collection(
             collection_name=collection_name,
             vectors_config=VectorParams(
@@ -213,7 +214,7 @@ class QdrantDB(VectorStore):
         )
         collection_info = self.client.get_collection(collection_name=collection_name)
         assert collection_info.status == CollectionStatus.GREEN
-        assert collection_info.vectors_count is None
+        assert collection_info.vectors_count in [0, None]
         if settings.debug:
             level = logger.getEffectiveLevel()
             logger.setLevel(logging.INFO)
