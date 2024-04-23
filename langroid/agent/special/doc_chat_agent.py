@@ -169,7 +169,8 @@ class DocChatAgentConfig(ChatAgentConfig):
         dims=1536,
     )
 
-    vecdb: VectorStoreConfig = LanceDBConfig(
+    # Allow vecdb to be None in case we want to explicitly set it later
+    vecdb: Optional[VectorStoreConfig] = LanceDBConfig(
         collection_name="doc-chat-lancedb",
         replace_collection=True,
         storage_path=".lancedb/data/",
@@ -209,12 +210,13 @@ class DocChatAgent(ChatAgent):
 
     def clear(self) -> None:
         """Clear the document collection and the specific collection in vecdb"""
-        if self.vecdb is None:
-            raise ValueError("VecDB not set")
         self.original_docs = []
         self.original_docs_length = 0
         self.chunked_docs = []
         self.chunked_docs_clean = []
+        if self.vecdb is None:
+            logger.warning("Attempting to clear VecDB, but VecDB not set.")
+            return
         collection_name = self.vecdb.config.collection_name
         if collection_name is None:
             return

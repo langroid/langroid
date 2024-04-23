@@ -318,15 +318,7 @@ class _MyDocChatAgentConfig(DocChatAgentConfig):
     debug: bool = False
     stream: bool = True  # allow streaming where needed
     conversation_mode = True
-    vecdb: VectorStoreConfig = QdrantDBConfig(
-        collection_name="test-data",
-        replace_collection=True,
-        storage_path=":memory:",
-        embedding=OpenAIEmbeddingsConfig(
-            model_name="text-embedding-ada-002",
-            dims=1536,
-        ),
-    )
+    vecdb: VectorStoreConfig | None = None
 
     llm: OpenAIGPTConfig = OpenAIGPTConfig(
         stream=True,
