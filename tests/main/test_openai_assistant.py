@@ -6,6 +6,7 @@ from langroid.agent.openai_assistant import (
     AssistantTool,
     OpenAIAssistant,
     OpenAIAssistantConfig,
+    ToolType,
 )
 from langroid.agent.task import Task
 from langroid.agent.tool_message import ToolMessage
@@ -258,7 +259,7 @@ def test_openai_assistant_retrieval(test_settings: Settings):
         filename = f.name
 
     # must enable retrieval first, then add file
-    agent.add_assistant_tools([AssistantTool(type="retrieval")])
+    agent.add_assistant_tools([AssistantTool(type=ToolType.RETRIEVAL)])
     agent.add_assistant_files([filename])
 
     response = agent.llm_response("where was Vlad Nabrosky born?")

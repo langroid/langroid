@@ -8,6 +8,10 @@ from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple, Type, cast, no_type_check
 
 from openai.types.beta import Assistant, Thread
+from openai.types.beta.assistant_update_params import (
+    ToolResources,
+    ToolResourcesCodeInterpreter,
+)
 from openai.types.beta.threads import Message, Run
 from openai.types.beta.threads.runs import RunStep
 from pydantic import BaseModel
@@ -29,7 +33,7 @@ logger = logging.getLogger(__name__)
 
 
 class ToolType(str, Enum):
-    RETRIEVAL = "retrieval"
+    RETRIEVAL = "file_search"
     CODE_INTERPRETER = "code_interpreter"
     FUNCTION = "function"
 
@@ -127,7 +131,11 @@ class OpenAIAssistant(ChatAgent):
         self.config.files = list(set(self.config.files + files))
         self.assistant = self.assistants.update(
             self.assistant.id,
-            file_ids=[f.id for f in self.files],
+            tool_resources=ToolResources(
+                code_interpreter=ToolResourcesCodeInterpreter(
+                    file_ids=[f.id for f in self.files],
+                ),
+            ),
         )
 
     def add_assistant_tools(self, tools: List[AssistantTool]) -> None:
