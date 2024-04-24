@@ -31,6 +31,7 @@ def run_batch_task_gen(
     turns: int = -1,
     message: Optional[str] = None,
     handle_exceptions: bool = False,
+    max_cost: float = 0.0,
 ) -> list[U]:
     """
     Generate and run copies of a task async/concurrently one per item in `items` list.
@@ -50,6 +51,7 @@ def run_batch_task_gen(
         turns (int): number of turns to run, -1 for infinite
         message (Optional[str]): optionally overrides the console status messages
         handle_exceptions: bool: Whether to replace exceptions with outputs of None
+        max_cost: float: maximum cost to run the task (default 0.0 for unlimited)
 
     Returns:
         list[Any]: list of final results
@@ -62,7 +64,7 @@ def run_batch_task_gen(
             task_i.agent.llm.set_stream(False)
         task_i.agent.config.show_stats = False
 
-        result = await task_i.run_async(input, turns=turns)
+        result = await task_i.run_async(input, turns=turns, max_cost=max_cost)
         return result
 
     async def _do_all(
@@ -120,6 +122,7 @@ def run_batch_tasks(
     sequential: bool = True,
     batch_size: Optional[int] = None,
     turns: int = -1,
+    max_cost: float = 0.0,
 ) -> List[U]:
     """
     Run copies of `task` async/concurrently one per item in `items` list.
@@ -137,6 +140,7 @@ def run_batch_tasks(
         batch_size (Optional[int]): The number of tasks to run at a time,
             if None, unbatched
         turns (int): number of turns to run, -1 for infinite
+        max_cost: float: maximum cost to run the task (default 0.0 for unlimited)
 
     Returns:
         list[Any]: list of final results
@@ -151,6 +155,7 @@ def run_batch_tasks(
         batch_size,
         turns,
         message,
+        max_cost=max_cost,
     )
 
 
