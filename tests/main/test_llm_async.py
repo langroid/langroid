@@ -1,5 +1,6 @@
 import asyncio
 
+import openai
 import pytest
 
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
@@ -67,6 +68,19 @@ async def test_openai_gpt_async(test_settings: Settings, streaming, country, cap
     response = await mdl.achat(messages=messages, max_tokens=10)
     assert capital in response.message
     assert response.cached
+
+    # pass intentional bad msg to test error handling
+    messages = [
+        LLMMessage(
+            role=Role.FUNCTION,
+            content="Hello!",
+        ),
+    ]
+
+    try:
+        _ = await mdl.achat(messages=messages, max_tokens=10)
+    except Exception as e:
+        assert isinstance(e, openai.BadRequestError)
 
 
 @pytest.mark.asyncio
