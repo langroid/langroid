@@ -90,6 +90,7 @@ class Task:
         max_stalled_steps: int = 5,
         done_if_no_response: List[Responder] = [],
         done_if_response: List[Responder] = [],
+        max_cost: float = 0,
     ):
         """
         A task to be performed by an agent.
@@ -138,6 +139,7 @@ class Task:
                 response from any of these responders. Default is empty list.
             done_if_response (List[Responder]): consider task done if NON-NULL
                 response from any of these responders. Default is empty list.
+            max_cost (float): maximum USD cost of the task. Default is 0 (= no limit).
         """
         if agent is None:
             agent = ChatAgent()
@@ -171,6 +173,7 @@ class Task:
             if user_message:
                 agent.set_user_message(user_message)
 
+        self.max_cost = max_cost
         self.logger: None | RichFileLogger = None
         self.tsv_logger: None | logging.Logger = None
         self.color_log: bool = False if settings.notebook else True
@@ -1050,6 +1053,16 @@ class Task:
                 f"Task {self.name} stuck for {self.max_stalled_steps} steps; exiting."
             )
             return True
+
+        if self.max_cost > 0 and self.agent.llm is not None:
+            try:
+                if self.agent.llm.tot_tokens_cost()[1] > self.max_cost:
+                    logger.warning(
+                        f"Task {self.name} exceeded max cost {self.max_cost}; exiting."
+                    )
+                    return True
+            except Exception:
+                pass
 
         return (
             # no valid response from any entity/agent in current turn

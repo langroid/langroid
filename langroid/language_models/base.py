@@ -449,6 +449,18 @@ class LanguageModel(ABC):
             s += f"{model}: {counter}\n"
         return s
 
+    @classmethod
+    def tot_tokens_cost(cls) -> Tuple[int, float]:
+        """
+        Return total tokens used and total cost across all models.
+        """
+        total_tokens = 0
+        total_cost = 0.0
+        for counter in cls.usage_cost_dict.values():
+            total_tokens += counter.total_tokens
+            total_cost += counter.cost
+        return total_tokens, total_cost
+
     def followup_to_standalone(
         self, chat_history: List[Tuple[str, str]], question: str
     ) -> str:

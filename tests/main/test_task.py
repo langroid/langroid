@@ -16,6 +16,32 @@ from langroid.utils.configuration import Settings, set_global
 from langroid.utils.constants import DONE, PASS
 
 
+def test_task_cost(test_settings: Settings):
+    set_global(test_settings)
+    set_global(Settings(cache=False))
+    agent = ChatAgent(ChatAgentConfig(name="Test"))
+    agent.llm.reset_usage_cost()
+    task = Task(
+        agent,
+        interactive=False,
+        single_round=False,
+        system_message="User will send you a number. Repeat the number.",
+        max_cost=0.0005,
+    )
+    sub_agent = ChatAgent(ChatAgentConfig(name="Sub"))
+    sub_agent.llm.reset_usage_cost()
+    sub = Task(
+        sub_agent,
+        interactive=False,
+        single_round=True,
+        system_message="User will send you a number. Return its double",
+        max_cost=0.0,  # no limit
+    )
+    task.add_sub_task(sub)
+    response = task.run("4", turns=10)
+    assert response is not None
+
+
 def test_task_empty_response(test_settings: Settings):
     set_global(test_settings)
     agent = ChatAgent(ChatAgentConfig(name="Test"))
