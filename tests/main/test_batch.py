@@ -86,6 +86,7 @@ def test_task_batch_turns(
     cfg = _TestChatAgentConfig()
 
     agent = _TestChatAgent(cfg)
+    agent.llm.reset_usage_cost()
     task = Task(
         agent,
         name="Test",
@@ -106,6 +107,7 @@ def test_task_batch_turns(
         sequential=sequential,
         batch_size=batch_size,
         turns=2,
+        max_cost=0.005,
     )
 
     # expected_answers are simple numbers, but
