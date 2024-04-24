@@ -1022,7 +1022,6 @@ class OpenAIGPT(LanguageModel):
             # capture exceptions not handled by retry, so we don't crash
             logging.error(friendly_error(e, "Error in OpenAIGPT.chat: "))
             raise e
-            # return LLMResponse(message=NO_ANSWER, cached=False)
 
     async def achat(
         self,
@@ -1076,7 +1075,6 @@ class OpenAIGPT(LanguageModel):
             # capture exceptions not handled by retry, so we don't crash
             logging.error(friendly_error(e, "Error in OpenAIGPT.achat: "))
             raise e
-            # return LLMResponse(message=NO_ANSWER, cached=False)
 
     @retry_with_exponential_backoff
     def _chat_completions_with_backoff(self, **kwargs):  # type: ignore
