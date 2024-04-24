@@ -49,7 +49,7 @@ from langroid.language_models.utils import (
     retry_with_exponential_backoff,
 )
 from langroid.utils.configuration import settings
-from langroid.utils.constants import NO_ANSWER, Colors
+from langroid.utils.constants import Colors
 from langroid.utils.system import friendly_error
 
 logging.getLogger("openai").setLevel(logging.ERROR)
@@ -847,9 +847,9 @@ class OpenAIGPT(LanguageModel):
         try:
             return self._generate(prompt, max_tokens)
         except Exception as e:
-            # capture exceptions not handled by retry, so we don't crash
+            # log and re-raise exception
             logging.error(friendly_error(e, "Error in OpenAIGPT.generate: "))
-            return LLMResponse(message=NO_ANSWER, cached=False)
+            raise e
 
     def _generate(self, prompt: str, max_tokens: int) -> LLMResponse:
         if self.config.use_chat_for_completion:
@@ -917,9 +917,9 @@ class OpenAIGPT(LanguageModel):
         try:
             return await self._agenerate(prompt, max_tokens)
         except Exception as e:
-            # capture exceptions not handled by retry, so we don't crash
+            # log and re-raise exception
             logging.error(friendly_error(e, "Error in OpenAIGPT.agenerate: "))
-            return LLMResponse(message=NO_ANSWER, cached=False)
+            raise e
 
     async def _agenerate(self, prompt: str, max_tokens: int) -> LLMResponse:
         # note we typically will not have self.config.stream = True
@@ -1019,9 +1019,9 @@ class OpenAIGPT(LanguageModel):
         try:
             return self._chat(messages, max_tokens, functions, function_call)
         except Exception as e:
-            # capture exceptions not handled by retry, so we don't crash
+            # log and re-raise exception
             logging.error(friendly_error(e, "Error in OpenAIGPT.chat: "))
-            return LLMResponse(message=NO_ANSWER, cached=False)
+            raise e
 
     async def achat(
         self,
@@ -1072,9 +1072,9 @@ class OpenAIGPT(LanguageModel):
             result = await self._achat(messages, max_tokens, functions, function_call)
             return result
         except Exception as e:
-            # capture exceptions not handled by retry, so we don't crash
+            # log and re-raise exception
             logging.error(friendly_error(e, "Error in OpenAIGPT.achat: "))
-            return LLMResponse(message=NO_ANSWER, cached=False)
+            raise e
 
     @retry_with_exponential_backoff
     def _chat_completions_with_backoff(self, **kwargs):  # type: ignore
