@@ -90,7 +90,6 @@ class Task:
         max_stalled_steps: int = 5,
         done_if_no_response: List[Responder] = [],
         done_if_response: List[Responder] = [],
-        max_cost: float = 0,
     ):
         """
         A task to be performed by an agent.
@@ -139,7 +138,6 @@ class Task:
                 response from any of these responders. Default is empty list.
             done_if_response (List[Responder]): consider task done if NON-NULL
                 response from any of these responders. Default is empty list.
-            max_cost (float): maximum USD cost of the task. Default is 0 (= no limit).
         """
         if agent is None:
             agent = ChatAgent()
@@ -172,8 +170,7 @@ class Task:
                 agent.set_system_message(system_message)
             if user_message:
                 agent.set_user_message(user_message)
-
-        self.max_cost = max_cost
+        self.max_cost: float = 0
         self.logger: None | RichFileLogger = None
         self.tsv_logger: None | logging.Logger = None
         self.color_log: bool = False if settings.notebook else True
@@ -378,11 +375,13 @@ class Task:
         msg: Optional[str | ChatDocument] = None,
         turns: int = -1,
         caller: None | Task = None,
+        max_cost: float = 0,
     ) -> Optional[ChatDocument]:
         """Synchronous version of `run_async()`.
         See `run_async()` for details."""
         self.task_progress = False
         self.n_stalled_steps = 0
+        self.max_cost = max_cost
         assert (
             msg is None or isinstance(msg, str) or isinstance(msg, ChatDocument)
         ), f"msg arg in Task.run() must be None, str, or ChatDocument, not {type(msg)}"
@@ -421,6 +420,7 @@ class Task:
         msg: Optional[str | ChatDocument] = None,
         turns: int = -1,
         caller: None | Task = None,
+        max_cost: float = 0,
     ) -> Optional[ChatDocument]:
         """
         Loop over `step()` until task is considered done or `turns` is reached.
@@ -437,6 +437,7 @@ class Task:
             turns (int): number of turns to run the task for;
                 default is -1, which means run until task is done.
             caller (Task|None): the calling task, if any
+            max_cost (float): maximum cost allowed for the task (default 0 -> no limit)
 
         Returns:
             Optional[ChatDocument]: valid result of the task.
@@ -447,6 +448,8 @@ class Task:
         # message can be considered to be from the USER
         # (from the POV of this agent's LLM).
         self.task_progress = False
+        self.n_stalled_steps = 0
+        self.max_cost = max_cost
         if (
             isinstance(msg, ChatDocument)
             and msg.metadata.recipient != ""
@@ -822,6 +825,7 @@ class Task:
                 self.pending_message,
                 turns=actual_turns,
                 caller=self,
+                max_cost=self.max_cost,
             )
             result_str = str(ChatDocument.to_LLMMessage(result))
             maybe_tool = len(extract_top_level_json(result_str)) > 0
