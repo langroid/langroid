@@ -117,7 +117,7 @@ class DocChatAgentConfig(ChatAgentConfig):
     )
     rerank_diversity: bool = True  # rerank to maximize diversity?
     rerank_periphery: bool = True  # rerank to avoid Lost In the Middle effect?
-    rerank_after_context_window: bool = True  # rerank after adding context window?
+    rerank_after_adding_context: bool = True  # rerank after adding context window?
     embed_batch_size: int = 500  # get embedding of at most this many at a time
     cache: bool = True  # cache results
     debug: bool = False
@@ -1111,7 +1111,7 @@ class DocChatAgent(ChatAgent):
         if len(passages) == 0:
             return []
 
-        if self.config.rerank_after_context_window:
+        if self.config.rerank_after_adding_context:
             passages_scores = [(p, 0.0) for p in passages]
             passages_scores = self.add_context_window(passages_scores)
             passages = [p for p, _ in passages_scores]
@@ -1131,7 +1131,7 @@ class DocChatAgent(ChatAgent):
             # (see Lost In the Middle issue).
             passages = self.rerank_to_periphery(passages)
 
-        if not self.config.rerank_after_context_window:
+        if not self.config.rerank_after_adding_context:
             passages_scores = [(p, 0.0) for p in passages]
             passages_scores = self.add_context_window(passages_scores)
             passages = [p for p, _ in passages_scores]
