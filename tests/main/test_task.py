@@ -17,6 +17,8 @@ from langroid.utils.constants import DONE, PASS
 
 
 def test_task_cost(test_settings: Settings):
+    """Test that max_cost, max_tokens are respected by Task.run()"""
+
     set_global(test_settings)
     settings.cache = False
     agent = ChatAgent(ChatAgentConfig(name="Test"))
@@ -36,7 +38,7 @@ def test_task_cost(test_settings: Settings):
         system_message="User will send you a number. Return its double",
     )
     task.add_sub_task(sub)
-    response = task.run("4", turns=10, max_cost=0.0005)
+    response = task.run("4", turns=10, max_cost=0.0005, max_tokens=100)
     settings.cache = True
     assert response is not None
 

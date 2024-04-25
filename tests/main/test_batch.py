@@ -81,7 +81,10 @@ class _TestChatAgent(ChatAgent):
 def test_task_batch_turns(
     test_settings: Settings, sequential: bool, batch_size: Optional[int]
 ):
-    """Test if `turns` param works as expected"""
+    """Test if `turns`, `max_cost`, `max_tokens` params work as expected.
+    The latter two are not really tested (since we need to turn off caching etc)
+    we just make sure they don't break anything.
+    """
     set_global(test_settings)
     cfg = _TestChatAgentConfig()
 
@@ -108,6 +111,7 @@ def test_task_batch_turns(
         batch_size=batch_size,
         turns=2,
         max_cost=0.005,
+        max_tokens=100,
     )
 
     # expected_answers are simple numbers, but
