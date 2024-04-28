@@ -1057,6 +1057,7 @@ class Task:
                 Not used here, but could be used by derived classes.
         Returns:
             bool: True if task is done, False otherwise
+            StatusCode: status code indicating why task is done
         """
         result = result or self.pending_message
         user_quit = (
