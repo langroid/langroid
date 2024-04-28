@@ -14,7 +14,7 @@ from .table_chat_agent import (
     dataframe_summary,
     TableChatAgent,
     TableChatAgentConfig,
-    RunCodeTool,
+    PandasEvalTool,
 )
 from . import sql
 from . import relevance_extractor_agent
@@ -38,7 +38,7 @@ __all__ = [
     "dataframe_summary",
     "TableChatAgent",
     "TableChatAgentConfig",
-    "RunCodeTool",
+    "PandasEvalTool",
     "sql",
     "relevance_extractor_agent",
     "doc_chat_agent",
