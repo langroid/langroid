@@ -81,7 +81,6 @@ async def test_task_kill(test_settings: Settings):
     assert result.metadata.status == lr.StatusCode.KILL
 
 
-
 def test_task_empty_response(test_settings: Settings):
     set_global(test_settings)
     agent = ChatAgent(ChatAgentConfig(name="Test"))

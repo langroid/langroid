@@ -84,6 +84,7 @@ class Task:
 
     # class variable called `cache` that is a RedisCache object
     cache: RedisCache = RedisCache(RedisCacheConfig(fake=False))
+
     def __init__(
         self,
         agent: Optional[Agent] = None,
@@ -331,7 +332,7 @@ class Task:
         self._cache_session_store("kill", "0")
 
     @classmethod
-    def kill_session(cls, session_id=""):
+    def kill_session(cls, session_id: str = "") -> None:
         """
         Kill the current session.
         """
