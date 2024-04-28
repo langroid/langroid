@@ -2,6 +2,7 @@
 Other tests for Task are in test_chat_agent.py
 """
 
+import asyncio
 from typing import List
 
 import pytest
@@ -45,6 +46,27 @@ def test_task_cost(test_settings: Settings):
         lr.StatusCode.MAX_COST,
         lr.StatusCode.MAX_TOKENS,
     ]
+
+
+@pytest.mark.asyncio
+async def test_task_kill(test_settings: Settings):
+    """Test that Task.run() can be killed"""
+    set_global(test_settings)
+    agent = ChatAgent(ChatAgentConfig(name="Test"))
+    task = Task(
+        agent,
+        interactive=False,
+        single_round=False,
+        default_human_response="double your last number",
+        system_message="User will send you a number. Return its double.",
+    )
+    # start task
+    async_task = asyncio.create_task(task.run_async("2", turns=20))
+    # sleep a bit then kill it
+    await asyncio.sleep(1)
+    task.kill()
+    result: lr.ChatDocument = await async_task
+    assert result.metadata.status == lr.StatusCode.KILL
 
 
 def test_task_empty_response(test_settings: Settings):
