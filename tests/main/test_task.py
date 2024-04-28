@@ -57,13 +57,15 @@ async def test_task_kill(test_settings: Settings):
         agent,
         interactive=False,
         single_round=False,
-        default_human_response="double your last number",
-        system_message="User will send you a number. Return its double.",
+        default_human_response="Add 3 to the last number",
+        system_message="generate a single number as instructed by user.",
     )
     # start task
-    async_task = asyncio.create_task(task.run_async("2", turns=20))
+    async_task = asyncio.create_task(
+        task.run_async("3+1=?", turns=20, session_id="mysession")
+    )
     # sleep a bit then kill it
-    await asyncio.sleep(1)
+    await asyncio.sleep(2)
     task.kill()
     result: lr.ChatDocument = await async_task
     assert result.metadata.status == lr.StatusCode.KILL
