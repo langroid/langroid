@@ -203,7 +203,6 @@ class TableChatAgent(ChatAgent):
         # Temporarily redirect standard output to our string-based I/O stream
         sys.stdout = code_out
 
-
         # Evaluate the last line and get the result
         try:
             eval_result = pd.eval(exprn, local_dict=local_vars)
