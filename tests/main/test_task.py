@@ -62,13 +62,24 @@ async def test_task_kill(test_settings: Settings):
     )
     # start task
     async_task = asyncio.create_task(
-        task.run_async("3+1=?", turns=20, session_id="mysession")
+        task.run_async("3+1=?", turns=50, session_id="mysession")
     )
     # sleep a bit then kill it
-    await asyncio.sleep(2)
+    await asyncio.sleep(0.5)
     task.kill()
     result: lr.ChatDocument = await async_task
     assert result.metadata.status == lr.StatusCode.KILL
+
+    # test killing via static method
+    async_task = asyncio.create_task(
+        task.run_async("3+1=?", turns=50, session_id="mysession")
+    )
+    # sleep a bit then kill it
+    await asyncio.sleep(0.5)
+    Task.kill_session("mysession")
+    result: lr.ChatDocument = await async_task
+    assert result.metadata.status == lr.StatusCode.KILL
+
 
 
 def test_task_empty_response(test_settings: Settings):

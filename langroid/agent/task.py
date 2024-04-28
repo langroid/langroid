@@ -82,6 +82,8 @@ class Task:
     the value of `result()`, which is the final result of the task.
     """
 
+    # class variable called `cache` that is a RedisCache object
+    cache: RedisCache = RedisCache(RedisCacheConfig(fake=False))
     def __init__(
         self,
         agent: Optional[Agent] = None,
@@ -150,7 +152,6 @@ class Task:
         """
         if agent is None:
             agent = ChatAgent()
-
         self.callbacks = SimpleNamespace(
             show_subtask_response=noop_fn,
             set_parent_agent=noop_fn,
@@ -182,7 +183,6 @@ class Task:
         self.max_cost: float = 0
         self.max_tokens: int = 0
         self.session_id: str = ""
-        self.cache = RedisCache(RedisCacheConfig(fake=False))
         self.logger: None | RichFileLogger = None
         self.tsv_logger: None | logging.Logger = None
         self.color_log: bool = False if settings.notebook else True
@@ -324,11 +324,19 @@ class Task:
         """
         return self._cache_session_lookup("kill") == "1"
 
-    def _init_kill(self) -> None:
+    def _set_alive(self) -> None:
         """
         Initialize the kill status of the current session.
         """
         self._cache_session_store("kill", "0")
+
+    @classmethod
+    def kill_session(cls, session_id=""):
+        """
+        Kill the current session.
+        """
+        session_id_kill_key = f"{session_id}:kill"
+        cls.cache.store(session_id_kill_key, "1")
 
     def kill(self) -> None:
         """
@@ -438,7 +446,7 @@ class Task:
         self.max_cost = max_cost
         self.max_tokens = max_tokens
         self.session_id = session_id
-        self._init_kill()
+        self._set_alive()
 
         assert (
             msg is None or isinstance(msg, str) or isinstance(msg, ChatDocument)
@@ -518,7 +526,7 @@ class Task:
         self.max_cost = max_cost
         self.max_tokens = max_tokens
         self.session_id = session_id
-        self._init_kill()
+        self._set_alive()
 
         if (
             isinstance(msg, ChatDocument)
