@@ -1,4 +1,5 @@
 import json
+from enum import Enum
 from typing import List, Optional, Union
 
 from pydantic import BaseModel, Extra
@@ -23,6 +24,22 @@ class ChatDocAttachment(BaseModel):
         extra = Extra.allow
 
 
+class StatusCode(str, Enum):
+    """Codes meant to be returned by task.run()"""
+
+    OK = "OK"
+    ERROR = "ERROR"
+    DONE = "DONE"
+    STALLED = "STALLED"
+    KILL = "KILL"
+    MAX_TURNS = "MAX_TURNS"
+    MAX_COST = "MAX_COST"
+    MAX_TOKENS = "MAX_TOKENS"
+    TIMEOUT = "TIMEOUT"
+    NO_ANSWER = "NO_ANSWER"
+    USER_QUIT = "USER_QUIT"
+
+
 class ChatDocMetaData(DocMetaData):
     parent: Optional["ChatDocument"] = None
     sender: Entity
@@ -35,6 +52,7 @@ class ChatDocMetaData(DocMetaData):
     usage: Optional[LLMTokenUsage]
     cached: bool = False
     displayed: bool = False
+    status: Optional[StatusCode] = None
 
 
 class ChatDocLoggerFields(BaseModel):

@@ -27,6 +27,7 @@ from langroid.agent.chat_document import (
     ChatDocLoggerFields,
     ChatDocMetaData,
     ChatDocument,
+    StatusCode,
 )
 from langroid.mytypes import Entity
 from langroid.parsing.parse_json import extract_top_level_json
@@ -406,15 +407,19 @@ class Task:
         i = 0
         while True:
             self.step()
-            if self.done():
+            done, status = self.done()
+            if done:
                 if self._level == 0 and not settings.quiet:
                     print("[magenta]Bye, hope this was useful!")
                 break
             i += 1
             if turns > 0 and i >= turns:
+                status = StatusCode.MAX_TURNS
                 break
 
         final_result = self.result()
+        if final_result is not None:
+            final_result.metadata.status = status
         self._post_run_loop()
         return final_result
 
@@ -473,15 +478,19 @@ class Task:
         i = 0
         while True:
             await self.step_async()
-            if self.done():
+            done, status = self.done()
+            if done:
                 if self._level == 0 and not settings.quiet:
                     print("[magenta]Bye, hope this was useful!")
                 break
             i += 1
             if turns > 0 and i >= turns:
+                status = StatusCode.MAX_TURNS
                 break
 
         final_result = self.result()
+        if final_result is not None:
+            final_result.metadata.status = status
         self._post_run_loop()
         return final_result
 
@@ -942,6 +951,7 @@ class Task:
         recipient = result_msg.metadata.recipient if result_msg else None
         responder = result_msg.metadata.parent_responder if result_msg else None
         tool_ids = result_msg.metadata.tool_ids if result_msg else []
+        status = result_msg.metadata.status if result_msg else None
 
         # regardless of which entity actually produced the result,
         # when we return the result, we set entity to USER
@@ -954,6 +964,7 @@ class Task:
                 source=Entity.USER,
                 sender=Entity.USER,
                 block=block,
+                status=status,
                 parent_responder=responder,
                 sender_name=self.name,
                 recipient=recipient,
@@ -1036,7 +1047,7 @@ class Task:
 
     def done(
         self, result: ChatDocument | None = None, r: Responder | None = None
-    ) -> bool:
+    ) -> Tuple[bool, StatusCode]:
         """
         Check if task is done. This is the default behavior.
         Derived classes can override this.
@@ -1055,17 +1066,17 @@ class Task:
         )
         if self._level == 0 and self.only_user_quits_root:
             # for top-level task, only user can quit out
-            return user_quit
+            return (user_quit, StatusCode.USER_QUIT if user_quit else StatusCode.OK)
 
         if self.is_done:
-            return True
+            return (True, StatusCode.DONE)
 
         if self.n_stalled_steps >= self.max_stalled_steps:
             # we are stuck, so bail to avoid infinite loop
             logger.warning(
                 f"Task {self.name} stuck for {self.max_stalled_steps} steps; exiting."
             )
-            return True
+            return (True, StatusCode.STALLED)
 
         if self.max_cost > 0 and self.agent.llm is not None:
             try:
@@ -1073,7 +1084,7 @@ class Task:
                     logger.warning(
                         f"Task {self.name} cost exceeded {self.max_cost}; exiting."
                     )
-                    return True
+                    return (True, StatusCode.MAX_COST)
             except Exception:
                 pass
 
@@ -1083,10 +1094,10 @@ class Task:
                     logger.warning(
                         f"Task {self.name} uses > {self.max_tokens} tokens; exiting."
                     )
-                    return True
+                    return (True, StatusCode.MAX_TOKENS)
             except Exception:
                 pass
-        return (
+        final = (
             # no valid response from any entity/agent in current turn
             result is None
             # An entity decided task is done
@@ -1103,6 +1114,7 @@ class Task:
             # )
             or user_quit
         )
+        return (final, StatusCode.OK)
 
     def valid(
         self,
@@ -1120,7 +1132,7 @@ class Task:
 
         # if task would be considered done given responder r's `result`,
         # then consider the result valid.
-        if result is not None and self.done(result, r):
+        if result is not None and self.done(result, r)[0]:
             return True
         return (
             result is not None
