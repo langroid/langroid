@@ -29,6 +29,7 @@ from langroid.agent.chat_document import (
     ChatDocument,
     StatusCode,
 )
+from langroid.cachedb.redis_cachedb import RedisCache, RedisCacheConfig
 from langroid.mytypes import Entity
 from langroid.parsing.parse_json import extract_top_level_json
 from langroid.utils.configuration import settings
@@ -180,6 +181,8 @@ class Task:
                 agent.set_user_message(user_message)
         self.max_cost: float = 0
         self.max_tokens: int = 0
+        self.session_id: str = ""
+        self.cache = RedisCache(RedisCacheConfig(fake=False))
         self.logger: None | RichFileLogger = None
         self.tsv_logger: None | logging.Logger = None
         self.color_log: bool = False if settings.notebook else True
@@ -293,6 +296,46 @@ class Task:
     def __str__(self) -> str:
         return f"{self.name}"
 
+    def _cache_session_store(self, key: str, value: str) -> None:
+        """
+        Cache a key-value pair for the current session.
+        E.g. key = "kill", value = "1"
+        """
+        try:
+            self.cache.store(f"{self.session_id}:{key}", value)
+        except Exception as e:
+            logging.error(f"Error in Task._cache_session_store: {e}")
+
+    def _cache_session_lookup(self, key: str) -> Dict[str, Any] | str | None:
+        """
+        Retrieve a value from the cache for the current session.
+        """
+        session_id_key = f"{self.session_id}:{key}"
+        try:
+            cached_val = self.cache.retrieve(session_id_key)
+        except Exception as e:
+            logging.error(f"Error in Task._cache_session_lookup: {e}")
+            return None
+        return cached_val
+
+    def _is_kill(self) -> bool:
+        """
+        Check if the current session is killed.
+        """
+        return self._cache_session_lookup("kill") == "1"
+
+    def _init_kill(self) -> None:
+        """
+        Initialize the kill status of the current session.
+        """
+        self._cache_session_store("kill", "0")
+
+    def kill(self) -> None:
+        """
+        Kill the task run associated with the current session.
+        """
+        self._cache_session_store("kill", "1")
+
     @property
     def _level(self) -> int:
         if self.caller is None:
@@ -386,6 +429,7 @@ class Task:
         caller: None | Task = None,
         max_cost: float = 0,
         max_tokens: int = 0,
+        session_id: str = "",
     ) -> Optional[ChatDocument]:
         """Synchronous version of `run_async()`.
         See `run_async()` for details."""
@@ -393,6 +437,9 @@ class Task:
         self.n_stalled_steps = 0
         self.max_cost = max_cost
         self.max_tokens = max_tokens
+        self.session_id = session_id
+        self._init_kill()
+
         assert (
             msg is None or isinstance(msg, str) or isinstance(msg, ChatDocument)
         ), f"msg arg in Task.run() must be None, str, or ChatDocument, not {type(msg)}"
@@ -437,6 +484,7 @@ class Task:
         caller: None | Task = None,
         max_cost: float = 0,
         max_tokens: int = 0,
+        session_id: str = "",
     ) -> Optional[ChatDocument]:
         """
         Loop over `step()` until task is considered done or `turns` is reached.
@@ -455,6 +503,7 @@ class Task:
             caller (Task|None): the calling task, if any
             max_cost (float): max cost allowed for the task (default 0 -> no limit)
             max_tokens (int): max tokens allowed for the task (default 0 -> no limit)
+            session_id (str): session id for the task
 
         Returns:
             Optional[ChatDocument]: valid result of the task.
@@ -468,6 +517,9 @@ class Task:
         self.n_stalled_steps = 0
         self.max_cost = max_cost
         self.max_tokens = max_tokens
+        self.session_id = session_id
+        self._init_kill()
+
         if (
             isinstance(msg, ChatDocument)
             and msg.metadata.recipient != ""
@@ -1066,6 +1118,8 @@ class Task:
             bool: True if task is done, False otherwise
             StatusCode: status code indicating why task is done
         """
+        if self._is_kill():
+            return (True, StatusCode.KILL)
         result = result or self.pending_message
         user_quit = (
             result is not None
