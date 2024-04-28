@@ -27,6 +27,7 @@ from .agent.batch import (
 )
 
 from .agent.chat_document import (
+    StatusCode,
     ChatDocument,
     ChatDocMetaData,
 )
@@ -77,6 +78,7 @@ __all__ = [
     "AgentConfig",
     "ChatAgent",
     "ChatAgentConfig",
+    "StatusCode",
     "ChatDocument",
     "ChatDocMetaData",
     "Task",

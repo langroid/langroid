@@ -53,6 +53,7 @@ def run_batch_task_gen(
         message (Optional[str]): optionally overrides the console status messages
         handle_exceptions: bool: Whether to replace exceptions with outputs of None
         max_cost: float: maximum cost to run the task (default 0.0 for unlimited)
+        max_tokens: int: maximum token usage (in and out) (default 0 for unlimited)
 
 
     Returns:
