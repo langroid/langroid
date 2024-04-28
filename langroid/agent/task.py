@@ -32,7 +32,14 @@ from langroid.agent.chat_document import (
 from langroid.mytypes import Entity
 from langroid.parsing.parse_json import extract_top_level_json
 from langroid.utils.configuration import settings
-from langroid.utils.constants import DONE, NO_ANSWER, PASS, PASS_TO, SEND_TO, USER_QUIT
+from langroid.utils.constants import (
+    DONE,
+    NO_ANSWER,
+    PASS,
+    PASS_TO,
+    SEND_TO,
+    USER_QUIT_STRINGS,
+)
 from langroid.utils.logging import RichFileLogger, setup_file_logger
 
 logger = logging.getLogger(__name__)
@@ -1062,7 +1069,7 @@ class Task:
         result = result or self.pending_message
         user_quit = (
             result is not None
-            and result.content in USER_QUIT
+            and result.content in USER_QUIT_STRINGS
             and result.metadata.sender == Entity.USER
         )
         if self._level == 0 and self.only_user_quits_root:

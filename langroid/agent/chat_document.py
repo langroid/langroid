@@ -25,12 +25,13 @@ class ChatDocAttachment(BaseModel):
 
 
 class StatusCode(str, Enum):
-    """Codes meant to be returned by task.run()"""
+    """Codes meant to be returned by task.run(). Some are not used yet."""
 
     OK = "OK"
     ERROR = "ERROR"
     DONE = "DONE"
     STALLED = "STALLED"
+    INF_LOOP = "INF_LOOP"
     KILL = "KILL"
     MAX_TURNS = "MAX_TURNS"
     MAX_COST = "MAX_COST"
