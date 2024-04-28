@@ -334,7 +334,7 @@ class Task:
     @classmethod
     def kill_session(cls, session_id: str = "") -> None:
         """
-        Kill the current session.
+        Kill the session with the given session_id.
         """
         session_id_kill_key = f"{session_id}:kill"
         cls.cache.store(session_id_kill_key, "1")
