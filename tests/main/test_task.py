@@ -41,6 +41,10 @@ def test_task_cost(test_settings: Settings):
     response = task.run("4", turns=10, max_cost=0.0005, max_tokens=100)
     settings.cache = True
     assert response is not None
+    assert response.metadata.status in [
+        lr.StatusCode.MAX_COST,
+        lr.StatusCode.MAX_TOKENS,
+    ]
 
 
 def test_task_empty_response(test_settings: Settings):
