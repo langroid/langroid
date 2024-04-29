@@ -77,6 +77,8 @@ In this scenario, an open-source LLM (e.g. `llama3-8b-8192`) is hosted on a Groq
 which provides an OpenAI-compatible API. Using this with langroid is exactly analogous
 to the Ollama scenario above: you can set the `chat_model` in the `OpenAIGPTConfig` to
 `groq/<model_name>`, e.g. `groq/llama3-8b-8192`. 
+For this to work, ensure you have a `GROQ_API_KEY` environment variable set in your
+`.env` file. See instructions here: https://console.groq.com/docs/quickstart
 
 ## Other non-Ollama LLMs supported by LiteLLM
 
