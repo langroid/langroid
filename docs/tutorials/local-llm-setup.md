@@ -72,6 +72,12 @@ as the `chat_model` param in the `OpenAIGPTConfig` as in the previous section.
 When a script supports it, you can also pass in the model name via
 `-m ollama/dolphin-mixtral-gguf`
 
+## "Local" LLMs hosted on Groq
+In this scenario, an open-source LLM (e.g. `llama3-8b-8192`) is hosted on a Groq server
+which provides an OpenAI-compatible API. Using this with langroid is exactly analogous
+to the Ollama scenario above: you can set the `chat_model` in the `OpenAIGPTConfig` to
+`groq/<model_name>`, e.g. `groq/llama3-8b-8192`. 
+
 ## Other non-Ollama LLMs supported by LiteLLM
 
 For other scenarios of running local/remote LLMs, it is possible that the `LiteLLM` library

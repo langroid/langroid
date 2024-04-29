@@ -7,6 +7,7 @@ import time
 from enum import Enum
 from typing import Any, Dict, List, Optional, Tuple, Type, cast, no_type_check
 
+import openai
 from openai.types.beta import Assistant, Thread
 from openai.types.beta.assistant_update_params import (
     ToolResources,
@@ -99,12 +100,14 @@ class OpenAIAssistant(ChatAgent):
         super().__init__(config)
         self.config: OpenAIAssistantConfig = config
         self.llm: OpenAIGPT = OpenAIGPT(self.config.llm)
+        if not isinstance(self.llm.client, openai.OpenAI):
+            raise ValueError("Client must be OpenAI")
         # handles for various entities and methods
-        self.client = self.llm.client
-        self.runs = self.llm.client.beta.threads.runs
-        self.threads = self.llm.client.beta.threads
-        self.thread_messages = self.llm.client.beta.threads.messages
-        self.assistants = self.llm.client.beta.assistants
+        self.client: openai.OpenAI = self.llm.client
+        self.runs = self.client.beta.threads.runs
+        self.threads = self.client.beta.threads
+        self.thread_messages = self.client.beta.threads.messages
+        self.assistants = self.client.beta.assistants
         # which tool_ids are awaiting output submissions
         self.pending_tool_ids: List[str] = []
         self.cached_tool_ids: List[str] = []
@@ -208,14 +211,14 @@ class OpenAIAssistant(ChatAgent):
 
     def _cache_thread_key(self) -> str:
         """Key to use for caching or retrieving thread id"""
-        org = self.llm.client.organization or ""
+        org = self.client.organization or ""
         uid = generate_user_id(org)
         name = self.config.name
         return "Thread:" + name + ":" + uid
 
     def _cache_assistant_key(self) -> str:
         """Key to use for caching or retrieving assistant id"""
-        org = self.llm.client.organization or ""
+        org = self.client.organization or ""
         uid = generate_user_id(org)
         name = self.config.name
         return "Assistant:" + name + ":" + uid
@@ -317,7 +320,7 @@ class OpenAIAssistant(ChatAgent):
         cached = self._cache_thread_lookup()
         if cached is not None:
             if self.config.use_cached_thread:
-                self.thread = self.llm.client.beta.threads.retrieve(thread_id=cached)
+                self.thread = self.client.beta.threads.retrieve(thread_id=cached)
             else:
                 logger.warning(
                     f"""
@@ -326,7 +329,7 @@ class OpenAIAssistant(ChatAgent):
                     """
                 )
                 try:
-                    self.llm.client.beta.threads.delete(thread_id=cached)
+                    self.client.beta.threads.delete(thread_id=cached)
                 except Exception:
                     logger.warning(
                         f"""
@@ -337,7 +340,7 @@ class OpenAIAssistant(ChatAgent):
         if self.thread is None:
             if self.assistant is None:
                 raise ValueError("Assistant is None")
-            self.thread = self.llm.client.beta.threads.create()
+            self.thread = self.client.beta.threads.create()
             hash_key_str = (
                 (self.assistant.instructions or "")
                 + str(self.config.use_tools)
@@ -371,7 +374,7 @@ class OpenAIAssistant(ChatAgent):
         cached = self._cache_assistant_lookup()
         if cached is not None:
             if self.config.use_cached_assistant:
-                self.assistant = self.llm.client.beta.assistants.retrieve(
+                self.assistant = self.client.beta.assistants.retrieve(
                     assistant_id=cached
                 )
             else:
@@ -382,7 +385,7 @@ class OpenAIAssistant(ChatAgent):
                     """
                 )
                 try:
-                    self.llm.client.beta.assistants.delete(assistant_id=cached)
+                    self.client.beta.assistants.delete(assistant_id=cached)
                 except Exception:
                     logger.warning(
                         f"""
@@ -391,7 +394,7 @@ class OpenAIAssistant(ChatAgent):
                     )
                 self.llm.cache.delete_keys([self._cache_assistant_key()])
         if self.assistant is None:
-            self.assistant = self.llm.client.beta.assistants.create(
+            self.assistant = self.client.beta.assistants.create(
                 name=self.config.name,
                 instructions=self.config.system_message,
                 tools=[],
