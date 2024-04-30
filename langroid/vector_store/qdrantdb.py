@@ -82,8 +82,9 @@ class QdrantDB(VectorStore):
         self.embedding_fn: EmbeddingFunction = emb_model.embedding_fn()
         self.embedding_dim = emb_model.embedding_dims
         if self.config.use_sparse_embeddings:
-            from fastembed import SparseTextEmbedding
-            self.sparse_model = SparseTextEmbedding(model_name=self.config.sparse_embedding_model)
+            from transformers import AutoModelForMaskedLM, AutoTokenizer
+            self.sparse_tokenizer = AutoTokenizer.from_pretrained(self.config.sparse_embedding_model)
+            self.sparse_model = AutoModelForMaskedLM.from_pretrained(self.config.sparse_embedding_model)
         self.host = config.host
         self.port = config.port
         load_dotenv()
@@ -219,7 +220,7 @@ class QdrantDB(VectorStore):
                 else:
                     logger.warning("Recreating fresh collection")
         vectors_config={
-            "text-dense": VectorParams(
+            "": VectorParams(
                 size=self.embedding_dim,
                 distance=Distance.COSINE,
             )
@@ -248,12 +249,22 @@ class QdrantDB(VectorStore):
     
     def get_sparse_embeddings(self, inputs: List[str]) -> List[SparseVector]:
         if not self.config.use_sparse_embeddings: return []
+        import torch
+        tokens = self.sparse_tokenizer(inputs, return_tensors='pt', truncation=True, padding=True)
+        output = self.sparse_model(**tokens)
+        vectors = torch.max(
+        torch.log(
+            1 + torch.relu(output.logits)
+        ) * tokens.attention_mask.unsqueeze(-1),
+        dim=1)[0].squeeze(dim=1)
         sparse_embeddings = []
-        for embedding in self.sparse_model.embed(inputs, batch_size=6):
+        for vec in vectors:
+            cols = vec.nonzero().squeeze().cpu().tolist()
+            weights = vec[cols].cpu().tolist()
             sparse_embeddings.append(
                 SparseVector(
-                    indices=embedding.indices.tolist(),
-                    values=embedding.values.tolist(),
+                    indices=cols,
+                    values=weights,
                 )
             )
         return sparse_embeddings
@@ -279,14 +290,14 @@ class QdrantDB(VectorStore):
         # else we get an API error
         b = self.config.batch_size
         for i in range(0, len(ids), b):
+            vectors={'': embedding_vecs[i : i + b]}
+            if self.config.use_sparse_embeddings:
+                vectors['text-sparse'] = sparse_embedding_vecs[i : i + b]
             self.client.upsert(
                 collection_name=self.config.collection_name,
                 points=Batch(
                     ids=ids[i : i + b],
-                    vectors={
-                        'text-dense': embedding_vecs[i : i + b],
-                        'text-sparse': sparse_embedding_vecs[i : i + b],
-                    },
+                    vectors=vectors,
                     payloads=document_dicts[i : i + b],
                 ),
             )
@@ -376,7 +387,7 @@ class QdrantDB(VectorStore):
         requests=[
             SearchRequest(
                 vector=NamedVector(
-                    name="text-dense",
+                    name="",
                     vector=embedding,
                 ),
                 limit=k,
