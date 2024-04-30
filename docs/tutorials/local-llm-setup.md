@@ -59,6 +59,7 @@ Only  change the  `FROM ...` line with the path to the model you downloaded, e.g
 ```
 FROM /Users/blah/.ollama/models/dolphin-2.7-mixtral-8x7b.Q4_K_M.gguf
 ```
+
 - Save this modelfile somewhere, e.g. `~/.ollama/modelfiles/dolphin-mixtral-gguf`
 - Create a new ollama model based on this file:
 ```
