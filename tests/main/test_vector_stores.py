@@ -74,7 +74,7 @@ def vecdb(request) -> VectorStore:
         yield qd_cloud
         qd_cloud.delete_collection(collection_name=qd_cfg_cloud.collection_name)
         return
-    
+
     if request.param == "qdrant_hybrid_cloud":
         qd_dir = ".qdrant/cloud/" + embed_cfg.model_type
         qd_cfg_cloud = QdrantDBConfig(
@@ -83,7 +83,7 @@ def vecdb(request) -> VectorStore:
             storage_path=qd_dir,
             embedding=embed_cfg,
             use_sparse_embeddings=True,
-            sparse_embedding_model='prithvida/Splade_PP_en_v1',
+            sparse_embedding_model="naver/splade-v3-distilbert",
         )
         qd_cloud = QdrantDB(qd_cfg_cloud)
         qd_cloud.add_documents(stored_docs)
