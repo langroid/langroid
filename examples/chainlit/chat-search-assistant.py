@@ -92,10 +92,13 @@ async def main(
         system_message=f"""
         You are a web-searcher. For any question you get, you must use the
         `{search_tool_handler_method}` tool/function-call to get up to 5 results.
+        I WILL SEND YOU THE RESULTS; DO NOT MAKE UP THE RESULTS!!
         Once you receive the results, you must compose a CONCISE answer 
         based on the search results and say DONE and show the answer to me,
         in this format:
         DONE [... your CONCISE answer here ...]
+        IMPORTANT: YOU MUST WAIT FOR ME TO SEND YOU THE 
+        SEARCH RESULTS BEFORE saying you're DONE.
         """,
     )
     search_agent = lr.ChatAgent(search_agent_config)
