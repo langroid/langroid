@@ -14,6 +14,7 @@ on:
 
 jobs:
   cancel:
+    if: "contains(github.event.head_commit.message, 'notest') == false"
     name: Cancel Previous Runs
     runs-on: ubuntu-latest
     timeout-minutes: 3
@@ -23,6 +24,7 @@ jobs:
         with:
           access_token: ${{ github.token }}
   pytest:
+    if: "contains(github.event.head_commit.message, 'notest') == false"    
     runs-on: ubuntu-latest
     services:
       meilisearch:
@@ -96,7 +98,7 @@ jobs:
 
     - name: Run tests with coverage
       run: |
-        poetry run coverage run --source=langroid -m pytest tests/main tests/extras/test_hf_embeddings.py
+        poetry run coverage run --source=langroid -m pytest -x tests/main tests/extras/test_hf_embeddings.py
         poetry run coverage report
     - name: Generate XML coverage report
       run: |

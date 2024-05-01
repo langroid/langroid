@@ -2,6 +2,7 @@
 Other tests for Task are in test_chat_agent.py
 """
 
+import asyncio
 from typing import List
 
 import pytest
@@ -12,8 +13,72 @@ from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
 from langroid.agent.tool_message import ToolMessage
 from langroid.mytypes import Entity
-from langroid.utils.configuration import Settings, set_global
+from langroid.utils.configuration import Settings, set_global, settings
 from langroid.utils.constants import DONE, PASS
+
+
+def test_task_cost(test_settings: Settings):
+    """Test that max_cost, max_tokens are respected by Task.run()"""
+
+    set_global(test_settings)
+    settings.cache = False
+    agent = ChatAgent(ChatAgentConfig(name="Test"))
+    agent.llm.reset_usage_cost()
+    task = Task(
+        agent,
+        interactive=False,
+        single_round=False,
+        system_message="User will send you a number. Repeat the number.",
+    )
+    sub_agent = ChatAgent(ChatAgentConfig(name="Sub"))
+    sub_agent.llm.reset_usage_cost()
+    sub = Task(
+        sub_agent,
+        interactive=False,
+        single_round=True,
+        system_message="User will send you a number. Return its double",
+    )
+    task.add_sub_task(sub)
+    response = task.run("4", turns=10, max_cost=0.0005, max_tokens=100)
+    settings.cache = True
+    assert response is not None
+    assert response.metadata.status in [
+        lr.StatusCode.MAX_COST,
+        lr.StatusCode.MAX_TOKENS,
+    ]
+
+
+@pytest.mark.asyncio
+async def test_task_kill(test_settings: Settings):
+    """Test that Task.run() can be killed"""
+    set_global(test_settings)
+    agent = ChatAgent(ChatAgentConfig(name="Test"))
+    task = Task(
+        agent,
+        interactive=False,
+        single_round=False,
+        default_human_response="Add 3 to the last number",
+        system_message="generate a single number as instructed by user.",
+    )
+    # start task
+    async_task = asyncio.create_task(
+        task.run_async("3+1=?", turns=50, session_id="mysession")
+    )
+    # sleep a bit then kill it
+    await asyncio.sleep(0.5)
+    task.kill()
+    result: lr.ChatDocument = await async_task
+    assert result.metadata.status == lr.StatusCode.KILL
+
+    # test killing via static method
+    async_task = asyncio.create_task(
+        task.run_async("3+1=?", turns=50, session_id="mysession")
+    )
+    # sleep a bit then kill it
+    await asyncio.sleep(0.5)
+    Task.kill_session("mysession")
+    result: lr.ChatDocument = await async_task
+    assert result.metadata.status == lr.StatusCode.KILL
 
 
 def test_task_empty_response(test_settings: Settings):

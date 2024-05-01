@@ -13,7 +13,7 @@ class Colors(BaseModel):
     RESET: str = "\033[0m"
 
 
-USER_QUIT = ["q", "x", "quit", "exit", "bye"]
+USER_QUIT_STRINGS = ["q", "x", "quit", "exit", "bye"]
 NO_ANSWER = "DO-NOT-KNOW"
 DONE = "DONE"
 PASS = "__PASS__"

@@ -62,6 +62,7 @@ def retry_with_exponential_backoff(
                 if num_retries > max_retries:
                     raise Exception(
                         f"Maximum number of retries ({max_retries}) exceeded."
+                        f" Last error: {e}."
                     )
 
                 # Increment the delay

@@ -1,5 +1,6 @@
 import warnings
 
+import groq
 import openai
 import pytest
 
@@ -72,6 +73,19 @@ def test_openai_gpt(test_settings: Settings, streaming, country, capital):
     response = mdl.chat(messages=messages, max_tokens=10)
     assert capital in response.message
     assert response.cached
+
+    # pass intentional bad msg to test error handling
+    messages = [
+        LLMMessage(
+            role=Role.FUNCTION,
+            content="Hello!",
+        ),
+    ]
+
+    try:
+        _ = mdl.chat(messages=messages, max_tokens=10)
+    except Exception as e:
+        assert isinstance(e, groq.BadRequestError | openai.BadRequestError)
 
 
 @pytest.mark.parametrize(

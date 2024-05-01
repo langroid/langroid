@@ -63,7 +63,6 @@ class LLMFunctionCall(BaseModel):
     """
 
     name: str  # name of function to call
-    to: str = ""  # intended recipient
     arguments: Optional[Dict[str, Any]] = None
 
     @staticmethod
@@ -227,14 +226,9 @@ class LLMResponse(BaseModel):
         if self.function_call is not None:
             # in this case we ignore message, since all information is in function_call
             msg = ""
-            # recipient may either have been specified as a special field "to" in
-            # function_call, or as a parameter "recipient" in the arguments
-            # (the latter can happen when using a Tool that has a 'recipient' parameter)
-            recipient = self.function_call.to
-            if recipient == "":
-                args = self.function_call.arguments
-                if isinstance(args, dict):
-                    recipient = args.get("recipient", "")
+            args = self.function_call.arguments
+            if isinstance(args, dict):
+                recipient = args.get("recipient", "")
             return recipient, msg
         else:
             msg = self.message
@@ -454,6 +448,18 @@ class LanguageModel(ABC):
         for model, counter in cls.usage_cost_dict.items():
             s += f"{model}: {counter}\n"
         return s
+
+    @classmethod
+    def tot_tokens_cost(cls) -> Tuple[int, float]:
+        """
+        Return total tokens used and total cost across all models.
+        """
+        total_tokens = 0
+        total_cost = 0.0
+        for counter in cls.usage_cost_dict.values():
+            total_tokens += counter.total_tokens
+            total_cost += counter.cost
+        return total_tokens, total_cost
 
     def followup_to_standalone(
         self, chat_history: List[Tuple[str, str]], question: str

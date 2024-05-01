@@ -21,6 +21,7 @@ from typing import (
 )
 
 import openai
+from groq import AsyncGroq, Groq
 from httpx import Timeout
 from openai import AsyncOpenAI, OpenAI
 from pydantic import BaseModel
@@ -49,7 +50,7 @@ from langroid.language_models.utils import (
     retry_with_exponential_backoff,
 )
 from langroid.utils.configuration import settings
-from langroid.utils.constants import NO_ANSWER, Colors
+from langroid.utils.constants import Colors
 from langroid.utils.system import friendly_error
 
 logging.getLogger("openai").setLevel(logging.ERROR)
@@ -69,7 +70,7 @@ class OpenAIChatModel(str, Enum):
     GPT3_5_TURBO = "gpt-3.5-turbo-1106"
     GPT4 = "gpt-4"
     GPT4_32K = "gpt-4-32k"
-    GPT4_TURBO = "gpt-4-turbo-preview"
+    GPT4_TURBO = "gpt-4-turbo"
 
 
 class OpenAICompletionModel(str, Enum):
@@ -347,6 +348,9 @@ class OpenAIGPT(LanguageModel):
     Class for OpenAI LLMs
     """
 
+    client: OpenAI | Groq
+    async_client: AsyncOpenAI | AsyncGroq
+
     def __init__(self, config: OpenAIGPTConfig = OpenAIGPTConfig()):
         """
         Args:
@@ -448,18 +452,31 @@ class OpenAIGPT(LanguageModel):
                 self.api_key = os.getenv("OPENAI_API_KEY", DUMMY_API_KEY)
         else:
             self.api_key = DUMMY_API_KEY
-        self.client = OpenAI(
-            api_key=self.api_key,
-            base_url=self.api_base,
-            organization=self.config.organization,
-            timeout=Timeout(self.config.timeout),
-        )
-        self.async_client = AsyncOpenAI(
-            api_key=self.api_key,
-            organization=self.config.organization,
-            base_url=self.api_base,
-            timeout=Timeout(self.config.timeout),
-        )
+
+        self.is_groq = self.config.chat_model.startswith("groq/")
+
+        if self.is_groq:
+            self.config.chat_model = self.config.chat_model.replace("groq/", "")
+            self.api_key = os.getenv("GROQ_API_KEY", DUMMY_API_KEY)
+            self.client = Groq(
+                api_key=self.api_key,
+            )
+            self.async_client = AsyncGroq(
+                api_key=self.api_key,
+            )
+        else:
+            self.client = OpenAI(
+                api_key=self.api_key,
+                base_url=self.api_base,
+                organization=self.config.organization,
+                timeout=Timeout(self.config.timeout),
+            )
+            self.async_client = AsyncOpenAI(
+                api_key=self.api_key,
+                organization=self.config.organization,
+                base_url=self.api_base,
+                timeout=Timeout(self.config.timeout),
+            )
 
         self.cache: MomentoCache | RedisCache
         if settings.cache_type == "momento":
@@ -847,13 +864,16 @@ class OpenAIGPT(LanguageModel):
         try:
             return self._generate(prompt, max_tokens)
         except Exception as e:
-            # capture exceptions not handled by retry, so we don't crash
+            # log and re-raise exception
             logging.error(friendly_error(e, "Error in OpenAIGPT.generate: "))
-            return LLMResponse(message=NO_ANSWER, cached=False)
+            raise e
 
     def _generate(self, prompt: str, max_tokens: int) -> LLMResponse:
         if self.config.use_chat_for_completion:
             return self.chat(messages=prompt, max_tokens=max_tokens)
+
+        if self.is_groq:
+            raise ValueError("Groq does not support pure completions")
 
         if settings.debug:
             print(f"[grey37]PROMPT: {escape(prompt)}[/grey37]")
@@ -869,6 +889,7 @@ class OpenAIGPT(LanguageModel):
             else:
                 if self.config.litellm:
                     from litellm import completion as litellm_completion
+                assert isinstance(self.client, OpenAI)
                 completion_call = (
                     litellm_completion
                     if self.config.litellm
@@ -917,9 +938,9 @@ class OpenAIGPT(LanguageModel):
         try:
             return await self._agenerate(prompt, max_tokens)
         except Exception as e:
-            # capture exceptions not handled by retry, so we don't crash
+            # log and re-raise exception
             logging.error(friendly_error(e, "Error in OpenAIGPT.agenerate: "))
-            return LLMResponse(message=NO_ANSWER, cached=False)
+            raise e
 
     async def _agenerate(self, prompt: str, max_tokens: int) -> LLMResponse:
         # note we typically will not have self.config.stream = True
@@ -928,6 +949,9 @@ class OpenAIGPT(LanguageModel):
         # disable streaming.
         if self.config.use_chat_for_completion:
             return await self.achat(messages=prompt, max_tokens=max_tokens)
+
+        if self.is_groq:
+            raise ValueError("Groq does not support pure completions")
 
         if settings.debug:
             print(f"[grey37]PROMPT: {escape(prompt)}[/grey37]")
@@ -948,6 +972,7 @@ class OpenAIGPT(LanguageModel):
                     from litellm import acompletion as litellm_acompletion
                 # TODO this may not work: text_completion is not async,
                 # and we didn't find an async version in litellm
+                assert isinstance(self.async_client, AsyncOpenAI)
                 acompletion_call = (
                     litellm_acompletion
                     if self.config.litellm
@@ -1019,9 +1044,9 @@ class OpenAIGPT(LanguageModel):
         try:
             return self._chat(messages, max_tokens, functions, function_call)
         except Exception as e:
-            # capture exceptions not handled by retry, so we don't crash
+            # log and re-raise exception
             logging.error(friendly_error(e, "Error in OpenAIGPT.chat: "))
-            return LLMResponse(message=NO_ANSWER, cached=False)
+            raise e
 
     async def achat(
         self,
@@ -1072,9 +1097,9 @@ class OpenAIGPT(LanguageModel):
             result = await self._achat(messages, max_tokens, functions, function_call)
             return result
         except Exception as e:
-            # capture exceptions not handled by retry, so we don't crash
+            # log and re-raise exception
             logging.error(friendly_error(e, "Error in OpenAIGPT.achat: "))
-            return LLMResponse(message=NO_ANSWER, cached=False)
+            raise e
 
     @retry_with_exponential_backoff
     def _chat_completions_with_backoff(self, **kwargs):  # type: ignore

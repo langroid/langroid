@@ -15,7 +15,7 @@ python3 examples/basic/chat-search-assistant.py
 
 There are optional args, especially note these:
 
--p or --provider: google or sciphi or metaphor (default: google)
+-p or --provider: google or ddg or metaphor (default: google)
 -m <model_name>: to run with a different LLM model (default: gpt4-turbo)
 
 You can specify a local in a few different ways, e.g. `-m local/localhost:8000/v1`
@@ -28,14 +28,7 @@ NOTE:
 environment variables in your `.env` file, as explained in the
 [README](https://github.com/langroid/langroid#gear-installation-and-setup).
 
-(b) If using the SciPhiSearchRAGTool, you need to have the
-SCIPHI_API_KEY environment variable in your `.env` file.
-See here for more info: https://www.sciphi.ai/
-This tool requires installing langroid with the `sciphi` extra, e.g.
-`pip install langroid[sciphi]` or `poetry add langroid[sciphi]`
-(it installs the `agent-search` package from pypi).
-
-(c) If using MetaphorSearchTool, you need to:
+(b) If using MetaphorSearchTool, you need to:
 * set the METAPHOR_API_KEY environment variables in
 your `.env` file, e.g. `METAPHOR_API_KEY=your_api_key_here`
 * install langroid with the `metaphor` extra, e.g.
@@ -68,7 +61,7 @@ def main(
         "ddg",
         "--provider",
         "-p",
-        help="search provider name (google, sciphi, metaphor, ddg)",
+        help="search provider name (google, metaphor, ddg)",
     ),
     nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
 ) -> None:
@@ -113,10 +106,6 @@ def main(
     match provider:
         case "google":
             search_tool_class = GoogleSearchTool
-        case "sciphi":
-            from langroid.agent.tools.sciphi_search_rag_tool import SciPhiSearchRAGTool
-
-            search_tool_class = SciPhiSearchRAGTool
         case "metaphor":
             from langroid.agent.tools.metaphor_search_tool import MetaphorSearchTool
 

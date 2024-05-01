@@ -59,6 +59,7 @@ Only  change the  `FROM ...` line with the path to the model you downloaded, e.g
 ```
 FROM /Users/blah/.ollama/models/dolphin-2.7-mixtral-8x7b.Q4_K_M.gguf
 ```
+
 - Save this modelfile somewhere, e.g. `~/.ollama/modelfiles/dolphin-mixtral-gguf`
 - Create a new ollama model based on this file:
 ```
@@ -71,6 +72,14 @@ To use this model with Langroid you can then specify `ollama/dolphin-mixtral-ggu
 as the `chat_model` param in the `OpenAIGPTConfig` as in the previous section.
 When a script supports it, you can also pass in the model name via
 `-m ollama/dolphin-mixtral-gguf`
+
+## "Local" LLMs hosted on Groq
+In this scenario, an open-source LLM (e.g. `llama3-8b-8192`) is hosted on a Groq server
+which provides an OpenAI-compatible API. Using this with langroid is exactly analogous
+to the Ollama scenario above: you can set the `chat_model` in the `OpenAIGPTConfig` to
+`groq/<model_name>`, e.g. `groq/llama3-8b-8192`. 
+For this to work, ensure you have a `GROQ_API_KEY` environment variable set in your
+`.env` file. See [groq docs](https://console.groq.com/docs/quickstart).
 
 ## Other non-Ollama LLMs supported by LiteLLM
 

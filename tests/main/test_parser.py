@@ -124,9 +124,7 @@ def test_extract_content():
 
 def test_utf8():
     my_str = "abc﷽🤦🏻‍♂️🤦🏻‍♂️🤦🏻‍♂️"
-    print(len(my_str))  # 19
-    b = my_str.encode("utf-8")
-    print(len(b))  # 57 bytes that represent 19 chars
+    b = my_str.encode("utf-8")  # 57 bytes that represent 19 chars
     content = b[:50]  # choose to cut it off at 50 for this example
 
     def find_last_full_char(str_to_test):
@@ -136,4 +134,5 @@ def test_utf8():
 
     content = content[: find_last_full_char(content)]
 
+    # test that this succeeds
     _ = content.decode("utf-8")

@@ -205,7 +205,7 @@ QUERY_EXPECTED_PAIRS = [
 
 
 @pytest.mark.parametrize(
-    "vecdb", ["qdrant_cloud", "qdrant_local", "chroma", "lancedb"], indirect=True
+    "vecdb", ["qdrant_local", "qdrant_cloud", "chroma", "lancedb"], indirect=True
 )
 @pytest.mark.parametrize("query, expected", QUERY_EXPECTED_PAIRS)
 def test_doc_chat_agent_llm(test_settings: Settings, agent, query: str, expected: str):
@@ -318,15 +318,7 @@ class _MyDocChatAgentConfig(DocChatAgentConfig):
     debug: bool = False
     stream: bool = True  # allow streaming where needed
     conversation_mode = True
-    vecdb: VectorStoreConfig = QdrantDBConfig(
-        collection_name="test-data",
-        replace_collection=True,
-        storage_path=":memory:",
-        embedding=OpenAIEmbeddingsConfig(
-            model_name="text-embedding-ada-002",
-            dims=1536,
-        ),
-    )
+    vecdb: VectorStoreConfig | None = None
 
     llm: OpenAIGPTConfig = OpenAIGPTConfig(
         stream=True,
@@ -776,8 +768,6 @@ def test_doc_chat_batch(test_settings: Settings, vecdb):
 
     # attach a common vector-db to all agents
     for a in doc_agents:
-        coll = a.config.vecdb.collection_name
-        vecdb.delete_collection(coll)
         a.vecdb = vecdb
 
     docs = [

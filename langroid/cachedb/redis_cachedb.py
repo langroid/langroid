@@ -109,7 +109,7 @@ class RedisCache(CacheDB):
             key (str): The key to retrieve the value for.
 
         Returns:
-            dict: The value associated with the key.
+            dict|str|None: The value associated with the key.
         """
         with self.redis_client() as client:  # type: ignore
             try:

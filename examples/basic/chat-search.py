@@ -2,7 +2,7 @@
 This is a basic example of a chatbot that uses one of these web-search Tools to
 answer questions:
  - GoogleSearchTool
- - SciPhiSearchRAGTool
+ - DuckduckgoSearchTool
  - MetaphorSearchTool
 When the LLM doesn't know the answer to a question, it will use the tool to
 search the web for relevant results, and then use the results to answer the
@@ -14,7 +14,7 @@ python3 examples/basic/chat-search.py
 
 There are optional args, especially note these:
 
--p or --provider: google or sciphi or metaphor (default: google)
+-p or --provider: google or ddg or metaphor (default: google)
 -m <model_name>: to run with a different LLM model (default: gpt4-turbo)
 
 You can specify a local in a few different ways, e.g. `-m local/localhost:8000/v1`
@@ -27,14 +27,8 @@ NOTE:
 environment variables in your `.env` file, as explained in the
 [README](https://github.com/langroid/langroid#gear-installation-and-setup).
 
-(b) If using the SciPhiSearchRAGTool, you need to have the
-SCIPHI_API_KEY environment variable in your `.env` file.
-See here for more info: https://www.sciphi.ai/
-This tool requires installing langroid with the `sciphi` extra, e.g.
-`pip install langroid[sciphi]` or `poetry add langroid[sciphi]`
-(it installs the `agent-search` package from pypi).
 
-(c) If using MetaphorSearchTool, you need to:
+(b) If using MetaphorSearchTool, you need to:
 * set the METAPHOR_API_KEY environment variables in
 your `.env` file, e.g. `METAPHOR_API_KEY=your_api_key_here`
 * install langroid with the `metaphor` extra, e.g.
@@ -65,7 +59,10 @@ def main(
     debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
     model: str = typer.Option("", "--model", "-m", help="model name"),
     provider: str = typer.Option(
-        "google", "--provider", "-p", help="search provider name (Google, SciPhi)"
+        "google",
+        "--provider",
+        "-p",
+        help="search provider name (google, ddg, metaphor)",
     ),
     no_stream: bool = typer.Option(False, "--nostream", "-ns", help="no streaming"),
     nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
@@ -111,10 +108,6 @@ def main(
     match provider:
         case "google":
             search_tool_class = GoogleSearchTool
-        case "sciphi":
-            from langroid.agent.tools.sciphi_search_rag_tool import SciPhiSearchRAGTool
-
-            search_tool_class = SciPhiSearchRAGTool
         case "metaphor":
             from langroid.agent.tools.metaphor_search_tool import MetaphorSearchTool
 

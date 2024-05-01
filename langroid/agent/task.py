@@ -27,11 +27,20 @@ from langroid.agent.chat_document import (
     ChatDocLoggerFields,
     ChatDocMetaData,
     ChatDocument,
+    StatusCode,
 )
+from langroid.cachedb.redis_cachedb import RedisCache, RedisCacheConfig
 from langroid.mytypes import Entity
 from langroid.parsing.parse_json import extract_top_level_json
 from langroid.utils.configuration import settings
-from langroid.utils.constants import DONE, NO_ANSWER, PASS, PASS_TO, SEND_TO, USER_QUIT
+from langroid.utils.constants import (
+    DONE,
+    NO_ANSWER,
+    PASS,
+    PASS_TO,
+    SEND_TO,
+    USER_QUIT_STRINGS,
+)
 from langroid.utils.logging import RichFileLogger, setup_file_logger
 
 logger = logging.getLogger(__name__)
@@ -72,6 +81,9 @@ class Task:
     This process repeats until `done()` returns true, at which point `run()` returns
     the value of `result()`, which is the final result of the task.
     """
+
+    # class variable called `cache` that is a RedisCache object
+    cache: RedisCache = RedisCache(RedisCacheConfig(fake=False))
 
     def __init__(
         self,
@@ -141,7 +153,6 @@ class Task:
         """
         if agent is None:
             agent = ChatAgent()
-
         self.callbacks = SimpleNamespace(
             show_subtask_response=noop_fn,
             set_parent_agent=noop_fn,
@@ -170,7 +181,9 @@ class Task:
                 agent.set_system_message(system_message)
             if user_message:
                 agent.set_user_message(user_message)
-
+        self.max_cost: float = 0
+        self.max_tokens: int = 0
+        self.session_id: str = ""
         self.logger: None | RichFileLogger = None
         self.tsv_logger: None | logging.Logger = None
         self.color_log: bool = False if settings.notebook else True
@@ -284,6 +297,54 @@ class Task:
     def __str__(self) -> str:
         return f"{self.name}"
 
+    def _cache_session_store(self, key: str, value: str) -> None:
+        """
+        Cache a key-value pair for the current session.
+        E.g. key = "kill", value = "1"
+        """
+        try:
+            self.cache.store(f"{self.session_id}:{key}", value)
+        except Exception as e:
+            logging.error(f"Error in Task._cache_session_store: {e}")
+
+    def _cache_session_lookup(self, key: str) -> Dict[str, Any] | str | None:
+        """
+        Retrieve a value from the cache for the current session.
+        """
+        session_id_key = f"{self.session_id}:{key}"
+        try:
+            cached_val = self.cache.retrieve(session_id_key)
+        except Exception as e:
+            logging.error(f"Error in Task._cache_session_lookup: {e}")
+            return None
+        return cached_val
+
+    def _is_kill(self) -> bool:
+        """
+        Check if the current session is killed.
+        """
+        return self._cache_session_lookup("kill") == "1"
+
+    def _set_alive(self) -> None:
+        """
+        Initialize the kill status of the current session.
+        """
+        self._cache_session_store("kill", "0")
+
+    @classmethod
+    def kill_session(cls, session_id: str = "") -> None:
+        """
+        Kill the session with the given session_id.
+        """
+        session_id_kill_key = f"{session_id}:kill"
+        cls.cache.store(session_id_kill_key, "1")
+
+    def kill(self) -> None:
+        """
+        Kill the task run associated with the current session.
+        """
+        self._cache_session_store("kill", "1")
+
     @property
     def _level(self) -> int:
         if self.caller is None:
@@ -375,11 +436,19 @@ class Task:
         msg: Optional[str | ChatDocument] = None,
         turns: int = -1,
         caller: None | Task = None,
+        max_cost: float = 0,
+        max_tokens: int = 0,
+        session_id: str = "",
     ) -> Optional[ChatDocument]:
         """Synchronous version of `run_async()`.
         See `run_async()` for details."""
         self.task_progress = False
         self.n_stalled_steps = 0
+        self.max_cost = max_cost
+        self.max_tokens = max_tokens
+        self.session_id = session_id
+        self._set_alive()
+
         assert (
             msg is None or isinstance(msg, str) or isinstance(msg, ChatDocument)
         ), f"msg arg in Task.run() must be None, str, or ChatDocument, not {type(msg)}"
@@ -401,15 +470,19 @@ class Task:
         i = 0
         while True:
             self.step()
-            if self.done():
+            done, status = self.done()
+            if done:
                 if self._level == 0 and not settings.quiet:
                     print("[magenta]Bye, hope this was useful!")
                 break
             i += 1
             if turns > 0 and i >= turns:
+                status = StatusCode.MAX_TURNS
                 break
 
         final_result = self.result()
+        if final_result is not None:
+            final_result.metadata.status = status
         self._post_run_loop()
         return final_result
 
@@ -418,6 +491,9 @@ class Task:
         msg: Optional[str | ChatDocument] = None,
         turns: int = -1,
         caller: None | Task = None,
+        max_cost: float = 0,
+        max_tokens: int = 0,
+        session_id: str = "",
     ) -> Optional[ChatDocument]:
         """
         Loop over `step()` until task is considered done or `turns` is reached.
@@ -434,6 +510,9 @@ class Task:
             turns (int): number of turns to run the task for;
                 default is -1, which means run until task is done.
             caller (Task|None): the calling task, if any
+            max_cost (float): max cost allowed for the task (default 0 -> no limit)
+            max_tokens (int): max tokens allowed for the task (default 0 -> no limit)
+            session_id (str): session id for the task
 
         Returns:
             Optional[ChatDocument]: valid result of the task.
@@ -444,6 +523,12 @@ class Task:
         # message can be considered to be from the USER
         # (from the POV of this agent's LLM).
         self.task_progress = False
+        self.n_stalled_steps = 0
+        self.max_cost = max_cost
+        self.max_tokens = max_tokens
+        self.session_id = session_id
+        self._set_alive()
+
         if (
             isinstance(msg, ChatDocument)
             and msg.metadata.recipient != ""
@@ -461,15 +546,19 @@ class Task:
         i = 0
         while True:
             await self.step_async()
-            if self.done():
+            done, status = self.done()
+            if done:
                 if self._level == 0 and not settings.quiet:
                     print("[magenta]Bye, hope this was useful!")
                 break
             i += 1
             if turns > 0 and i >= turns:
+                status = StatusCode.MAX_TURNS
                 break
 
         final_result = self.result()
+        if final_result is not None:
+            final_result.metadata.status = status
         self._post_run_loop()
         return final_result
 
@@ -819,6 +908,8 @@ class Task:
                 self.pending_message,
                 turns=actual_turns,
                 caller=self,
+                max_cost=self.max_cost,
+                max_tokens=self.max_tokens,
             )
             result_str = str(ChatDocument.to_LLMMessage(result))
             maybe_tool = len(extract_top_level_json(result_str)) > 0
@@ -894,6 +985,8 @@ class Task:
                 self.pending_message,
                 turns=actual_turns,
                 caller=self,
+                max_cost=self.max_cost,
+                max_tokens=self.max_tokens,
             )
             result_str = str(ChatDocument.to_LLMMessage(result))
             maybe_tool = len(extract_top_level_json(result_str)) > 0
@@ -926,6 +1019,7 @@ class Task:
         recipient = result_msg.metadata.recipient if result_msg else None
         responder = result_msg.metadata.parent_responder if result_msg else None
         tool_ids = result_msg.metadata.tool_ids if result_msg else []
+        status = result_msg.metadata.status if result_msg else None
 
         # regardless of which entity actually produced the result,
         # when we return the result, we set entity to USER
@@ -938,6 +1032,7 @@ class Task:
                 source=Entity.USER,
                 sender=Entity.USER,
                 block=block,
+                status=status,
                 parent_responder=responder,
                 sender_name=self.name,
                 recipient=recipient,
@@ -1020,7 +1115,7 @@ class Task:
 
     def done(
         self, result: ChatDocument | None = None, r: Responder | None = None
-    ) -> bool:
+    ) -> Tuple[bool, StatusCode]:
         """
         Check if task is done. This is the default behavior.
         Derived classes can override this.
@@ -1030,28 +1125,50 @@ class Task:
                 Not used here, but could be used by derived classes.
         Returns:
             bool: True if task is done, False otherwise
+            StatusCode: status code indicating why task is done
         """
+        if self._is_kill():
+            return (True, StatusCode.KILL)
         result = result or self.pending_message
         user_quit = (
             result is not None
-            and result.content in USER_QUIT
+            and result.content in USER_QUIT_STRINGS
             and result.metadata.sender == Entity.USER
         )
         if self._level == 0 and self.only_user_quits_root:
             # for top-level task, only user can quit out
-            return user_quit
+            return (user_quit, StatusCode.USER_QUIT if user_quit else StatusCode.OK)
 
         if self.is_done:
-            return True
+            return (True, StatusCode.DONE)
 
         if self.n_stalled_steps >= self.max_stalled_steps:
             # we are stuck, so bail to avoid infinite loop
             logger.warning(
                 f"Task {self.name} stuck for {self.max_stalled_steps} steps; exiting."
             )
-            return True
+            return (True, StatusCode.STALLED)
 
-        return (
+        if self.max_cost > 0 and self.agent.llm is not None:
+            try:
+                if self.agent.llm.tot_tokens_cost()[1] > self.max_cost:
+                    logger.warning(
+                        f"Task {self.name} cost exceeded {self.max_cost}; exiting."
+                    )
+                    return (True, StatusCode.MAX_COST)
+            except Exception:
+                pass
+
+        if self.max_tokens > 0 and self.agent.llm is not None:
+            try:
+                if self.agent.llm.tot_tokens_cost()[0] > self.max_tokens:
+                    logger.warning(
+                        f"Task {self.name} uses > {self.max_tokens} tokens; exiting."
+                    )
+                    return (True, StatusCode.MAX_TOKENS)
+            except Exception:
+                pass
+        final = (
             # no valid response from any entity/agent in current turn
             result is None
             # An entity decided task is done
@@ -1068,6 +1185,7 @@ class Task:
             # )
             or user_quit
         )
+        return (final, StatusCode.OK)
 
     def valid(
         self,
@@ -1085,7 +1203,7 @@ class Task:
 
         # if task would be considered done given responder r's `result`,
         # then consider the result valid.
-        if result is not None and self.done(result, r):
+        if result is not None and self.done(result, r)[0]:
             return True
         return (
             result is not None

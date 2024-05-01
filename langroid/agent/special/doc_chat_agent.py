@@ -117,6 +117,7 @@ class DocChatAgentConfig(ChatAgentConfig):
     )
     rerank_diversity: bool = True  # rerank to maximize diversity?
     rerank_periphery: bool = True  # rerank to avoid Lost In the Middle effect?
+    rerank_after_adding_context: bool = True  # rerank after adding context window?
     embed_batch_size: int = 500  # get embedding of at most this many at a time
     cache: bool = True  # cache results
     debug: bool = False
@@ -169,7 +170,8 @@ class DocChatAgentConfig(ChatAgentConfig):
         dims=1536,
     )
 
-    vecdb: VectorStoreConfig = LanceDBConfig(
+    # Allow vecdb to be None in case we want to explicitly set it later
+    vecdb: Optional[VectorStoreConfig] = LanceDBConfig(
         collection_name="doc-chat-lancedb",
         replace_collection=True,
         storage_path=".lancedb/data/",
@@ -209,12 +211,13 @@ class DocChatAgent(ChatAgent):
 
     def clear(self) -> None:
         """Clear the document collection and the specific collection in vecdb"""
-        if self.vecdb is None:
-            raise ValueError("VecDB not set")
         self.original_docs = []
         self.original_docs_length = 0
         self.chunked_docs = []
         self.chunked_docs_clean = []
+        if self.vecdb is None:
+            logger.warning("Attempting to clear VecDB, but VecDB not set.")
+            return
         collection_name = self.vecdb.config.collection_name
         if collection_name is None:
             return
@@ -1108,9 +1111,10 @@ class DocChatAgent(ChatAgent):
         if len(passages) == 0:
             return []
 
-        passages_scores = [(p, 0.0) for p in passages]
-        passages_scores = self.add_context_window(passages_scores)
-        passages = [p for p, _ in passages_scores]
+        if self.config.rerank_after_adding_context:
+            passages_scores = [(p, 0.0) for p in passages]
+            passages_scores = self.add_context_window(passages_scores)
+            passages = [p for p, _ in passages_scores]
         # now passages can potentially have a lot of doc chunks,
         # so we re-rank them using a cross-encoder scoring model,
         # and pick top k where k = config.parsing.n_similar_docs
@@ -1126,6 +1130,11 @@ class DocChatAgent(ChatAgent):
             # reorder so most important docs are at periphery
             # (see Lost In the Middle issue).
             passages = self.rerank_to_periphery(passages)
+
+        if not self.config.rerank_after_adding_context:
+            passages_scores = [(p, 0.0) for p in passages]
+            passages_scores = self.add_context_window(passages_scores)
+            passages = [p for p, _ in passages_scores]
 
         return passages
 

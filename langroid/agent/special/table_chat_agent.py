@@ -2,10 +2,11 @@
 Agent that supports asking queries about a tabular dataset, internally
 represented as a Pandas dataframe. The `TableChatAgent` is configured with a
 dataset, which can be a Pandas df, file or URL. The delimiter/separator
-is auto-detected. In response to a user query, the Agent's LLM generates Pandas
-code to answer the query. The code is passed via the `run_code` tool/function-call,
-which is handled by the Agent's `run_code` method. This method executes/evaluates
-the code and returns the result as a string.
+is auto-detected. In response to a user query, the Agent's LLM generates a Pandas
+expression (involving a dataframe `df`) to answer the query.
+The expression is passed via the `pandas_eval` tool/function-call,
+which is handled by the Agent's `pandas_eval` method. This method evaluates
+the expression and returns the result as a string.
 """
 
 import io
@@ -35,25 +36,26 @@ DEFAULT_TABLE_CHAT_SYSTEM_MESSAGE = f"""
 You are a savvy data scientist, with expertise in analyzing tabular datasets,
 using Python and the Pandas library for dataframe manipulation.
 Since you do not have access to the dataframe 'df', you
-will need to use the `run_code` tool/function-call to answer my questions.
+will need to use the `pandas_eval` tool/function-call to answer my questions.
 Here is a summary of the dataframe:
 {{summary}}
 Do not assume any columns other than those shown.
-In the code you submit to the `run_code` tool/function, 
-do not forget to include any necessary imports, such as `import pandas as pd`.
-Sometimes you may not be able to answer the question in a single call to `run_code`,
-so you can use a series of calls to `run_code` to build up the answer. 
+In the expression you submit to the `pandas_eval` tool/function, 
+you are allowed to use the variable 'df' to refer to the dataframe.
+
+Sometimes you may not be able to answer the question in a single call to `pandas_eval`,
+so you can use a series of calls to `pandas_eval` to build up the answer. 
 For example you may first want to know something about the possible values in a column.
 
 If you receive a null or other unexpected result, see if you have made an assumption
-in your code, and try another way, or use `run_code` to explore the dataframe 
+in your code, and try another way, or use `pandas_eval` to explore the dataframe 
 before submitting your final code. 
 
 Once you have the answer to the question, possibly after a few steps,
 say {DONE} and show me the answer. If you receive an error message, 
-try using the `run_code` tool/function again with the corrected code. 
+try using the `pandas_eval` tool/function again with the corrected code. 
 
-VERY IMPORTANT: When using the `run_code` tool/function, DO NOT EXPLAIN ANYTHING,
+VERY IMPORTANT: When using the `pandas_eval` tool/function, DO NOT EXPLAIN ANYTHING,
    SIMPLY USE THE TOOL, with the CODE.
 Start by asking me what I want to know about the data.
 """
@@ -123,22 +125,22 @@ class TableChatAgentConfig(ChatAgentConfig):
     )
 
 
-class RunCodeTool(ToolMessage):
-    """Tool/function to run code on a dataframe named `df`"""
+class PandasEvalTool(ToolMessage):
+    """Tool/function to evaluate a pandas expression involving a dataframe `df`"""
 
-    request: str = "run_code"
+    request: str = "pandas_eval"
     purpose: str = """
-            To run <code> on the dataframe 'df' and 
+            To eval a pandas <expression> on the dataframe 'df' and 
             return the results to answer a question.
-            IMPORTANT: ALL the code should be in the <code> field.
+            IMPORTANT: the <expression> field should be a valid pandas expression.
             """
-    code: str
+    expression: str
 
     @classmethod
     def examples(cls) -> List["ToolMessage"]:
         return [
-            cls(code="df.head()"),
-            cls(code="df[(df['gender'] == 'Male')]['income'].mean()"),
+            cls(expression="df.head()"),
+            cls(expression="df[(df['gender'] == 'Male')]['income'].mean()"),
         ]
 
 
@@ -147,7 +149,7 @@ class TableChatAgent(ChatAgent):
     Agent for chatting with a collection of documents.
     """
 
-    sent_code: bool = False
+    sent_expression: bool = False
 
     def __init__(self, config: TableChatAgentConfig):
         if isinstance(config.data, pd.DataFrame):
@@ -170,8 +172,8 @@ class TableChatAgent(ChatAgent):
             {self.df.columns}
             """
         )
-        # enable the agent to use and handle the RunCodeTool
-        self.enable_message(RunCodeTool)
+        # enable the agent to use and handle the PandasEvalTool
+        self.enable_message(PandasEvalTool)
 
     def user_response(
         self,
@@ -179,44 +181,31 @@ class TableChatAgent(ChatAgent):
     ) -> Optional[ChatDocument]:
         response = super().user_response(msg)
         if response is not None and response.content != "":
-            self.sent_code = False
+            self.sent_expression = False
         return response
 
-    def run_code(self, msg: RunCodeTool) -> str:
+    def pandas_eval(self, msg: PandasEvalTool) -> str:
         """
-        Handle a RunCodeTool message by running the code and returning the result.
+        Handle a PandasEvalTool message by evaluating the `expression` field
+            and returning the result.
         Args:
-            msg (RunCodeTool): The tool-message to handle.
+            msg (PandasEvalTool): The tool-message to handle.
 
         Returns:
             str: The result of running the code along with any print output.
         """
-        self.sent_code = True
-        code = msg.code
-        # Create a dictionary that maps 'df' to the actual DataFrame
+        self.sent_expression = True
+        exprn = msg.expression
         local_vars = {"df": self.df}
-
         # Create a string-based I/O stream
         code_out = io.StringIO()
 
         # Temporarily redirect standard output to our string-based I/O stream
         sys.stdout = code_out
 
-        # Split the code into lines
-        lines = code.strip().split("\n")
-
-        lines = [
-            "import pandas as pd",
-            "import numpy as np",
-        ] + lines
-
-        # Run all lines as statements except for the last one
-        for line in lines[:-1]:
-            exec(line, {}, local_vars)
-
         # Evaluate the last line and get the result
         try:
-            eval_result = pd.eval(lines[-1], local_dict=local_vars)
+            eval_result = pd.eval(exprn, local_dict=local_vars)
         except Exception as e:
             eval_result = f"ERROR: {type(e)}: {e}"
 
@@ -242,15 +231,15 @@ class TableChatAgent(ChatAgent):
     def handle_message_fallback(
         self, msg: str | ChatDocument
     ) -> str | ChatDocument | None:
-        """Handle scenario where LLM forgets to say DONE or forgets to use run_code"""
+        """Handle scenario where LLM forgets to say DONE or
+        forgets to use pandas_eval"""
         if isinstance(msg, ChatDocument) and msg.metadata.sender == lr.Entity.LLM:
-            if self.sent_code:
+            if self.sent_expression:
                 return DONE
             else:
                 return """
-                    You forgot to use the `run_code` tool/function to find the answer.
-                    Try again using the `run_code` tool/function.
-                    Remember that ALL your code, including imports, 
-                    should be in the `code` field.
+                    You forgot to use the `pandas_eval` tool/function 
+                    to find the answer.
+                    Try again using the `pandas_eval` tool/function.
                     """
         return None

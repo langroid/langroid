@@ -122,6 +122,19 @@ teacher_task.run()
 <details>
 <summary> <b>Click to expand</b></summary>
 
+- **Apr 2024:**
+  - **0.1.236**: Support for open LLMs hosted on Groq, e.g. specify 
+    `chat_model="groq/llama3-8b-8192"`.
+      See [tutorial](https://langroid.github.io/langroid/tutorials/local-llm-setup/).
+  - **0.1.235**: `Task.run(), Task.run_async(), run_batch_tasks` have `max_cost` 
+    and `max_tokens` params to exit when tokens or cost exceed a limit. The result 
+    `ChatDocument.metadata` now includes a `status` field which is a code indicating a 
+     task completion reason code. Also `task.run()` etc can be invoked with an explicit
+     `session_id` field which is used as a key to look up various settings in Redis cache.
+    Currently only used to look up "kill status" - this allows killing a running task, either by `task.kill()`
+    or by the classmethod `Task.kill_session(session_id)`.
+    For example usage, see the `test_task_kill` in [tests/main/test_task.py](https://github.com/langroid/langroid/blob/main/tests/main/test_task.py)
+  
 - **Mar 2024:**
   - **0.1.216:** Improvements to allow concurrent runs of `DocChatAgent`, see the
     [`test_doc_chat_agent.py`](https://github.com/langroid/langroid/blob/main/tests/main/test_doc_chat_agent.py)
