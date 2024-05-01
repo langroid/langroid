@@ -15,6 +15,12 @@ from qdrant_client.http.models import (
     Filter,
     SearchParams,
     VectorParams,
+    SparseVectorParams,
+    SparseIndexParams,
+    SparseVector,
+    SearchRequest,
+    NamedVector,
+    NamedSparseVector,
 )
 
 from langroid.embedding_models.base import (
@@ -62,6 +68,10 @@ class QdrantDBConfig(VectorStoreConfig):
     storage_path: str = ".qdrant/data"
     embedding: EmbeddingModelsConfig = OpenAIEmbeddingsConfig()
     distance: str = Distance.COSINE
+    use_sparse_embeddings: bool = False
+    use_dense_embeddings: bool = True
+    sparse_embedding_model: str = ''
+    sparse_limit: int = 3
 
 
 class QdrantDB(VectorStore):
@@ -71,6 +81,10 @@ class QdrantDB(VectorStore):
         emb_model = EmbeddingModel.create(config.embedding)
         self.embedding_fn: EmbeddingFunction = emb_model.embedding_fn()
         self.embedding_dim = emb_model.embedding_dims
+        if self.config.use_sparse_embeddings:
+            from transformers import AutoModelForMaskedLM, AutoTokenizer
+            self.sparse_tokenizer = AutoTokenizer.from_pretrained(self.config.sparse_embedding_model)
+            self.sparse_model = AutoModelForMaskedLM.from_pretrained(self.config.sparse_embedding_model)
         self.host = config.host
         self.port = config.port
         load_dotenv()
@@ -205,12 +219,24 @@ class QdrantDB(VectorStore):
                 else:
                     logger.warning("Recreating fresh collection")
             self.client.delete_collection(collection_name=collection_name)
-        self.client.create_collection(
-            collection_name=collection_name,
-            vectors_config=VectorParams(
+        
+        vectors_config={
+            "": VectorParams(
                 size=self.embedding_dim,
                 distance=Distance.COSINE,
-            ),
+            )
+        }
+        sparse_vectors_config=None
+        if self.config.use_sparse_embeddings:
+            sparse_vectors_config={
+                'text-sparse': SparseVectorParams(
+                    index=SparseIndexParams()
+                )
+            }
+        self.client.create_collection(
+            collection_name=collection_name,
+            vectors_config=vectors_config,
+            sparse_vectors_config=sparse_vectors_config
         )
         collection_info = self.client.get_collection(collection_name=collection_name)
         assert collection_info.status == CollectionStatus.GREEN
@@ -220,6 +246,28 @@ class QdrantDB(VectorStore):
             logger.setLevel(logging.INFO)
             logger.info(collection_info)
             logger.setLevel(level)
+
+    def get_sparse_embeddings(self, inputs: List[str]) -> List[SparseVector]:
+        if not self.config.use_sparse_embeddings: return []
+        import torch
+        tokens = self.sparse_tokenizer(inputs, return_tensors='pt', truncation=True, padding=True)
+        output = self.sparse_model(**tokens)
+        vectors = torch.max(
+        torch.log(
+            1 + torch.relu(output.logits)
+        ) * tokens.attention_mask.unsqueeze(-1),
+        dim=1)[0].squeeze(dim=1)
+        sparse_embeddings = []
+        for vec in vectors:
+            cols = vec.nonzero().squeeze().cpu().tolist()
+            weights = vec[cols].cpu().tolist()
+            sparse_embeddings.append(
+                SparseVector(
+                    indices=cols,
+                    values=weights,
+                )
+            )
+        return sparse_embeddings
 
     def add_documents(self, documents: Sequence[Document]) -> None:
         # Add id to metadata if not already present
@@ -232,6 +280,7 @@ class QdrantDB(VectorStore):
             return
         document_dicts = [doc.dict() for doc in documents]
         embedding_vecs = self.embedding_fn([doc.content for doc in documents])
+        sparse_embedding_vecs = self.get_sparse_embeddings([doc.content for doc in documents])
         if self.config.collection_name is None:
             raise ValueError("No collection name set, cannot ingest docs")
         if self.config.collection_name not in colls:
@@ -241,11 +290,14 @@ class QdrantDB(VectorStore):
         # else we get an API error
         b = self.config.batch_size
         for i in range(0, len(ids), b):
+            vectors={'': embedding_vecs[i : i + b]}
+            if self.config.use_sparse_embeddings:
+                vectors['text-sparse'] = sparse_embedding_vecs[i : i + b]
             self.client.upsert(
                 collection_name=self.config.collection_name,
                 points=Batch(
                     ids=ids[i : i + b],
-                    vectors=embedding_vecs[i : i + b],
+                    vectors=vectors,
                     payloads=document_dicts[i : i + b],
                 ),
             )
@@ -332,18 +384,38 @@ class QdrantDB(VectorStore):
             filter = Filter()
         else:
             filter = Filter.parse_obj(json.loads(where))
+        requests=[
+            SearchRequest(
+                vector=NamedVector(
+                    name="",
+                    vector=embedding,
+                ),
+                limit=k,
+                with_payload=True,
+                filter=filter,
+            )
+        ]
+        if self.config.use_sparse_embeddings:
+            sparse_embedding = self.get_sparse_embeddings([text])[0]
+            requests.append(
+                SearchRequest(
+                    vector=NamedSparseVector(
+                        name="text-sparse",
+                        vector=sparse_embedding,
+                    ),
+                    limit=self.config.sparse_limit,
+                    with_payload=True,
+                    filter=filter,
+                )
+            )
         if self.config.collection_name is None:
             raise ValueError("No collection name set, cannot search")
-        search_result: List[ScoredPoint] = self.client.search(
+        search_result: List[ScoredPoint] = self.client.search_batch(
             collection_name=self.config.collection_name,
-            query_vector=embedding,
-            query_filter=filter,
-            limit=k,
-            search_params=SearchParams(
-                hnsw_ef=128,
-                exact=False,  # use Apx NN, not exact NN
-            ),
+            requests=requests
         )
+
+        search_result = [match for result in search_result for match in result] # 2D list -> 1D list
         scores = [match.score for match in search_result if match is not None]
         docs = [
             Document(**(match.payload))  # type: ignore
