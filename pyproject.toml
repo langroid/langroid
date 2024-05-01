@@ -90,13 +90,15 @@ grpcio = "^1.62.1"
 metaphor-python = {version = "^0.1.23", optional = true}
 chainlit = {version = "^1.0.400", optional = true}
 python-socketio = {version="^5.11.0", optional=true}
-duckduckgo-search = "^4.4"
+duckduckgo-search = "^5.3.0"
 huggingface-hub = {version="^0.21.2", optional=true}
 pdf2image = "^1.17.0"
 pytesseract = "^0.3.10"
 types-pyyaml = "^6.0.12.20240311"
 types-pillow = "^10.2.0.20240406"
 groq = "^0.5.0"
+nest-asyncio = "^1.6.0"
+python-magic = "^0.4.27"
 
 [tool.poetry.extras]
 # install these using `poetry install -E [...]` where [...] is one of the extras below
