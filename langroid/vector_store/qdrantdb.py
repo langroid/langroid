@@ -206,8 +206,7 @@ class QdrantDB(VectorStore):
                 with the same name. Defaults to False.
         """
         self.config.collection_name = collection_name
-        collections = self.list_collections()
-        if collection_name in collections:
+        if self.client.collection_exists(collection_name=collection_name):
             coll = self.client.get_collection(collection_name=collection_name)
             if (
                 coll.status == CollectionStatus.GREEN
@@ -219,6 +218,8 @@ class QdrantDB(VectorStore):
                     return
                 else:
                     logger.warning("Recreating fresh collection")
+            self.client.delete_collection(collection_name=collection_name)
+        
         vectors_config={
             "": VectorParams(
                 size=self.embedding_dim,
@@ -232,21 +233,20 @@ class QdrantDB(VectorStore):
                     index=SparseIndexParams()
                 )
             }
-
-        self.client.recreate_collection(
+        self.client.create_collection(
             collection_name=collection_name,
             vectors_config=vectors_config,
             sparse_vectors_config=sparse_vectors_config
         )
         collection_info = self.client.get_collection(collection_name=collection_name)
         assert collection_info.status == CollectionStatus.GREEN
-        assert collection_info.vectors_count == 0
+        assert collection_info.vectors_count in [0, None]
         if settings.debug:
             level = logger.getEffectiveLevel()
             logger.setLevel(logging.INFO)
             logger.info(collection_info)
             logger.setLevel(level)
-    
+
     def get_sparse_embeddings(self, inputs: List[str]) -> List[SparseVector]:
         if not self.config.use_sparse_embeddings: return []
         import torch
