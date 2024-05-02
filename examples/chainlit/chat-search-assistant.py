@@ -12,6 +12,7 @@ chainlit run examples/chainlit/chat-search-assistant.py
 from dotenv import load_dotenv
 from textwrap import dedent
 
+import os
 import chainlit as cl
 import langroid as lr
 from langroid.agent.callbacks.chainlit import add_instructions
@@ -25,7 +26,7 @@ from langroid.utils.configuration import Settings, set_global
 async def main(
     debug: bool = False,
     # e.g. ollama/mistral or local/localhost:5000/v1 default is GPT4_TURBO
-    model: str = "",
+    model: str = os.getenv("MODEL", ""),
     provider: str = "ddg",  # or "google", "metaphor"
     nocache: bool = False,
 ):
