@@ -7,7 +7,7 @@ def test_url_loader():
     loader = URLLoader(
         urls=[
             "https://pytorch.org",
-            "https://openai.com",
+            "https://www.tensorflow.org",
         ],
     )
 
