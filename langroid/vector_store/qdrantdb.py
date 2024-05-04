@@ -3,7 +3,7 @@ import json
 import logging
 import os
 import uuid
-from typing import List, Optional, Sequence, Tuple, TypeVar
+from typing import Dict, List, Optional, Sequence, Tuple, TypeVar
 
 from dotenv import load_dotenv
 from qdrant_client import QdrantClient
@@ -27,7 +27,7 @@ from langroid.embedding_models.base import (
     EmbeddingModelsConfig,
 )
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
-from langroid.mytypes import Document, EmbeddingFunction
+from langroid.mytypes import Document, EmbeddingFunction, Embeddings
 from langroid.utils.configuration import settings
 from langroid.vector_store.base import VectorStore, VectorStoreConfig
 
@@ -68,7 +68,6 @@ class QdrantDBConfig(VectorStoreConfig):
     embedding: EmbeddingModelsConfig = OpenAIEmbeddingsConfig()
     distance: str = Distance.COSINE
     use_sparse_embeddings: bool = False
-    use_dense_embeddings: bool = True
     sparse_embedding_model: str = ""
     sparse_limit: int = 3
 
@@ -76,7 +75,7 @@ class QdrantDBConfig(VectorStoreConfig):
 class QdrantDB(VectorStore):
     def __init__(self, config: QdrantDBConfig = QdrantDBConfig()):
         super().__init__(config)
-        self.config = config
+        self.config: QdrantDBConfig = config
         emb_model = EmbeddingModel.create(config.embedding)
         self.embedding_fn: EmbeddingFunction = emb_model.embedding_fn()
         self.embedding_dim = emb_model.embedding_dims
@@ -268,7 +267,7 @@ class QdrantDB(VectorStore):
         )
         output = self.sparse_model(**tokens)
         vectors = torch.max(
-            torch.log(1 + torch.relu(output.logits))
+            torch.log(torch.relu(output.logits) + torch.tensor(1.0))
             * tokens.attention_mask.unsqueeze(-1),
             dim=1,
         )[0].squeeze(dim=1)
@@ -307,7 +306,9 @@ class QdrantDB(VectorStore):
         # else we get an API error
         b = self.config.batch_size
         for i in range(0, len(ids), b):
-            vectors = {"": embedding_vecs[i : i + b]}
+            vectors: Dict[str, Embeddings | List[SparseVector]] = {
+                "": embedding_vecs[i : i + b]
+            }
             if self.config.use_sparse_embeddings:
                 vectors["text-sparse"] = sparse_embedding_vecs[i : i + b]
             self.client.upsert(
@@ -427,12 +428,12 @@ class QdrantDB(VectorStore):
             )
         if self.config.collection_name is None:
             raise ValueError("No collection name set, cannot search")
-        search_result: List[ScoredPoint] = self.client.search_batch(
+        search_result_lists: List[List[ScoredPoint]] = self.client.search_batch(
             collection_name=self.config.collection_name, requests=requests
         )
 
         search_result = [
-            match for result in search_result for match in result
+            match for result in search_result_lists for match in result
         ]  # 2D list -> 1D list
         scores = [match.score for match in search_result if match is not None]
         docs = [
