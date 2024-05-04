@@ -99,12 +99,13 @@ types-pillow = "^10.2.0.20240406"
 groq = "^0.5.0"
 nest-asyncio = "^1.6.0"
 python-magic = "^0.4.27"
+transformers = {version="^4.40.1", optional=true}
 
 [tool.poetry.extras]
 # install these using `poetry install -E [...]` where [...] is one of the extras below
 # or install multiple extras using, e.g.,  `poetry install -E "litellm mysql"
 hf-embeddings = ["sentence-transformers", "torch"]
-transformers = ["transformers", "huggingface-hub"]
+transformers = ["transformers", "huggingface-hub", "torch"]
 unstructured = ["unstructured"]
 postgres = ["psycopg2", "pytest-postgresql"]
 mysql = ["pymysql", "pytest-mysql"]
