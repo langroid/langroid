@@ -80,6 +80,7 @@ def vecdb(request) -> VectorStore:
         qd_cfg_cloud = QdrantDBConfig(
             cloud=True,
             collection_name="test-" + embed_cfg.model_type,
+            replace_collection=True,
             storage_path=qd_dir,
             embedding=embed_cfg,
             use_sparse_embeddings=True,
@@ -180,6 +181,19 @@ def test_vector_stores_search(
 
 
 @pytest.mark.parametrize(
+    "query,results,exceptions",
+    [
+        ("which city is Belgium's capital?", [phrases.BELGIUM], ["meliseach"]),
+        ("capital of France", [phrases.FRANCE], ["meliseach"]),
+        ("hello", [phrases.HELLO], ["meliseach"]),
+        ("hi there", [phrases.HI_THERE], ["meliseach"]),
+        ("men and women over 40", [phrases.OVER_40], ["meilisearch"]),
+        ("people aged less than 40", [phrases.UNDER_40], ["meilisearch"]),
+        ("Canadian residents", [phrases.CANADA], ["meilisearch"]),
+        ("people outside Canada", [phrases.NOT_CANADA], ["meilisearch"]),
+    ],
+)
+@pytest.mark.parametrize(
     "vecdb",
     ["qdrant_hybrid_cloud"],
     indirect=True,
@@ -188,8 +202,6 @@ def test_hybrid_vector_search(
     vecdb, query: str, results: List[str], exceptions: List[str]
 ):
     if vecdb.__class__.__name__.lower() in exceptions:
-        # we don't expect some of these to work,
-        # e.g. MeiliSearch is a text search engine, not a vector store
         return
     docs_and_scores = vecdb.similar_texts_with_scores(query, k=len(vars(phrases)))
     # first doc should be best match
