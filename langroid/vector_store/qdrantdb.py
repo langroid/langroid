@@ -87,8 +87,8 @@ class QdrantDB(VectorStore):
                 raise ImportError(
                     """
                     To use sparse embeddings, 
-                    you must install langroid with the [hf-embeddings] extra, e.g.:
-                    pip install "langroid[hf-embeddings]"
+                    you must install langroid with the [transformers] extra, e.g.:
+                    pip install "langroid[transformers]"
                     """
                 )
 
