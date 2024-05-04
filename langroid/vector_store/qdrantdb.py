@@ -81,7 +81,16 @@ class QdrantDB(VectorStore):
         self.embedding_fn: EmbeddingFunction = emb_model.embedding_fn()
         self.embedding_dim = emb_model.embedding_dims
         if self.config.use_sparse_embeddings:
-            from transformers import AutoModelForMaskedLM, AutoTokenizer
+            try:
+                from transformers import AutoModelForMaskedLM, AutoTokenizer
+            except ImportError:
+                raise ImportError(
+                    """
+                    To use sparse embeddings, 
+                    you must install langroid with the [hf-embeddings] extra, e.g.:
+                    pip install "langroid[hf-embeddings]"
+                    """
+                )
 
             self.sparse_tokenizer = AutoTokenizer.from_pretrained(
                 self.config.sparse_embedding_model
