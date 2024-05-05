@@ -7,6 +7,14 @@ See that script for details.
 Run like this:
 
 chainlit run examples/chainlit/chat-search-assistant.py
+
+To run with a different LLM, set the MODEL environment variable:
+
+MODEL=ollama/mistral chainlit run examples/chainlit/chat-search-assistant.py
+
+or
+
+MODEL=groq/llama3-70b-8192 chainlit run examples/chainlit/chat-search-assistant.py
 """
 
 from dotenv import load_dotenv
