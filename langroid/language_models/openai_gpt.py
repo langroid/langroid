@@ -670,23 +670,26 @@ class OpenAIGPT(LanguageModel):
         sys.stdout.write(Colors().GREEN)
         sys.stdout.flush()
         has_function = False
-        for event in response:
-            (
-                is_break,
-                has_function,
-                function_name,
-                function_args,
-                completion,
-            ) = self._process_stream_event(
-                event,
-                chat=chat,
-                has_function=has_function,
-                completion=completion,
-                function_args=function_args,
-                function_name=function_name,
-            )
-            if is_break:
-                break
+        try:
+            for event in response:
+                (
+                    is_break,
+                    has_function,
+                    function_name,
+                    function_args,
+                    completion,
+                ) = self._process_stream_event(
+                    event,
+                    chat=chat,
+                    has_function=has_function,
+                    completion=completion,
+                    function_args=function_args,
+                    function_name=function_name,
+                )
+                if is_break:
+                    break
+        except Exception:
+            pass
 
         print("")
         # TODO- get usage info in stream mode (?)
@@ -722,23 +725,26 @@ class OpenAIGPT(LanguageModel):
         sys.stdout.write(Colors().GREEN)
         sys.stdout.flush()
         has_function = False
-        async for event in response:
-            (
-                is_break,
-                has_function,
-                function_name,
-                function_args,
-                completion,
-            ) = self._process_stream_event(
-                event,
-                chat=chat,
-                has_function=has_function,
-                completion=completion,
-                function_args=function_args,
-                function_name=function_name,
-            )
-            if is_break:
-                break
+        try:
+            async for event in response:
+                (
+                    is_break,
+                    has_function,
+                    function_name,
+                    function_args,
+                    completion,
+                ) = self._process_stream_event(
+                    event,
+                    chat=chat,
+                    has_function=has_function,
+                    completion=completion,
+                    function_args=function_args,
+                    function_name=function_name,
+                )
+                if is_break:
+                    break
+        except Exception:
+            pass
 
         print("")
         # TODO- get usage info in stream mode (?)

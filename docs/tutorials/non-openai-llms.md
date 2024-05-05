@@ -42,6 +42,13 @@ llm_config = lm.OpenAIGPTConfig(
 )
 ```
 
+A similar process works for the `Gemini 1.5 Pro` LLM:
+
+- get the API key [here](https://aistudio.google.com/)
+- set the `GEMINI_API_KEY` environment variable in your `.env` file or shell
+- set `chat_model="litellm/gemini/gemini-1.5-pro-latest"` in the `OpenAIGPTConfig` object
+
+For other gemini models supported by litellm, see [their docs](https://litellm.vercel.app/docs/providers/gemini)
 
 
 ## Working with the created `OpenAIGPTConfig` object

@@ -47,7 +47,7 @@ async def test_openai_gpt_async(test_settings: Settings, streaming, country, cap
     # actually calls `achat` under the hood
     cfg.use_chat_for_completion = True
     # check that "agenerate" works
-    response = await mdl.agenerate(prompt=question, max_tokens=10)
+    response = await mdl.agenerate(prompt=question, max_tokens=50)
     assert capital in response.message
     assert not response.cached
 
@@ -59,13 +59,13 @@ async def test_openai_gpt_async(test_settings: Settings, streaming, country, cap
         ),
         LLMMessage(role=Role.USER, content=question),
     ]
-    response = await mdl.achat(messages=messages, max_tokens=10)
+    response = await mdl.achat(messages=messages, max_tokens=50)
     assert capital in response.message
     assert not response.cached
 
     set_global(Settings(cache=True))
     # should be from cache this time
-    response = await mdl.achat(messages=messages, max_tokens=10)
+    response = await mdl.achat(messages=messages, max_tokens=50)
     assert capital in response.message
     assert response.cached
 
@@ -78,7 +78,7 @@ async def test_openai_gpt_async(test_settings: Settings, streaming, country, cap
     ]
 
     try:
-        _ = await mdl.achat(messages=messages, max_tokens=10)
+        _ = await mdl.achat(messages=messages, max_tokens=50)
     except Exception as e:
         assert isinstance(e, openai.BadRequestError)
 
@@ -105,7 +105,7 @@ async def test_llm_async_concurrent(test_settings: Settings):
     questions = ["1+" + str(i) for i in range(N)]
     expected_answers = [str(i + 1) for i in range(N)]
     answers = await asyncio.gather(
-        *(mdl.agenerate(prompt=question, max_tokens=20) for question in questions)
+        *(mdl.agenerate(prompt=question, max_tokens=50) for question in questions)
     )
 
     assert len(answers) == len(questions)
@@ -113,7 +113,7 @@ async def test_llm_async_concurrent(test_settings: Settings):
         assert any(e in a.message for a in answers)
 
     answers = await asyncio.gather(
-        *(mdl.achat(question, max_tokens=20) for question in questions)
+        *(mdl.achat(question, max_tokens=50) for question in questions)
     )
     assert len(answers) == len(questions)
     for e in expected_answers:
