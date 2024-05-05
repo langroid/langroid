@@ -6,7 +6,8 @@ This may sound limiting, but fortunately:
 - many open-source LLMs can be served via 
 OpenAI-compatible endpoints. See the [Local LLM Setup](https://langroid.github.io/langroid/tutorials/local-llm-setup/) guide for details.
 - there are tools like [LiteLLM](https://github.com/BerriAI/litellm/tree/main/litellm) 
-  that provide an OpenAI-like API for _hundreds_ of non-OpenAI LLM providers (e.g. Anthropic's Claude)
+  that provide an OpenAI-like API for _hundreds_ of non-OpenAI LLM providers 
+(e.g. Anthropic's Claude, Google's Gemini).
   
 Below we show how you can use the LiteLLM library with Langroid.
 
