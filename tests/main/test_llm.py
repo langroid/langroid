@@ -51,7 +51,7 @@ def test_openai_gpt(test_settings: Settings, streaming, country, capital):
     # actually calls `chat` under the hood
     cfg.use_chat_for_completion = True
     # check that "generate" works when "use_chat_for_completion" is True
-    response = mdl.generate(prompt=question, max_tokens=10)
+    response = mdl.generate(prompt=question, max_tokens=50)
     assert capital in response.message
     assert not response.cached
 
@@ -63,14 +63,14 @@ def test_openai_gpt(test_settings: Settings, streaming, country, capital):
         ),
         LLMMessage(role=Role.USER, content=question),
     ]
-    response = mdl.chat(messages=messages, max_tokens=10)
+    response = mdl.chat(messages=messages, max_tokens=50)
     assert capital in response.message
     assert not response.cached
 
     test_settings.cache = True
     set_global(test_settings)
     # should be from cache this time
-    response = mdl.chat(messages=messages, max_tokens=10)
+    response = mdl.chat(messages=messages, max_tokens=50)
     assert capital in response.message
     assert response.cached
 
@@ -83,7 +83,7 @@ def test_openai_gpt(test_settings: Settings, streaming, country, capital):
     ]
 
     try:
-        _ = mdl.chat(messages=messages, max_tokens=10)
+        _ = mdl.chat(messages=messages, max_tokens=50)
     except Exception as e:
         assert isinstance(e, groq.BadRequestError | openai.BadRequestError)
 
@@ -141,7 +141,7 @@ def test_model_selection(test_settings: Settings):
     defaultOpenAIChatModel = lr.language_models.openai_gpt.defaultOpenAIChatModel
 
     def get_response(llm):
-        llm.generate(prompt="What is the capital of France?", max_tokens=10)
+        llm.generate(prompt="What is the capital of France?", max_tokens=50)
 
     def simulate_response(llm):
         llm.run_on_first_use()
