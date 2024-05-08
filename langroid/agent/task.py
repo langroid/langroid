@@ -170,24 +170,25 @@ class Task:
                 the config may affect other agents using the same config.
                 """
             )
-
+        self.restart = restart
+        agent = cast(ChatAgent, agent)
+        self.agent: ChatAgent = agent
         if isinstance(agent, ChatAgent) and len(agent.message_history) == 0 or restart:
-            agent = cast(ChatAgent, agent)
-            agent.clear_history(0)
-            agent.clear_dialog()
+            self.agent.clear_history(0)
+            self.agent.clear_dialog()
             # possibly change the system and user messages
             if system_message:
                 # we always have at least 1 task_message
-                agent.set_system_message(system_message)
+                self.agent.set_system_message(system_message)
             if user_message:
-                agent.set_user_message(user_message)
+                self.agent.set_user_message(user_message)
         self.max_cost: float = 0
         self.max_tokens: int = 0
         self.session_id: str = ""
         self.logger: None | RichFileLogger = None
         self.tsv_logger: None | logging.Logger = None
         self.color_log: bool = False if settings.notebook else True
-        self.agent = agent
+
         self.step_progress = False  # progress in current step?
         self.n_stalled_steps = 0  # how many consecutive steps with no progress?
         self.max_stalled_steps = max_stalled_steps
@@ -281,7 +282,7 @@ class Task:
             single_round=self.single_round,
             system_message=self.agent.system_message,
             user_message=self.agent.user_message,
-            restart=False,
+            restart=self.restart,
             default_human_response=self.default_human_response,
             interactive=self.interactive,
             erase_substeps=self.erase_substeps,
@@ -442,6 +443,11 @@ class Task:
     ) -> Optional[ChatDocument]:
         """Synchronous version of `run_async()`.
         See `run_async()` for details."""
+
+        if self.restart:
+            self.agent.clear_history(0)
+            self.agent.clear_dialog()
+
         self.task_progress = False
         self.n_stalled_steps = 0
         self.max_cost = max_cost
@@ -522,6 +528,10 @@ class Task:
         # have come from another LLM), as far as this agent is concerned, the initial
         # message can be considered to be from the USER
         # (from the POV of this agent's LLM).
+        if self.restart:
+            self.agent.clear_history(0)
+            self.agent.clear_dialog()
+
         self.task_progress = False
         self.n_stalled_steps = 0
         self.max_cost = max_cost
@@ -607,6 +617,13 @@ class Task:
             if self.erase_substeps:
                 # TODO I don't like directly accessing agent message_history. Revisit.
                 # (Pchalasani)
+                # Note: msg history will consist of:
+                # - H: the original msg history, ending at idx= self.message_history_idx
+                # - R: this agent's response, which presumably leads to:
+                # - X: a series of back-and-forth msgs from sub-tasks [X]
+                # - F: the final result message, from this agent.
+                # Here we are deleting all of [X] from the agent's message history,
+                # so that it simply looks as if the sub-tasks never happened.
                 del self.agent.message_history[
                     self.message_history_idx + 2 : n_messages - 1
                 ]

@@ -520,6 +520,16 @@ class ChatAgent(Agent):
         )
         return response
 
+    def init_message_history(self) -> None:
+        """
+        Initialize the message history with the system message and user message
+        """
+        self.message_history = [self._create_system_and_tools_message()]
+        if self.user_message:
+            self.message_history.append(
+                LLMMessage(role=Role.USER, content=self.user_message)
+            )
+
     def _prep_llm_messages(
         self,
         message: Optional[str | ChatDocument] = None,
@@ -553,11 +563,7 @@ class ChatAgent(Agent):
 
         if len(self.message_history) == 0:
             # initial messages have not yet been loaded, so load them
-            self.message_history = [self._create_system_and_tools_message()]
-            if self.user_message:
-                self.message_history.append(
-                    LLMMessage(role=Role.USER, content=self.user_message)
-                )
+            self.init_message_history()
 
             # for debugging, show the initial message history
             if settings.debug:
