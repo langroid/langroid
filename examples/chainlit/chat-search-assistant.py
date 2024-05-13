@@ -35,7 +35,7 @@ async def main(
     debug: bool = False,
     # e.g. ollama/mistral or local/localhost:5000/v1 default is GPT4_TURBO
     model: str = os.getenv("MODEL", ""),
-    provider: str = "ddg",  # or "google", "metaphor"
+    provider: str = "metaphor",  # or "google", "metaphor"
     nocache: bool = False,
 ):
     set_global(
