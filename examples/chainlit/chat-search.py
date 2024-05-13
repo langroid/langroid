@@ -53,7 +53,7 @@ class SearchAgent(lr.ChatAgent):
         if response is None:
             return None
         content = response.content
-        search_tool = DuckduckgoSearchTool
+        search_tool = MetaphorSearchTool
         if content.startswith("/"):
             match content[1]:
                 case "d":
@@ -99,7 +99,7 @@ async def setup_agent_task(search_tool: lr.ToolMessage):
 @cl.on_settings_update
 async def on_update(settings):
     await update_llm(settings)
-    await setup_agent_task(DuckduckgoSearchTool)
+    await setup_agent_task(MetaphorSearchTool)
 
 
 @cl.on_chat_start
@@ -128,7 +128,7 @@ async def on_chat_start():
     )
 
     await make_llm_settings_widgets()
-    await setup_agent_task(DuckduckgoSearchTool)
+    await setup_agent_task(MetaphorSearchTool)
 
 
 @cl.on_message
