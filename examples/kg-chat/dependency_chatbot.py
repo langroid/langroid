@@ -42,6 +42,7 @@ from langroid.agent.special.neo4j.neo4j_chat_agent import (
     Neo4jChatAgentConfig,
     Neo4jSettings,
 )
+from langroid.language_models.azure_openai import AzureConfig
 from langroid.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
 from langroid.utils.constants import NO_ANSWER
 from langroid.utils.configuration import set_global, Settings
@@ -230,15 +231,18 @@ def main(
 
     neo4j_settings = Neo4jSettings()
 
+    if model:
+        llm = OpenAIGPTConfig(chat_model=model or OpenAIChatModel.GPT4_TURBO)
+    else:
+        llm = AzureConfig()
+
     dependency_agent = DependencyGraphAgent(
         config=Neo4jChatAgentConfig(
             neo4j_settings=neo4j_settings,
             show_stats=False,
             use_tools=tools,
             use_functions_api=not tools,
-            llm=OpenAIGPTConfig(
-                chat_model=model or OpenAIChatModel.GPT4_TURBO,
-            ),
+            llm=llm,
         ),
     )
 
