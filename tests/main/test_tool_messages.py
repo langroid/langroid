@@ -87,6 +87,10 @@ cfg = ChatAgentConfig(
     prompts=PromptsConfig(),
     use_functions_api=False,
     use_tools=True,
+    system_message="""
+    VERY IMPORTANT: IF you see a possibility of using a tool/function,
+    you MUST use it, and MUST NOT ASK IN NATURAL LANGUAGE.
+    """,
 )
 agent = MessageHandlingAgent(cfg)
 
@@ -235,42 +239,25 @@ def test_handle_bad_tool_message():
 
 
 @pytest.mark.parametrize(
-    "use_functions_api, message_class, prompt, result",
+    "use_functions_api",
+    [True, False],
+)
+@pytest.mark.parametrize(
+    "message_class, prompt, result",
     [
         (
-            False,
             FileExistsMessage,
-            "Start by asking me whether the file 'requirements.txt' exists",
+            "You have to find out whether the file 'requirements.txt' exists",
             "yes",
         ),
         (
-            False,
             PythonVersionMessage,
-            "Start by asking me about the python version",
+            "Find out about the python version",
             "3.9",
         ),
         (
-            False,
             CountryCapitalMessage,
-            "Start by asking me whether the capital of France is Paris",
-            "yes",
-        ),
-        (
-            True,
-            FileExistsMessage,
-            "Start by asking me whether the file 'requirements.txt' exists",
-            "yes",
-        ),
-        (
-            True,
-            PythonVersionMessage,
-            "Start by asking me about the python version",
-            "3.9",
-        ),
-        (
-            True,
-            CountryCapitalMessage,
-            "Start by asking me whether the capital of France is Paris",
+            "You have to check whether Paris is the capital of France",
             "yes",
         ),
     ],
