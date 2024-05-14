@@ -232,7 +232,7 @@ def main(
     neo4j_settings = Neo4jSettings()
 
     if model:
-        llm = OpenAIGPTConfig(chat_model=model or OpenAIChatModel.GPT4_TURBO)
+        llm = OpenAIGPTConfig(chat_model=model)
     else:
         llm = AzureConfig()
 
