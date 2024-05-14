@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "langroid"
-version = "0.1.242"
+version = "0.1.243"
 description = "Harness LLMs with Multi-Agent Programming"
 authors = ["Prasad Chalasani <pchalasani@gmail.com>"]
 readme = "README.md"
@@ -90,7 +90,7 @@ grpcio = "^1.62.1"
 metaphor-python = {version = "^0.1.23", optional = true}
 chainlit = {version = "^1.0.400", optional = true}
 python-socketio = {version="^5.11.0", optional=true}
-duckduckgo-search = "^5.3.0"
+duckduckgo-search = "^6.0.0"
 huggingface-hub = {version="^0.21.2", optional=true}
 pdf2image = "^1.17.0"
 pytesseract = "^0.3.10"
