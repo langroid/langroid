@@ -19,7 +19,7 @@ def pytest_addoption(parser) -> None:
     parser.addoption("--ct", default="redis", help="redis or momento")
     parser.addoption(
         "--m",
-        default=OpenAIChatModel.GPT4,
+        default=OpenAIChatModel.GPT4o,
         help="""
         language model name, e.g. litellm/ollama/llama2, or 
         local or localhost:8000 or localhost:8000/v1
