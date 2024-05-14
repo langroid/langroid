@@ -533,7 +533,7 @@ def test_doc_chat_add_content_fields(
     agent.ingest_dataframe(df, content="summary", metadata=metadata)
     response = agent.llm_response(
         """
-        What was the title of the George Morewell book and when was it written?
+        What was the title of the book by George Morewell and when was it written?
         """
     )
     assert "2084" in response.content and "1989" in response.content
