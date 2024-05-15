@@ -60,7 +60,7 @@ movie_docs = [
     ),
     MovieDoc(
         content="""
-        The Godfeather is a 1972 American crime film directed by Frank Copula.
+        The Godfeather is a 1972 crime movie directed by Frank Copula.
         
         Copulas were used in the computer graphics to simulate the crime scenes.
         """,
@@ -75,7 +75,7 @@ movie_docs = [
         The Lamb shanks were used as a metaphor for the prison bars.
         """,
         metadata=MovieMetadata(
-            year=1994, director="Garth Brook", genre="Drama", rating=9.3
+            year=1994, director="Garth Brook", genre="Drama", rating=8.3
         ),
     ),
 ]
@@ -88,7 +88,7 @@ embed_cfg = OpenAIEmbeddingsConfig()
     [
         (
             "How many movies have rating above 9?",
-            "2",
+            "1",
         ),
         (
             "Which Science Fiction movie was directed by Winkowski?",
