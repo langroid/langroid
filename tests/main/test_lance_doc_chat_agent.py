@@ -19,6 +19,7 @@ from langroid.vector_store.lancedb import LanceDBConfig
 
 class MovieMetadata(DocMetaData):
     # Field(..., ) are optional but can help the LLM
+    title: str = Field(..., description="The title of the movie.")
     year: int = Field(..., description="The year the movie was released.")
     director: str = Field(
         ..., description="The Full Name of the director of the movie."
@@ -41,6 +42,7 @@ movie_docs = [
         It was a movie full of projections of vectors in 3D space.
         """,
         metadata=MovieMetadata(
+            title="The Vector",
             year=1999,
             director="Jomes Winkowski",
             genre="Science Fiction",
@@ -55,7 +57,11 @@ movie_docs = [
         The sparseness of the alien landscape was a key feature of the movie.
         """,
         metadata=MovieMetadata(
-            year=1968, director="Stanley Hendrick", genre="Science Fiction", rating=8.9
+            title="Sparse Odyssey",
+            year=1968,
+            director="Stanley Hendrick",
+            genre="Science Fiction",
+            rating=8.9,
         ),
     ),
     MovieDoc(
@@ -65,7 +71,11 @@ movie_docs = [
         Copulas were used in the computer graphics to simulate the crime scenes.
         """,
         metadata=MovieMetadata(
-            year=1972, director="Frank Copula", genre="Crime", rating=9.2
+            title="The Godfeather",
+            year=1972,
+            director="Frank Copula",
+            genre="Crime",
+            rating=9.2,
         ),
     ),
     MovieDoc(
@@ -75,7 +85,11 @@ movie_docs = [
         The Lamb shanks were used as a metaphor for the prison bars.
         """,
         metadata=MovieMetadata(
-            year=1994, director="Garth Brook", genre="Drama", rating=8.3
+            title="The Lamb Shank Redemption",
+            year=1994,
+            director="Garth Brook",
+            genre="Drama",
+            rating=8.3,
         ),
     ),
 ]
@@ -163,7 +177,7 @@ df = pd.DataFrame(
             "and directed by Jomes Winkowski.",
             "Sparse Odyssey is a 1968 science fiction film produced "
             "and directed by Stanley Hendrick.",
-            "The Godfeather is a 1972 about birds directed by Frank Copula.",
+            "The Godfeather is a 1972 movie about birds directed by Frank Copula.",
             "The Lamb Shank Redemption is a 1994 American drama "
             "film directed by Garth Brook about a prison escape.",
             "Escape from Alcoona is a 1979 American prison action film  "
@@ -177,7 +191,7 @@ df = pd.DataFrame(
             "Garth Brook",
             "Dan Seagull",
         ],
-        "genre": ["Science Fiction", "Science Fiction", "Crime", "Crime", "Crime"],
+        "genre": ["Science Fiction", "Science Fiction", "Nature", "Crime", "Crime"],
         "rating": [8, 10, 9.2, 8.7, 9.0],
     }
 )
@@ -219,7 +233,7 @@ def test_lance_doc_chat_agent_df_query_plan(
     cfg = DocChatAgentConfig(
         cross_encoder_reranking_model="",
         vecdb=ldb_cfg,
-        add_fields_to_content=["year", "director", "genre"],
+        add_fields_to_content=["title", "year", "director", "genre"],
         filter_fields=["year", "director", "genre", "rating"],
     )
     agent = LanceDocChatAgent(cfg)
@@ -295,7 +309,7 @@ def test_lance_doc_chat_agent_df(
     cfg = DocChatAgentConfig(
         cross_encoder_reranking_model="",
         vecdb=ldb_cfg,
-        add_fields_to_content=["year", "director", "genre"],
+        add_fields_to_content=["title", "year", "director", "genre"],
         filter_fields=["year", "director", "genre", "rating"],
     )
     agent = LanceDocChatAgent(cfg)
