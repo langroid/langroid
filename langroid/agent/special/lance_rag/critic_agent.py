@@ -64,6 +64,8 @@ class QueryPlanCriticConfig(LanceQueryPlanAgentConfig):
     ONLY using the `query_plan_feedback` tool, and DO NOT SAY ANYTHING ELSE.
     
     Here is how you must examine the QUERY PLAN + ANSWER:
+    - ALL filtering conditions in the original query must be EXPLICITLY 
+      mentioned in the FILTER, and the QUERY field should not be used for filtering.
     - If the ANSWER is in the expected form, then the QUERY PLAN is likely VALID,
       and your feedback should say VALID, with empty `suggested_fix`.
     - If the ANSWER is {NO_ANSWER} or of the wrong form, 

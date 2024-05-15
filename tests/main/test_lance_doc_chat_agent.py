@@ -7,6 +7,7 @@ from pydantic import Field
 from langroid.agent.special.doc_chat_agent import DocChatAgentConfig
 from langroid.agent.special.lance_doc_chat_agent import LanceDocChatAgent
 from langroid.agent.special.lance_rag.lance_rag_task import LanceRAGTaskCreator
+from langroid.agent.special.lance_tools import QueryPlan, QueryPlanTool
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
 from langroid.mytypes import DocMetaData, Document
 from langroid.parsing.parser import ParsingConfig, Splitter
@@ -194,11 +195,58 @@ class FlatMovieDoc(Document):
     metadata: DocMetaData = DocMetaData()
 
 
+@pytest.mark.parametrize("flatten", [False, True])
+def test_lance_doc_chat_agent_df_query_plan(
+    test_settings: Settings,
+    flatten: bool,
+):
+    """Test handling of manually-created query plan"""
+
+    set_global(test_settings)
+
+    ldb_dir = ".lancedb/data/test-2"
+    rmdir(ldb_dir)
+    ldb_cfg = LanceDBConfig(
+        cloud=False,
+        collection_name="test-lance-2",
+        replace_collection=True,
+        storage_path=ldb_dir,
+        embedding=embed_cfg,
+        document_class=FlatMovieDoc,
+        flatten=flatten,
+    )
+
+    cfg = DocChatAgentConfig(
+        cross_encoder_reranking_model="",
+        vecdb=ldb_cfg,
+        add_fields_to_content=["year", "director", "genre"],
+        filter_fields=["year", "director", "genre", "rating"],
+    )
+    agent = LanceDocChatAgent(cfg)
+
+    # convert df to list of dicts
+    doc_dicts = df.to_dict(orient="records")
+    # convert doc_dicts to list of FlatMovieDocs
+    docs = [FlatMovieDoc(**d) for d in doc_dicts]
+    agent.ingest_docs(docs, split=False)
+
+    query_plan = QueryPlanTool(
+        plan=QueryPlan(
+            original_query="Which movie about prison escapes is rated highest?",
+            query="movie about prison escape",
+            filter="",
+            dataframe_calc="df.sort_values(by='rating', ascending=False).iloc[0]",
+        )
+    )
+    result = agent.query_plan(query_plan)
+    assert "Alcoona" in result
+
+
 @pytest.mark.parametrize(
     "query, expected",
     [
         (
-            "Which movie about about prisons is rated highest?",
+            "Which movie about about prison escapes is rated highest?",
             "Alcoona",
         ),
         (
