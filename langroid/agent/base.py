@@ -812,12 +812,14 @@ class Agent(ABC):
             llm_model = (
                 "no-LLM" if self.config.llm is None else self.llm.config.chat_model
             )
-
+            # tot cost across all LLMs, agents
+            all_cost = format(self.llm.tot_tokens_cost()[1], ".4f")
             return (
                 f"[bold]Stats:[/bold] [magenta]N_MSG={chat_length}, "
                 f"TOKENS: in={in_tokens}, out={out_tokens}, "
                 f"max={max_out}, ctx={context_length}, "
-                f"COST: now=${llm_response_cost}, cumul=${cumul_cost} "
+                f"COST: now=${llm_response_cost}, cumul=${cumul_cost}, "
+                f"tot=${all_cost} "
                 f"[bold]({llm_model})[/bold][/magenta]"
             )
         return ""

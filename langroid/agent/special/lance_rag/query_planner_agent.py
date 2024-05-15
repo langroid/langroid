@@ -16,6 +16,7 @@ This agent has access to two tools:
 
 import logging
 
+import langroid as lr
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.chat_document import ChatDocument
 from langroid.agent.special.lance_tools import (
@@ -35,6 +36,7 @@ class LanceQueryPlanAgentConfig(ChatAgentConfig):
     doc_agent_name: str = "LanceRAG"
     doc_schema: str = ""
     use_tools = False
+    max_retries: int = 5  # max number of retries for query plan
     use_functions_api = True
 
     system_message = f"""
@@ -58,10 +60,13 @@ class LanceQueryPlanAgentConfig(ChatAgentConfig):
         so the REPHRASED QUERY should NOT mention ANY FILTER fields.
         The answer will answer based on documents whose CONTENTS match the QUERY, 
         possibly REPHRASED. 
-    - a Pandas-dataframe calculation/aggregation string that can be used to calculate
-        the answer to the original query, e.g. "df["rating"].mean()",
-        or "df.groupby("director").mean()["rating"]", etc, or empty string if no calc
-        is needed. The dataframe calc CAN refer to the `content` field. 
+    - an OPTIONAL SINGLE-LINE Pandas-dataframe calculation/aggregation string 
+        that can be used to calculate the answer to the original query, 
+        e.g. "df["rating"].mean()",
+        or "df.groupby("director").mean()["rating"]", 
+        or EMPTY string if no calc is needed. 
+        The dataframe calc CAN refer to the `content` field.
+        If a DataFrame calculation is NOT needed, leave this field EMPTY.
     
     
     EXAMPLE:
@@ -116,6 +121,8 @@ class LanceQueryPlanAgent(ChatAgent):
         super().__init__(config)
         self.config: LanceQueryPlanAgentConfig = config
         self.curr_query_plan: QueryPlan | None = None
+        # how many times re-trying query plan in response to feedback:
+        self.n_retries: int = 0
         self.result: str = ""  # answer received from LanceRAG
         # This agent should generate the QueryPlanTool
         # as well as handle it for validation
@@ -125,6 +132,8 @@ class LanceQueryPlanAgent(ChatAgent):
     def query_plan(self, msg: QueryPlanTool) -> str:
         """Valid, forward to RAG Agent"""
         # save, to be used to assemble QueryPlanResultTool
+        if len(msg.plan.dataframe_calc.split("\n")) > 1:
+            return "DATAFRAME CALCULATION must be a SINGLE LINE; Retry the `query_plan`"
         self.curr_query_plan = msg.plan
         return PASS_TO + self.config.doc_agent_name
 
@@ -132,7 +141,8 @@ class LanceQueryPlanAgent(ChatAgent):
         """Process Critic feedback on QueryPlan + Answer from RAG Agent"""
         # We should have saved answer in self.result by this time,
         # since this Agent seeks feedback only after receiving RAG answer.
-        if msg.feedback == "":
+        if msg.suggested_fix == "":
+            self.n_retries = 0
             # This means the Query Plan or Result is good, as judged by Critic
             if self.result == "":
                 # This was feedback for query with no result
@@ -141,9 +151,16 @@ class LanceQueryPlanAgent(ChatAgent):
                 return NO_ANSWER
             else:  # non-empty and non-null answer
                 return DONE + " " + self.result
+        self.n_retries += 1
+        if self.n_retries >= self.config.max_retries:
+            # bail out to avoid infinite loop
+            self.n_retries = 0
+            return DONE + " " + NO_ANSWER
         return f"""
-        here is FEEDBACK about your QUERY PLAN. Modify it if needed:
-        {msg.feedback}
+        here is FEEDBACK about your QUERY PLAN, and a SUGGESTED FIX.
+        Modify the QUERY PLAN if needed:
+        FEEDBACK: {msg.feedback}
+        SUGGESTED FIX: {msg.suggested_fix}
         """
 
     def handle_message_fallback(
@@ -177,4 +194,14 @@ class LanceQueryPlanAgent(ChatAgent):
             response_tmpl.metadata.recipient = self.config.critic_name
             self.curr_query_plan = None  # reset
             return response_tmpl
+        if (
+            isinstance(msg, ChatDocument)
+            and not self.has_tool_message_attempt(msg)
+            and msg.metadata.sender == lr.Entity.LLM
+        ):
+            # remind LLM to use the QueryPlanFeedbackTool
+            return """
+            You forgot to use the `query_plan` tool/function.
+            Re-try your response using the `query_plan` tool/function.
+            """
         return None
