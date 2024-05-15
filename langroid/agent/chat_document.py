@@ -175,6 +175,7 @@ class ChatDocument(Document):
                 request = fc.arguments.get("request")
                 if request is not None and request != "":
                     fc.name = request
+                    fc.arguments.pop("request")
         return ChatDocument(
             content=message,
             function_call=response.function_call,
