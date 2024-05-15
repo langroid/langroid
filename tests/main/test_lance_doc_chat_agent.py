@@ -163,7 +163,7 @@ df = pd.DataFrame(
             "and directed by Jomes Winkowski.",
             "Sparse Odyssey is a 1968 science fiction film produced "
             "and directed by Stanley Hendrick.",
-            "The Godfeather is a 1972 Mafia film directed by Frank Copula.",
+            "The Godfeather is a 1972 about birds directed by Frank Copula.",
             "The Lamb Shank Redemption is a 1994 American drama "
             "film directed by Garth Brook about a prison escape.",
             "Escape from Alcoona is a 1979 American prison action film  "
@@ -258,7 +258,7 @@ def test_lance_doc_chat_agent_df_query_plan(
             "Odyssey",
         ),
         (
-            "Tell me about a Mafia movie rated over 9",
+            "Tell me about a movie about birds rated over 9",
             "Godfeather",
         ),
         (
