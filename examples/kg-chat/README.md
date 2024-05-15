@@ -1,4 +1,4 @@
-# Reterival over Knwoledge Graphs
+# Reterival over Knowledge Graphs
 
 This folder contains two examples to demonistrate how to use `langroid` to build a chatbot that can answer questions about a knowledge graph.
 The first example is a **PyPi Packages Dependency Chatbot** that can answer questions about a dependency graph of a `PyPi` package. 
