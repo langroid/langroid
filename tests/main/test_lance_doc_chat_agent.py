@@ -150,12 +150,19 @@ def test_lance_doc_chat_agent(
 # dummy pandas dataframe from text
 df = pd.DataFrame(
     {
+        "title": [
+            "The Vector",
+            "Sparse Odyssey",
+            "The Godfeather",
+            "Lamb Shank Redemption",
+            "Escape from Alcoona",
+        ],
         "content": [
             "The Vector is a 1999 science fiction action film written "
             "and directed by Jomes Winkowski.",
             "Sparse Odyssey is a 1968 science fiction film produced "
             "and directed by Stanley Hendrick.",
-            "The Godfeather is a 1972 American crime film directed by Frank Copula.",
+            "The Godfeather is a 1972 Mafia film directed by Frank Copula.",
             "The Lamb Shank Redemption is a 1994 American drama "
             "film directed by Garth Brook about a prison escape.",
             "Escape from Alcoona is a 1979 American prison action film  "
@@ -176,6 +183,7 @@ df = pd.DataFrame(
 
 
 class FlatMovieDoc(Document):
+    title: str = Field(..., description="The title of the movie.")
     content: str = Field(..., description="A short description of the movie.")
     year: int = Field(..., description="The year the movie was released.")
     director: str = Field(
@@ -190,19 +198,19 @@ class FlatMovieDoc(Document):
     "query, expected",
     [
         (
-            "Average rating of Science Fiction movies?",
-            "9",
+            "Which movie about about prisons is rated highest?",
+            "Alcoona",
         ),
         (
-            "Which movie about about incarceration or jails is rated highest?",
-            "Alcoona",
+            "Average rating of Science Fiction movies?",
+            "9",
         ),
         (
             "Which Science Fiction movie is rated highest?",
             "Odyssey",
         ),
         (
-            "Tell me about a Crime movie rated over 9",
+            "Tell me about a Mafia movie rated over 9",
             "Godfeather",
         ),
         (

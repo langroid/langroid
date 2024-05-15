@@ -52,7 +52,7 @@ class QueryPlanCriticConfig(LanceQueryPlanAgentConfig):
       SEMANTIC/LEXICAL/FUZZY FILTER since the Assistant is able to use it to match 
       the CONTENT of the docs in various ways (semantic, lexical, fuzzy, etc.).
          
-    - DATAFRAME CALCULATION, and 
+    - DATAFRAME CALCULATION, which must be a SINGLE LINE calculation, and 
     - ANSWER recieved from an assistant that used this QUERY PLAN.
 
     In addition to the above SCHEMA fields there is a `content` field which:
@@ -65,7 +65,7 @@ class QueryPlanCriticConfig(LanceQueryPlanAgentConfig):
     
     Here is how you must examine the QUERY PLAN + ANSWER:
     - If the ANSWER is in the expected form, then the QUERY PLAN is likely VALID,
-      and your feedback should be EMPTY.
+      and your feedback should say VALID, with empty `suggested_fix`.
     - If the ANSWER is {NO_ANSWER} or of the wrong form, 
       then try to DIAGNOSE the problem IN THE FOLLOWING ORDER:
       - DATAFRAME CALCULATION -- is it doing the right thing?
@@ -83,11 +83,13 @@ class QueryPlanCriticConfig(LanceQueryPlanAgentConfig):
         REMEMBER: A filter should ONLY be used if EXPLICITLY REQUIRED BY THE QUERY.
      
     
-    ALWAYS use `query_plan_feedback` tool/fn to present your feedback!
-    and DO NOT SAY ANYTHING ELSE OUTSIDE THE TOOL/FN.
-    IF NO REVISION NEEDED, simply give EMPTY FEEBACK, SAY NOTHING ELSE
-    and DO NOT EXPLAIN YOURSELF.
-        
+    ALWAYS use `query_plan_feedback` tool/fn to present your feedback
+    in the `feedback` field, and if any fix is suggested,
+    present it in the `suggested_fix` field.
+    DO NOT SAY ANYTHING ELSE OUTSIDE THE TOOL/FN.
+    IF NO REVISION NEEDED, simply leave the `suggested_fix` field EMPTY,
+    and SAY NOTHING ELSE
+    and DO NOT EXPLAIN YOURSELF.        
     """
 
 
@@ -95,7 +97,7 @@ def plain_text_query_plan(msg: QueryPlanAnswerTool) -> str:
     plan = f"""
     OriginalQuery: {msg.plan.original_query}
     Filter: {msg.plan.filter}
-    Query: {msg.plan.query}
+    Rephrased Query: {msg.plan.query}
     DataframeCalc: {msg.plan.dataframe_calc}
     Answer: {msg.answer}
     """
@@ -126,11 +128,12 @@ class QueryPlanCritic(ChatAgent):
     def handle_message_fallback(
         self, msg: str | ChatDocument
     ) -> str | ChatDocument | None:
-        """Create QueryPlanFeedbackTool since LLM forgot"""
+        """Remind the LLM to use QueryPlanFeedbackTool since it forgot"""
         if isinstance(msg, ChatDocument) and msg.metadata.sender == Entity.LLM:
-            # our LLM forgot to use the QueryPlanFeedbackTool
-            feedback = QueryPlanFeedbackTool(feedback=msg.content)
-            msg.tool_messages = [feedback]
-            msg.content = DONE
-            return msg
+            return """
+            You forgot to use the `query_plan_feedback` tool/function.
+            Re-try your response using the `query_plan_feedback` tool/function,
+            remember to provide feedback in the `feedback` field,
+            and if any fix is suggested, provide it in the `suggested_fix` field.
+            """
         return None
