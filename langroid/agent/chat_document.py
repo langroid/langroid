@@ -166,6 +166,15 @@ class ChatDocument(Document):
         message = message.strip()
         if message in ["''", '""']:
             message = ""
+        if response.function_call is not None:
+            # Sometimes an OpenAI LLM may generate a function-call
+            # where the `name` is set, as well as `arugments.request` is set.
+            # In this case we override the `name` with the `request` value.
+            fc = response.function_call
+            if fc.arguments is not None:
+                request = fc.arguments.get("request")
+                if request is not None and request != "":
+                    fc.name = request
         return ChatDocument(
             content=message,
             function_call=response.function_call,
