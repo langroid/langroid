@@ -579,17 +579,18 @@ class ChainlitTaskCallbacks(ChainlitAgentCallbacks):
         top-level agent"""
 
         super().__init__(task.agent, msg, config)
-        ChainlitTaskCallbacks._inject_callbacks(task)
+        self._inject_callbacks(task)
         self.task = task
         self.task.callbacks.show_subtask_response = self.show_subtask_response
 
-    @staticmethod
+    @classmethod
     def _inject_callbacks(
-        task: lr.Task, config: ChainlitCallbackConfig = ChainlitCallbackConfig()
+        cls, task: lr.Task, config: ChainlitCallbackConfig = ChainlitCallbackConfig()
     ) -> None:
         # recursively apply ChainlitAgentCallbacks to agents of sub-tasks
         for t in task.sub_tasks:
-            ChainlitTaskCallbacks(t, config=config)
+            cls(t, config=config)
+            # ChainlitTaskCallbacks(t, config=config)
 
     def show_subtask_response(
         self, task: lr.Task, content: str, is_tool: bool = False
