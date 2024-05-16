@@ -67,6 +67,9 @@ class LanceQueryPlanAgentConfig(ChatAgentConfig):
         or EMPTY string if no calc is needed. 
         The dataframe calc CAN refer to the `content` field.
         If a DataFrame calculation is NOT needed, leave this field EMPTY.
+        
+        IMPORTANT: The DataFrame `df` in this calculation is the result of 
+        applying the FILTER AND REPHRASED QUERY to the documents.
     
     
     EXAMPLE:
@@ -87,7 +90,9 @@ class LanceQueryPlanAgentConfig(ChatAgentConfig):
          ASSISTANT does not know about them and only uses the query to 
          match the CONTENT of the docs.]
     DATAFRAME CALCULATION: "df["num_deaths"].sum()"
-
+        NOTE!!! The DataFrame `df` in this calculation is the result of
+        applying the FILTER AND REPHRASED QUERY to the documents, 
+        hence this computation will give the total deaths in shoplifting crimes.
     ------------- END OF EXAMPLE ----------------
     
     The FILTER must be a SQL-like condition, e.g. 
