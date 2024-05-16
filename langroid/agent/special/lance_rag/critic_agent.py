@@ -50,10 +50,10 @@ class QueryPlanCriticConfig(LanceQueryPlanAgentConfig):
       In general the REPHRASED QUERY should be relied upon to match the CONTENT 
       of the docs. Thus the REPHRASED QUERY itself acts like a 
       SEMANTIC/LEXICAL/FUZZY FILTER since the Assistant is able to use it to match 
-      the CONTENT of the docs in various ways (semantic, lexical, fuzzy, etc.).
-         
-    - DATAFRAME CALCULATION, which must be a SINGLE LINE calculation, and 
-    - ANSWER recieved from an assistant that used this QUERY PLAN.
+      the CONTENT of the docs in various ways (semantic, lexical, fuzzy, etc.).         
+    - DATAFRAME CALCULATION, which must be a SINGLE LINE calculation (or empty),
+        [NOTE ==> This calculation is applied AFTER the FILTER and REPHRASED QUERY.],
+    - ANSWER received from an assistant that used this QUERY PLAN.
 
     In addition to the above SCHEMA fields there is a `content` field which:
     - CANNOT appear in a FILTER, 
@@ -88,6 +88,10 @@ class QueryPlanCriticConfig(LanceQueryPlanAgentConfig):
       - If the REPHRASED QUERY looks correct, then check if the FILTER makes sense.
         REMEMBER: A filter should ONLY be used if EXPLICITLY REQUIRED BY THE QUERY.
      
+     
+     IMPORTANT!! The DATAFRAME CALCULATION is done AFTER applying the 
+         FILTER and REPHRASED QUERY! Keep this in mind when evaluating 
+         the correctness of the DATAFRAME CALCULATION.
     
     ALWAYS use `query_plan_feedback` tool/fn to present your feedback
     in the `feedback` field, and if any fix is suggested,
