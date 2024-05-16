@@ -143,6 +143,13 @@ class PandasEvalTool(ToolMessage):
             cls(expression="df[(df['gender'] == 'Male')]['income'].mean()"),
         ]
 
+    @classmethod
+    def instructions(cls) -> str:
+        return """
+            Use the `pandas_eval` tool/function to evaluate a pandas expression
+            involving the dataframe 'df' to answer the user's question.
+            """
+
 
 class TableChatAgent(ChatAgent):
     """

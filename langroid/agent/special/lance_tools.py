@@ -40,5 +40,9 @@ class QueryPlanAnswerTool(ToolMessage):
 
 class QueryPlanFeedbackTool(ToolMessage):
     request = "query_plan_feedback"
-    purpose = "To give <feedback> regarding the query plan."
+    purpose = """
+    To give <feedback> regarding the query plan, 
+    along with a <suggested_fix> if any (empty string if no fix is suggested).
+    """
     feedback: str
+    suggested_fix: str
