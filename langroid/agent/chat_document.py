@@ -172,10 +172,10 @@ class ChatDocument(Document):
             # (a) the `name` is set, as well as `arugments.request` is set,
             #  and in langroid we use the `request` value as the `name`.
             #  In this case we override the `name` with the `request` value.
-            # (b) the `name` looks like "functions: blah" or just "functions:"
-            #   In this case we strip the "functions:" part.
+            # (b) the `name` looks like "functions blah" or just "functions"
+            #   In this case we strip the "functions" part.
             fc = response.function_call
-            fc.name = fc.name.replace("functions:", "").strip()
+            fc.name = fc.name.replace("functions", "").strip()
             if fc.arguments is not None:
                 request = fc.arguments.get("request")
                 if request is not None and request != "":
