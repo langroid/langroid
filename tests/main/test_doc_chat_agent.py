@@ -12,7 +12,7 @@ from langroid.agent.special.lance_doc_chat_agent import LanceDocChatAgent
 from langroid.agent.task import Task
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
-from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
+from langroid.language_models.openai_gpt import OpenAIGPTConfig
 from langroid.mytypes import DocMetaData, Document, Entity
 from langroid.parsing.parser import ParsingConfig, Splitter
 from langroid.parsing.utils import generate_random_text
@@ -160,7 +160,6 @@ class _TestDocChatAgentConfig(DocChatAgentConfig):
     llm: OpenAIGPTConfig = OpenAIGPTConfig(
         stream=True,
         cache_config=RedisCacheConfig(fake=False),
-        chat_model=OpenAIChatModel.GPT4,
         use_chat_for_completion=True,
     )
 
@@ -323,7 +322,6 @@ class _MyDocChatAgentConfig(DocChatAgentConfig):
     llm: OpenAIGPTConfig = OpenAIGPTConfig(
         stream=True,
         cache_config=RedisCacheConfig(fake=False),
-        chat_model=OpenAIChatModel.GPT4,
         use_chat_for_completion=True,
     )
 

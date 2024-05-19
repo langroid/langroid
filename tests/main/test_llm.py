@@ -35,11 +35,6 @@ def test_openai_gpt(test_settings: Settings, streaming, country, capital):
         type="openai",
         max_output_tokens=100,
         min_output_tokens=10,
-        chat_model=(
-            OpenAIChatModel.GPT3_5_TURBO
-            if test_settings.gpt3_5
-            else OpenAIChatModel.GPT4  # or GPT4_TURBO
-        ),
         completion_model=OpenAICompletionModel.GPT3_5_TURBO_INSTRUCT,
         cache_config=RedisCacheConfig(fake=False),
     )
@@ -108,7 +103,6 @@ def _test_context_length_error(test_settings: Settings, mode: str, max_tokens: i
     cfg = OpenAIGPTConfig(
         stream=False,
         max_output_tokens=max_tokens,
-        chat_model=OpenAIChatModel.GPT4,  # or GPT4_TURBO,
         completion_model=OpenAICompletionModel.TEXT_DA_VINCI_003,
         cache_config=RedisCacheConfig(fake=False),
     )
@@ -168,7 +162,7 @@ def test_model_selection(test_settings: Settings):
                 except catch_errors:
                     pass
 
-    # Default is GPT4; we should not generate the warning in this case
+    # Default is GPT4o; we should not generate the warning in this case
     lr.language_models.openai_gpt.defaultOpenAIChatModel = OpenAIChatModel.GPT4_TURBO
     llm = OpenAIGPT(config=OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT3_5_TURBO))
     check_warning(llm, False)

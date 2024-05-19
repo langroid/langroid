@@ -8,7 +8,7 @@ import pytest
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
 from langroid.agent.tool_message import ToolMessage
-from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
+from langroid.language_models.openai_gpt import OpenAIGPTConfig
 from langroid.utils.configuration import Settings, set_global
 
 
@@ -44,9 +44,7 @@ def test_stateful_tool(test_settings: Settings, fn_api: bool):
     number_game_agent = NumberGameAgent(
         ChatAgentConfig(
             name="Gamer",
-            llm=OpenAIGPTConfig(
-                chat_model=OpenAIChatModel.GPT4,
-            ),
+            llm=OpenAIGPTConfig(),
             vecdb=None,
             use_tools=not fn_api,
             use_functions_api=fn_api,
@@ -74,9 +72,7 @@ async def test_stateful_tool_async(test_settings: Settings, fn_api: bool):
     number_game_agent = NumberGameAgent(
         ChatAgentConfig(
             name="Gamer",
-            llm=OpenAIGPTConfig(
-                chat_model=OpenAIChatModel.GPT4,
-            ),
+            llm=OpenAIGPTConfig(),
             vecdb=None,
             use_tools=not fn_api,
             use_functions_api=fn_api,

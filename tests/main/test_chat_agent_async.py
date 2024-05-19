@@ -6,7 +6,7 @@ from langroid.agent.base import NO_ANSWER
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
-from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
+from langroid.language_models.openai_gpt import OpenAIGPTConfig
 from langroid.mytypes import Entity
 from langroid.utils.configuration import Settings, set_global
 from langroid.vector_store.base import VectorStoreConfig
@@ -16,7 +16,6 @@ class _TestChatAgentConfig(ChatAgentConfig):
     vecdb: VectorStoreConfig = None
     llm: OpenAIGPTConfig = OpenAIGPTConfig(
         cache_config=RedisCacheConfig(fake=False),
-        chat_model=OpenAIChatModel.GPT4,
         use_chat_for_completion=True,
     )
 
