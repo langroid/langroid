@@ -29,11 +29,6 @@ async def test_openai_gpt_async(test_settings: Settings, streaming, country, cap
         type="openai",
         max_output_tokens=100,
         min_output_tokens=10,
-        chat_model=(
-            OpenAIChatModel.GPT3_5_TURBO
-            if test_settings.gpt3_5
-            else OpenAIChatModel.GPT4
-        ),
         completion_model=OpenAICompletionModel.GPT3_5_TURBO_INSTRUCT,
         cache_config=RedisCacheConfig(fake=False),
     )

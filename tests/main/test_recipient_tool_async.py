@@ -30,7 +30,7 @@ from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
 from langroid.agent.tool_message import ToolMessage
 from langroid.agent.tools.recipient_tool import RecipientTool
-from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
+from langroid.language_models.openai_gpt import OpenAIGPTConfig
 from langroid.mytypes import Entity
 from langroid.utils.configuration import Settings, set_global
 from langroid.utils.constants import DONE
@@ -63,9 +63,7 @@ async def test_agents_with_recipient_tool(
 ):
     set_global(test_settings)
     config = ChatAgentConfig(
-        llm=OpenAIGPTConfig(
-            chat_model=OpenAIChatModel.GPT4,
-        ),
+        llm=OpenAIGPTConfig(),
         use_tools=not fn_api,
         use_functions_api=fn_api,
         vecdb=None,
