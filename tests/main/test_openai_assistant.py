@@ -11,9 +11,9 @@ from langroid.agent.openai_assistant import (
 from langroid.agent.task import Task
 from langroid.agent.tool_message import ToolMessage
 from langroid.agent.tools.recipient_tool import RecipientTool
-from langroid.language_models import OpenAIChatModel, OpenAIGPTConfig
+from langroid.language_models import OpenAIGPTConfig
 from langroid.mytypes import Entity
-from langroid.utils.configuration import Settings, set_global, settings
+from langroid.utils.configuration import Settings, set_global
 from langroid.utils.constants import NO_ANSWER
 
 
@@ -111,7 +111,7 @@ def test_openai_assistant_fn_tool(test_settings: Settings, fn_api: bool):
     set_global(test_settings)
     cfg = OpenAIAssistantConfig(
         name="NabroskyBot",
-        llm=OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT4_TURBO),
+        llm=OpenAIGPTConfig(),
         use_functions_api=fn_api,
         use_tools=not fn_api,
         system_message="""
@@ -152,7 +152,7 @@ def test_openai_assistant_fn_2_level(test_settings: Settings, fn_api: bool):
     set_global(test_settings)
     cfg = OpenAIAssistantConfig(
         name="Main",
-        llm=OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT4_TURBO),
+        llm=OpenAIGPTConfig(),
         use_functions_api=fn_api,
         use_tools=not fn_api,
         system_message="""
@@ -168,7 +168,7 @@ def test_openai_assistant_fn_2_level(test_settings: Settings, fn_api: bool):
 
     nabrosky_cfg = OpenAIAssistantConfig(
         name="NabroskyBot",
-        llm=OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT4_TURBO),
+        llm=OpenAIGPTConfig(),
         use_functions_api=fn_api,
         use_tools=not fn_api,
         system_message="""
@@ -237,11 +237,8 @@ def test_openai_assistant_retrieval(test_settings: Settings):
     based on retrieval from file.
     """
     set_global(test_settings)
-    # in tests/main/conftest.py we enforce gpt-4, overriding the default gpt4-turbo,
-    # but in case of OpenAIAssistant when using retrieval, we must use gpt4-turbo
-    settings.chat_model = OpenAIChatModel.GPT4_TURBO
     cfg = OpenAIAssistantConfig(
-        llm=OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT4_TURBO),
+        llm=OpenAIGPTConfig(),
         system_message="Answer questions based on the provided document.",
     )
     agent = OpenAIAssistant(cfg)
@@ -275,7 +272,7 @@ def test_openai_asst_code_interpreter(test_settings: Settings):
     """
     set_global(test_settings)
     cfg = OpenAIAssistantConfig(
-        llm=OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT4_TURBO),
+        llm=OpenAIGPTConfig(),
         system_message="Answer questions by running code if needed",
     )
     agent = OpenAIAssistant(cfg)
@@ -316,7 +313,7 @@ def test_openai_assistant_multi(test_settings: Settings):
         use_cached_assistant=False,
         use_cached_thread=False,
         name="Teacher",
-        llm=OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT4),
+        llm=OpenAIGPTConfig(),
     )
     agent = OpenAIAssistant(cfg)
 

@@ -8,10 +8,7 @@ from pydantic import BaseModel, Field
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.tool_message import ToolMessage
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
-from langroid.language_models.openai_gpt import (
-    OpenAIChatModel,
-    OpenAIGPTConfig,
-)
+from langroid.language_models.openai_gpt import OpenAIGPTConfig
 from langroid.parsing.parser import ParsingConfig
 from langroid.prompts.prompts_config import PromptsConfig
 from langroid.utils.configuration import Settings, set_global
@@ -80,7 +77,6 @@ cfg = ChatAgentConfig(
     vecdb=None,
     llm=OpenAIGPTConfig(
         type="openai",
-        chat_model=OpenAIChatModel.GPT4,
         cache_config=RedisCacheConfig(fake=False),
     ),
     parsing=ParsingConfig(),

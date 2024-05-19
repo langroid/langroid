@@ -2,7 +2,7 @@ from langroid.agent.base import NO_ANSWER
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
-from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
+from langroid.language_models.openai_gpt import OpenAIGPTConfig
 from langroid.mytypes import Entity
 from langroid.prompts.prompts_config import PromptsConfig
 from langroid.utils.configuration import Settings, set_global
@@ -12,7 +12,6 @@ class _TestChatAgentConfig(ChatAgentConfig):
     max_tokens: int = 200
     llm: OpenAIGPTConfig = OpenAIGPTConfig(
         cache_config=RedisCacheConfig(fake=False),
-        chat_model=OpenAIChatModel.GPT4,
         use_chat_for_completion=True,
     )
     prompts: PromptsConfig = PromptsConfig(

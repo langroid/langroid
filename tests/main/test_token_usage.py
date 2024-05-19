@@ -3,7 +3,7 @@ import pytest
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.tool_message import ToolMessage
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
-from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
+from langroid.language_models.openai_gpt import OpenAIGPTConfig
 from langroid.parsing.parser import ParsingConfig
 from langroid.prompts.prompts_config import PromptsConfig
 from langroid.utils.configuration import Settings, set_global
@@ -30,7 +30,6 @@ class CapitalTool(ToolMessage):
 # Define the configurations
 config = OpenAIGPTConfig(
     cache_config=RedisCacheConfig(fake=True),
-    chat_model=OpenAIChatModel.GPT4,
     use_chat_for_completion=True,
     max_output_tokens=MAX_OUTPUT_TOKENS,
     min_output_tokens=1,

@@ -94,9 +94,16 @@ class Agent(ABC):
         self._indent = ""
         self.llm = LanguageModel.create(config.llm)
         self.vecdb = VectorStore.create(config.vecdb) if config.vecdb else None
+        # token_encoding_model is used to obtain the tokenizer,
+        # so we ensure that the tokenizer corresponding to the model is used.
+        if config.parsing is not None and self.config.llm is not None:
+            config.parsing.token_encoding_model = (
+                self.config.llm.chat_model or self.config.llm.completion_model
+            )
         self.parser: Optional[Parser] = (
             Parser(config.parsing) if config.parsing else None
         )
+
         self.callbacks = SimpleNamespace(
             start_llm_stream=lambda: noop_fn,
             cancel_llm_stream=noop_fn,
