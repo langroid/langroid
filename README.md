@@ -122,6 +122,11 @@ teacher_task.run()
 <details>
 <summary> <b>Click to expand</b></summary>
 
+- **May 2024:** 
+  - `gpt-4o` is now the default LLM throughout; Update tests and examples to work 
+    with this LLM; use tokenizer corresponding to the LLM.
+  - `gemini 1.5 pro` support via `litellm`
+  - `QdrantDB:` update to support learned sparse embeddings.
 - **Apr 2024:**
   - **0.1.236**: Support for open LLMs hosted on Groq, e.g. specify 
     `chat_model="groq/llama3-8b-8192"`.
