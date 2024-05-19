@@ -96,9 +96,10 @@ class Agent(ABC):
         self.vecdb = VectorStore.create(config.vecdb) if config.vecdb else None
         # token_encoding_model is used to obtain the tokenizer,
         # so we ensure that the tokenizer corresponding to the model is used.
-        config.parsing.token_encoding_model = (
-            self.config.llm.chat_model or self.config.llm.completion_model
-        )
+        if config.parsing is not None and self.config.llm is not None:
+            config.parsing.token_encoding_model = (
+                self.config.llm.chat_model or self.config.llm.completion_model
+            )
         self.parser: Optional[Parser] = (
             Parser(config.parsing) if config.parsing else None
         )
