@@ -35,7 +35,7 @@ from langroid.language_models.base import (
     LLMTokenUsage,
     StreamingIfAllowed,
 )
-from langroid.language_models.openai_gpt import OpenAIGPTConfig
+from langroid.language_models.openai_gpt import OpenAIGPT, OpenAIGPTConfig
 from langroid.mytypes import Entity
 from langroid.parsing.parse_json import extract_top_level_json
 from langroid.parsing.parser import Parser, ParsingConfig
@@ -94,12 +94,12 @@ class Agent(ABC):
         self._indent = ""
         self.llm = LanguageModel.create(config.llm)
         self.vecdb = VectorStore.create(config.vecdb) if config.vecdb else None
-        # token_encoding_model is used to obtain the tokenizer,
-        # so we ensure that the tokenizer corresponding to the model is used.
         if config.parsing is not None and self.config.llm is not None:
-            config.parsing.token_encoding_model = (
-                self.config.llm.chat_model or self.config.llm.completion_model
-            )
+            # token_encoding_model is used to obtain the tokenizer,
+            # so in case it's an OpenAI model, we ensure that the tokenizer
+            # corresponding to the model is used.
+            if isinstance(self.llm, OpenAIGPT) and self.llm.is_openai_chat_model():
+                config.parsing.token_encoding_model = self.llm.config.chat_model
         self.parser: Optional[Parser] = (
             Parser(config.parsing) if config.parsing else None
         )
