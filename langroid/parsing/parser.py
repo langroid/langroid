@@ -56,7 +56,10 @@ class ParsingConfig(BaseSettings):
 class Parser:
     def __init__(self, config: ParsingConfig):
         self.config = config
-        self.tokenizer = tiktoken.encoding_for_model(config.token_encoding_model)
+        try:
+            self.tokenizer = tiktoken.encoding_for_model(config.token_encoding_model)
+        except Exception:
+            self.tokenizer = tiktoken.encoding_for_model("text-embedding-ada-002")
 
     def num_tokens(self, text: str) -> int:
         tokens = self.tokenizer.encode(text)
