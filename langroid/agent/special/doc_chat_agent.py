@@ -14,6 +14,7 @@ pip install "langroid[hf-embeddings]"
 """
 
 import logging
+import re
 from contextlib import ExitStack
 from functools import cache
 from typing import Any, Dict, List, Optional, Set, Tuple, no_type_check
@@ -81,6 +82,23 @@ try:
     has_sentence_transformers = True
 except ImportError:
     pass
+
+
+def extract_citations(text: str) -> List[int]:
+    # Find all patterns that match [[<numbers>]]
+    matches = re.findall(r"\[\[([\d,]+)\]\]", text)
+
+    # Initialize a set to hold distinct citation numbers
+    citations: Set[int] = set()
+
+    # Process each match
+    for match in matches:
+        # Split numbers by comma and convert to integers
+        numbers = match.split(",")
+        citations.update(int(number) for number in numbers)
+
+    # Return a sorted list of unique citations
+    return sorted(citations)
 
 
 class DocChatAgentConfig(ChatAgentConfig):
@@ -676,6 +694,7 @@ class DocChatAgent(ChatAgent):
         else:
             self.callbacks.show_start_response(entity="llm")
             response = self.answer_from_docs(query_str)
+            self._render_llm_response(response, citation_only=True)
             return ChatDocument(
                 content=response.content,
                 metadata=ChatDocMetaData(
@@ -719,6 +738,7 @@ class DocChatAgent(ChatAgent):
         else:
             self.callbacks.show_start_response(entity="llm")
             response = self.answer_from_docs(query_str)
+            self._render_llm_response(response, citation_only=True)
             return ChatDocument(
                 content=response.content,
                 metadata=ChatDocMetaData(
@@ -742,10 +762,11 @@ class DocChatAgent(ChatAgent):
         return "\n".join(
             [
                 f"""
+                [{i+1}]
                 {content}
                 {source}
                 """
-                for (content, source) in zip(contents, sources)
+                for i, (content, source) in enumerate(zip(contents, sources))
             ]
         )
 
@@ -769,7 +790,7 @@ class DocChatAgent(ChatAgent):
         # Substitute Q and P into the templatized prompt
 
         final_prompt = self.config.summarize_prompt.format(
-            question=f"Question:{question}", extracts=passages_str
+            question=question, extracts=passages_str
         )
         show_if_debug(final_prompt, "SUMMARIZE_PROMPT= ")
 
@@ -788,24 +809,24 @@ class DocChatAgent(ChatAgent):
         final_answer = answer_doc.content.strip()
         show_if_debug(final_answer, "SUMMARIZE_RESPONSE= ")
 
-        if final_answer.startswith("SOURCE"):
-            # sometimes SOURCE may be shown first,
-            # in this case just use final_answer as-is for both content and source
-            content = final_answer
-            sources = final_answer
-        else:
-            parts = final_answer.split("SOURCE:", maxsplit=1)
-            if len(parts) > 1:
-                content = parts[0].strip()
-                sources = parts[1].strip()
-            else:
-                content = final_answer
-                sources = ""
+        citations = extract_citations(final_answer)
+
+        citations_str = ""
+        if len(citations) > 0:
+            # append [i] source, content for each citation
+            citations_str = "\n".join(
+                [
+                    f"[{c}] {passages[c-1].metadata.source}\n{passages[c-1].content}"
+                    for c in citations
+                ]
+            )
+
         return ChatDocument(
-            content=content,
+            content=final_answer,  # does not contain citations
             metadata=ChatDocMetaData(
-                source="SOURCE: " + sources,
+                source=citations_str,  # only the citations
                 sender=Entity.LLM,
+                has_citation=len(citations) > 0,
                 cached=getattr(answer_doc.metadata, "cached", False),
             ),
         )

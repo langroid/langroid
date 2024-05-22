@@ -708,21 +708,8 @@ class ChatAgent(Agent):
         self.llm.config.streamer = noop_fn
         if response.cached:
             self.callbacks.cancel_llm_stream()
-
-        if not self.llm.get_stream() or response.cached:
-            # We would have already displayed the msg "live" ONLY if
-            # streaming was enabled, AND we did not find a cached response.
-            # If we are here, it means the response has not yet been displayed.
-            cached = f"[red]{self.indent}(cached)[/red]" if response.cached else ""
-            if not settings.quiet:
-                print(cached + "[green]" + escape(str(response)))
-                self.callbacks.show_llm_response(
-                    content=str(response),
-                    is_tool=self.has_tool_message_attempt(
-                        ChatDocument.from_LLMResponse(response, displayed=True)
-                    ),
-                    cached=response.cached,
-                )
+        chat_doc = ChatDocument.from_LLMResponse(response, displayed=True)
+        self._render_llm_response(chat_doc)
         self.update_token_usage(
             response,
             messages,
@@ -730,7 +717,7 @@ class ChatAgent(Agent):
             chat=True,
             print_response_stats=self.config.show_stats and not settings.quiet,
         )
-        return ChatDocument.from_LLMResponse(response, displayed=True)
+        return chat_doc
 
     async def llm_response_messages_async(
         self, messages: List[LLMMessage], output_len: Optional[int] = None
@@ -770,21 +757,8 @@ class ChatAgent(Agent):
         self.llm.config.streamer = noop_fn
         if response.cached:
             self.callbacks.cancel_llm_stream()
-        if not self.llm.get_stream() or response.cached:
-            # We would have already displayed the msg "live" ONLY if
-            # streaming was enabled, AND we did not find a cached response.
-            # If we are here, it means the response has not yet been displayed.
-            cached = f"[red]{self.indent}(cached)[/red]" if response.cached else ""
-            if not settings.quiet:
-                print(cached + "[green]" + escape(str(response)))
-                self.callbacks.show_llm_response(
-                    content=str(response),
-                    is_tool=self.has_tool_message_attempt(
-                        ChatDocument.from_LLMResponse(response, displayed=True)
-                    ),
-                    cached=response.cached,
-                )
-
+        chat_doc = ChatDocument.from_LLMResponse(response, displayed=True)
+        self._render_llm_response(chat_doc)
         self.update_token_usage(
             response,
             messages,
@@ -792,7 +766,34 @@ class ChatAgent(Agent):
             chat=True,
             print_response_stats=self.config.show_stats and not settings.quiet,
         )
-        return ChatDocument.from_LLMResponse(response, displayed=True)
+        return chat_doc
+
+    def _render_llm_response(
+        self, response: ChatDocument, citation_only: bool = False
+    ) -> None:
+        is_cached = response.metadata.cached
+        if self.llm is None:
+            return
+        if not citation_only and (not self.llm.get_stream() or is_cached):
+            # We would have already displayed the msg "live" ONLY if
+            # streaming was enabled, AND we did not find a cached response.
+            # If we are here, it means the response has not yet been displayed.
+            cached = f"[red]{self.indent}(cached)[/red]" if is_cached else ""
+            if not settings.quiet:
+                print(cached + "[green]" + escape(str(response)))
+                self.callbacks.show_llm_response(
+                    content=str(response),
+                    is_tool=self.has_tool_message_attempt(response),
+                    cached=is_cached,
+                )
+        if response.metadata.has_citation and not settings.quiet:
+            print("[grey37]SOURCES:\n" + response.metadata.source + "[/grey37]")
+            self.callbacks.show_llm_response(
+                content=str(response.metadata.source),
+                is_tool=False,
+                cached=False,
+                language="text",
+            )
 
     def _llm_response_temp_context(self, message: str, prompt: str) -> ChatDocument:
         """
