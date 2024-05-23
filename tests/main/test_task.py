@@ -75,7 +75,7 @@ async def test_task_kill(test_settings: Settings):
         task.run_async("3+1=?", turns=50, session_id="mysession")
     )
     # sleep a bit then kill it
-    await asyncio.sleep(0.5)
+    await asyncio.sleep(0.1)
     Task.kill_session("mysession")
     result: lr.ChatDocument = await async_task
     assert result.metadata.status == lr.StatusCode.KILL

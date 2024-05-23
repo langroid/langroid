@@ -15,6 +15,7 @@ from langroid.agent.tool_message import ToolMessage
 from langroid.language_models.base import (
     LLMFunctionSpec,
     LLMMessage,
+    LLMResponse,
     Role,
     StreamingIfAllowed,
 )
@@ -681,8 +682,11 @@ class ChatAgent(Agent):
             streamer = self.callbacks.start_llm_stream()
         self.llm.config.streamer = streamer
         with ExitStack() as stack:  # for conditionally using rich spinner
-            if not self.llm.get_stream():
+            if not self.llm.get_stream() and not settings.quiet:
                 # show rich spinner only if not streaming!
+                # (Why? b/c the intent of showing a spinner is to "show progress",
+                # and we don't need to do that when streaming, since
+                # streaming output already shows progress.)
                 cm = status(
                     "LLM responding to messages...",
                     log_if_quiet=False,
@@ -698,18 +702,16 @@ class ChatAgent(Agent):
                 functions=functions,
                 function_call=fun_call,
             )
+        chat_doc = ChatDocument.from_LLMResponse(response, displayed=True)
         if self.llm.get_stream():
             self.callbacks.finish_llm_stream(
                 content=str(response),
-                is_tool=self.has_tool_message_attempt(
-                    ChatDocument.from_LLMResponse(response, displayed=True)
-                ),
+                is_tool=self.has_tool_message_attempt(chat_doc),
             )
         self.llm.config.streamer = noop_fn
         if response.cached:
             self.callbacks.cancel_llm_stream()
-        chat_doc = ChatDocument.from_LLMResponse(response, displayed=True)
-        self._render_llm_response(chat_doc)
+        self._render_llm_response(response)
         self.update_token_usage(
             response,
             messages,
@@ -747,18 +749,16 @@ class ChatAgent(Agent):
             functions=functions,
             function_call=fun_call,
         )
+        chat_doc = ChatDocument.from_LLMResponse(response, displayed=True)
         if self.llm.get_stream():
             self.callbacks.finish_llm_stream(
                 content=str(response),
-                is_tool=self.has_tool_message_attempt(
-                    ChatDocument.from_LLMResponse(response, displayed=True)
-                ),
+                is_tool=self.has_tool_message_attempt(chat_doc),
             )
         self.llm.config.streamer = noop_fn
         if response.cached:
             self.callbacks.cancel_llm_stream()
-        chat_doc = ChatDocument.from_LLMResponse(response, displayed=True)
-        self._render_llm_response(chat_doc)
+        self._render_llm_response(response)
         self.update_token_usage(
             response,
             messages,
@@ -769,12 +769,22 @@ class ChatAgent(Agent):
         return chat_doc
 
     def _render_llm_response(
-        self, response: ChatDocument, citation_only: bool = False
+        self, response: ChatDocument | LLMResponse, citation_only: bool = False
     ) -> None:
-        is_cached = response.metadata.cached
+        is_cached = (
+            response.cached
+            if isinstance(response, LLMResponse)
+            else response.metadata.cached
+        )
         if self.llm is None:
             return
         if not citation_only and (not self.llm.get_stream() or is_cached):
+            # We expect response to be LLMResponse in this context
+            if not isinstance(response, LLMResponse):
+                raise ValueError(
+                    "Expected response to be LLMResponse, but got "
+                    f"{type(response)} instead."
+                )
             # We would have already displayed the msg "live" ONLY if
             # streaming was enabled, AND we did not find a cached response.
             # If we are here, it means the response has not yet been displayed.
@@ -783,9 +793,15 @@ class ChatAgent(Agent):
                 print(cached + "[green]" + escape(str(response)))
                 self.callbacks.show_llm_response(
                     content=str(response),
-                    is_tool=self.has_tool_message_attempt(response),
+                    is_tool=self.has_tool_message_attempt(
+                        ChatDocument.from_LLMResponse(response, displayed=True),
+                    ),
                     cached=is_cached,
                 )
+        if isinstance(response, LLMResponse):
+            # we are in the context immediately after an LLM responded,
+            # we won't have citations yet, so we're done
+            return
         if response.metadata.has_citation and not settings.quiet:
             print("[grey37]SOURCES:\n" + response.metadata.source + "[/grey37]")
             self.callbacks.show_llm_response(
