@@ -25,7 +25,7 @@ from langroid.agent.tool_message import ToolMessage
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
 from langroid.parsing.table_loader import read_tabular_data
 from langroid.prompts.prompts_config import PromptsConfig
-from langroid.utils.constants import DONE
+from langroid.utils.constants import DONE, PASS
 from langroid.vector_store.base import VectorStoreConfig
 
 logger = logging.getLogger(__name__)
@@ -52,7 +52,8 @@ in your code, and try another way, or use `pandas_eval` to explore the dataframe
 before submitting your final code. 
 
 Once you have the answer to the question, possibly after a few steps,
-say {DONE} and show me the answer. If you receive an error message, 
+say {DONE} and PRESENT THE ANSWER TO ME; do not just say {DONE}.
+If you receive an error message, 
 try using the `pandas_eval` tool/function again with the corrected code. 
 
 VERY IMPORTANT: When using the `pandas_eval` tool/function, DO NOT EXPLAIN ANYTHING,
@@ -238,12 +239,22 @@ class TableChatAgent(ChatAgent):
     def handle_message_fallback(
         self, msg: str | ChatDocument
     ) -> str | ChatDocument | None:
-        """Handle scenario where LLM forgets to say DONE or
-        forgets to use pandas_eval"""
+        """Handle various LLM deviations"""
         if isinstance(msg, ChatDocument) and msg.metadata.sender == lr.Entity.LLM:
+            if msg.content.strip() == DONE and self.sent_expression:
+                # LLM sent an expression (i.e. used the `pandas_eval` tool)
+                # but upon receiving the results, simply said DONE without
+                # narrating the result as instructed.
+                return """
+                    You forgot to PRESENT the answer to the user's query
+                    based on the results from `pandas_eval` tool.
+                """
             if self.sent_expression:
-                return DONE
+                # LLM forgot to say DONE
+                self.sent_expression = False
+                return DONE + " " + PASS
             else:
+                # LLM forgot to use the `pandas_eval` tool
                 return """
                     You forgot to use the `pandas_eval` tool/function 
                     to find the answer.
