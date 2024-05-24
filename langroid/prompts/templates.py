@@ -50,26 +50,27 @@ EXTRACTION_PROMPT = f"""
 
 SUMMARY_ANSWER_PROMPT_GPT4 = f"""
 
-        Use the provided extracts (with sources)  to answer the question. 
+        Use the provided NUMBERED extracts (with sources)  to answer the QUESTION. 
         If there's not enough information, respond with {NO_ANSWER}. Use only the 
         information in these extracts, even if your answer is factually incorrect, 
         and even if the answer contradicts other parts of the document. The only 
         important thing is that your answer is consistent with and supported by the 
-        extracts. Compose your complete answer and cite all supporting sources on a 
-        separate separate line as follows. For each SOURCE, (a) show the source name,
-        and (b) the exact EXTRACT from the source that supports your answer.
-        DO NOT SHOW THE FULL EXTRACT; only show the FIRST 3 words and LAST 3 words.  
-        For example:
-        SOURCE:  https://en.wikipedia.org/wiki/Tree
-        EXTRACTS: "The tree species ... oak, maple, and birch."
+        extracts. Compose your complete answer, inserting CITATIONS 
+        in the format [[i,j,...]] where i,j,... are the extract NUMBERS you are citing.
+        For example your answer might look like this (NOTE HOW multiple citations
+        are grouped as [[2,5]]):
         
-        SOURCE: https://en.wikipedia.org/wiki/Oak
-        EXTRACTS: "The oak trees ... longevity and strength."
+        Beethoven composed the 9th symphony in 1824. [[1]] After that he became deaf
+        and could not hear his own music. [[2,5]] He was a prolific composer and
+        wrote many famous pieces.
+        
+        NUMBERED EXTRACTS:
         
         {{extracts}}
         
+        QUESTION:
         {{question}}
-        Answer:   
+
 """.strip()
 
 ANSWER_PROMPT_USE_HISTORY_GPT4 = f"""

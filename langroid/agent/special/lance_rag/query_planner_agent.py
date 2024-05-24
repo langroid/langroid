@@ -58,7 +58,7 @@ class LanceQueryPlanAgentConfig(ChatAgentConfig):
     - a possibly REPHRASED QUERY to be answerable given the FILTER.
         Keep in mind that the ASSISTANT does NOT know anything about the FILTER fields,
         so the REPHRASED QUERY should NOT mention ANY FILTER fields.
-        The answer will answer based on documents whose CONTENTS match the QUERY, 
+        The assistant will answer based on documents whose CONTENTS match the QUERY, 
         possibly REPHRASED. 
     - an OPTIONAL SINGLE-LINE Pandas-dataframe calculation/aggregation string 
         that can be used to calculate the answer to the original query, 
@@ -70,6 +70,10 @@ class LanceQueryPlanAgentConfig(ChatAgentConfig):
         
         IMPORTANT: The DataFrame `df` in this calculation is the result of 
         applying the FILTER AND REPHRASED QUERY to the documents.
+        
+        WATCH OUT!! When deciding the dataframe calc, if any, CAREFULLY
+        note what the query is asking, and ensure that the result of your
+        dataframe calc expression would answer the query.                
     
     
     EXAMPLE:

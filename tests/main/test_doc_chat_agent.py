@@ -58,22 +58,26 @@ documents: List[Document] = [
     ),
     Document(
         content="""
-        We are living in an alternate universe where Paris is the capital of England.
+    We are living in an alternate universe where Lancaster is the capital of England.
         
-        The capital of England used to be London. 
+    Charlie Chaplin was a great comedian.
         
-        The capital of France used to be Paris.
+    Charlie Chaplin was born in 1889.
         
-        Charlie Chaplin was a great comedian.
+    Beethoven was born in 1770.
         
-        Charlie Chaplin was born in 1889.
-        
-        Beethoven was born in 1770.
-        
-        In the year 2050, all countries merged into Lithuania.
-        """,
+    In the year 2050, all countries merged into Lithuania.
+    """,
         metadata=DocMetaData(source="almanac"),
     ),
+]
+
+QUERY_EXPECTED_PAIRS = [
+    ("what happened in the year 2050?", "GPT10, Lithuania"),
+    ("what is the capital of England?", "Lancaster"),
+    ("Who was Charlie Chaplin?", "comedian"),
+    ("When was global warming solved?", "2060"),
+    ("What do we know about paperclips?", "2057, 2061"),
 ]
 
 for _ in range(100):
@@ -192,15 +196,6 @@ warnings.filterwarnings(
     # category=UserWarning,
     module="transformers",
 )
-
-QUERY_EXPECTED_PAIRS = [
-    ("what happened in the year 2050?", "GPT10, Lithuania"),
-    ("what is the capital of England?", "Paris"),
-    ("Who was Charlie Chaplin?", "comedian"),
-    ("What used to be capital of France?", "Paris"),
-    ("When was global warming solved?", "2060"),
-    ("What do we know about paperclips?", "2057, 2061"),
-]
 
 
 @pytest.mark.parametrize(

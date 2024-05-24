@@ -475,10 +475,12 @@ class LanguageModel(ABC):
         history = collate_chat_history(chat_history)
 
         prompt = f"""
-        Given the conversationn below, and a follow-up question, rephrase the follow-up 
-        question as a standalone question.
+        Given the CHAT HISTORY below, and a follow-up QUESTION or SEARCH PHRASE,
+        rephrase the follow-up question/phrase as a STANDALONE QUESTION that
+        can be understood without the context of the chat history.
         
         Chat history: {history}
+        
         Follow-up question: {question} 
         """.strip()
         show_if_debug(prompt, "FOLLOWUP->STANDALONE-PROMPT= ")

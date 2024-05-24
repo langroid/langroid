@@ -582,7 +582,7 @@ class OpenAIGPT(LanguageModel):
 
     def get_stream(self) -> bool:
         """Get streaming status"""
-        return self.config.stream
+        return self.config.stream and settings.stream
 
     @no_type_check
     def _process_stream_event(
