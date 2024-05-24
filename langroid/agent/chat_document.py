@@ -53,6 +53,7 @@ class ChatDocMetaData(DocMetaData):
     usage: Optional[LLMTokenUsage]
     cached: bool = False
     displayed: bool = False
+    has_citation: bool = False
     status: Optional[StatusCode] = None
 
 

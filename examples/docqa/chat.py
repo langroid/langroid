@@ -34,6 +34,7 @@ def main(
     vecdb: str = typer.Option(
         "lancedb", "--vecdb", "-v", help="vector db name (default: lancedb)"
     ),
+    nostream: bool = typer.Option(False, "--nostream", "-ns", help="no streaming"),
     embed: str = typer.Option(
         "openai",
         "--embed",
@@ -112,6 +113,7 @@ def main(
         Settings(
             debug=debug,
             cache=not nocache,
+            stream=not nostream,
         )
     )
 

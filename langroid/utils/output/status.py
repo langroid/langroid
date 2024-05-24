@@ -3,6 +3,7 @@ from contextlib import AbstractContextManager, ExitStack
 from typing import Any
 
 from rich.console import Console
+from rich.errors import LiveError
 
 from langroid.utils.configuration import quiet_mode, settings
 
@@ -19,15 +20,21 @@ def status(
     Displays a rich spinner if not in quiet mode, else optionally logs the message.
     """
     stack = ExitStack()
-
-    if settings.quiet:
-        if log_if_quiet:
-            logger.info(msg)
+    logged = False
     if settings.quiet and log_if_quiet:
+        logged = True
         logger.info(msg)
-    else:
-        stack.enter_context(console.status(msg))
 
+    if not settings.quiet:
+        try:
+            stack.enter_context(console.status(msg))
+        except LiveError:
+            if not logged:
+                logger.info(msg)
+
+    # When using rich spinner, we enforce quiet mode
+    # (since output will be messy otherwise);
+    # We make an exception to this when debug is enabled.
     stack.enter_context(quiet_mode(not settings.debug))
 
     return stack

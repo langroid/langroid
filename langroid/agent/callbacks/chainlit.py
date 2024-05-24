@@ -98,7 +98,7 @@ async def make_llm_settings_widgets(
         [
             cl.input_widget.TextInput(
                 id="chat_model",
-                label="Model Name (Default GPT4-Turbo)",
+                label="Model Name (Default GPT-4o)",
                 initial="",
                 placeholder="E.g. ollama/mistral or " "local/localhost:8000/v1",
             ),
@@ -337,6 +337,7 @@ class ChainlitAgentCallbacks:
         content: str,
         is_tool: bool = False,
         cached: bool = False,
+        language: str | None = None,
     ) -> None:
         """Show non-streaming LLM response."""
         step = cl.Step(
@@ -344,7 +345,7 @@ class ChainlitAgentCallbacks:
             name=self._entity_name("llm", tool=is_tool, cached=cached),
             type="llm",
             parent_id=self._get_parent_id(),
-            language="json" if is_tool else None,
+            language=language or ("json" if is_tool else None),
         )
         self.last_step = step
         self.curr_step = None
