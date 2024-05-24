@@ -30,6 +30,7 @@ from langroid.agent.special.relevance_extractor_agent import (
     RelevanceExtractorAgentConfig,
 )
 from langroid.agent.task import Task
+from langroid.agent.tools.retrieval_tool import RetrievalTool
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
 from langroid.language_models.base import StreamingIfAllowed
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
@@ -462,6 +463,13 @@ class DocChatAgent(ChatAgent):
         self.original_docs_length = self.doc_length(docs)
         self.setup_documents(docs, filter=self.config.filter)
         return len(docs)
+
+    def retrieval_tool(self, msg: RetrievalTool) -> str:
+        """Handle the RetrievalTool message"""
+        self.config.retrieve_only = True
+        self.config.parsing.n_similar_docs = msg.num_results
+        content_doc = self.answer_from_docs(msg.query)
+        return content_doc.content
 
     @staticmethod
     def document_compatible_dataframe(
