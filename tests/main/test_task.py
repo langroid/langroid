@@ -70,11 +70,12 @@ async def test_task_kill(test_settings: Settings):
     result: lr.ChatDocument = await async_task
     assert result.metadata.status == lr.StatusCode.KILL
 
-    # test killing via static method
+    # test killing via static method:
+    # Run it for a potentially very large number of turns...
     async_task = asyncio.create_task(
-        task.run_async("3+1=?", turns=50, session_id="mysession")
+        task.run_async("3+1=?", turns=500, session_id="mysession")
     )
-    # sleep a bit then kill it
+    # ...sleep a bit then kill it
     await asyncio.sleep(0.1)
     Task.kill_session("mysession")
     result: lr.ChatDocument = await async_task
