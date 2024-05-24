@@ -123,6 +123,8 @@ teacher_task.run()
 <summary> <b>Click to expand</b></summary>
 
 - **May 2024:** 
+  - [Much-Improved Citation](https://github.com/langroid/langroid/issues/477) 
+    generation and display when using `DocChatAgent`.
   - `gpt-4o` is now the default LLM throughout; Update tests and examples to work 
     with this LLM; use tokenizer corresponding to the LLM.
   - `gemini 1.5 pro` support via `litellm`
