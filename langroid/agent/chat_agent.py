@@ -702,23 +702,25 @@ class ChatAgent(Agent):
                 functions=functions,
                 function_call=fun_call,
             )
-        chat_doc = ChatDocument.from_LLMResponse(response, displayed=True)
         if self.llm.get_stream():
             self.callbacks.finish_llm_stream(
                 content=str(response),
-                is_tool=self.has_tool_message_attempt(chat_doc),
+                is_tool=self.has_tool_message_attempt(
+                    ChatDocument.from_LLMResponse(response, displayed=True),
+                ),
             )
         self.llm.config.streamer = noop_fn
         if response.cached:
             self.callbacks.cancel_llm_stream()
         self._render_llm_response(response)
         self.update_token_usage(
-            response,
+            response,  # .usage attrib is updated!
             messages,
             self.llm.get_stream(),
             chat=True,
             print_response_stats=self.config.show_stats and not settings.quiet,
         )
+        chat_doc = ChatDocument.from_LLMResponse(response, displayed=True)
         return chat_doc
 
     async def llm_response_messages_async(
@@ -749,23 +751,25 @@ class ChatAgent(Agent):
             functions=functions,
             function_call=fun_call,
         )
-        chat_doc = ChatDocument.from_LLMResponse(response, displayed=True)
         if self.llm.get_stream():
             self.callbacks.finish_llm_stream(
                 content=str(response),
-                is_tool=self.has_tool_message_attempt(chat_doc),
+                is_tool=self.has_tool_message_attempt(
+                    ChatDocument.from_LLMResponse(response, displayed=True),
+                ),
             )
         self.llm.config.streamer = noop_fn
         if response.cached:
             self.callbacks.cancel_llm_stream()
         self._render_llm_response(response)
         self.update_token_usage(
-            response,
+            response,  # .usage attrib is updated!
             messages,
             self.llm.get_stream(),
             chat=True,
             print_response_stats=self.config.show_stats and not settings.quiet,
         )
+        chat_doc = ChatDocument.from_LLMResponse(response, displayed=True)
         return chat_doc
 
     def _render_llm_response(
