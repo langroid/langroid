@@ -205,9 +205,9 @@ class RecipientTool(ToolMessage):
         # So if this method is called, we can be sure that the recipient has not
         # been specified.
         if (
-            isinstance(msg, str) or
-            msg.metadata.sender != Entity.LLM or
-            msg.metadata.recipient != "" # there IS an explicit recipient
+            isinstance(msg, str)
+            or msg.metadata.sender != Entity.LLM
+            or msg.metadata.recipient != ""  # there IS an explicit recipient
         ):
             return None
         content = msg if isinstance(msg, str) else msg.content

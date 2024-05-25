@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import copy
 import logging
-import re
 from collections import Counter
 from types import SimpleNamespace
 from typing import (
@@ -32,6 +31,7 @@ from langroid.agent.chat_document import (
 from langroid.cachedb.redis_cachedb import RedisCache, RedisCacheConfig
 from langroid.mytypes import Entity
 from langroid.parsing.parse_json import extract_top_level_json
+from langroid.parsing.routing import parse_addressed_message
 from langroid.utils.configuration import settings
 from langroid.utils.constants import (
     DONE,
@@ -858,42 +858,6 @@ class Task:
             msg_str = escape(str(self.pending_message))
             print(f"[grey37][{sender_str}]{msg_str}[/grey37]")
 
-    def _parse_routing(self, msg: ChatDocument | str) -> Tuple[bool | None, str | None]:
-        """
-        Parse routing instruction if any, of the form:
-        PASS:<recipient>  (pass current pending msg to recipient)
-        SEND:<recipient> <content> (send content to recipient)
-        Args:
-            msg (ChatDocument|str|None): message to parse
-        Returns:
-            Tuple[bool,str|None]:
-                bool: true=PASS, false=SEND, or None if neither
-                str: recipient, or None
-        """
-        # handle routing instruction in result if any,
-        # of the form PASS=<recipient>
-        content = msg.content if isinstance(msg, ChatDocument) else msg
-        content = content.strip()
-        if PASS in content and PASS_TO not in content:
-            return True, None
-        if PASS_TO in content and content.split(":")[1] != "":
-            return True, content.split(":")[1]
-        if SEND_TO in content and (send_parts := re.split(r"[,: ]", content))[1] != "":
-            # assume syntax is SEND_TO:<recipient> <content>
-            # or SEND_TO:<recipient>,<content> or SEND_TO:<recipient>:<content>
-            recipient = send_parts[1].strip()
-            # get content to send, clean out routing instruction, and
-            # start from 1 char after SEND_TO:<recipient>,
-            # because we expect there is either a blank or some other separator
-            # after the recipient
-            content_to_send = content.replace(f"{SEND_TO}{recipient}", "").strip()[1:]
-            # if no content then treat same as PASS_TO
-            if content_to_send == "":
-                return True, recipient
-            else:
-                return False, recipient
-        return None, None
-
     def response(
         self,
         e: Responder,
@@ -931,7 +895,8 @@ class Task:
         # process result in case there is a routing instruction
         if result is None:
             return None
-        is_pass, recipient = self._parse_routing(result)
+        # if result content starts with @name, set recipient to name
+        is_pass, recipient, content = parse_routing(result)
         if is_pass is None:  # no routing, i.e. neither PASS nor SEND
             return result
         if is_pass:
@@ -951,9 +916,7 @@ class Task:
         elif recipient is not None:
             # we are sending non-empty content to non-null recipient
             # clean up result.content, set metadata.recipient and return
-            result.content = result.content.replace(
-                f"{SEND_TO}:{recipient}", ""
-            ).strip()
+            result.content = content or ""
             result.metadata.recipient = recipient
             return result
         else:
@@ -1320,3 +1283,53 @@ class Task:
 
         """
         self.color_log = enable
+
+
+def parse_routing(
+    msg: ChatDocument | str,
+) -> Tuple[bool | None, str | None, str | None]:
+    """
+    Parse routing instruction if any, of the form:
+    PASS:<recipient>  (pass current pending msg to recipient)
+    SEND:<recipient> <content> (send content to recipient)
+    @<recipient> <content> (send content to recipient)
+    Args:
+        msg (ChatDocument|str|None): message to parse
+    Returns:
+        Tuple[bool|None, str|None, str|None]:
+            bool: true=PASS, false=SEND, or None if neither
+            str: recipient, or None
+            str: content to send, or None
+    """
+    # handle routing instruction in result if any,
+    # of the form PASS=<recipient>
+    content = msg.content if isinstance(msg, ChatDocument) else msg
+    content = content.strip()
+    if PASS in content and PASS_TO not in content:
+        return True, None, None
+    if PASS_TO in content and content.split(":")[1] != "":
+        return True, content.split(":")[1], None
+    if (
+        SEND_TO in content
+        and (addressee_content := parse_addressed_message(content, SEND_TO))[0]
+        is not None
+    ):
+        (addressee, content_to_send) = addressee_content
+        # if no content then treat same as PASS_TO
+        if content_to_send == "":
+            return True, addressee, None
+        else:
+            return False, addressee, content_to_send
+    AT = "@"
+    if (
+        AT in content
+        and (addressee_content := parse_addressed_message(content, AT))[0] is not None
+    ):
+        (addressee, content_to_send) = addressee_content
+        # if no content then treat same as PASS_TO
+        if content_to_send == "":
+            return True, addressee, None
+        else:
+            return False, addressee, content_to_send
+
+    return None, None, None
