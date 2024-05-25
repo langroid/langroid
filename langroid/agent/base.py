@@ -280,9 +280,9 @@ class Agent(ABC):
         ]
         return "\n\n".join(sample_convo)
 
-    def agent_response_template(self) -> ChatDocument:
+    def agent_response_template(self, content: str|None=None) -> ChatDocument:
         """Template for agent_response."""
-        return self._response_template(Entity.AGENT)
+        return self._response_template(Entity.AGENT, content)
 
     async def agent_response_async(
         self,
@@ -343,19 +343,19 @@ class Agent(ABC):
             ),
         )
 
-    def _response_template(self, e: Entity) -> ChatDocument:
+    def _response_template(self, e: Entity, content: str|None=None) -> ChatDocument:
         """Template for response from entity `e`."""
         return ChatDocument(
-            content="",
+            content=content or "",
             tool_messages=[],
             metadata=ChatDocMetaData(
                 source=e, sender=e, sender_name=self.config.name, tool_ids=[]
             ),
         )
 
-    def user_response_template(self) -> ChatDocument:
+    def user_response_template(self, content:str|None=None) -> ChatDocument:
         """Template for user_response."""
-        return self._response_template(Entity.USER)
+        return self._response_template(Entity.USER, content)
 
     async def user_response_async(
         self,
@@ -391,7 +391,7 @@ class Agent(ABC):
         if self.default_human_response is not None and not need_human_response:
             # useful for automated testing
             user_msg = self.default_human_response
-        if not interactive and not need_human_response:
+        elif not interactive and not need_human_response:
             return None
         else:
             if self.callbacks.get_user_response is not None:
@@ -451,9 +451,9 @@ class Agent(ABC):
 
         return True
 
-    def llm_response_template(self) -> ChatDocument:
+    def llm_response_template(self, content:str|None=None) -> ChatDocument:
         """Template for llm_response."""
-        return self._response_template(Entity.LLM)
+        return self._response_template(Entity.LLM, content)
 
     @no_type_check
     async def llm_response_async(
