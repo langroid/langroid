@@ -201,10 +201,11 @@ class Task:
             agent.config.name = name
         self.name = name or agent.config.name
         self.value: str = self.name
-        self.default_human_response = default_human_response
+
         if default_human_response is not None and default_human_response == "":
             interactive = False
         self.interactive = interactive
+        self.agent.interactive = interactive
         self.message_history_idx = -1
         if interactive:
             only_user_quits_root = True
@@ -213,6 +214,7 @@ class Task:
             only_user_quits_root = False
         if default_human_response is not None:
             self.agent.default_human_response = default_human_response
+        self.default_human_response = default_human_response
         if self.interactive:
             self.agent.default_human_response = None
         self.only_user_quits_root = only_user_quits_root
@@ -1289,7 +1291,9 @@ class Task:
         return (
             self.pending_message is not None
             and (recipient := self.pending_message.metadata.recipient) != ""
-            and recipient not in (e.name, self.name)
+            and recipient != e  # case insensitive
+            and recipient != e.name
+            and recipient != self.name  # case sensitive
         )
 
     def _can_respond(self, e: Responder) -> bool:
