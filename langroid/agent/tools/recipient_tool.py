@@ -204,7 +204,11 @@ class RecipientTool(ToolMessage):
         # since the recipient will differ from the task name.
         # So if this method is called, we can be sure that the recipient has not
         # been specified.
-        if isinstance(msg, str) or msg.metadata.sender != Entity.LLM:
+        if (
+            isinstance(msg, str) or
+            msg.metadata.sender != Entity.LLM or
+            msg.metadata.recipient != "" # there IS an explicit recipient
+        ):
             return None
         content = msg if isinstance(msg, str) else msg.content
         # save the content as a class-variable, so that
