@@ -20,7 +20,8 @@ from langroid.utils.constants import DONE, SEND_TO
         f"{SEND_TO}Alice,",
     ],
 )
-def test_addressing(test_settings: Settings, address: str):
+@pytest.mark.parametrize("x,answer", [(2, 4), (5, 25)])
+def test_addressing(test_settings: Settings, address: str, x: int, answer: int):
     """Test that an agent is able to address another agent in a message."""
     set_global(test_settings)
 
@@ -33,13 +34,15 @@ def test_addressing(test_settings: Settings, address: str):
                 and message.metadata.sender_name == "Alice"
             ):
                 return self.llm_response_template(DONE + " " + message.content)
-            return self.llm_response_template(f"{address}what is the square of 10?")
+            return self.llm_response_template(f"{address} {x}")
 
     class AliceAgent(ChatAgent):
         def llm_response(
             self, message: Optional[str | ChatDocument] = None
         ) -> Optional[ChatDocument]:
-            return self.llm_response_template(f"{DONE} The square of 10 is 100.")
+            x = int(message.content.strip())
+            answer = x * x
+            return self.llm_response_template(f"{DONE} {answer}")
 
     bob_config = ChatAgentConfig(name="Bob")
 
@@ -53,4 +56,4 @@ def test_addressing(test_settings: Settings, address: str):
     bob_task.add_sub_task(alice_task)
 
     result = bob_task.run()
-    assert "100" in result.content
+    assert answer == int(result.content.strip())
