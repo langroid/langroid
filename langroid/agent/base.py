@@ -87,6 +87,7 @@ class Agent(ABC):
         self.llm_tools_map: Dict[str, Type[ToolMessage]] = {}
         self.llm_tools_handled: Set[str] = set()
         self.llm_tools_usable: Set[str] = set()
+        self.interactive: bool | None = None
         self.total_llm_token_cost = 0.0
         self.total_llm_token_usage = 0
         self.token_stats_str = ""
@@ -223,8 +224,8 @@ class Agent(ABC):
         ):
             setattr(self, tool, lambda obj: obj.response(self))
 
-        if hasattr(message_class, "handle_message_fallback") and inspect.isfunction(
-            message_class.handle_message_fallback
+        if hasattr(message_class, "handle_message_fallback") and (
+            inspect.isfunction(message_class.handle_message_fallback)
         ):
             setattr(
                 self,
@@ -377,11 +378,21 @@ class Agent(ABC):
             (str) User response, packaged as a ChatDocument
 
         """
-        if self.default_human_response is not None:
+
+        # When msg explicitly addressed to user, this means an actual human response
+        # is being sought.
+        need_human_response = (
+            isinstance(msg, ChatDocument) and msg.metadata.recipient == Entity.USER
+        )
+
+        interactive = (
+            self.interactive if self.interactive is not None else settings.interactive
+        )
+        if self.default_human_response is not None and not need_human_response:
             # useful for automated testing
             user_msg = self.default_human_response
-        elif not settings.interactive:
-            user_msg = ""
+        if not interactive and not need_human_response:
+            return None
         else:
             if self.callbacks.get_user_response is not None:
                 # ask user with empty prompt: no need for prompt
