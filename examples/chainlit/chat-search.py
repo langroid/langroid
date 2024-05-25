@@ -29,6 +29,9 @@ from langroid.agent.callbacks.chainlit import (
     update_llm,
 )
 from textwrap import dedent
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def search_system_message(search_tool: lr.ToolMessage) -> str:
@@ -79,10 +82,6 @@ async def setup_agent_task(search_tool: lr.ToolMessage):
     # set up LLM and LLMConfig from settings state
     await setup_llm()
     llm_config = cl.user_session.get("llm_config")
-    if task := cl.user_session.get("task"):
-        # task already exists and is running, so we just update the agent's llm config
-        task.agent.config.llm = llm_config
-        return
     sys_msg = search_system_message(search_tool)
     config = lr.ChatAgentConfig(
         llm=llm_config,

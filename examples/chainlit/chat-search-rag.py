@@ -14,7 +14,7 @@ Run like this:
 https://langroid.github.io/langroid/tutorials/local-llm-setup/
 """
 
-from typing import List
+from typing import List, Optional
 
 import typer
 import langroid as lr
@@ -39,6 +39,9 @@ from langroid.agent.callbacks.chainlit import (
     update_llm,
 )
 from textwrap import dedent
+import logging
+
+logger = logging.getLogger(__name__)
 
 app = typer.Typer()
 
@@ -90,17 +93,18 @@ class RelevantSearchExtractsTool(ToolMessage):
 class DDGSearchDocChatAgent(DocChatAgent):
     tried_vecdb: bool = False
 
-    def llm_response(
+    def llm_response_async(
         self,
         query: None | str | ChatDocument = None,
-    ) -> ChatDocument | None:
-        return ChatAgent.llm_response(self, query)
+    ) -> Optional[ChatDocument]:
+        return ChatAgent.llm_response_async(self, query)
 
     def relevant_extracts(self, msg: RelevantExtractsTool) -> str:
         """Get docs/extracts relevant to the query, from vecdb"""
         self.tried_vecdb = True
         self.callbacks.show_start_response(entity="agent")
         query = msg.query
+        logger.info(f"Trying to get relevant extracts for query: {query}")
         _, extracts = self.get_relevant_extracts(query)
         if len(extracts) == 0:
             return """
@@ -137,10 +141,6 @@ async def setup_agent_task():
     # set up LLM and LLMConfig from settings state
     await setup_llm()
     llm_config = cl.user_session.get("llm_config")
-    if task := cl.user_session.get("task"):
-        # task already exists and is running, so we just update the agent's llm config
-        task.agent.config.llm = llm_config
-        return
 
     set_global(
         Settings(

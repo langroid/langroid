@@ -75,11 +75,7 @@ async def initialize_agent() -> None:
 @cl.on_settings_update
 async def on_update(settings):
     await update_llm(settings)
-    llm_config = cl.user_session.get("llm_config")
-    llm = lm.OpenAIGPT(llm_config)
-    agent: DocChatAgent = cl.user_session.get("agent")
-    agent.llm = llm
-    agent.config.relevance_extractor_config.llm = llm_config
+    await initialize_agent()
 
 
 @cl.on_chat_start

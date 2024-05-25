@@ -203,10 +203,6 @@ async def setup_agent_task():
     # set up LLM and LLMConfig from settings state
     await setup_llm()
     llm_config = cl.user_session.get("llm_config")
-    if task := cl.user_session.get("task"):
-        # task already exists and is running, so we just update the agent's llm config
-        task.agent.config.llm = llm_config
-        return
 
     set_global(
         Settings(
