@@ -26,6 +26,11 @@ def pytest_addoption(parser) -> None:
         """,
     )
     parser.addoption(
+        "--turns",
+        default=30,
+        help="maximum number of turns in a task (to avoid inf loop)",
+    )
+    parser.addoption(
         "--nof",
         action="store_true",
         default=False,
@@ -36,6 +41,7 @@ def pytest_addoption(parser) -> None:
 @pytest.fixture(scope="session")
 def test_settings(request) -> Settings:
     chat_model = request.config.getoption("--m")
+    max_turns = request.config.getoption("--turns")
     if request.config.getoption("--3"):
         chat_model = OpenAIChatModel.GPT3_5_TURBO
 
@@ -46,6 +52,7 @@ def test_settings(request) -> Settings:
         gpt3_5=request.config.getoption("--3"),
         stream=not request.config.getoption("--ns"),
         chat_model=chat_model,
+        max_turns=max_turns,
     )
 
 

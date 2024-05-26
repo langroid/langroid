@@ -478,7 +478,7 @@ class Task:
                     print("[magenta]Bye, hope this was useful!")
                 break
             i += 1
-            if turns > 0 and i >= turns:
+            if (max_turns := max(turns, settings.max_turns)) > 0 and i >= max_turns:
                 status = StatusCode.MAX_TURNS
                 break
 
@@ -554,7 +554,7 @@ class Task:
                     print("[magenta]Bye, hope this was useful!")
                 break
             i += 1
-            if turns > 0 and i >= turns:
+            if (max_turns := max(turns, settings.max_turns)) > 0 and i >= max_turns:
                 status = StatusCode.MAX_TURNS
                 break
 

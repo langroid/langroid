@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     # NOTE all of these can be overridden in your .env file with upper-case names,
     # for example CACHE_TYPE=momento
     debug: bool = False  # show debug messages?
+    max_turns: int = -1  # maximum number of turns in a task (to avoid inf loop)
     progress: bool = False  # show progress spinners/bars?
     stream: bool = True  # stream output?
     cache: bool = True  # use cache?
