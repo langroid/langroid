@@ -2,12 +2,13 @@ from __future__ import annotations
 
 import copy
 import logging
-from collections import Counter
+from collections import Counter, deque
 from types import SimpleNamespace
 from typing import (
     Any,
     Callable,
     Coroutine,
+    Deque,
     Dict,
     List,
     Optional,
@@ -29,6 +30,7 @@ from langroid.agent.chat_document import (
     StatusCode,
 )
 from langroid.cachedb.redis_cachedb import RedisCache, RedisCacheConfig
+from langroid.exceptions import InfiniteLoopException
 from langroid.mytypes import Entity
 from langroid.parsing.parse_json import extract_top_level_json
 from langroid.parsing.routing import parse_addressed_message
@@ -42,6 +44,7 @@ from langroid.utils.constants import (
     USER_QUIT_STRINGS,
 )
 from langroid.utils.logging import RichFileLogger, setup_file_logger
+from langroid.utils.system import hash
 
 logger = logging.getLogger(__name__)
 
@@ -157,6 +160,10 @@ class Task:
             show_subtask_response=noop_fn,
             set_parent_agent=noop_fn,
         )
+        # counts of distinct pending messages in history,
+        # to help detect (exact) infinite loops
+        self.message_counter: Counter[str] = Counter()
+        self.history_count: Deque[int] = deque(maxlen=10)
         # copy the agent's config, so that we don't modify the original agent's config,
         # which may be shared by other agents.
         try:
@@ -450,6 +457,8 @@ class Task:
         self.max_tokens = max_tokens
         self.session_id = session_id
         self._set_alive()
+        self.message_counter.clear()
+        self.history_count.clear()
 
         assert (
             msg is None or isinstance(msg, str) or isinstance(msg, ChatDocument)
@@ -478,8 +487,16 @@ class Task:
                     print("[magenta]Bye, hope this was useful!")
                 break
             i += 1
-            if (max_turns := max(turns, settings.max_turns)) > 0 and i >= max_turns:
+            max_turns = (
+                min(turns, settings.max_turns)
+                if turns > 0 and settings.max_turns > 0
+                else max(turns, settings.max_turns)
+            )
+            if max_turns > 0 and i >= max_turns:
                 status = StatusCode.MAX_TURNS
+                break
+            if self._maybe_infinite_loop(history=10):
+                raise InfiniteLoopException("Possible infinite loop detected!")
                 break
 
         final_result = self.result()
@@ -530,6 +547,8 @@ class Task:
         self.max_tokens = max_tokens
         self.session_id = session_id
         self._set_alive()
+        self.message_counter.clear()
+        self.history_count.clear()
 
         if (
             isinstance(msg, ChatDocument)
@@ -554,8 +573,16 @@ class Task:
                     print("[magenta]Bye, hope this was useful!")
                 break
             i += 1
-            if (max_turns := max(turns, settings.max_turns)) > 0 and i >= max_turns:
+            max_turns = (
+                min(turns, settings.max_turns)
+                if turns > 0 and settings.max_turns > 0
+                else max(turns, settings.max_turns)
+            )
+            if max_turns > 0 and i >= max_turns:
                 status = StatusCode.MAX_TURNS
+                break
+            if self._maybe_infinite_loop(history=10):
+                raise InfiniteLoopException("Possible infinite loop detected!")
                 break
 
         final_result = self.result()
@@ -826,6 +853,12 @@ class Task:
             # reset stuck counter since we made progress
             self.n_stalled_steps = 0
 
+        # update counters for infinite loop detection
+        if self.pending_message is not None:
+            hashed_msg = hash(str(self.pending_message))
+            self.message_counter.update([hashed_msg])
+            self.history_count.append(self.message_counter[hashed_msg])
+
     def _process_invalid_step_result(self, parent: ChatDocument | None) -> None:
         """
         Since step had no valid result from any responder, decide whether to update the
@@ -1047,36 +1080,49 @@ class Task:
 
     def _maybe_infinite_loop(self, history: int = 10) -> bool:
         """
-        TODO Not currently used, until we figure out best way.
-        Check if {NO_ANSWER}, empty answer, or a specific non-LLM msg occurs too
-        often in history of pending messages -- this can be an indicator of a possible
-        multi-step infinite loop that we should exit.
-        (A single-step infinite loop is where individual steps don't show progress
-        and are easy to detect via n_stalled_steps, but a multi-step infinite loop
-        could show "progress" at each step, but can still be an infinite loop, e.g.
-        if the steps are just alternating between two messages).
-        """
-        p = self.pending_message
-        n_no_answers = 0
-        n_empty_answers = 0
-        counter: Counter[str] = Counter()
-        # count number of NO_ANSWER and empty answers in last up to 10 messages
-        # in ancestors of self.pending_message
-        for _ in range(history):
-            if p is None:
-                break
-            n_no_answers += p.content.strip() == NO_ANSWER
-            n_empty_answers += p.content.strip() == "" and p.function_call is None
-            if p.metadata.sender != Entity.LLM and PASS not in p.content:
-                counter.update([p.metadata.sender + ":" + p.content])
-            p = p.metadata.parent
+        Detect possible infinite loop based on message frequencies.
+        NOTE: This only (attempts to) detect "exact" loops, i.e. a cycle
+        of messages that repeats exactly, e.g.
+        a r b i t r a t e r a t e r a t e r a t e ...
 
-        # freq of most common message in history
-        high_freq = (counter.most_common(1) or [("", 0)])[0][1]
-        # We deem this a potential infinite loop if:
-        # - a specific non-LLM msg occurs too often, or
-        # - a NO_ANSWER or empty answer occurs too often
-        return max(high_freq, n_no_answers) > self.max_stalled_steps
+        It does not detect "approximate" loops, where the LLM is generating a
+        sequence of messages that are similar, but not exactly the same.
+
+        Intuition: when you look at a sufficiently long sequence with an m-message
+        loop, then the frequencies of these m messages will "dominate" those
+        of all other messages.
+
+        1. First find m "dominant" messages, i.e. whose freqs are at least 1.5x
+        the freq of the next message. So if you plot these frequencies in increasing
+        order, you will see a "jump" in the plot. We collect the freqs after this jump.
+        2. Say we found m such dominant frequencies. Now look at the freqs of the last
+            m messages.
+            If this (sorted) freq-list is identical to the (sorted) dominant freqs,
+            then we are likely in a loop.
+        """
+
+        if sum(self.message_counter.values()) < 3 * history:
+            # we haven't seen enough messages to detect a loop
+            return False
+
+        most_common_msg_counts: List[Tuple[str, int]] = (
+            self.message_counter.most_common(history)
+        )
+        # get the most dominant msgs, i.e. these are at least 1.5x more freq
+        # than the rest
+        m = len(most_common_msg_counts) - 1
+        for i in range(min(history - 1, len(most_common_msg_counts) - 1)):
+            if most_common_msg_counts[i][1] > 1.5 * most_common_msg_counts[i + 1][1]:
+                m = i
+                break
+        dominant_msg_counts = most_common_msg_counts[: m + 1]
+
+        # if the dominant m message counts are the same as the
+        # counts of the last m messages, then we are likely in a loop
+        dominant_counts = sorted([c for _, c in dominant_msg_counts])
+        recent_counts = sorted(list(self.history_count)[-(m + 1) :])
+
+        return dominant_counts == recent_counts
 
     def done(
         self, result: ChatDocument | None = None, r: Responder | None = None

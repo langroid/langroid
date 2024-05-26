@@ -280,7 +280,7 @@ class Agent(ABC):
         ]
         return "\n\n".join(sample_convo)
 
-    def agent_response_template(self, content: str | None = None) -> ChatDocument:
+    def create_agent_response(self, content: str | None = None) -> ChatDocument:
         """Template for agent_response."""
         return self._response_template(Entity.AGENT, content)
 
@@ -353,7 +353,7 @@ class Agent(ABC):
             ),
         )
 
-    def user_response_template(self, content: str | None = None) -> ChatDocument:
+    def create_user_response(self, content: str | None = None) -> ChatDocument:
         """Template for user_response."""
         return self._response_template(Entity.USER, content)
 
@@ -451,7 +451,7 @@ class Agent(ABC):
 
         return True
 
-    def llm_response_template(self, content: str | None = None) -> ChatDocument:
+    def create_llm_response(self, content: str | None = None) -> ChatDocument:
         """Template for llm_response."""
         return self._response_template(Entity.LLM, content)
 

@@ -64,8 +64,11 @@ from .mytypes import (
     Entity,
 )
 
+from .exceptions import InfiniteLoopException
+
 __all__ = [
     "mytypes",
+    "exceptions",
     "utils",
     "parsing",
     "prompts",
@@ -89,6 +92,7 @@ __all__ = [
     "run_batch_tasks",
     "llm_response_batch",
     "agent_response_batch",
+    "InfiniteLoopException",
 ]
 if chainlit_available:
     __all__.extend(

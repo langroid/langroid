@@ -33,8 +33,8 @@ def test_addressing(test_settings: Settings, address: str, x: int, answer: int):
                 isinstance(message, ChatDocument)
                 and message.metadata.sender_name == "Alice"
             ):
-                return self.llm_response_template(DONE + " " + message.content)
-            return self.llm_response_template(f"{address} {x}")
+                return self.create_llm_response(DONE + " " + message.content)
+            return self.create_llm_response(f"{address} {x}")
 
     class AliceAgent(ChatAgent):
         def llm_response(
@@ -42,7 +42,7 @@ def test_addressing(test_settings: Settings, address: str, x: int, answer: int):
         ) -> Optional[ChatDocument]:
             x = int(message.content.strip())
             answer = x * x
-            return self.llm_response_template(f"{DONE} {answer}")
+            return self.create_llm_response(f"{DONE} {answer}")
 
     bob_config = ChatAgentConfig(name="Bob")
 

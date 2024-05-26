@@ -27,7 +27,7 @@ def pytest_addoption(parser) -> None:
     )
     parser.addoption(
         "--turns",
-        default=30,
+        default=60,
         help="maximum number of turns in a task (to avoid inf loop)",
     )
     parser.addoption(
