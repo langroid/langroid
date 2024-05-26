@@ -52,7 +52,10 @@ class ToolMessage(ABC, BaseModel):
 
     @classmethod
     def instructions(cls) -> str:
-        return ""
+        return """
+        IMPORTANT: You MUST include the `request` field in the JSON structure
+        when using this or any other tool.
+        """
 
     @classmethod
     def require_recipient(cls) -> Type["ToolMessage"]:
