@@ -18,6 +18,7 @@ from typing import (
     cast,
 )
 
+from pydantic import BaseModel
 from rich import print
 from rich.markup import escape
 
@@ -53,6 +54,16 @@ Responder = Entity | Type["Task"]
 
 def noop_fn(*args: List[Any], **kwargs: Dict[str, Any]) -> None:
     pass
+
+
+class TaskConfig(BaseModel):
+    """Configuration for a Task. This is a container for any params that
+    we didn't include in the task __init__ method.
+    We may eventually move all the task __init__ params to this class, analogous to how
+    we have config classes for Agent, ChatAgent, LanguageModel, etc."""
+
+    inf_loop_cycle_len: int = 10  # max exact-loop cycle length
+    inf_loop_dominance_factor: float = 1.5  # dominance factor for exact-loop detection
 
 
 class Task:
@@ -105,6 +116,7 @@ class Task:
         max_stalled_steps: int = 5,
         done_if_no_response: List[Responder] = [],
         done_if_response: List[Responder] = [],
+        config: TaskConfig = TaskConfig(),
     ):
         """
         A task to be performed by an agent.
@@ -160,10 +172,11 @@ class Task:
             show_subtask_response=noop_fn,
             set_parent_agent=noop_fn,
         )
+        self.config = config
         # counts of distinct pending messages in history,
         # to help detect (exact) infinite loops
         self.message_counter: Counter[str] = Counter()
-        self.history_count: Deque[int] = deque(maxlen=10)
+        self.history_count: Deque[int] = deque(maxlen=self.config.inf_loop_cycle_len)
         # copy the agent's config, so that we don't modify the original agent's config,
         # which may be shared by other agents.
         try:
@@ -298,6 +311,7 @@ class Task:
             max_stalled_steps=self.max_stalled_steps,
             done_if_no_response=[Entity(s) for s in self.done_if_no_response],
             done_if_response=[Entity(s) for s in self.done_if_response],
+            config=self.config,
         )
 
     def __repr__(self) -> str:
@@ -1092,8 +1106,10 @@ class Task:
         loop, then the frequencies of these m messages will "dominate" those
         of all other messages.
 
-        1. First find m "dominant" messages, i.e. whose freqs are at least 1.5x
-        the freq of the next message. So if you plot these frequencies in increasing
+        1. First find m "dominant" messages, i.e. whose freqs are at least F *
+        the freq of the next message (F is config.inf_loop_dominance_factor,
+        defaults to 1.5).
+         So if you plot these frequencies in increasing
         order, you will see a "jump" in the plot. We collect the freqs after this jump.
         2. Say we found m such dominant frequencies. Now look at the freqs of the last
             m messages.
@@ -1101,7 +1117,7 @@ class Task:
             then we are likely in a loop.
         """
 
-        if sum(self.message_counter.values()) < 3 * history:
+        if sum(self.message_counter.values()) < 5 * history:
             # we haven't seen enough messages to detect a loop
             return False
 
@@ -1111,8 +1127,9 @@ class Task:
         # get the most dominant msgs, i.e. these are at least 1.5x more freq
         # than the rest
         m = len(most_common_msg_counts) - 1
+        F = self.config.inf_loop_dominance_factor
         for i in range(min(history - 1, len(most_common_msg_counts) - 1)):
-            if most_common_msg_counts[i][1] > 1.5 * most_common_msg_counts[i + 1][1]:
+            if most_common_msg_counts[i][1] > F * most_common_msg_counts[i + 1][1]:
                 m = i
                 break
         dominant_msg_counts = most_common_msg_counts[: m + 1]
