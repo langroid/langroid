@@ -37,6 +37,7 @@ def test_task_inf_loop(loop_start: int, cycle_len: int):
         def llm_response(
             self, message: Optional[str | ChatDocument] = None
         ) -> Optional[ChatDocument]:
+            """Mock LLM response"""
             if self.iter < loop_start:
                 param = self.iter * 1000 + 100
             else:

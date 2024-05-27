@@ -747,6 +747,24 @@ class Agent(ABC):
 
     def _get_one_tool_message(self, json_str: str) -> Optional[ToolMessage]:
         json_data = json.loads(json_str)
+        # check if the json_data contains a "properties" field
+        # which further contains the actual tool-call
+        # (some weak LLMs do this). E.g. gpt-4o sometimes generates this:
+        # TOOL: {
+        #     "type": "object",
+        #     "properties": {
+        #         "request": "square",
+        #         "number": 9
+        #     },
+        #     "required": [
+        #         "number",
+        #         "request"
+        #     ]
+        # }
+
+        properties = json_data.get("properties")
+        if properties is not None:
+            json_data = properties
         request = json_data.get("request")
         if (
             request is None
