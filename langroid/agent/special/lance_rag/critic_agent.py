@@ -72,11 +72,14 @@ class QueryPlanCriticConfig(LanceQueryPlanAgentConfig):
       fix the problem (or simply equals "address the the error shown in feedback")
     - If the ANSWER is in the expected form, then the QUERY PLAN is likely VALID,
       and your feedback should say VALID, with empty `suggested_fix`.
+      ===> HOWEVER!!! Watch out for a spurious correct-looking answer, for EXAMPLE:
+      the query was to find the ENTITY with a maximum SIZE, 
+      but the dataframe calculation is find the SIZE, NOT the ENTITY!!      
     - If the ANSWER is {NO_ANSWER} or of the wrong form, 
       then try to DIAGNOSE the problem IN THE FOLLOWING ORDER:
       - DATAFRAME CALCULATION -- is it doing the right thing?
         Is it finding the Index of a row instead of the value in a column?
-        Or another example: mmaybe it is finding the maximum population
+        Or another example: maybe it is finding the maximum population
            rather than the CITY with the maximum population?
         If you notice a problem with the DATAFRAME CALCULATION, then
         ONLY SUBMIT FEEDBACK ON THE DATAFRAME CALCULATION, and DO NOT
