@@ -273,9 +273,7 @@ class ChatAgent(Agent):
                 example = "" if self.config.use_tools else (msg_cls.usage_example())
                 if example != "":
                     example = "EXAMPLE: " + example
-                class_instructions = (
-                    ToolMessage.instructions() + "\n\n" + msg_cls.instructions()
-                )
+                class_instructions = msg_cls.instructions()
                 guidance = (
                     ""
                     if class_instructions == ""
