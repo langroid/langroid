@@ -41,7 +41,7 @@ from .agent.chat_agent import (
     ChatAgentConfig,
 )
 
-from .agent.task import Task
+from .agent.task import Task, TaskConfig
 
 try:
     from .agent.callbacks.chainlit import (
@@ -85,6 +85,7 @@ __all__ = [
     "ChatDocument",
     "ChatDocMetaData",
     "Task",
+    "TaskConfig",
     "DocMetaData",
     "Document",
     "Entity",

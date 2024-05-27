@@ -9,15 +9,25 @@ import pytest
 import langroid as lr
 from langroid.agent import ChatDocument
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
-from langroid.agent.task import Task
 from langroid.utils.configuration import settings
 
 settings.stream = False
 
 
-@pytest.mark.parametrize("loop_start", [0, 10])
-@pytest.mark.parametrize("cycle_len", [1000, 1, 3])
-def test_task_inf_loop(loop_start: int, cycle_len: int):
+@pytest.mark.parametrize("loop_start", [10, 0])
+@pytest.mark.parametrize(
+    "cycle_len, max_cycle_len",
+    [
+        (5, 3),
+        (1000, 10),
+        (1, 5),
+        (3, 5),
+        (3, 0),
+    ],
+)
+def test_task_inf_loop(
+    loop_start: int, cycle_len: int, max_cycle_len:int
+):
     """Test that Task.run() can detect infinite loops"""
 
     # set up an agent with a llm_response that produces cyclical output
@@ -38,10 +48,13 @@ def test_task_inf_loop(loop_start: int, cycle_len: int):
             return response
 
     loop_agent = LoopAgent(ChatAgentConfig())
-    task = Task(loop_agent, interactive=False)
+    task_config = lr.TaskConfig(
+        inf_loop_cycle_len=max_cycle_len,
+    )
+    task = lr.Task(loop_agent, interactive=False, config=task_config)
 
     # Test with a run that should raise the exception
-    if cycle_len < 1000:  # i.e. an actual loop within the run
+    if cycle_len < max_cycle_len:  # i.e. an actual loop within the run
         with pytest.raises(lr.InfiniteLoopException):
             task.run(turns=500)
     else:

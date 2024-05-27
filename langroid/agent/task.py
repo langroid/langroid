@@ -512,7 +512,11 @@ class Task:
             if max_turns > 0 and i >= max_turns:
                 status = StatusCode.MAX_TURNS
                 break
-            if i % self.config.inf_loop_cycle_len == 0 and self._maybe_infinite_loop():
+            if (
+                self.config.inf_loop_cycle_len > 0 and
+                i % self.config.inf_loop_cycle_len == 0 and
+                self._maybe_infinite_loop()
+            ):
                 raise InfiniteLoopException("Possible infinite loop detected!")
 
         final_result = self.result()
@@ -597,7 +601,11 @@ class Task:
             if max_turns > 0 and i >= max_turns:
                 status = StatusCode.MAX_TURNS
                 break
-            if i % self.config.inf_loop_cycle_len == 0 and self._maybe_infinite_loop():
+            if (
+                self.config.inf_loop_cycle_len > 0 and
+                i % self.config.inf_loop_cycle_len == 0 and
+                self._maybe_infinite_loop()
+            ):
                 raise InfiniteLoopException("Possible infinite loop detected!")
 
         final_result = self.result()
@@ -1107,15 +1115,18 @@ class Task:
         loop, then the frequencies of these m messages will "dominate" those
         of all other messages.
 
-        1. First find m "dominant" messages, i.e. whose freqs are at least F *
-        the freq of the next message (F is config.inf_loop_dominance_factor,
-        defaults to 1.5).
-         So if you plot these frequencies in increasing
-        order, you will see a "jump" in the plot. We collect the freqs after this jump.
-        2. Say we found m such dominant frequencies. Now look at the freqs of the last
-            m messages.
-            If this (sorted) freq-list is identical to the (sorted) dominant freqs,
-            then we are likely in a loop.
+        1. First find m "dominant" messages, i.e. when arranged in decreasing
+            frequency order, find the m such that
+                freq[m] > F * freq[m+1] and
+                freq[m] > W + freq[m+1]
+            where F = config.inf_loop_dominance_factor (default 1.5) and
+            W = config.inf_loop_wait_factor (default 5).
+            So if you plot these frequencies in decreasing order,
+            you will see a big in the plot, from m to m+1.
+            We call the freqs until m the "dominant" freqs.
+        2. Say we found m such dominant frequencies.
+           If these are the same as the freqs of the last m messages,
+           then we are likely in a loop.
         """
         max_cycle_len = self.config.inf_loop_cycle_len
         if max_cycle_len <= 0:
@@ -1136,7 +1147,8 @@ class Task:
         counts = np.array([c for _, c in most_common_msg_counts])
         # find first index where counts[i] > F * counts[i+1]
         ratios = counts[:-1] / counts[1:]
-        indices = np.where(ratios > F)[0]
+        diffs = counts[:-1] - counts[1:]
+        indices = np.where((ratios > F) & (diffs > wait_factor))[0]
         m = indices[0] if indices.size > 0 else -1
         if m < 0:
             # no dominance found, but...
