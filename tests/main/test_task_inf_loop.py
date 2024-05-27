@@ -25,9 +25,7 @@ settings.stream = False
         (3, 0),
     ],
 )
-def test_task_inf_loop(
-    loop_start: int, cycle_len: int, max_cycle_len:int
-):
+def test_task_inf_loop(loop_start: int, cycle_len: int, max_cycle_len: int):
     """Test that Task.run() can detect infinite loops"""
 
     # set up an agent with a llm_response that produces cyclical output

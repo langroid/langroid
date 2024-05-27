@@ -513,9 +513,9 @@ class Task:
                 status = StatusCode.MAX_TURNS
                 break
             if (
-                self.config.inf_loop_cycle_len > 0 and
-                i % self.config.inf_loop_cycle_len == 0 and
-                self._maybe_infinite_loop()
+                self.config.inf_loop_cycle_len > 0
+                and i % self.config.inf_loop_cycle_len == 0
+                and self._maybe_infinite_loop()
             ):
                 raise InfiniteLoopException("Possible infinite loop detected!")
 
@@ -602,9 +602,9 @@ class Task:
                 status = StatusCode.MAX_TURNS
                 break
             if (
-                self.config.inf_loop_cycle_len > 0 and
-                i % self.config.inf_loop_cycle_len == 0 and
-                self._maybe_infinite_loop()
+                self.config.inf_loop_cycle_len > 0
+                and i % self.config.inf_loop_cycle_len == 0
+                and self._maybe_infinite_loop()
             ):
                 raise InfiniteLoopException("Possible infinite loop detected!")
 
