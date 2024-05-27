@@ -18,6 +18,7 @@ from typing import (
     cast,
 )
 
+import numpy as np
 from pydantic import BaseModel
 from rich import print
 from rich.markup import escape
@@ -64,6 +65,8 @@ class TaskConfig(BaseModel):
 
     inf_loop_cycle_len: int = 10  # max exact-loop cycle length
     inf_loop_dominance_factor: float = 1.5  # dominance factor for exact-loop detection
+    # wait this * cycle_len msgs before checking for loop
+    inf_loop_wait_factor: float = 5.0
 
 
 class Task:
@@ -509,9 +512,8 @@ class Task:
             if max_turns > 0 and i >= max_turns:
                 status = StatusCode.MAX_TURNS
                 break
-            if self._maybe_infinite_loop(history=10):
+            if i % self.config.inf_loop_cycle_len == 0 and self._maybe_infinite_loop():
                 raise InfiniteLoopException("Possible infinite loop detected!")
-                break
 
         final_result = self.result()
         if final_result is not None:
@@ -595,9 +597,8 @@ class Task:
             if max_turns > 0 and i >= max_turns:
                 status = StatusCode.MAX_TURNS
                 break
-            if self._maybe_infinite_loop(history=10):
+            if i % self.config.inf_loop_cycle_len == 0 and self._maybe_infinite_loop():
                 raise InfiniteLoopException("Possible infinite loop detected!")
-                break
 
         final_result = self.result()
         if final_result is not None:
@@ -1092,15 +1093,15 @@ class Task:
             or (not self._is_empty_message(result) and response_says_done)
         )
 
-    def _maybe_infinite_loop(self, history: int = 10) -> bool:
+    def _maybe_infinite_loop(self) -> bool:
         """
         Detect possible infinite loop based on message frequencies.
         NOTE: This only (attempts to) detect "exact" loops, i.e. a cycle
         of messages that repeats exactly, e.g.
         a r b i t r a t e r a t e r a t e r a t e ...
 
-        It does not detect "approximate" loops, where the LLM is generating a
-        sequence of messages that are similar, but not exactly the same.
+        [It does not detect "approximate" loops, where the LLM is generating a
+        sequence of messages that are similar, but not exactly the same.]
 
         Intuition: when you look at a sufficiently long sequence with an m-message
         loop, then the frequencies of these m messages will "dominate" those
@@ -1116,24 +1117,39 @@ class Task:
             If this (sorted) freq-list is identical to the (sorted) dominant freqs,
             then we are likely in a loop.
         """
-
-        if sum(self.message_counter.values()) < 5 * history:
+        max_cycle_len = self.config.inf_loop_cycle_len
+        wait_factor = self.config.inf_loop_wait_factor
+        if sum(self.message_counter.values()) < wait_factor * max_cycle_len:
             # we haven't seen enough messages to detect a loop
             return False
 
         most_common_msg_counts: List[Tuple[str, int]] = (
-            self.message_counter.most_common(history)
+            self.message_counter.most_common(max_cycle_len + 1)
         )
         # get the most dominant msgs, i.e. these are at least 1.5x more freq
         # than the rest
-        m = len(most_common_msg_counts) - 1
         F = self.config.inf_loop_dominance_factor
-        for i in range(min(history - 1, len(most_common_msg_counts) - 1)):
-            if most_common_msg_counts[i][1] > F * most_common_msg_counts[i + 1][1]:
-                m = i
-                break
-        dominant_msg_counts = most_common_msg_counts[: m + 1]
+        # counts array in non-increasing order
+        counts = np.array([c for _, c in most_common_msg_counts])
+        # find first index where counts[i] > F * counts[i+1]
+        ratios = counts[:-1] / counts[1:]
+        indices = np.where(ratios > F)[0]
+        m = indices[0] if indices.size > 0 else -1
+        if m < 0:
+            # no dominance found, but...
+            if len(most_common_msg_counts) <= max_cycle_len:
+                # ...The most-common messages are at most max_cycle_len,
+                # even though we looked for the most common (max_cycle_len + 1) msgs.
+                # This means there are only at most max_cycle_len distinct messages,
+                # which also indicates a possible loop.
+                m = len(most_common_msg_counts) - 1
+            else:
+                # ... we have enough messages, but no dominance found,
+                # so there COULD be loops longer than max_cycle_len,
+                # OR there is no loop at all; we can't tell, so we return False.
+                return False
 
+        dominant_msg_counts = most_common_msg_counts[: m + 1]
         # if the dominant m message counts are the same as the
         # counts of the last m messages, then we are likely in a loop
         dominant_counts = sorted([c for _, c in dominant_msg_counts])

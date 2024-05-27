@@ -11,12 +11,15 @@ from langroid.agent import ChatDocument
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
 from langroid.agent.tool_message import ToolMessage
-from langroid.utils.configuration import Settings, set_global
+from langroid.utils.configuration import settings
+
+settings.stream = False
 
 
-def test_task_inf_loop(test_settings: Settings):
+@pytest.mark.parametrize("loop_start", [0, 10])
+@pytest.mark.parametrize("cycle_len", [1000, 1, 3])
+def test_task_inf_loop(loop_start: int, cycle_len: int):
     """Test that Task.run() can detect infinite loops"""
-    set_global(test_settings)
 
     class DummyTool(ToolMessage):
         request = "dummy"
@@ -34,18 +37,14 @@ def test_task_inf_loop(test_settings: Settings):
         def llm_response(
             self, message: Optional[str | ChatDocument] = None
         ) -> Optional[ChatDocument]:
-            # for first 10 iters, return tool with a different param
+            if self.iter < loop_start:
+                param = self.iter * 1000 + 100
+            else:
+                param = self.iter % cycle_len
             self.iter += 1
-            if self.iter < 10:
-                return self.create_llm_response(
-                    f"""
-                    TOOL: {{"request": "dummy", "param": {self.iter}}}
-                    """
-                )
-            # ... after that return a fixed response
             return self.create_llm_response(
-                """
-                TOOL: {"request": "dummy", "param": 10}
+                f"""
+                TOOL: {{"request": "dummy", "param": {param}}}
                 """
             )
 
@@ -54,5 +53,10 @@ def test_task_inf_loop(test_settings: Settings):
     task = Task(loop_agent, interactive=False)
 
     # Test with a run that should raise the exception
-    with pytest.raises(lr.InfiniteLoopException):
-        task.run(turns=500)
+    if cycle_len < 1000:  # i.e. an actual loop within the run
+        with pytest.raises(lr.InfiniteLoopException):
+            task.run(turns=500)
+    else:
+        # no loop within this many turns, so we shouldn't raise exception
+        result = task.run(turns=100)
+        assert result.metadata.status == lr.StatusCode.MAX_TURNS
