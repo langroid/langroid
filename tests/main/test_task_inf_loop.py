@@ -10,7 +10,6 @@ import langroid as lr
 from langroid.agent import ChatDocument
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
-from langroid.agent.tool_message import ToolMessage
 from langroid.utils.configuration import settings
 
 settings.stream = False
@@ -21,16 +20,7 @@ settings.stream = False
 def test_task_inf_loop(loop_start: int, cycle_len: int):
     """Test that Task.run() can detect infinite loops"""
 
-    class DummyTool(ToolMessage):
-        request = "dummy"
-        purpose = "Dummy tool for testing"
-        param: int
-
-        def handle(self) -> str:
-            return f"got param {self.param}"
-
-    # set up an agent with a tool so it alternates between
-    # agent_response and llm_response forever
+    # set up an agent with a llm_response that produces cyclical output
     class LoopAgent(ChatAgent):
         iter: int = 0
 
@@ -43,14 +33,11 @@ def test_task_inf_loop(loop_start: int, cycle_len: int):
             else:
                 param = self.iter % cycle_len
             self.iter += 1
-            return self.create_llm_response(
-                f"""
-                TOOL: {{"request": "dummy", "param": {param}}}
-                """
-            )
+            response = self.create_llm_response(str(param))
+            self._render_llm_response(response)
+            return response
 
     loop_agent = LoopAgent(ChatAgentConfig())
-    loop_agent.enable_message(DummyTool)
     task = Task(loop_agent, interactive=False)
 
     # Test with a run that should raise the exception

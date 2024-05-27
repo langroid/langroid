@@ -63,7 +63,7 @@ class TaskConfig(BaseModel):
     We may eventually move all the task __init__ params to this class, analogous to how
     we have config classes for Agent, ChatAgent, LanguageModel, etc."""
 
-    inf_loop_cycle_len: int = 10  # max exact-loop cycle length
+    inf_loop_cycle_len: int = 10  # max exact-loop cycle length: 0 => no inf loop test
     inf_loop_dominance_factor: float = 1.5  # dominance factor for exact-loop detection
     # wait this * cycle_len msgs before checking for loop
     inf_loop_wait_factor: float = 5.0
@@ -1118,6 +1118,9 @@ class Task:
             then we are likely in a loop.
         """
         max_cycle_len = self.config.inf_loop_cycle_len
+        if max_cycle_len <= 0:
+            # no loop detection
+            return False
         wait_factor = self.config.inf_loop_wait_factor
         if sum(self.message_counter.values()) < wait_factor * max_cycle_len:
             # we haven't seen enough messages to detect a loop
