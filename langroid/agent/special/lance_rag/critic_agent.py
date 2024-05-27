@@ -70,6 +70,9 @@ class QueryPlanCriticConfig(LanceQueryPlanAgentConfig):
       plan execution FAILED, and your feedback should say INVALID along 
       with the ERROR message, `suggested_fix` that aims to help the assistant 
       fix the problem (or simply equals "address the the error shown in feedback")
+    - Ask yourself, is the ANSWER in the expected form, e.g. 
+        if the question is asking for the name of an ENTITY with max SIZE,
+        then the answer should be the ENTITY name, NOT the SIZE!! 
     - If the ANSWER is in the expected form, then the QUERY PLAN is likely VALID,
       and your feedback should say VALID, with empty `suggested_fix`.
       ===> HOWEVER!!! Watch out for a spurious correct-looking answer, for EXAMPLE:
