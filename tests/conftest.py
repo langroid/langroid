@@ -36,6 +36,11 @@ def pytest_addoption(parser) -> None:
         default=False,
         help="use model with no function_call",
     )
+    parser.addoption("--first-test", action="store", default=None,
+                     help="Specify a test FUNCTION to run first.")
+
+    parser.addoption("--first-test-file", action="store", default=None,
+                     help="Specify a test FILE to run first.")
 
 
 @pytest.fixture(scope="session")
@@ -63,3 +68,14 @@ def redis_setup(redisdb):
     os.environ["REDIS_PASSWORD"] = ""  # Assuming no password for testing
     yield
     # Reset or clean up environment variables after tests
+
+def pytest_collection_modifyitems(session, config, items):
+    first_test = config.getoption("--first-test")
+    first_test_file = config.getoption("--first-test-file")
+
+    if first_test:
+        # Prioritize the specified test function
+        items.sort(key=lambda item: item.nodeid != first_test)
+    elif first_test_file:
+        # Prioritize the specified test file
+        items.sort(key=lambda item: not item.nodeid.startswith(first_test_file))
