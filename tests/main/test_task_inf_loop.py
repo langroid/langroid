@@ -14,15 +14,15 @@ from langroid.utils.configuration import settings
 settings.stream = False
 
 
-@pytest.mark.parametrize("loop_start", [10, 0])
+@pytest.mark.parametrize("loop_start", [6, 0])
 @pytest.mark.parametrize(
     "cycle_len, max_cycle_len",
     [
-        (5, 3),
-        (1000, 10),
-        (1, 5),
-        (3, 5),
-        (3, 0),
+        (3, 5),  # inf loop
+        (5, 3),  # no inf loop
+        (1000, 5),  # no inf loop
+        (1, 5),  # inf loop
+        (3, 0),  # no loop detection
     ],
 )
 def test_task_inf_loop(loop_start: int, cycle_len: int, max_cycle_len: int):
@@ -54,8 +54,8 @@ def test_task_inf_loop(loop_start: int, cycle_len: int, max_cycle_len: int):
     # Test with a run that should raise the exception
     if cycle_len < max_cycle_len:  # i.e. an actual loop within the run
         with pytest.raises(lr.InfiniteLoopException):
-            task.run(turns=500)
+            task.run(turns=80)
     else:
         # no loop within this many turns, so we shouldn't raise exception
-        result = task.run(turns=100)
+        result = task.run(turns=80)
         assert result.metadata.status == lr.StatusCode.MAX_TURNS
