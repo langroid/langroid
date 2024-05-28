@@ -6,6 +6,7 @@ import logging
 import shutil
 import socket
 import traceback
+import uuid
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -166,3 +167,9 @@ def hash(s: str) -> str:
         str: The SHA256 hash of the string.
     """
     return update_hash(s=s)
+
+
+def generate_unique_id() -> str:
+    """Generate a unique ID using UUID4."""
+    unique_id = str(uuid.uuid4())
+    return unique_id
