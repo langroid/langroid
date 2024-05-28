@@ -101,6 +101,7 @@ jobs:
       run: |
         poetry run coverage run --source=langroid -m pytest \
           --first-test-file=tests/main/test_task.py \
+          --first-test-name=tests/main/test_lance_doc_chat_agent.py \
           -x tests/main tests/extras/test_hf_embeddings.py
         poetry run coverage report
       continue-on-error: true
