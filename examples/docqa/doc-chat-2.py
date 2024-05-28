@@ -20,7 +20,6 @@ from langroid.mytypes import Entity
 from langroid.parsing.parser import ParsingConfig, PdfParsingConfig, Splitter
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
-from langroid.language_models.openai_gpt import OpenAIGPTConfig
 from langroid.agent.tools.recipient_tool import RecipientTool
 from langroid.utils.configuration import set_global, Settings
 from langroid.utils.constants import NO_ANSWER

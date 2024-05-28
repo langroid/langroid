@@ -113,7 +113,7 @@ def chat() -> None:
     even_task = Task(
         even_agent,
         name="Even",
-        default_human_response="",
+        interactive=False,
         system_message=f"""
         You will receive two types of messages, to which you will respond as follows:
         
@@ -132,7 +132,7 @@ def chat() -> None:
     evenz_task = Task(
         evenz_agent,
         name="EvenZ",
-        default_human_response="",
+        interactive=False,
         system_message=f"""
         You will receive two types of messages, to which you will respond as follows:
         
@@ -151,7 +151,7 @@ def chat() -> None:
     even_nz_task = Task(
         even_nz_agent,
         name="EvenNZ",
-        default_human_response="",
+        interactive=False,
         system_message=f"""
         You will receive two types of messages, to which you will respond as follows:
         
@@ -170,7 +170,7 @@ def chat() -> None:
     odd_task = Task(
         odd_agent,
         name="Odd",
-        default_human_response="",
+        interactive=False,
         system_message=f"""
         You will receive two types of messages, to which you will respond as follows:
         
@@ -188,7 +188,7 @@ def chat() -> None:
     adder_task = Task(
         adder_agent,
         name="Adder",
-        default_human_response="",
+        interactive=False,
         system_message="""
         You will be given a number n.
         You have to add it to the original number and return the result.

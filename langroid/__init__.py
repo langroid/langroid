@@ -41,7 +41,7 @@ from .agent.chat_agent import (
     ChatAgentConfig,
 )
 
-from .agent.task import Task
+from .agent.task import Task, TaskConfig
 
 try:
     from .agent.callbacks.chainlit import (
@@ -64,8 +64,11 @@ from .mytypes import (
     Entity,
 )
 
+from .exceptions import InfiniteLoopException
+
 __all__ = [
     "mytypes",
+    "exceptions",
     "utils",
     "parsing",
     "prompts",
@@ -82,6 +85,7 @@ __all__ = [
     "ChatDocument",
     "ChatDocMetaData",
     "Task",
+    "TaskConfig",
     "DocMetaData",
     "Document",
     "Entity",
@@ -89,6 +93,7 @@ __all__ = [
     "run_batch_tasks",
     "llm_response_batch",
     "agent_response_batch",
+    "InfiniteLoopException",
 ]
 if chainlit_available:
     __all__.extend(

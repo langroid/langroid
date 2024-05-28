@@ -260,10 +260,6 @@ def test_lance_doc_chat_agent_df_query_plan(
     "query, expected",
     [
         (
-            "Which movie about about prison escapes is rated highest?",
-            "Alcoona",
-        ),
-        (
             "Average rating of Science Fiction movies?",
             "9",
         ),

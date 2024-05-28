@@ -24,7 +24,6 @@ https://langroid.github.io/langroid/tutorials/local-llm-setup/
 
 import chainlit as cl
 import langroid as lr
-import langroid.language_models as lm
 import langroid.parsing.parser as lp
 from langroid.agent.special.doc_chat_agent import DocChatAgent, DocChatAgentConfig
 from langroid.utils.constants import NO_ANSWER

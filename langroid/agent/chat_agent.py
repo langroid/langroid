@@ -273,10 +273,11 @@ class ChatAgent(Agent):
                 example = "" if self.config.use_tools else (msg_cls.usage_example())
                 if example != "":
                     example = "EXAMPLE: " + example
+                class_instructions = msg_cls.instructions()
                 guidance = (
                     ""
-                    if msg_cls.instructions() == ""
-                    else ("GUIDANCE: " + msg_cls.instructions())
+                    if class_instructions == ""
+                    else ("GUIDANCE: " + class_instructions)
                 )
                 if guidance == "" and example == "":
                     continue
@@ -783,23 +784,20 @@ class ChatAgent(Agent):
         if self.llm is None:
             return
         if not citation_only and (not self.llm.get_stream() or is_cached):
-            # We expect response to be LLMResponse in this context
-            if not isinstance(response, LLMResponse):
-                raise ValueError(
-                    "Expected response to be LLMResponse, but got "
-                    f"{type(response)} instead."
-                )
             # We would have already displayed the msg "live" ONLY if
             # streaming was enabled, AND we did not find a cached response.
             # If we are here, it means the response has not yet been displayed.
             cached = f"[red]{self.indent}(cached)[/red]" if is_cached else ""
             if not settings.quiet:
+                chat_doc = (
+                    response
+                    if isinstance(response, ChatDocument)
+                    else ChatDocument.from_LLMResponse(response, displayed=True)
+                )
                 print(cached + "[green]" + escape(str(response)))
                 self.callbacks.show_llm_response(
                     content=str(response),
-                    is_tool=self.has_tool_message_attempt(
-                        ChatDocument.from_LLMResponse(response, displayed=True),
-                    ),
+                    is_tool=self.has_tool_message_attempt(chat_doc),
                     cached=is_cached,
                 )
         if isinstance(response, LLMResponse):
