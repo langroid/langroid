@@ -36,18 +36,19 @@ def pytest_addoption(parser) -> None:
         default=False,
         help="use model with no function_call",
     )
+    # use multiple --first-test arguments to specify multiple tests to run first
     parser.addoption(
         "--first-test",
-        action="store",
-        default=None,
-        help="Specify a test FUNCTION to run first.",
+        action="append",
+        default=[],
+        help="Specify test FUNCTION(s) to run first.",
     )
-
+    # use multiple --first-test-file arguments to specify multiple files to run first
     parser.addoption(
         "--first-test-file",
-        action="store",
-        default=None,
-        help="Specify a test FILE to run first.",
+        action="append",
+        default=[],
+        help="Specify test FILE(s) to run first.",
     )
 
 
@@ -78,13 +79,33 @@ def redis_setup(redisdb):
     # Reset or clean up environment variables after tests
 
 
-def pytest_collection_modifyitems(session, config, items):
-    first_test = config.getoption("--first-test")
-    first_test_file = config.getoption("--first-test-file")
+def pytest_collection_modifyitems(config, items):
+    # Get the lists of specified tests and files
+    first_tests = config.getoption("--first-test")
+    first_test_files = config.getoption("--first-test-file")
 
-    if first_test:
-        # Prioritize the specified test function
-        items.sort(key=lambda item: item.nodeid != first_test)
-    elif first_test_file:
-        # Prioritize the specified test file
-        items.sort(key=lambda item: not item.nodeid.startswith(first_test_file))
+    priority_items = []
+    other_items = list(items)  # Start with all items
+
+    # Prioritize individual tests specified by --first-test
+    for first_test in first_tests:
+        current_priority_items = [
+            item for item in other_items if first_test in item.nodeid
+        ]
+        priority_items.extend(current_priority_items)
+        other_items = [
+            item for item in other_items if item not in current_priority_items
+        ]
+
+    # Prioritize entire files specified by --first-test-file
+    for first_test_file in first_test_files:
+        current_priority_items = [
+            item for item in other_items if first_test_file in str(item.fspath)
+        ]
+        priority_items.extend(current_priority_items)
+        other_items = [
+            item for item in other_items if item not in current_priority_items
+        ]
+
+    # Replace the items list with priority items first, followed by others
+    items[:] = priority_items + other_items
