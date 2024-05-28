@@ -41,6 +41,7 @@ instantiate a `ChatAgent` object with that config:
 import langroid as lr
 
 config = lr.ChatAgentConfig(
+    name="MyAgent", # note there should be no spaces in the name!
     llm = lr.language_models.OpenAIGPTConfig(
     chat_model=lr.language_models.OpenAIChatModel.GPT4
     ) #(1)!
@@ -123,6 +124,9 @@ implemented with a `Task`, in a couple of lines of code:
 ```py
 task = lr.Task(agent, name="Bot", system_message="You are a helpful assistant")
 ```
+
+(When a `name` is provided in the `Task` constructor, it overrides the agent's name.) 
+
 We can then run the task:
 ```py
 task.run() #(1)!

@@ -2,6 +2,7 @@ import asyncio
 import inspect
 import json
 import logging
+import re
 from abc import ABC
 from contextlib import ExitStack
 from types import SimpleNamespace
@@ -19,7 +20,7 @@ from typing import (
     no_type_check,
 )
 
-from pydantic import BaseSettings, ValidationError
+from pydantic import BaseSettings, ValidationError, validator
 from rich import print
 from rich.console import Console
 from rich.markup import escape
@@ -63,6 +64,15 @@ class AgentConfig(BaseSettings):
     parsing: Optional[ParsingConfig] = ParsingConfig()
     prompts: Optional[PromptsConfig] = PromptsConfig()
     show_stats: bool = True  # show token usage/cost stats?
+
+    @validator("name")
+    def check_name_alphanum(cls, v: str) -> str:
+        if not re.match(r"^[a-zA-Z0-9_-]+$", v):
+            raise ValueError(
+                "The name must only contain alphanumeric characters, "
+                "underscores, or hyphens, with no spaces"
+            )
+        return v
 
 
 def noop_fn(*args: List[Any], **kwargs: Dict[str, Any]) -> None:
