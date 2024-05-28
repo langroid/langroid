@@ -123,6 +123,17 @@ teacher_task.run()
 <summary> <b>Click to expand</b></summary>
 
 - **May 2024:** 
+  - [Infinite loop detection](https://github.com/langroid/langroid/blob/0ed30eb467b00d5eaf2933b577a4b2cc37de1aa1/langroid/agent/task.py#L1121) for task loops of cycle-length <= 10 (configurable 
+    in [`TaskConfig`](https://github.
+    com/langroid/langroid/blob/0ed30eb467b00d5eaf2933b577a4b2cc37de1aa1/langroid/agent
+    /task.py#L61). Only detects _exact_ loops, rather than 
+    _approximate_ loops where the entities are saying essentially similar (but not 
+    exactly the same) things repeatedly.
+  - "@"-addressing: any entity can address any other by name, which can be the name 
+    of an agent's responder ("llm", "user", "agent") or a sub-task name. This is a 
+    simpler alternative to the `RecipientTool` mechanism, with the tradeoff that 
+    since it's not a tool, there's no way to enforce/remind the LLM to explicitly 
+    specify an addressee (in scenarios where this is important).
   - [Much-Improved Citation](https://github.com/langroid/langroid/issues/477) 
     generation and display when using `DocChatAgent`.
   - `gpt-4o` is now the default LLM throughout; Update tests and examples to work 
