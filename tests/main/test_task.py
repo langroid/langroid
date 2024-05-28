@@ -3,7 +3,7 @@ Other tests for Task are in test_chat_agent.py
 """
 
 import asyncio
-from typing import List
+from typing import List, Optional
 
 import pytest
 
@@ -13,7 +13,12 @@ from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
 from langroid.agent.tool_message import ToolMessage
 from langroid.mytypes import Entity
-from langroid.utils.configuration import Settings, set_global, settings
+from langroid.utils.configuration import (
+    Settings,
+    set_global,
+    settings,
+    temporary_settings,
+)
 from langroid.utils.constants import DONE, PASS
 
 
@@ -52,34 +57,44 @@ def test_task_cost(test_settings: Settings):
 async def test_task_kill(test_settings: Settings):
     """Test that Task.run() can be killed"""
     set_global(test_settings)
-    agent = ChatAgent(ChatAgentConfig(name="Test"))
-    task = Task(
-        agent,
-        interactive=False,
-        single_round=False,
-        default_human_response="Add 3 to the last number",
-        system_message="generate a single number as instructed by user.",
-    )
-    # start task
-    async_task = asyncio.create_task(
-        task.run_async("3+1=?", turns=50, session_id="mysession")
-    )
-    # sleep a bit then kill it
-    await asyncio.sleep(0.5)
-    task.kill()
-    result: lr.ChatDocument = await async_task
-    assert result.metadata.status == lr.StatusCode.KILL
 
-    # test killing via static method:
-    # Run it for a potentially very large number of turns...
-    async_task = asyncio.create_task(
-        task.run_async("3+1=?", turns=500, session_id="mysession")
-    )
-    # ...sleep a bit then kill it
-    await asyncio.sleep(0.1)
-    Task.kill_session("mysession")
-    result: lr.ChatDocument = await async_task
-    assert result.metadata.status == lr.StatusCode.KILL
+    class MockAgent(ChatAgent):
+        async def llm_response_async(
+            self, message: Optional[str | ChatDocument] = None
+        ) -> Optional[ChatDocument]:
+            # dummy deterministic response; no need for real LLM here!
+            return self.create_llm_response("hello")
+
+    agent = MockAgent(ChatAgentConfig(name="Test"))
+    with temporary_settings(Settings(max_turns=-1)):
+
+        task = Task(
+            agent,
+            interactive=False,
+            single_round=False,
+            default_human_response="ok",
+            config=lr.TaskConfig(inf_loop_cycle_len=0),  # turn off cycle detection
+        )
+        # start task
+        async_task = asyncio.create_task(
+            task.run_async("hi", turns=50, session_id="mysession")
+        )
+        # sleep a bit then kill it
+        await asyncio.sleep(0.1)
+        task.kill()
+        result: lr.ChatDocument = await async_task
+        assert result.metadata.status == lr.StatusCode.KILL
+
+        # test killing via static method:
+        # Run it for a potentially very large number of turns...
+        async_task = asyncio.create_task(
+            task.run_async("hi", turns=50, session_id="mysession")
+        )
+        # ...sleep a bit then kill it
+        await asyncio.sleep(0.1)
+        Task.kill_session("mysession")
+        result: lr.ChatDocument = await async_task
+        assert result.metadata.status == lr.StatusCode.KILL
 
 
 def test_task_empty_response(test_settings: Settings):
