@@ -108,12 +108,16 @@ class SpyGameAgent(lr.ChatAgent):
         super().__init__(config)
         self.numbers = [3, 4, 8, 11, 15, 25, 40, 80, 90]
 
-    def probe(self, msg: ProbeTool) -> str:
+    def probe(self, msg: ProbeTool) -> str: #(1)!
         # return how many values in self.numbers are less or equal to msg.number
         return str(len([n for n in self.numbers if n <= msg.number]))
 
 spy_game_agent = SpyGameAgent(config)
 ``` 
+
+1. Note that this method name exactly matches the value of the `request` field in the 
+   `ProbeTool` definition. This ensures that this method is called when the LLM 
+   generates a valid `ProbeTool` message.
 
 ## Enable the `spy_game_agent` to handle the `probe` tool
 

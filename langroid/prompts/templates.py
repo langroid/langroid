@@ -55,13 +55,14 @@ SUMMARY_ANSWER_PROMPT_GPT4 = f"""
         information in these extracts, even if your answer is factually incorrect, 
         and even if the answer contradicts other parts of the document. The only 
         important thing is that your answer is consistent with and supported by the 
-        extracts. Compose your complete answer, inserting CITATIONS 
-        in the format [[i,j,...]] where i,j,... are the extract NUMBERS you are citing.
+        extracts. Compose your complete answer, inserting CITATIONS in MARKDOWN format
+        [^i][^j] where i,j,... are the extract NUMBERS you are 
+        citing.
         For example your answer might look like this (NOTE HOW multiple citations
-        are grouped as [[2,5]]):
+        are grouped as [^2][^5]):
         
-        Beethoven composed the 9th symphony in 1824. [[1]] After that he became deaf
-        and could not hear his own music. [[2,5]] He was a prolific composer and
+        Beethoven composed the 9th symphony in 1824.[^1] After that he became deaf
+        and could not hear his own music. [^2][^5]. He was a prolific composer and
         wrote many famous pieces.
         
         NUMBERED EXTRACTS:

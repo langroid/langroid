@@ -2,6 +2,7 @@ import asyncio
 import inspect
 import json
 import logging
+import re
 from abc import ABC
 from contextlib import ExitStack
 from types import SimpleNamespace
@@ -19,7 +20,7 @@ from typing import (
     no_type_check,
 )
 
-from pydantic import BaseSettings, ValidationError
+from pydantic import BaseSettings, ValidationError, validator
 from rich import print
 from rich.console import Console
 from rich.markup import escape
@@ -64,6 +65,15 @@ class AgentConfig(BaseSettings):
     prompts: Optional[PromptsConfig] = PromptsConfig()
     show_stats: bool = True  # show token usage/cost stats?
 
+    @validator("name")
+    def check_name_alphanum(cls, v: str) -> str:
+        if not re.match(r"^[a-zA-Z0-9_-]+$", v):
+            raise ValueError(
+                "The name must only contain alphanumeric characters, "
+                "underscores, or hyphens, with no spaces"
+            )
+        return v
+
 
 def noop_fn(*args: List[Any], **kwargs: Dict[str, Any]) -> None:
     pass
@@ -87,6 +97,7 @@ class Agent(ABC):
         self.llm_tools_map: Dict[str, Type[ToolMessage]] = {}
         self.llm_tools_handled: Set[str] = set()
         self.llm_tools_usable: Set[str] = set()
+        self.interactive: bool | None = None
         self.total_llm_token_cost = 0.0
         self.total_llm_token_usage = 0
         self.token_stats_str = ""
@@ -223,8 +234,8 @@ class Agent(ABC):
         ):
             setattr(self, tool, lambda obj: obj.response(self))
 
-        if hasattr(message_class, "handle_message_fallback") and inspect.isfunction(
-            message_class.handle_message_fallback
+        if hasattr(message_class, "handle_message_fallback") and (
+            inspect.isfunction(message_class.handle_message_fallback)
         ):
             setattr(
                 self,
@@ -279,9 +290,9 @@ class Agent(ABC):
         ]
         return "\n\n".join(sample_convo)
 
-    def agent_response_template(self) -> ChatDocument:
+    def create_agent_response(self, content: str | None = None) -> ChatDocument:
         """Template for agent_response."""
-        return self._response_template(Entity.AGENT)
+        return self._response_template(Entity.AGENT, content)
 
     async def agent_response_async(
         self,
@@ -342,19 +353,19 @@ class Agent(ABC):
             ),
         )
 
-    def _response_template(self, e: Entity) -> ChatDocument:
+    def _response_template(self, e: Entity, content: str | None = None) -> ChatDocument:
         """Template for response from entity `e`."""
         return ChatDocument(
-            content="",
+            content=content or "",
             tool_messages=[],
             metadata=ChatDocMetaData(
                 source=e, sender=e, sender_name=self.config.name, tool_ids=[]
             ),
         )
 
-    def user_response_template(self) -> ChatDocument:
+    def create_user_response(self, content: str | None = None) -> ChatDocument:
         """Template for user_response."""
-        return self._response_template(Entity.USER)
+        return self._response_template(Entity.USER, content)
 
     async def user_response_async(
         self,
@@ -377,11 +388,21 @@ class Agent(ABC):
             (str) User response, packaged as a ChatDocument
 
         """
-        if self.default_human_response is not None:
+
+        # When msg explicitly addressed to user, this means an actual human response
+        # is being sought.
+        need_human_response = (
+            isinstance(msg, ChatDocument) and msg.metadata.recipient == Entity.USER
+        )
+
+        interactive = (
+            self.interactive if self.interactive is not None else settings.interactive
+        )
+        if self.default_human_response is not None and not need_human_response:
             # useful for automated testing
             user_msg = self.default_human_response
-        elif not settings.interactive:
-            user_msg = ""
+        elif not interactive and not need_human_response:
+            return None
         else:
             if self.callbacks.get_user_response is not None:
                 # ask user with empty prompt: no need for prompt
@@ -440,9 +461,9 @@ class Agent(ABC):
 
         return True
 
-    def llm_response_template(self) -> ChatDocument:
+    def create_llm_response(self, content: str | None = None) -> ChatDocument:
         """Template for llm_response."""
-        return self._response_template(Entity.LLM)
+        return self._response_template(Entity.LLM, content)
 
     @no_type_check
     async def llm_response_async(
@@ -736,6 +757,24 @@ class Agent(ABC):
 
     def _get_one_tool_message(self, json_str: str) -> Optional[ToolMessage]:
         json_data = json.loads(json_str)
+        # check if the json_data contains a "properties" field
+        # which further contains the actual tool-call
+        # (some weak LLMs do this). E.g. gpt-4o sometimes generates this:
+        # TOOL: {
+        #     "type": "object",
+        #     "properties": {
+        #         "request": "square",
+        #         "number": 9
+        #     },
+        #     "required": [
+        #         "number",
+        #         "request"
+        #     ]
+        # }
+
+        properties = json_data.get("properties")
+        if properties is not None:
+            json_data = properties
         request = json_data.get("request")
         if (
             request is None

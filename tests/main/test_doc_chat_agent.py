@@ -1,13 +1,20 @@
 import os
 import warnings
 from types import SimpleNamespace
-from typing import List
+from typing import List, Optional
 
 import pandas as pd
 import pytest
 
+from langroid import ChatDocument
 from langroid.agent.batch import run_batch_task_gen, run_batch_tasks
-from langroid.agent.special.doc_chat_agent import DocChatAgent, DocChatAgentConfig
+from langroid.agent.chat_agent import ChatAgent
+from langroid.agent.special.doc_chat_agent import (
+    DocChatAgent,
+    DocChatAgentConfig,
+    RetrievalTool,
+    extract_markdown_references,
+)
 from langroid.agent.special.lance_doc_chat_agent import LanceDocChatAgent
 from langroid.agent.task import Task
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
@@ -18,6 +25,7 @@ from langroid.parsing.parser import ParsingConfig, Splitter
 from langroid.parsing.utils import generate_random_text
 from langroid.prompts.prompts_config import PromptsConfig
 from langroid.utils.configuration import Settings, set_global
+from langroid.utils.constants import DONE
 from langroid.utils.system import rmdir
 from langroid.vector_store.base import VectorStore, VectorStoreConfig
 from langroid.vector_store.chromadb import ChromaDB, ChromaDBConfig
@@ -211,7 +219,11 @@ def test_doc_chat_agent_llm(test_settings: Settings, agent, query: str, expected
     # internal dialog history of the agent.
     set_global(test_settings)
     agent.config.conversation_mode = False
-    ans = agent.llm_response(query).content
+    result = agent.llm_response(query)
+    ans = result.content
+    refs = extract_markdown_references(ans)
+    sources = extract_markdown_references(result.metadata.source)
+    assert refs == sources
     expected = [e.strip() for e in expected.split(",")]
     assert all([e in ans for e in expected])
 
@@ -256,6 +268,68 @@ def test_doc_chat_agent_task(test_settings: Settings, agent):
         expected = [e.strip() for e in expected.split(",")]
         assert all([e in ans for e in expected])
         assert task.pending_message.metadata.sender == Entity.LLM
+
+
+class RetrievalAgent(DocChatAgent):
+    def llm_response(
+        self,
+        query: None | str | ChatDocument = None,
+    ) -> Optional[ChatDocument]:
+        # override the DocChatAgent's LLM response,
+        # to just use ChatAgent's LLM response - this ensures that the system msg
+        # is respected, and it uses the `retrieval_tool` as instructed.
+        return ChatAgent.llm_response(self, query)
+
+
+@pytest.fixture(scope="function")
+def retrieval_agent(vecdb) -> RetrievalAgent:
+    agent = RetrievalAgent(config)
+    agent.vecdb = vecdb
+    agent.ingest_docs(documents)
+    os.environ["TOKENIZERS_PARALLELISM"] = "false"
+    return agent
+
+
+@pytest.mark.parametrize("vecdb", ["qdrant_local"], indirect=True)
+@pytest.mark.parametrize(
+    "query, expected",
+    [
+        ("Capital of England", "Lancaster"),
+        ("Who was Charlie Chaplin?", "comedian"),
+        ("Events in the year 2050", "Lithuania, GPT10"),
+    ],
+)
+def test_retrieval_tool(
+    test_settings: Settings, retrieval_agent, query: str, expected: str
+):
+    set_global(test_settings)
+    retrieval_agent.enable_message(RetrievalTool)
+    task = Task(
+        retrieval_agent,
+        restart=True,
+        interactive=False,
+        system_message=f"""
+        To answer user's query, use the `retrieval_tool` to retrieve relevant passages, 
+        and ONLY then answer the query. 
+        In case the query is simply a topic or search phrase, 
+        guess what the user may want to know, and formulate it as a 
+        question to be answered, and use this as the `query` field in the 
+        `retrieval_tool`. 
+        
+        IMPORTANT: Your answer MUST ONLY be based on the retrieved passages,
+        REGARDLESS of how IMPLAUSIBLE the answer may seem, and 
+        REGARDLESS of whether you think the answer is correct or not.
+        
+        When you are ready to show your answer, say {DONE}, followed by the answer.
+        """,
+    )
+    # 3 turns:
+    # 1. LLM gen `retrieval_tool` request
+    # 2. Agent gen `retrieval_tool` response (i.e. returns relevant passages)
+    # 3. LLM gen answer based on passages
+    ans = task.run(query, turns=3).content
+    expected = [e.strip() for e in expected.split(",")]
+    assert all([e in ans for e in expected])
 
 
 @pytest.mark.parametrize("vecdb", ["lancedb", "qdrant_local", "chroma"], indirect=True)

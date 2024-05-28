@@ -26,16 +26,36 @@ def pytest_addoption(parser) -> None:
         """,
     )
     parser.addoption(
+        "--turns",
+        default=100,
+        help="maximum number of turns in a task (to avoid inf loop)",
+    )
+    parser.addoption(
         "--nof",
         action="store_true",
         default=False,
         help="use model with no function_call",
+    )
+    # use multiple --first-test arguments to specify multiple tests to run first
+    parser.addoption(
+        "--first-test",
+        action="append",
+        default=[],
+        help="Specify test FUNCTION(s) to run first.",
+    )
+    # use multiple --first-test-file arguments to specify multiple files to run first
+    parser.addoption(
+        "--first-test-file",
+        action="append",
+        default=[],
+        help="Specify test FILE(s) to run first.",
     )
 
 
 @pytest.fixture(scope="session")
 def test_settings(request) -> Settings:
     chat_model = request.config.getoption("--m")
+    max_turns = request.config.getoption("--turns")
     if request.config.getoption("--3"):
         chat_model = OpenAIChatModel.GPT3_5_TURBO
 
@@ -46,6 +66,7 @@ def test_settings(request) -> Settings:
         gpt3_5=request.config.getoption("--3"),
         stream=not request.config.getoption("--ns"),
         chat_model=chat_model,
+        max_turns=max_turns,
     )
 
 
@@ -56,3 +77,35 @@ def redis_setup(redisdb):
     os.environ["REDIS_PASSWORD"] = ""  # Assuming no password for testing
     yield
     # Reset or clean up environment variables after tests
+
+
+def pytest_collection_modifyitems(config, items):
+    # Get the lists of specified tests and files
+    first_tests = config.getoption("--first-test")
+    first_test_files = config.getoption("--first-test-file")
+
+    priority_items = []
+    other_items = list(items)  # Start with all items
+
+    # Prioritize individual tests specified by --first-test
+    for first_test in first_tests:
+        current_priority_items = [
+            item for item in other_items if first_test in item.nodeid
+        ]
+        priority_items.extend(current_priority_items)
+        other_items = [
+            item for item in other_items if item not in current_priority_items
+        ]
+
+    # Prioritize entire files specified by --first-test-file
+    for first_test_file in first_test_files:
+        current_priority_items = [
+            item for item in other_items if first_test_file in str(item.fspath)
+        ]
+        priority_items.extend(current_priority_items)
+        other_items = [
+            item for item in other_items if item not in current_priority_items
+        ]
+
+    # Replace the items list with priority items first, followed by others
+    items[:] = priority_items + other_items

@@ -1,14 +1,15 @@
 from __future__ import annotations
 
+import asyncio
 import copy
 import logging
-import re
-from collections import Counter
+from collections import Counter, deque
 from types import SimpleNamespace
 from typing import (
     Any,
     Callable,
     Coroutine,
+    Deque,
     Dict,
     List,
     Optional,
@@ -18,6 +19,8 @@ from typing import (
     cast,
 )
 
+import numpy as np
+from pydantic import BaseModel
 from rich import print
 from rich.markup import escape
 
@@ -30,8 +33,10 @@ from langroid.agent.chat_document import (
     StatusCode,
 )
 from langroid.cachedb.redis_cachedb import RedisCache, RedisCacheConfig
+from langroid.exceptions import InfiniteLoopException
 from langroid.mytypes import Entity
 from langroid.parsing.parse_json import extract_top_level_json
+from langroid.parsing.routing import parse_addressed_message
 from langroid.utils.configuration import settings
 from langroid.utils.constants import (
     DONE,
@@ -42,6 +47,7 @@ from langroid.utils.constants import (
     USER_QUIT_STRINGS,
 )
 from langroid.utils.logging import RichFileLogger, setup_file_logger
+from langroid.utils.system import hash
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +56,23 @@ Responder = Entity | Type["Task"]
 
 def noop_fn(*args: List[Any], **kwargs: Dict[str, Any]) -> None:
     pass
+
+
+class TaskConfig(BaseModel):
+    """Configuration for a Task. This is a container for any params that
+    we didn't include in the task `__init__` method.
+    We may eventually move all the task __init__ params to this class, analogous to how
+    we have config classes for `Agent`, `ChatAgent`, `LanguageModel`, etc.
+
+    Attributes:
+        inf_loop_cycle_len: max exact-loop cycle length: 0 => no inf loop test
+        inf_loop_dominance_factor: dominance factor for exact-loop detection
+        inf_loop_wait_factor: wait this * cycle_len msgs before loop-check
+    """
+
+    inf_loop_cycle_len: int = 10
+    inf_loop_dominance_factor: float = 1.5
+    inf_loop_wait_factor: float = 5.0
 
 
 class Task:
@@ -102,6 +125,7 @@ class Task:
         max_stalled_steps: int = 5,
         done_if_no_response: List[Responder] = [],
         done_if_response: List[Responder] = [],
+        config: TaskConfig = TaskConfig(),
     ):
         """
         A task to be performed by an agent.
@@ -157,6 +181,11 @@ class Task:
             show_subtask_response=noop_fn,
             set_parent_agent=noop_fn,
         )
+        self.config = config
+        # counts of distinct pending messages in history,
+        # to help detect (exact) infinite loops
+        self.message_counter: Counter[str] = Counter()
+        self.history_count: Deque[int] = deque(maxlen=self.config.inf_loop_cycle_len)
         # copy the agent's config, so that we don't modify the original agent's config,
         # which may be shared by other agents.
         try:
@@ -202,10 +231,11 @@ class Task:
             agent.config.name = name
         self.name = name or agent.config.name
         self.value: str = self.name
-        self.default_human_response = default_human_response
+
         if default_human_response is not None and default_human_response == "":
             interactive = False
         self.interactive = interactive
+        self.agent.interactive = interactive
         self.message_history_idx = -1
         if interactive:
             only_user_quits_root = True
@@ -214,6 +244,7 @@ class Task:
             only_user_quits_root = False
         if default_human_response is not None:
             self.agent.default_human_response = default_human_response
+        self.default_human_response = default_human_response
         if self.interactive:
             self.agent.default_human_response = None
         self.only_user_quits_root = only_user_quits_root
@@ -290,6 +321,7 @@ class Task:
             max_stalled_steps=self.max_stalled_steps,
             done_if_no_response=[Entity(s) for s in self.done_if_no_response],
             done_if_response=[Entity(s) for s in self.done_if_response],
+            config=self.config,
         )
 
     def __repr__(self) -> str:
@@ -454,6 +486,8 @@ class Task:
         self.max_tokens = max_tokens
         self.session_id = session_id
         self._set_alive()
+        self.message_counter.clear()
+        self.history_count.clear()
 
         assert (
             msg is None or isinstance(msg, str) or isinstance(msg, ChatDocument)
@@ -482,9 +516,25 @@ class Task:
                     print("[magenta]Bye, hope this was useful!")
                 break
             i += 1
-            if turns > 0 and i >= turns:
+            max_turns = (
+                min(turns, settings.max_turns)
+                if turns > 0 and settings.max_turns > 0
+                else max(turns, settings.max_turns)
+            )
+            if max_turns > 0 and i >= max_turns:
                 status = StatusCode.MAX_TURNS
                 break
+            if (
+                self.config.inf_loop_cycle_len > 0
+                and i % self.config.inf_loop_cycle_len == 0
+                and self._maybe_infinite_loop()
+            ):
+                raise InfiniteLoopException(
+                    """Possible infinite loop detected!
+                    You can adjust infinite loop detection by changing the params
+                    in the TaskConfig passed to the Task constructor: 
+                    e.g. set inf_loop_cycle_len=0 to disable loop detection."""
+                )
 
         final_result = self.result()
         if final_result is not None:
@@ -538,6 +588,8 @@ class Task:
         self.max_tokens = max_tokens
         self.session_id = session_id
         self._set_alive()
+        self.message_counter.clear()
+        self.history_count.clear()
 
         if (
             isinstance(msg, ChatDocument)
@@ -556,15 +608,32 @@ class Task:
         i = 0
         while True:
             await self.step_async()
+            await asyncio.sleep(0.01)  # temp yield to avoid blocking
             done, status = self.done()
             if done:
                 if self._level == 0 and not settings.quiet:
                     print("[magenta]Bye, hope this was useful!")
                 break
             i += 1
-            if turns > 0 and i >= turns:
+            max_turns = (
+                min(turns, settings.max_turns)
+                if turns > 0 and settings.max_turns > 0
+                else max(turns, settings.max_turns)
+            )
+            if max_turns > 0 and i >= max_turns:
                 status = StatusCode.MAX_TURNS
                 break
+            if (
+                self.config.inf_loop_cycle_len > 0
+                and i % self.config.inf_loop_cycle_len == 0
+                and self._maybe_infinite_loop()
+            ):
+                raise InfiniteLoopException(
+                    """Possible infinite loop detected!
+                    You can adjust infinite loop detection by changing the params
+                    in the TaskConfig passed to the Task constructor: 
+                    e.g. set inf_loop_cycle_len=0 to disable loop detection."""
+                )
 
         final_result = self.result()
         if final_result is not None:
@@ -841,6 +910,12 @@ class Task:
             # reset stuck counter since we made progress
             self.n_stalled_steps = 0
 
+        # update counters for infinite loop detection
+        if self.pending_message is not None:
+            hashed_msg = hash(str(self.pending_message))
+            self.message_counter.update([hashed_msg])
+            self.history_count.append(self.message_counter[hashed_msg])
+
     def _process_invalid_step_result(self, parent: ChatDocument | None) -> None:
         """
         Since step had no valid result from any responder, decide whether to update the
@@ -872,42 +947,6 @@ class Task:
             sender_str = escape(str(self.pending_sender))
             msg_str = escape(str(self.pending_message))
             print(f"[grey37][{sender_str}]{msg_str}[/grey37]")
-
-    def _parse_routing(self, msg: ChatDocument | str) -> Tuple[bool | None, str | None]:
-        """
-        Parse routing instruction if any, of the form:
-        PASS:<recipient>  (pass current pending msg to recipient)
-        SEND:<recipient> <content> (send content to recipient)
-        Args:
-            msg (ChatDocument|str|None): message to parse
-        Returns:
-            Tuple[bool,str|None]:
-                bool: true=PASS, false=SEND, or None if neither
-                str: recipient, or None
-        """
-        # handle routing instruction in result if any,
-        # of the form PASS=<recipient>
-        content = msg.content if isinstance(msg, ChatDocument) else msg
-        content = content.strip()
-        if PASS in content and PASS_TO not in content:
-            return True, None
-        if PASS_TO in content and content.split(":")[1] != "":
-            return True, content.split(":")[1]
-        if SEND_TO in content and (send_parts := re.split(r"[,: ]", content))[1] != "":
-            # assume syntax is SEND_TO:<recipient> <content>
-            # or SEND_TO:<recipient>,<content> or SEND_TO:<recipient>:<content>
-            recipient = send_parts[1].strip()
-            # get content to send, clean out routing instruction, and
-            # start from 1 char after SEND_TO:<recipient>,
-            # because we expect there is either a blank or some other separator
-            # after the recipient
-            content_to_send = content.replace(f"{SEND_TO}{recipient}", "").strip()[1:]
-            # if no content then treat same as PASS_TO
-            if content_to_send == "":
-                return True, recipient
-            else:
-                return False, recipient
-        return None, None
 
     def response(
         self,
@@ -946,7 +985,8 @@ class Task:
         # process result in case there is a routing instruction
         if result is None:
             return None
-        is_pass, recipient = self._parse_routing(result)
+        # if result content starts with @name, set recipient to name
+        is_pass, recipient, content = parse_routing(result)
         if is_pass is None:  # no routing, i.e. neither PASS nor SEND
             return result
         if is_pass:
@@ -966,9 +1006,7 @@ class Task:
         elif recipient is not None:
             # we are sending non-empty content to non-null recipient
             # clean up result.content, set metadata.recipient and return
-            result.content = result.content.replace(
-                f"{SEND_TO}:{recipient}", ""
-            ).strip()
+            result.content = content or ""
             result.metadata.recipient = recipient
             return result
         else:
@@ -1097,38 +1135,76 @@ class Task:
             or (not self._is_empty_message(result) and response_says_done)
         )
 
-    def _maybe_infinite_loop(self, history: int = 10) -> bool:
+    def _maybe_infinite_loop(self) -> bool:
         """
-        TODO Not currently used, until we figure out best way.
-        Check if {NO_ANSWER}, empty answer, or a specific non-LLM msg occurs too
-        often in history of pending messages -- this can be an indicator of a possible
-        multi-step infinite loop that we should exit.
-        (A single-step infinite loop is where individual steps don't show progress
-        and are easy to detect via n_stalled_steps, but a multi-step infinite loop
-        could show "progress" at each step, but can still be an infinite loop, e.g.
-        if the steps are just alternating between two messages).
-        """
-        p = self.pending_message
-        n_no_answers = 0
-        n_empty_answers = 0
-        counter: Counter[str] = Counter()
-        # count number of NO_ANSWER and empty answers in last up to 10 messages
-        # in ancestors of self.pending_message
-        for _ in range(history):
-            if p is None:
-                break
-            n_no_answers += p.content.strip() == NO_ANSWER
-            n_empty_answers += p.content.strip() == "" and p.function_call is None
-            if p.metadata.sender != Entity.LLM and PASS not in p.content:
-                counter.update([p.metadata.sender + ":" + p.content])
-            p = p.metadata.parent
+        Detect possible infinite loop based on message frequencies.
+        NOTE: This only (attempts to) detect "exact" loops, i.e. a cycle
+        of messages that repeats exactly, e.g.
+        a r b i t r a t e r a t e r a t e r a t e ...
 
-        # freq of most common message in history
-        high_freq = (counter.most_common(1) or [("", 0)])[0][1]
-        # We deem this a potential infinite loop if:
-        # - a specific non-LLM msg occurs too often, or
-        # - a NO_ANSWER or empty answer occurs too often
-        return max(high_freq, n_no_answers) > self.max_stalled_steps
+        [It does not detect "approximate" loops, where the LLM is generating a
+        sequence of messages that are similar, but not exactly the same.]
+
+        Intuition: when you look at a sufficiently long sequence with an m-message
+        loop, then the frequencies of these m messages will "dominate" those
+        of all other messages.
+
+        1. First find m "dominant" messages, i.e. when arranged in decreasing
+            frequency order, find the m such that
+                freq[m] > F * freq[m+1] and
+                freq[m] > W + freq[m+1]
+            where F = config.inf_loop_dominance_factor (default 1.5) and
+            W = config.inf_loop_wait_factor (default 5).
+            So if you plot these frequencies in decreasing order,
+            you will see a big drop in the plot, from m to m+1.
+            We call the freqs until m the "dominant" freqs.
+        2. Say we found m such dominant frequencies.
+           If these are the same as the freqs of the last m messages,
+           then we are likely in a loop.
+        """
+        max_cycle_len = self.config.inf_loop_cycle_len
+        if max_cycle_len <= 0:
+            # no loop detection
+            return False
+        wait_factor = self.config.inf_loop_wait_factor
+        if sum(self.message_counter.values()) < wait_factor * max_cycle_len:
+            # we haven't seen enough messages to detect a loop
+            return False
+
+        most_common_msg_counts: List[Tuple[str, int]] = (
+            self.message_counter.most_common(max_cycle_len + 1)
+        )
+        # get the most dominant msgs, i.e. these are at least 1.5x more freq
+        # than the rest
+        F = self.config.inf_loop_dominance_factor
+        # counts array in non-increasing order
+        counts = np.array([c for _, c in most_common_msg_counts])
+        # find first index where counts[i] > F * counts[i+1]
+        ratios = counts[:-1] / counts[1:]
+        diffs = counts[:-1] - counts[1:]
+        indices = np.where((ratios > F) & (diffs > wait_factor))[0]
+        m = indices[0] if indices.size > 0 else -1
+        if m < 0:
+            # no dominance found, but...
+            if len(most_common_msg_counts) <= max_cycle_len:
+                # ...The most-common messages are at most max_cycle_len,
+                # even though we looked for the most common (max_cycle_len + 1) msgs.
+                # This means there are only at most max_cycle_len distinct messages,
+                # which also indicates a possible loop.
+                m = len(most_common_msg_counts) - 1
+            else:
+                # ... we have enough messages, but no dominance found,
+                # so there COULD be loops longer than max_cycle_len,
+                # OR there is no loop at all; we can't tell, so we return False.
+                return False
+
+        dominant_msg_counts = most_common_msg_counts[: m + 1]
+        # if the dominant m message counts are the same as the
+        # counts of the last m messages, then we are likely in a loop
+        dominant_counts = sorted([c for _, c in dominant_msg_counts])
+        recent_counts = sorted(list(self.history_count)[-(m + 1) :])
+
+        return dominant_counts == recent_counts
 
     def done(
         self, result: ChatDocument | None = None, r: Responder | None = None
@@ -1306,7 +1382,9 @@ class Task:
         return (
             self.pending_message is not None
             and (recipient := self.pending_message.metadata.recipient) != ""
-            and recipient not in (e.name, self.name)
+            and recipient != e  # case insensitive
+            and recipient != e.name
+            and recipient != self.name  # case sensitive
         )
 
     def _can_respond(self, e: Responder) -> bool:
@@ -1333,3 +1411,53 @@ class Task:
 
         """
         self.color_log = enable
+
+
+def parse_routing(
+    msg: ChatDocument | str,
+) -> Tuple[bool | None, str | None, str | None]:
+    """
+    Parse routing instruction if any, of the form:
+    PASS:<recipient>  (pass current pending msg to recipient)
+    SEND:<recipient> <content> (send content to recipient)
+    @<recipient> <content> (send content to recipient)
+    Args:
+        msg (ChatDocument|str|None): message to parse
+    Returns:
+        Tuple[bool|None, str|None, str|None]:
+            bool: true=PASS, false=SEND, or None if neither
+            str: recipient, or None
+            str: content to send, or None
+    """
+    # handle routing instruction in result if any,
+    # of the form PASS=<recipient>
+    content = msg.content if isinstance(msg, ChatDocument) else msg
+    content = content.strip()
+    if PASS in content and PASS_TO not in content:
+        return True, None, None
+    if PASS_TO in content and content.split(":")[1] != "":
+        return True, content.split(":")[1], None
+    if (
+        SEND_TO in content
+        and (addressee_content := parse_addressed_message(content, SEND_TO))[0]
+        is not None
+    ):
+        (addressee, content_to_send) = addressee_content
+        # if no content then treat same as PASS_TO
+        if content_to_send == "":
+            return True, addressee, None
+        else:
+            return False, addressee, content_to_send
+    AT = "@"
+    if (
+        AT in content
+        and (addressee_content := parse_addressed_message(content, AT))[0] is not None
+    ):
+        (addressee, content_to_send) = addressee_content
+        # if no content then treat same as PASS_TO
+        if content_to_send == "":
+            return True, addressee, None
+        else:
+            return False, addressee, content_to_send
+
+    return None, None, None

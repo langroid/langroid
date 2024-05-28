@@ -22,6 +22,18 @@ class Entity(str, Enum):
     USER = "User"
     SYSTEM = "System"
 
+    def __eq__(self, other: object) -> bool:
+        """Allow case-insensitive comparison with strings."""
+        if isinstance(other, str):
+            return self.value.lower() == other.lower()
+        return super().__eq__(other)
+
+    def __hash__(self) -> int:
+        """Override this to ensure hashability of the enum,
+        so it can be used sets and dictionary keys.
+        """
+        return hash(self.value.lower())
+
 
 class DocMetaData(BaseModel):
     """Metadata for a document."""

@@ -97,9 +97,13 @@ class RecipientTool(ToolMessage):
     content: str
 
     @classmethod
-    def create(cls, recipients: List[str]) -> Type["RecipientTool"]:
+    def create(cls, recipients: List[str], default: str = "") -> Type["RecipientTool"]:
+        """Create a restricted version of RecipientTool that
+        only allows certain recipients, and possibly sets a default recipient."""
+
         class RecipientToolRestricted(cls):  # type: ignore
             allowed_recipients = recipients
+            default_recipient = default
 
         return RecipientToolRestricted
 
@@ -133,16 +137,18 @@ class RecipientTool(ToolMessage):
 
     def response(self, agent: ChatAgent) -> str | ChatDocument:
         """
-        When LLM has correctly used this tool, set the agent's `recipient_tool_used`
-        field to True, and construct a ChatDocument with an explicit recipient,
+        When LLM has correctly used this tool,
+        construct a ChatDocument with an explicit recipient,
         and make it look like it is from the LLM.
 
         Returns:
             (ChatDocument): with content set to self.content and
-                metadata.recipient set to self.recipient.
+                metadata.recipient set to self.intended_recipient.
         """
-
-        if self.intended_recipient == "":
+        default_recipient = self.__class__.default_value("default_recipient")
+        if self.intended_recipient == "" and default_recipient not in ["", None]:
+            self.intended_recipient = default_recipient
+        elif self.intended_recipient == "":
             # save the content as a class-variable, so that
             # we can construct the ChatDocument once the LLM specifies a recipient.
             # This avoids having to re-generate the entire message, saving time + cost.
@@ -198,9 +204,11 @@ class RecipientTool(ToolMessage):
         # since the recipient will differ from the task name.
         # So if this method is called, we can be sure that the recipient has not
         # been specified.
-        if isinstance(msg, str):
-            return None
-        if msg.metadata.sender != Entity.LLM:
+        if (
+            isinstance(msg, str)
+            or msg.metadata.sender != Entity.LLM
+            or msg.metadata.recipient != ""  # there IS an explicit recipient
+        ):
             return None
         content = msg if isinstance(msg, str) else msg.content
         # save the content as a class-variable, so that

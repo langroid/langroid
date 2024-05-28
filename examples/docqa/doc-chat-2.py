@@ -15,11 +15,11 @@ from langroid.agent.special.doc_chat_agent import (
     DocChatAgent,
     DocChatAgentConfig,
 )
+import langroid.language_models as lm
 from langroid.mytypes import Entity
 from langroid.parsing.parser import ParsingConfig, PdfParsingConfig, Splitter
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
-from langroid.language_models.openai_gpt import OpenAIGPTConfig
 from langroid.agent.tools.recipient_tool import RecipientTool
 from langroid.utils.configuration import set_global, Settings
 from langroid.utils.constants import NO_ANSWER
@@ -31,8 +31,11 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 def main(
     debug: bool = False,
     nocache: bool = False,
+    model: str = lm.OpenAIChatModel.GPT4o,
 ) -> None:
+    llm_config = lm.OpenAIGPTConfig(chat_model=model)
     config = DocChatAgentConfig(
+        llm=llm_config,
         n_query_rephrases=0,
         hypothetical_answer=False,
         assistant_mode=True,
@@ -79,7 +82,7 @@ def main(
     writer_agent = ChatAgent(
         ChatAgentConfig(
             name="WriterAgent",
-            llm=OpenAIGPTConfig(),
+            llm=llm_config,
             vecdb=None,
         )
     )

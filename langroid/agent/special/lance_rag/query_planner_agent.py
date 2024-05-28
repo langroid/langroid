@@ -195,7 +195,7 @@ class LanceQueryPlanAgent(ChatAgent):
                 plan=self.curr_query_plan,
                 answer=self.result,
             )
-            response_tmpl = self.agent_response_template()
+            response_tmpl = self.create_agent_response()
             # ... add the QueryPlanAnswerTool to the response
             # (Notice how the Agent is directly sending a tool, not the LLM)
             response_tmpl.tool_messages = [query_plan_answer_tool]

@@ -27,9 +27,6 @@ async def on_settings_update(settings: cl.ChatSettings):
 async def setup_agent_task():
     await setup_llm()
     llm_config = cl.user_session.get("llm_config")
-    if task := cl.user_session.get("task"):
-        task.agent.config.llm = llm_config
-        return
 
     config = lr.ChatAgentConfig(
         llm=llm_config,

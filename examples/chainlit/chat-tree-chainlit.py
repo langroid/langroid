@@ -97,7 +97,6 @@ async def chat() -> None:
         even_agent,
         name="Even",
         interactive=INTERACTIVE,
-        default_human_response="",
         system_message=f"""
         You will receive two types of messages, to which you will respond as follows:
         
@@ -117,7 +116,6 @@ async def chat() -> None:
         evenz_agent,
         name="EvenZ",
         interactive=INTERACTIVE,
-        default_human_response="",
         system_message=f"""
         You will receive two types of messages, to which you will respond as follows:
         
@@ -137,7 +135,6 @@ async def chat() -> None:
         even_nz_agent,
         name="EvenNZ",
         interactive=INTERACTIVE,
-        default_human_response="",
         system_message=f"""
         You will receive two types of messages, to which you will respond as follows:
         
@@ -157,7 +154,6 @@ async def chat() -> None:
         odd_agent,
         name="Odd",
         interactive=INTERACTIVE,
-        default_human_response="",
         system_message=f"""
         You will receive two types of messages, to which you will respond as follows:
         
@@ -180,7 +176,6 @@ async def chat() -> None:
         adder_agent,
         name="Adder",
         interactive=INTERACTIVE,
-        default_human_response="",
         system_message="""
         You will be given a number n.
         You have to add it to the original number and return the result.
