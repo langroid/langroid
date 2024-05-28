@@ -60,13 +60,18 @@ def noop_fn(*args: List[Any], **kwargs: Dict[str, Any]) -> None:
 
 class TaskConfig(BaseModel):
     """Configuration for a Task. This is a container for any params that
-    we didn't include in the task __init__ method.
+    we didn't include in the task `__init__` method.
     We may eventually move all the task __init__ params to this class, analogous to how
-    we have config classes for Agent, ChatAgent, LanguageModel, etc."""
+    we have config classes for `Agent`, `ChatAgent`, `LanguageModel`, etc.
 
-    inf_loop_cycle_len: int = 10  # max exact-loop cycle length: 0 => no inf loop test
-    inf_loop_dominance_factor: float = 1.5  # dominance factor for exact-loop detection
-    # wait this * cycle_len msgs before checking for loop
+    Attributes:
+        inf_loop_cycle_len: max exact-loop cycle length: 0 => no inf loop test
+        inf_loop_dominance_factor: dominance factor for exact-loop detection
+        inf_loop_wait_factor: wait this * cycle_len msgs before loop-check
+    """
+
+    inf_loop_cycle_len: int = 10
+    inf_loop_dominance_factor: float = 1.5
     inf_loop_wait_factor: float = 5.0
 
 
@@ -518,7 +523,12 @@ class Task:
                 and i % self.config.inf_loop_cycle_len == 0
                 and self._maybe_infinite_loop()
             ):
-                raise InfiniteLoopException("Possible infinite loop detected!")
+                raise InfiniteLoopException(
+                    """Possible infinite loop detected!
+                    You can adjust infinite loop detection by changing the params
+                    in the TaskConfig passed to the Task constructor: 
+                    e.g. set inf_loop_cycle_len=0 to disable loop detection."""
+                )
 
         final_result = self.result()
         if final_result is not None:
@@ -608,7 +618,12 @@ class Task:
                 and i % self.config.inf_loop_cycle_len == 0
                 and self._maybe_infinite_loop()
             ):
-                raise InfiniteLoopException("Possible infinite loop detected!")
+                raise InfiniteLoopException(
+                    """Possible infinite loop detected!
+                    You can adjust infinite loop detection by changing the params
+                    in the TaskConfig passed to the Task constructor: 
+                    e.g. set inf_loop_cycle_len=0 to disable loop detection."""
+                )
 
         final_result = self.result()
         if final_result is not None:
