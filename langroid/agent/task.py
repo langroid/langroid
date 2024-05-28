@@ -1122,7 +1122,7 @@ class Task:
             where F = config.inf_loop_dominance_factor (default 1.5) and
             W = config.inf_loop_wait_factor (default 5).
             So if you plot these frequencies in decreasing order,
-            you will see a big in the plot, from m to m+1.
+            you will see a big drop in the plot, from m to m+1.
             We call the freqs until m the "dominant" freqs.
         2. Say we found m such dominant frequencies.
            If these are the same as the freqs of the last m messages,
