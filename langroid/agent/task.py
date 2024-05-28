@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import copy
 import logging
 from collections import Counter, deque
@@ -587,6 +588,7 @@ class Task:
         i = 0
         while True:
             await self.step_async()
+            await asyncio.sleep(0.01)  # temp yield to avoid blocking
             done, status = self.done()
             if done:
                 if self._level == 0 and not settings.quiet:
