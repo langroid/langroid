@@ -53,7 +53,7 @@ from langroid.utils.constants import NO_ANSWER
 from langroid.utils.output import show_if_debug, status
 from langroid.utils.pydantic_utils import dataframe_to_documents, extract_fields
 from langroid.vector_store.base import VectorStore, VectorStoreConfig
-from langroid.vector_store.lancedb import LanceDBConfig
+from langroid.vector_store.qdrantdb import QdrantDBConfig
 
 
 @cache
@@ -212,13 +212,33 @@ class DocChatAgentConfig(ChatAgentConfig):
         dims=1536,
     )
 
-    # Allow vecdb to be None in case we want to explicitly set it later
-    vecdb: Optional[VectorStoreConfig] = LanceDBConfig(
-        collection_name="doc-chat-lancedb",
+    vecdb_config: VectorStoreConfig = QdrantDBConfig(
+        collection_name="doc-chat-qdrantdb",
         replace_collection=True,
-        storage_path=".lancedb/data/",
+        storage_path=".qdrantdb/data/",
         embedding=hf_embed_config if has_sentence_transformers else oai_embed_config,
     )
+
+    try:
+        import lancedb
+
+        from langroid.vector_store.lancedb import LanceDBConfig
+
+        vecdb_config = LanceDBConfig(
+            collection_name="doc-chat-lancedb",
+            replace_collection=True,
+            storage_path=".lancedb/data/",
+            embedding=(
+                hf_embed_config if has_sentence_transformers else oai_embed_config
+            ),
+        )
+
+    except ImportError:
+        logger.warning("LanceDB not installed, using QdrantDB instead.")
+
+    # Allow vecdb to be None in case we want to explicitly set it later
+    vecdb: Optional[VectorStoreConfig] = vecdb_config
+
     llm: OpenAIGPTConfig = OpenAIGPTConfig(
         type="openai",
         chat_model=OpenAIChatModel.GPT4,

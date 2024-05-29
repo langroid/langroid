@@ -1,6 +1,11 @@
 from typing import Dict, List, Union
 
-from sqlalchemy import MetaData
+from langroid.exceptions import LangroidImportError
+
+try:
+    from sqlalchemy import MetaData
+except ImportError as e:
+    raise LangroidImportError(extra="sql", error=str(e))
 
 
 def populate_metadata_with_schema_tools(

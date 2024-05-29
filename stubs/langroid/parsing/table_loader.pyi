@@ -1,0 +1,6 @@
+import pandas as pd
+
+def read_tabular_data(path_or_url: str, sep: None | str = None) -> pd.DataFrame: ...
+def describe_dataframe(
+    df: pd.DataFrame, filter_fields: list[str] = [], n_vals: int = 10
+) -> str: ...

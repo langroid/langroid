@@ -1,0 +1,3 @@
+def parse_addressed_message(
+    content: str, addressing: str = "@"
+) -> tuple[str | None, str]: ...

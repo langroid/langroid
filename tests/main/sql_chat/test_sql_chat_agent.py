@@ -1,7 +1,13 @@
 import pytest
-from sqlalchemy import Column, ForeignKey, Integer, String, create_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import Session, relationship, sessionmaker
+
+from langroid.exceptions import LangroidImportError
+
+try:
+    from sqlalchemy import Column, ForeignKey, Integer, String, create_engine
+    from sqlalchemy.ext.declarative import declarative_base
+    from sqlalchemy.orm import Session, relationship, sessionmaker
+except ImportError as e:
+    raise LangroidImportError(extra="sql", error=str(e))
 
 from langroid.agent.special.sql.sql_chat_agent import SQLChatAgent, SQLChatAgentConfig
 from langroid.agent.task import Task

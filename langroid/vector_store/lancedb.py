@@ -1,18 +1,31 @@
-import logging
-from typing import Any, Dict, Generator, List, Optional, Sequence, Tuple, Type
+from __future__ import annotations
 
-import lancedb
+import logging
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Dict,
+    Generator,
+    List,
+    Optional,
+    Sequence,
+    Tuple,
+    Type,
+)
+
 import pandas as pd
 from dotenv import load_dotenv
-from lancedb.pydantic import LanceModel, Vector
-from lancedb.query import LanceVectorQueryBuilder
 from pydantic import BaseModel, ValidationError, create_model
+
+if TYPE_CHECKING:
+    from lancedb.query import LanceVectorQueryBuilder
 
 from langroid.embedding_models.base import (
     EmbeddingModel,
     EmbeddingModelsConfig,
 )
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
+from langroid.exceptions import LangroidImportError
 from langroid.mytypes import Document, EmbeddingFunction
 from langroid.utils.configuration import settings
 from langroid.utils.pydantic_utils import (
@@ -25,6 +38,14 @@ from langroid.utils.pydantic_utils import (
     nested_dict_from_flat,
 )
 from langroid.vector_store.base import VectorStore, VectorStoreConfig
+
+try:
+    import lancedb
+    from lancedb.pydantic import LanceModel, Vector
+
+    has_lancedb = True
+except ImportError:
+    has_lancedb = False
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +65,9 @@ class LanceDBConfig(VectorStoreConfig):
 class LanceDB(VectorStore):
     def __init__(self, config: LanceDBConfig = LanceDBConfig()):
         super().__init__(config)
+        if not has_lancedb:
+            raise LangroidImportError("lancedb", "lancedb")
+
         self.config: LanceDBConfig = config
         emb_model = EmbeddingModel.create(config.embedding)
         self.embedding_fn: EmbeddingFunction = emb_model.embedding_fn()
@@ -170,6 +194,9 @@ class LanceDB(VectorStore):
         if not issubclass(doc_cls, Document):
             raise ValueError("DocClass must be a subclass of Document")
 
+        if not has_lancedb:
+            raise LangroidImportError("lancedb", "lancedb")
+
         n = self.embedding_dim
 
         # Prepare fields for the new model
@@ -193,6 +220,8 @@ class LanceDB(VectorStore):
         Flat version of the lance_schema, as nested Pydantic schemas are not yet
         supported by LanceDB.
         """
+        if not has_lancedb:
+            raise LangroidImportError("lancedb", "lancedb")
         lance_model = self._create_lance_schema(doc_cls)
         FlatModel = flatten_pydantic_model(lance_model, base_model=LanceModel)
         return FlatModel
@@ -368,7 +397,9 @@ class LanceDB(VectorStore):
     def delete_collection(self, collection_name: str) -> None:
         self.client.drop_table(collection_name, ignore_missing=True)
 
-    def _lance_result_to_docs(self, result: LanceVectorQueryBuilder) -> List[Document]:
+    def _lance_result_to_docs(
+        self, result: "LanceVectorQueryBuilder"
+    ) -> List[Document]:
         if self.is_from_dataframe:
             df = result.to_pandas()
             return dataframe_to_documents(

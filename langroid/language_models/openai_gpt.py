@@ -28,8 +28,9 @@ from pydantic import BaseModel
 from rich import print
 from rich.markup import escape
 
-from langroid.cachedb.momento_cachedb import MomentoCache, MomentoCacheConfig
+from langroid.cachedb.base import CacheDB
 from langroid.cachedb.redis_cachedb import RedisCache, RedisCacheConfig
+from langroid.exceptions import LangroidImportError
 from langroid.language_models.base import (
     LanguageModel,
     LLMConfig,
@@ -280,14 +281,7 @@ class OpenAIGPTConfig(LLMConfig):
         try:
             import litellm
         except ImportError:
-            raise ImportError(
-                """
-                litellm not installed. Please install it via:
-                pip install litellm.
-                Or when installing langroid, install it with the `litellm` extra:
-                pip install langroid[litellm]
-                """
-            )
+            raise LangroidImportError("litellm", "litellm")
         litellm.telemetry = False
         litellm.drop_params = True  # drop un-supported params without crashing
         self.seed = None  # some local mdls don't support seed
@@ -482,17 +476,24 @@ class OpenAIGPT(LanguageModel):
                 timeout=Timeout(self.config.timeout),
             )
 
-        self.cache: MomentoCache | RedisCache
+        self.cache: CacheDB
         if settings.cache_type == "momento":
-            if config.cache_config is None or isinstance(
-                config.cache_config, RedisCacheConfig
+            from langroid.cachedb.momento_cachedb import (
+                MomentoCache,
+                MomentoCacheConfig,
+            )
+
+            if config.cache_config is None or not isinstance(
+                config.cache_config,
+                MomentoCacheConfig,
             ):
                 # switch to fresh momento config if needed
                 config.cache_config = MomentoCacheConfig()
             self.cache = MomentoCache(config.cache_config)
         elif "redis" in settings.cache_type:
-            if config.cache_config is None or isinstance(
-                config.cache_config, MomentoCacheConfig
+            if config.cache_config is None or not isinstance(
+                config.cache_config,
+                RedisCacheConfig,
             ):
                 # switch to fresh redis config if needed
                 config.cache_config = RedisCacheConfig(

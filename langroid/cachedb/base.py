@@ -1,18 +1,26 @@
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List
 
+from pydantic import BaseSettings
+
+
+class CacheDBConfig(BaseSettings):
+    """Configuration model for CacheDB."""
+
+    pass
+
 
 class CacheDB(ABC):
     """Abstract base class for a cache database."""
 
     @abstractmethod
-    def store(self, key: str, value: Dict[str, Any]) -> None:
+    def store(self, key: str, value: Any) -> None:
         """
         Abstract method to store a value associated with a key.
 
         Args:
             key (str): The key under which to store the value.
-            value (dict): The value to store.
+            value (Any): The value to store.
         """
         pass
 

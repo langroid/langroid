@@ -17,9 +17,14 @@ from rich.prompt import Prompt
 from typing import Dict, Any
 import json
 import os
+from langroid.exceptions import LangroidImportError
 
-from sqlalchemy import create_engine, inspect
-from sqlalchemy.engine import Engine
+try:
+    from sqlalchemy import create_engine, inspect
+    from sqlalchemy.engine import Engine
+except ImportError as e:
+    raise LangroidImportError(extra="sql", error=str(e))
+
 from prettytable import PrettyTable
 
 from utils import get_database_uri, fix_uri

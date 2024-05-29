@@ -10,8 +10,7 @@ from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union
 import aiohttp
 from pydantic import BaseModel, BaseSettings, Field
 
-from langroid.cachedb.momento_cachedb import MomentoCacheConfig
-from langroid.cachedb.redis_cachedb import RedisCacheConfig
+from langroid.cachedb.base import CacheDBConfig
 from langroid.mytypes import Document
 from langroid.parsing.agent_chats import parse_message
 from langroid.parsing.parse_json import top_level_json_field
@@ -49,7 +48,7 @@ class LLMConfig(BaseSettings):
     # use chat model for completion? For OpenAI models, this MUST be set to True!
     use_chat_for_completion: bool = True
     stream: bool = True  # stream output from API?
-    cache_config: None | RedisCacheConfig | MomentoCacheConfig = None
+    cache_config: None | CacheDBConfig = None
 
     # Dict of model -> (input/prompt cost, output/completion cost)
     chat_cost_per_1k_tokens: Tuple[float, float] = (0.0, 0.0)

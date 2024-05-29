@@ -7,16 +7,21 @@ Note that what we call "Collection" in Langroid is referred to as
 but for uniformity we use the Langroid terminology here.
 """
 
+from __future__ import annotations
+
 import asyncio
 import logging
 import os
-from typing import Any, Callable, Dict, List, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Sequence, Tuple
 
-import meilisearch_python_sdk as meilisearch
 from dotenv import load_dotenv
-from meilisearch_python_sdk.index import AsyncIndex
-from meilisearch_python_sdk.models.documents import DocumentsInfo
 
+if TYPE_CHECKING:
+    from meilisearch_python_sdk.index import AsyncIndex
+    from meilisearch_python_sdk.models.documents import DocumentsInfo
+
+
+from langroid.exceptions import LangroidImportError
 from langroid.mytypes import DocMetaData, Document
 from langroid.utils.configuration import settings
 from langroid.vector_store.base import VectorStore, VectorStoreConfig
@@ -34,6 +39,11 @@ class MeiliSearchConfig(VectorStoreConfig):
 class MeiliSearch(VectorStore):
     def __init__(self, config: MeiliSearchConfig = MeiliSearchConfig()):
         super().__init__(config)
+        try:
+            import meilisearch_python_sdk as meilisearch
+        except ImportError:
+            raise LangroidImportError("meilisearch", "meilisearch")
+
         self.config: MeiliSearchConfig = config
         self.host = config.host
         self.port = config.port
@@ -98,12 +108,12 @@ class MeiliSearch(VectorStore):
     async def _async_get_indexes(self) -> List[AsyncIndex]:
         async with self.client() as client:
             indexes = await client.get_indexes(limit=10_000)
-        return [] if indexes is None else indexes
+        return [] if indexes is None else indexes  # type: ignore
 
-    async def _async_get_index(self, index_uid: str) -> AsyncIndex:
+    async def _async_get_index(self, index_uid: str) -> "AsyncIndex":
         async with self.client() as client:
             index = await client.get_index(index_uid)
-        return index
+        return index  # type: ignore
 
     def list_collections(self, empty: bool = False) -> List[str]:
         """
@@ -116,7 +126,7 @@ class MeiliSearch(VectorStore):
         else:
             return [ind.uid for ind in indexes]
 
-    async def _async_create_index(self, collection_name: str) -> AsyncIndex:
+    async def _async_create_index(self, collection_name: str) -> "AsyncIndex":
         async with self.client() as client:
             index = await client.create_index(
                 uid=collection_name,
@@ -128,7 +138,7 @@ class MeiliSearch(VectorStore):
         """Delete index if it exists. Returns True iff index was deleted"""
         async with self.client() as client:
             result = await client.delete_index_if_exists(uid=collection_name)
-        return result
+        return result  # type: ignore
 
     def create_collection(self, collection_name: str, replace: bool = False) -> None:
         """
@@ -198,7 +208,7 @@ class MeiliSearch(VectorStore):
         except ValueError:
             return id
 
-    async def _async_get_documents(self, where: str = "") -> DocumentsInfo:
+    async def _async_get_documents(self, where: str = "") -> "DocumentsInfo":
         if self.config.collection_name is None:
             raise ValueError("No collection name set, cannot retrieve docs")
         filter = [] if where is None else where
@@ -258,7 +268,7 @@ class MeiliSearch(VectorStore):
                 show_ranking_score=True,
                 filter=filter,
             )
-        return results.hits
+        return results.hits  # type: ignore
 
     def similar_texts_with_scores(
         self,

@@ -6,8 +6,11 @@ authors = ["Prasad Chalasani <pchalasani@gmail.com>"]
 readme = "README.md"
 license = "MIT"
 
+# =============== MAIN DEPS ==============
 [tool.poetry.dependencies]
 python = ">=3.10,<3.12"
+
+# OPTIONALS
 mkdocs = {version="^1.4.2", optional=true}
 mkdocs-material = {version="^9.1.5", optional=true}
 mkdocstrings = {extras = ["python"], version = "^0.21.2", optional=true}
@@ -18,13 +21,34 @@ mkdocs-literate-nav = {version="^0.6.0", optional=true}
 mkdocs-section-index = {version="^0.3.5", optional=true}
 mkdocs-jupyter = {version="^0.24.1", optional=true}
 chromadb = {version=">=0.4.21, <=0.4.23", optional=true}
-onnxruntime = "1.16.1"
+momento = {version="^1.10.2", optional=true}
+unstructured = {extras = ["docx", "pptx", "pdf"], version = ">=0.10.16,<0.10.18", optional=true}
+sentence-transformers = {version="2.2.2", optional=true}
+torch = {version="2.0.0", optional=true}
+psycopg2 = {version="^2.9.7", optional=true}
+pymysql = {version = "^1.1.0", optional = true}
+meilisearch = {version="^0.28.3", optional=true}
+meilisearch-python-sdk = {version="^2.2.3", optional=true}
+litellm = {version = "^1.30.1", optional = true}
+metaphor-python = {version = "^0.1.23", optional = true}
+chainlit = {version = "^1.0.400", optional = true}
+python-socketio = {version="^5.11.0", optional=true}
+neo4j = {version = "^5.14.1", optional = true}
+huggingface-hub = {version="^0.21.2", optional=true}
+transformers = {version="^4.40.1", optional=true}
+lancedb = {version="^0.6.2", optional=true}
+tantivy = {version="^0.21.0", optional=true}
+pypdf = {version="^3.12.2", optional=true}
+pymupdf = {version="^1.23.3", optional=true}
+pdf2image = {version="^1.17.0", optional=true}
+pytesseract = {version="^0.3.10", optional=true}
+sqlalchemy = {version="^2.0.19", optional=true}
+pyarrow = {version="15.0.0", optional=true}
+
+# CORE
+onnxruntime = "^1.16.1"
 fire = "^0.5.0"
-black = {extras = ["jupyter"], version = "^24.3.0"}
-flake8 = "^6.0.0"
-mypy = "^1.7.0"
 bs4 = "^0.0.1"
-autopep8 = "^2.0.2"
 python-dotenv = "^1.0.0"
 wget = "^3.2"
 rich = "^13.3.4"
@@ -41,88 +65,91 @@ redis = "^5.0.1"
 fakeredis = "^2.12.1"
 faker = "^18.9.0"
 requests = "^2.31.0"
-ruff = "^0.2.2"
-pre-commit = "^3.3.2"
-types-redis = "^4.5.5.2"
-types-requests = "^2.31.0.1"
 pyparsing = "^3.0.9"
 nltk = "^3.8.1"
 qdrant-client = "^1.8.0"
 pydantic = "1.10.13"
-pypdf = "^3.12.2"
-momento = "^1.10.2"
+
+
 pandas = "^2.0.3"
-sqlalchemy = "^2.0.19"
+
 prettytable = "^3.8.0"
-tantivy = "^0.21.0"
+
 google-api-python-client = "^2.95.0"
 lxml = "^4.9.3"
-unstructured = {extras = ["docx", "pptx", "pdf"], version = ">=0.10.16,<0.10.18", optional=true}
-
-sentence-transformers = {version="2.2.2", optional=true}
-torch = {version="2.0.0", optional=true}
-psycopg2 = {version="^2.9.7", optional=true}
-pymysql = {version = "^1.1.0", optional = true}
-pytest-postgresql = {version = "^5.0.0", optional = true}
-pytest-mysql = {version = "^2.4.2", optional = true}
 
 rank-bm25 = "^0.2.2"
 thefuzz = "^0.20.0"
 pdfplumber = "^0.10.2"
-pymupdf = "^1.23.3"
+
 jinja2 = "^3.1.2"
-pytest-asyncio = "^0.21.1"
+
 docstring-parser = "^0.15"
-meilisearch = "^0.28.3"
-meilisearch-python-sdk = "^2.2.3"
-litellm = {version = "^1.30.1", optional = true}
 scrapy = "^2.11.0"
 async-generator = "^1.10"
-lancedb = "^0.6.2"
-# only needed by lancedb; we're explicitly specifying version since 15.0.1 is "not found"
-# Once 15.0.1 is available, we can remove the version specifier here
-pyarrow = "15.0.0"
-pytest-redis = "^3.0.2"
-neo4j = {version = "^5.14.1", optional = true}
+
 python-docx = "^1.1.0"
 aiohttp = "^3.9.1"
 grpcio = "^1.62.1"
-metaphor-python = {version = "^0.1.23", optional = true}
-chainlit = {version = "^1.0.400", optional = true}
-python-socketio = {version="^5.11.0", optional=true}
 duckduckgo-search = "^6.0.0"
-huggingface-hub = {version="^0.21.2", optional=true}
-pdf2image = "^1.17.0"
-pytesseract = "^0.3.10"
-types-pyyaml = "^6.0.12.20240311"
-types-pillow = "^10.2.0.20240406"
+
 groq = "^0.5.0"
 nest-asyncio = "^1.6.0"
 python-magic = "^0.4.27"
-transformers = {version="^4.40.1", optional=true}
+
 google-generativeai = "^0.5.2"
 
+# ================= EXTRAS =================
 [tool.poetry.extras]
-# install these using `poetry install -E [...]` where [...] is one of the extras below
+# install these using, e.g.,
+# `poetry install -E [...]` where [...] is one of the extras below
 # or install multiple extras using, e.g.,  `poetry install -E "litellm mysql"
+lancedb = ["lancedb", "tantivy", "pyarrow"]
+pdf-parsers = ["pypdf", "pymupdf", "pdf2image", "pytesseract"]
 hf-embeddings = ["sentence-transformers", "torch"]
 transformers = ["transformers", "huggingface-hub", "torch"]
 unstructured = ["unstructured"]
-postgres = ["psycopg2", "pytest-postgresql"]
-mysql = ["pymysql", "pytest-mysql"]
+postgres = ["psycopg2"]
+mysql = ["pymysql"]
+sql = ["sqlalchemy", "pymysql",  "psycopg2"]
 litellm = ["litellm"]
 neo4j = ["neo4j"]
 metaphor = ["metaphor-python"]
 chainlit = ["chainlit", "python-socketio"]
 chromadb = ["chromadb"]
-mkdocs = ["mkdocs", "mkdocs-material", "mkdocstrings", "mkdocs-awesome-pages-plugin",
+mkdocs = [
+    "mkdocs", "mkdocs-material", "mkdocstrings", "mkdocs-awesome-pages-plugin",
     "mkdocs-gen-files", "mkdocs-literate-nav",
-    "mkdocs-section-index", "mkdocs-jupyter", "mkdocs-rss-plugin"]
+    "mkdocs-section-index", "mkdocs-jupyter", "mkdocs-rss-plugin"
+]
+meilisearch = ["meilisearch", "meilisearch-python-sdk"]
+momento = ["momento"]
 
+
+# ================= DEV DEPS =================
 [tool.poetry.group.dev.dependencies]
+black = {extras = ["jupyter"], version = "^24.3.0"}
+flake8 = "^6.0.0"
+mypy = "^1.7.0"
+ruff = "^0.2.2"
+pre-commit = "^3.3.2"
+autopep8 = "^2.0.2"
+
+types-redis = "^4.5.5.2"
+types-requests = "^2.31.0.1"
+types-pyyaml = "^6.0.12.20240311"
+types-pillow = "^10.2.0.20240406"
+
 pytest = "^7.3.1"
+pytest-redis = "^3.0.2"
+pytest-asyncio = "^0.21.1"
+pytest-postgresql = "^5.0.0"
+pytest-mysql = "^2.4.2"
+
+
 coverage = "^7.2.5"
 
+# ========================================
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
@@ -130,9 +157,16 @@ build-backend = "poetry.core.masonry.api"
 [tool.black]
 line-length = 88
 include = '\.pyi?$'
+# extend-exclude = '.*pyi$'
+# exclude = '^stubs/'
+
+[tool.pytype]
+inputs = ["langroid"]
 
 [tool.mypy]
 python_version = "3.11"
+#mypy_path = ["stubs"]
+
 #follow_imports = "skip"
 #check_untyped_defs = "True"
 disallow_untyped_defs = "True"
@@ -144,7 +178,6 @@ exclude = [
     "notebooks",
     "langroid/parsing/repo_loader.py",
     "langroid/embedding_models/clustering.py",
-    #TODO revisit why mypy keeps failing on gh actions, but works fine locally
     "langroid/agent/callbacks/chainlit.py",
     "langroid/vector_store/chromadb.py",
     "langroid/embedding_models/protoc" # ignore generated files
@@ -168,6 +201,7 @@ lint.select = [
 lint.exclude = ["docs/**", ".venv", "venv", "examples/**", "examples_dev", "langroid/utils/web", "notebooks", "__init__.py", "langroid/embedding_models/protoc/*"]
 lint.fixable = ["A", "B", "C", "D", "E", "F", "G", "I", "N", "Q", "S", "T", "W", "ANN", "ARG", "BLE", "COM", "DJ", "DTZ", "EM", "ERA", "EXE", "FBT", "ICN", "INP", "ISC", "NPY", "PD", "PGH", "PIE", "PL", "PT", "PTH", "PYI", "RET", "RSE", "RUF", "SIM", "SLF", "TCH", "TID", "TRY", "UP", "YTT"]
 lint.unfixable = []
+lint.extend-ignore = ["F821"]
 
 [tool.pytest.ini_options]
 filterwarnings = ["ignore::DeprecationWarning"]
