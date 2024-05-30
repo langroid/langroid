@@ -1,13 +1,18 @@
 from typing import List, Set, no_type_check
 from urllib.parse import urlparse
 
-from pydispatch import dispatcher
-from scrapy import signals
-from scrapy.crawler import CrawlerRunner
-from scrapy.http import Response
-from scrapy.linkextractors import LinkExtractor
-from scrapy.spiders import CrawlSpider, Rule
-from twisted.internet import defer, reactor
+from langroid.exceptions import LangroidImportError
+
+try:
+    from pydispatch import dispatcher
+    from scrapy import signals
+    from scrapy.crawler import CrawlerRunner
+    from scrapy.http import Response
+    from scrapy.linkextractors import LinkExtractor
+    from scrapy.spiders import CrawlSpider, Rule
+    from twisted.internet import defer, reactor
+except ImportError:
+    raise LangroidImportError("scrapy", "scrapy")
 
 
 @no_type_check

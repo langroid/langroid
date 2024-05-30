@@ -35,6 +35,7 @@ from langroid.embedding_models.models import (
     OpenAIEmbeddingsConfig,
     SentenceTransformerEmbeddingsConfig,
 )
+from langroid.exceptions import LangroidImportError
 from langroid.language_models.base import StreamingIfAllowed
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
 from langroid.mytypes import DocMetaData, Document, Entity
@@ -108,6 +109,9 @@ vecdb_config: VectorStoreConfig = QdrantDBConfig(
 )
 
 try:
+    import lancedb
+
+    lancedb  # appease mypy
     from langroid.vector_store.lancedb import LanceDBConfig
 
     vecdb_config = LanceDBConfig(
@@ -117,7 +121,7 @@ try:
         embedding=(hf_embed_config if has_sentence_transformers else oai_embed_config),
     )
 
-except ImportError:
+except (ImportError, LangroidImportError):
     pass
 
 

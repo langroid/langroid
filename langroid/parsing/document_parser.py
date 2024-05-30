@@ -1,26 +1,37 @@
+from __future__ import annotations
+
 import itertools
 import logging
 import re
 from enum import Enum
 from io import BytesIO
-from typing import Any, Generator, List, Tuple
+from typing import TYPE_CHECKING, Any, Generator, List, Tuple
 
 from langroid.exceptions import LangroidImportError
 
 try:
     import fitz
 except ImportError:
-    raise LangroidImportError("PyMuPDF", "pdf-parsers")
+    if not TYPE_CHECKING:
+        fitz = None
 
 try:
     import pypdf
 except ImportError:
-    raise LangroidImportError("pypdf", "pdf-parsers")
+    if not TYPE_CHECKING:
+        pypdf = None
 
-import pdfplumber
+try:
+    import pdfplumber
+except ImportError:
+    if not TYPE_CHECKING:
+        pdfplumber = None
+
 import requests
 from bs4 import BeautifulSoup
-from PIL import Image
+
+if TYPE_CHECKING:
+    from PIL import Image
 
 from langroid.mytypes import DocMetaData, Document
 from langroid.parsing.parser import Parser, ParsingConfig
@@ -373,19 +384,21 @@ class FitzPDFParser(DocumentParser):
     Parser for processing PDFs using the `fitz` library.
     """
 
-    def iterate_pages(self) -> Generator[Tuple[int, fitz.Page], None, None]:
+    def iterate_pages(self) -> Generator[Tuple[int, "fitz.Page"], None, None]:
         """
         Yield each page in the PDF using `fitz`.
 
         Returns:
             Generator[fitz.Page]: Generator yielding each page.
         """
+        if fitz is None:
+            raise LangroidImportError("fitz", "pdf-parsers")
         doc = fitz.open(stream=self.doc_bytes, filetype="pdf")
         for i, page in enumerate(doc):
             yield i, page
         doc.close()
 
-    def extract_text_from_page(self, page: fitz.Page) -> str:
+    def extract_text_from_page(self, page: "fitz.Page") -> str:
         """
         Extract text from a given `fitz` page.
 
@@ -410,6 +423,8 @@ class PyPDFParser(DocumentParser):
         Returns:
             Generator[pypdf.pdf.PageObject]: Generator yielding each page.
         """
+        if pypdf is None:
+            raise LangroidImportError("pypdf", "pdf-parsers")
         reader = pypdf.PdfReader(self.doc_bytes)
         for i, page in enumerate(reader.pages):
             yield i, page
@@ -441,6 +456,8 @@ class PDFPlumberParser(DocumentParser):
         Returns:
             Generator[pdfplumber.Page]: Generator yielding each page.
         """
+        if pdfplumber is None:
+            raise LangroidImportError("pdfplumber", "pdf-parsers")
         with pdfplumber.open(self.doc_bytes) as pdf:
             for i, page in enumerate(pdf.pages):
                 yield i, page
@@ -654,7 +671,10 @@ class PythonDocxParser(DocumentParser):
         In a DOCX file, pages are not explicitly defined,
         so we consider each paragraph as a separate 'page' for simplicity.
         """
-        import docx
+        try:
+            import docx
+        except ImportError:
+            raise LangroidImportError("python-docx", "docx")
 
         doc = docx.Document(self.doc_bytes)
         for i, para in enumerate(doc.paragraphs, start=1):

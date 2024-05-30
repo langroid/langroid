@@ -16,7 +16,8 @@ from .table_chat_agent import (
     TableChatAgentConfig,
     PandasEvalTool,
 )
-from . import sql
+
+
 from . import relevance_extractor_agent
 from . import doc_chat_agent
 from . import retriever_agent
@@ -39,7 +40,6 @@ __all__ = [
     "TableChatAgent",
     "TableChatAgentConfig",
     "PandasEvalTool",
-    "sql",
     "relevance_extractor_agent",
     "doc_chat_agent",
     "retriever_agent",
@@ -49,3 +49,11 @@ __all__ = [
     "lance_doc_chat_agent",
     "lance_rag",
 ]
+
+try:
+    from . import sql
+
+    sql
+    __all__.append("sql")
+except ImportError:
+    pass
