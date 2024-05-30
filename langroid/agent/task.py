@@ -525,9 +525,11 @@ class Task:
             ):
                 raise InfiniteLoopException(
                     """Possible infinite loop detected!
-                    You can adjust infinite loop detection by changing the params
-                    in the TaskConfig passed to the Task constructor: 
-                    e.g. set inf_loop_cycle_len=0 to disable loop detection."""
+                    You can adjust infinite loop detection (or turn it off)
+                    by changing the params in the TaskConfig passed to the Task 
+                    constructor; see here:
+                    https://langroid.github.io/langroid/reference/agent/task/#langroid.agent.task.TaskConfig
+                    """
                 )
 
         final_result = self.result()
@@ -620,9 +622,11 @@ class Task:
             ):
                 raise InfiniteLoopException(
                     """Possible infinite loop detected!
-                    You can adjust infinite loop detection by changing the params
-                    in the TaskConfig passed to the Task constructor: 
-                    e.g. set inf_loop_cycle_len=0 to disable loop detection."""
+                    You can adjust infinite loop detection (or turn it off)
+                    by changing the params in the TaskConfig passed to the Task 
+                    constructor; see here:
+                    https://langroid.github.io/langroid/reference/agent/task/#langroid.agent.task.TaskConfig
+                    """
                 )
 
         final_result = self.result()
