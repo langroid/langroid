@@ -43,20 +43,6 @@ from .agent.chat_agent import (
 
 from .agent.task import Task, TaskConfig
 
-try:
-    from .agent.callbacks.chainlit import (
-        ChainlitAgentCallbacks,
-        ChainlitTaskCallbacks,
-        ChainlitCallbackConfig,
-    )
-
-    chainlit_available = True
-    ChainlitAgentCallbacks
-    ChainlitTaskCallbacks
-    ChainlitCallbackConfig
-except ImportError:
-    chainlit_available = False
-
 
 from .mytypes import (
     DocMetaData,
@@ -65,6 +51,7 @@ from .mytypes import (
 )
 
 from .exceptions import InfiniteLoopException
+from .exceptions import LangroidImportError
 
 __all__ = [
     "mytypes",
@@ -94,8 +81,20 @@ __all__ = [
     "llm_response_batch",
     "agent_response_batch",
     "InfiniteLoopException",
+    "LangroidImportError",
 ]
-if chainlit_available:
+
+
+try:
+    from .agent.callbacks.chainlit import (
+        ChainlitAgentCallbacks,
+        ChainlitTaskCallbacks,
+        ChainlitCallbackConfig,
+    )
+
+    ChainlitAgentCallbacks
+    ChainlitTaskCallbacks
+    ChainlitCallbackConfig
     __all__.extend(
         [
             "ChainlitAgentCallbacks",
@@ -103,3 +102,5 @@ if chainlit_available:
             "ChainlitCallbackConfig",
         ]
     )
+except ImportError:
+    pass

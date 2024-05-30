@@ -130,7 +130,7 @@ python3 -m venv .venv
 . .venv/bin/activate
 
 # use poetry to install dependencies (these go into .venv dir)
-poetry install
+poetry install --with dev
 
 ```
 To add packages, use `poetry add <package-name>`. This will automatically

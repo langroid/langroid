@@ -1,7 +1,7 @@
 import logging
 import sys
 from contextlib import contextmanager
-from typing import Any, Iterator, Optional
+from typing import Any, Iterator, Optional, Type
 
 from rich import print as rprint
 from rich.text import Text
@@ -89,6 +89,11 @@ class SuppressLoggerWarnings:
         # Set the logging level to 'ERROR' to suppress warnings
         self.logger.setLevel(logging.ERROR)
 
-    def __exit__(self, exc_type, exc_value, traceback) -> None:  # type: ignore
+    def __exit__(
+        self,
+        exc_type: Optional[Type[BaseException]],
+        exc_value: Optional[BaseException],
+        traceback: Any,
+    ) -> None:
         # Reset the logging level to its original value
         self.logger.setLevel(self.original_level)

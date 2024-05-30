@@ -10,7 +10,7 @@ This will usually be much cheaper and faster than actually writing out the extra
 text. The handler of this tool/function will then extract the text and send it back.
 """
 
-from typing import List
+from typing import List, Tuple
 
 from langroid.agent.tool_message import ToolMessage
 
@@ -25,7 +25,7 @@ class SegmentExtractTool(ToolMessage):
     segment_list: str
 
     @classmethod
-    def examples(cls) -> List["ToolMessage"]:
+    def examples(cls) -> List["ToolMessage" | Tuple[str, "ToolMessage"]]:
         return [cls(segment_list="1,3,5-7")]
 
     @classmethod

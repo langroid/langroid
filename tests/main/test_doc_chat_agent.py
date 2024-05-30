@@ -13,7 +13,6 @@ from langroid.agent.special.doc_chat_agent import (
     DocChatAgent,
     DocChatAgentConfig,
     RetrievalTool,
-    extract_markdown_references,
 )
 from langroid.agent.special.lance_doc_chat_agent import LanceDocChatAgent
 from langroid.agent.task import Task
@@ -26,6 +25,7 @@ from langroid.parsing.utils import generate_random_text
 from langroid.prompts.prompts_config import PromptsConfig
 from langroid.utils.configuration import Settings, set_global
 from langroid.utils.constants import DONE
+from langroid.utils.output.citations import extract_markdown_references
 from langroid.utils.system import rmdir
 from langroid.vector_store.base import VectorStore, VectorStoreConfig
 from langroid.vector_store.chromadb import ChromaDB, ChromaDBConfig

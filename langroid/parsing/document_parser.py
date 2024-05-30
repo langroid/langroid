@@ -5,9 +5,19 @@ from enum import Enum
 from io import BytesIO
 from typing import Any, Generator, List, Tuple
 
-import fitz
+from langroid.exceptions import LangroidImportError
+
+try:
+    import fitz
+except ImportError:
+    raise LangroidImportError("PyMuPDF", "pdf-parsers")
+
+try:
+    import pypdf
+except ImportError:
+    raise LangroidImportError("pypdf", "pdf-parsers")
+
 import pdfplumber
-import pypdf
 import requests
 from bs4 import BeautifulSoup
 from PIL import Image
@@ -456,7 +466,10 @@ class ImagePdfParser(DocumentParser):
     def iterate_pages(
         self,
     ) -> Generator[Tuple[int, "Image"], None, None]:  # type: ignore
-        from pdf2image import convert_from_bytes
+        try:
+            from pdf2image import convert_from_bytes
+        except ImportError:
+            raise LangroidImportError("pdf2image", "pdf-parsers")
 
         images = convert_from_bytes(self.doc_bytes.getvalue())
         for i, image in enumerate(images):
@@ -472,7 +485,10 @@ class ImagePdfParser(DocumentParser):
         Returns:
             str: Extracted text from the image.
         """
-        import pytesseract
+        try:
+            import pytesseract
+        except ImportError:
+            raise LangroidImportError("pytesseract", "pdf-parsers")
 
         text = pytesseract.image_to_string(page)
         return self.fix_text(text)

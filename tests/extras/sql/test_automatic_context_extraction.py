@@ -14,12 +14,27 @@ from functools import partial
 from typing import Generator
 
 import pytest
-from pytest_mysql import factories as mysql_factories
-from pytest_postgresql import factories as postgresql_factories
-from sqlalchemy import Column, Engine, ForeignKey, Integer, String, create_engine, text
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import Session, relationship, sessionmaker
-from sqlalchemy.schema import CreateSchema
+
+from langroid.exceptions import LangroidImportError
+
+try:
+    from pytest_mysql import factories as mysql_factories
+    from pytest_postgresql import factories as postgresql_factories
+    from sqlalchemy import (
+        Column,
+        Engine,
+        ForeignKey,
+        Integer,
+        String,
+        create_engine,
+        text,
+    )
+    from sqlalchemy.ext.declarative import declarative_base
+    from sqlalchemy.orm import Session, relationship, sessionmaker
+    from sqlalchemy.schema import CreateSchema
+except ImportError as e:
+    raise LangroidImportError(extra="sql", error=str(e))
+
 
 from langroid.agent.special.sql.sql_chat_agent import (
     SQLChatAgent,

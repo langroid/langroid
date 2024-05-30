@@ -25,6 +25,7 @@ from . import lance_doc_chat_agent
 from . import lance_rag
 from . import table_chat_agent
 
+
 __all__ = [
     "RelevanceExtractorAgent",
     "RelevanceExtractorAgentConfig",
@@ -34,7 +35,6 @@ __all__ = [
     "RecordDoc",
     "RetrieverAgentConfig",
     "RetrieverAgent",
-    "LanceDocChatAgent",
     "dataframe_summary",
     "TableChatAgent",
     "TableChatAgentConfig",
@@ -43,8 +43,9 @@ __all__ = [
     "relevance_extractor_agent",
     "doc_chat_agent",
     "retriever_agent",
+    "table_chat_agent",
+    "LanceDocChatAgent",
     "lance_tools",
     "lance_doc_chat_agent",
     "lance_rag",
-    "table_chat_agent",
 ]

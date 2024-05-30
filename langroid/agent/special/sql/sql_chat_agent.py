@@ -12,10 +12,16 @@ from typing import Any, Dict, List, Optional, Sequence, Union
 
 from rich import print
 from rich.console import Console
-from sqlalchemy import MetaData, Row, create_engine, inspect, text
-from sqlalchemy.engine import Engine
-from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import Session, sessionmaker
+
+from langroid.exceptions import LangroidImportError
+
+try:
+    from sqlalchemy import MetaData, Row, create_engine, inspect, text
+    from sqlalchemy.engine import Engine
+    from sqlalchemy.exc import SQLAlchemyError
+    from sqlalchemy.orm import Session, sessionmaker
+except ImportError as e:
+    raise LangroidImportError(extra="sql", error=str(e))
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.chat_document import ChatDocMetaData, ChatDocument

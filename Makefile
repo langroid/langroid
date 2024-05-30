@@ -10,7 +10,8 @@ setup: ## Setup the git pre-commit hooks
 update: ## Update the git pre-commit hooks
 	poetry run pre-commit autoupdate
 
-check:
+.PHONY: type-check
+type-check:
 	@poetry run pre-commit install
 	@poetry run pre-commit autoupdate
 	@poetry run pre-commit run --all-files
@@ -23,12 +24,24 @@ check:
 	@poetry run mypy -p langroid
 	@echo "All checks passed!"
 
+.PHONE: lint
 lint:
 	black .
 	poetry run ruff . --fix
 
+.PHONY: stubs
+stubs:
+	@echo "Generating Python stubs for the langroid package..."
+	@poetry run stubgen -p langroid -o stubs
+	@echo "Stubs generated in the 'stubs' directory"
+
+.PHONY: check
+check: lint type-check
+
+.PHONY: tests
 tests:
 	pytest tests/main --basetemp=/tmp/pytest
+
 
 docs:
 	@# Kill any existing 'mkdocs serve' processes.

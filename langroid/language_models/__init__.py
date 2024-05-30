@@ -22,6 +22,7 @@ from .openai_gpt import (
 )
 from .azure_openai import AzureConfig, AzureGPT
 
+
 __all__ = [
     "utils",
     "config",

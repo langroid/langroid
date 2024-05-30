@@ -7,6 +7,7 @@ from langroid.embedding_models.base import (
     EmbeddingModelsConfig,
 )
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
+from langroid.exceptions import LangroidImportError
 from langroid.mytypes import DocMetaData, Document
 from langroid.utils.configuration import settings
 from langroid.utils.output.printing import print_long_text
@@ -29,14 +30,7 @@ class ChromaDB(VectorStore):
         try:
             import chromadb
         except ImportError:
-            raise ImportError(
-                """
-                ChromaDB is not installed by default with Langroid.
-                If you want to use it, please install it with the `chromadb` extra, e.g.
-                pip install "langroid[chromadb]"
-                or an equivalent command.
-                """
-            )
+            raise LangroidImportError("chromadb", "chromadb")
         self.config = config
         emb_model = EmbeddingModel.create(config.embedding)
         self.embedding_fn = emb_model.embedding_fn()

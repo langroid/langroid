@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Tuple
 
 from langroid.agent.tool_message import ToolMessage
 
@@ -16,7 +16,7 @@ class RetrievalTool(ToolMessage):
     num_results: int
 
     @classmethod
-    def examples(cls) -> List["ToolMessage"]:
+    def examples(cls) -> List["ToolMessage" | Tuple[str, "ToolMessage"]]:
         return [
             cls(
                 query="What are the eligibility criteria for the scholarship?",

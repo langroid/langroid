@@ -31,7 +31,10 @@ from langroid.agent.special.relevance_extractor_agent import (
 )
 from langroid.agent.task import Task
 from langroid.agent.tools.retrieval_tool import RetrievalTool
-from langroid.embedding_models.models import OpenAIEmbeddingsConfig
+from langroid.embedding_models.models import (
+    OpenAIEmbeddingsConfig,
+    SentenceTransformerEmbeddingsConfig,
+)
 from langroid.language_models.base import StreamingIfAllowed
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
 from langroid.mytypes import DocMetaData, Document, Entity
@@ -51,9 +54,13 @@ from langroid.prompts.prompts_config import PromptsConfig
 from langroid.prompts.templates import SUMMARY_ANSWER_PROMPT_GPT4
 from langroid.utils.constants import NO_ANSWER
 from langroid.utils.output import show_if_debug, status
+from langroid.utils.output.citations import (
+    extract_markdown_references,
+    format_footnote_text,
+)
 from langroid.utils.pydantic_utils import dataframe_to_documents, extract_fields
 from langroid.vector_store.base import VectorStore, VectorStoreConfig
-from langroid.vector_store.lancedb import LanceDBConfig
+from langroid.vector_store.qdrantdb import QdrantDBConfig
 
 
 @cache
@@ -82,47 +89,36 @@ except ImportError:
     pass
 
 
-def extract_markdown_references(md_string: str) -> list[int]:
-    """
-    Extracts markdown references (e.g., [^1], [^2]) from a string and returns
-    them as a sorted list of integers.
+hf_embed_config = SentenceTransformerEmbeddingsConfig(
+    model_type="sentence-transformer",
+    model_name="BAAI/bge-large-en-v1.5",
+)
 
-    Args:
-        md_string (str): The markdown string containing references.
+oai_embed_config = OpenAIEmbeddingsConfig(
+    model_type="openai",
+    model_name="text-embedding-ada-002",
+    dims=1536,
+)
 
-    Returns:
-        list[int]: A sorted list of unique integers from the markdown references.
-    """
-    import re
+vecdb_config: VectorStoreConfig = QdrantDBConfig(
+    collection_name="doc-chat-qdrantdb",
+    replace_collection=True,
+    storage_path=".qdrantdb/data/",
+    embedding=hf_embed_config if has_sentence_transformers else oai_embed_config,
+)
 
-    # Regex to find all occurrences of [^<number>]
-    matches = re.findall(r"\[\^(\d+)\]", md_string)
-    # Convert matches to integers, remove duplicates with set, and sort
-    return sorted(set(int(match) for match in matches))
+try:
+    from langroid.vector_store.lancedb import LanceDBConfig
 
+    vecdb_config = LanceDBConfig(
+        collection_name="doc-chat-lancedb",
+        replace_collection=True,
+        storage_path=".lancedb/data/",
+        embedding=(hf_embed_config if has_sentence_transformers else oai_embed_config),
+    )
 
-def format_footnote_text(content: str, width: int = 80) -> str:
-    """
-    Formats the content part of a footnote (i.e. not the first line that
-    appears right after the reference [^4])
-    It wraps the text so that no line is longer than the specified width and indents
-    lines as necessary for markdown footnotes.
-
-    Args:
-        content (str): The text of the footnote to be formatted.
-        width (int): Maximum width of the text lines.
-
-    Returns:
-        str: Properly formatted markdown footnote text.
-    """
-    import textwrap
-
-    # Wrap the text to the specified width
-    wrapped_lines = textwrap.wrap(content, width)
-    if len(wrapped_lines) == 0:
-        return ""
-    indent = "    "  # Indentation for markdown footnotes
-    return indent + ("\n" + indent).join(wrapped_lines)
+except ImportError:
+    pass
 
 
 class DocChatAgentConfig(ChatAgentConfig):
@@ -199,26 +195,10 @@ class DocChatAgentConfig(ChatAgentConfig):
             library="pdfplumber",
         ),
     )
-    from langroid.embedding_models.models import SentenceTransformerEmbeddingsConfig
-
-    hf_embed_config = SentenceTransformerEmbeddingsConfig(
-        model_type="sentence-transformer",
-        model_name="BAAI/bge-large-en-v1.5",
-    )
-
-    oai_embed_config = OpenAIEmbeddingsConfig(
-        model_type="openai",
-        model_name="text-embedding-ada-002",
-        dims=1536,
-    )
 
     # Allow vecdb to be None in case we want to explicitly set it later
-    vecdb: Optional[VectorStoreConfig] = LanceDBConfig(
-        collection_name="doc-chat-lancedb",
-        replace_collection=True,
-        storage_path=".lancedb/data/",
-        embedding=hf_embed_config if has_sentence_transformers else oai_embed_config,
-    )
+    vecdb: Optional[VectorStoreConfig] = vecdb_config
+
     llm: OpenAIGPTConfig = OpenAIGPTConfig(
         type="openai",
         chat_model=OpenAIChatModel.GPT4,

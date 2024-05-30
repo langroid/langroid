@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 import pandas as pd
 import typer
@@ -105,7 +105,7 @@ class PandasToKGTool(ToolMessage):
     args: list[str]
 
     @classmethod
-    def examples(cls) -> List["ToolMessage"]:
+    def examples(cls) -> List["ToolMessage" | Tuple[str, "ToolMessage"]]:
         return [
             cls(
                 cypherQuery="""MERGE (employee:Employee {name: $employeeName, 
