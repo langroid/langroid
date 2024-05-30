@@ -1,11 +1,10 @@
 from typing import List, Set, no_type_check
 from urllib.parse import urlparse
 
-from pydispatch import dispatcher
-
 from langroid.exceptions import LangroidImportError
 
 try:
+    from pydispatch import dispatcher
     from scrapy import signals
     from scrapy.crawler import CrawlerRunner
     from scrapy.http import Response

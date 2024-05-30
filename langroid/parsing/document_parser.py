@@ -29,7 +29,9 @@ except ImportError:
 
 import requests
 from bs4 import BeautifulSoup
-from PIL import Image
+
+if TYPE_CHECKING:
+    from PIL import Image
 
 from langroid.mytypes import DocMetaData, Document
 from langroid.parsing.parser import Parser, ParsingConfig
