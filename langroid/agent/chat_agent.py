@@ -270,9 +270,9 @@ class ChatAgent(Agent):
             ):
                 # example will be shown in json_format_rules() when using TOOLs,
                 # so we don't need to show it here.
-                example = "" if self.config.use_tools else (msg_cls.usage_example())
+                example = "" if self.config.use_tools else (msg_cls.usage_examples())
                 if example != "":
-                    example = "EXAMPLE: " + example
+                    example = "EXAMPLES:\n" + example
                 class_instructions = msg_cls.instructions()
                 guidance = (
                     ""

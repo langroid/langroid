@@ -9,6 +9,7 @@ from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.tool_message import ToolMessage
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
 from langroid.language_models.openai_gpt import OpenAIGPTConfig
+from langroid.parsing.parse_json import extract_top_level_json
 from langroid.parsing.parser import ParsingConfig
 from langroid.prompts.prompts_config import PromptsConfig
 from langroid.utils.configuration import Settings, set_global
@@ -166,8 +167,11 @@ def test_disable_message_use(msg_class: Optional[ToolMessage]):
 
 @pytest.mark.parametrize("msg_cls", [PythonVersionMessage, FileExistsMessage])
 def test_usage_instruction(msg_cls: ToolMessage):
-    usage = msg_cls.usage_example()
-    assert json.loads(usage)["request"] == msg_cls.default_value("request")
+    usage = msg_cls.usage_examples()
+    jsons = extract_top_level_json(usage)
+    assert all(
+        json.loads(j)["request"] == msg_cls.default_value("request") for j in jsons
+    )
 
 
 NONE_MSG = "nothing to see here"
