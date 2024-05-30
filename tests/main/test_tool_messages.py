@@ -23,8 +23,12 @@ class CountryCapitalMessage(ToolMessage):
 
     @classmethod
     def examples(cls) -> List["CountryCapitalMessage"]:
+        # illustrating two types of examples
         return [
-            cls(country="France", city="Paris", result="yes"),
+            (
+                "Need to check if Paris is the capital of France",
+                cls(country="France", city="Paris", result="yes"),
+            ),
             cls(country="France", city="Marseille", result="no"),
         ]
 
