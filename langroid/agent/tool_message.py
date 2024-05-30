@@ -82,7 +82,7 @@ class ToolMessage(ABC, BaseModel):
     @classmethod
     def usage_examples(cls, random: bool = False) -> str:
         """
-        Instruction to the LLM showing an example of how to use the message.
+        Instruction to the LLM showing examples of how to use the tool-message.
 
         Args:
             random (bool): whether to pick a random example from the list of examples.
