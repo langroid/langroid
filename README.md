@@ -354,7 +354,8 @@ such as [LiteLLM](https://docs.litellm.ai/docs/providers) that in effect mimic t
 
 ### Install `langroid`
 Langroid requires Python 3.11+. We recommend using a virtual environment.
-Use `pip` to install `langroid` (from PyPi) to your virtual environment:
+Use `pip` to install a bare-bones slim version of `langroid` (from PyPi) to your virtual 
+environment:
 ```bash
 pip install langroid
 ```
@@ -362,17 +363,21 @@ The core Langroid package lets you use OpenAI Embeddings models via their API.
 If you instead want to use the `sentence-transformers` embedding models from HuggingFace, 
 install Langroid like this: 
 ```bash
-pip install langroid[hf-embeddings]
-```
-If using `zsh` (or similar shells), you may need to escape the square brackets, e.g.:
-```
-pip install langroid\[hf-embeddings\]
-```
-or use quotes:
-```
 pip install "langroid[hf-embeddings]"
 ```
-
+For many practical scenarios, you may need additional optional dependencies:
+- To use various document-parsers, install langroid with the `doc-chat` extra:
+    ```bash
+    pip install "langroid[doc-chat]"
+    ```
+- For "chat with databases", use the `db` extra:
+    ```bash
+    pip install "langroid[db]"
+    ``
+- You can specify multiple extras by separating them with commas, e.g.:
+    ```bash
+    pip install "langroid[doc-chat,db]"
+    ```
 
 <details>
 <summary><b>Optional Installs for using SQL Chat with a PostgreSQL DB </b></summary>

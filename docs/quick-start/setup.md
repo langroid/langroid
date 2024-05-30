@@ -23,6 +23,26 @@ Alternatively, use `pip` to install `langroid` into your virtual environment:
 pip install langroid
 ```
 
+The core Langroid package lets you use OpenAI Embeddings models via their API.
+If you instead want to use the `sentence-transformers` embedding models from HuggingFace,
+install Langroid like this:
+```bash
+pip install "langroid[hf-embeddings]"
+```
+For many practical scenarios, you may need additional optional dependencies:
+- To use various document-parsers, install langroid with the `doc-chat` extra:
+    ```bash
+    pip install "langroid[doc-chat]"
+    ```
+- For "chat with databases", use the `db` extra:
+    ```bash
+    pip install "langroid[db]"
+    ``
+- You can specify multiple extras by separating them with commas, e.g.:
+    ```bash
+    pip install "langroid[doc-chat,db]"
+    ```
+
 ??? note "Optional Installs for using SQL Chat with a PostgreSQL DB"
     If you are using `SQLChatAgent`
     (e.g. the script [`examples/data-qa/sql-chat/sql_chat.py`](https://github.com/langroid/langroid/blob/main/examples/data-qa/sql-chat/sql_chat.py),

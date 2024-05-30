@@ -101,6 +101,16 @@ python-magic = "^0.4.27"
 # install these using, e.g.,
 # `poetry install -E [...]` where [...] is one of the extras below
 # or install multiple extras using, e.g.,  `poetry install -E "litellm mysql"
+
+# Groupings for common use-cases
+doc-chat = [
+    "unstructured", "python-docx", "pdfplumber", "pypdf",
+    "pymupdf", "pdf2image", "pytesseract"
+]
+db = ["postgres", "mysql", "sqlalchemy", "psycopg2", "pymysql"]
+embeddings = ["sentence-transformers", "torch", "transformers", "huggingface-hub"]
+
+# more granular groupings
 lancedb = ["lancedb", "tantivy", "pyarrow"]
 pdf-parsers = ["pdfplumber", "pypdf", "pymupdf", "pdf2image", "pytesseract"]
 docx = ["python-docx"]
