@@ -49,6 +49,7 @@ python-docx = {version="^1.1.0", optional=true}
 scrapy = {version="^2.11.0", optional=true}
 
 # ====CORE================================
+pyyaml = "^6.0.1"
 onnxruntime = "^1.16.1"
 fire = "^0.5.0"
 bs4 = "^0.0.1"
@@ -97,6 +98,7 @@ python-magic = "^0.4.27"
 
 
 # ================= EXTRAS =================
+
 [tool.poetry.extras]
 # install these using, e.g.,
 # `poetry install -E [...]` where [...] is one of the extras below
