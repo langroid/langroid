@@ -11,7 +11,6 @@ from . import urls
 from . import utils
 from . import search
 from . import web_search
-from . import spider
 
 from .parser import (
     Splitter,
@@ -36,7 +35,6 @@ __all__ = [
     "utils",
     "search",
     "web_search",
-    "spider",
     "Splitter",
     "PdfParsingConfig",
     "DocxParsingConfig",
@@ -44,3 +42,11 @@ __all__ = [
     "ParsingConfig",
     "Parser",
 ]
+
+try:
+    from . import spider
+
+    spider
+    __all__.append("spider")
+except ImportError:
+    pass

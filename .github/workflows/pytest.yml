@@ -86,7 +86,7 @@ jobs:
         python -m pip install --upgrade pip
         
         poetry install \
-          -E "lancedb momento meilisearch chromadb hf-embeddings unstructured pdf-parsers sql" \
+          -E "lancedb momento meilisearch chromadb hf-embeddings unstructured pdf-parsers docx sql" \
           --with dev
 
     - name: Dump dependencies to file
