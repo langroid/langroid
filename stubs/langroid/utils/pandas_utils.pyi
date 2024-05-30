@@ -1,3 +1,0 @@
-from typing import Any
-
-def stringify(x: Any) -> str: ...
