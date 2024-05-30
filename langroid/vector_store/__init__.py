@@ -10,14 +10,8 @@ __all__ = [
     "VectorStore",
     "VectorStoreConfig",
     "qdrantdb",
-    "meilisearch",
-    "lancedb",
     "QdrantDBConfig",
     "QdrantDB",
-    "MeiliSearch",
-    "MeiliSearchConfig",
-    "LanceDB",
-    "LanceDBConfig",
 ]
 
 

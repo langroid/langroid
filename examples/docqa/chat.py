@@ -32,7 +32,7 @@ def main(
     model: str = typer.Option("", "--model", "-m", help="model name"),
     nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
     vecdb: str = typer.Option(
-        "lancedb", "--vecdb", "-v", help="vector db name (default: lancedb)"
+        "qdrant", "--vecdb", "-v", help="vector db name (default: qdrant)"
     ),
     nostream: bool = typer.Option(False, "--nostream", "-ns", help="no streaming"),
     embed: str = typer.Option(
