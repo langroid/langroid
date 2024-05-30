@@ -17,7 +17,11 @@ try:
 except ImportError:
     raise LangroidImportError("pypdf", "pdf-parsers")
 
-import pdfplumber
+try:
+    import pdfplumber
+except ImportError:
+    raise LangroidImportError("pdfplumber", "pdf-parsers")
+
 import requests
 from bs4 import BeautifulSoup
 from PIL import Image
@@ -654,7 +658,10 @@ class PythonDocxParser(DocumentParser):
         In a DOCX file, pages are not explicitly defined,
         so we consider each paragraph as a separate 'page' for simplicity.
         """
-        import docx
+        try:
+            import docx
+        except ImportError:
+            raise LangroidImportError("python-docx", "docx")
 
         doc = docx.Document(self.doc_bytes)
         for i, para in enumerate(doc.paragraphs, start=1):
