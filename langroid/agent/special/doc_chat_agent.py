@@ -109,6 +109,9 @@ vecdb_config: VectorStoreConfig = QdrantDBConfig(
 )
 
 try:
+    import lancedb
+
+    lancedb  # appease mypy
     from langroid.vector_store.lancedb import LanceDBConfig
 
     vecdb_config = LanceDBConfig(
