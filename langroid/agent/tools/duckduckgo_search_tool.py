@@ -5,7 +5,7 @@ access to agent state), it can be enabled for any agent, without having to defin
 special method inside the agent: `agent.enable_message(DuckduckgoSearchTool)`
 """
 
-from typing import List
+from typing import List, Tuple
 
 from langroid.agent.tool_message import ToolMessage
 from langroid.parsing.web_search import duckduckgo_search
@@ -41,7 +41,7 @@ class DuckduckgoSearchTool(ToolMessage):
         """
 
     @classmethod
-    def examples(cls) -> List["ToolMessage"]:
+    def examples(cls) -> List["ToolMessage" | Tuple[str, "ToolMessage"]]:
         return [
             cls(
                 query="When was the Llama2 Large Language Model (LLM) released?",

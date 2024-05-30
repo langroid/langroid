@@ -69,10 +69,7 @@ pyparsing = "^3.0.9"
 nltk = "^3.8.1"
 qdrant-client = "^1.8.0"
 pydantic = "1.10.13"
-
-
 pandas = "^2.0.3"
-
 prettytable = "^3.8.0"
 
 google-api-python-client = "^2.95.0"

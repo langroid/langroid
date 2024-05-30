@@ -12,7 +12,7 @@ the expression and returns the result as a string.
 import io
 import logging
 import sys
-from typing import List, Optional, no_type_check
+from typing import List, Optional, Tuple, no_type_check
 
 import numpy as np
 import pandas as pd
@@ -138,7 +138,7 @@ class PandasEvalTool(ToolMessage):
     expression: str
 
     @classmethod
-    def examples(cls) -> List["ToolMessage"]:
+    def examples(cls) -> List["ToolMessage" | Tuple[str, "ToolMessage"]]:
         return [
             cls(expression="df.head()"),
             cls(expression="df[(df['gender'] == 'Male')]['income'].mean()"),
