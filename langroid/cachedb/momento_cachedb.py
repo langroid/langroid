@@ -4,17 +4,23 @@ import os
 from datetime import timedelta
 from typing import Any, Dict, List
 
-import momento
+from langroid.cachedb.base import CacheDBConfig
+from langroid.exceptions import LangroidImportError
+
+try:
+    import momento
+    from momento.responses import CacheGet
+except ImportError:
+    raise LangroidImportError(package="momento", extra="momento")
+
 from dotenv import load_dotenv
-from momento.responses import CacheGet
-from pydantic import BaseModel
 
 from langroid.cachedb.base import CacheDB
 
 logger = logging.getLogger(__name__)
 
 
-class MomentoCacheConfig(BaseModel):
+class MomentoCacheConfig(CacheDBConfig):
     """Configuration model for Momento Cache."""
 
     ttl: int = 60 * 60 * 24 * 7  # 1 week

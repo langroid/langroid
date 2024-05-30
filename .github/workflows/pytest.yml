@@ -85,7 +85,9 @@ jobs:
         echo "$HOME/.local/bin" >> $GITHUB_PATH
         python -m pip install --upgrade pip
         
-        poetry install -E "chromadb hf-embeddings unstructured"
+        poetry install \
+          -E "lancedb momento meilisearch chromadb hf-embeddings unstructured pdf-parsers sql" \
+          --with dev
 
     - name: Dump dependencies to file
       run: pip freeze > requirements_github.txt
@@ -102,7 +104,7 @@ jobs:
         poetry run coverage run --source=langroid -m pytest \
           --first-test-file=tests/main/test_task_inf_loop.py \
           --first-test-file=tests/main/test_task.py \
-          --first-test-name=tests/main/test_lance_doc_chat_agent.py \
+          --first-test-file=tests/main/test_lance_doc_chat_agent.py \
           -x tests/main tests/extras/test_hf_embeddings.py
         poetry run coverage report
       continue-on-error: true
@@ -110,7 +112,11 @@ jobs:
     - name: Retry pytest with gpt-4 instead of gpt-4o
       if: steps.first_test.outcome == 'failure'
       run: |
-        poetry run coverage run --source=langroid -m pytest -x tests/main tests/extras/test_hf_embeddings.py --m gpt-4
+        poetry run coverage run --source=langroid -m pytest --m gpt-4 \
+          --first-test-file=tests/main/test_task_inf_loop.py \
+          --first-test-file=tests/main/test_task.py \
+          --first-test-file=tests/main/test_lance_doc_chat_agent.py \
+          -x tests/main tests/extras/test_hf_embeddings.py
         poetry run coverage report
 
     - name: Generate XML coverage report

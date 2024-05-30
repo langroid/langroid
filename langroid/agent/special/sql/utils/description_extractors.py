@@ -1,7 +1,12 @@
 from typing import Any, Dict, List, Optional
 
-from sqlalchemy import inspect, text
-from sqlalchemy.engine import Engine
+from langroid.exceptions import LangroidImportError
+
+try:
+    from sqlalchemy import inspect, text
+    from sqlalchemy.engine import Engine
+except ImportError as e:
+    raise LangroidImportError(extra="sql", error=str(e))
 
 
 def extract_postgresql_descriptions(

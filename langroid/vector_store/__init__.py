@@ -1,25 +1,9 @@
 from . import base
 
 from . import qdrantdb
-from . import meilisearch
-from . import lancedb
 
 from .base import VectorStoreConfig, VectorStore
 from .qdrantdb import QdrantDBConfig, QdrantDB
-from .meilisearch import MeiliSearch, MeiliSearchConfig
-from .lancedb import LanceDB, LanceDBConfig
-
-has_chromadb = False
-try:
-    from . import chromadb
-    from .chromadb import ChromaDBConfig, ChromaDB
-
-    chromadb  # silence linters
-    ChromaDB
-    ChromaDBConfig
-    has_chromadb = True
-except ImportError:
-    pass
 
 __all__ = [
     "base",
@@ -36,5 +20,37 @@ __all__ = [
     "LanceDBConfig",
 ]
 
-if has_chromadb:
+
+try:
+    from . import meilisearch
+    from .meilisearch import MeiliSearch, MeiliSearchConfig
+
+    meilisearch
+    MeiliSearch
+    MeiliSearchConfig
+    __all__.extend(["meilisearch", "MeiliSearch", "MeiliSearchConfig"])
+except ImportError:
+    pass
+
+
+try:
+    from . import lancedb
+    from .lancedb import LanceDB, LanceDBConfig
+
+    lancedb
+    LanceDB
+    LanceDBConfig
+    __all__.extend(["lancedb", "LanceDB", "LanceDBConfig"])
+except ImportError:
+    pass
+
+try:
+    from . import chromadb
+    from .chromadb import ChromaDBConfig, ChromaDB
+
+    chromadb  # silence linters
+    ChromaDB
+    ChromaDBConfig
     __all__.extend(["chromadb", "ChromaDBConfig", "ChromaDB"])
+except ImportError:
+    pass

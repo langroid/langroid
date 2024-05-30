@@ -1,5 +1,4 @@
 from . import printing
-
 from .printing import (
     shorten_text,
     print_long_text,
@@ -7,8 +6,8 @@ from .printing import (
     SuppressLoggerWarnings,
     PrintColored,
 )
-
 from .status import status
+
 
 __all__ = [
     "printing",

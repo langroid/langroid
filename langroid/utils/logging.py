@@ -31,7 +31,11 @@ def setup_colored_logging() -> None:
     # logger.setLevel(logging.DEBUG)
 
 
-def setup_logger(name: str, level: int = logging.INFO) -> logging.Logger:
+def setup_logger(
+    name: str,
+    level: int = logging.INFO,
+    terminal: bool = False,
+) -> logging.Logger:
     """
     Set up a logger of module `name` at a desired level.
     Args:
@@ -42,7 +46,7 @@ def setup_logger(name: str, level: int = logging.INFO) -> logging.Logger:
     """
     logger = logging.getLogger(name)
     logger.setLevel(level)
-    if not logger.hasHandlers():
+    if not logger.hasHandlers() and terminal:
         handler = logging.StreamHandler()
         formatter = logging.Formatter(
             "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
@@ -73,7 +77,7 @@ def setup_file_logger(
 ) -> logging.Logger:
     os.makedirs(os.path.dirname(filename), exist_ok=True)
     file_mode = "a" if append else "w"
-    logger = setup_logger(name)
+    logger = setup_logger(name, terminal=False)
     handler = logging.FileHandler(filename, mode=file_mode)
     handler.setLevel(logging.INFO)
     if log_format:

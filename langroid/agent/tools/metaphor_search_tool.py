@@ -21,7 +21,7 @@ For more information, please refer to the official docs:
 https://metaphor.systems/
 """
 
-from typing import List
+from typing import List, Tuple
 
 from langroid.agent.tool_message import ToolMessage
 from langroid.parsing.web_search import metaphor_search
@@ -58,7 +58,7 @@ class MetaphorSearchTool(ToolMessage):
         """
 
     @classmethod
-    def examples(cls) -> List["ToolMessage"]:
+    def examples(cls) -> List["ToolMessage" | Tuple[str, "ToolMessage"]]:
         return [
             cls(
                 query="When was the Llama2 Large Language Model (LLM) released?",

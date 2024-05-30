@@ -3,23 +3,34 @@ Momento Vector Index.
 https://docs.momentohq.com/vector-index/develop/api-reference
 """
 
+from __future__ import annotations
+
 import logging
 import os
 from typing import List, Optional, Sequence, Tuple, no_type_check
 
-import momento.responses.vector_index as mvi_response
 from dotenv import load_dotenv
-from momento import (
-    # PreviewVectorIndexClientAsync,
-    CredentialProvider,
-    PreviewVectorIndexClient,
-    VectorIndexConfigurations,
-)
-from momento.requests.vector_index import (
-    ALL_METADATA,
-    Item,
-    SimilarityMetric,
-)
+
+from langroid.exceptions import LangroidImportError
+
+try:
+    import momento.responses.vector_index as mvi_response
+    from momento import (
+        # PreviewVectorIndexClientAsync,
+        CredentialProvider,
+        PreviewVectorIndexClient,
+        VectorIndexConfigurations,
+    )
+    from momento.requests.vector_index import (
+        ALL_METADATA,
+        Item,
+        SimilarityMetric,
+    )
+
+    has_momento = True
+except ImportError:
+    has_momento = False
+
 
 from langroid.embedding_models.base import (
     EmbeddingModel,
@@ -41,12 +52,14 @@ class MomentoVIConfig(VectorStoreConfig):
     cloud: bool = True
     collection_name: str | None = "temp"
     embedding: EmbeddingModelsConfig = OpenAIEmbeddingsConfig()
-    distance: SimilarityMetric = SimilarityMetric.COSINE_SIMILARITY
 
 
 class MomentoVI(VectorStore):
     def __init__(self, config: MomentoVIConfig = MomentoVIConfig()):
         super().__init__(config)
+        if not has_momento:
+            raise LangroidImportError("momento", "momento")
+        self.distance = SimilarityMetric.COSINE_SIMILARITY
         self.config: MomentoVIConfig = config
         emb_model = EmbeddingModel.create(config.embedding)
         self.embedding_fn: EmbeddingFunction = emb_model.embedding_fn()
@@ -114,6 +127,8 @@ class MomentoVI(VectorStore):
         Args:
             empty (bool, optional): Whether to include empty collections.
         """
+        if not has_momento:
+            raise LangroidImportError("momento", "momento")
         response = self.client.list_indexes()
         if isinstance(response, mvi_response.ListIndexes.Success):
             return [ind.name for ind in response.indexes]
@@ -131,11 +146,13 @@ class MomentoVI(VectorStore):
             replace (bool): Whether to replace an existing collection
                 with the same name. Defaults to False.
         """
+        if not has_momento:
+            raise LangroidImportError("momento", "momento")
         self.config.collection_name = collection_name
         response = self.client.create_index(
             index_name=collection_name,
             num_dimensions=self.embedding_dim,
-            similarity_metric=self.config.distance,
+            similarity_metric=self.distance,
         )
         if isinstance(response, mvi_response.CreateIndex.Success):
             logger.info(f"Created collection {collection_name}")

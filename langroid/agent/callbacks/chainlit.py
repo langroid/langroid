@@ -9,19 +9,12 @@ from typing import Any, Callable, Dict, List, Literal, Optional, no_type_check
 
 from pydantic import BaseSettings
 
+from langroid.exceptions import LangroidImportError
+
 try:
     import chainlit as cl
 except ImportError:
-    raise ImportError(
-        """
-        You are attempting to use `chainlit`, which is not installed 
-        by default with `langroid`.
-        Please install langroid with the `chainlit` extra using:
-        `pip install langroid[chainlit]` or 
-        `poetry install -E chainlit`
-        depending on your scenario
-        """
-    )
+    raise LangroidImportError("chainlit", "chainlit")
 
 from chainlit import run_sync
 from chainlit.config import config
@@ -83,9 +76,9 @@ async def setup_llm() -> None:
 
 
 @no_type_check
-async def update_llm(settings: Dict[str, Any]) -> None:
+async def update_llm(new_settings: Dict[str, Any]) -> None:
     """Update LLMConfig and LLM from settings, and save in session state."""
-    cl.user_session.set("llm_settings", settings)
+    cl.user_session.set("llm_settings", new_settings)
     await inform_llm_settings()
     await setup_llm()
 

@@ -7,15 +7,14 @@ from typing import Any, Dict, List, TypeVar
 import fakeredis
 import redis
 from dotenv import load_dotenv
-from pydantic import BaseModel
 
-from langroid.cachedb.base import CacheDB
+from langroid.cachedb.base import CacheDB, CacheDBConfig
 
 T = TypeVar("T", bound="RedisCache")
 logger = logging.getLogger(__name__)
 
 
-class RedisCacheConfig(BaseModel):
+class RedisCacheConfig(CacheDBConfig):
     """Configuration model for RedisCache."""
 
     fake: bool = False

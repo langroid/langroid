@@ -10,7 +10,7 @@ import json
 import textwrap
 from abc import ABC
 from random import choice
-from typing import Any, Dict, List, Type
+from typing import Any, Dict, List, Tuple, Type
 
 from docstring_parser import parse
 from pydantic import BaseModel
@@ -65,9 +65,16 @@ class ToolMessage(ABC, BaseModel):
         return ToolMessageWithRecipient
 
     @classmethod
-    def examples(cls) -> List["ToolMessage"]:
+    def examples(cls) -> List["ToolMessage" | Tuple[str, "ToolMessage"]]:
         """
         Examples to use in few-shot demos with JSON formatting instructions.
+        Each example can be either:
+        - just a ToolMessage instance, e.g. MyTool(param1=1, param2="hello"), or
+        - a tuple (description, ToolMessage instance), where the description is
+            a natural language "thought" that leads to the tool usage,
+            e.g. ("I want to find the square of 5",  SquareTool(num=5))
+            In some scenarios, ncluding such a description can significantly
+            enhance reliability of tool use.
         Returns:
         """
         return []
@@ -83,7 +90,11 @@ class ToolMessage(ABC, BaseModel):
         if len(cls.examples()) == 0:
             return ""
         ex = choice(cls.examples())
-        return ex.json_example()
+        if isinstance(ex, tuple):
+            # (description, example_instance)
+            return f"{ex[0]} => {ex[1].json_example()}"
+        else:
+            return ex.json_example()
 
     def to_json(self) -> str:
         return self.json(indent=4, exclude={"result", "purpose"})
