@@ -26,7 +26,12 @@ class SegmentExtractTool(ToolMessage):
 
     @classmethod
     def examples(cls) -> List["ToolMessage" | Tuple[str, "ToolMessage"]]:
-        return [cls(segment_list="1,3,5-7")]
+        return [
+            (
+                "I want to extract segments 1, 3, and 5 thru 7",
+                cls(segment_list="1,3,5-7"),
+            )
+        ]
 
     @classmethod
     def instructions(cls) -> str:

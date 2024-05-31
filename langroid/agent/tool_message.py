@@ -80,21 +80,34 @@ class ToolMessage(ABC, BaseModel):
         return []
 
     @classmethod
-    def usage_example(cls) -> str:
+    def usage_examples(cls, random: bool = False) -> str:
         """
-        Instruction to the LLM showing an example of how to use the message.
+        Instruction to the LLM showing examples of how to use the tool-message.
+
+        Args:
+            random (bool): whether to pick a random example from the list of examples.
+                Set to `true` when using this to illustrate a dialog between LLM and
+                user.
+                (if false, use ALL examples)
         Returns:
-            str: example of how to use the message
+            str: examples of how to use the tool/function-call
         """
         # pick a random example of the fields
         if len(cls.examples()) == 0:
             return ""
-        ex = choice(cls.examples())
-        if isinstance(ex, tuple):
-            # (description, example_instance)
-            return f"{ex[0]} => {ex[1].json_example()}"
+        if random:
+            examples = [choice(cls.examples())]
         else:
-            return ex.json_example()
+            examples = cls.examples()
+        examples_jsons = [
+            (
+                f"EXAMPLE {i}: (THOUGHT: {ex[0]}) => \n{ex[1].json_example()}"
+                if isinstance(ex, tuple)
+                else f"EXAMPLE {i}:\n {ex.json_example()}"
+            )
+            for i, ex in enumerate(examples, 1)
+        ]
+        return "\n\n".join(examples_jsons)
 
     def to_json(self) -> str:
         return self.json(indent=4, exclude={"result", "purpose"})
@@ -139,6 +152,9 @@ class ToolMessage(ABC, BaseModel):
             # cls.simple_schema() if tool else
             cls.llm_function_schema(request=True).parameters
         )
+        examples_str = ""
+        if cls.examples():
+            examples_str = "EXAMPLES:\n" + cls.usage_examples()
         return textwrap.dedent(
             f"""
             TOOL: {cls.default_value("request")}
@@ -146,7 +162,7 @@ class ToolMessage(ABC, BaseModel):
             JSON FORMAT: {
                 json.dumps(param_dict, indent=4)
             }
-            {"EXAMPLE: " + cls.usage_example() if cls.examples() else ""}
+            {examples_str}
             """.lstrip()
         )
 

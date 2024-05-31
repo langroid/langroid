@@ -284,7 +284,7 @@ class Agent(ABC):
         enabled_classes: List[Type[ToolMessage]] = list(self.llm_tools_map.values())
         # use at most 2 sample conversations, no need to be exhaustive;
         sample_convo = [
-            msg_cls().usage_example()  # type: ignore
+            msg_cls().usage_examples(random=True)  # type: ignore
             for i, msg_cls in enumerate(enabled_classes)
             if i < 2
         ]
