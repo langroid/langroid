@@ -33,8 +33,8 @@ environment, and the results of the execution are returned to the LLM.
 
 For LLM developers, Langroid provides a clean, uniform interface
 for the recently released OpenAI [Function-calling](https://platform.openai.com/docs/guides/gpt/function-calling)
-as well Langroid's own native "tools" mechanism. The latter is useful to have non-OpenAI
-(or other LLMs) that do not have a "native" function-calling facility.
+as well Langroid's own native "tools" mechanism. The native tools mechanism is meant to be
+used when working with non-OpenAI LLMs that do not have a "native" function-calling facility.
 You can choose which to enable by setting the 
 `use_tools` and `use_functions_api` flags in the `ChatAgentConfig` object.
 (Or you can omit setting these, and langroid auto-selects the best mode

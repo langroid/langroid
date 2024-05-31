@@ -149,6 +149,9 @@ pytest-postgresql = "^5.0.0"
 pytest-mysql = "^2.4.2"
 coverage = "^7.2.5"
 
+[tool.poetry.group.docs]
+optional = true
+
 [tool.poetry.group.docs.dependencies]
 
 mkdocs = "^1.4.2"
