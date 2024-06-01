@@ -1,6 +1,6 @@
 # Guide to examples in `langroid-examples` repo
 
-!!! note "Outdated"
+!!! warning "Outdated"
     This guide is from Feb 2024; there have been numerous additional examples
     since then. We recommend you visit the `examples` folder in the core `langroid`
     repo for the most up-to-date examples. These examples are periodically copied

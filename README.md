@@ -388,7 +388,10 @@ For many practical scenarios, you may need additional optional dependencies:
     ```bash
     pip install "langroid[doc-chat,db]"
     ```
-
+- To simply install _all_ optional dependencies, use the `all` extra (but note that this will result in longer load/startup times and a larger install size):
+    ```bash
+    pip install "langroid[all]"
+    ```
 <details>
 <summary><b>Optional Installs for using SQL Chat with a PostgreSQL DB </b></summary>
 
