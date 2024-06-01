@@ -68,7 +68,7 @@ class QdrantDBConfig(VectorStoreConfig):
     embedding: EmbeddingModelsConfig = OpenAIEmbeddingsConfig()
     distance: str = Distance.COSINE
     use_sparse_embeddings: bool = False
-    sparse_embedding_model: str = ""
+    sparse_embedding_model: str = "naver/splade-v3-distilbert"
     sparse_limit: int = 3
 
 
