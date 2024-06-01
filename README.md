@@ -332,7 +332,7 @@ section above)
   a task of an agent can delegate to other sub-tasks: from the point of view of a Task,
   sub-tasks are simply additional responders, to be used in a round-robin fashion 
   after the agent's own responders.
-- **Modularity, Reusabilily, Loose coupling:** The `Agent` and `Task` abstractions allow users to design
+- **Modularity, Reusability, Loose coupling:** The `Agent` and `Task` abstractions allow users to design
   Agents with specific skills, wrap them in Tasks, and combine tasks in a flexible way.
 - **LLM Support**: Langroid supports OpenAI LLMs as well as LLMs from hundreds of 
 providers (local/open or remote/commercial) via proxy libraries and local model servers
