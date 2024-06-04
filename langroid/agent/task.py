@@ -918,9 +918,8 @@ class Task:
         """
         self.n_stalled_steps += 1
         user_dummy_response = self.pending_sender != Entity.USER and self.interactive
-        if (
-            (not self.is_pass_thru) and
-            (not self.task_progress or self.allow_null_result or user_dummy_response)
+        if (not self.is_pass_thru) and (
+            not self.task_progress or self.allow_null_result or user_dummy_response
         ):
 
             # There has been no progress at all in this task, so we
@@ -1385,14 +1384,11 @@ class Task:
         )
 
     def _can_respond(self, e: Responder) -> bool:
-        user_can_respond = (
-            self.interactive or
-            (
-                # regardless of self.interactive, if a msg is explicitly addressed to
-                # user, then wait for user response
-                self.pending_message is not None and
-                self.pending_message.metadata.recipient == Entity.USER
-            )
+        user_can_respond = self.interactive or (
+            # regardless of self.interactive, if a msg is explicitly addressed to
+            # user, then wait for user response
+            self.pending_message is not None
+            and self.pending_message.metadata.recipient == Entity.USER
         )
 
         if self.pending_sender == e or (e == Entity.USER and not user_can_respond):
