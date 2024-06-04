@@ -1,25 +1,18 @@
 [tool.poetry]
 name = "langroid"
-version = "0.1.253"
+version = "0.1.259"
 description = "Harness LLMs with Multi-Agent Programming"
 authors = ["Prasad Chalasani <pchalasani@gmail.com>"]
 readme = "README.md"
 license = "MIT"
+include = ["pyproject.toml"]
+
 
 # =============== MAIN DEPS ==============
 [tool.poetry.dependencies]
 python = ">=3.10,<3.12"
 
-# OPTIONALS
-mkdocs = {version="^1.4.2", optional=true}
-mkdocs-material = {version="^9.1.5", optional=true}
-mkdocstrings = {extras = ["python"], version = "^0.21.2", optional=true}
-mkdocs-awesome-pages-plugin = {version="^2.8.0", optional=true}
-mkdocs-rss-plugin = {version="^1.8.0", optional=true}
-mkdocs-gen-files = {version="^0.4.0", optional=true}
-mkdocs-literate-nav = {version="^0.6.0", optional=true}
-mkdocs-section-index = {version="^0.3.5", optional=true}
-mkdocs-jupyter = {version="^0.24.1", optional=true}
+# =========== OPTIONALS ==============================
 chromadb = {version=">=0.4.21, <=0.4.23", optional=true}
 momento = {version="^1.10.2", optional=true}
 unstructured = {extras = ["docx", "pptx", "pdf"], version = ">=0.10.16,<0.10.18", optional=true}
@@ -49,6 +42,7 @@ python-docx = {version="^1.1.0", optional=true}
 scrapy = {version="^2.11.0", optional=true}
 
 # ====CORE================================
+pyyaml = "^6.0.1"
 onnxruntime = "^1.16.1"
 fire = "^0.5.0"
 bs4 = "^0.0.1"
@@ -95,8 +89,6 @@ async-generator = "^1.10"
 
 python-magic = "^0.4.27"
 
-
-# ================= EXTRAS =================
 [tool.poetry.extras]
 # install these using, e.g.,
 # `poetry install -E [...]` where [...] is one of the extras below
@@ -108,8 +100,18 @@ doc-chat = [
     "pymupdf", "pdf2image", "pytesseract"
 ]
 db = ["postgres", "mysql", "sqlalchemy", "psycopg2", "pymysql"]
-embeddings = ["sentence-transformers", "torch", "transformers", "huggingface-hub"]
-
+hf-transformers = ["sentence-transformers", "torch", "transformers", "huggingface-hub"]
+vecdbs = ["lancedb", "tantivy", "pyarrow", "chromadb"]
+all = [
+    "unstructured", "python-docx", "pdfplumber", "pypdf",
+    "pymupdf", "pdf2image", "pytesseract",
+    "postgres", "mysql", "sqlalchemy", "psycopg2", "pymysql",
+    "sentence-transformers", "torch", "transformers", "huggingface-hub",
+    "lancedb", "tantivy", "pyarrow", "chromadb",
+    "metaphor-python", "neo4j",
+    "litellm",
+    "chainlit", "python-socketio",
+]
 # more granular groupings
 lancedb = ["lancedb", "tantivy", "pyarrow"]
 pdf-parsers = ["pdfplumber", "pypdf", "pymupdf", "pdf2image", "pytesseract"]
@@ -154,9 +156,24 @@ pytest-redis = "^3.0.2"
 pytest-asyncio = "^0.21.1"
 pytest-postgresql = "^5.0.0"
 pytest-mysql = "^2.4.2"
-
-
 coverage = "^7.2.5"
+
+[tool.poetry.group.docs]
+optional = true
+
+[tool.poetry.group.docs.dependencies]
+
+mkdocs = "^1.4.2"
+mkdocs-material = "^9.1.5"
+mkdocstrings = {extras = ["python"], version = "^0.21.2"}
+mkdocs-awesome-pages-plugin = "^2.8.0"
+mkdocs-rss-plugin = "^1.8.0"
+mkdocs-gen-files = "^0.4.0"
+mkdocs-literate-nav = "^0.6.0"
+mkdocs-section-index = "^0.3.5"
+mkdocs-jupyter = "^0.24.1"
+
+
 
 # ========================================
 [build-system]

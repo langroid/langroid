@@ -37,7 +37,7 @@ from langroid.utils.constants import NO_ANSWER
         Cats are very independent. Unlike dogs, they like to be left 
         alone.
         """,
-            "What do we know about cats?",
+            "Characteristics of cats",
             "2-4,7,12-13",  # or LLM could say 2,3,4,7,12,10; we handle this below
         )
     ],
@@ -100,7 +100,7 @@ def test_relevance_extractor_agent(
             very loyal. But so are cats. Unlike cats, dogs can get dirty.""",
                 "Cats are very independent. Unlike dogs, they like to be left alone.",
             ],
-            "What do we know about cats?",
+            "Characteristics of cats",
             ["", "1-3,6", "1,2"],
         )
     ],
@@ -176,7 +176,7 @@ async def test_relevance_extractor_concurrent(
                 very loyal. But so are cats. Unlike cats, dogs can get dirty.""",
                 "Cats are very independent. Unlike dogs, they like to be left alone.",
             ],
-            "What do we know about cats?",
+            "Characteristics of cats",
             ["", "1-3,6", "1,2"],
         )
     ],

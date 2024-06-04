@@ -1,5 +1,11 @@
 # Guide to examples in `langroid-examples` repo
 
+!!! warning "Outdated"
+    This guide is from Feb 2024; there have been numerous additional examples
+    since then. We recommend you visit the `examples` folder in the core `langroid`
+    repo for the most up-to-date examples. These examples are periodically copied
+    over to the `examples` folder in the `langroid-examples` repo.
+
 The [`langroid-examples`](https://github.com/langroid/langroid-examples) repo
 contains several examples of using
 the [Langroid](https://github.com/langroid/langroid) agent-oriented programming 

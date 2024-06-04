@@ -2,12 +2,14 @@
 2-agent doc-aware conversation,
 different from standard question -> answer RAG flow.
 
-GuideAgent answers the user's question, via a multi-step
-conversation, where it could either address:
-- DocAgent (who has access to docs) for info, or
-- User, to ask follow-up questions about their situation/context.
+User indicates some type of problem,
+TroubleShooter Agent engages in conversation with User,
+guiding them toward a solution.
+At each step, Troubleshooter Agent can either address:
+- DocAgent (who has access to docs/manuals) for info, or
+- User, to ask follow-up questions about the problem
 
-python3 examples/docqa/doc-aware-guide-2.py
+python3 examples/docqa/doc-based-troubleshooting.py
 
 """
 
@@ -52,8 +54,9 @@ class DocAgent(DocChatAgent):
             
             Look at the results above. These might be too much for the user to read.
             DECIDE whether you want to:
-            - Ask the User a SINGLE follow-up question to get more info about their 
-                situation or context, OR
+            - Ask the User a SINGLE follow-up question (could be MultipleChoice,
+                where they need to select a numbered choice)
+                to get more info about their situation or context, OR
             - Ask the DocAgent for more information, if you think you need more info.
             - Provide the User a FINAL answer, if you think you have enough information 
                from the User AND the Documents
@@ -62,8 +65,12 @@ class DocAgent(DocChatAgent):
                 you must HELP the user by asking them FOLLOWUP questions
                 about their situation and GUIDE them to a SPECIFIC, 
                 DIRECTLY RELEVANT answer. 
+                You CAN give the user a MULTIPLE CHOICE question, telling them 
+                to pick a number (or choice-letter) from the list.
+                
             REMEMBER - NEVER ask the DocAgent or User MULTIPLE questions at a time,
-                always ask ONE question at a time.
+                always ask ONE question at a time;
+                 if asking the USER, it CAN be a MULTIPLE CHOICE question.
             """
         )
 
@@ -81,8 +88,8 @@ def main(
 
     llm_config = lm.OpenAIGPTConfig(chat_model=model)
     config = DocChatAgentConfig(
-        vecdb=vecdb_config,
         llm=llm_config,
+        vecdb=vecdb_config,
         n_query_rephrases=0,
         hypothetical_answer=False,
         assistant_mode=True,
@@ -141,10 +148,10 @@ def main(
         guide_agent,
         interactive=False,
         system_message=f"""
-        You are VERY HELPFUL GUIDE, who wants to help a User with their inquiry.
+        You are a TROUBLESHOOTER, who wants to help a User with their PROBLEM.
         
         Your task is to GUIDE them STEP BY STEP toward a specific
-        answer that is DIRECTLY RELEVANT to their specific situation.
+        resolution that is DIRECTLY RELEVANT to their specific problem.
         
         IMPORTANT: Your guidance/help should ONLY be based on certain DOCUMENTS
           and NOT on your existing knowledge. NEVER answer based on your own knowledge,
@@ -177,7 +184,10 @@ def main(
             so I will say {DONE}, followed by the answer.   
             
         IMPORTANT: When giving the User a list of choices, always show them
-            a NUMBERED list of choices.          
+            a NUMBERED list of choices.     
+            
+        I REPEAT -- NEVER use your OWN KNOWLEDGE. ALWAYS RELY ON the Documents
+        from DocAgent.     
         """,
     )
     guide_task.add_sub_task(doc_task)

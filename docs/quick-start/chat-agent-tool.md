@@ -27,13 +27,18 @@ or request scanning a large file (which wouldn't fit into its context) for a spe
 pattern.
 - **Code execution**: the LLM can generate code that is executed in a sandboxed
 environment, and the results of the execution are returned to the LLM.
+- **API Calls**: the LLM can generate a JSON containing params for an API call,
+  which the tool handler uses to make the call and return the results to the LLM.
 
 
 For LLM developers, Langroid provides a clean, uniform interface
 for the recently released OpenAI [Function-calling](https://platform.openai.com/docs/guides/gpt/function-calling)
-as well Langroid's own native "tools" mechanism.
+as well Langroid's own native "tools" mechanism. The native tools mechanism is meant to be
+used when working with non-OpenAI LLMs that do not have a "native" function-calling facility.
 You can choose which to enable by setting the 
 `use_tools` and `use_functions_api` flags in the `ChatAgentConfig` object.
+(Or you can omit setting these, and langroid auto-selects the best mode
+depending on the LLM).
 The implementation leverages the excellent 
 [Pydantic](https://docs.pydantic.dev/latest/) library.
 Benefits of using Pydantic are that you never have to write complex JSON specs 
@@ -72,11 +77,26 @@ class ProbeTool(lr.agent.ToolMessage):
         To find which number in my list is closest to the <number> you specify
         """ #(2)!
     number: int #(3)!
+
+    @classmethod
+    def examples(cls): #(4)!
+        # Compiled to few-shot examples sent along with the tool instructions.
+        return [
+            cls(number=10),
+            (
+                "To find which number is closest to 20",
+                cls(number=20),
+            )
+        ]
 ```
 
-1. this indicates that the agent's `probe` method will handle this tool-message
+1. This indicates that the agent's `probe` method will handle this tool-message
 2. The `purpose` is used behind the scenes to instruct the LLM
 3. `number` is a required argument of the tool-message (function)
+4. You can optionally include a class method that returns a list containing examples, 
+   of two types: either a class instance, or a tuple consisting of a description and a 
+   class instance, where the description is the "thought" that leads the LLM to use the
+   tool. In some scenarios this can help with LLM tool-generation accuracy.
 
 ## Define the ChatAgent, with the `probe` method
 

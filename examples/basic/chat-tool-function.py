@@ -41,6 +41,35 @@ class CompanyInfoTool(lr.agent.ToolMessage):
     )
     company_info: CompanyInfo
 
+    @classmethod
+    def examples(cls):
+        """Examples that will be compiled to few-shot examples for the LLM.
+        Illustrating two types of examples below:
+        - example instance
+        - (description, example) tuple
+        """
+        return [
+            cls(
+                company_info=CompanyInfo(
+                    name="IBM",
+                    industry="Technology",
+                    financials=CompanyFinancials(shares=1.24e9, price=140.15, eps=4.68),
+                )
+            ),
+            (
+                "I want to extract and present company info from the passage",
+                cls(
+                    company_info=CompanyInfo(
+                        name="Apple",
+                        industry="Technology",
+                        financials=CompanyFinancials(
+                            shares=16.82e9, price=149.15, eps=5.68
+                        ),
+                    )
+                ),
+            ),
+        ]
+
     def handle(self) -> str:
         """Handle LLM's structured output if it matches CompanyInfo structure.
         This suffices for a "stateless" tool.

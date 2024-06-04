@@ -14,6 +14,7 @@ chainlit run examples/chainlit/multi-agent.py
 
 import langroid as lr
 import chainlit as cl
+import os
 from langroid.agent.callbacks.chainlit import ChainlitTaskCallbacks
 from langroid.agent.callbacks.chainlit import add_instructions
 from langroid.utils.configuration import settings
@@ -22,8 +23,8 @@ from textwrap import dedent
 
 @cl.on_chat_start
 async def on_chat_start(
-    debug: bool = False,
-    no_cache: bool = False,
+    debug: bool = os.getenv("DEBUG", False),
+    no_cache: bool = os.getenv("NOCACHE", False),
 ):
     settings.debug = debug
     settings.cache = not no_cache

@@ -6,6 +6,7 @@
 <div align="center">
 
 [![PyPI - Version](https://img.shields.io/pypi/v/langroid)](https://pypi.org/project/langroid/)
+[![Downloads](https://img.shields.io/pypi/dm/langroid)](https://pypi.org/project/langroid/)
 [![Pytest](https://github.com/langroid/langroid/actions/workflows/pytest.yml/badge.svg)](https://github.com/langroid/langroid/actions/workflows/pytest.yml)
 [![codecov](https://codecov.io/gh/langroid/langroid/branch/main/graph/badge.svg?token=H94BX5F0TE)](https://codecov.io/gh/langroid/langroid)
 [![Multi-Architecture DockerHub](https://github.com/langroid/langroid/actions/workflows/docker-publish.yml/badge.svg)](https://github.com/langroid/langroid/actions/workflows/docker-publish.yml)
@@ -123,12 +124,22 @@ teacher_task.run()
 <summary> <b>Click to expand</b></summary>
 
 - **May 2024:** 
+  - **Slimmer langroid**: All document-parsers (i.e. pdf, doc, docx) and most 
+    vector-databases (except qdrant) 
+    are now optional/extra dependencies, which helps reduce build size, script 
+    start-up time, and install time. For convenience various grouping of "extras" are 
+    provided, e.g. `doc-chat`, `db` (for database-related dependencies). See updated 
+    install instructions below and in the docs.
+  - **Few-shot examples** for tools: when defining a [ToolMessage](https://langroid.github.io/langroid/quick-start/chat-agent-tool/#example-find-the-smallest-number-in-a-list), previously you were able to include a classmethod named `examples`,
+    and a random example from this list would be used to generate a 1-shot example 
+    for the LLM. This has been improved so you can now supply a list of examples 
+    where each example is either a tool instance, or a tuple of (description, 
+    tool instance), where the description is a "thought" that leads the LLM to use 
+    the tool (see example in the [docs](https://langroid.github.io/langroid/quick-start/chat-agent-tool/#example-find-the-smallest-number-in-a-list)). In some scenarios this can improve LLM tool 
+    generation accuracy. Also, now instead of a random example, ALL examples are used to generate few-shot 
+    examples.     
   - [Infinite loop detection](https://github.com/langroid/langroid/blob/0ed30eb467b00d5eaf2933b577a4b2cc37de1aa1/langroid/agent/task.py#L1121) for task loops of cycle-length <= 10 (configurable 
-    in [`TaskConfig`](https://github.
-    com/langroid/langroid/blob/0ed30eb467b00d5eaf2933b577a4b2cc37de1aa1/langroid/agent
-    /task.py#L61). Only detects _exact_ loops, rather than 
-    _approximate_ loops where the entities are saying essentially similar (but not 
-    exactly the same) things repeatedly.
+    in [`TaskConfig`](https://langroid.github.io/langroid/reference/agent/task/#langroid.agent.task.TaskConfig). Only detects _exact_ loops, rather than _approximate_ loops where the entities are saying essentially similar (but not exactly the same) things repeatedly.
   - "@"-addressing: any entity can address any other by name, which can be the name 
     of an agent's responder ("llm", "user", "agent") or a sub-task name. This is a 
     simpler alternative to the `RecipientTool` mechanism, with the tradeoff that 
@@ -322,7 +333,7 @@ section above)
   a task of an agent can delegate to other sub-tasks: from the point of view of a Task,
   sub-tasks are simply additional responders, to be used in a round-robin fashion 
   after the agent's own responders.
-- **Modularity, Reusabilily, Loose coupling:** The `Agent` and `Task` abstractions allow users to design
+- **Modularity, Reusability, Loose coupling:** The `Agent` and `Task` abstractions allow users to design
   Agents with specific skills, wrap them in Tasks, and combine tasks in a flexible way.
 - **LLM Support**: Langroid supports OpenAI LLMs as well as LLMs from hundreds of 
 providers (local/open or remote/commercial) via proxy libraries and local model servers
@@ -378,7 +389,10 @@ For many practical scenarios, you may need additional optional dependencies:
     ```bash
     pip install "langroid[doc-chat,db]"
     ```
-
+- To simply install _all_ optional dependencies, use the `all` extra (but note that this will result in longer load/startup times and a larger install size):
+    ```bash
+    pip install "langroid[all]"
+    ```
 <details>
 <summary><b>Optional Installs for using SQL Chat with a PostgreSQL DB </b></summary>
 
