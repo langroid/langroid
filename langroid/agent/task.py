@@ -156,6 +156,11 @@ class Task:
             interactive (bool): if true, wait for human input after each non-human
                 response (prevents infinite loop of non-human responses).
                 Default is true. If false, then `default_human_response` is set to ""
+                Note: When interactive = False, the one exception is when the user
+                is explicitly addressed, via "@user" or using RecipientTool, in which
+                case the system will wait for a user response. In other words, use
+                `interactive=False` when you want a "largely non-interactive"
+                run, with the exception of explicit user addressing.
             only_user_quits_root (bool): if true, only user can quit the root task.
                 [This param is ignored & deprecated; Keeping for backward compatibility.
                 Instead of this, setting `interactive` suffices]
@@ -912,7 +917,12 @@ class Task:
             parent (ChatDocument|None): parent message of the current message
         """
         self.n_stalled_steps += 1
-        if (not self.task_progress or self.allow_null_result) and not self.is_pass_thru:
+        user_dummy_response = self.pending_sender != Entity.USER and self.interactive
+        if (
+            (not self.is_pass_thru) and
+            (not self.task_progress or self.allow_null_result or user_dummy_response)
+        ):
+
             # There has been no progress at all in this task, so we
             # update the pending_message to a dummy NO_ANSWER msg
             # from the entity 'opposite' to the current pending_sender,
@@ -1375,9 +1385,21 @@ class Task:
         )
 
     def _can_respond(self, e: Responder) -> bool:
-        if self.pending_sender == e:
-            # Responder cannot respond to its own message
+        user_can_respond = (
+            self.interactive or
+            (
+                # regardless of self.interactive, if a msg is explicitly addressed to
+                # user, then wait for user response
+                self.pending_message is not None and
+                self.pending_message.metadata.recipient == Entity.USER
+            )
+        )
+
+        if self.pending_sender == e or (e == Entity.USER and not user_can_respond):
+            # sender is same as e (an entity cannot respond to its own msg),
+            # or user cannot respond
             return False
+
         if self.pending_message is None:
             return True
         if self._recipient_mismatch(e):

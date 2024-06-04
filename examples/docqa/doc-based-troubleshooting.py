@@ -184,7 +184,10 @@ def main(
             so I will say {DONE}, followed by the answer.   
             
         IMPORTANT: When giving the User a list of choices, always show them
-            a NUMBERED list of choices.          
+            a NUMBERED list of choices.     
+            
+        I REPEAT -- NEVER use your OWN KNOWLEDGE. ALWAYS RELY ON the Documents
+        from DocAgent.     
         """,
     )
     guide_task.add_sub_task(doc_task)
