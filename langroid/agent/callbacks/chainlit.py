@@ -214,6 +214,7 @@ def wrap_text_preserving_structure(text: str, width: int = 90) -> str:
 
 class ChainlitCallbackConfig(BaseSettings):
     user_has_agent_name: bool = True  # show agent name in front of "YOU" ?
+    show_subtask_response: bool = True  # show sub-task response as a step?
 
 
 class ChainlitAgentCallbacks:
@@ -611,7 +612,8 @@ class ChainlitTaskCallbacks(ChainlitAgentCallbacks):
         super().__init__(task.agent, msg, config)
         self._inject_callbacks(task)
         self.task = task
-        self.task.callbacks.show_subtask_response = self.show_subtask_response
+        if config.show_subtask_response:
+            self.task.callbacks.show_subtask_response = self.show_subtask_response
 
     @classmethod
     def _inject_callbacks(
