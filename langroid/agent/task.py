@@ -190,6 +190,8 @@ class Task:
         # counts of distinct pending messages in history,
         # to help detect (exact) infinite loops
         self.message_counter: Counter[str] = Counter()
+        self._init_message_counter()
+
         self.history: Deque[str] = deque(
             maxlen=self.config.inf_loop_cycle_len * self.config.inf_loop_wait_factor
         )
@@ -336,6 +338,12 @@ class Task:
     def __str__(self) -> str:
         return f"{self.name}"
 
+    def _init_message_counter(self) -> None:
+        self.message_counter.clear()
+        # create a unique string that will not likely be in any message,
+        # so we always have a message with count=1
+        self.message_counter.update([hash("___NO_MESSAGE___")])
+
     def _cache_session_store(self, key: str, value: str) -> None:
         """
         Cache a key-value pair for the current session.
@@ -447,7 +455,7 @@ class Task:
                 ),
             )
         else:
-            self.pending_message = msg
+            self.pending_message = copy.deepcopy(msg)
             if self.pending_message is not None and self.caller is not None:
                 # msg may have come from `caller`, so we pretend this is from
                 # the CURRENT task's USER entity
@@ -487,7 +495,7 @@ class Task:
         self.max_tokens = max_tokens
         self.session_id = session_id
         self._set_alive()
-        self.message_counter.clear()
+        self._init_message_counter()
         self.history.clear()
 
         assert (
@@ -587,7 +595,7 @@ class Task:
         self.max_tokens = max_tokens
         self.session_id = session_id
         self._set_alive()
-        self.message_counter.clear()
+        self._init_message_counter()
         self.history.clear()
 
         if (
@@ -669,8 +677,8 @@ class Task:
         # TODO decide on whether or not to print, based on is_async
         llm_model = (
             "no-LLM"
-            if self.agent.config.llm is None
-            else self.agent.config.llm.chat_model
+            if self.agent.llm is None
+            else self.agent.llm.config.chat_model
         )
         if not settings.quiet:
             print(
@@ -1049,7 +1057,6 @@ class Task:
         tool_messages = result_msg.tool_messages if result_msg else []
         block = result_msg.metadata.block if result_msg else None
         recipient = result_msg.metadata.recipient if result_msg else None
-        responder = result_msg.metadata.parent_responder if result_msg else None
         tool_ids = result_msg.metadata.tool_ids if result_msg else []
         status = result_msg.metadata.status if result_msg else None
 
@@ -1065,7 +1072,6 @@ class Task:
                 sender=Entity.USER,
                 block=block,
                 status=status,
-                parent_responder=responder,
                 sender_name=self.name,
                 recipient=recipient,
                 tool_ids=tool_ids,
@@ -1148,6 +1154,7 @@ class Task:
             # we haven't seen enough messages to detect a loop
             return False
 
+        # recall there's always a dummy msg with freq = 1
         most_common_msg_counts: List[Tuple[str, int]] = (
             self.message_counter.most_common(max_cycle_len + 1)
         )
@@ -1160,7 +1167,7 @@ class Task:
         ratios = counts[:-1] / counts[1:]
         diffs = counts[:-1] - counts[1:]
         indices = np.where((ratios > F) & (diffs > wait_factor))[0]
-        m = indices[0] if indices.size > 0 else -1
+        m = indices[-1] if indices.size > 0 else -1
         if m < 0:
             # no dominance found, but...
             if len(most_common_msg_counts) <= max_cycle_len:
