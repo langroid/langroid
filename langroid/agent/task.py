@@ -676,9 +676,7 @@ class Task:
             )
         # TODO decide on whether or not to print, based on is_async
         llm_model = (
-            "no-LLM"
-            if self.agent.llm is None
-            else self.agent.llm.config.chat_model
+            "no-LLM" if self.agent.llm is None else self.agent.llm.config.chat_model
         )
         if not settings.quiet:
             print(

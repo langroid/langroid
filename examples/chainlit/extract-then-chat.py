@@ -133,10 +133,11 @@ async def on_chat_start():
                 n_similar_docs=3,
                 n_neighbor_ids=4,
             ),
-            vecdb=lr.vector_store.LanceDBConfig(
+            vecdb=lr.vector_store.QdrantDBConfig(
                 collection_name="book_info",
                 replace_collection=True,
-                storage_path=".lancedb/data/",
+                storage_path=".qdrant/data/",
+                cloud=False,
                 embedding=lr.embedding_models.SentenceTransformerEmbeddingsConfig(
                     model_type="sentence-transformer",
                     model_name="BAAI/bge-large-en-v1.5",

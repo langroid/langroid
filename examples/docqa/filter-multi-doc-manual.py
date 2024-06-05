@@ -16,8 +16,6 @@ NOTES:
 (1) The app works best with GPT4/Turbo, but results may be mixed with local LLMs.
 You may have to tweak the system_message, use_message, and summarize_prompt
 as indicated in comments below, to get good results.
-(2) The default vector-db in DocChatAgent is LanceDB, but you can switch to the other
-    supported vector-dbs, e.g. qdrant or chroma.
 
 """
 

@@ -161,8 +161,8 @@ def _test_sql_chat_agent(
 @pytest.mark.parametrize(
     "fn_api,query,answer",
     [
-        (True, "How many departments are there?", "2"),
         (False, "How many departments are there?", "2"),
+        (True, "How many departments are there?", "2"),
         (True, "What is the total amount of sales?", "600"),
         (False, "What is the total amount of sales?", "600"),
         (True, "How many employees are in Sales?", "1"),

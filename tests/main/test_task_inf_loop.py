@@ -14,7 +14,7 @@ from langroid.utils.configuration import settings
 settings.stream = False
 
 
-@pytest.mark.parametrize("loop_start", [6, 0])
+@pytest.mark.parametrize("loop_start", [0, 6])
 @pytest.mark.parametrize(
     "cycle_len, max_cycle_len",
     [
@@ -25,7 +25,13 @@ settings.stream = False
         (3, 0),  # no loop detection
     ],
 )
-def test_task_inf_loop(loop_start: int, cycle_len: int, max_cycle_len: int):
+@pytest.mark.parametrize("user_copy", [False, True])
+def test_task_inf_loop(
+    loop_start: int,
+    cycle_len: int,
+    max_cycle_len: int,
+    user_copy: bool,  # should user response copy the message?
+):
     """Test that Task.run() can detect infinite loops"""
 
     # set up an agent with a llm_response that produces cyclical output
@@ -49,8 +55,11 @@ def test_task_inf_loop(loop_start: int, cycle_len: int, max_cycle_len: int):
             self,
             msg: Optional[str | ChatDocument] = None,
         ) -> Optional[ChatDocument]:
-            """Mock user response: simply repeat the message"""
-            content = msg if isinstance(msg, str) else msg.content
+            """Mock user response"""
+            if user_copy:
+                content = msg if isinstance(msg, str) else msg.content
+            else:
+                content = "ok"
             return self.create_user_response(content)
 
     loop_agent = LoopAgent(ChatAgentConfig())
