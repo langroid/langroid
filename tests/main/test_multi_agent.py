@@ -287,4 +287,3 @@ def test_multi_agent_no_answer(test_settings: Settings):
     task_a.agent.clear_history(0)
     result = task_a.run(turns=2)
     assert NO_ANSWER in result.content
-

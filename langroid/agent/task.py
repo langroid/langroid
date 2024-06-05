@@ -916,7 +916,7 @@ class Task:
             self.message_counter.update([hashed_msg])
             self.history.append(hashed_msg)
 
-    def _process_invalid_step_result(self, parent: ChatDocument|None) -> None:
+    def _process_invalid_step_result(self, parent: ChatDocument | None) -> None:
         """
         Since step had no valid result from any responder, decide whether to update the
         self.pending_message to a NO_ANSWER message from the opposite entity,
