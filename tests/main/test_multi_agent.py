@@ -281,9 +281,10 @@ def test_multi_agent_no_answer(test_settings: Settings):
     # recipient replies NO_ANSWER, which is considered invalid, hence
     # pending message does not change
     pending_message = task_a.step()
-    assert "who" in pending_message.content.lower()
-    assert pending_message.metadata.sender == Entity.LLM
+    assert NO_ANSWER in pending_message.content
+    assert pending_message.metadata.sender == Entity.USER
 
     task_a.agent.clear_history(0)
     result = task_a.run(turns=2)
-    assert "who" in result.content.lower()
+    assert NO_ANSWER in result.content
+

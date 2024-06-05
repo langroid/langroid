@@ -83,19 +83,21 @@ async def test_task_step_async(test_settings: Settings):
     assert "London" in task.pending_message.content
     assert task.pending_message.metadata.sender == Entity.LLM
 
-    agent.default_human_response = NO_ANSWER
-    # NO_ANSWER is considered invalid, pending message does not change!
+    # It's Human's turn; they say nothing,
+    # and this is reflected in `self.pending_message` as NO_ANSWER
+    agent.default_human_response = ""
+    # Human says ''
     await task.step_async()
-    assert "London" in task.pending_message.content
-    assert task.pending_message.metadata.sender == Entity.LLM
-    # still no valid responses, so pending message does not change
+    assert NO_ANSWER in task.pending_message.content
+    assert task.pending_message.metadata.sender == Entity.USER
+
+    # Since chat was user-initiated, LLM can still respond to NO_ANSWER
+    # with something like "How can I help?"
     await task.step_async()
-    assert "London" in task.pending_message.content
     assert task.pending_message.metadata.sender == Entity.LLM
 
     # reset task
     question = "What is my name?"
-    agent.default_human_response = None
     task = Task(
         agent,
         name="Test",
@@ -103,11 +105,11 @@ async def test_task_step_async(test_settings: Settings):
         user_message=question,
         restart=True,
     )
-    # LLM responds with NO_ANSWER, which is invalid, hence pending_message remains None
+    # LLM responds with NO_ANSWER
     task.init()
-    pending_message = await task.step_async()
-    assert pending_message is None
-    assert task.pending_sender == Entity.USER
+    await task.step_async()
+    assert NO_ANSWER in task.pending_message.content
+    assert task.pending_message.metadata.sender == Entity.LLM
 
 
 @pytest.mark.asyncio
