@@ -787,7 +787,7 @@ class Task:
                 # skip trying other responders in this step
                 break
         if not found_response:
-            self._process_invalid_step_result()
+            self._process_invalid_step_result(parent)
         self._show_pending_message_if_debug()
         return self.pending_message
 
@@ -879,7 +879,7 @@ class Task:
                 # skip trying other responders in this step
                 break
         if not found_response:
-            self._process_invalid_step_result()
+            self._process_invalid_step_result(parent)
         self._show_pending_message_if_debug()
         return self.pending_message
 
@@ -916,11 +916,28 @@ class Task:
             self.message_counter.update([hashed_msg])
             self.history.append(hashed_msg)
 
-    def _process_invalid_step_result(self) -> None:
+    def _process_invalid_step_result(self, parent: ChatDocument | None) -> None:
         """
-        No valid result from any responder => increment stalled counter.
+        Since step had no valid result from any responder, decide whether to update the
+        self.pending_message to a NO_ANSWER message from the opposite entity,
+        or leave it as is.
+        Args:
+           parent (ChatDocument|None): parent message of the current message
         """
         self.n_stalled_steps += 1
+        if (not self.task_progress or self.allow_null_result) and not self.is_pass_thru:
+            # There has been no progress at all in this task, so we
+            # update the pending_message to a dummy NO_ANSWER msg
+            # from the entity 'opposite' to the current pending_sender,
+            # so we show "progress" and avoid getting stuck in an infinite loop.
+            responder = (
+                Entity.LLM if self.pending_sender == Entity.USER else Entity.USER
+            )
+            self.pending_message = ChatDocument(
+                content=NO_ANSWER,
+                metadata=ChatDocMetaData(sender=responder, parent=parent),
+            )
+            self.pending_sender = responder
         self.log_message(self.pending_sender, self.pending_message, mark=True)
 
     def _show_pending_message_if_debug(self) -> None:
