@@ -44,7 +44,7 @@ def chat() -> None:
 
     planner_cfg = OpenAIAssistantConfig(
         name="Planner",
-        llm=OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT4_TURBO),
+        llm=OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT4o),
         use_cached_thread=reuse,
         use_cached_assistant=reuse,
         system_message="""
@@ -65,7 +65,7 @@ def chat() -> None:
         name="Retriever",
         use_cached_thread=reuse,
         use_cached_assistant=reuse,
-        llm=OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT4_TURBO),
+        llm=OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT4o),
         system_message="Answer questions based on the documents provided.",
     )
 

@@ -237,7 +237,7 @@ def main(
             use_tools=tools,
             use_functions_api=not tools,
             llm=OpenAIGPTConfig(
-                chat_model=model or OpenAIChatModel.GPT4_TURBO,
+                chat_model=model or OpenAIChatModel.GPT4o,
             ),
         ),
     )

@@ -145,7 +145,7 @@ def chat(opts: CLIOptions) -> None:
     system_msg = re.sub("you are", "", system_msg, flags=re.IGNORECASE)
 
     llm_config = lm.OpenAIGPTConfig(
-        chat_model=opts.model or lm.OpenAIChatModel.GPT4_TURBO,
+        chat_model=opts.model or lm.OpenAIChatModel.GPT4o,
         # or, other possibilities for example:
         # "litellm/bedrock/anthropic.claude-instant-v1"
         # "ollama/llama2"

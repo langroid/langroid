@@ -23,7 +23,7 @@ from langroid.utils.configuration import settings
 import langroid.language_models as lm
 
 # for best results:
-DEFAULT_LLM = lm.OpenAIChatModel.GPT4_TURBO
+DEFAULT_LLM = lm.OpenAIChatModel.GPT4o
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 

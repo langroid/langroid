@@ -20,10 +20,10 @@ import langroid.language_models as lm
 # - we use `lm.OpenAIGPTConfig` to incidate this config is for LLMs served
 #    at OpenAI-compatible endpoints)
 # - if you omit `chat_model` below, it defaults to OpenAI GPT4-turbo,
-#   or you can explicitly specify it as `lm.OpenAIChatModel.GPT4` or `lm.OpenAIChatModel.GPT4_TURBO`
+#   or you can explicitly specify it as `lm.OpenAIChatModel.GPT4` or `lm.OpenAIChatModel.GPT4o`
 
 llm_config = lm.OpenAIGPTConfig(
-    chat_model=lm.OpenAIChatModel.GPT4_TURBO,  # or,e.g. "ollama/mistral"
+    chat_model=lm.OpenAIChatModel.GPT4o,  # or,e.g. "ollama/mistral"
     max_output_tokens=200,
     chat_context_length=2048,  # adjust based on your local LLM params
 )

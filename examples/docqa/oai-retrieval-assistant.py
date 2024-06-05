@@ -39,7 +39,7 @@ def chat() -> None:
     )
 
     cfg = OpenAIAssistantConfig(
-        llm=OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT4_TURBO),
+        llm=OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT4o),
         use_cached_assistant=reuse,
         use_cached_thread=reuse,
         system_message="Answer questions based on the provided document.",

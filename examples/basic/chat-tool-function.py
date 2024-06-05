@@ -90,7 +90,7 @@ class CompanyInfoTool(lr.agent.ToolMessage):
 
 def run(model: str = ""):  # or, e.g., "ollama/mistral:7b-instruct-v0.2-q8_0"
     lm_config = lm.OpenAIGPTConfig(
-        chat_model=model or lm.OpenAIChatModel.GPT4_TURBO,  # or
+        chat_model=model or lm.OpenAIChatModel.GPT4o,  # or
     )
     tool_name = CompanyInfoTool.default_value("request")
     agent_config = lr.ChatAgentConfig(

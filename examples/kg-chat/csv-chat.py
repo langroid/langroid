@@ -91,7 +91,7 @@ def main(
             use_tools=tools,
             use_functions_api=not tools,
             llm=OpenAIGPTConfig(
-                chat_model=model or OpenAIChatModel.GPT4_TURBO,
+                chat_model=model or OpenAIChatModel.GPT4o,
                 chat_context_length=16_000,  # adjust based on model
                 timeout=45,
                 temperature=0.2,

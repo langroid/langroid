@@ -120,7 +120,7 @@ async def on_chat_start():
 
     llm_cfg = lm.OpenAIGPTConfig(
         # or, e.g. "ollama/mistral:7b-instruct-v0.2-q8_0" but result may be brittle
-        chat_model=lm.OpenAIChatModel.GPT4_TURBO,
+        chat_model=lm.OpenAIChatModel.GPT4o,
         chat_context_length=16_000,  # adjust based on model
     )
     doc_agent = DocChatAgent(

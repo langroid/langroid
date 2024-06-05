@@ -35,7 +35,7 @@ async def setup_agent() -> None:
     model = cl.user_session.get("settings", {}).get("ModelName")
     print(f"Using model: {model}")
     llm_config = lm.OpenAIGPTConfig(
-        chat_model=model or lm.OpenAIChatModel.GPT4_TURBO,
+        chat_model=model or lm.OpenAIChatModel.GPT4o,
         # or, other possibilities for example:
         # "litellm/bedrock/anthropic.claude-instant-v1"
         # "ollama/llama2"
