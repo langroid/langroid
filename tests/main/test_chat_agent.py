@@ -79,21 +79,21 @@ def test_process_messages(test_settings: Settings):
     assert "London" in task.pending_message.content
     assert task.pending_message.metadata.sender == Entity.LLM
 
-    # It's Human's turn; they say nothing,
-    # and this is reflected in `self.pending_message` as NO_ANSWER
-    agent.default_human_response = ""
-    # Human says ''
+    agent.default_human_response = NO_ANSWER
+    # NO_ANSWER is considered invalid, pending message does not change!
     task.step()
-    assert NO_ANSWER in task.pending_message.content
-    assert task.pending_message.metadata.sender == Entity.USER
+    assert "London" in task.pending_message.content
+    assert task.pending_message.metadata.sender == Entity.LLM
 
-    # Since chat was user-initiated, LLM can still respond to NO_ANSWER
-    # with something like "How can I help?"
+    # User is still saying NO_ANSWER, so pending msg still does not change
+
     task.step()
+    assert "London" in task.pending_message.content
     assert task.pending_message.metadata.sender == Entity.LLM
 
     # reset task
     question = "What is my name?"
+    agent.default_human_response = None
     task = Task(
         agent,
         name="Test",
@@ -103,9 +103,11 @@ def test_process_messages(test_settings: Settings):
     )
     # LLM responds with NO_ANSWER
     task.init()
-    task.step()
-    assert NO_ANSWER in task.pending_message.content
-    assert task.pending_message.metadata.sender == Entity.LLM
+    pending_message = task.step()
+    assert pending_message is None
+    # pending_sender is set as "User' in init(), and it does not change
+    # there are no valid responses in task.step()
+    assert task.pending_sender == Entity.USER
 
 
 def test_task(test_settings: Settings):

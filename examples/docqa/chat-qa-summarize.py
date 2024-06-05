@@ -50,7 +50,7 @@ def main(
     ),
 ) -> None:
     llm_config = lm.OpenAIGPTConfig(
-        chat_model=model or lm.OpenAIChatModel.GPT4_TURBO,
+        chat_model=model or lm.OpenAIChatModel.GPT4o,
     )
     config = lr.agent.special.DocChatAgentConfig(
         llm=llm_config,

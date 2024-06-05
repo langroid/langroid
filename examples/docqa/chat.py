@@ -44,7 +44,7 @@ def main(
     ),
 ) -> None:
     llm_config = lm.OpenAIGPTConfig(
-        chat_model=model or lm.OpenAIChatModel.GPT4_TURBO,
+        chat_model=model or lm.OpenAIChatModel.GPT4o,
         chat_context_length=16_000,  # adjust as needed
         temperature=0.2,
         max_output_tokens=300,

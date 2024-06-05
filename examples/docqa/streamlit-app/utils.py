@@ -1,5 +1,5 @@
 from langroid.agent.special import DocChatAgent, DocChatAgentConfig
-from langroid.vector_store.lancedb import LanceDBConfig
+from langroid.vector_store.qdrantdb import QdrantDBConfig
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
 from langroid.parsing.parser import ParsingConfig
 from langroid.language_models.openai_gpt import OpenAIGPTConfig
@@ -31,10 +31,11 @@ def configure(filename: str, chat_model: str = "") -> DocChatAgentConfig:
         show_stats=False,
         cross_encoder_reranking_model="",
         llm=llm_cfg,
-        vecdb=LanceDBConfig(
+        vecdb=QdrantDBConfig(
             embedding=oai_embed_config,
             collection_name="lease",
             replace_collection=True,
+            cloud=False,
         ),
         doc_paths=[filename],
     )

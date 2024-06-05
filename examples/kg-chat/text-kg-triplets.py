@@ -98,7 +98,7 @@ def main(
         neo4j_settings=neo4j_settings,
         show_stats=False,
         llm=lm.OpenAIGPTConfig(
-            chat_model=model or lm.OpenAIChatModel.GPT4_TURBO,
+            chat_model=model or lm.OpenAIChatModel.GPT4o,
         ),
     )
 
@@ -173,7 +173,7 @@ def main(
         neo4j_settings=neo4j_settings,
         show_stats=False,
         llm=lm.OpenAIGPTConfig(
-            chat_model=model or lm.OpenAIChatModel.GPT4_TURBO,
+            chat_model=model or lm.OpenAIChatModel.GPT4o,
         ),
     )
 

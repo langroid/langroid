@@ -51,7 +51,7 @@ def main(
     nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
 ) -> None:
     llm_config_rag = OpenAIGPTConfig(
-        chat_model=model_rag or model or lm.OpenAIChatModel.GPT4_TURBO,
+        chat_model=model_rag or model or lm.OpenAIChatModel.GPT4o,
         # or, other possibilities for example:
         # "litellm/bedrock/anthropic.claude-instant-v1"
         # "ollama/llama2"
@@ -109,7 +109,7 @@ def main(
         ChatAgentConfig(
             name="WriterAgent",
             llm=OpenAIGPTConfig(
-                chat_model=model or lm.OpenAIChatModel.GPT4_TURBO,
+                chat_model=model or lm.OpenAIChatModel.GPT4o,
                 chat_context_length=8192,  # adjust based on model
             ),
             vecdb=None,

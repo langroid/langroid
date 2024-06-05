@@ -36,7 +36,7 @@ def main(
     )
     config = lr.ChatAgentConfig(
         llm=lm.OpenAIGPTConfig(
-            chat_model=lm.OpenAIChatModel.GPT4_TURBO,
+            chat_model=lm.OpenAIChatModel.GPT4o,
         ),
         vecdb=None,
     )

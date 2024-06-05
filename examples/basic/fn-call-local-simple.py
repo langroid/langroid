@@ -28,7 +28,7 @@ import langroid.language_models as lm
 from langroid.agent.chat_document import ChatDocument
 
 # for best results:
-DEFAULT_LLM = lm.OpenAIChatModel.GPT4_TURBO
+DEFAULT_LLM = lm.OpenAIChatModel.GPT4o
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 

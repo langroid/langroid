@@ -45,8 +45,6 @@ class ChatDocMetaData(DocMetaData):
     parent: Optional["ChatDocument"] = None
     sender: Entity
     tool_ids: List[str] = []  # stack of tool_ids; used by OpenAIAssistant
-    # when result returns to parent, pretend message is from this entity
-    parent_responder: None | Entity = None
     block: None | Entity = None
     sender_name: str = ""
     recipient: str = ""
