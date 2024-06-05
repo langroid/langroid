@@ -72,7 +72,7 @@ class TaskConfig(BaseModel):
 
     inf_loop_cycle_len: int = 10
     inf_loop_dominance_factor: float = 1.5
-    inf_loop_wait_factor: float = 5.0
+    inf_loop_wait_factor: int = 5
 
 
 class Task:
@@ -190,7 +190,9 @@ class Task:
         # counts of distinct pending messages in history,
         # to help detect (exact) infinite loops
         self.message_counter: Counter[str] = Counter()
-        self.history_count: Deque[int] = deque(maxlen=self.config.inf_loop_cycle_len)
+        self.history: Deque[str] = deque(
+            maxlen=self.config.inf_loop_cycle_len * self.config.inf_loop_wait_factor
+        )
         # copy the agent's config, so that we don't modify the original agent's config,
         # which may be shared by other agents.
         try:
@@ -486,7 +488,7 @@ class Task:
         self.session_id = session_id
         self._set_alive()
         self.message_counter.clear()
-        self.history_count.clear()
+        self.history.clear()
 
         assert (
             msg is None or isinstance(msg, str) or isinstance(msg, ChatDocument)
@@ -586,7 +588,7 @@ class Task:
         self.session_id = session_id
         self._set_alive()
         self.message_counter.clear()
-        self.history_count.clear()
+        self.history.clear()
 
         if (
             isinstance(msg, ChatDocument)
@@ -906,7 +908,7 @@ class Task:
         if self.pending_message is not None:
             hashed_msg = hash(str(self.pending_message))
             self.message_counter.update([hashed_msg])
-            self.history_count.append(self.message_counter[hashed_msg])
+            self.history.append(hashed_msg)
 
     def _process_invalid_step_result(self) -> None:
         """
@@ -1133,9 +1135,9 @@ class Task:
             So if you plot these frequencies in decreasing order,
             you will see a big drop in the plot, from m to m+1.
             We call the freqs until m the "dominant" freqs.
-        2. Say we found m such dominant frequencies.
-           If these are the same as the freqs of the last m messages,
-           then we are likely in a loop.
+        2. Say we found m such dominant messages
+           If the set of last (W * m) messages are the same as the
+           set of m dominant messages,  then we are likely in a loop.
         """
         max_cycle_len = self.config.inf_loop_cycle_len
         if max_cycle_len <= 0:
@@ -1174,12 +1176,13 @@ class Task:
                 return False
 
         dominant_msg_counts = most_common_msg_counts[: m + 1]
-        # if the dominant m message counts are the same as the
-        # counts of the last m messages, then we are likely in a loop
-        dominant_counts = sorted([c for _, c in dominant_msg_counts])
-        recent_counts = sorted(list(self.history_count)[-(m + 1) :])
-
-        return dominant_counts == recent_counts
+        # if the SET of dominant m messages is the same as the
+        # the SET of last m*w messages, (where w = config.inf_loop_wait_factor),
+        # then we are likely in a loop
+        dominant_msgs = set([msg for msg, _ in dominant_msg_counts])
+        lookback = wait_factor * (m + 1)
+        recent_msgs = set(list(self.history)[-lookback:])
+        return dominant_msgs == recent_msgs
 
     def done(
         self, result: ChatDocument | None = None, r: Responder | None = None

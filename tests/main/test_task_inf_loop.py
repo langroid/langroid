@@ -18,7 +18,7 @@ settings.stream = False
 @pytest.mark.parametrize(
     "cycle_len, max_cycle_len",
     [
-        (3, 5),  # inf loop
+        (3, 8),  # inf loop
         (5, 3),  # no inf loop
         (1000, 5),  # no inf loop
         (1, 5),  # inf loop
@@ -45,11 +45,23 @@ def test_task_inf_loop(loop_start: int, cycle_len: int, max_cycle_len: int):
             self._render_llm_response(response)
             return response
 
+        def user_response(
+            self,
+            msg: Optional[str | ChatDocument] = None,
+        ) -> Optional[ChatDocument]:
+            """Mock user response: simply repeat the message"""
+            content = msg if isinstance(msg, str) else msg.content
+            return self.create_user_response(content)
+
     loop_agent = LoopAgent(ChatAgentConfig())
     task_config = lr.TaskConfig(
         inf_loop_cycle_len=max_cycle_len,
     )
-    task = lr.Task(loop_agent, interactive=False, config=task_config)
+    task = lr.Task(
+        loop_agent,
+        interactive=True,
+        config=task_config,
+    )
 
     # Test with a run that should raise the exception
     if cycle_len < max_cycle_len:  # i.e. an actual loop within the run
