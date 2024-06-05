@@ -421,15 +421,9 @@ class OpenAIGPT(LanguageModel):
                 self.api_base = "http://" + self.api_base
         elif self.config.chat_model.startswith("ollama/"):
             self.config.ollama = True
-            
-            # allow setting ollama base url via code as well
-            # if not set or empty, use the default OLLAMA_BASE_URL
-            # otherwise use the value set in the config.
-            if self.config.api_base is None or len(self.config.api_base) == 0:
-                self.api_base = OLLAMA_BASE_URL
-            else:
-                self.api_base = self.config.api_base
- 
+
+            # use api_base from config if set, else fall back on OLLAMA_BASE_URL
+            self.api_base = self.config.api_base or OLLAMA_BASE_URL
             self.api_key = OLLAMA_API_KEY
             self.config.chat_model = self.config.chat_model.replace("ollama/", "")
         else:
