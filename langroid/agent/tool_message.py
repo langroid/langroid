@@ -73,7 +73,7 @@ class ToolMessage(ABC, BaseModel):
         - a tuple (description, ToolMessage instance), where the description is
             a natural language "thought" that leads to the tool usage,
             e.g. ("I want to find the square of 5",  SquareTool(num=5))
-            In some scenarios, ncluding such a description can significantly
+            In some scenarios, including such a description can significantly
             enhance reliability of tool use.
         Returns:
         """

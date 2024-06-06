@@ -1059,6 +1059,9 @@ class Task:
         """
         Get result of task. This is the default behavior.
         Derived classes can override this.
+
+        Note the result of a task is returned as if it is from the User entity.
+
         Returns:
             ChatDocument: result of task
         """
