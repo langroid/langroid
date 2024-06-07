@@ -112,13 +112,26 @@ class LanceDB(VectorStore):
             )
 
     def _setup_schemas(self, doc_cls: Type[Document] | None) -> None:
-        doc_cls = doc_cls or self.config.document_class
-        self.unflattened_schema = self._create_lance_schema(doc_cls)
-        self.schema = (
-            self._create_flat_lance_schema(doc_cls)
-            if self.config.flatten
-            else self.unflattened_schema
-        )
+        try:
+            doc_cls = doc_cls or self.config.document_class
+            self.unflattened_schema = self._create_lance_schema(doc_cls)
+            self.schema = (
+                self._create_flat_lance_schema(doc_cls)
+                if self.config.flatten
+                else self.unflattened_schema
+            )
+        except (AttributeError, TypeError) as e:
+            raise ValueError(
+                f"""
+                {e}
+                ====
+                One reason for this error is that you may be using Pydantic v2,
+                which is not yet compatible with Langroid's LanceDB integration.
+                If so, to use Lancedb with Langroid, please install the 
+                latest pydantic 1.10.15 instead of pydantic v2, e.g. 
+                pip install pydantic==1.10.15
+                """
+            )
 
     def clear_empty_collections(self) -> int:
         coll_names = self.list_collections()
@@ -247,7 +260,23 @@ class LanceDB(VectorStore):
                     return
                 else:
                     logger.warning("Recreating fresh collection")
-        self.client.create_table(collection_name, schema=self.schema, mode="overwrite")
+        try:
+            self.client.create_table(
+                collection_name, schema=self.schema, mode="overwrite"
+            )
+        except TypeError as e:
+            raise TypeError(
+                f"""
+                {e}
+                ====
+                One reason for this error is that you may be using Pydantic v2,
+                which is not yet compatible with Langroid's LanceDB integration.
+                If so, to use Lancedb with Langroid, please install the 
+                latest pydantic 1.10.15 instead of pydantic v2, e.g. 
+                pip install pydantic==1.10.15
+                """
+            )
+
         if settings.debug:
             level = logger.getEffectiveLevel()
             logger.setLevel(logging.INFO)
