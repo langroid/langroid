@@ -1074,7 +1074,7 @@ class Task:
         fun_call = result_msg.function_call if result_msg else None
         tool_messages = result_msg.tool_messages if result_msg else []
         block = result_msg.metadata.block if result_msg else None
-        recipient = result_msg.metadata.recipient if result_msg else None
+        recipient = result_msg.metadata.recipient if result_msg else ""
         tool_ids = result_msg.metadata.tool_ids if result_msg else []
         status = result_msg.metadata.status if result_msg else None
 

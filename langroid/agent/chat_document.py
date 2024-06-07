@@ -48,7 +48,7 @@ class ChatDocMetaData(DocMetaData):
     block: None | Entity = None
     sender_name: str = ""
     recipient: str = ""
-    usage: Optional[LLMTokenUsage]
+    usage: Optional[LLMTokenUsage] = None
     cached: bool = False
     displayed: bool = False
     has_citation: bool = False
