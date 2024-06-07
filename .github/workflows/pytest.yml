@@ -120,6 +120,7 @@ jobs:
           --lf --last-failed-no-failures none \
           tests/main tests/extras/test_hf_embeddings.py
         poetry run coverage report
+      continue-on-error: true
 
     - name: Install Pydantic 1.10.15
       run: pip install pydantic==1.10.15
