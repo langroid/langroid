@@ -20,7 +20,6 @@ from typing import (
 )
 
 import numpy as np
-from pydantic.v1 import BaseModel
 from rich import print
 from rich.markup import escape
 
@@ -37,6 +36,7 @@ from langroid.exceptions import InfiniteLoopException
 from langroid.mytypes import Entity
 from langroid.parsing.parse_json import extract_top_level_json
 from langroid.parsing.routing import parse_addressed_message
+from langroid.pydantic_v1 import BaseModel
 from langroid.utils.configuration import settings
 from langroid.utils.constants import (
     DONE,

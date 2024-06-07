@@ -2,9 +2,9 @@ import logging
 from abc import ABC, abstractmethod
 
 import numpy as np
-from pydantic.v1 import BaseSettings
 
 from langroid.mytypes import EmbeddingFunction
+from langroid.pydantic_v1 import BaseSettings
 
 logging.getLogger("openai").setLevel(logging.ERROR)
 

@@ -1,4 +1,4 @@
-from pydantic.v1 import BaseModel
+from langroid.pydantic_v1 import BaseModel
 
 
 # Define the ANSI escape sequences for various colors and reset

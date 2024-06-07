@@ -16,9 +16,9 @@ from typing import (
 
 import numpy as np
 import pandas as pd
-from pydantic.v1 import BaseModel, ValidationError, create_model
 
 from langroid.mytypes import DocMetaData, Document
+from langroid.pydantic_v1 import BaseModel, ValidationError, create_model
 
 logger = logging.getLogger(__name__)
 

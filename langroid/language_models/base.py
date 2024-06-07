@@ -6,12 +6,11 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union
 
-from pydantic.v1 import BaseModel, BaseSettings, Field
-
 from langroid.cachedb.base import CacheDBConfig
 from langroid.parsing.agent_chats import parse_message
 from langroid.parsing.parse_json import top_level_json_field
 from langroid.prompts.dialog import collate_chat_history
+from langroid.pydantic_v1 import BaseModel, BaseSettings, Field
 from langroid.utils.configuration import settings
 from langroid.utils.output.printing import show_if_debug
 

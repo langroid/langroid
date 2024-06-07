@@ -24,7 +24,6 @@ import openai
 from groq import AsyncGroq, Groq
 from httpx import Timeout
 from openai import AsyncOpenAI, OpenAI
-from pydantic.v1 import BaseModel
 from rich import print
 from rich.markup import escape
 
@@ -50,6 +49,7 @@ from langroid.language_models.utils import (
     async_retry_with_exponential_backoff,
     retry_with_exponential_backoff,
 )
+from langroid.pydantic_v1 import BaseModel
 from langroid.utils.configuration import settings
 from langroid.utils.constants import Colors
 from langroid.utils.system import friendly_error

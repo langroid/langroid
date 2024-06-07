@@ -15,7 +15,8 @@ from typing import (
 
 import pandas as pd
 from dotenv import load_dotenv
-from pydantic.v1 import BaseModel, ValidationError, create_model
+
+from langroid.pydantic_v1 import BaseModel, ValidationError, create_model
 
 if TYPE_CHECKING:
     from lancedb.query import LanceVectorQueryBuilder

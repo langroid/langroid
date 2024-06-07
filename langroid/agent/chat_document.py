@@ -2,8 +2,6 @@ import json
 from enum import Enum
 from typing import List, Optional, Union
 
-from pydantic.v1 import BaseModel, Extra
-
 from langroid.agent.tool_message import ToolMessage
 from langroid.language_models.base import (
     LLMFunctionCall,
@@ -15,6 +13,7 @@ from langroid.language_models.base import (
 from langroid.mytypes import DocMetaData, Document, Entity
 from langroid.parsing.agent_chats import parse_message
 from langroid.parsing.parse_json import extract_top_level_json, top_level_json_field
+from langroid.pydantic_v1 import BaseModel, Extra
 from langroid.utils.output.printing import shorten_text
 
 
