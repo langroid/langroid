@@ -123,10 +123,10 @@ jobs:
 
     - name: Install Pydantic 1.10.15
       run: pip install pydantic==1.10.15
-    - name: Retry FAILED tests ONLY with pydantic 1.10.15
+    - name: Retry FAILED tests ONLY with pydantic 1.10.15, gpt-4
       if: steps.second_test.outcome == 'failure'
       run: |
-        poetry run pytest \
+        poetry run pytest --m gpt-4 \
           --first-test-file=tests/main/test_task_inf_loop.py \
           --first-test-file=tests/main/test_task.py \
           --first-test-file=tests/main/test_lance_doc_chat_agent.py \
