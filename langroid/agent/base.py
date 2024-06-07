@@ -20,7 +20,6 @@ from typing import (
     no_type_check,
 )
 
-from pydantic.v1 import BaseSettings, ValidationError, validator
 from rich import print
 from rich.console import Console
 from rich.markup import escape
@@ -41,6 +40,7 @@ from langroid.mytypes import Entity
 from langroid.parsing.parse_json import extract_top_level_json
 from langroid.parsing.parser import Parser, ParsingConfig
 from langroid.prompts.prompts_config import PromptsConfig
+from langroid.pydantic_v1 import BaseSettings, ValidationError, validator
 from langroid.utils.configuration import settings
 from langroid.utils.constants import NO_ANSWER
 from langroid.utils.output import status
