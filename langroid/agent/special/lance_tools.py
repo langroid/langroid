@@ -1,6 +1,6 @@
 import logging
 
-from pydantic import BaseModel
+from pydantic.v1 import BaseModel
 
 from langroid.agent.tool_message import ToolMessage
 

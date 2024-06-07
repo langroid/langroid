@@ -4,7 +4,7 @@ from contextlib import contextmanager
 from typing import Iterator, List, Literal
 
 from dotenv import find_dotenv, load_dotenv
-from pydantic import BaseSettings
+from pydantic.v1 import BaseSettings
 
 
 class Settings(BaseSettings):

@@ -2,7 +2,7 @@ import json
 import logging
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
-from pydantic import BaseModel, BaseSettings
+from pydantic.v1 import BaseModel, BaseSettings
 from rich import print
 from rich.console import Console
 

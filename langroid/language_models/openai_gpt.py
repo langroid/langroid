@@ -24,7 +24,7 @@ import openai
 from groq import AsyncGroq, Groq
 from httpx import Timeout
 from openai import AsyncOpenAI, OpenAI
-from pydantic import BaseModel
+from pydantic.v1 import BaseModel
 from rich import print
 from rich.markup import escape
 

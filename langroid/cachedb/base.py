@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 from typing import Any, Dict, List
 
-from pydantic import BaseSettings
+from pydantic.v1 import BaseSettings
 
 
 class CacheDBConfig(BaseSettings):

@@ -13,7 +13,7 @@ from random import choice
 from typing import Any, Dict, List, Tuple, Type
 
 from docstring_parser import parse
-from pydantic import BaseModel
+from pydantic.v1 import BaseModel
 
 from langroid.language_models.base import LLMFunctionSpec
 from langroid.utils.pydantic_utils import (

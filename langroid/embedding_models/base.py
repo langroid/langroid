@@ -2,7 +2,7 @@ import logging
 from abc import ABC, abstractmethod
 
 import numpy as np
-from pydantic import BaseSettings
+from pydantic.v1 import BaseSettings
 
 from langroid.mytypes import EmbeddingFunction
 

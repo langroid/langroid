@@ -8,7 +8,7 @@ from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union
 
 import aiohttp
-from pydantic import BaseModel, BaseSettings, Field
+from pydantic.v1 import BaseModel, BaseSettings, Field
 
 from langroid.cachedb.base import CacheDBConfig
 from langroid.mytypes import Document

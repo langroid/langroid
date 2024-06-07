@@ -3,7 +3,7 @@ from enum import Enum
 from typing import Dict, List, Literal
 
 import tiktoken
-from pydantic import BaseSettings
+from pydantic.v1 import BaseSettings
 
 from langroid.mytypes import Document
 from langroid.parsing.para_sentence_split import create_chunks, remove_extra_whitespace

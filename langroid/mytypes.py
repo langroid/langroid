@@ -4,7 +4,7 @@ from enum import Enum
 from textwrap import dedent
 from typing import Any, Callable, Dict, List, Union
 
-from pydantic import BaseModel, Extra
+from pydantic.v1 import BaseModel, Extra
 
 Number = Union[int, float]
 Embedding = List[Number]

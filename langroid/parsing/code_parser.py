@@ -2,7 +2,7 @@ from functools import reduce
 from typing import Callable, List
 
 import tiktoken
-from pydantic import BaseSettings
+from pydantic.v1 import BaseSettings
 from pygments import lex
 from pygments.lexers import get_lexer_by_name
 from pygments.token import Token

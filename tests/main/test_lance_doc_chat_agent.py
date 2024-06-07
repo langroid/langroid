@@ -2,7 +2,7 @@ from typing import Type
 
 import pandas as pd
 import pytest
-from pydantic import Field
+from pydantic.v1 import Field
 
 from langroid.agent.special.doc_chat_agent import DocChatAgentConfig
 from langroid.agent.special.lance_doc_chat_agent import LanceDocChatAgent

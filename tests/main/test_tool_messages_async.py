@@ -2,7 +2,7 @@ import itertools
 from typing import List
 
 import pytest
-from pydantic import Field
+from pydantic.v1 import Field
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.tool_message import ToolMessage

@@ -15,7 +15,7 @@ from github import Github
 from github.ContentFile import ContentFile
 from github.Label import Label
 from github.Repository import Repository
-from pydantic import BaseModel, BaseSettings, Field
+from pydantic.v1 import BaseModel, BaseSettings, Field
 
 from langroid.mytypes import DocMetaData, Document
 from langroid.parsing.document_parser import DocumentParser, DocumentType

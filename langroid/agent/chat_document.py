@@ -2,7 +2,7 @@ import json
 from enum import Enum
 from typing import List, Optional, Union
 
-from pydantic import BaseModel, Extra
+from pydantic.v1 import BaseModel, Extra
 
 from langroid.agent.tool_message import ToolMessage
 from langroid.language_models.base import (

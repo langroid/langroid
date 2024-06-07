@@ -3,7 +3,7 @@ import json
 from typing import List, Optional
 
 import pytest
-from pydantic import BaseModel, Field
+from pydantic.v1 import BaseModel, Field
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.tool_message import ToolMessage

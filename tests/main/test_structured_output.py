@@ -1,7 +1,7 @@
 from typing import List
 
 import pytest
-from pydantic import BaseModel, Field
+from pydantic.v1 import BaseModel, Field
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.tool_message import ToolMessage
