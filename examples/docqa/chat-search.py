@@ -21,11 +21,9 @@ https://langroid.github.io/langroid/tutorials/local-llm-setup/
 import re
 from typing import List
 
-import typer
 from rich import print
 from rich.prompt import Prompt
 
-from langroid.pydantic_v1 import BaseSettings
 import langroid.language_models as lm
 from langroid.agent.tool_message import ToolMessage
 from langroid.agent.chat_agent import ChatAgent, ChatDocument
@@ -38,6 +36,7 @@ from langroid.agent.task import Task
 from langroid.utils.constants import NO_ANSWER
 from langroid.utils.configuration import set_global, Settings
 from fire import Fire
+
 
 class RelevantExtractsTool(ToolMessage):
     request = "relevant_extracts"
