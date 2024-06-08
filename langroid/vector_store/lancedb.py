@@ -38,6 +38,7 @@ from langroid.utils.pydantic_utils import (
     flatten_pydantic_model,
     nested_dict_from_flat,
 )
+from langroid.utils.system import pydantic_major_version
 from langroid.vector_store.base import VectorStore, VectorStoreConfig
 
 try:
@@ -121,17 +122,21 @@ class LanceDB(VectorStore):
                 else self.unflattened_schema
             )
         except (AttributeError, TypeError) as e:
-            raise ValueError(
-                f"""
-                {e}
-                ====
-                One reason for this error is that you may be using Pydantic v2,
-                which is not yet compatible with Langroid's LanceDB integration.
-                If so, to use Lancedb with Langroid, please install the 
-                latest pydantic 1.10.15 instead of pydantic v2, e.g. 
-                pip install pydantic==1.10.15
-                """
-            )
+            pydantic_version = pydantic_major_version()
+            if pydantic_version > 1:
+                raise ValueError(
+                    f"""
+                    {e}
+                    ====
+                    You are using Pydantic v{pydantic_version},
+                    which is not yet compatible with Langroid's LanceDB integration.
+                    To use Lancedb with Langroid, please install the 
+                    latest pydantic 1.x instead of pydantic v2, e.g. 
+                    pip install "pydantic<2.0.0"
+                    """
+                )
+            else:
+                raise e
 
     def clear_empty_collections(self) -> int:
         coll_names = self.list_collections()
@@ -264,18 +269,22 @@ class LanceDB(VectorStore):
             self.client.create_table(
                 collection_name, schema=self.schema, mode="overwrite"
             )
-        except TypeError as e:
-            raise TypeError(
-                f"""
-                {e}
-                ====
-                One reason for this error is that you may be using Pydantic v2,
-                which is not yet compatible with Langroid's LanceDB integration.
-                If so, to use Lancedb with Langroid, please install the 
-                latest pydantic 1.10.15 instead of pydantic v2, e.g. 
-                pip install pydantic==1.10.15
-                """
-            )
+        except (AttributeError, TypeError) as e:
+            pydantic_version = pydantic_major_version()
+            if pydantic_version > 1:
+                raise ValueError(
+                    f"""
+                    {e}
+                    ====
+                    You are using Pydantic v{pydantic_version},
+                    which is not yet compatible with Langroid's LanceDB integration.
+                    To use Lancedb with Langroid, please install the 
+                    latest pydantic 1.x instead of pydantic v2, e.g. 
+                    pip install "pydantic<2.0.0"
+                    """
+                )
+            else:
+                raise e
 
         if settings.debug:
             level = logger.getEffectiveLevel()
