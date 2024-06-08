@@ -123,7 +123,8 @@ jobs:
       continue-on-error: true
 
     - name: Install Langroid with "lancedb" extra which constrains to Pydantic 1.x
-      run: poetry install \
+      run: |
+        poetry install \
         -E "lancedb momento meilisearch chromadb hf-embeddings unstructured pdf-parsers docx sql" \
         --with dev
     - name: Retry FAILED tests ONLY with "lancedb" extra (=> pydantic 1.10.15), gpt-4
