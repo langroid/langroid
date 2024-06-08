@@ -25,7 +25,7 @@ import typer
 from rich import print
 from rich.prompt import Prompt
 
-from pydantic import BaseSettings
+from langroid.pydantic_v1 import BaseSettings
 import langroid.language_models as lm
 from langroid.agent.tool_message import ToolMessage
 from langroid.agent.chat_agent import ChatAgent, ChatDocument

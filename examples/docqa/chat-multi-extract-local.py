@@ -35,7 +35,7 @@ Optional script args:
 
 import typer
 from rich import print
-from pydantic import BaseModel
+from langroid.pydantic_v1 import BaseModel
 from typing import List, Optional
 import json
 import os

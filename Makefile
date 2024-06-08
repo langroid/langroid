@@ -35,8 +35,16 @@ stubs:
 	@poetry run stubgen -p langroid -o stubs
 	@echo "Stubs generated in the 'stubs' directory"
 
+.PHONY: fix-pydantic
+
+# Entry to replace pydantic imports in specified directories
+fix-pydantic:
+	@echo "Fixing pydantic imports..."
+	@chmod +x scripts/fix-pydantic-imports.sh
+	@./scripts/fix-pydantic-imports.sh
+
 .PHONY: check
-check: lint type-check
+check: fix-pydantic lint type-check
 
 .PHONY: tests
 tests:

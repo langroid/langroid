@@ -14,7 +14,7 @@ Use -f option to use OpenAI function calling API instead of Langroid tool.
 
 import typer
 from rich import print
-from pydantic import BaseModel
+from langroid.pydantic_v1 import BaseModel
 import json
 import os
 

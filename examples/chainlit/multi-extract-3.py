@@ -32,7 +32,7 @@ https://langroid.github.io/langroid/tutorials/local-llm-setup/
 """
 
 from rich import print
-from pydantic import BaseModel
+from langroid.pydantic_v1 import BaseModel
 from typing import List
 import json
 import os
