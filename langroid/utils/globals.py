@@ -1,6 +1,6 @@
 from typing import Any, Dict, Optional, Type, TypeVar
 
-from pydantic import BaseModel
+from langroid.pydantic_v1 import BaseModel
 
 T = TypeVar("T", bound="GlobalState")
 

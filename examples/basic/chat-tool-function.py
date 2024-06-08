@@ -13,7 +13,7 @@ python3 examples/basic/chat-tool-function.py -m ollama/mistral:7b-instruct-v0.2-
 
 import langroid as lr
 import langroid.language_models as lm
-from pydantic import BaseModel, Field
+from langroid.pydantic_v1 import BaseModel, Field
 from fire import Fire
 
 # define a nested structure for Company information

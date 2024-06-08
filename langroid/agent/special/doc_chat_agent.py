@@ -1313,7 +1313,7 @@ class DocChatAgent(ChatAgent):
             meta.update(extracts[0].metadata)
             return ChatDocument(
                 content="\n\n".join([e.content for e in extracts]),
-                metadata=ChatDocMetaData(**meta),
+                metadata=ChatDocMetaData(**meta),  # type: ignore
             )
         response = self.get_summary_answer(query, extracts)
 

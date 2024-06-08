@@ -20,7 +20,6 @@ from typing import (
 )
 
 import numpy as np
-from pydantic import BaseModel
 from rich import print
 from rich.markup import escape
 
@@ -37,6 +36,7 @@ from langroid.exceptions import InfiniteLoopException
 from langroid.mytypes import Entity
 from langroid.parsing.parse_json import extract_top_level_json
 from langroid.parsing.routing import parse_addressed_message
+from langroid.pydantic_v1 import BaseModel
 from langroid.utils.configuration import settings
 from langroid.utils.constants import (
     DONE,
@@ -1074,7 +1074,7 @@ class Task:
         fun_call = result_msg.function_call if result_msg else None
         tool_messages = result_msg.tool_messages if result_msg else []
         block = result_msg.metadata.block if result_msg else None
-        recipient = result_msg.metadata.recipient if result_msg else None
+        recipient = result_msg.metadata.recipient if result_msg else ""
         tool_ids = result_msg.metadata.tool_ids if result_msg else []
         status = result_msg.metadata.status if result_msg else None
 

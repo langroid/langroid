@@ -14,7 +14,7 @@ chainlit run examples/chainlit/extract-then-chat.py
 """
 
 from langroid import ChatDocument
-from pydantic import BaseModel
+from langroid.pydantic_v1 import BaseModel
 from typing import List
 import os
 

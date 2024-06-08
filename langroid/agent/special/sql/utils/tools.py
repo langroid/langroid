@@ -29,7 +29,7 @@ class GetTableSchemaTool(ToolMessage):
     @classmethod
     def example(cls) -> "GetTableSchemaTool":
         return cls(
-            tables=("employees", "departments", "sales"),
+            tables=["employees", "departments", "sales"],
         )
 
 

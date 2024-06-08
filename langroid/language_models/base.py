@@ -1,5 +1,4 @@
 import ast
-import asyncio
 import json
 import logging
 from abc import ABC, abstractmethod
@@ -7,18 +6,11 @@ from datetime import datetime
 from enum import Enum
 from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union
 
-import aiohttp
-from pydantic import BaseModel, BaseSettings, Field
-
 from langroid.cachedb.base import CacheDBConfig
-from langroid.mytypes import Document
 from langroid.parsing.agent_chats import parse_message
 from langroid.parsing.parse_json import top_level_json_field
 from langroid.prompts.dialog import collate_chat_history
-from langroid.prompts.templates import (
-    EXTRACTION_PROMPT_GPT4,
-    SUMMARY_ANSWER_PROMPT_GPT4,
-)
+from langroid.pydantic_v1 import BaseModel, BaseSettings, Field
 from langroid.utils.configuration import settings
 from langroid.utils.output.printing import show_if_debug
 
@@ -184,7 +176,7 @@ class LLMResponse(BaseModel):
     message: str
     tool_id: str = ""  # used by OpenAIAssistant
     function_call: Optional[LLMFunctionCall] = None
-    usage: Optional[LLMTokenUsage]
+    usage: Optional[LLMTokenUsage] = None
     cached: bool = False
 
     def __str__(self) -> str:
@@ -486,107 +478,6 @@ class LanguageModel(ABC):
         standalone = self.generate(prompt=prompt, max_tokens=1024).message.strip()
         show_if_debug(prompt, "FOLLOWUP->STANDALONE-RESPONSE= ")
         return standalone
-
-    async def get_verbatim_extract_async(self, question: str, passage: Document) -> str:
-        """
-        Asynchronously, get verbatim extract from passage
-        that is relevant to a question.
-        Asynch allows parallel calls to the LLM API.
-        """
-        async with aiohttp.ClientSession():
-            templatized_prompt = EXTRACTION_PROMPT_GPT4
-            final_prompt = templatized_prompt.format(
-                question=question, content=passage.content
-            )
-            show_if_debug(final_prompt, "EXTRACT-PROMPT= ")
-            final_extract = await self.agenerate(prompt=final_prompt, max_tokens=1024)
-            show_if_debug(final_extract.message.strip(), "EXTRACT-RESPONSE= ")
-        return final_extract.message.strip()
-
-    async def _get_verbatim_extracts(
-        self,
-        question: str,
-        passages: List[Document],
-    ) -> List[Document]:
-        async with aiohttp.ClientSession():
-            verbatim_extracts = await asyncio.gather(
-                *(self.get_verbatim_extract_async(question, P) for P in passages)
-            )
-        metadatas = [P.metadata for P in passages]
-        # return with metadata so we can use it downstream, e.g. to cite sources
-        return [
-            Document(content=e, metadata=m)
-            for e, m in zip(verbatim_extracts, metadatas)
-        ]
-
-    def get_verbatim_extracts(
-        self, question: str, passages: List[Document]
-    ) -> List[Document]:
-        """
-        From each passage, extract verbatim text that is relevant to a question,
-        using concurrent API calls to the LLM.
-        Args:
-            question: question to be answered
-            passages: list of passages from which to extract relevant verbatim text
-            LLM: LanguageModel to use for generating the prompt and extract
-        Returns:
-            list of verbatim extracts from passages that are relevant to question
-        """
-        docs = asyncio.run(self._get_verbatim_extracts(question, passages))
-        return docs
-
-    def get_summary_answer(self, question: str, passages: List[Document]) -> Document:
-        """
-        Given a question and a list of (possibly) doc snippets,
-        generate an answer if possible
-        Args:
-            question: question to answer
-            passages: list of `Document` objects each containing a possibly relevant
-                snippet, and metadata
-        Returns:
-            a `Document` object containing the answer,
-            and metadata containing source citations
-
-        """
-
-        # Define an auxiliary function to transform the list of
-        # passages into a single string
-        def stringify_passages(passages: List[Document]) -> str:
-            return "\n".join(
-                [
-                    f"""
-                Extract: {p.content}
-                Source: {p.metadata.source}
-                """
-                    for p in passages
-                ]
-            )
-
-        passages_str = stringify_passages(passages)
-        # Substitute Q and P into the templatized prompt
-
-        final_prompt = SUMMARY_ANSWER_PROMPT_GPT4.format(
-            question=f"Question:{question}", extracts=passages_str
-        )
-        show_if_debug(final_prompt, "SUMMARIZE_PROMPT= ")
-        # Generate the final verbatim extract based on the final prompt
-        llm_response = self.generate(prompt=final_prompt, max_tokens=1024)
-        final_answer = llm_response.message.strip()
-        show_if_debug(final_answer, "SUMMARIZE_RESPONSE= ")
-        parts = final_answer.split("SOURCE:", maxsplit=1)
-        if len(parts) > 1:
-            content = parts[0].strip()
-            sources = parts[1].strip()
-        else:
-            content = final_answer
-            sources = ""
-        return Document(
-            content=content,
-            metadata={
-                "source": "SOURCE: " + sources,
-                "cached": llm_response.cached,
-            },
-        )
 
 
 class StreamingIfAllowed:

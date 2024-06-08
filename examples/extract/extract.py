@@ -17,7 +17,7 @@ import json
 import typer
 from typing import List
 from rich import print
-from pydantic import BaseModel
+from langroid.pydantic_v1 import BaseModel
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task

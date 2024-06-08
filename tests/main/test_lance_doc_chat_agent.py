@@ -2,7 +2,6 @@ from typing import Type
 
 import pandas as pd
 import pytest
-from pydantic import Field
 
 from langroid.agent.special.doc_chat_agent import DocChatAgentConfig
 from langroid.agent.special.lance_doc_chat_agent import LanceDocChatAgent
@@ -11,6 +10,7 @@ from langroid.agent.special.lance_tools import QueryPlan, QueryPlanTool
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
 from langroid.mytypes import DocMetaData, Document
 from langroid.parsing.parser import ParsingConfig, Splitter
+from langroid.pydantic_v1 import Field
 from langroid.utils.configuration import Settings, set_global
 from langroid.utils.constants import NO_ANSWER
 from langroid.utils.system import rmdir

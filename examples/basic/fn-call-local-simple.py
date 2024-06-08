@@ -20,7 +20,7 @@ import os
 from typing import List
 import fire
 
-from pydantic import BaseModel, Field
+from langroid.pydantic_v1 import BaseModel, Field
 import langroid as lr
 from langroid.utils.configuration import settings
 from langroid.agent.tool_message import ToolMessage

@@ -191,7 +191,7 @@ class LanceQueryPlanAgent(ChatAgent):
             # save result, to be used in query_plan_feedback()
             self.result = msg.content
             # assemble QueryPlanAnswerTool...
-            query_plan_answer_tool = QueryPlanAnswerTool(
+            query_plan_answer_tool = QueryPlanAnswerTool(  # type: ignore
                 plan=self.curr_query_plan,
                 answer=self.result,
             )
