@@ -30,7 +30,6 @@ neo4j = {version = "^5.14.1", optional = true}
 huggingface-hub = {version="^0.21.2", optional=true}
 transformers = {version="^4.40.1", optional=true}
 lancedb = {version="^0.8.2", optional=true}
-langroid_pydantic_v1 = {version="^0.1.0", optional=true}
 tantivy = {version="^0.21.0", optional=true}
 pypdf = {version="^3.12.2", optional=true}
 pymupdf = {version="^1.23.3", optional=true}
@@ -115,8 +114,7 @@ all = [
     "chainlit", "python-socketio",
 ]
 # more granular groupings
-langroid_pydantic_v1 = ["langroid_pydantic_v1"]
-lancedb = ["lancedb", "tantivy", "pyarrow", "langroid_pydantic_v1"]
+lancedb = ["lancedb", "tantivy", "pyarrow"]
 pdf-parsers = ["pdfplumber", "pypdf", "pymupdf", "pdf2image", "pytesseract"]
 docx = ["python-docx"]
 scrapy = ["scrapy"]

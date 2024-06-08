@@ -86,7 +86,7 @@ jobs:
         python -m pip install --upgrade pip
         
         poetry install \
-          -E "momento meilisearch chromadb hf-embeddings unstructured pdf-parsers docx sql" \
+          -E "lancedb momento meilisearch chromadb hf-embeddings unstructured pdf-parsers docx sql" \
           --with dev
 
     - name: Dump dependencies to file
@@ -122,12 +122,9 @@ jobs:
         poetry run coverage report
       continue-on-error: true
 
-    - name: Install Langroid with "lancedb" extra which constrains to Pydantic 1.x
-      run: |
-        poetry install \
-        -E "lancedb momento meilisearch chromadb hf-embeddings unstructured pdf-parsers docx sql" \
-        --with dev
-    - name: Retry FAILED tests ONLY with "lancedb" extra (=> pydantic 1.10.15), gpt-4
+    - name: Install Pydantic 1.x to pass lancedb tests
+      run: poetry add "pydantic<2.0.0"
+    - name: Retry FAILED tests ONLY with pydantic 1.x, gpt-4
       if: steps.second_test.outcome == 'failure'
       run: |
         poetry run pytest --m gpt-4 \
