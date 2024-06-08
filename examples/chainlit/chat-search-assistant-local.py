@@ -306,7 +306,7 @@ async def main(
     load_dotenv()
 
     llm_config = lm.OpenAIGPTConfig(
-        chat_model=model or lm.OpenAIChatModel.GPT4_TURBO,
+        chat_model=model or lm.OpenAIChatModel.GPT4o,
         chat_context_length=16_000,
         temperature=0.2,
         max_output_tokens=500,

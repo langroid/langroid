@@ -20,7 +20,7 @@ import os
 from typing import List
 import fire
 
-from pydantic import BaseModel, Field
+from langroid.pydantic_v1 import BaseModel, Field
 import langroid as lr
 from langroid.utils.configuration import settings
 from langroid.agent.tool_message import ToolMessage
@@ -28,7 +28,7 @@ import langroid.language_models as lm
 from langroid.agent.chat_document import ChatDocument
 
 # for best results:
-DEFAULT_LLM = lm.OpenAIChatModel.GPT4_TURBO
+DEFAULT_LLM = lm.OpenAIChatModel.GPT4o
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 

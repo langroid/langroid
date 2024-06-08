@@ -229,7 +229,7 @@ def test_multi_agent_directed(test_settings: Settings):
 
 def test_multi_agent_no_answer(test_settings: Settings):
     """
-    Test whether TO:[<recipient>] works as expected.
+    Test whether @[<recipient>] works as expected.
     Also verfies that when LLM of subtask returns NO_ANSWER,
     the appropriate result is received by the parent task.
     """
@@ -251,7 +251,7 @@ def test_multi_agent_no_answer(test_settings: Settings):
         You are talking to two people B and C, and 
         your job is to pick B or C and ask that person 'Who are you?'.
         Whoever you address, make sure you say it in the form 
-        TO[<recipient>]: <your message>.
+        @[recipient]: <your message>.
         As the conversation progresses your job is always keep asking 
         this question to either B or C.
         """,
@@ -274,12 +274,15 @@ def test_multi_agent_no_answer(test_settings: Settings):
     task_a.add_sub_task([task_b, task_c])
     # kick off with empty msg, so LLM will respond based on initial sys, user messages
     task_a.init()
-    for _ in range(2):
-        # LLM asks, addressing B or C
-        task_a.step()
-        # recipient replies NO_ANSWER
-        task_a.step()
-        assert NO_ANSWER in task_a.pending_message.content
+    # LLM asks "Who are you", addressing B or C
+    pending_message = task_a.step()
+    assert "who" in pending_message.content.lower()
+    assert pending_message.metadata.sender == Entity.LLM
+    # recipient replies NO_ANSWER, which is considered invalid, hence
+    # pending message does not change
+    pending_message = task_a.step()
+    assert NO_ANSWER in pending_message.content
+    assert pending_message.metadata.sender == Entity.USER
 
     task_a.agent.clear_history(0)
     result = task_a.run(turns=2)

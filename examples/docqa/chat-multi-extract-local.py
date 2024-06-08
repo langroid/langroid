@@ -28,14 +28,14 @@ https://langroid.github.io/langroid/tutorials/local-llm-setup/
 
 Optional script args:
 -m <local-model-name>, e.g. -m ollama/mistral:7b-instruct-v0.2-q8_0
-(if omitted, defaults to GPT4_TURBO)
+(if omitted, defaults to GPT4o)
 -nc to disable cache retrieval
 -d to enable debug mode: see prompts, agent msgs etc.
 """
 
 import typer
 from rich import print
-from pydantic import BaseModel
+from langroid.pydantic_v1 import BaseModel
 from typing import List, Optional
 import json
 import os
@@ -213,7 +213,7 @@ def main(
         )
     )
     llm_cfg = OpenAIGPTConfig(
-        chat_model=model or lm.OpenAIChatModel.GPT4_TURBO,
+        chat_model=model or lm.OpenAIChatModel.GPT4o,
         chat_context_length=32_000,  # adjust based on model
         timeout=120,
         temperature=0.2,

@@ -7,9 +7,8 @@ import logging
 import textwrap
 from typing import Any, Callable, Dict, List, Literal, Optional, no_type_check
 
-from pydantic import BaseSettings
-
 from langroid.exceptions import LangroidImportError
+from langroid.pydantic_v1 import BaseSettings
 
 try:
     import chainlit as cl

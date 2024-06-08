@@ -20,7 +20,6 @@ from typing import (
 )
 
 import numpy as np
-from pydantic import BaseModel
 from rich import print
 from rich.markup import escape
 
@@ -37,6 +36,7 @@ from langroid.exceptions import InfiniteLoopException
 from langroid.mytypes import Entity
 from langroid.parsing.parse_json import extract_top_level_json
 from langroid.parsing.routing import parse_addressed_message
+from langroid.pydantic_v1 import BaseModel
 from langroid.utils.configuration import settings
 from langroid.utils.constants import (
     DONE,
@@ -72,7 +72,7 @@ class TaskConfig(BaseModel):
 
     inf_loop_cycle_len: int = 10
     inf_loop_dominance_factor: float = 1.5
-    inf_loop_wait_factor: float = 5.0
+    inf_loop_wait_factor: int = 5
 
 
 class Task:
@@ -190,7 +190,11 @@ class Task:
         # counts of distinct pending messages in history,
         # to help detect (exact) infinite loops
         self.message_counter: Counter[str] = Counter()
-        self.history_count: Deque[int] = deque(maxlen=self.config.inf_loop_cycle_len)
+        self._init_message_counter()
+
+        self.history: Deque[str] = deque(
+            maxlen=self.config.inf_loop_cycle_len * self.config.inf_loop_wait_factor
+        )
         # copy the agent's config, so that we don't modify the original agent's config,
         # which may be shared by other agents.
         try:
@@ -335,6 +339,12 @@ class Task:
     def __str__(self) -> str:
         return f"{self.name}"
 
+    def _init_message_counter(self) -> None:
+        self.message_counter.clear()
+        # create a unique string that will not likely be in any message,
+        # so we always have a message with count=1
+        self.message_counter.update([hash("___NO_MESSAGE___")])
+
     def _cache_session_store(self, key: str, value: str) -> None:
         """
         Cache a key-value pair for the current session.
@@ -446,7 +456,7 @@ class Task:
                 ),
             )
         else:
-            self.pending_message = msg
+            self.pending_message = copy.deepcopy(msg)
             if self.pending_message is not None and self.caller is not None:
                 # msg may have come from `caller`, so we pretend this is from
                 # the CURRENT task's USER entity
@@ -491,8 +501,8 @@ class Task:
         self.max_tokens = max_tokens
         self.session_id = session_id
         self._set_alive()
-        self.message_counter.clear()
-        self.history_count.clear()
+        self._init_message_counter()
+        self.history.clear()
 
         assert (
             msg is None or isinstance(msg, str) or isinstance(msg, ChatDocument)
@@ -595,8 +605,8 @@ class Task:
         self.max_tokens = max_tokens
         self.session_id = session_id
         self._set_alive()
-        self.message_counter.clear()
-        self.history_count.clear()
+        self._init_message_counter()
+        self.history.clear()
 
         if (
             isinstance(msg, ChatDocument)
@@ -676,9 +686,7 @@ class Task:
             )
         # TODO decide on whether or not to print, based on is_async
         llm_model = (
-            "no-LLM"
-            if self.agent.config.llm is None
-            else self.agent.config.llm.chat_model
+            "no-LLM" if self.agent.llm is None else self.agent.llm.config.chat_model
         )
         if not settings.quiet:
             print(
@@ -923,7 +931,7 @@ class Task:
         if self.pending_message is not None:
             hashed_msg = hash(str(self.pending_message))
             self.message_counter.update([hashed_msg])
-            self.history_count.append(self.message_counter[hashed_msg])
+            self.history.append(hashed_msg)
 
     def _process_invalid_step_result(self, parent: ChatDocument | None) -> None:
         """
@@ -931,14 +939,10 @@ class Task:
         self.pending_message to a NO_ANSWER message from the opposite entity,
         or leave it as is.
         Args:
-            parent (ChatDocument|None): parent message of the current message
+           parent (ChatDocument|None): parent message of the current message
         """
         self.n_stalled_steps += 1
-        user_dummy_response = self.pending_sender != Entity.USER and self.interactive
-        if (not self.is_pass_thru) and (
-            not self.task_progress or self.allow_null_result or user_dummy_response
-        ):
-
+        if (not self.task_progress or self.allow_null_result) and not self.is_pass_thru:
             # There has been no progress at all in this task, so we
             # update the pending_message to a dummy NO_ANSWER msg
             # from the entity 'opposite' to the current pending_sender,
@@ -1072,6 +1076,9 @@ class Task:
         """
         Get result of task. This is the default behavior.
         Derived classes can override this.
+
+        Note the result of a task is returned as if it is from the User entity.
+
         Returns:
             ChatDocument: result of task
         """
@@ -1084,8 +1091,7 @@ class Task:
         fun_call = result_msg.function_call if result_msg else None
         tool_messages = result_msg.tool_messages if result_msg else []
         block = result_msg.metadata.block if result_msg else None
-        recipient = result_msg.metadata.recipient if result_msg else None
-        responder = result_msg.metadata.parent_responder if result_msg else None
+        recipient = result_msg.metadata.recipient if result_msg else ""
         tool_ids = result_msg.metadata.tool_ids if result_msg else []
         status = result_msg.metadata.status if result_msg else None
 
@@ -1101,7 +1107,6 @@ class Task:
                 sender=Entity.USER,
                 block=block,
                 status=status,
-                parent_responder=responder,
                 sender_name=self.name,
                 recipient=recipient,
                 tool_ids=tool_ids,
@@ -1171,9 +1176,9 @@ class Task:
             So if you plot these frequencies in decreasing order,
             you will see a big drop in the plot, from m to m+1.
             We call the freqs until m the "dominant" freqs.
-        2. Say we found m such dominant frequencies.
-           If these are the same as the freqs of the last m messages,
-           then we are likely in a loop.
+        2. Say we found m such dominant messages
+           If the set of last (W * m) messages are the same as the
+           set of m dominant messages,  then we are likely in a loop.
         """
         max_cycle_len = self.config.inf_loop_cycle_len
         if max_cycle_len <= 0:
@@ -1184,6 +1189,7 @@ class Task:
             # we haven't seen enough messages to detect a loop
             return False
 
+        # recall there's always a dummy msg with freq = 1
         most_common_msg_counts: List[Tuple[str, int]] = (
             self.message_counter.most_common(max_cycle_len + 1)
         )
@@ -1196,7 +1202,7 @@ class Task:
         ratios = counts[:-1] / counts[1:]
         diffs = counts[:-1] - counts[1:]
         indices = np.where((ratios > F) & (diffs > wait_factor))[0]
-        m = indices[0] if indices.size > 0 else -1
+        m = indices[-1] if indices.size > 0 else -1
         if m < 0:
             # no dominance found, but...
             if len(most_common_msg_counts) <= max_cycle_len:
@@ -1212,12 +1218,13 @@ class Task:
                 return False
 
         dominant_msg_counts = most_common_msg_counts[: m + 1]
-        # if the dominant m message counts are the same as the
-        # counts of the last m messages, then we are likely in a loop
-        dominant_counts = sorted([c for _, c in dominant_msg_counts])
-        recent_counts = sorted(list(self.history_count)[-(m + 1) :])
-
-        return dominant_counts == recent_counts
+        # if the SET of dominant m messages is the same as the
+        # the SET of last m*w messages, (where w = config.inf_loop_wait_factor),
+        # then we are likely in a loop
+        dominant_msgs = set([msg for msg, _ in dominant_msg_counts])
+        lookback = wait_factor * (m + 1)
+        recent_msgs = set(list(self.history)[-lookback:])
+        return dominant_msgs == recent_msgs
 
     def done(
         self, result: ChatDocument | None = None, r: Responder | None = None

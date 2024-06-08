@@ -14,7 +14,7 @@ Use -f option to use OpenAI function calling API instead of Langroid tool.
 
 import typer
 from rich import print
-from pydantic import BaseModel
+from langroid.pydantic_v1 import BaseModel
 import json
 import os
 
@@ -77,7 +77,7 @@ class LeaseMessage(ToolMessage):
 def chat() -> None:
     retriever_cfg = OpenAIAssistantConfig(
         name="LeaseRetriever",
-        llm=OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT4_TURBO),
+        llm=OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT4o),
         system_message="Answer questions based on the documents provided.",
     )
 
@@ -94,7 +94,7 @@ def chat() -> None:
 
     extractor_cfg = OpenAIAssistantConfig(
         name="LeaseExtractor",
-        llm=OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT4_TURBO),
+        llm=OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT4o),
         system_message=f"""
         You have to collect information about a Commercial Lease from a 
         lease contract which you don't have access to. You need to ask

@@ -65,18 +65,20 @@ For many practical scenarios, you may need additional optional dependencies:
     For the best experience we recommend you work in a nice terminal that supports 
     colored outputs, such as [Iterm2](https://iterm2.com/).    
 
-!!! note "OpenAI GPT4 is required"
+!!! note "OpenAI GPT-4/GPT-4o is required"
     The various LLM prompts and instructions in Langroid 
-    have been tested to work well with GPT4.
-    Switching to GPT3.5-Turbo is easy via a config flag, and may suffice 
-    for some applications, but in general you may see inferior results.
+    have been tested to work well with GPT-4 (and to some extent GPT-4o).
+    Switching to other LLMs (local/open and proprietary) is easy (see guides mentioned below),
+    and may suffice for some applications, but in general you may see inferior results
+    unless you adjust the prompts and/or the multi-agent setup.
 
 ## Set up tokens/keys 
 
 To get started, all you need is an OpenAI API Key.
-If you don't have one, see [this OpenAI Page](https://help.openai.com/en/collections/3675940-getting-started-with-openai-api).
-Currently only OpenAI models are supported. Others will be added later
-(Pull Requests welcome!).
+If you don't have one, see [this OpenAI Page](https://platform.openai.com/docs/quickstart).
+(Note that while this is the simplest way to get started, Langroid works with practically any LLM, not just those from OpenAI.
+See the guides to using [Open/Local LLMs](https://langroid.github.io/langroid/tutorials/local-llm-setup/),
+and other [non-OpenAI](https://langroid.github.io/langroid/tutorials/non-openai-llms/) proprietary LLMs.)
 
 In the root of the repo, copy the `.env-template` file to a new file `.env`:
 ```bash

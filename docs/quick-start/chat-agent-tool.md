@@ -90,13 +90,29 @@ class ProbeTool(lr.agent.ToolMessage):
         ]
 ```
 
-1. This indicates that the agent's `probe` method will handle this tool-message
+1. This indicates that the agent's `probe` method will handle this tool-message.
 2. The `purpose` is used behind the scenes to instruct the LLM
 3. `number` is a required argument of the tool-message (function)
 4. You can optionally include a class method that returns a list containing examples, 
    of two types: either a class instance, or a tuple consisting of a description and a 
    class instance, where the description is the "thought" that leads the LLM to use the
    tool. In some scenarios this can help with LLM tool-generation accuracy.
+
+!!! note "Stateless tool handlers"
+      The above `ProbeTool` is "stateful", i.e. it requires access to a variable in
+      the Agent instance (the `numbers` variable). This is why handling this 
+      tool-message requires subclassing the `ChatAgent` and defining a special method 
+      in the Agent, with a name matching the value of the `request` field of the Tool 
+      (`probe` in this case). However you may often define "stateless tools" which 
+      don't require access to the Agent's state. For such tools, you can define a 
+      handler method right in the `ToolMessage` itself, with a name `handle`. Langroid 
+      looks for such a method in the `ToolMessage` and automatically inserts it into 
+      the Agent as a method with name matching the `request` field of the Tool. Examples of
+      stateless tools include tools for numerical computation 
+      (e.g., in [this example](https://langroid.github.io/langroid/examples/agent-tree/)),
+      or API calls (e.g. for internet search, see 
+      [DuckDuckGoSearch Tool][langroid.agent.tools.duckduckgo_search_tool.DuckduckgoSearchTool]).
+        
 
 ## Define the ChatAgent, with the `probe` method
 

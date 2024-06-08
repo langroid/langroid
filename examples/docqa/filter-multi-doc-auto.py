@@ -13,11 +13,9 @@ See here for how to set up a Local LLM to work with Langroid:
 https://langroid.github.io/langroid/tutorials/local-llm-setup/
 
 NOTES:
-(1) The app works best with GPT4/Turbo, but results may be mixed with local LLMs.
+(1) The app works best with GPT-4o, but results may be mixed with local LLMs.
 You may have to tweak the system_message, use_message, and summarize_prompt
 as indicated in comments below, to get good results.
-(2) The default vector-db in DocChatAgent is LanceDB, but you can switch to the other
-    supported vector-dbs, e.g. qdrant or chroma.
 
 """
 
@@ -26,7 +24,7 @@ from rich import print
 from rich.prompt import Prompt
 import os
 
-from pydantic import Field
+from langroid.pydantic_v1 import Field
 import langroid as lr
 import langroid.language_models as lm
 from langroid.agent.special.doc_chat_agent import DocChatAgentConfig
@@ -62,7 +60,7 @@ def main(
     model: str = typer.Option("", "--model", "-m", help="model name"),
 ) -> None:
     llm_config = lm.OpenAIGPTConfig(
-        chat_model=model or lm.OpenAIChatModel.GPT4_TURBO,
+        chat_model=model or lm.OpenAIChatModel.GPT4o,
         # or, other possibilities for example:
         # "litellm/bedrock/anthropic.claude-instant-v1"
         # "ollama/llama2"

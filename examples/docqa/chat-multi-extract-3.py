@@ -31,7 +31,7 @@ https://langroid.github.io/langroid/tutorials/local-llm-setup/
 
 import typer
 from rich import print
-from pydantic import BaseModel
+from langroid.pydantic_v1 import BaseModel
 from typing import List
 import json
 import os
@@ -131,7 +131,7 @@ def main(
         )
     )
     llm_cfg = OpenAIGPTConfig(
-        chat_model=model or lm.OpenAIChatModel.GPT4_TURBO,
+        chat_model=model or lm.OpenAIChatModel.GPT4o,
         chat_context_length=16_000,  # adjust based on model
         temperature=0,
         timeout=45,

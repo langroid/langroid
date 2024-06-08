@@ -15,7 +15,7 @@ from rich.prompt import Prompt
 import os
 import json
 
-from pydantic import Field
+from langroid.pydantic_v1 import Field
 import langroid as lr
 import langroid.language_models as lm
 from langroid import ChatDocument
@@ -100,7 +100,7 @@ def main(
     model: str = "",
 ) -> None:
     llm_config = lm.OpenAIGPTConfig(
-        chat_model=model or lm.OpenAIChatModel.GPT4_TURBO,
+        chat_model=model or lm.OpenAIChatModel.GPT4o,
         # or, other possibilities for example:
         # "litellm/bedrock/anthropic.claude-instant-v1"
         # "ollama/llama2"

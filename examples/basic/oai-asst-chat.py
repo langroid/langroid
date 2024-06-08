@@ -43,7 +43,7 @@ def chat() -> None:
 
     config = OpenAIAssistantConfig(
         system_message=sys_msg,
-        llm=OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT4),  # or GPT4_TURBO
+        llm=OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT4),  # or GPT4o
     )
     agent = OpenAIAssistant(config)
     task = Task(agent)

@@ -7,7 +7,7 @@ python3 examples/extract/capitals.py
 """
 
 from rich import print
-from pydantic import BaseModel
+from langroid.pydantic_v1 import BaseModel
 from typing import List
 import langroid as lr
 

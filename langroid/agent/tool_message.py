@@ -13,9 +13,9 @@ from random import choice
 from typing import Any, Dict, List, Tuple, Type
 
 from docstring_parser import parse
-from pydantic import BaseModel
 
 from langroid.language_models.base import LLMFunctionSpec
+from langroid.pydantic_v1 import BaseModel
 from langroid.utils.pydantic_utils import (
     _recursive_purge_dict_key,
     generate_simple_schema,
@@ -73,7 +73,7 @@ class ToolMessage(ABC, BaseModel):
         - a tuple (description, ToolMessage instance), where the description is
             a natural language "thought" that leads to the tool usage,
             e.g. ("I want to find the square of 5",  SquareTool(num=5))
-            In some scenarios, ncluding such a description can significantly
+            In some scenarios, including such a description can significantly
             enhance reliability of tool use.
         Returns:
         """

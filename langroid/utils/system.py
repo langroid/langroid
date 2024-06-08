@@ -1,6 +1,7 @@
 import getpass
 import hashlib
 import importlib
+import importlib.metadata
 import inspect
 import logging
 import shutil
@@ -16,6 +17,15 @@ DELETION_ALLOWED_PATHS = [
     ".chroma",
     ".lancedb",
 ]
+
+
+def pydantic_major_version() -> int:
+    try:
+        pydantic_version = importlib.metadata.version("pydantic")
+        major_version = int(pydantic_version.split(".")[0])
+        return major_version
+    except importlib.metadata.PackageNotFoundError:
+        return -1
 
 
 class LazyLoad:

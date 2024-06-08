@@ -60,7 +60,7 @@ def main(
         config=TableChatAgentConfig(
             data=path,
             llm=OpenAIGPTConfig(
-                chat_model=model or OpenAIChatModel.GPT4_TURBO,
+                chat_model=model or OpenAIChatModel.GPT4o,
                 chat_context_length=16_000,  # adjust based on model
                 timeout=45,
                 temperature=0.2,

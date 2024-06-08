@@ -21,11 +21,9 @@ https://langroid.github.io/langroid/tutorials/local-llm-setup/
 import re
 from typing import List
 
-import typer
 from rich import print
 from rich.prompt import Prompt
 
-from pydantic import BaseSettings
 import langroid.language_models as lm
 from langroid.agent.tool_message import ToolMessage
 from langroid.agent.chat_agent import ChatAgent, ChatDocument
@@ -37,8 +35,7 @@ from langroid.parsing.web_search import duckduckgo_search
 from langroid.agent.task import Task
 from langroid.utils.constants import NO_ANSWER
 from langroid.utils.configuration import set_global, Settings
-
-app = typer.Typer()
+from fire import Fire
 
 
 class RelevantExtractsTool(ToolMessage):
@@ -117,12 +114,20 @@ class DDGSearchDocChatAgent(DocChatAgent):
         return "\n".join(str(e) for e in extracts)
 
 
-class CLIOptions(BaseSettings):
-    fn_api: bool = False
-    model: str = ""
+def main(
+    debug: bool = False,
+    nocache: bool = False,
+    model: str = "",
+    fn_api: bool = True,
+) -> None:
 
+    set_global(
+        Settings(
+            debug=debug,
+            cache=not nocache,
+        )
+    )
 
-def chat(opts: CLIOptions) -> None:
     print(
         """
         [blue]Welcome to the Internet Search chatbot!
@@ -145,7 +150,7 @@ def chat(opts: CLIOptions) -> None:
     system_msg = re.sub("you are", "", system_msg, flags=re.IGNORECASE)
 
     llm_config = lm.OpenAIGPTConfig(
-        chat_model=opts.model or lm.OpenAIChatModel.GPT4_TURBO,
+        chat_model=model or lm.OpenAIChatModel.GPT4o,
         # or, other possibilities for example:
         # "litellm/bedrock/anthropic.claude-instant-v1"
         # "ollama/llama2"
@@ -155,8 +160,8 @@ def chat(opts: CLIOptions) -> None:
     )
 
     config = DocChatAgentConfig(
-        use_functions_api=opts.fn_api,
-        use_tools=not opts.fn_api,
+        use_functions_api=fn_api,
+        use_tools=not fn_api,
         llm=llm_config,
         system_message=f"""
         {system_msg} You will try your best to answer my questions,
@@ -210,26 +215,5 @@ def chat(opts: CLIOptions) -> None:
     task.run("Can you help me answer some questions, possibly using web search?")
 
 
-@app.command()
-def main(
-    debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
-    nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
-    model: str = typer.Option("", "--model", "-m", help="model name"),
-    fn_api: bool = typer.Option(False, "--fn_api", "-f", help="use functions api"),
-) -> None:
-    cli_opts = CLIOptions(
-        fn_api=fn_api,
-        model=model,
-    )
-
-    set_global(
-        Settings(
-            debug=debug,
-            cache=not nocache,
-        )
-    )
-    chat(cli_opts)
-
-
 if __name__ == "__main__":
-    app()
+    Fire(main)

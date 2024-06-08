@@ -13,7 +13,7 @@ python3 examples/basic/chat-tool-function.py -m ollama/mistral:7b-instruct-v0.2-
 
 import langroid as lr
 import langroid.language_models as lm
-from pydantic import BaseModel, Field
+from langroid.pydantic_v1 import BaseModel, Field
 from fire import Fire
 
 # define a nested structure for Company information
@@ -90,7 +90,7 @@ class CompanyInfoTool(lr.agent.ToolMessage):
 
 def run(model: str = ""):  # or, e.g., "ollama/mistral:7b-instruct-v0.2-q8_0"
     lm_config = lm.OpenAIGPTConfig(
-        chat_model=model or lm.OpenAIChatModel.GPT4_TURBO,  # or
+        chat_model=model or lm.OpenAIChatModel.GPT4o,  # or
     )
     tool_name = CompanyInfoTool.default_value("request")
     agent_config = lr.ChatAgentConfig(

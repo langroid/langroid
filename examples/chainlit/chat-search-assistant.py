@@ -33,7 +33,7 @@ from langroid.utils.configuration import Settings, set_global
 @cl.on_chat_start
 async def main(
     debug: bool = False,
-    # e.g. ollama/mistral or local/localhost:5000/v1 default is GPT4_TURBO
+    # e.g. ollama/mistral or local/localhost:5000/v1 default is GPT4o
     model: str = os.getenv("MODEL", ""),
     provider: str = "ddg",  # or "google", "metaphor"
     nocache: bool = False,
@@ -60,7 +60,7 @@ async def main(
     )
 
     llm_config = lm.OpenAIGPTConfig(
-        chat_model=model or lm.OpenAIChatModel.GPT4_TURBO,
+        chat_model=model or lm.OpenAIChatModel.GPT4o,
         chat_context_length=8_000,
         temperature=0,
         max_output_tokens=200,

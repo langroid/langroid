@@ -1,4 +1,4 @@
-from pydantic import BaseSettings
+from langroid.pydantic_v1 import BaseSettings
 
 
 class PromptFormatterConfig(BaseSettings):

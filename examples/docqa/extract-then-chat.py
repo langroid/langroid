@@ -14,7 +14,7 @@ python3 examples/chainlit/extract-then-chat.py
 """
 
 from langroid import ChatDocument
-from pydantic import BaseModel
+from langroid.pydantic_v1 import BaseModel
 from typing import List
 import os
 from fire import Fire
@@ -119,7 +119,7 @@ def chat(
 
     llm_cfg = lm.OpenAIGPTConfig(
         # or, e.g. "ollama/mistral:7b-instruct-v0.2-q8_0" but result may be brittle
-        chat_model=model or lm.OpenAIChatModel.GPT4_TURBO,
+        chat_model=model or lm.OpenAIChatModel.GPT4o,
         chat_context_length=16_000,  # adjust based on model
     )
     doc_agent = DocChatAgent(
@@ -132,10 +132,11 @@ def chat(
                 n_similar_docs=3,
                 n_neighbor_ids=4,
             ),
-            vecdb=lr.vector_store.LanceDBConfig(
+            vecdb=lr.vector_store.QdrantDBConfig(
                 collection_name="book_info",
                 replace_collection=True,
-                storage_path=".lancedb/data/",
+                cloud=False,
+                storage_path=".qdrant/data/",
                 embedding=lr.embedding_models.SentenceTransformerEmbeddingsConfig(
                     model_type="sentence-transformer",
                     model_name="BAAI/bge-large-en-v1.5",

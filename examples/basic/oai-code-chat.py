@@ -64,7 +64,7 @@ def chat() -> None:
 
     config = OpenAIAssistantConfig(
         system_message=sys_msg,
-        llm=OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT4_TURBO),
+        llm=OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT4o),
     )
     agent = OpenAIAssistant(config)
     agent.add_assistant_tools([AssistantTool(type=ToolType.CODE_INTERPRETER)])

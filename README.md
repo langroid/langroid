@@ -411,9 +411,10 @@ with a postgres db, you will need to:
 ### Set up environment variables (API keys, etc)
 
 To get started, all you need is an OpenAI API Key.
-If you don't have one, see [this OpenAI Page](https://help.openai.com/en/collections/3675940-getting-started-with-openai-api).
-Currently only OpenAI models are supported. Others will be added later
-(Pull Requests welcome!).
+If you don't have one, see [this OpenAI Page](https://platform.openai.com/docs/quickstart).
+(Note that while this is the simplest way to get started, Langroid works with practically any LLM, not just those from OpenAI. 
+See the guides to using [Open/Local LLMs](https://langroid.github.io/langroid/tutorials/local-llm-setup/), 
+and other [non-OpenAI](https://langroid.github.io/langroid/tutorials/non-openai-llms/) proprietary LLMs.) 
 
 In the root of the repo, copy the `.env-template` file to a new file `.env`: 
 ```bash
@@ -441,9 +442,7 @@ All of the following environment variable settings are optional, and some are on
 to use specific features (as noted below).
 
 - **Qdrant** Vector Store API Key, URL. This is only required if you want to use Qdrant cloud.
-  The default vector store in our RAG agent (`DocChatAgent`) is LanceDB which uses file storage,
-  and you do not need to set up any environment variables for that.
-  Alternatively [Chroma](https://docs.trychroma.com/) is also currently supported. 
+  Alternatively [Chroma](https://docs.trychroma.com/) or [LanceDB](https://lancedb.com/) are also currently supported. 
   We use the local-storage version of Chroma, so there is no need for an API key.
 - **Redis** Password, host, port: This is optional, and only needed to cache LLM API responses
   using Redis Cloud. Redis [offers](https://redis.com/try-free/) a free 30MB Redis account
@@ -538,11 +537,12 @@ and they are **not** complete runnable examples! For that we encourage you to
 consult the [`langroid-examples`](https://github.com/langroid/langroid-examples) 
 repository.
 
-:information_source: The various LLM prompts and instructions in Langroid
-have been tested to work well with GPT4.
-Switching to GPT3.5-Turbo is easy via a config flag
-(e.g., `cfg = OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT3_5_TURBO)`),
-and may suffice for some applications, but in general you may see inferior results.
+:information_source:
+The various LLM prompts and instructions in Langroid
+have been tested to work well with GPT-4 (and to some extent GPT-4o).
+Switching to other LLMs (local/open and proprietary) is easy (see guides mentioned above),
+and may suffice for some applications, but in general you may see inferior results
+unless you adjust the prompts and/or the multi-agent setup.
 
 
 :book: Also see the
@@ -817,7 +817,7 @@ config = DocChatAgentConfig(
     "https://en.wikipedia.org/wiki/N-gram_language_model",
     "/path/to/my/notes-on-language-models.txt",
   ],
-  vecdb=lr.vector_store.LanceDBConfig(),
+  vecdb=lr.vector_store.QdrantDBConfig(),
 )
 ```
 

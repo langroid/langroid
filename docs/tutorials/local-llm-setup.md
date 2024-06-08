@@ -1,5 +1,17 @@
 # Setting up a local LLM to work with Langroid
 
+!!! tip "Examples scripts in [`examples/`](https://github.com/langroid/langroid/tree/main/examples) directory."
+      There are numerous examples of scripts that can be run with local LLMs,
+      in the [`examples/`](https://github.com/langroid/langroid/tree/main/examples)
+      directory of the main `langroid` repo. These examples are also in the 
+      [`langroid-examples`](https://github.com/langroid/langroid-examples/tree/main/examples),
+      although the latter repo may contain some examples that are not in the `langroid` repo.
+      Most of these example scripts allow you to specify an LLM in the format `-m <model>`,
+      where the specification of `<model>` is described in the quide below for local/open LLMs, 
+      or in the [Non-OpenAI LLM](https://langroid.github.io/langroid/tutorials/non-openai-llms/) guide.
+      If you want a pointer to a specific script that illustrates a 2-agent chat, have a look 
+      at [`chat-search-assistant.py`](https://github.com/langroid/langroid/blob/main/examples/basic/chat-search-assistant.py).
+
 ## Easiest: with Ollama
 
 As of version 0.1.24, Ollama provides an OpenAI-compatible API server for the LLMs it supports,

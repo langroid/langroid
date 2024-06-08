@@ -1,5 +1,4 @@
-from pydantic import BaseModel
-
+from langroid.pydantic_v1 import BaseModel
 from langroid.utils.pydantic_utils import extract_fields
 
 

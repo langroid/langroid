@@ -15,7 +15,7 @@ def test_code_parser():
 
     codes = """
     py|
-    from pydantic import BaseModel
+    from langroid.pydantic_v1 import BaseModel
     from typing import List
     
     class Item(BaseModel):
@@ -27,7 +27,7 @@ def test_code_parser():
     py|
     import requests
     from fastapi import FastAPI
-    from pydantic import BaseModel
+    from langroid.pydantic_v1 import BaseModel
     
     app = FastAPI()
     +
