@@ -567,13 +567,15 @@ class Task:
         Runs asynchronously.
 
         Args:
-            msg (str|ChatDocument): initial message to process; if None,
+            msg (str|ChatDocument): initial *user-role* message to process; if None,
                 the LLM will respond to its initial `self.task_messages`
                 which set up and kick off the overall task.
                 The agent tries to achieve this goal by looping
                 over `self.step()` until the task is considered
                 done; this can involve a series of messages produced by Agent,
-                LLM or Human (User).
+                LLM or Human (User). Note that `msg`, if passed, is treated as
+                message with role `user`; a "system" role message should not be
+                passed here.
             turns (int): number of turns to run the task for;
                 default is -1, which means run until task is done.
             caller (Task|None): the calling task, if any
