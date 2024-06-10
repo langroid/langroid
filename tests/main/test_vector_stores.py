@@ -150,10 +150,10 @@ def vecdb(request) -> VectorStore:
 @pytest.mark.parametrize(
     "query,results,exceptions",
     [
-        ("which city is Belgium's capital?", [phrases.BELGIUM], ["meliseach"]),
-        ("capital of France", [phrases.FRANCE], ["meliseach"]),
-        ("hello", [phrases.HELLO], ["meliseach"]),
-        ("hi there", [phrases.HI_THERE], ["meliseach"]),
+        ("which city is Belgium's capital?", [phrases.BELGIUM], ["meilisearch"]),
+        ("capital of France", [phrases.FRANCE], ["meilisearch"]),
+        ("hello", [phrases.HELLO], ["meilisearch"]),
+        ("hi there", [phrases.HI_THERE], ["meilisearch"]),
         ("men and women over 40", [phrases.OVER_40], ["meilisearch"]),
         ("people aged less than 40", [phrases.UNDER_40], ["meilisearch"]),
         ("Canadian residents", [phrases.CANADA], ["meilisearch"]),
@@ -183,10 +183,10 @@ def test_vector_stores_search(
 @pytest.mark.parametrize(
     "query,results,exceptions",
     [
-        ("which city is Belgium's capital?", [phrases.BELGIUM], ["meliseach"]),
-        ("capital of France", [phrases.FRANCE], ["meliseach"]),
-        ("hello", [phrases.HELLO], ["meliseach"]),
-        ("hi there", [phrases.HI_THERE], ["meliseach"]),
+        ("which city is Belgium's capital?", [phrases.BELGIUM], ["meilisearch"]),
+        ("capital of France", [phrases.FRANCE], ["meilisearch"]),
+        ("hello", [phrases.HELLO], ["meilisearch"]),
+        ("hi there", [phrases.HI_THERE], ["meilisearch"]),
         ("men and women over 40", [phrases.OVER_40], ["meilisearch"]),
         ("people aged less than 40", [phrases.UNDER_40], ["meilisearch"]),
         ("Canadian residents", [phrases.CANADA], ["meilisearch"]),

@@ -320,7 +320,7 @@ Here is what it looks like in action
 
 # :zap: Highlights
 (For a more up-to-date list see the 
-[release](https://github.com/langroid/langroid?tab=readme-ov-file#fire-updatesreleases) 
+[Updates/Releases](https://github.com/langroid/langroid?tab=readme-ov-file#fire-updatesreleases) 
 section above)
 - **Agents as first-class citizens:** The [Agent](https://langroid.github.io/langroid/reference/agent/base/#langroid.agent.base.Agent) class encapsulates LLM conversation state,
   and optionally a vector-store and tools. Agents are a core abstraction in Langroid;
@@ -336,8 +336,8 @@ section above)
 - **Modularity, Reusability, Loose coupling:** The `Agent` and `Task` abstractions allow users to design
   Agents with specific skills, wrap them in Tasks, and combine tasks in a flexible way.
 - **LLM Support**: Langroid supports OpenAI LLMs as well as LLMs from hundreds of 
-providers (local/open or remote/commercial) via proxy libraries and local model servers
-such as [LiteLLM](https://docs.litellm.ai/docs/providers) that in effect mimic the OpenAI API. 
+providers ([local/open](https://langroid.github.io/langroid/tutorials/local-llm-setup/) or [remote/commercial](https://langroid.github.io/langroid/tutorials/non-openai-llms/)) via proxy libraries and local model servers
+such as [ollama](https://github.com/ollama), [oobabooga](https://github.com/oobabooga/text-generation-webui), [LiteLLM](https://docs.litellm.ai/docs/providers) that in effect mimic the OpenAI API. 
 - **Caching of LLM responses:** Langroid supports [Redis](https://redis.com/try-free/) and 
   [Momento](https://www.gomomento.com/) to cache LLM responses.
 - **Vector-stores**: [LanceDB](https://github.com/lancedb/lancedb), [Qdrant](https://qdrant.tech/), [Chroma](https://www.trychroma.com/) are currently supported.
@@ -347,7 +347,7 @@ such as [LiteLLM](https://docs.litellm.ai/docs/providers) that in effect mimic t
 - **Observability, Logging, Lineage:** Langroid generates detailed logs of multi-agent interactions and
   maintains provenance/lineage of messages, so that you can trace back
   the origin of a message.
-- **Tools/Plugins/Function-calling**: Langroid supports OpenAI's recently
+- **[Tools/Plugins/Function-calling](https://langroid.github.io/langroid/quick-start/chat-agent-tool/)**: Langroid supports OpenAI's recently
   released [function calling](https://platform.openai.com/docs/guides/gpt/function-calling)
   feature. In addition, Langroid has its own native equivalent, which we
   call **tools** (also known as "plugins" in other contexts). Function
