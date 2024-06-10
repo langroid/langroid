@@ -106,7 +106,7 @@ class Task:
     """
 
     # class variable called `cache` that is a RedisCache object
-    cache: RedisCache = RedisCache(RedisCacheConfig(fake=False))
+    _cache: RedisCache | None = None
 
     def __init__(
         self,
@@ -332,6 +332,12 @@ class Task:
             config=self.config,
         )
 
+    @classmethod
+    def cache(cls) -> RedisCache:
+        if cls._cache is None:
+            cls._cache = RedisCache(RedisCacheConfig(fake=False))
+        return cls._cache
+
     def __repr__(self) -> str:
         return f"{self.name}"
 
@@ -350,7 +356,7 @@ class Task:
         E.g. key = "kill", value = "1"
         """
         try:
-            self.cache.store(f"{self.session_id}:{key}", value)
+            self.cache().store(f"{self.session_id}:{key}", value)
         except Exception as e:
             logging.error(f"Error in Task._cache_session_store: {e}")
 
@@ -360,7 +366,7 @@ class Task:
         """
         session_id_key = f"{self.session_id}:{key}"
         try:
-            cached_val = self.cache.retrieve(session_id_key)
+            cached_val = self.cache().retrieve(session_id_key)
         except Exception as e:
             logging.error(f"Error in Task._cache_session_lookup: {e}")
             return None
@@ -384,7 +390,7 @@ class Task:
         Kill the session with the given session_id.
         """
         session_id_kill_key = f"{session_id}:kill"
-        cls.cache.store(session_id_kill_key, "1")
+        cls.cache().store(session_id_kill_key, "1")
 
     def kill(self) -> None:
         """

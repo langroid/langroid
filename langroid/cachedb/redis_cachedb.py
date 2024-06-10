@@ -23,6 +23,8 @@ class RedisCacheConfig(CacheDBConfig):
 class RedisCache(CacheDB):
     """Redis implementation of the CacheDB."""
 
+    _warned_password: bool = False
+
     def __init__(self, config: RedisCacheConfig):
         """
         Initialize a RedisCache with the given config.
@@ -40,10 +42,12 @@ class RedisCache(CacheDB):
             redis_host = os.getenv("REDIS_HOST")
             redis_port = os.getenv("REDIS_PORT")
             if None in [redis_password, redis_host, redis_port]:
-                logger.warning(
-                    """REDIS_PASSWORD, REDIS_HOST, REDIS_PORT not set in .env file,
-                    using fake redis client"""
-                )
+                if not RedisCache._warned_password:
+                    logger.warning(
+                        """REDIS_PASSWORD, REDIS_HOST, REDIS_PORT not set in .env file,
+                        using fake redis client"""
+                    )
+                    RedisCache._warned_password = True
                 self.pool = fakeredis.FakeStrictRedis()  # type: ignore
             else:
                 self.pool = redis.ConnectionPool(  # type: ignore
