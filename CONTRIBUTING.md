@@ -216,20 +216,20 @@ cooperation!
 
 To check for issues locally, run `make check`, it runs linters `black`, `ruff`,
 `flake8` and type-checker `mypy`. It also installs a pre-commit hook, 
-so that commits are blocked if there are style/type issues.
-Issues flagged by `black` or `ruff` can usually be fixed by running `make lint`. 
-`flake8` may warn about some issues; read about each one and fix those
-  issues.
+so that commits are blocked if there are style/type issues. The linting attempts to
+auto-fix issues, and warns about those it can't fix.
+(There is a separate `make lint` you could do, but that is already part of `make check`).
+The `make check` command also looks through the codebase to see if there are any
+direct imports from pydantic, and replaces them with importing from `langroid.pydantic_v1`
+(this is needed to enable dual-compatibility with Pydantic v1 and v2).
 
 So, typically when submitting a PR, you would do this sequence:
 - run `make tests` or `pytest tests/main` (if needed use `-nc` means "no cache", i.e. to prevent
   using cached LLM API call responses)
 - fix things so tests pass, then proceed to lint/style/type checks below.
 - `make check` to see what issues there are
-- `make lint` to auto-fix some of them
+- manually fix any lint or type issues
 - `make check` again to see what issues remain
-- possibly manually fix `flake8` issues, and any `mypy` issues flagged.
-- `make check` again to see if all issues are fixed.
 - repeat if needed, until all clean.
 
 When done with these, commit and push to github and submit the PR. If this

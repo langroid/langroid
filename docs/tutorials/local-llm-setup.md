@@ -8,9 +8,13 @@
       although the latter repo may contain some examples that are not in the `langroid` repo.
       Most of these example scripts allow you to specify an LLM in the format `-m <model>`,
       where the specification of `<model>` is described in the quide below for local/open LLMs, 
-      or in the [Non-OpenAI LLM](https://langroid.github.io/langroid/tutorials/non-openai-llms/) guide.
+      or in the [Non-OpenAI LLM](https://langroid.github.io/langroid/tutorials/non-openai-llms/) guide. Scripts 
+      that have the string `local` in their name have been especially designed to work with 
+      certain local LLMs, as described in the respective scripts.
       If you want a pointer to a specific script that illustrates a 2-agent chat, have a look 
       at [`chat-search-assistant.py`](https://github.com/langroid/langroid/blob/main/examples/basic/chat-search-assistant.py).
+      This specific script, originally designed for GPT-4/GPT-4o, works well with `llama3-70b` 
+      (tested via Groq, mentioned below).
 
 ## Easiest: with Ollama
 
@@ -109,9 +113,8 @@ via `pip install langroid[litellm]` or equivalent.
 
 
 ## Harder: with oobabooga
-Like Ollama, oobabooga provides an OpenAI-API-compatible API server, but the setup 
-is significantly more involved. See 
-https://github.com/oobabooga/text-generation-webui for installation and model-download instructions.
+Like Ollama, [oobabooga/text-generation-webui](https://github.com/oobabooga/text-generation-webui) provides an OpenAI-API-compatible API server, but the setup 
+is significantly more involved. See their github page for installation and model-download instructions.
 
 Once you have finished the installation, you can spin up the server for an LLM using
 something like this:
@@ -164,3 +167,14 @@ llm_config = lm.OpenAIGPTConfig(
 )
 ```
 
+## Quick testing with local LLMs
+As mentioned [here](https://langroid.github.io/langroid/tutorials/non-openai-llms/#quick-testing-with-non-openai-models), 
+you can run many of the [tests](https://github.com/langroid/langroid/tree/main/tests/main) in the main langroid repo against a local LLM
+(which by default run against an OpenAI model), 
+by specifying the model as `--m <model>`, 
+where `<model>` follows the syntax described in the previous sections. Here's an example:
+
+```bash
+pytest tests/main/test_chat_agent.py --m ollama/mixtral
+```
+Of course, bear in mind that the tests may not pass due to weaknesses of the local LLM.

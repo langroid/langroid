@@ -40,17 +40,22 @@ instantiate a `ChatAgent` object with that config:
 ```py
 import langroid as lr
 
-config = lr.ChatAgentConfig(
+config = lr.ChatAgentConfig( #(1)!
     name="MyAgent", # note there should be no spaces in the name!
     llm = lr.language_models.OpenAIGPTConfig(
-    chat_model=lr.language_models.OpenAIChatModel.GPT4
-    ) #(1)!
+    chat_model=lr.language_models.OpenAIChatModel.GPT4,
+    system_message="You are a helpful assistant" #(2)! 
+    )
 )
 agent = lr.ChatAgent(config)
 ```
 
 1. This agent only has an LLM, and no vector-store. Examples of agents with
    vector-stores will be shown later.
+2. The `system_message` is used when invoking the agent's `llm_response` method; it is 
+   passed to the LLM API as the first message (with role `"system"`), followed by the alternating series of user, 
+   assistant messages. Note that a `system_message` can also be specified when initializing a `Task` object (as seen 
+   below); in this case the `Task` `system_message` overrides the agent's `system_message`.
 
 We can now use the agent's responder methods, for example:
 ```py
@@ -122,8 +127,13 @@ Tasks work. Unless you are creating a custom orchestration mechanism, you do not
 need to be aware of these details. In fact our basic human + LLM chat loop can be trivially 
 implemented with a `Task`, in a couple of lines of code:
 ```py
-task = lr.Task(agent, name="Bot", system_message="You are a helpful assistant")
+task = lr.Task(
+    agent, name="Bot", 
+    system_message="You are a helpful assistant", #(1)!
+)
 ```
+
+1. Overrides the agent's `system_message`
 
 (When a `name` is provided in the `Task` constructor, it overrides the agent's name.) 
 
