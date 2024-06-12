@@ -1,10 +1,9 @@
-import hashlib
-import uuid
 from enum import Enum
 from textwrap import dedent
 from typing import Any, Callable, Dict, List, Union
+from uuid import uuid4
 
-from langroid.pydantic_v1 import BaseModel, Extra
+from langroid.pydantic_v1 import BaseModel, Extra, Field
 
 Number = Union[int, float]
 Embedding = List[Number]
@@ -40,7 +39,7 @@ class DocMetaData(BaseModel):
 
     source: str = "context"
     is_chunk: bool = False  # if it is a chunk, don't split
-    id: str = ""  # unique id for the document
+    id: str = Field(default_factory=lambda: str(uuid4()))
     window_ids: List[str] = []  # for RAG: ids of chunks around this one
 
     def dict_bool_int(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
@@ -67,37 +66,8 @@ class Document(BaseModel):
     content: str
     metadata: DocMetaData
 
-    @staticmethod
-    def hash_id(doc: str) -> str:
-        # Encode the document as UTF-8
-        doc_utf8 = str(doc).encode("utf-8")
-
-        # Create a SHA256 hash object
-        sha256_hash = hashlib.sha256()
-
-        # Update the hash object with the bytes of the document
-        sha256_hash.update(doc_utf8)
-
-        # Get the hexadecimal representation of the hash
-        hash_hex = sha256_hash.hexdigest()
-
-        # Convert the first part of the hash to a UUID
-        hash_uuid = uuid.UUID(hash_hex[:32])
-
-        return str(hash_uuid)
-
-    def _unique_hash_id(self) -> str:
-        return self.hash_id(str(self))
-
     def id(self) -> str:
-        if (
-            hasattr(self.metadata, "id")
-            and self.metadata.id is not None
-            and self.metadata.id != ""
-        ):
-            return self.metadata.id
-        else:
-            return self._unique_hash_id()
+        return self.metadata.id
 
     def __str__(self) -> str:
         # TODO: make metadata a pydantic model to enforce "source"

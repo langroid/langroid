@@ -20,6 +20,7 @@ from .openai_gpt import (
     OpenAIGPTConfig,
     OpenAIGPT,
 )
+from .mock_lm import MockLM, MockLMConfig
 from .azure_openai import AzureConfig, AzureGPT
 
 
@@ -43,4 +44,6 @@ __all__ = [
     "OpenAIGPT",
     "AzureConfig",
     "AzureGPT",
+    "MockLM",
+    "MockLMConfig",
 ]

@@ -5,6 +5,7 @@ from . import logging
 from . import pydantic_utils
 from . import system
 from . import output
+from . import object_registry
 
 __all__ = [
     "configuration",
@@ -14,4 +15,5 @@ __all__ = [
     "pydantic_utils",
     "system",
     "output",
+    "object_registry",
 ]

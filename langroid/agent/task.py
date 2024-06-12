@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import copy
 import logging
+import threading
 from collections import Counter, deque
 from types import SimpleNamespace
 from typing import (
@@ -13,7 +14,6 @@ from typing import (
     Dict,
     List,
     Optional,
-    Set,
     Tuple,
     Type,
     cast,
@@ -47,6 +47,7 @@ from langroid.utils.constants import (
     USER_QUIT_STRINGS,
 )
 from langroid.utils.logging import RichFileLogger, setup_file_logger
+from langroid.utils.object_registry import scheduled_cleanup
 from langroid.utils.system import hash
 
 logger = logging.getLogger(__name__)
@@ -65,14 +66,17 @@ class TaskConfig(BaseModel):
     we have config classes for `Agent`, `ChatAgent`, `LanguageModel`, etc.
 
     Attributes:
-        inf_loop_cycle_len: max exact-loop cycle length: 0 => no inf loop test
-        inf_loop_dominance_factor: dominance factor for exact-loop detection
-        inf_loop_wait_factor: wait this * cycle_len msgs before loop-check
+        inf_loop_cycle_len (int): max exact-loop cycle length: 0 => no inf loop test
+        inf_loop_dominance_factor (float): dominance factor for exact-loop detection
+        inf_loop_wait_factor (int): wait this * cycle_len msgs before loop-check
+        restart_subtask_run (bool): whether to restart *every* run of this task
+            when run as a subtask.
     """
 
     inf_loop_cycle_len: int = 10
     inf_loop_dominance_factor: float = 1.5
     inf_loop_wait_factor: int = 5
+    restart_as_subtask: bool = False
 
 
 class Task:
@@ -107,6 +111,7 @@ class Task:
 
     # class variable called `cache` that is a RedisCache object
     _cache: RedisCache | None = None
+    _background_tasks_started: bool = False
 
     def __init__(
         self,
@@ -149,7 +154,7 @@ class Task:
                 One run of step() is considered a "turn".
             system_message (str): if not empty, overrides agent's system_message
             user_message (str): if not empty, overrides agent's user_message
-            restart (bool): if true, resets the agent's message history
+            restart (bool): if true, resets the agent's message history *at every run*.
             default_human_response (str): default response from user; useful for
                 testing, to avoid interactive input from user.
                 [Instead of this, setting `interactive` usually suffices]
@@ -187,6 +192,8 @@ class Task:
             set_parent_agent=noop_fn,
         )
         self.config = config
+        # how to behave as a sub-task; can be overriden by `add_sub_task()`
+        self.config_sub_task = copy.deepcopy(config)
         # counts of distinct pending messages in history,
         # to help detect (exact) infinite loops
         self.message_counter: Counter[str] = Counter()
@@ -306,7 +313,6 @@ class Task:
 
         # other sub_tasks this task can delegate to
         self.sub_tasks: List[Task] = []
-        self.parent_task: Set[Task] = set()
         self.caller: Task | None = None  # which task called this task's `run` method
 
     def clone(self, i: int) -> "Task":
@@ -338,6 +344,19 @@ class Task:
         if cls._cache is None:
             cls._cache = RedisCache(RedisCacheConfig(fake=False))
         return cls._cache
+
+    @classmethod
+    def _start_background_tasks(cls) -> None:
+        """Start background object registry cleanup thread. NOT USED."""
+        if cls._background_tasks_started:
+            return
+        cls._background_tasks_started = True
+        cleanup_thread = threading.Thread(
+            target=scheduled_cleanup,
+            args=(600,),
+            daemon=True,
+        )
+        cleanup_thread.start()
 
     def __repr__(self) -> str:
         return f"{self.name}"
@@ -417,24 +436,37 @@ class Task:
     def _leave(self) -> str:
         return self._indent + "<<<"
 
-    def add_sub_task(self, task: Task | List[Task]) -> None:
+    def add_sub_task(
+        self,
+        task: (
+            Task | List[Task] | Tuple[Task, TaskConfig] | List[Tuple[Task, TaskConfig]]
+        ),
+    ) -> None:
         """
         Add a sub-task (or list of subtasks) that this task can delegate
         (or fail-over) to. Note that the sequence of sub-tasks is important,
         since these are tried in order, as the parent task searches for a valid
-        response.
+        response (unless a sub-task is explicitly addressed).
 
         Args:
-            task (Task|List[Task]): sub-task(s) to add
+            task: A task, or list of tasks, or a tuple of task and task config,
+                or a list of tuples of task and task config.
+                These tasks are added as sub-tasks of the current task.
+                The task configs (if any) dictate how the tasks are run when
+                invoked as sub-tasks of other tasks. This allows users to specify
+                behavior applicable only in the context of a particular task-subtask
+                combination.
         """
-
         if isinstance(task, list):
             for t in task:
                 self.add_sub_task(t)
             return
-        assert isinstance(task, Task), f"added task must be a Task, not {type(task)}"
 
-        task.parent_task.add(self)  # add myself to set of parent tasks of `task`
+        if isinstance(task, tuple):
+            task, config = task
+        else:
+            config = TaskConfig()
+        task.config_sub_task = config
         self.sub_tasks.append(task)
         self.name_sub_task_map[task.name] = task
         self.responders.append(cast(Responder, task))
@@ -461,12 +493,28 @@ class Task:
                     sender=Entity.USER,
                 ),
             )
+        elif msg is None and len(self.agent.message_history) > 1:
+            # if agent has a history beyond system msg, set the
+            # pending message to the ChatDocument linked from
+            # last message in the history
+            last_agent_msg = self.agent.message_history[-1]
+            self.pending_message = ChatDocument.from_id(last_agent_msg.chat_document_id)
+            if self.pending_message is not None:
+                self.pending_sender = self.pending_message.metadata.sender
         else:
-            self.pending_message = copy.deepcopy(msg)
+            if isinstance(msg, ChatDocument):
+                # carefully deep-copy: fresh metadata.id, register
+                # as new obj in registry
+                self.pending_message = ChatDocument.deepcopy(msg)
             if self.pending_message is not None and self.caller is not None:
                 # msg may have come from `caller`, so we pretend this is from
                 # the CURRENT task's USER entity
                 self.pending_message.metadata.sender = Entity.USER
+                # update parent, child, agent pointers
+                if msg is not None:
+                    msg.metadata.child_id = self.pending_message.metadata.id
+                    self.pending_message.metadata.parent_id = msg.metadata.id
+                self.pending_message.metadata.agent_id = self.agent.id
 
         self._show_pending_message_if_debug()
 
@@ -485,6 +533,13 @@ class Task:
         self.log_message(Entity.USER, self.pending_message)
         return self.pending_message
 
+    def reset_all_sub_tasks(self) -> None:
+        """Recursively reset message history of agents in all sub-tasks"""
+        for t in self.sub_tasks:
+            t.agent.clear_history(0)
+            t.agent.clear_dialog()
+            t.reset_all_sub_tasks()
+
     def run(
         self,
         msg: Optional[str | ChatDocument] = None,
@@ -496,10 +551,13 @@ class Task:
     ) -> Optional[ChatDocument]:
         """Synchronous version of `run_async()`.
         See `run_async()` for details."""
-
-        if self.restart:
-            self.agent.clear_history(0)
-            self.agent.clear_dialog()
+        if (self.restart and caller is None) or (
+            self.config_sub_task.restart_as_subtask and caller is not None
+        ):
+            # We are either at top level, with restart = True, OR
+            # we are a sub-task with restart_as_subtask = True,
+            # so reset own agent and recursively for all sub-tasks
+            self.reset_all_sub_tasks()
 
         self.task_progress = False
         self.n_stalled_steps = 0
@@ -603,9 +661,17 @@ class Task:
         # have come from another LLM), as far as this agent is concerned, the initial
         # message can be considered to be from the USER
         # (from the POV of this agent's LLM).
-        if self.restart:
-            self.agent.clear_history(0)
-            self.agent.clear_dialog()
+
+        if (
+            self.restart
+            and caller is None
+            or self.config_sub_task.restart_as_subtask
+            and caller is not None
+        ):
+            # We are either at top level, with restart = True, OR
+            # we are a sub-task with restart_as_subtask = True,
+            # so reset own agent and recursively for all sub-tasks
+            self.reset_all_sub_tasks()
 
         self.task_progress = False
         self.n_stalled_steps = 0
@@ -714,10 +780,20 @@ class Task:
                 # Note: msg history will consist of:
                 # - H: the original msg history, ending at idx= self.message_history_idx
                 # - R: this agent's response, which presumably leads to:
-                # - X: a series of back-and-forth msgs from sub-tasks [X]
+                # - X: a series of back-and-forth msgs (including with agent's own
+                #     responders and with sub-tasks)
                 # - F: the final result message, from this agent.
                 # Here we are deleting all of [X] from the agent's message history,
                 # so that it simply looks as if the sub-tasks never happened.
+
+                dropped = self.agent.message_history[
+                    self.message_history_idx + 2 : n_messages - 1
+                ]
+                # first delete the linked ChatDocuments (and descendants) from
+                # ObjectRegistry
+                for msg in dropped:
+                    ChatDocument.delete_id(msg.chat_document_id)
+                # then delete the messages from the agent's message_history
                 del self.agent.message_history[
                     self.message_history_idx + 2 : n_messages - 1
                 ]
@@ -767,9 +843,11 @@ class Task:
 
         if (
             Entity.USER in self.responders
+            and self.interactive
             and not self.human_tried
             and not self.agent.has_tool_message_attempt(self.pending_message)
         ):
+            # When in interactive mode,
             # Give human first chance if they haven't been tried in last step,
             # and the msg is not a tool-call attempt;
             # This ensures human gets a chance to respond,
@@ -795,6 +873,8 @@ class Task:
                         recipient=recipient,
                     ),
                 )
+                # no need to register this dummy msg in ObjectRegistry
+                ChatDocument.delete_id(log_doc.id())
                 self.log_message(r, log_doc)
                 continue
             self.human_tried = r == Entity.USER
@@ -861,6 +941,7 @@ class Task:
 
         if (
             Entity.USER in self.responders
+            and self.interactive
             and not self.human_tried
             and not self.agent.has_tool_message_attempt(self.pending_message)
         ):
@@ -887,6 +968,8 @@ class Task:
                         recipient=recipient,
                     ),
                 )
+                # no need to register this dummy msg in ObjectRegistry
+                ChatDocument.delete_id(log_doc.id())
                 self.log_message(r, log_doc)
                 continue
             self.human_tried = r == Entity.USER
@@ -922,10 +1005,26 @@ class Task:
         # Contrast this with self.pending_message.metadata.sender, which is an ENTITY
         # of this agent, or a sub-task's agent.
         if not self.is_pass_thru:
-            self.pending_sender = r
-        result.metadata.parent = parent
-        if not self.is_pass_thru:
+            if (
+                self.pending_message is not None
+                and self.pending_message.metadata.agent_id == self.agent.id
+            ):
+                # when pending msg is from our own agent, respect the sender set there,
+                # since sometimes a response may "mock" as if the response is from
+                # another entity (e.g when using RewindTool, the agent handler
+                # returns a result as if it were from the LLM).
+                self.pending_sender = result.metadata.sender
+            else:
+                # when pending msg is from a sub-task, the sender is the sub-task
+                self.pending_sender = r
             self.pending_message = result
+        # set the parent/child links ONLY if not already set by agent internally,
+        # which may happen when using the RewindTool
+        if parent is not None and not result.metadata.parent_id:
+            result.metadata.parent_id = parent.id()
+        if parent is not None and not parent.metadata.child_id:
+            parent.metadata.child_id = result.id()
+
         self.log_message(self.pending_sender, result, mark=True)
         self.step_progress = True
         self.task_progress = True
@@ -958,9 +1057,10 @@ class Task:
             responder = (
                 Entity.LLM if self.pending_sender == Entity.USER else Entity.USER
             )
+            parent_id = "" if parent is None else parent.id()
             self.pending_message = ChatDocument(
                 content=NO_ANSWER,
-                metadata=ChatDocMetaData(sender=responder, parent=parent),
+                metadata=ChatDocMetaData(sender=responder, parent_id=parent_id),
             )
             self.pending_sender = responder
         self.log_message(self.pending_sender, self.pending_message, mark=True)
@@ -1106,7 +1206,7 @@ class Task:
         # regardless of which entity actually produced the result,
         # when we return the result, we set entity to USER
         # since to the "parent" task, this result is equivalent to a response from USER
-        return ChatDocument(
+        result_doc = ChatDocument(
             content=content,
             function_call=fun_call,
             tool_messages=tool_messages,
@@ -1118,8 +1218,14 @@ class Task:
                 sender_name=self.name,
                 recipient=recipient,
                 tool_ids=tool_ids,
+                parent_id=result_msg.id() if result_msg else "",
+                agent_id=str(self.agent.id),
             ),
         )
+        if self.pending_message is not None:
+            self.pending_message.metadata.child_id = result_doc.id()
+
+        return result_doc
 
     def _is_empty_message(self, msg: str | ChatDocument | None) -> bool:
         """

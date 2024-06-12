@@ -7,6 +7,7 @@ import tiktoken
 from langroid.mytypes import Document
 from langroid.parsing.para_sentence_split import create_chunks, remove_extra_whitespace
 from langroid.pydantic_v1 import BaseSettings
+from langroid.utils.object_registry import ObjectRegistry
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.WARNING)
@@ -76,7 +77,7 @@ class Parser:
         # The original metadata.id (if any) is ignored since it will be same for all
         # chunks and is useless. We want a distinct id for each chunk.
         orig_ids = [c.metadata.id for c in chunks]
-        ids = [Document.hash_id(str(c)) for c in chunks]
+        ids = [ObjectRegistry.new_id() for c in chunks]
         id2chunk = {id: c for id, c in zip(ids, chunks)}
 
         # group the ids by orig_id
@@ -274,7 +275,7 @@ class Parser:
         # we need this to distinguish docs later in add_window_ids
         for d in docs:
             if d.metadata.id in [None, ""]:
-                d.metadata.id = d._unique_hash_id()
+                d.metadata.id = ObjectRegistry.new_id()
         # some docs are already splits, so don't split them further!
         chunked_docs = [d for d in docs if d.metadata.is_chunk]
         big_docs = [d for d in docs if not d.metadata.is_chunk]

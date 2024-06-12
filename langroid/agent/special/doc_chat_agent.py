@@ -54,6 +54,7 @@ from langroid.parsing.utils import batched
 from langroid.prompts.prompts_config import PromptsConfig
 from langroid.prompts.templates import SUMMARY_ANSWER_PROMPT_GPT4
 from langroid.utils.constants import NO_ANSWER
+from langroid.utils.object_registry import ObjectRegistry
 from langroid.utils.output import show_if_debug, status
 from langroid.utils.output.citations import (
     extract_markdown_references,
@@ -414,7 +415,7 @@ class DocChatAgent(ChatAgent):
             raise ValueError("Parser not set")
         for d in docs:
             if d.metadata.id in [None, ""]:
-                d.metadata.id = d._unique_hash_id()
+                d.metadata.id = ObjectRegistry.new_id()
         if split:
             docs = self.parser.split(docs)
         else:

@@ -4,7 +4,17 @@ import logging
 from abc import ABC, abstractmethod
 from datetime import datetime
 from enum import Enum
-from typing import Any, Callable, Dict, List, Optional, Tuple, Type, Union
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    List,
+    Optional,
+    Tuple,
+    Type,
+    Union,
+    cast,
+)
 
 from langroid.cachedb.base import CacheDBConfig
 from langroid.parsing.agent_chats import parse_message
@@ -134,12 +144,15 @@ class LLMMessage(BaseModel):
     content: str
     function_call: Optional[LLMFunctionCall] = None
     timestamp: datetime = Field(default_factory=datetime.utcnow)
+    # link to corresponding chat document, for provenance/rewind purposes
+    chat_document_id: str = ""
 
     def api_dict(self) -> Dict[str, Any]:
         """
-        Convert to dictionary for API request.
-        DROP the tool_id, since it is only for use in the Assistant API,
-        not the completion API.
+        Convert to dictionary for API request, keeping ONLY
+        the fields that are expected in an API call!
+        E.g., DROP the tool_id, since it is only for use in the Assistant API,
+            not the completion API.
         Returns:
             dict: dictionary representation of LLM message
         """
@@ -155,8 +168,10 @@ class LLMMessage(BaseModel):
                 dict_no_none["function_call"]["arguments"] = json.dumps(
                     dict_no_none["function_call"]["arguments"]
                 )
+        # IMPORTANT! drop fields that are not expected in API call
         dict_no_none.pop("tool_id", None)
         dict_no_none.pop("timestamp", None)
+        dict_no_none.pop("chat_document_id", None)
         return dict_no_none
 
     def __str__(self) -> str:
@@ -268,10 +283,14 @@ class LanguageModel(ABC):
                 """
             )
         from langroid.language_models.azure_openai import AzureGPT
+        from langroid.language_models.mock_lm import MockLM, MockLMConfig
         from langroid.language_models.openai_gpt import OpenAIGPT
 
         if config is None or config.type is None:
             return None
+
+        if config.type == "mock":
+            return MockLM(cast(MockLMConfig, config))
 
         openai: Union[Type[AzureGPT], Type[OpenAIGPT]]
 

@@ -1,6 +1,9 @@
+from __future__ import annotations
+
+import copy
 import json
 from enum import Enum
-from typing import List, Optional, Union
+from typing import Any, List, Optional, Union, cast
 
 from langroid.agent.tool_message import ToolMessage
 from langroid.language_models.base import (
@@ -14,6 +17,7 @@ from langroid.mytypes import DocMetaData, Document, Entity
 from langroid.parsing.agent_chats import parse_message
 from langroid.parsing.parse_json import extract_top_level_json, top_level_json_field
 from langroid.pydantic_v1 import BaseModel, Extra
+from langroid.utils.object_registry import ObjectRegistry
 from langroid.utils.output.printing import shorten_text
 
 
@@ -41,8 +45,11 @@ class StatusCode(str, Enum):
 
 
 class ChatDocMetaData(DocMetaData):
-    parent: Optional["ChatDocument"] = None
-    sender: Entity
+    parent_id: str = ""  # msg (ChatDocument) to which this is a response
+    child_id: str = ""  # ChatDocument that has response to this message
+    agent_id: str = ""  # ChatAgent that generated this message
+    msg_idx: int = -1  # index of this message in the agent `message_history`
+    sender: Entity  # sender of the message
     tool_ids: List[str] = []  # stack of tool_ids; used by OpenAIAssistant
     block: None | Entity = None
     sender_name: str = ""
@@ -52,6 +59,14 @@ class ChatDocMetaData(DocMetaData):
     displayed: bool = False
     has_citation: bool = False
     status: Optional[StatusCode] = None
+
+    @property
+    def parent(self) -> Optional["ChatDocument"]:
+        return ChatDocument.from_id(self.parent_id)
+
+    @property
+    def child(self) -> Optional["ChatDocument"]:
+        return ChatDocument.from_id(self.child_id)
 
 
 class ChatDocLoggerFields(BaseModel):
@@ -74,6 +89,41 @@ class ChatDocument(Document):
     tool_messages: List[ToolMessage] = []
     metadata: ChatDocMetaData
     attachment: None | ChatDocAttachment = None
+
+    def __init__(self, **data: Any):
+        super().__init__(**data)
+        ObjectRegistry.register_object(self)
+
+    @property
+    def parent(self) -> Optional["ChatDocument"]:
+        return ChatDocument.from_id(self.metadata.parent_id)
+
+    @property
+    def child(self) -> Optional["ChatDocument"]:
+        return ChatDocument.from_id(self.metadata.child_id)
+
+    @staticmethod
+    def deepcopy(doc: ChatDocument) -> ChatDocument:
+        new_doc = copy.deepcopy(doc)
+        new_doc.metadata.id = ObjectRegistry.new_id()
+        ObjectRegistry.register_object(new_doc)
+        return new_doc
+
+    @staticmethod
+    def from_id(id: str) -> Optional["ChatDocument"]:
+        return cast(ChatDocument, ObjectRegistry.get(id))
+
+    @staticmethod
+    def delete_id(id: str) -> None:
+        """Remove ChatDocument with given id from ObjectRegistry,
+        and all its descendants.
+        """
+        chat_doc = ChatDocument.from_id(id)
+        # first delete all descendants
+        while chat_doc is not None:
+            next_chat_doc = chat_doc.child
+            ObjectRegistry.remove(chat_doc.id())
+            chat_doc = next_chat_doc
 
     def __str__(self) -> str:
         fields = self.log_fields()
@@ -224,6 +274,7 @@ class ChatDocument(Document):
         sender_role = Role.USER
         fun_call = None
         tool_id = ""
+        chat_document_id: str = ""
         if isinstance(message, ChatDocument):
             content = message.content
             fun_call = message.function_call
@@ -240,6 +291,7 @@ class ChatDocument(Document):
             sender_name = message.metadata.sender_name
             tool_ids = message.metadata.tool_ids
             tool_id = tool_ids[-1] if len(tool_ids) > 0 else ""
+            chat_document_id = message.id()
             if message.metadata.sender == Entity.SYSTEM:
                 sender_role = Role.SYSTEM
             if (
@@ -260,7 +312,9 @@ class ChatDocument(Document):
             content=content,
             function_call=fun_call,
             name=sender_name,
+            chat_document_id=chat_document_id,
         )
 
 
+LLMMessage.update_forward_refs()
 ChatDocMetaData.update_forward_refs()
