@@ -35,7 +35,6 @@ from langroid.embedding_models.models import (
     OpenAIEmbeddingsConfig,
     SentenceTransformerEmbeddingsConfig,
 )
-from langroid.exceptions import LangroidImportError
 from langroid.language_models.base import StreamingIfAllowed
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
 from langroid.mytypes import DocMetaData, Document, Entity
@@ -101,29 +100,6 @@ oai_embed_config = OpenAIEmbeddingsConfig(
     model_name="text-embedding-ada-002",
     dims=1536,
 )
-
-vecdb_config: VectorStoreConfig = QdrantDBConfig(
-    collection_name="doc-chat-qdrantdb",
-    replace_collection=True,
-    storage_path=".qdrantdb/data/",
-    embedding=hf_embed_config if has_sentence_transformers else oai_embed_config,
-)
-
-try:
-    import lancedb
-
-    lancedb  # appease mypy
-    from langroid.vector_store.lancedb import LanceDBConfig
-
-    vecdb_config = LanceDBConfig(
-        collection_name="doc-chat-lancedb",
-        replace_collection=True,
-        storage_path=".lancedb/data/",
-        embedding=(hf_embed_config if has_sentence_transformers else oai_embed_config),
-    )
-
-except (ImportError, LangroidImportError):
-    pass
 
 
 class DocChatAgentConfig(ChatAgentConfig):
@@ -202,7 +178,12 @@ class DocChatAgentConfig(ChatAgentConfig):
     )
 
     # Allow vecdb to be None in case we want to explicitly set it later
-    vecdb: Optional[VectorStoreConfig] = vecdb_config
+    vecdb: Optional[VectorStoreConfig] = QdrantDBConfig(
+        collection_name="doc-chat-qdrantdb",
+        replace_collection=True,
+        storage_path=".qdrantdb/data/",
+        embedding=hf_embed_config if has_sentence_transformers else oai_embed_config,
+    )
 
     llm: OpenAIGPTConfig = OpenAIGPTConfig(
         type="openai",

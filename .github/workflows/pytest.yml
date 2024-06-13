@@ -64,7 +64,8 @@ jobs:
     steps:
     - name: Check out repository
       uses: actions/checkout@v3
-
+    - name: Increase ulimit
+      run: ulimit -n 4096
     - name: Set up Python
       uses: actions/setup-python@v4
       with:
@@ -131,7 +132,7 @@ jobs:
           --first-test-file=tests/main/test_task_inf_loop.py \
           --first-test-file=tests/main/test_task.py \
           --first-test-file=tests/main/test_lance_doc_chat_agent.py \
-          --lf --last-failed-no-failures none \
+          --lf -s --last-failed-no-failures none \
           tests/main tests/extras/test_hf_embeddings.py
         poetry run coverage report
 

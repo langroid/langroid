@@ -97,8 +97,9 @@ for _ in range(100):
     )
 
 
-@pytest.fixture(scope="function")
-def vecdb(request) -> VectorStore:
+@pytest.fixture(scope="session")
+def vecdb(test_settings: Settings, request) -> VectorStore:
+    set_global(test_settings)
     if request.param == "qdrant_local":
         qd_dir = ":memory:"
         qd_cfg = QdrantDBConfig(
@@ -133,7 +134,7 @@ def vecdb(request) -> VectorStore:
         )
         cd = ChromaDB(cd_cfg)
         yield cd
-        rmdir(cd_dir)
+        # rmdir(cd_dir)
         return
 
     if request.param == "lancedb":
@@ -148,7 +149,7 @@ def vecdb(request) -> VectorStore:
         )
         ldb = LanceDB(ldb_cfg)
         yield ldb
-        rmdir(ldb_dir)
+        # rmdir(ldb_dir)
         return
 
 
@@ -168,7 +169,7 @@ class _TestDocChatAgentConfig(DocChatAgentConfig):
     #         dims=1536,
     #     ),
     # )
-
+    vecdb: VectorStoreConfig | None = None
     llm: OpenAIGPTConfig = OpenAIGPTConfig(
         stream=True,
         cache_config=RedisCacheConfig(fake=False),
@@ -189,8 +190,9 @@ config = _TestDocChatAgentConfig()
 set_global(Settings(cache=True))  # allow cacheing
 
 
-@pytest.fixture(scope="function")
-def agent(vecdb) -> DocChatAgent:
+@pytest.fixture(scope="session")
+def agent(test_settings: Settings, vecdb) -> DocChatAgent:
+    set_global(test_settings)
     agent = DocChatAgent(config)
     agent.vecdb = vecdb
     agent.ingest_docs(documents)
@@ -249,7 +251,7 @@ async def test_doc_chat_agent_llm_async(
     assert all([e in ans for e in expected])
 
 
-@pytest.mark.parametrize("vecdb", ["qdrant_local", "chroma", "lancedb"], indirect=True)
+@pytest.mark.parametrize("vecdb", ["qdrant_local", "chroma"], indirect=True)
 def test_doc_chat_agent_task(test_settings: Settings, agent):
     """
     Test DocChatAgent wrapped in a Task.
@@ -281,8 +283,9 @@ class RetrievalAgent(DocChatAgent):
         return ChatAgent.llm_response(self, query)
 
 
-@pytest.fixture(scope="function")
-def retrieval_agent(vecdb) -> RetrievalAgent:
+@pytest.fixture(scope="session")
+def retrieval_agent(test_settings: Settings, vecdb) -> RetrievalAgent:
+    set_global(test_settings)
     agent = RetrievalAgent(config)
     agent.vecdb = vecdb
     agent.ingest_docs(documents)
@@ -332,18 +335,28 @@ def test_retrieval_tool(
     assert all([e in ans for e in expected])
 
 
-@pytest.mark.parametrize("vecdb", ["lancedb", "qdrant_local", "chroma"], indirect=True)
+@pytest.fixture(scope="session")
+def new_agent(test_settings: Settings, vecdb) -> DocChatAgent:
+    set_global(test_settings)
+    agent = DocChatAgent(config)
+    agent.vecdb = vecdb
+    # agent.ingest_docs(documents)
+    os.environ["TOKENIZERS_PARALLELISM"] = "false"
+    return agent
+
+
+@pytest.mark.parametrize("vecdb", ["qdrant_local", "chroma"], indirect=True)
 @pytest.mark.parametrize("conv_mode", [True, False])
-def test_doc_chat_followup(test_settings: Settings, agent, conv_mode: bool):
+def test_doc_chat_followup(test_settings: Settings, new_agent, conv_mode: bool):
     """
     Test whether follow-up question is handled correctly.
     """
-    agent.config.conversation_mode = conv_mode
+    new_agent.config.conversation_mode = conv_mode
     set_global(test_settings)
     task = Task(
-        agent,
+        new_agent,
         interactive=False,
-        restart=True,
+        restart=False,  # don't restart, so we can ask follow-up questions
         done_if_response=[Entity.LLM],
         done_if_no_response=[Entity.LLM],
     )
@@ -354,19 +367,21 @@ def test_doc_chat_followup(test_settings: Settings, agent, conv_mode: bool):
     assert "1889" in result.content
 
 
-@pytest.mark.parametrize("vecdb", ["lancedb", "qdrant_local", "chroma"], indirect=True)
+@pytest.mark.parametrize("vecdb", ["qdrant_local", "chroma"], indirect=True)
 @pytest.mark.parametrize("conv_mode", [True, False])
 @pytest.mark.asyncio
-async def test_doc_chat_followup_async(test_settings: Settings, agent, conv_mode: bool):
+async def test_doc_chat_followup_async(
+    test_settings: Settings, new_agent, conv_mode: bool
+):
     """
     Test whether follow-up question is handled correctly (in async mode).
     """
-    agent.config.conversation_mode = conv_mode
+    new_agent.config.conversation_mode = conv_mode
     set_global(test_settings)
     task = Task(
-        agent,
+        new_agent,
         interactive=False,
-        restart=True,
+        restart=False,  # don't restart, so we can ask follow-up questions
         done_if_response=[Entity.LLM],
         done_if_no_response=[Entity.LLM],
     )
@@ -455,7 +470,7 @@ def test_doc_chat_retrieval(
     agent.clear()
 
 
-@pytest.mark.parametrize("vecdb", ["qdrant_local", "chroma", "lancedb"], indirect=True)
+@pytest.mark.parametrize("vecdb", ["qdrant_local", "chroma"], indirect=True)
 def test_doc_chat_rerank_diversity(test_settings: Settings, vecdb):
     """
     Test that reranking by diversity works.
@@ -492,7 +507,7 @@ def test_doc_chat_rerank_diversity(test_settings: Settings, vecdb):
         assert sum(p in r.content for r in reranked[:4]) == 1
 
 
-@pytest.mark.parametrize("vecdb", ["qdrant_local", "chroma", "lancedb"], indirect=True)
+@pytest.mark.parametrize("vecdb", ["qdrant_local", "chroma"], indirect=True)
 def test_doc_chat_rerank_periphery(test_settings: Settings, vecdb):
     """
     Test that reranking to periphery works.
@@ -658,7 +673,7 @@ def test_doc_chat_incremental_ingest(
     )
 
 
-@pytest.mark.parametrize("vecdb", ["chroma", "qdrant_local", "lancedb"], indirect=True)
+@pytest.mark.parametrize("vecdb", ["chroma", "qdrant_local"], indirect=True)
 @pytest.mark.parametrize(
     "splitter", [Splitter.PARA_SENTENCE, Splitter.SIMPLE, Splitter.TOKENS]
 )

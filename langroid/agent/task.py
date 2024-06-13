@@ -534,10 +534,10 @@ class Task:
         return self.pending_message
 
     def reset_all_sub_tasks(self) -> None:
-        """Recursively reset message history of agents in all sub-tasks"""
+        """Recursively reset message history of own agent and all sub-tasks"""
+        self.agent.clear_history(0)
+        self.agent.clear_dialog()
         for t in self.sub_tasks:
-            t.agent.clear_history(0)
-            t.agent.clear_dialog()
             t.reset_all_sub_tasks()
 
     def run(
