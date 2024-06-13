@@ -181,5 +181,4 @@ def hash(s: str) -> str:
 
 def generate_unique_id() -> str:
     """Generate a unique ID using UUID4."""
-    unique_id = str(uuid.uuid4())
-    return unique_id
+    return str(uuid.uuid4())

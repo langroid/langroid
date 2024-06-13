@@ -12,6 +12,7 @@ from langroid.mytypes import Document
 from langroid.pydantic_v1 import BaseSettings
 from langroid.utils.algorithms.graph import components, topological_sort
 from langroid.utils.configuration import settings
+from langroid.utils.object_registry import ObjectRegistry
 from langroid.utils.output.printing import print_long_text
 from langroid.utils.pandas_utils import stringify
 
@@ -163,7 +164,7 @@ class VectorStore(ABC):
         vecdbs don't like having blank ids."""
         for d in documents:
             if d.metadata.id in [None, ""]:
-                d.metadata.id = d._unique_hash_id()
+                d.metadata.id = ObjectRegistry.new_id()
 
     @abstractmethod
     def similar_texts_with_scores(
@@ -254,7 +255,7 @@ class VectorStore(ABC):
                 metadata=metadata,
             )
             # make a fresh id since content is in general different
-            document.metadata.id = document.hash_id(document.content)
+            document.metadata.id = ObjectRegistry.new_id()
             final_docs += [document]
             final_scores += [max(id2max_score[id] for id in w)]
         return list(zip(final_docs, final_scores))

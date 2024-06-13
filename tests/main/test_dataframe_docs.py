@@ -51,7 +51,6 @@ def test_df_to_documents(test_settings: Settings):
     docs = dataframe_to_documents(df, content="junk", metadata=[])
     assert len(docs) == 5
     assert docs[0].content == ""  # since `junk` is not a column in the dataframe
-    assert docs[0].metadata.id == ""  # already exists in DocMetaData, default is ""
     assert docs[0].year == data["year"][0]
     assert docs[0].author == data["author"][0]
     assert isinstance(docs[0], Document)

@@ -7,6 +7,7 @@ import tiktoken
 from langroid.mytypes import Document
 from langroid.parsing.para_sentence_split import create_chunks, remove_extra_whitespace
 from langroid.pydantic_v1 import BaseSettings
+from langroid.utils.object_registry import ObjectRegistry
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.WARNING)
@@ -75,11 +76,13 @@ class Parser:
             return
         # The original metadata.id (if any) is ignored since it will be same for all
         # chunks and is useless. We want a distinct id for each chunk.
+        # ASSUMPTION: all chunks c of a doc have same c.metadata.id !
         orig_ids = [c.metadata.id for c in chunks]
-        ids = [Document.hash_id(str(c)) for c in chunks]
+        ids = [ObjectRegistry.new_id() for c in chunks]
         id2chunk = {id: c for id, c in zip(ids, chunks)}
 
         # group the ids by orig_id
+        # (each distinct orig_id refers to a different document)
         orig_id_to_ids: Dict[str, List[str]] = {}
         for orig_id, id in zip(orig_ids, ids):
             if orig_id not in orig_id_to_ids:
@@ -108,6 +111,10 @@ class Parser:
             if d.content.strip() == "":
                 continue
             chunks = remove_extra_whitespace(d.content).split(self.config.separators[0])
+            # note we are ensuring we COPY the document metadata into each chunk,
+            # which ensures all chunks of a given doc have same metadata
+            # (and in particular same metadata.id, which is important later for
+            # add_window_ids)
             chunk_docs = [
                 Document(
                     content=c, metadata=d.metadata.copy(update=dict(is_chunk=True))
@@ -156,6 +163,10 @@ class Parser:
             if d.content.strip() == "":
                 continue
             chunks = create_chunks(d.content, self.config.chunk_size, self.num_tokens)
+            # note we are ensuring we COPY the document metadata into each chunk,
+            # which ensures all chunks of a given doc have same metadata
+            # (and in particular same metadata.id, which is important later for
+            # add_window_ids)
             chunk_docs = [
                 Document(
                     content=c, metadata=d.metadata.copy(update=dict(is_chunk=True))
@@ -171,6 +182,10 @@ class Parser:
         final_docs = []
         for d in docs:
             chunks = self.chunk_tokens(d.content)
+            # note we are ensuring we COPY the document metadata into each chunk,
+            # which ensures all chunks of a given doc have same metadata
+            # (and in particular same metadata.id, which is important later for
+            # add_window_ids)
             chunk_docs = [
                 Document(
                     content=c, metadata=d.metadata.copy(update=dict(is_chunk=True))
@@ -274,7 +289,7 @@ class Parser:
         # we need this to distinguish docs later in add_window_ids
         for d in docs:
             if d.metadata.id in [None, ""]:
-                d.metadata.id = d._unique_hash_id()
+                d.metadata.id = ObjectRegistry.new_id()
         # some docs are already splits, so don't split them further!
         chunked_docs = [d for d in docs if d.metadata.is_chunk]
         big_docs = [d for d in docs if not d.metadata.is_chunk]

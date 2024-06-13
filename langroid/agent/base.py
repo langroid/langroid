@@ -40,9 +40,10 @@ from langroid.mytypes import Entity
 from langroid.parsing.parse_json import extract_top_level_json
 from langroid.parsing.parser import Parser, ParsingConfig
 from langroid.prompts.prompts_config import PromptsConfig
-from langroid.pydantic_v1 import BaseSettings, ValidationError, validator
+from langroid.pydantic_v1 import BaseSettings, Field, ValidationError, validator
 from langroid.utils.configuration import settings
 from langroid.utils.constants import NO_ANSWER
+from langroid.utils.object_registry import ObjectRegistry
 from langroid.utils.output import status
 from langroid.vector_store.base import VectorStore, VectorStoreConfig
 
@@ -64,6 +65,7 @@ class AgentConfig(BaseSettings):
     parsing: Optional[ParsingConfig] = ParsingConfig()
     prompts: Optional[PromptsConfig] = PromptsConfig()
     show_stats: bool = True  # show token usage/cost stats?
+    add_to_registry: bool = True  # register agent in ObjectRegistry?
 
     @validator("name")
     def check_name_alphanum(cls, v: str) -> str:
@@ -90,6 +92,8 @@ class Agent(ABC):
     information about any tool/function-calling messages that have been defined.
     """
 
+    id: str = Field(default_factory=lambda: ObjectRegistry.new_id())
+
     def __init__(self, config: AgentConfig = AgentConfig()):
         self.config = config
         self.lock = asyncio.Lock()  # for async access to update self.llm.usage_cost
@@ -114,6 +118,8 @@ class Agent(ABC):
         self.parser: Optional[Parser] = (
             Parser(config.parsing) if config.parsing else None
         )
+        if config.add_to_registry:
+            ObjectRegistry.register_object(self)
 
         self.callbacks = SimpleNamespace(
             start_llm_stream=lambda: noop_fn,
@@ -127,6 +133,14 @@ class Agent(ABC):
             show_error_message=noop_fn,
             show_start_response=noop_fn,
         )
+
+    @staticmethod
+    def from_id(id: str) -> "Agent":
+        return cast(Agent, ObjectRegistry.get(id))
+
+    @staticmethod
+    def delete_id(id: str) -> None:
+        ObjectRegistry.remove(id)
 
     def entity_responders(
         self,

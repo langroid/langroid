@@ -21,6 +21,7 @@ from langroid.language_models.base import (
 )
 from langroid.language_models.openai_gpt import OpenAIGPT
 from langroid.utils.configuration import settings
+from langroid.utils.object_registry import ObjectRegistry
 from langroid.utils.output import status
 
 console = Console()
@@ -137,11 +138,22 @@ class ChatAgent(Agent):
         self.llm_functions_usable: Set[str] = set()
         self.llm_function_force: Optional[Dict[str, str]] = None
 
+    @staticmethod
+    def from_id(id: str) -> "ChatAgent":
+        """
+        Get an agent from its ID
+        Args:
+            agent_id (str): ID of the agent
+        Returns:
+            ChatAgent: The agent with the given ID
+        """
+        return cast(ChatAgent, Agent.from_id(id))
+
     def clone(self, i: int = 0) -> "ChatAgent":
         """Create i'th clone of this agent, ensuring tool use/handling is cloned.
         Important: We assume all member variables are in the __init__ method here
         and in the Agent class.
-        TODO: We are attempting to close an agent after its state has been
+        TODO: We are attempting to clone an agent after its state has been
         changed in possibly many ways. Below is an imperfect solution. Caution advised.
         Revisit later.
         """
@@ -158,6 +170,9 @@ class ChatAgent(Agent):
         new_agent.llm_function_force = self.llm_function_force
         # Caution - we are copying the vector-db, maybe we don't always want this?
         new_agent.vecdb = self.vecdb
+        new_agent.id = ObjectRegistry.new_id()
+        if self.config.add_to_registry:
+            ObjectRegistry.register_object(new_agent)
         return new_agent
 
     def _fn_call_available(self) -> bool:
@@ -202,6 +217,10 @@ class ChatAgent(Agent):
         if start < 0:
             n = len(self.message_history)
             start = max(0, n + start)
+        dropped = self.message_history[start:]
+        for msg in dropped:
+            # clear out the chat document from the ObjectRegistry
+            ChatDocument.delete_id(msg.chat_document_id)
         self.message_history = self.message_history[:start]
 
     def update_history(self, message: str, response: str) -> None:
@@ -310,10 +329,24 @@ class ChatAgent(Agent):
 
     def last_message_with_role(self, role: Role) -> LLMMessage | None:
         """from `message_history`, return the last message with role `role`"""
-        for i in range(len(self.message_history) - 1, -1, -1):
-            if self.message_history[i].role == role:
-                return self.message_history[i]
-        return None
+        n_role_msgs = len([m for m in self.message_history if m.role == role])
+        if n_role_msgs == 0:
+            return None
+        idx = self.nth_message_idx_with_role(role, n_role_msgs)
+        return self.message_history[idx]
+
+    def nth_message_idx_with_role(self, role: Role, n: int) -> int:
+        """Index of `n`th message in message_history, with specified role.
+        (n is assumed to be 1-based, i.e. 1 is the first message with that role).
+        Return -1 if not found. Index = 0 is the first message in the history.
+        """
+        indices_with_role = [
+            i for i, m in enumerate(self.message_history) if m.role == role
+        ]
+
+        if len(indices_with_role) < n:
+            return -1
+        return indices_with_role[n - 1]
 
     def update_last_message(self, message: str, role: str = Role.USER) -> None:
         """
@@ -488,9 +521,9 @@ class ChatAgent(Agent):
             return None
         with StreamingIfAllowed(self.llm, self.llm.get_stream()):
             response = self.llm_response_messages(hist, output_len)
-        # TODO - when response contains function_call we should include
-        # that (and related fields) in the message_history
         self.message_history.append(ChatDocument.to_LLMMessage(response))
+        response.metadata.msg_idx = len(self.message_history) - 1
+        response.metadata.agent_id = self.id
         # Preserve trail of tool_ids for OpenAI Assistant fn-calls
         response.metadata.tool_ids = (
             []
@@ -511,9 +544,9 @@ class ChatAgent(Agent):
         hist, output_len = self._prep_llm_messages(message)
         with StreamingIfAllowed(self.llm, self.llm.get_stream()):
             response = await self.llm_response_messages_async(hist, output_len)
-        # TODO - when response contains function_call we should include
-        # that (and related fields) in the message_history
         self.message_history.append(ChatDocument.to_LLMMessage(response))
+        response.metadata.msg_idx = len(self.message_history) - 1
+        response.metadata.agent_id = self.id
         # Preserve trail of tool_ids for OpenAI Assistant fn-calls
         response.metadata.tool_ids = (
             []
@@ -521,6 +554,16 @@ class ChatAgent(Agent):
             else message.metadata.tool_ids if message is not None else []
         )
         return response
+
+    def init_message_history(self) -> None:
+        """
+        Initialize the message history with the system message and user message
+        """
+        self.message_history = [self._create_system_and_tools_message()]
+        if self.user_message:
+            self.message_history.append(
+                LLMMessage(role=Role.USER, content=self.user_message)
+            )
 
     def _prep_llm_messages(
         self,
@@ -555,11 +598,7 @@ class ChatAgent(Agent):
 
         if len(self.message_history) == 0:
             # initial messages have not yet been loaded, so load them
-            self.message_history = [self._create_system_and_tools_message()]
-            if self.user_message:
-                self.message_history.append(
-                    LLMMessage(role=Role.USER, content=self.user_message)
-                )
+            self.init_message_history()
 
             # for debugging, show the initial message history
             if settings.debug:
@@ -576,8 +615,14 @@ class ChatAgent(Agent):
             self.message_history[0] = self._create_system_and_tools_message()
 
         if message is not None:
-            llm_msg = ChatDocument.to_LLMMessage(message)
-            self.message_history.append(llm_msg)
+            if (
+                isinstance(message, str)
+                or message.id() != self.message_history[-1].chat_document_id
+            ):
+                # either the message is a str, or it is a fresh ChatDocument
+                # different from the last message in the history
+                llm_msg = ChatDocument.to_LLMMessage(message)
+                self.message_history.append(llm_msg)
 
         hist = self.message_history
         output_len = self.config.llm.max_output_tokens
@@ -614,6 +659,7 @@ class ChatAgent(Agent):
                         )
                     # drop the second message, i.e. first msg after the sys msg
                     # (typically user msg).
+                    ChatDocument.delete_id(hist[1].chat_document_id)
                     hist = hist[:1] + hist[2:]
 
                 if len(hist) < len(self.message_history):
@@ -650,6 +696,12 @@ class ChatAgent(Agent):
                 and the response may be truncated.
                 """
             )
+        if isinstance(message, ChatDocument):
+            # record the position of the corresponding LLMMessage in
+            # the message_history
+            message.metadata.msg_idx = len(hist) - 1
+            message.metadata.agent_id = self.id
+
         return hist, output_len
 
     def _function_args(

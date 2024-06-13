@@ -8,6 +8,7 @@ class _TestGlobals(GlobalState):
 
     some_variable: int = 0
     another_variable: str = ""
+    mapping: dict = {}
 
 
 def test_initial_global_state():
@@ -16,6 +17,7 @@ def test_initial_global_state():
     """
     assert _TestGlobals.get_value("some_variable") == 0
     assert _TestGlobals.get_value("another_variable") == ""
+    assert _TestGlobals.get_value("mapping") == {}
 
 
 def test_set_global_state():
@@ -32,6 +34,11 @@ def test_set_global_state():
     assert _TestGlobals.get_value("some_variable") == 7
     assert _TestGlobals.get_value("another_variable") == "hello"
 
+    _TestGlobals.set_values(mapping={"k1": "v1", "k2": "v2"})
+
+    assert _TestGlobals.get_value("mapping")["k1"] == "v1"
+    assert _TestGlobals.get_value("mapping")["k2"] == "v2"
+
 
 def test_singleton_behavior():
     """
@@ -45,3 +52,7 @@ def test_singleton_behavior():
     # Modify using one instance and check with the other
     first_instance.set_values(some_variable=10)
     assert second_instance.get_value("some_variable") == 10
+
+    first_instance.set_values(mapping={"k1": "v1", "k2": "v2"})
+    assert second_instance.get_value("mapping")["k1"] == "v1"
+    assert second_instance.get_value("mapping")["k2"] == "v2"
