@@ -330,7 +330,7 @@ def new_agent(test_settings: Settings, vecdb) -> DocChatAgent:
     set_global(test_settings)
     agent = DocChatAgent(config)
     agent.vecdb = vecdb
-    # agent.ingest_docs(documents)
+    agent.ingest_docs(documents)
     os.environ["TOKENIZERS_PARALLELISM"] = "false"
     return agent
 

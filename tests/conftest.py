@@ -16,7 +16,7 @@ def pytest_addoption(parser) -> None:
     parser.addoption("--nc", action="store_true", default=False, help="don't use cache")
     parser.addoption("--3", action="store_true", default=False, help="use GPT-3.5")
     parser.addoption("--ns", action="store_true", default=False, help="no streaming")
-    parser.addoption("--ct", default="redis", help="redis or momento")
+    parser.addoption("--ct", default="redis", help="redis, fakeredis or momento")
     parser.addoption(
         "--m",
         default=OpenAIChatModel.GPT4o,
