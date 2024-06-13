@@ -123,6 +123,10 @@ teacher_task.run()
 <details>
 <summary> <b>Click to expand</b></summary>
 
+- **Jun 2024:**
+  - **0.2.0:** Improved lineage tracking, granular sub-task configs, and a new tool, `RewindTool`, 
+    that lets an agent "rewind and redo" a past message (and all dependent messages are cleared out 
+    thanks to the lineage tracking). Read notes [here](https://github.com/langroid/langroid/releases/tag/0.2.0).
 - **May 2024:** 
   - **Slimmer langroid**: All document-parsers (i.e. pdf, doc, docx) and most 
     vector-databases (except qdrant) 
