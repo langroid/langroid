@@ -132,7 +132,7 @@ jobs:
           --first-test-file=tests/main/test_task_inf_loop.py \
           --first-test-file=tests/main/test_task.py \
           --first-test-file=tests/main/test_lance_doc_chat_agent.py \
-          --lf -s --last-failed-no-failures none \
+          --lf --last-failed-no-failures none \
           tests/main tests/extras/test_hf_embeddings.py
         poetry run coverage report
 

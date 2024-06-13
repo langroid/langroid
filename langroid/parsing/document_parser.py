@@ -8,6 +8,7 @@ from io import BytesIO
 from typing import TYPE_CHECKING, Any, Generator, List, Tuple
 
 from langroid.exceptions import LangroidImportError
+from langroid.utils.object_registry import ObjectRegistry
 
 try:
     import fitz
@@ -341,6 +342,8 @@ class DocumentParser(Parser):
         split = []  # tokens in curr split
         pages: List[str] = []
         docs: List[Document] = []
+        # metadata.id to be shared by ALL chunks of this document
+        common_id = ObjectRegistry.new_id()
         for i, page in self.iterate_pages():
             page_text = self.extract_text_from_page(page)
             split += self.tokenizer.encode(page_text)
@@ -358,6 +361,7 @@ class DocumentParser(Parser):
                         metadata=DocMetaData(
                             source=f"{self.source} pages {pg}",
                             is_chunk=True,
+                            id=common_id,
                         ),
                     )
                 )
@@ -372,6 +376,7 @@ class DocumentParser(Parser):
                     metadata=DocMetaData(
                         source=f"{self.source} pages {pg}",
                         is_chunk=True,
+                        id=common_id,
                     ),
                 )
             )

@@ -71,7 +71,6 @@ class Document(BaseModel):
 
     def __str__(self) -> str:
         # TODO: make metadata a pydantic model to enforce "source"
-        self.metadata.json()
         return dedent(
             f"""
         CONTENT: {self.content}         
