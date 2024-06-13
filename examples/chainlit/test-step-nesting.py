@@ -10,6 +10,8 @@ Two things to look for:
 
 (1) is fine in chainlit 1.1.202, i.e. all steps are shown whether tools or not
     but in 1.1.300, only type = "tool" steps are shown.
+    For example if the `type` params are other than "tool" in the example below,
+    the steps will not show up in the chat.
 (2) is broken in 1.1.202 -- the sub-step is correctly nested BUT always shows up
     at the TOP, and can look very unintuitive, as this example shows.
 """
