@@ -97,7 +97,7 @@ for _ in range(100):
     )
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="function")
 def vecdb(test_settings: Settings, request) -> VectorStore:
     set_global(test_settings)
     if request.param == "qdrant_local":
@@ -134,7 +134,7 @@ def vecdb(test_settings: Settings, request) -> VectorStore:
         )
         cd = ChromaDB(cd_cfg)
         yield cd
-        # rmdir(cd_dir)
+        rmdir(cd_dir)
         return
 
     if request.param == "lancedb":
@@ -149,7 +149,7 @@ def vecdb(test_settings: Settings, request) -> VectorStore:
         )
         ldb = LanceDB(ldb_cfg)
         yield ldb
-        # rmdir(ldb_dir)
+        rmdir(ldb_dir)
         return
 
 
@@ -159,16 +159,6 @@ class _TestDocChatAgentConfig(DocChatAgentConfig):
     debug: bool = False
     stream: bool = True  # allow streaming where needed
     conversation_mode = True
-    # vecdb: VectorStoreConfig = QdrantDBConfig(
-    #     collection_name="test-data",
-    #     replace_collection=True,
-    #     storage_path=storage_path,
-    #     embedding=OpenAIEmbeddingsConfig(
-    #         model_type="openai",
-    #         model_name="text-embedding-ada-002",
-    #         dims=1536,
-    #     ),
-    # )
     vecdb: VectorStoreConfig | None = None
     llm: OpenAIGPTConfig = OpenAIGPTConfig(
         stream=True,
@@ -190,7 +180,7 @@ config = _TestDocChatAgentConfig()
 set_global(Settings(cache=True))  # allow cacheing
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="function")
 def agent(test_settings: Settings, vecdb) -> DocChatAgent:
     set_global(test_settings)
     agent = DocChatAgent(config)
@@ -283,7 +273,7 @@ class RetrievalAgent(DocChatAgent):
         return ChatAgent.llm_response(self, query)
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="function")
 def retrieval_agent(test_settings: Settings, vecdb) -> RetrievalAgent:
     set_global(test_settings)
     agent = RetrievalAgent(config)
@@ -335,7 +325,7 @@ def test_retrieval_tool(
     assert all([e in ans for e in expected])
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="function")
 def new_agent(test_settings: Settings, vecdb) -> DocChatAgent:
     set_global(test_settings)
     agent = DocChatAgent(config)
