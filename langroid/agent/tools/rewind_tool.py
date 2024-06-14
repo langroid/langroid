@@ -82,8 +82,9 @@ class RewindTool(ToolMessage):
             cls(n=1, content="What are the 3 major causes of heart disease?"),
             (
                 """
-                I want to change my 2nd message to Bob, to say 
-                'who wrote the book Grime and Banishment?'
+                Based on the conversation so far, I realize I would get a better
+                response from Bob if rephrase my 2nd message to him to: 
+                'Who wrote the book Grime and Banishment?'
                 """,
                 cls(n=2, content="who wrote the book 'Grime and Banishment'?"),
             ),

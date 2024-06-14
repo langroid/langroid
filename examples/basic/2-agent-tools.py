@@ -56,7 +56,7 @@ class ChichikovTool(lr.ToolMessage):
 helper = lr.ChatAgent(
     lr.ChatAgentConfig(
         name="Helper",
-        system_message=f"""
+        system_message="""
         You have a few tools to help answer the user's questions. 
         Decide which tool to use, and send your request using the correct format 
         for the tool.

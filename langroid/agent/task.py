@@ -39,6 +39,7 @@ from langroid.parsing.routing import parse_addressed_message
 from langroid.pydantic_v1 import BaseModel
 from langroid.utils.configuration import settings
 from langroid.utils.constants import (
+    AT,  # regex for start of an addressed recipient e.g. "@"
     DONE,
     NO_ANSWER,
     PASS,
@@ -124,13 +125,13 @@ class Task:
         restart: bool = True,
         default_human_response: Optional[str] = None,
         interactive: bool = True,
-        only_user_quits_root: bool = False,
         erase_substeps: bool = False,
         allow_null_result: bool = True,
         max_stalled_steps: int = 5,
         done_if_no_response: List[Responder] = [],
         done_if_response: List[Responder] = [],
         config: TaskConfig = TaskConfig(),
+        **kwargs: Any,  # catch-all for any legacy params, for backwards compatibility
     ):
         """
         A task to be performed by an agent.
@@ -155,7 +156,7 @@ class Task:
             system_message (str): if not empty, overrides agent's system_message
             user_message (str): if not empty, overrides agent's user_message
             restart (bool): if true, resets the agent's message history *at every run*.
-            default_human_response (str): default response from user; useful for
+            default_human_response (str|None): default response from user; useful for
                 testing, to avoid interactive input from user.
                 [Instead of this, setting `interactive` usually suffices]
             interactive (bool): if true, wait for human input after each non-human
@@ -166,9 +167,6 @@ class Task:
                 case the system will wait for a user response. In other words, use
                 `interactive=False` when you want a "largely non-interactive"
                 run, with the exception of explicit user addressing.
-            only_user_quits_root (bool): if true, only user can quit the root task.
-                [This param is ignored & deprecated; Keeping for backward compatibility.
-                Instead of this, setting `interactive` suffices]
             erase_substeps (bool): if true, when task completes, erase intermediate
                 conversation with subtasks from this agent's `message_history`, and also
                 erase all subtask agents' `message_history`.
@@ -248,22 +246,14 @@ class Task:
         self.name = name or agent.config.name
         self.value: str = self.name
 
-        if default_human_response is not None and default_human_response == "":
-            interactive = False
+        self.default_human_response = default_human_response
+        if default_human_response is not None:
+            # only override agent's default_human_response if it is explicitly set
+            self.agent.default_human_response = default_human_response
         self.interactive = interactive
         self.agent.interactive = interactive
         self.message_history_idx = -1
-        if interactive:
-            only_user_quits_root = True
-        else:
-            default_human_response = default_human_response or ""
-            only_user_quits_root = False
-        if default_human_response is not None:
-            self.agent.default_human_response = default_human_response
-        self.default_human_response = default_human_response
-        if self.interactive:
-            self.agent.default_human_response = None
-        self.only_user_quits_root = only_user_quits_root
+
         # set to True if we want to collapse multi-turn conversation with sub-tasks into
         # just the first outgoing message and last incoming message.
         # Note this also completely erases sub-task agents' message_history.
@@ -744,9 +734,6 @@ class Task:
         self.init(msg)
         # sets indentation to be printed prior to any output from agent
         self.agent.indent = self._indent
-        if self.default_human_response is not None:
-            self.agent.default_human_response = self.default_human_response
-
         self.message_history_idx = -1
         if isinstance(self.agent, ChatAgent):
             # mark where we are in the message history, so we can reset to this when
@@ -1362,8 +1349,8 @@ class Task:
             and result.content in USER_QUIT_STRINGS
             and result.metadata.sender == Entity.USER
         )
-        if self._level == 0 and self.only_user_quits_root:
-            # for top-level task, only user can quit out
+        if self._level == 0 and self.interactive:
+            # for top-level task, in interactive mode, only user can quit out
             return (user_quit, StatusCode.USER_QUIT if user_quit else StatusCode.OK)
 
         if self.is_done:
@@ -1591,7 +1578,6 @@ def parse_routing(
             return True, addressee, None
         else:
             return False, addressee, content_to_send
-    AT = "@"
     if (
         AT in content
         and (addressee_content := parse_addressed_message(content, AT))[0] is not None
