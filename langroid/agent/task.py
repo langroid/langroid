@@ -125,6 +125,7 @@ class Task:
         restart: bool = True,
         default_human_response: Optional[str] = None,
         interactive: bool = True,
+        only_user_quits_root: bool = True,
         erase_substeps: bool = False,
         allow_null_result: bool = True,
         max_stalled_steps: int = 5,
@@ -167,6 +168,8 @@ class Task:
                 case the system will wait for a user response. In other words, use
                 `interactive=False` when you want a "largely non-interactive"
                 run, with the exception of explicit user addressing.
+            only_user_quits_root (bool): if true, when interactive=True, only user can
+                quit the root task (Ignored when interactive=False).
             erase_substeps (bool): if true, when task completes, erase intermediate
                 conversation with subtasks from this agent's `message_history`, and also
                 erase all subtask agents' `message_history`.
@@ -252,6 +255,7 @@ class Task:
             self.agent.default_human_response = default_human_response
         self.interactive = interactive
         self.agent.interactive = interactive
+        self.only_user_quits_root = only_user_quits_root
         self.message_history_idx = -1
 
         # set to True if we want to collapse multi-turn conversation with sub-tasks into
@@ -1349,7 +1353,7 @@ class Task:
             and result.content in USER_QUIT_STRINGS
             and result.metadata.sender == Entity.USER
         )
-        if self._level == 0 and self.interactive:
+        if self._level == 0 and self.interactive and self.only_user_quits_root:
             # for top-level task, in interactive mode, only user can quit out
             return (user_quit, StatusCode.USER_QUIT if user_quit else StatusCode.OK)
 

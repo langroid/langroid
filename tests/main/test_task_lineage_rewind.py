@@ -47,8 +47,7 @@ def test_lineage_1_task():
             )
         )
     )
-    task = lr.Task(agent, interactive=True)
-    task.only_user_quits_root = False
+    task = lr.Task(agent, interactive=True, only_user_quits_root=False)
     result = task.run("1")
     assert "100" in result.content
 
