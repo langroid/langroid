@@ -82,14 +82,14 @@ def test_process_messages(test_settings: Settings):
     # It's Human's turn; they say nothing,
     # and this is reflected in `self.pending_message` as NO_ANSWER
     agent.default_human_response = ""
-    # Human says ''
+    # Human says '' -- considered an Invalid message, so pending msg doesn't change
     task.step()
-    assert NO_ANSWER in task.pending_message.content
-    assert task.pending_message.metadata.sender == Entity.USER
+    assert "London" in task.pending_message.content
+    assert task.pending_message.metadata.sender == Entity.LLM
 
-    # Since chat was user-initiated, LLM can still respond to NO_ANSWER
-    # with something like "How can I help?"
+    # LLM cannot respond to itself, so next step still does not change pending msg
     task.step()
+    assert "London" in task.pending_message.content
     assert task.pending_message.metadata.sender == Entity.LLM
 
     # reset task
@@ -98,12 +98,13 @@ def test_process_messages(test_settings: Settings):
         agent,
         name="Test",
         system_message=f""" Your job is to always say "{NO_ANSWER}" """,
-        user_message=question,
         restart=True,
     )
-    # LLM responds with NO_ANSWER
-    task.init()
-    task.step()
+    # LLM responds with NO_ANSWER, which, although it is an invalid response,
+    # is the only explicit response in the loop, so it is processed as a valid response,
+    # and the pending message is updated to this message.
+    task.init(question)
+    task.step()  # LLM has invalid response => pending msg is still the same
     assert NO_ANSWER in task.pending_message.content
     assert task.pending_message.metadata.sender == Entity.LLM
 

@@ -86,14 +86,14 @@ async def test_task_step_async(test_settings: Settings):
     # It's Human's turn; they say nothing,
     # and this is reflected in `self.pending_message` as NO_ANSWER
     agent.default_human_response = ""
-    # Human says ''
+    # Human says '', which is an invalid response, so pending msg stays same
     await task.step_async()
-    assert NO_ANSWER in task.pending_message.content
-    assert task.pending_message.metadata.sender == Entity.USER
+    assert "London" in task.pending_message.content
+    assert task.pending_message.metadata.sender == Entity.LLM
 
-    # Since chat was user-initiated, LLM can still respond to NO_ANSWER
-    # with something like "How can I help?"
+    # LLM cannot respond to itself, so pending msg still does not change
     await task.step_async()
+    assert "London" in task.pending_message.content
     assert task.pending_message.metadata.sender == Entity.LLM
 
     # reset task
@@ -102,11 +102,13 @@ async def test_task_step_async(test_settings: Settings):
         agent,
         name="Test",
         system_message=f""" Your job is to always say "{NO_ANSWER}" """,
-        user_message=question,
         restart=True,
     )
-    # LLM responds with NO_ANSWER
-    task.init()
+    # LLM responds with NO_ANSWER, which is an invalid msg,
+    # which is normally an invalid message, but it is the ONLY explicit message
+    # in the step, so is processed as a valid step result, and the pending msg is
+    # updated to this message.
+    task.init(question)
     await task.step_async()
     assert NO_ANSWER in task.pending_message.content
     assert task.pending_message.metadata.sender == Entity.LLM
