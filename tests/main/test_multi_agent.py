@@ -3,6 +3,7 @@ from typing import Optional
 import pytest
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
+from langroid.agent.chat_document import StatusCode
 from langroid.agent.task import Task
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
 from langroid.language_models.base import Role
@@ -285,5 +286,10 @@ def test_multi_agent_no_answer(test_settings: Settings):
     assert pending_message.metadata.sender == Entity.USER
 
     task_a.agent.clear_history(0)
+    # Run for 2 turns -- recipients say NO_ANSWER, which is
+    # normally an invalid response, but since this is the ONLY explicit response
+    # in the step, we process this as a valid step result, and the pending message
+    # is updated to this message.
     result = task_a.run(turns=2)
     assert NO_ANSWER in result.content
+    assert result.metadata.status == StatusCode.FIXED_TURNS

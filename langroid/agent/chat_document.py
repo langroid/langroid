@@ -36,7 +36,8 @@ class StatusCode(str, Enum):
     STALLED = "STALLED"
     INF_LOOP = "INF_LOOP"
     KILL = "KILL"
-    MAX_TURNS = "MAX_TURNS"
+    FIXED_TURNS = "FIXED_TURNS"  # reached intended number of turns
+    MAX_TURNS = "MAX_TURNS"  # hit max-turns limit
     MAX_COST = "MAX_COST"
     MAX_TOKENS = "MAX_TOKENS"
     TIMEOUT = "TIMEOUT"

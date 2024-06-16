@@ -2,6 +2,7 @@
 Specific tests of the Task class for infinite loops.
 """
 
+from random import choice
 from typing import Optional
 
 import pytest
@@ -9,7 +10,9 @@ import pytest
 import langroid as lr
 from langroid.agent import ChatDocument
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
+from langroid.language_models.mock_lm import MockLMConfig
 from langroid.utils.configuration import settings
+from langroid.utils.constants import NO_ANSWER
 
 settings.stream = False
 
@@ -79,4 +82,56 @@ def test_task_inf_loop(
     else:
         # no loop within this many turns, so we shouldn't raise exception
         result = task.run(turns=80)
-        assert result.metadata.status == lr.StatusCode.MAX_TURNS
+        assert result.metadata.status == lr.StatusCode.FIXED_TURNS
+
+
+def test_task_stall():
+    """Test that task.run() bails when stalled"""
+
+    agent = ChatAgent(
+        ChatAgentConfig(
+            name="Random",
+            llm=MockLMConfig(response_fn=lambda x: choice(["1", "2", "3"])),
+        )
+    )
+
+    alice_task = lr.Task(agent, interactive=False)
+    result = alice_task.run(turns=100)
+    assert result is None
+
+
+def test_task_alternating_no_answer():
+    """Test that task.run() bails when there's a long enough
+    alternation between NO_ANSWER and normal msg."""
+
+    alice = ChatAgent(
+        ChatAgentConfig(
+            name="Alice",
+            llm=MockLMConfig(response_fn=lambda x: choice([str(x) for x in range(50)])),
+        )
+    )
+
+    alice_task = lr.Task(alice, interactive=True, default_human_response=NO_ANSWER)
+    with pytest.raises(lr.InfiniteLoopException):
+        alice_task.run(turns=100)
+
+    alice_task = lr.Task(
+        alice,
+        restart=True,
+        interactive=False,
+    )
+    # Alice keeps sending random msgs, Bob always says NO_ANSWER
+    # This simulates an inf loop situation where Alice is asking various questions
+    # and the sub-task responds with NO_ANSWER.
+    bob = ChatAgent(
+        ChatAgentConfig(
+            name="Bob",
+            llm=MockLMConfig(default_response=NO_ANSWER),
+        )
+    )
+
+    bob_task = lr.Task(bob, interactive=False, single_round=True)
+    alice_task.add_sub_task(bob_task)
+
+    with pytest.raises(lr.InfiniteLoopException):
+        alice_task.run(turns=100)

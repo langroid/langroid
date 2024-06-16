@@ -857,7 +857,7 @@ class ChatAgent(Agent):
             # we won't have citations yet, so we're done
             return
         if response.metadata.has_citation and not settings.quiet:
-            print("[grey37]SOURCES:\n" + response.metadata.source + "[/grey37]")
+            print("[grey37]SOURCES:\n" + escape(response.metadata.source) + "[/grey37]")
             self.callbacks.show_llm_response(
                 content=str(response.metadata.source),
                 is_tool=False,

@@ -344,7 +344,7 @@ class Agent(ABC):
             return results
         if not settings.quiet:
             console.print(f"[red]{self.indent}", end="")
-            print(f"[red]Agent: {results}")
+            print(f"[red]Agent: {escape(results)}")
             maybe_json = len(extract_top_level_json(results)) > 0
             self.callbacks.show_agent_response(
                 content=results,
@@ -409,14 +409,12 @@ class Agent(ABC):
             isinstance(msg, ChatDocument) and msg.metadata.recipient == Entity.USER
         )
 
-        interactive = (
-            self.interactive if self.interactive is not None else settings.interactive
-        )
-        if self.default_human_response is not None and not need_human_response:
-            # useful for automated testing
-            user_msg = self.default_human_response
-        elif not interactive and not need_human_response:
+        interactive = self.interactive or settings.interactive
+
+        if not interactive and not need_human_response:
             return None
+        elif self.default_human_response is not None:
+            user_msg = self.default_human_response
         else:
             if self.callbacks.get_user_response is not None:
                 # ask user with empty prompt: no need for prompt
