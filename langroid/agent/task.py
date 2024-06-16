@@ -184,8 +184,8 @@ class Task:
                 Note: erasing can reduce prompt sizes, but results in repetitive
                 sub-task delegation.
             allow_null_result (bool):
-                If true, allow null (empty or NO_ANSWER) as the result of a step or
-                overall task result.
+                If true, create dummy NO_ANSWER response when no valid response is found
+                in a step.
                 Optional, default is False.
                 *Note:* In non-interactive mode, when this is set to True,
                 you can have a situation where an LLM generates (non-tool) text,
@@ -193,7 +193,9 @@ class Task:
                 is inserted as a dummy response from the User entity, so the LLM
                 will now respond to this Null result, and this will continue
                 until the LLM emits a DONE signal (if instructed to do so),
-                otherwise it can result in an infinite loop.
+                otherwise langroid detects a potential infinite loop after
+                a certain number of such steps (= `TaskConfig.inf_loop_wait_factor`)
+                and will raise an InfiniteLoopException.
             max_stalled_steps (int): task considered done after this many consecutive
                 steps with no progress. Default is 3.
             done_if_no_response (List[Responder]): consider task done if NULL
@@ -1047,15 +1049,10 @@ class Task:
         self._show_pending_message_if_debug()
         return self.pending_message
 
-    def _process_valid_responder_result(
-        self,
-        r: Responder,
-        parent: ChatDocument | None,
-        result: ChatDocument,
-    ) -> None:
-        """Processes valid result from a responder, during a step"""
+    def _update_no_answer_vars(self, result: ChatDocument) -> None:
+        """Update variables related to NO_ANSWER responses, to aid
+        in alternating NO_ANSWER infinite-loop detection."""
 
-        # in case the valid response was a NO_ANSWER,
         if NO_ANSWER in result.content:
             if self._no_answer_step == self._step_idx - 2:
                 # N/A two steps ago
@@ -1066,6 +1063,16 @@ class Task:
 
             # record the last step where the best explicit response was N/A
             self._no_answer_step = self._step_idx
+
+    def _process_valid_responder_result(
+        self,
+        r: Responder,
+        parent: ChatDocument | None,
+        result: ChatDocument,
+    ) -> None:
+        """Processes valid result from a responder, during a step"""
+
+        self._update_no_answer_vars(result)
 
         # pending_sender is of type Responder,
         # i.e. it is either one of the agent's entities
@@ -1131,6 +1138,7 @@ class Task:
                 metadata=ChatDocMetaData(sender=responder, parent_id=parent_id),
             )
             self.pending_sender = responder
+            self._update_no_answer_vars(self.pending_message)
         self.log_message(self.pending_sender, self.pending_message, mark=True)
 
     def _show_pending_message_if_debug(self) -> None:
@@ -1346,13 +1354,20 @@ class Task:
     def _maybe_infinite_loop(self) -> bool:
         """
         Detect possible infinite loop based on message frequencies.
-        NOTE: This only (attempts to) detect "exact" loops, i.e. a cycle
-        of messages that repeats exactly, e.g.
+        NOTE: This detects two types of loops:
+        - Alternating NO_ANSWER loops, specifically of the form
+        x1 NO_ANSWER x2 NO_ANSWER x3 NO_ANSWER...
+        (e.g. an LLM repeatedly saying something different, and another responder
+        or sub-task saying NO_ANSWER -- i.e. "DO-NOT-KNOW")
+
+        - "exact" loops, i.e. a cycle of messages that repeats exactly, e.g.
         a r b i t r a t e r a t e r a t e r a t e ...
 
-        [It does not detect "approximate" loops, where the LLM is generating a
-        sequence of messages that are similar, but not exactly the same.]
+        [It does not detect more general "approximate" loops, where two entities are
+        responding to each other potentially forever, with (slightly) different
+        messages each time]
 
+        Here is the logic for the exact-loop detection:
         Intuition: when you look at a sufficiently long sequence with an m-message
         loop, then the frequencies of these m messages will "dominate" those
         of all other messages.

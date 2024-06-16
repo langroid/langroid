@@ -86,18 +86,34 @@ def test_task_inf_loop(
 
 
 def test_task_stall():
-    """Test that task.run() bails when stalled"""
+    """Test that task.run() bails when stalled, i.e. no valid response
+    for many steps."""
 
     agent = ChatAgent(
         ChatAgentConfig(
             name="Random",
-            llm=MockLMConfig(response_fn=lambda x: choice(["1", "2", "3"])),
+            llm=MockLMConfig(
+                response_fn=lambda x: choice([str(x) for x in range(30)]),
+            ),
         )
     )
 
-    alice_task = lr.Task(agent, interactive=False)
-    result = alice_task.run(turns=100)
+    # interactive=False, so in each step,
+    # other than LLM, other responders have no response -> stalled
+    task = lr.Task(agent, interactive=False)
+    result = task.run(turns=100)
     assert result is None
+
+    # set allow_null_result=True, so in each step, when no valid response is found,
+    # we create a dummy NO_ANSWER response from the entity "opposite" to the author
+    # of the pending message, i.e.
+    # - if the author was LLM, then the entity is USER
+    # - if the author was not LLM, then the entity is LLM
+    # But this should result in an "alternating NA infinite loop", i.e.
+    # LLM says x1, then USER says NA, then LLM says x2, then USER says NA, ...
+    task = lr.Task(agent, restart=True, interactive=False, allow_null_result=True)
+    with pytest.raises(lr.InfiniteLoopException):
+        task.run(turns=100)
 
 
 def test_task_alternating_no_answer():
