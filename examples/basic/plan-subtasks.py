@@ -16,12 +16,12 @@ When it waits for user input, try asking things like:
 """
 
 import langroid as lr
-from langroid.utils.constants import NO_ANSWER
+from langroid.utils.constants import NO_ANSWER, DONE
 
 planner = lr.ChatAgent(
     lr.ChatAgentConfig(
         name="Planner",
-        system_message="""[
+        system_message=f"""
         User will give you a math calculation, but you have no math abilities.
         However you are a great planner, so your task is to do two things:
         
@@ -41,7 +41,7 @@ planner = lr.ChatAgent(
             To clarify who you are sending the message to, preface your message with
             @<helper_name>, e.g. "@Multiplier multiply with 5" 
             
-            When you have the final answer, say DONE and show it.
+            When you have the final answer, say {DONE} and show it.
             
             At the START, ask the user what they need help with, address them as "@user"
             
