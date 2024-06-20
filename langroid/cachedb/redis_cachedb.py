@@ -54,7 +54,7 @@ class RedisCache(CacheDB):
                     host=redis_host,
                     port=redis_port,
                     password=redis_password,
-                    max_connections=10_000,
+                    max_connections=500,
                     socket_timeout=5,
                     socket_keepalive=True,
                     retry_on_timeout=True,
