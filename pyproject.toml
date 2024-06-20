@@ -231,5 +231,4 @@ lint.extend-ignore = ["F821"]
 
 [tool.pytest.ini_options]
 filterwarnings = ["ignore::DeprecationWarning"]
-addopts = "--show-capture=no --tb=line"
 
