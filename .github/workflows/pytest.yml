@@ -101,8 +101,10 @@ jobs:
 
     - name: Run ALL tests with coverage (GPT-4o)
       id: first_test
+      env:
+        PYTEST_ADDOPTS: "-p no:logging"
       run: |
-        poetry run coverage run --source=langroid -m pytest -ra --tb=line \
+        poetry run coverage run --source=langroid -m pytest -ra --tb=line --show-capture=no \
           --first-test-file=tests/main/test_task_inf_loop.py \
           --first-test-file=tests/main/test_task.py \
           --first-test-file=tests/main/test_lance_doc_chat_agent.py \
@@ -117,8 +119,10 @@ jobs:
     - name: Retry FAILED tests ONLY with gpt-4 instead of gpt-4o (no coverage)
       id: second_test
       if: steps.first_test.outcome == 'failure'
+      env:
+        PYTEST_ADDOPTS: "-p no:logging"
       run: |
-        poetry run pytest --m gpt-4  -ra --tb=line \
+        poetry run pytest --m gpt-4  -ra --tb=line --show-capture=no \
           --first-test-file=tests/main/test_task_inf_loop.py \
           --first-test-file=tests/main/test_task.py \
           --first-test-file=tests/main/test_lance_doc_chat_agent.py \
