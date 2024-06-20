@@ -102,7 +102,7 @@ jobs:
     - name: Run ALL tests with coverage (GPT-4o)
       id: first_test
       run: |
-        poetry run coverage run --source=langroid -m pytest -q \
+        poetry run coverage run --source=langroid -m pytest -q -ra \
           --first-test-file=tests/main/test_task_inf_loop.py \
           --first-test-file=tests/main/test_task.py \
           --first-test-file=tests/main/test_lance_doc_chat_agent.py \
@@ -118,7 +118,7 @@ jobs:
       id: second_test
       if: steps.first_test.outcome == 'failure'
       run: |
-        poetry run pytest --m gpt-4 -q \
+        poetry run pytest --m gpt-4 -q -ra \
           --first-test-file=tests/main/test_task_inf_loop.py \
           --first-test-file=tests/main/test_task.py \
           --first-test-file=tests/main/test_lance_doc_chat_agent.py \
@@ -134,7 +134,7 @@ jobs:
     - name: Retry FAILED tests ONLY with pydantic 1.x, gpt-4
       if: steps.second_test.outcome == 'failure'
       run: |
-        poetry run pytest --m gpt-4 -q \
+        poetry run pytest --m gpt-4 -q -ra \
           --first-test-file=tests/main/test_task_inf_loop.py \
           --first-test-file=tests/main/test_task.py \
           --first-test-file=tests/main/test_lance_doc_chat_agent.py \
