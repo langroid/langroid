@@ -2,6 +2,7 @@ import os
 
 import pytest
 
+from langroid.cachedb.redis_cachedb import RedisCache, RedisCacheConfig
 from langroid.language_models import OpenAIChatModel
 from langroid.utils.configuration import Settings
 
@@ -109,3 +110,15 @@ def pytest_collection_modifyitems(config, items):
 
     # Replace the items list with priority items first, followed by others
     items[:] = priority_items + other_items
+
+
+@pytest.fixture(autouse=True)
+def redis_close_connections():
+    """Close all redis connections after each test fn, to avoid
+    max connections exceeded error."""
+
+    # Setup code here (if necessary)
+    yield  # Yield to test execution
+    # Cleanup code here
+    redis = RedisCache(RedisCacheConfig(fake=False))
+    redis.close_all_connections()
