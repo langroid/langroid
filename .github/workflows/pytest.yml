@@ -112,7 +112,7 @@ jobs:
       continue-on-error: true
 
     - name: Generate coverage report
-      run: poetry run coverage report
+      run: poetry run coverage report -v
 
     - name: Retry FAILED tests ONLY with gpt-4 instead of gpt-4o (no coverage)
       id: second_test
@@ -126,7 +126,7 @@ jobs:
           --first-test-file=tests/main/test_llm_async.py \        
           --lf --last-failed-no-failures none \
           tests/main tests/extras/test_hf_embeddings.py
-        poetry run coverage report
+        poetry run coverage report -v
       continue-on-error: true
 
     - name: Install Pydantic 1.x to pass lancedb tests
@@ -142,7 +142,7 @@ jobs:
           --first-test-file=tests/main/test_llm_async.py \        
           --lf --last-failed-no-failures none \
           tests/main tests/extras/test_hf_embeddings.py
-        poetry run coverage report
+        poetry run coverage report -v
 
     - name: Generate XML coverage report
       run: |
