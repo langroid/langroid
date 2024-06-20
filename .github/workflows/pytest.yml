@@ -106,6 +106,8 @@ jobs:
           --first-test-file=tests/main/test_task_inf_loop.py \
           --first-test-file=tests/main/test_task.py \
           --first-test-file=tests/main/test_lance_doc_chat_agent.py \
+          --first-test-file=tests/main/test_llm.py \
+          --first-test-file=tests/main/test_llm_async.py \
           tests/main tests/extras/test_hf_embeddings.py
         poetry run coverage report
       continue-on-error: true
@@ -118,6 +120,8 @@ jobs:
           --first-test-file=tests/main/test_task_inf_loop.py \
           --first-test-file=tests/main/test_task.py \
           --first-test-file=tests/main/test_lance_doc_chat_agent.py \
+          --first-test-file=tests/main/test_llm.py \
+          --first-test-file=tests/main/test_llm_async.py \        
           --lf --last-failed-no-failures none \
           tests/main tests/extras/test_hf_embeddings.py
         poetry run coverage report
@@ -132,6 +136,8 @@ jobs:
           --first-test-file=tests/main/test_task_inf_loop.py \
           --first-test-file=tests/main/test_task.py \
           --first-test-file=tests/main/test_lance_doc_chat_agent.py \
+          --first-test-file=tests/main/test_llm.py \
+          --first-test-file=tests/main/test_llm_async.py \        
           --lf --last-failed-no-failures none \
           tests/main tests/extras/test_hf_embeddings.py
         poetry run coverage report
