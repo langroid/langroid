@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import copy
 import logging
+import re
 import threading
 from collections import Counter, deque
 from pathlib import Path
@@ -256,7 +257,7 @@ class Task:
         # how many 2-step-apart alternations of no_answer step-result have we had,
         # i.e. x1, N/A, x2, N/A, x3, N/A ...
         self.n_no_answer_alternations = 0
-        self._no_answer_step: int = -1
+        self._no_answer_step: int = -5
         self._step_idx = -1  # current step index
         self.max_stalled_steps = max_stalled_steps
         self.done_if_response = [r.value for r in done_if_response]
@@ -579,7 +580,7 @@ class Task:
             self.reset_all_sub_tasks()
 
         self.n_stalled_steps = 0
-        self._no_answer_step = -1  # last step where the best explicit response was N/A
+        self._no_answer_step = -5  # last step where the best explicit response was N/A
         # how many N/A alternations have we had so far? (for Inf loop detection)
         self.n_no_answer_alternations = 0
         self.max_cost = max_cost
@@ -704,7 +705,7 @@ class Task:
             self.reset_all_sub_tasks()
 
         self.n_stalled_steps = 0
-        self._no_answer_step = -1  # last step where the best explicit response was N/A
+        self._no_answer_step = -5  # last step where the best explicit response was N/A
         # how many N/A alternations have we had so far? (for Inf loop detection)
         self.n_no_answer_alternations = 0
         self.max_cost = max_cost
@@ -931,7 +932,7 @@ class Task:
             if self.is_done:
                 # skip trying other responders in this step
                 break
-        if not found_response:  # did not find a Non-NO_ANSWER response
+        if not found_response:  # did not find a valid response
             if no_answer_response:
                 # even though there was no valid response from anyone in this step,
                 # if there was at least one who EXPLICITLY said NO_ANSWER, then
@@ -1522,7 +1523,9 @@ class Task:
         return (
             result is not None
             and not self._is_empty_message(result)
-            and result.content.strip() != NO_ANSWER
+            # some weaker LLMs, including even GPT-4o, may say "DO-NOT-KNOW."
+            # (with a punctuation at the end), so need to strip out punctuation
+            and re.sub(r"[,.!?:]", "", result.content.strip()) != NO_ANSWER
         )
 
     def log_message(
