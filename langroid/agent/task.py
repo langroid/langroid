@@ -880,7 +880,6 @@ class Task:
 
         if (
             Entity.USER in self.responders
-            and self.interactive
             and not self.human_tried
             and not self.agent.has_tool_message_attempt(self.pending_message)
         ):
@@ -988,7 +987,6 @@ class Task:
 
         if (
             Entity.USER in self.responders
-            and self.interactive
             and not self.human_tried
             and not self.agent.has_tool_message_attempt(self.pending_message)
         ):
@@ -1453,7 +1451,7 @@ class Task:
         result = result or self.pending_message
         user_quit = (
             result is not None
-            and result.content in USER_QUIT_STRINGS
+            and (result.content in USER_QUIT_STRINGS or DONE in result.content)
             and result.metadata.sender == Entity.USER
         )
         if self._level == 0 and self.interactive and self.only_user_quits_root:
@@ -1605,7 +1603,7 @@ class Task:
         return (
             self.pending_message is not None
             and (recipient := self.pending_message.metadata.recipient) != ""
-            and recipient != e  # case insensitive
+            and not (recipient == e)  # case insensitive for entities
             and recipient != e.name
             and recipient != self.name  # case sensitive
         )
