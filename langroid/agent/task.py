@@ -640,6 +640,7 @@ class Task:
                 self.config.inf_loop_cycle_len > 0
                 and i % self.config.inf_loop_cycle_len == 0
                 and self._maybe_infinite_loop()
+                or self.n_no_answer_alternations > self.config.inf_loop_wait_factor
             ):
                 raise InfiniteLoopException(
                     """Possible infinite loop detected!
@@ -762,6 +763,7 @@ class Task:
                 self.config.inf_loop_cycle_len > 0
                 and i % self.config.inf_loop_cycle_len == 0
                 and self._maybe_infinite_loop()
+                or self.n_no_answer_alternations > self.config.inf_loop_wait_factor
             ):
                 raise InfiniteLoopException(
                     """Possible infinite loop detected!
@@ -1384,8 +1386,6 @@ class Task:
            If the set of last (W * m) messages are the same as the
            set of m dominant messages,  then we are likely in a loop.
         """
-        if self.n_no_answer_alternations > self.config.inf_loop_wait_factor:
-            return True
 
         max_cycle_len = self.config.inf_loop_cycle_len
         if max_cycle_len <= 0:
