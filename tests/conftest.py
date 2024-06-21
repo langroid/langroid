@@ -138,4 +138,7 @@ def redis_close_connections():
     yield  # Yield to test execution
     # Cleanup code here
     redis = RedisCache(RedisCacheConfig(fake=False))
-    redis.close_all_connections()
+    try:
+        redis.close_all_connections()
+    except Exception:
+        pass
