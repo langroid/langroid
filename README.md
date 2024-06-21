@@ -46,7 +46,7 @@ This Multi-Agent paradigm is inspired by the
 `Langroid` is a fresh take on LLM app-development, where considerable thought has gone 
 into simplifying the developer experience; it does not use `Langchain`.
 
-Companies are using/adapting Langroid in production. Here is a quote from one of them:
+📢 Companies are using/adapting Langroid in **production**. Here is a quote:
 
 >[Nullify](https://www.nullify.ai) uses AI Agents for secure software development. 
 > It finds, prioritizes and fixes vulnerabilities. We have internally adapted Langroid's multi-agent orchestration framework in production, after evaluating CrewAI, Autogen, LangChain, Langflow, etc. We found Langroid to be far superior to those frameworks in terms of ease of setup and flexibility. Langroid's Agent and Task abstractions are intuitive, well thought out, and provide a great developer  experience. We wanted the quickest way to get something in production. With other frameworks it would have taken us weeks, but with Langroid we got to good results in minutes. Highly recommended! <br> -- Jacky Wong, Head of AI at Nullify.
@@ -357,17 +357,17 @@ such as [ollama](https://github.com/ollama), [oobabooga](https://github.com/ooba
 - **Observability, Logging, Lineage:** Langroid generates detailed logs of multi-agent interactions and
   maintains provenance/lineage of messages, so that you can trace back
   the origin of a message.
-- **[Tools/Plugins/Function-calling](https://langroid.github.io/langroid/quick-start/chat-agent-tool/)**: Langroid supports OpenAI's recently
-  released [function calling](https://platform.openai.com/docs/guides/gpt/function-calling)
-  feature. In addition, Langroid has its own native equivalent, which we
-  call **tools** (also known as "plugins" in other contexts). Function
-  calling and tools have the same developer-facing interface, implemented
+- **[Tools/Plugins/Function-calling](https://langroid.github.io/langroid/quick-start/chat-agent-tool/)**:
+  Langroid supports OpenAI's [function calling](https://platform.openai.com/docs/guides/gpt/function-calling), as
+  well as an equivalent `ToolMessage` mechanism which works with
+  any LLM, not just OpenAI's.
+  Function calling and tools have the same developer-facing interface, implemented
   using [Pydantic](https://docs.pydantic.dev/latest/),
   which makes it very easy to define tools/functions and enable agents
   to use them. Benefits of using Pydantic are that you never have to write
   complex JSON specs for function calling, and when the LLM
   hallucinates malformed JSON, the Pydantic error message is sent back to
-  the LLM so it can fix it!
+  the LLM so it can fix it.
 
 --- 
 
