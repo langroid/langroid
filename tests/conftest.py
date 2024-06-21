@@ -12,8 +12,12 @@ def pytest_sessionfinish(session, exitstatus):
     """Hook to terminate pytest forcefully after displaying all test stats."""
 
     def terminate():
-        os._exit(0)  # Exits with a status of 0, indicating successa
-        # os.kill(os.getpid(), signal.SIGTERM)
+        if exitstatus == 0:
+            print("All tests passed. Exiting cleanly.")
+            os._exit(0)  # Exit code 0 for success
+        else:
+            print("Some tests failed. Exiting with error.")
+            os._exit(1)  # Exit code 1 for error
 
     # Set a timer that will terminate pytest after a set delay
     # Delay allows all finalizers and plugins to complete normally

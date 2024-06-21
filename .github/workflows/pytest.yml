@@ -148,7 +148,7 @@ jobs:
           tests/main tests/extras/test_hf_embeddings.py
 
     - name: Generate final coverage report from all runs
-      run: poetry run coverage report -v
+      run: poetry run coverage report
 
     - name: Generate XML coverage report
       run: poetry run coverage xml
