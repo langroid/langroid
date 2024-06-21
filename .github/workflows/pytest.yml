@@ -146,7 +146,6 @@ jobs:
           --first-test-file=tests/main/test_llm_async.py \
           --lf --last-failed-no-failures none \
           tests/main tests/extras/test_hf_embeddings.py
-      continue-on-error: true # continue even if force-terminated
 
     - name: Generate final coverage report from all runs
       run: poetry run coverage report -v
