@@ -1,9 +1,27 @@
 import os
+import threading
 
 import pytest
 
+from langroid.cachedb.redis_cachedb import RedisCache, RedisCacheConfig
 from langroid.language_models import OpenAIChatModel
 from langroid.utils.configuration import Settings
+
+
+def pytest_sessionfinish(session, exitstatus):
+    """Hook to terminate pytest forcefully after displaying all test stats."""
+
+    def terminate():
+        if exitstatus == 0:
+            print("All tests passed. Exiting cleanly.")
+            os._exit(0)  # Exit code 0 for success
+        else:
+            print("Some tests failed. Exiting with error.")
+            os._exit(1)  # Exit code 1 for error
+
+    # Set a timer that will terminate pytest after a set delay
+    # Delay allows all finalizers and plugins to complete normally
+    threading.Timer(60, terminate).start()  # 60 seconds delay
 
 
 def pytest_addoption(parser) -> None:
@@ -109,3 +127,15 @@ def pytest_collection_modifyitems(config, items):
 
     # Replace the items list with priority items first, followed by others
     items[:] = priority_items + other_items
+
+
+@pytest.fixture(autouse=True)
+def redis_close_connections():
+    """Close all redis connections after each test fn, to avoid
+    max connections exceeded error."""
+
+    # Setup code here (if necessary)
+    yield  # Yield to test execution
+    # Cleanup code here
+    redis = RedisCache(RedisCacheConfig(fake=False))
+    redis.close_all_connections()

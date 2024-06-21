@@ -46,6 +46,12 @@ This Multi-Agent paradigm is inspired by the
 `Langroid` is a fresh take on LLM app-development, where considerable thought has gone 
 into simplifying the developer experience; it does not use `Langchain`.
 
+Companies are using/adapting Langroid in production. Here is a quote from one of them:
+
+>[Nullify](https://www.nullify.ai) uses AI Agents for secure software development. 
+> It finds, prioritizes and fixes vulnerabilities. We have internally adapted Langroid's multi-agent orchestration framework in production, after evaluating CrewAI, Autogen, LangChain, Langflow, etc. We found Langroid to be far superior to those frameworks in terms of ease of setup and flexibility. Langroid's Agent and Task abstractions are intuitive, well thought out, and provide a great developer  experience. We wanted the quickest way to get something in production. With other frameworks it would have taken us weeks, but with Langroid we got to good results in minutes. Highly recommended! <br> -- Jacky Wong, Head of AI at Nullify.
+
+
 :fire: See this [Intro to Langroid](https://lancedb.substack.com/p/langoid-multi-agent-programming-framework)
 blog post from the LanceDB team
 

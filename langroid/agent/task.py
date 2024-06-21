@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import copy
 import logging
+import re
 import threading
 from collections import Counter, deque
 from pathlib import Path
@@ -256,7 +257,7 @@ class Task:
         # how many 2-step-apart alternations of no_answer step-result have we had,
         # i.e. x1, N/A, x2, N/A, x3, N/A ...
         self.n_no_answer_alternations = 0
-        self._no_answer_step: int = -1
+        self._no_answer_step: int = -5
         self._step_idx = -1  # current step index
         self.max_stalled_steps = max_stalled_steps
         self.done_if_response = [r.value for r in done_if_response]
@@ -579,7 +580,7 @@ class Task:
             self.reset_all_sub_tasks()
 
         self.n_stalled_steps = 0
-        self._no_answer_step = -1  # last step where the best explicit response was N/A
+        self._no_answer_step = -5  # last step where the best explicit response was N/A
         # how many N/A alternations have we had so far? (for Inf loop detection)
         self.n_no_answer_alternations = 0
         self.max_cost = max_cost
@@ -639,6 +640,7 @@ class Task:
                 self.config.inf_loop_cycle_len > 0
                 and i % self.config.inf_loop_cycle_len == 0
                 and self._maybe_infinite_loop()
+                or self.n_no_answer_alternations > self.config.inf_loop_wait_factor
             ):
                 raise InfiniteLoopException(
                     """Possible infinite loop detected!
@@ -704,7 +706,7 @@ class Task:
             self.reset_all_sub_tasks()
 
         self.n_stalled_steps = 0
-        self._no_answer_step = -1  # last step where the best explicit response was N/A
+        self._no_answer_step = -5  # last step where the best explicit response was N/A
         # how many N/A alternations have we had so far? (for Inf loop detection)
         self.n_no_answer_alternations = 0
         self.max_cost = max_cost
@@ -761,6 +763,7 @@ class Task:
                 self.config.inf_loop_cycle_len > 0
                 and i % self.config.inf_loop_cycle_len == 0
                 and self._maybe_infinite_loop()
+                or self.n_no_answer_alternations > self.config.inf_loop_wait_factor
             ):
                 raise InfiniteLoopException(
                     """Possible infinite loop detected!
@@ -880,7 +883,6 @@ class Task:
 
         if (
             Entity.USER in self.responders
-            and self.interactive
             and not self.human_tried
             and not self.agent.has_tool_message_attempt(self.pending_message)
         ):
@@ -932,7 +934,7 @@ class Task:
             if self.is_done:
                 # skip trying other responders in this step
                 break
-        if not found_response:  # did not find a Non-NO_ANSWER response
+        if not found_response:  # did not find a valid response
             if no_answer_response:
                 # even though there was no valid response from anyone in this step,
                 # if there was at least one who EXPLICITLY said NO_ANSWER, then
@@ -988,7 +990,6 @@ class Task:
 
         if (
             Entity.USER in self.responders
-            and self.interactive
             and not self.human_tried
             and not self.agent.has_tool_message_attempt(self.pending_message)
         ):
@@ -1385,8 +1386,6 @@ class Task:
            If the set of last (W * m) messages are the same as the
            set of m dominant messages,  then we are likely in a loop.
         """
-        if self.n_no_answer_alternations > self.config.inf_loop_wait_factor:
-            return True
 
         max_cycle_len = self.config.inf_loop_cycle_len
         if max_cycle_len <= 0:
@@ -1453,7 +1452,7 @@ class Task:
         result = result or self.pending_message
         user_quit = (
             result is not None
-            and result.content in USER_QUIT_STRINGS
+            and (result.content in USER_QUIT_STRINGS or DONE in result.content)
             and result.metadata.sender == Entity.USER
         )
         if self._level == 0 and self.interactive and self.only_user_quits_root:
@@ -1524,7 +1523,9 @@ class Task:
         return (
             result is not None
             and not self._is_empty_message(result)
-            and result.content.strip() != NO_ANSWER
+            # some weaker LLMs, including even GPT-4o, may say "DO-NOT-KNOW."
+            # (with a punctuation at the end), so need to strip out punctuation
+            and re.sub(r"[,.!?:]", "", result.content.strip()) != NO_ANSWER
         )
 
     def log_message(
@@ -1605,7 +1606,7 @@ class Task:
         return (
             self.pending_message is not None
             and (recipient := self.pending_message.metadata.recipient) != ""
-            and recipient != e  # case insensitive
+            and not (recipient == e)  # case insensitive for entities
             and recipient != e.name
             and recipient != self.name  # case sensitive
         )
