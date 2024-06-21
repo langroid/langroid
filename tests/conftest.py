@@ -1,10 +1,23 @@
 import os
+import signal
+import threading
 
 import pytest
 
 from langroid.cachedb.redis_cachedb import RedisCache, RedisCacheConfig
 from langroid.language_models import OpenAIChatModel
 from langroid.utils.configuration import Settings
+
+
+def pytest_sessionfinish(session, exitstatus):
+    """Hook to terminate pytest forcefully after displaying all test stats."""
+
+    def terminate():
+        os.kill(os.getpid(), signal.SIGTERM)
+
+    # Set a timer that will terminate pytest after a set delay
+    # Delay allows all finalizers and plugins to complete normally
+    threading.Timer(60, terminate).start()  # 60 seconds delay
 
 
 def pytest_addoption(parser) -> None:
