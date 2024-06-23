@@ -22,10 +22,14 @@ class Entity(str, Enum):
     SYSTEM = "System"
 
     def __eq__(self, other: object) -> bool:
-        """Allow case-insensitive comparison with strings."""
+        """Allow case-insensitive equality (==) comparison with strings."""
         if isinstance(other, str):
             return self.value.lower() == other.lower()
         return super().__eq__(other)
+
+    def __ne__(self, other: object) -> bool:
+        """Allow case-insensitive non-equality (!=) comparison with strings."""
+        return not self.__eq__(other)
 
     def __hash__(self) -> int:
         """Override this to ensure hashability of the enum,
