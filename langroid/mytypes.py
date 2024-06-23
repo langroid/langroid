@@ -23,6 +23,8 @@ class Entity(str, Enum):
 
     def __eq__(self, other: object) -> bool:
         """Allow case-insensitive equality (==) comparison with strings."""
+        if other is None:
+            return False
         if isinstance(other, str):
             return self.value.lower() == other.lower()
         return super().__eq__(other)
