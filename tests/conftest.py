@@ -19,9 +19,20 @@ def pytest_sessionfinish(session, exitstatus):
             print("Some tests failed. Exiting with error.")
             os._exit(1)  # Exit code 1 for error
 
-    # Set a timer that will terminate pytest after a set delay
-    # Delay allows all finalizers and plugins to complete normally
-    threading.Timer(60, terminate).start()  # 60 seconds delay
+    # Only set the timer if on GitHub Actions or another defined CI environment
+    if "CI" in os.environ:
+        # Set a timer that will terminate pytest after a set delay
+        # Delay allows all finalizers and plugins to complete normally
+        timer = threading.Timer(60, terminate)  # 60 seconds delay
+        timer.start()
+        # Optionally, store the timer in the session for further management
+        session._timeout_timer = timer
+
+
+# Optional: Cleanup if needed
+def pytest_unconfigure(config):
+    if hasattr(config, "session") and hasattr(config.session, "_timeout_timer"):
+        config.session._timeout_timer.cancel()
 
 
 def pytest_addoption(parser) -> None:
