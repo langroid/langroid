@@ -42,7 +42,8 @@ is maintained, and responses based on documents are always accompanied by
 Langroid provides a special type of agent called 
 [`DocChatAgent`][langroid.agent.special.doc_chat_agent.DocChatAgent], which is a [`ChatAgent`][langroid.agent.chat_agent.ChatAgent]
 augmented with a vector-store, and some special methods that enable the agent
-to ingest documents into the vector-store, and answer queries based on these documents.
+to ingest documents into the vector-store, 
+and answer queries based on these documents.
 
 The [`DocChatAgent`][langroid.agent.special.doc_chat_agent.DocChatAgent] provides many ways to ingest documents into the vector-store,
 including from URLs and local file-paths and URLs. Given a collection of document paths,
