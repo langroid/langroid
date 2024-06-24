@@ -20,7 +20,7 @@ PASS = "__PASS__"
 PASS_TO = PASS + ":"
 SEND_TO = "__SEND__:"
 TOOL = "TOOL"
-# This is a recommend setting for TaskConfig.addressing_prefix if using it at all;
+# This is a recommended setting for TaskConfig.addressing_prefix if using it at all;
 # prefer to use `RecipientTool` to allow agents addressing others.
 # Caution the AT string should NOT contain any 'word' characters, i.e.
 # it no letters, digits or underscores.
