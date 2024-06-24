@@ -12,12 +12,14 @@ def pytest_sessionfinish(session, exitstatus):
     """Hook to terminate pytest forcefully after displaying all test stats."""
 
     def terminate():
-        if exitstatus == 0:
-            print("All tests passed. Exiting cleanly.")
-            os._exit(0)  # Exit code 0 for success
-        else:
-            print("Some tests failed. Exiting with error.")
-            os._exit(1)  # Exit code 1 for error
+        # Ensure that pytest is still running
+        if threading.main_thread().is_alive():
+            if exitstatus == 0:
+                print("All tests passed. Exiting cleanly.")
+                os._exit(0)  # Exit code 0 for success
+            else:
+                print("Some tests failed. Exiting with error.")
+                os._exit(1)  # Exit code 1 for error
 
     # Only set the timer if on GitHub Actions or another defined CI environment
     if "CI" in os.environ:
