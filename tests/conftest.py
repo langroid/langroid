@@ -1,5 +1,4 @@
 import os
-import sys
 import threading
 
 import pytest
@@ -12,40 +11,18 @@ from langroid.utils.configuration import Settings
 def pytest_sessionfinish(session, exitstatus):
     """Hook to terminate pytest forcefully after displaying all test stats."""
 
-    def force_exit(exit_code):
-        # Attempt to terminate using sys.exit first
-        sys.exit(exit_code)
-
-        # If sys.exit fails, fall back to os._exit
-        os._exit(exit_code)
-
     def terminate():
-        # Log active threads for debugging
-        print("Active threads at exit:")
-        for thread in threading.enumerate():
-            print(f"{thread.name} (daemon: {thread.isDaemon()})")
-
-        # Exit based on test results
         if exitstatus == 0:
             print("All tests passed. Exiting cleanly.")
-            force_exit(0)  # Exit code 0 for success
+            os._exit(0)  # Exit code 0 for success
         else:
             print("Some tests failed. Exiting with error.")
-            force_exit(1)  # Exit code 1 for error
+            os._exit(1)  # Exit code 1 for error
 
-    # Only set the timer if on GitHub Actions or another defined CI environment
-    if "CI" in os.environ:
-        timer = threading.Timer(60, terminate)  # 60 seconds delay
-        timer.start()
-
-        # Optionally, store the timer in the session for further management
-        session._timeout_timer = timer
-
-
-# Optional: Cleanup if needed
-def pytest_unconfigure(config):
-    if hasattr(config, "session") and hasattr(config.session, "_timeout_timer"):
-        config.session._timeout_timer.cancel()
+    # Only set the timer if on GitHub Actions or another
+    # CI environment where 'CI' is true
+    if os.getenv("CI") == "true":
+        threading.Timer(60, terminate).start()  # 60 seconds delay
 
 
 def pytest_addoption(parser) -> None:
