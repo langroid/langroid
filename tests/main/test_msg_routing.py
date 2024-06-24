@@ -5,7 +5,7 @@ import pytest
 import langroid as lr
 from langroid import ChatDocument
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
-from langroid.agent.task import Task
+from langroid.agent.task import Task, TaskConfig
 from langroid.language_models.mock_lm import MockLMConfig
 from langroid.parsing.routing import parse_addressed_message
 from langroid.utils.configuration import Settings, set_global
@@ -24,10 +24,10 @@ ADDRESSES = [
 @pytest.mark.parametrize("address", ADDRESSES)
 def test_parse_address(address: str):
     """Test that the address is parsed correctly."""
-    msg = f"ok @all, @xyz here is my message to {address} -- {address} Hello"
+    msg = f"ok {AT}all, {AT}xyz here is my message to {address} -- {address} Hello"
     (addressee, content) = parse_addressed_message(
         msg,
-        addressing="@" if AT in address else SEND_TO,
+        addressing=AT if AT in address else SEND_TO,
     )
     assert addressee == "Alice"
     assert content == "Hello"
@@ -52,7 +52,7 @@ def test_addressing(test_settings: Settings, address: str, x: int, answer: int):
             ):
                 return self.create_llm_response(DONE + " " + message.content)
 
-            addr = "@" if AT in address else SEND_TO
+            addr = AT if AT in address else SEND_TO
             # throw in some distracting addresses, to test that
             # only the last one is picked up
             return self.create_llm_response(
@@ -71,7 +71,11 @@ def test_addressing(test_settings: Settings, address: str, x: int, answer: int):
 
     bob = BobAgent(bob_config)
     # When addressing Alice, set it to non-interactive, else interactive
-    bob_task = Task(bob, interactive=False)
+    bob_task = Task(
+        bob,
+        interactive=False,
+        config=TaskConfig(addressing_prefix=AT if AT in address else SEND_TO),
+    )
 
     alice_config = ChatAgentConfig(name="Alice")
     alice = AliceAgent(alice_config)
@@ -99,7 +103,7 @@ class MockAgent(ChatAgent):
 
 
 @pytest.mark.parametrize("interactive", [True, False])
-@pytest.mark.parametrize("address", ["@user", "@User", "@USER"])
+@pytest.mark.parametrize("address", [AT + "user", AT + "User", AT + "USER"])
 def test_user_addressing(interactive: bool, address: str):
     """Test that when LLM addresses user explicitly, the user
     is allowed to respond, regardless of interactive mode"""
@@ -114,6 +118,7 @@ def test_user_addressing(interactive: bool, address: str):
         agent,
         interactive=interactive,
         default_human_response=f"{DONE} 1",
+        config=TaskConfig(addressing_prefix=AT),
     )
     result = task.run()
     assert "1" in result.content

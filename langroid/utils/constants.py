@@ -18,6 +18,11 @@ DONE = "DONE"
 USER_QUIT_STRINGS = ["q", "x", "quit", "exit", "bye", DONE]
 PASS = "__PASS__"
 PASS_TO = PASS + ":"
-SEND_TO = "SEND:"
+SEND_TO = "__SEND__:"
 TOOL = "TOOL"
-AT = "@"
+# This is a recommend setting for TaskConfig.addressing_prefix if using it at all;
+# prefer to use `RecipientTool` to allow agents addressing others.
+# Caution the AT string should NOT contain any 'word' characters, i.e.
+# it no letters, digits or underscores.
+# See tests/main/test_msg_routing for example usage
+AT = "|@|"
