@@ -41,7 +41,6 @@ from langroid.parsing.routing import parse_addressed_message
 from langroid.pydantic_v1 import BaseModel
 from langroid.utils.configuration import settings
 from langroid.utils.constants import (
-    AT,  # regex for start of an addressed recipient e.g. "@"
     DONE,
     NO_ANSWER,
     PASS,
@@ -74,6 +73,18 @@ class TaskConfig(BaseModel):
         inf_loop_wait_factor (int): wait this * cycle_len msgs before loop-check
         restart_subtask_run (bool): whether to restart *every* run of this task
             when run as a subtask.
+        addressing_prefix (str): prefix an agent can use to address other
+            agents, or entities of the agent. E.g., if this is "@", the addressing
+            string would be "@Alice", or "@user", "@llm", "@agent", etc.
+            If this is an empty string, then addressing is disabled.
+            Default is empty string "".
+            CAUTION: this is a deprecated practice, since normal prompts
+            can accidentally contain such addressing prefixes, and will break
+            your runs. This could happen especially when your prompt/context
+            contains code, but of course could occur in normal text as well.
+            Instead, use the `RecipientTool` to have agents address other agents or
+            entities. If you do choose to use `addressing_prefix`, the recommended
+            setting is to use `langroid.utils.constants.AT`, which currently is "|@|".
     """
 
     inf_loop_cycle_len: int = 10
@@ -81,6 +92,7 @@ class TaskConfig(BaseModel):
     inf_loop_wait_factor: int = 5
     restart_as_subtask: bool = False
     logs_dir: str = "logs"
+    addressing_prefix: str = ""
 
 
 class Task:
@@ -1190,7 +1202,10 @@ class Task:
         if result is None:
             return None
         # if result content starts with @name, set recipient to name
-        is_pass, recipient, content = parse_routing(result)
+        is_pass, recipient, content = parse_routing(
+            result,
+            addressing_prefix=self.config.addressing_prefix,
+        )
         if is_pass is None:  # no routing, i.e. neither PASS nor SEND
             return result
         if is_pass:
@@ -1648,6 +1663,7 @@ class Task:
 
 def parse_routing(
     msg: ChatDocument | str,
+    addressing_prefix: str = "",
 ) -> Tuple[bool | None, str | None, str | None]:
     """
     Parse routing instruction if any, of the form:
@@ -1656,6 +1672,8 @@ def parse_routing(
     @<recipient> <content> (send content to recipient)
     Args:
         msg (ChatDocument|str|None): message to parse
+        addressing_prefix (str): prefix to address other agents or entities,
+             (e.g. "@". See documentation of `TaskConfig` for details).
     Returns:
         Tuple[bool|None, str|None, str|None]:
             bool: true=PASS, false=SEND, or None if neither
@@ -1682,8 +1700,12 @@ def parse_routing(
         else:
             return False, addressee, content_to_send
     if (
-        AT in content
-        and (addressee_content := parse_addressed_message(content, AT))[0] is not None
+        addressing_prefix != ""
+        and addressing_prefix in content
+        and (addressee_content := parse_addressed_message(content, addressing_prefix))[
+            0
+        ]
+        is not None
     ):
         (addressee, content_to_send) = addressee_content
         # if no content then treat same as PASS_TO
