@@ -80,7 +80,11 @@ class TaskConfig(BaseModel):
             Default is empty string "".
             CAUTION: this is a deprecated practice, since normal prompts
             can accidentally contain such addressing prefixes, and will break
-            your runs. Instead, use the `RecipientTool`.
+            your runs. This could happen especially when your prompt/context
+            contains code, but of course could occur in normal text as well.
+            Instead, use the `RecipientTool` to have agents address other agents or
+            entities. If you do choose to use `addressing_prefix`, the recommended
+            setting is to use `langroid.utils.constaints.AT`, which currently is "|@|".
     """
 
     inf_loop_cycle_len: int = 10
