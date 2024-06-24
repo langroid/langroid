@@ -84,7 +84,7 @@ class TaskConfig(BaseModel):
             contains code, but of course could occur in normal text as well.
             Instead, use the `RecipientTool` to have agents address other agents or
             entities. If you do choose to use `addressing_prefix`, the recommended
-            setting is to use `langroid.utils.constaints.AT`, which currently is "|@|".
+            setting is to use `langroid.utils.constants.AT`, which currently is "|@|".
     """
 
     inf_loop_cycle_len: int = 10
