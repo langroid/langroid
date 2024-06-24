@@ -33,12 +33,15 @@ def test_parse_address(address: str):
     assert content == "Hello"
 
 
+@pytest.mark.parametrize("prefix", [AT, ""])  # enable AT-addressing?
 @pytest.mark.parametrize(
     "address",
     ADDRESSES,
 )
 @pytest.mark.parametrize("x,answer", [(5, 25)])
-def test_addressing(test_settings: Settings, address: str, x: int, answer: int):
+def test_addressing(
+    test_settings: Settings, prefix: str, address: str, x: int, answer: int
+):
     """Test that an agent is able to address another agent in a message."""
     set_global(test_settings)
 
@@ -63,18 +66,22 @@ def test_addressing(test_settings: Settings, address: str, x: int, answer: int):
         def llm_response(
             self, message: Optional[str | ChatDocument] = None
         ) -> Optional[ChatDocument]:
-            y = int(message.content.strip())
+            # message.content will either be just an an int-string "5"
+            # (if prefix != "") or Bob's entire msg otherwise (and hence not an int)
+            try:
+                y = int(message.content.strip())
+            except ValueError:
+                return None
             answer = y * y
             return self.create_llm_response(f"{DONE} {answer}")
 
     bob_config = ChatAgentConfig(name="Bob")
 
     bob = BobAgent(bob_config)
-    # When addressing Alice, set it to non-interactive, else interactive
     bob_task = Task(
         bob,
         interactive=False,
-        config=TaskConfig(addressing_prefix=AT if AT in address else SEND_TO),
+        config=TaskConfig(addressing_prefix=prefix),
     )
 
     alice_config = ChatAgentConfig(name="Alice")
@@ -84,7 +91,10 @@ def test_addressing(test_settings: Settings, address: str, x: int, answer: int):
     bob_task.add_sub_task(alice_task)
 
     result = bob_task.run()
-    assert answer == int(result.content.strip())
+    if prefix == "" and AT in address:
+        assert result is None
+    else:
+        assert answer == int(result.content.strip())
 
 
 class MockAgent(ChatAgent):
@@ -103,11 +113,13 @@ class MockAgent(ChatAgent):
 
 
 @pytest.mark.parametrize("interactive", [True, False])
-@pytest.mark.parametrize("address", [AT + "user", AT + "User", AT + "USER"])
-def test_user_addressing(interactive: bool, address: str):
+@pytest.mark.parametrize("prefix", [AT, SEND_TO])
+@pytest.mark.parametrize("addressee", ["user", "User", "USER"])
+def test_user_addressing(interactive: bool, prefix: str, addressee: str):
     """Test that when LLM addresses user explicitly, the user
     is allowed to respond, regardless of interactive mode"""
 
+    address = prefix + addressee
     agent = lr.ChatAgent(
         ChatAgentConfig(
             name="Mock",
@@ -122,3 +134,35 @@ def test_user_addressing(interactive: bool, address: str):
     )
     result = task.run()
     assert "1" in result.content
+
+
+@pytest.mark.parametrize("interactive", [True, False])
+@pytest.mark.parametrize("prefix", [AT, SEND_TO])
+@pytest.mark.parametrize("addressee", ["user", "User", "USER"])
+def test_no_addressing(interactive: bool, prefix: str, addressee: str):
+    """Test that when a Task is configured with TaskConfig.addressing_prefix = ''
+    (the default), then no routing is recognized. This ensures there is no
+    "accidental" addressing due to presence of route-line characters in the message.
+    Note the TaskConfig.address_prefix only affects whether "@"-like addressing is
+    recognized; it does not affect whether SEND_TO is recognized; SEND_TO-based routing
+    is always enabled, as this is a key mechanism by which a response from an entity
+    can direct the msg to another entity.
+    """
+
+    address = prefix + addressee
+    agent = lr.ChatAgent(
+        ChatAgentConfig(
+            name="Mock",
+            llm=MockLMConfig(default_response=f"Ok here we go {address} give a number"),
+        )
+    )
+    task = lr.Task(
+        agent,
+        interactive=interactive,
+        default_human_response=f"{DONE} 1",
+    )
+    result = task.run()
+    if interactive or prefix == SEND_TO:
+        assert "1" in result.content  # user gets chance anyway, without addressing
+    else:
+        assert result is None  # user not explicitly addressed, so they can't respond

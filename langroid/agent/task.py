@@ -73,7 +73,7 @@ class TaskConfig(BaseModel):
         inf_loop_wait_factor (int): wait this * cycle_len msgs before loop-check
         restart_subtask_run (bool): whether to restart *every* run of this task
             when run as a subtask.
-        addressing_prefix (str): prefix an agent can use to address other
+        addressing_prefix (str): "@"-like prefix an agent can use to address other
             agents, or entities of the agent. E.g., if this is "@", the addressing
             string would be "@Alice", or "@user", "@llm", "@agent", etc.
             If this is an empty string, then addressing is disabled.
@@ -85,6 +85,10 @@ class TaskConfig(BaseModel):
             Instead, use the `RecipientTool` to have agents address other agents or
             entities. If you do choose to use `addressing_prefix`, the recommended
             setting is to use `langroid.utils.constants.AT`, which currently is "|@|".
+            Note that this setting does NOT affect the use of `constants.SEND_TO` --
+            this is always enabled since this is a critical way for responders to
+            indicate that the message should be sent to a specific entity/agent.
+            (Search for "SEND_TO" in the examples/ dir to see how this is used.)
     """
 
     inf_loop_cycle_len: int = 10
