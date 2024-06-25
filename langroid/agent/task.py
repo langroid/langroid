@@ -227,7 +227,7 @@ class Task:
             set_parent_agent=noop_fn,
         )
         self.config = config
-        # how to behave as a sub-task; can be overriden by `add_sub_task()`
+        # how to behave as a sub-task; can be overridden by `add_sub_task()`
         self.config_sub_task = copy.deepcopy(config)
         # counts of distinct pending messages in history,
         # to help detect (exact) infinite loops
