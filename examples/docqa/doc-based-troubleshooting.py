@@ -31,7 +31,7 @@ from langroid.parsing.parser import ParsingConfig, PdfParsingConfig, Splitter
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
 from langroid.utils.configuration import set_global, Settings
-from langroid.utils.constants import DONE, NO_ANSWER
+from langroid.utils.constants import DONE, NO_ANSWER, AT
 from fire import Fire
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
@@ -144,9 +144,11 @@ def main(
     #     recipients=["DocAgent", "User"], default="User"
     # )
     # guide_agent.enable_message(MyRecipientTool)
+    task_config = lr.TaskConfig(addressing_prefix=AT)
     guide_task = Task(
         guide_agent,
         interactive=False,
+        config=task_config,
         system_message=f"""
         You are a TROUBLESHOOTER, who wants to help a User with their PROBLEM.
         
@@ -161,7 +163,7 @@ def main(
           
         Since you could be talking to TWO people, in order to CLARIFY who you are
         addressing, you MUST ALWAYS EXPLICITLY ADDRESS either the 
-        "User" or the "DocAgent" using @User or @DocAgent, respectively.
+        "User" or the "DocAgent" using {AT}User or {AT}DocAgent, respectively.
         
         You must THINK like this at each step after receiving a question from the User:
         

@@ -16,7 +16,7 @@ When it waits for user input, try asking things like:
 """
 
 import langroid as lr
-from langroid.utils.constants import NO_ANSWER, DONE
+from langroid.utils.constants import NO_ANSWER, DONE, AT
 
 planner = lr.ChatAgent(
     lr.ChatAgentConfig(
@@ -39,11 +39,12 @@ planner = lr.ChatAgent(
             * Send Divide operation to `Divider`
             
             To clarify who you are sending the message to, preface your message with
-            @<helper_name>, e.g. "@Multiplier multiply with 5" 
+            {AT}<helper_name>, e.g. "{AT}Multiplier multiply with 5" 
             
             When you have the final answer, say {DONE} and show it.
             
-            At the START, ask the user what they need help with, address them as "@user"
+            At the START, ask the user what they need help with, 
+            address them as "{AT}user"
             
         EXAMPLE: 
         ============
@@ -53,7 +54,7 @@ planner = lr.ChatAgent(
                 1. multiply 4 with 5
                 2. add 1 to the result
                 3. divide result by 3
-            @Multiplier multiply 4 with 5
+            {AT}Multiplier multiply 4 with 5
             [... wait for result, then show your NEW PLAN and send a new request]
             and so on.                         
                         
@@ -102,7 +103,8 @@ divider = lr.ChatAgent(
 )
 
 
-planner_task = lr.Task(planner, interactive=False)
+task_config = lr.TaskConfig(addressing_prefix=AT)
+planner_task = lr.Task(planner, interactive=False, config=task_config)
 adder_task = lr.Task(adder, interactive=False, single_round=True)
 multiplier_task = lr.Task(multiplier, interactive=False, single_round=True)
 divider_task = lr.Task(divider, interactive=False, single_round=True)
