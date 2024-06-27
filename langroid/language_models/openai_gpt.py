@@ -478,8 +478,9 @@ class OpenAIGPT(LanguageModel):
                 timeout=Timeout(self.config.timeout),
             )
 
-        self.cache: CacheDB
-        if settings.cache_type == "momento":
+        self.cache: CacheDB | None = None
+        use_cache = self.config.cache_config is not None
+        if settings.cache_type == "momento" and use_cache:
             from langroid.cachedb.momento_cachedb import (
                 MomentoCache,
                 MomentoCacheConfig,
@@ -492,7 +493,7 @@ class OpenAIGPT(LanguageModel):
                 # switch to fresh momento config if needed
                 config.cache_config = MomentoCacheConfig()
             self.cache = MomentoCache(config.cache_config)
-        elif "redis" in settings.cache_type:
+        elif "redis" in settings.cache_type and use_cache:
             if config.cache_config is None or not isinstance(
                 config.cache_config,
                 RedisCacheConfig,
@@ -505,10 +506,10 @@ class OpenAIGPT(LanguageModel):
                 # force use of fake redis if global cache_type is "fakeredis"
                 config.cache_config.fake = True
             self.cache = RedisCache(config.cache_config)
-        else:
+        elif settings.cache_type != "none" and use_cache:
             raise ValueError(
                 f"Invalid cache type {settings.cache_type}. "
-                "Valid types are momento, redis, fakeredis"
+                "Valid types are momento, redis, fakeredis, none"
             )
 
         self.config._validate_litellm()
@@ -818,6 +819,8 @@ class OpenAIGPT(LanguageModel):
         )
 
     def _cache_store(self, k: str, v: Any) -> None:
+        if self.cache is None:
+            return
         try:
             self.cache.store(k, v)
         except Exception as e:
@@ -825,6 +828,8 @@ class OpenAIGPT(LanguageModel):
             pass
 
     def _cache_lookup(self, fn_name: str, **kwargs: Dict[str, Any]) -> Tuple[str, Any]:
+        if self.cache is None:
+            return "", None  # no cache, return empty key and None result
         # Use the kwargs as the cache key
         sorted_kwargs_str = str(sorted(kwargs.items()))
         raw_key = f"{fn_name}:{sorted_kwargs_str}"
