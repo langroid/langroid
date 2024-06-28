@@ -65,6 +65,15 @@ OLLAMA_API_KEY = "ollama"
 DUMMY_API_KEY = "xxx"
 
 
+class AnthropicModel(str, Enum):
+    """Enum for Anthropic models"""
+
+    CLAUDE_3_5_SONNET = "claude-3-5-sonnet-20240620"
+    CLAUDE_3_OPUS = "claude-3-opus-20240229"
+    CLAUDE_3_SONNET = "claude-3-sonnet-20240229"
+    CLAUDE_3_HAIKU = "claude-3-turbo-20240307"
+
+
 class OpenAIChatModel(str, Enum):
     """Enum for OpenAI Chat models"""
 
@@ -90,6 +99,10 @@ _context_length: Dict[str, int] = {
     OpenAIChatModel.GPT4_TURBO: 128_000,
     OpenAIChatModel.GPT4o: 128_000,
     OpenAICompletionModel.TEXT_DA_VINCI_003: 4096,
+    AnthropicModel.CLAUDE_3_5_SONNET: 200_000,
+    AnthropicModel.CLAUDE_3_OPUS: 200_000,
+    AnthropicModel.CLAUDE_3_SONNET: 200_000,
+    AnthropicModel.CLAUDE_3_HAIKU: 200_000,
 }
 
 _cost_per_1k_tokens: Dict[str, Tuple[float, float]] = {
@@ -99,6 +112,10 @@ _cost_per_1k_tokens: Dict[str, Tuple[float, float]] = {
     OpenAIChatModel.GPT4: (0.03, 0.06),  # 8K context
     OpenAIChatModel.GPT4_TURBO: (0.01, 0.03),  # 128K context
     OpenAIChatModel.GPT4o: (0.005, 0.015),  # 128K context
+    AnthropicModel.CLAUDE_3_5_SONNET: (0.003, 0.015),
+    AnthropicModel.CLAUDE_3_OPUS: (0.015, 0.075),
+    AnthropicModel.CLAUDE_3_SONNET: (0.003, 0.015),
+    AnthropicModel.CLAUDE_3_HAIKU: (0.00025, 0.00125),
 }
 
 
