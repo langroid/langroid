@@ -72,6 +72,9 @@ For many practical scenarios, you may need additional optional dependencies:
     and may suffice for some applications, but in general you may see inferior results
     unless you adjust the prompts and/or the multi-agent setup.
 
+!!! note "mysqlclient errors"
+    If you get strange errors involving `mysqlclient`, try doing `pip uninstall mysqlclient` followed by `pip install mysqlclient` 
+
 ## Set up tokens/keys 
 
 To get started, all you need is an OpenAI API Key.
