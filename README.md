@@ -418,6 +418,8 @@ with a postgres db, you will need to:
   If this gives you an error, try `pip install psycopg2-binary` in your virtualenv.
 </details>
 
+:memo: If you get strange errors involving `mysqlclient`, try doing `pip uninstall mysqlclient` followed by `pip install mysqlclient`.
+
 ### Set up environment variables (API keys, etc)
 
 To get started, all you need is an OpenAI API Key.
