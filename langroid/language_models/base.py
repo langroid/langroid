@@ -17,6 +17,7 @@ from typing import (
 )
 
 from langroid.cachedb.base import CacheDBConfig
+from langroid.cachedb.redis_cachedb import RedisCacheConfig
 from langroid.parsing.agent_chats import parse_message
 from langroid.parsing.parse_json import top_level_json_field
 from langroid.prompts.dialog import collate_chat_history
@@ -50,7 +51,7 @@ class LLMConfig(BaseSettings):
     # use chat model for completion? For OpenAI models, this MUST be set to True!
     use_chat_for_completion: bool = True
     stream: bool = True  # stream output from API?
-    cache_config: None | CacheDBConfig = None
+    cache_config: None | CacheDBConfig = RedisCacheConfig()
 
     # Dict of model -> (input/prompt cost, output/completion cost)
     chat_cost_per_1k_tokens: Tuple[float, float] = (0.0, 0.0)

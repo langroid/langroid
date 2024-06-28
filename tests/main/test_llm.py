@@ -26,8 +26,9 @@ set_global(Settings(stream=True))
     "streaming, country, capital",
     [(True, "France", "Paris"), (False, "India", "Delhi")],
 )
-def test_openai_gpt(test_settings: Settings, streaming, country, capital):
-    test_settings.cache = False
+@pytest.mark.parametrize("use_cache", [False, True])
+def test_openai_gpt(test_settings: Settings, streaming, country, capital, use_cache):
+    test_settings.cache = False  # cache response but don't retrieve from cache
     set_global(test_settings)
 
     cfg = OpenAIGPTConfig(
@@ -36,7 +37,7 @@ def test_openai_gpt(test_settings: Settings, streaming, country, capital):
         max_output_tokens=100,
         min_output_tokens=10,
         completion_model=OpenAICompletionModel.GPT3_5_TURBO_INSTRUCT,
-        cache_config=RedisCacheConfig(fake=False),
+        cache_config=RedisCacheConfig(fake=False) if use_cache else None,
     )
 
     mdl = OpenAIGPT(config=cfg)
@@ -64,10 +65,10 @@ def test_openai_gpt(test_settings: Settings, streaming, country, capital):
 
     test_settings.cache = True
     set_global(test_settings)
-    # should be from cache this time
+    # should be from cache this time, Provided config.cache_config is not None
     response = mdl.chat(messages=messages, max_tokens=50)
     assert capital in response.message
-    assert response.cached
+    assert response.cached == use_cache
 
     # pass intentional bad msg to test error handling
     messages = [

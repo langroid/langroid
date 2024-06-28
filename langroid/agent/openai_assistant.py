@@ -100,6 +100,10 @@ class OpenAIAssistant(ChatAgent):
         super().__init__(config)
         self.config: OpenAIAssistantConfig = config
         self.llm: OpenAIGPT = OpenAIGPT(self.config.llm)
+        assert (
+            self.llm.cache is not None
+        ), "OpenAIAssistant requires a cache to store Assistant and Thread ids"
+
         if not isinstance(self.llm.client, openai.OpenAI):
             raise ValueError("Client must be OpenAI")
         # handles for various entities and methods
@@ -235,19 +239,23 @@ class OpenAIAssistant(ChatAgent):
         """Try to retrieve cached thread_id associated with
         this user + machine + organization"""
         key = self._cache_thread_key()
+        if self.llm.cache is None:
+            return None
         return self.llm.cache.retrieve(key)
 
     @no_type_check
     def _cache_assistant_lookup(self) -> str | None:
         """Try to retrieve cached assistant_id associated with
         this user + machine + organization"""
+        if self.llm.cache is None:
+            return None
         key = self._cache_assistant_key()
         return self.llm.cache.retrieve(key)
 
     @no_type_check
     def _cache_messages_lookup(self) -> LLMResponse | None:
         """Try to retrieve cached response for the message-list-hash"""
-        if not settings.cache:
+        if not settings.cache or self.llm.cache is None:
             return None
         key = self._cache_messages_key()
         cached_dict = self.llm.cache.retrieve(key)
@@ -260,6 +268,8 @@ class OpenAIAssistant(ChatAgent):
         Cache the assistant_id, thread_id associated with
         this user + machine + organization
         """
+        if self.llm.cache is None:
+            return
         if self.thread is None or self.assistant is None:
             raise ValueError("Thread or Assistant is None")
         thread_key = self._cache_thread_key()
@@ -336,7 +346,8 @@ class OpenAIAssistant(ChatAgent):
                         Could not delete thread with id {cached}, ignoring. 
                         """
                     )
-                self.llm.cache.delete_keys([self._cache_thread_key()])
+                if self.llm.cache is not None:
+                    self.llm.cache.delete_keys([self._cache_thread_key()])
         if self.thread is None:
             if self.assistant is None:
                 raise ValueError("Assistant is None")
@@ -392,7 +403,8 @@ class OpenAIAssistant(ChatAgent):
                         Could not delete assistant with id {cached}, ignoring. 
                         """
                     )
-                self.llm.cache.delete_keys([self._cache_assistant_key()])
+                if self.llm.cache is not None:
+                    self.llm.cache.delete_keys([self._cache_assistant_key()])
         if self.assistant is None:
             self.assistant = self.client.beta.assistants.create(
                 name=self.config.name,
@@ -614,7 +626,8 @@ class OpenAIAssistant(ChatAgent):
             usage=None,  # TODO
             cached=False,  # TODO - revisit when able to insert Assistant responses
         )
-        self.llm.cache.store(key, result.dict())
+        if self.llm.cache is not None:
+            self.llm.cache.store(key, result.dict())
         return result
 
     def _parse_run_required_action(self) -> List[AssistantToolCall]:
