@@ -302,7 +302,7 @@ class OpenAIGPTConfig(LLMConfig):
         litellm.telemetry = False
         litellm.drop_params = True  # drop un-supported params without crashing
         self.seed = None  # some local mdls don't support seed
-        keys_dict = litellm.validate_environment(self.chat_model)
+        keys_dict = litellm.utils.validate_environment(self.chat_model)
         missing_keys = keys_dict.get("missing_keys", [])
         if len(missing_keys) > 0:
             raise ValueError(
