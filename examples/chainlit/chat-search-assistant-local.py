@@ -4,15 +4,26 @@ with a minor change to enable Chainlit callbacks.
 Tested and works ok nous-hermes2-mixtral, but may still have issues.
 See that script for details.
 
-You can specify a local in a few different ways, e.g. `-m local/localhost:8000/v1`
-or `-m ollama/mistral` etc. See here how to use Langroid with local LLMs:
+You can specify a local model in a few different ways, e.g. `groq/llama3-70b-8192`
+or `ollama/mistral` etc. See here how to use Langroid with local LLMs:
 https://langroid.github.io/langroid/tutorials/local-llm-setup/
 
+Since chainlit does not take cmd line args in the normal way, you have to specify
+the model via an environment variable, e.g. `MODEL=ollama/mistral` before the
+script is run, e.g.
+
+MODEL=ollama/mistral chainlit run  examples/chainlit/chat-search-assistant-local.py
+
+Note - this is just an example of using an open/local LLM;
+ it does not mean that this will work with ANY local LLM.
+
+You may get good results using `groq/llama3-70b-8192` (see the above-linked guide
+to using open/local LLMs with Langroid for more details).
 
 """
 
 from typing import List, Optional, Type
-
+import os
 from dotenv import load_dotenv
 from textwrap import dedent
 
@@ -279,8 +290,8 @@ class SearcherAgent(lr.ChatAgent):
 
 @cl.on_chat_start
 async def main(
-    debug: bool = False,
-    model: str = "ollama/nous-hermes2-mixtral:latest",
+    debug: bool = True,
+    model: str = os.getenv("MODEL", "gpt-4o"),
     nocache: bool = True,
 ) -> None:
     set_global(

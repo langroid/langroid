@@ -351,6 +351,7 @@ def test_agent_malformed_tool(
     test_settings: Settings,
     use_functions_api: bool,
 ):
+    set_global(test_settings)
     cfg = ChatAgentConfig(
         use_tools=not use_functions_api,
         use_functions_api=use_functions_api,
@@ -359,3 +360,22 @@ def test_agent_malformed_tool(
     agent.enable_message(NabroskiTool)
     response = agent.agent_response(wrong_nabroski_tool)
     assert "num_pair" in response.content and "yval" in response.content
+
+
+@pytest.mark.parametrize("use_functions_api", [True, False])
+def test_tool_no_llm_response(
+    test_settings: Settings,
+    use_functions_api: bool,
+):
+    """Test that agent.llm_response does not respond to tool messages."""
+
+    set_global(test_settings)
+    cfg = ChatAgentConfig(
+        use_tools=not use_functions_api,
+        use_functions_api=use_functions_api,
+    )
+    agent = ChatAgent(cfg)
+    agent.enable_message(NabroskiTool)
+    nabroski_tool = NabroskiTool(num_pair=NumPair(xval=1, yval=2)).to_json()
+    response = agent.llm_response(nabroski_tool)
+    assert response is None

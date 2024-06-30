@@ -540,8 +540,9 @@ class ChatAgent(Agent):
         """
         if self.llm is None:
             return None
-
         hist, output_len = self._prep_llm_messages(message)
+        if len(hist) == 0:
+            return None
         with StreamingIfAllowed(self.llm, self.llm.get_stream()):
             response = await self.llm_response_messages_async(hist, output_len)
         self.message_history.append(ChatDocument.to_LLMMessage(response))

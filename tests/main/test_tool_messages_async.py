@@ -189,3 +189,25 @@ async def test_llm_tool_message(
 
     agent_result = agent.handle_message(llm_msg)
     assert result.lower() in agent_result.lower()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("use_functions_api", [True, False])
+async def test_tool_no_llm_response_async(
+    test_settings: Settings,
+    use_functions_api: bool,
+):
+    """Test that agent.llm_response does not respond to tool messages."""
+
+    set_global(test_settings)
+    cfg = ChatAgentConfig(
+        use_tools=not use_functions_api,
+        use_functions_api=use_functions_api,
+    )
+    agent = ChatAgent(cfg)
+    agent.enable_message(CountryCapitalMessage)
+    capital_tool = CountryCapitalMessage(
+        city="Paris", country="France", result="yes"
+    ).to_json()
+    response = await agent.llm_response_async(capital_tool)
+    assert response is None
