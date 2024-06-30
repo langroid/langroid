@@ -50,7 +50,7 @@ N = 20
 # should LLM include reasoning along with probability?
 # (meant to test whether including reasoning along with the probability
 # improves accuracy and/or variance of estimates)
-REASON: bool = True
+REASON: bool = False
 
 
 def extract_num(x: str) -> int:
@@ -96,6 +96,7 @@ def main(
                 temperature=temp,
                 chat_model=model,
             ),
+            name="ADE-Estimator",
             system_message=f"""
             You are a clinician with deep knowledge of Adverse Drug Events (ADEs) 
             of various drugs and categories of drugs.
@@ -112,13 +113,14 @@ def main(
         )
     )
 
-    probs = lr.llm_response_batch(
+    results = lr.llm_response_batch(
         agent,
         [pair] * n,
         # ["(Beta Blockers, Mortality after Myocardial Infarction)"]*20,
-        output_map=lambda r: extract_num(r.content),
     )
-
+    probs = [extract_num(r.content) for r in results]
+    cached = [r.metadata.cached for r in results]
+    n_cached = sum(cached)
     # eliminate negatives (due to errs)
     probs = [p for p in probs if p >= 0]
     mean = np.mean(probs)
@@ -128,9 +130,11 @@ def main(
     lo = min(probs)
     print(f"Stats for {pair} with {model} temp {temp} reason {reason}:")
     print(
-        f"N: {len(probs)} Mean: {mean:.2f}, Std: {std:.2f}, StdErr: {std_err:.2f}, "
-        f"min: {lo:.2f}, max: {hi:.2f}"
+        f"N: {len(probs)} ({n_cached} cached ) Mean: {mean:.2f}, Std: {std:.2f}, StdErr:"
+        f" {std_err:.2f}, min: {lo:.2f}, max: {hi:.2f}"
     )
+    toks, cost = agent.llm.tot_tokens_cost()
+    print(f"Tokens: {toks}, Cost: {cost:.2f}")
 
 
 if __name__ == "__main__":
