@@ -31,7 +31,6 @@ jobs:
         id: docker_tag
         run: |
           if [ "${{ github.ref_type }}" == "tag" ]; then
-            echo "TAG_NAME=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
             echo "DOCKER_TAG=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
           else
             echo "DOCKER_TAG=latest" >> $GITHUB_ENV
@@ -68,7 +67,6 @@ jobs:
         id: docker_tag
         run: |
           if [ "${{ github.ref_type }}" == "tag" ]; then
-            echo "TAG_NAME=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
             echo "DOCKER_TAG=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
           else
             echo "DOCKER_TAG=latest" >> $GITHUB_ENV
