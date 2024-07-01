@@ -6,6 +6,8 @@ on:
       - "langroid/**"
     branches:
       - main
+    tags:
+      - '*'
 
 jobs:
   build_amd64:
@@ -25,13 +27,25 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: Determine Docker tag
+        id: docker_tag
+        run: |
+          if [ "${{ github.ref_type }}" == "tag" ]; then
+            echo "TAG_NAME=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+            echo "DOCKER_TAG=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+          else
+            echo "DOCKER_TAG=latest" >> $GITHUB_ENV
+          fi
+
       - name: Build and push amd64
         uses: docker/build-push-action@v2
         with:
           context: .
           push: true
           platforms: linux/amd64
-          tags: langroid/langroid:latest-amd64
+          tags: |
+            langroid/langroid:latest-amd64
+            langroid/langroid:${{ env.DOCKER_TAG }}-amd64
 
   build_arm64:
     name: Build Docker image for arm64
@@ -50,10 +64,22 @@ jobs:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+      - name: Determine Docker tag
+        id: docker_tag
+        run: |
+          if [ "${{ github.ref_type }}" == "tag" ]; then
+            echo "TAG_NAME=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+            echo "DOCKER_TAG=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+          else
+            echo "DOCKER_TAG=latest" >> $GITHUB_ENV
+          fi
+
       - name: Build and push arm64
         uses: docker/build-push-action@v2
         with:
           context: .
           push: true
           platforms: linux/arm64
-          tags: langroid/langroid:latest-arm64
+          tags: |
+            langroid/langroid:latest-arm64
+            langroid/langroid:${{ env.DOCKER_TAG }}-arm64
