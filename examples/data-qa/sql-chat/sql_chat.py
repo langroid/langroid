@@ -35,6 +35,7 @@ from langroid.agent.special.sql.sql_chat_agent import (
 from langroid.agent.task import Task
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
 from langroid.utils.configuration import set_global, Settings
+from langroid.utils.constants import SEND_TO
 import logging
 
 logger = logging.getLogger(__name__)
@@ -183,7 +184,9 @@ def main(
 
     agent = SQLChatAgent(
         config=SQLChatAgentConfig(
+            name="sql",
             database_uri=database_uri,
+            addressing_prefix=SEND_TO,
             use_tools=tools,
             use_functions_api=not tools,
             show_stats=False,
@@ -194,7 +197,7 @@ def main(
             ),
         )
     )
-    task = Task(agent)
+    task = Task(agent, interactive=False)
     task.run()
 
 
