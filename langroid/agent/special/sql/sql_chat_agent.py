@@ -66,6 +66,17 @@ Start by asking what I would like to know about the data.
 
 """
 
+ADDRESSING_INSTRUCTION = """
+IMPORTANT - Whenever you are NOT writing a SQL query, make sure you address the user
+using {prefix}User. You MUST use the EXACT syntax {prefix} !!!
+
+In other words, you ALWAYS write EITHER:
+ - a SQL query using the `run_query` tool, 
+ - OR address the user using {prefix}User.
+
+"""
+
+
 SQL_ERROR_MSG = "There was an error in your SQL Query"
 
 
@@ -81,6 +92,7 @@ class SQLChatAgentConfig(ChatAgentConfig):
     context_descriptions: Dict[str, Dict[str, Union[str, Dict[str, str]]]] = {}
     use_schema_tools: bool = False
     multi_schema: bool = False
+    addressing_prefix: str = ""
 
     """
     Optional, but strongly recommended, context descriptions for tables, columns, 
@@ -206,6 +218,10 @@ class SQLChatAgent(ChatAgent):
         """Initialize message tools used for chatting."""
         message = self._format_message()
         self.config.system_message = self.config.system_message.format(mode=message)
+        if self.config.addressing_prefix != "":
+            self.config.system_message += ADDRESSING_INSTRUCTION.format(
+                prefix=self.config.addressing_prefix
+            )
         super().__init__(self.config)
         self.enable_message(RunQueryTool)
         if self.config.use_schema_tools:

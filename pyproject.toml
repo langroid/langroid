@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "langroid"
-version = "0.2.10"
+version = "0.2.12"
 description = "Harness LLMs with Multi-Agent Programming"
 authors = ["Prasad Chalasani <pchalasani@gmail.com>"]
 readme = "README.md"
@@ -16,8 +16,8 @@ python = "^3.10"
 chromadb = {version=">=0.4.21, <=0.4.23", optional=true}
 momento = {version="^1.10.2", optional=true}
 unstructured = {extras = ["docx", "pptx", "pdf"], version = ">=0.10.16,<0.10.18", optional=true}
-sentence-transformers = {version="2.2.2", optional=true}
-torch = {version="2.0.0", optional=true}
+sentence-transformers = {version="^2.2.2", optional=true}
+torch = {version="^2.0.0", optional=true}
 psycopg2 = {version="^2.9.7", optional=true}
 pymysql = {version = "^1.1.0", optional = true}
 meilisearch-python-sdk = {version="^2.2.3", optional=true}
