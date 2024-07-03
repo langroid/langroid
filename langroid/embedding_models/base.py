@@ -24,6 +24,8 @@ class EmbeddingModel(ABC):
     @classmethod
     def create(cls, config: EmbeddingModelsConfig) -> "EmbeddingModel":
         from langroid.embedding_models.models import (
+            FastEmbedEmbeddings,
+            FastEmbedEmbeddingsConfig,
             OpenAIEmbeddings,
             OpenAIEmbeddingsConfig,
             SentenceTransformerEmbeddings,
@@ -40,6 +42,8 @@ class EmbeddingModel(ABC):
             return OpenAIEmbeddings(config)
         elif isinstance(config, SentenceTransformerEmbeddingsConfig):
             return SentenceTransformerEmbeddings(config)
+        elif isinstance(config, FastEmbedEmbeddingsConfig):
+            return FastEmbedEmbeddings(config)
         else:
             raise ValueError(f"Unknown embedding config: {config.__repr_name__}")
 

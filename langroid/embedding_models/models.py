@@ -32,6 +32,17 @@ class SentenceTransformerEmbeddingsConfig(EmbeddingModelsConfig):
     devices: Optional[list[str]] = None
 
 
+class FastEmbedEmbeddingsConfig(EmbeddingModelsConfig):
+    model_type: str = "fastembed"
+    model_name: str = "BAAI/bge-small-en-v1.5"
+    dims: int = 384
+    batch_size: int = 256
+    cache_dir: Optional[str] = None
+    threads: Optional[int] = None
+    parallel: Optional[int] = None
+    additional_kwargs: dict = {}
+
+
 class EmbeddingFunctionCallable:
     """
     A callable class designed to generate embeddings for a list of texts using
@@ -189,6 +200,46 @@ class SentenceTransformerEmbeddings(EmbeddingModel):
         return dims  # type: ignore
 
 
+class FastEmbedEmbeddings(EmbeddingModel):
+    def __init__(self, config: FastEmbedEmbeddingsConfig = FastEmbedEmbeddingsConfig()):
+        try:
+            from fastembed import TextEmbedding
+        except ImportError:
+            raise ImportError(
+                """
+                To use FastEmbed embeddings, 
+                you must install langroid with the [fastembed] extra, e.g.:
+                pip install "langroid[fastembed]"
+                """
+            )
+
+        super().__init__()
+        self.config = config
+        self._batch_size = config.batch_size
+        self._parallel = config.parallel
+
+        self._model = TextEmbedding(
+            model_name=self.config.model_name,
+            cache_dir=self.config.cache_dir,
+            threads=self.config.threads,
+            **self.config.additional_kwargs,
+        )
+
+    def embedding_fn(self) -> Callable[[List[str]], Embeddings]:
+        def fn(texts: List[str]) -> Embeddings:
+            embeddings = self._model.embed(
+                texts, batch_size=self._batch_size, parallel=self._parallel
+            )
+
+            return [embedding.tolist() for embedding in embeddings]
+
+        return fn
+
+    @property
+    def embedding_dims(self) -> int:
+        return self.config.dims
+
+
 def embedding_model(embedding_fn_type: str = "openai") -> EmbeddingModel:
     """
     Args:
@@ -198,5 +249,7 @@ def embedding_model(embedding_fn_type: str = "openai") -> EmbeddingModel:
     """
     if embedding_fn_type == "openai":
         return OpenAIEmbeddings  # type: ignore
+    elif embedding_fn_type == "fastembed":
+        return FastEmbedEmbeddings
     else:  # default sentence transformer
         return SentenceTransformerEmbeddings  # type: ignore
