@@ -1,5 +1,6 @@
 import atexit
 import os
+from functools import cached_property
 from typing import Any, Callable, Dict, List, Optional
 
 import tiktoken
@@ -234,9 +235,10 @@ class FastEmbedEmbeddings(EmbeddingModel):
 
         return fn
 
-    @property
+    @cached_property
     def embedding_dims(self) -> int:
-        return self.config.dims
+        embed_func = self.embedding_fn()
+        return len(embed_func(["text"])[0])
 
 
 def embedding_model(embedding_fn_type: str = "openai") -> EmbeddingModel:

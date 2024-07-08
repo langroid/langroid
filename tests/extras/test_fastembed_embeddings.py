@@ -14,7 +14,6 @@ from langroid.embedding_models.models import FastEmbedEmbeddingsConfig
 def test_embeddings():
     fastembed_cfg = FastEmbedEmbeddingsConfig(
         model_name="BAAI/bge-small-en-v1.5",
-        dims=384,
     )
 
     fastembed_model = EmbeddingModel.create(fastembed_cfg)
