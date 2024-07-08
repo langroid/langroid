@@ -87,7 +87,7 @@ jobs:
         python -m pip install --upgrade pip
         
         poetry install \
-          -E "lancedb momento meilisearch chromadb hf-embeddings unstructured pdf-parsers docx sql" \
+          -E "lancedb momento meilisearch chromadb hf-embeddings unstructured pdf-parsers docx sql fastembed" \
           --with dev
 
     - name: Dump dependencies to file
@@ -105,13 +105,13 @@ jobs:
         PYTEST_ADDOPTS: "-p no:logging"
       run: |
         poetry run coverage run --source=langroid \
-          -m pytest -rf --tb=no --show-capture=no \
+          -m pytest -v -rf --capture=no --show-capture=no \
           --first-test-file=tests/main/test_task_inf_loop.py \
           --first-test-file=tests/main/test_task.py \
           --first-test-file=tests/main/test_lance_doc_chat_agent.py \
           --first-test-file=tests/main/test_llm.py \
           --first-test-file=tests/main/test_llm_async.py \
-          tests/main tests/extras/test_hf_embeddings.py
+          tests/main tests/extras/test_hf_embeddings.py tests/extras/test_fastembed_embeddings.py
       continue-on-error: true
 
 
@@ -122,14 +122,14 @@ jobs:
         PYTEST_ADDOPTS: "-p no:logging"
       run: |
         poetry run coverage run --append --source=langroid \
-          -m pytest --m gpt-4  -rf --tb=no --show-capture=no \
+          -m pytest --m gpt-4  -v -rf --capture=no --show-capture=no \
           --first-test-file=tests/main/test_task_inf_loop.py \
           --first-test-file=tests/main/test_task.py \
           --first-test-file=tests/main/test_lance_doc_chat_agent.py \
           --first-test-file=tests/main/test_llm.py \
           --first-test-file=tests/main/test_llm_async.py \
           --lf --last-failed-no-failures none \
-          tests/main tests/extras/test_hf_embeddings.py
+          tests/main tests/extras/test_hf_embeddings.py tests/extras/test_fastembed_embeddings.py
       continue-on-error: true
 
     - name: Install Pydantic 1.x to pass lancedb tests
@@ -145,7 +145,7 @@ jobs:
           --first-test-file=tests/main/test_llm.py \
           --first-test-file=tests/main/test_llm_async.py \
           --lf --last-failed-no-failures none \
-          tests/main tests/extras/test_hf_embeddings.py
+          tests/main tests/extras/test_hf_embeddings.py tests/extras/test_fastembed_embeddings.py
 
     - name: Generate final coverage report from all runs
       run: poetry run coverage report

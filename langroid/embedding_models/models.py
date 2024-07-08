@@ -1,12 +1,14 @@
 import atexit
 import os
-from typing import Callable, List, Optional
+from functools import cached_property
+from typing import Any, Callable, Dict, List, Optional
 
 import tiktoken
 from dotenv import load_dotenv
 from openai import OpenAI
 
 from langroid.embedding_models.base import EmbeddingModel, EmbeddingModelsConfig
+from langroid.exceptions import LangroidImportError
 from langroid.mytypes import Embeddings
 from langroid.parsing.utils import batched
 
@@ -30,6 +32,20 @@ class SentenceTransformerEmbeddingsConfig(EmbeddingModelsConfig):
     device: Optional[str] = None
     # Select devices when data parallel is enabled
     devices: Optional[list[str]] = None
+
+
+class FastEmbedEmbeddingsConfig(EmbeddingModelsConfig):
+    """Config for qdrant/fastembed embeddings,
+    see here: https://github.com/qdrant/fastembed
+    """
+
+    model_type: str = "fastembed"
+    model_name: str = "BAAI/bge-small-en-v1.5"
+    batch_size: int = 256
+    cache_dir: Optional[str] = None
+    threads: Optional[int] = None
+    parallel: Optional[int] = None
+    additional_kwargs: Dict[str, Any] = {}
 
 
 class EmbeddingFunctionCallable:
@@ -189,6 +205,41 @@ class SentenceTransformerEmbeddings(EmbeddingModel):
         return dims  # type: ignore
 
 
+class FastEmbedEmbeddings(EmbeddingModel):
+    def __init__(self, config: FastEmbedEmbeddingsConfig = FastEmbedEmbeddingsConfig()):
+        try:
+            from fastembed import TextEmbedding
+        except ImportError:
+            raise LangroidImportError("fastembed", extra="fastembed")
+
+        super().__init__()
+        self.config = config
+        self._batch_size = config.batch_size
+        self._parallel = config.parallel
+
+        self._model = TextEmbedding(
+            model_name=self.config.model_name,
+            cache_dir=self.config.cache_dir,
+            threads=self.config.threads,
+            **self.config.additional_kwargs,
+        )
+
+    def embedding_fn(self) -> Callable[[List[str]], Embeddings]:
+        def fn(texts: List[str]) -> Embeddings:
+            embeddings = self._model.embed(
+                texts, batch_size=self._batch_size, parallel=self._parallel
+            )
+
+            return [embedding.tolist() for embedding in embeddings]
+
+        return fn
+
+    @cached_property
+    def embedding_dims(self) -> int:
+        embed_func = self.embedding_fn()
+        return len(embed_func(["text"])[0])
+
+
 def embedding_model(embedding_fn_type: str = "openai") -> EmbeddingModel:
     """
     Args:
@@ -198,5 +249,7 @@ def embedding_model(embedding_fn_type: str = "openai") -> EmbeddingModel:
     """
     if embedding_fn_type == "openai":
         return OpenAIEmbeddings  # type: ignore
+    elif embedding_fn_type == "fastembed":
+        return FastEmbedEmbeddings  # type: ignore
     else:  # default sentence transformer
         return SentenceTransformerEmbeddings  # type: ignore
