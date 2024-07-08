@@ -80,23 +80,6 @@ jobs:
     - name: Install Poetry
       uses: Gr1N/setup-poetry@v8
 
-    - name: Clear cache
-      uses: actions/github-script@v6
-      with:
-        script: |
-          const caches = await github.rest.actions.getActionsCacheList({
-            owner: context.repo.owner,
-            repo: context.repo.repo,
-          })
-          for (const cache of caches.data.actions_caches) {
-            await github.rest.actions.deleteActionsCacheById({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              cache_id: cache.id,
-            })
-          }
-          console.log('Cache cleared')
-
     - name: Install Poetry dependencies
       run: |
         poetry --version
@@ -123,7 +106,7 @@ jobs:
         PYTEST_ADDOPTS: "-p no:logging"
       run: |
         poetry run coverage run --source=langroid \
-          -m pytest -rf --show-capture=no \
+          -m pytest -rf -v -s --show-capture=no --log-cli-level=DEBUG \
           --first-test-file=tests/main/test_task_inf_loop.py \
           --first-test-file=tests/main/test_task.py \
           --first-test-file=tests/main/test_lance_doc_chat_agent.py \
