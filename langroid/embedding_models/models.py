@@ -41,7 +41,6 @@ class FastEmbedEmbeddingsConfig(EmbeddingModelsConfig):
 
     model_type: str = "fastembed"
     model_name: str = "BAAI/bge-small-en-v1.5"
-    dims: int = 384
     batch_size: int = 256
     cache_dir: Optional[str] = None
     threads: Optional[int] = None
