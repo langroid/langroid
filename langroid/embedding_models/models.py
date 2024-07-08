@@ -1,12 +1,13 @@
 import atexit
 import os
-from typing import Callable, List, Optional
+from typing import Any, Callable, Dict, List, Optional
 
 import tiktoken
 from dotenv import load_dotenv
 from openai import OpenAI
 
 from langroid.embedding_models.base import EmbeddingModel, EmbeddingModelsConfig
+from langroid.exceptions import LangroidImportError
 from langroid.mytypes import Embeddings
 from langroid.parsing.utils import batched
 
@@ -33,6 +34,10 @@ class SentenceTransformerEmbeddingsConfig(EmbeddingModelsConfig):
 
 
 class FastEmbedEmbeddingsConfig(EmbeddingModelsConfig):
+    """Config for qdrant/fastembed embeddings,
+    see here: https://github.com/qdrant/fastembed
+    """
+
     model_type: str = "fastembed"
     model_name: str = "BAAI/bge-small-en-v1.5"
     dims: int = 384
@@ -40,7 +45,7 @@ class FastEmbedEmbeddingsConfig(EmbeddingModelsConfig):
     cache_dir: Optional[str] = None
     threads: Optional[int] = None
     parallel: Optional[int] = None
-    additional_kwargs: dict = {}
+    additional_kwargs: Dict[str, Any] = {}
 
 
 class EmbeddingFunctionCallable:
@@ -205,13 +210,7 @@ class FastEmbedEmbeddings(EmbeddingModel):
         try:
             from fastembed import TextEmbedding
         except ImportError:
-            raise ImportError(
-                """
-                To use FastEmbed embeddings, 
-                you must install langroid with the [fastembed] extra, e.g.:
-                pip install "langroid[fastembed]"
-                """
-            )
+            raise LangroidImportError("fastembed", extra="fastembed")
 
         super().__init__()
         self.config = config
@@ -250,6 +249,6 @@ def embedding_model(embedding_fn_type: str = "openai") -> EmbeddingModel:
     if embedding_fn_type == "openai":
         return OpenAIEmbeddings  # type: ignore
     elif embedding_fn_type == "fastembed":
-        return FastEmbedEmbeddings
+        return FastEmbedEmbeddings  # type: ignore
     else:  # default sentence transformer
         return SentenceTransformerEmbeddings  # type: ignore

@@ -10,7 +10,7 @@ include = ["pyproject.toml"]
 
 # =============== MAIN DEPS ==============
 [tool.poetry.dependencies]
-python = "^3.10"
+python = ">=3.10,<3.13"
 
 # =========== OPTIONALS ==============================
 chromadb = {version=">=0.4.21, <=0.4.23", optional=true}
