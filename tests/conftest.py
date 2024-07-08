@@ -71,7 +71,7 @@ def pytest_addoption(parser) -> None:
     )
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="function")
 def test_settings(request) -> Settings:
     chat_model = request.config.getoption("--m")
     max_turns = request.config.getoption("--turns")
