@@ -21,3 +21,4 @@ def test_embeddings():
     fastembed_fn = fastembed_model.embedding_fn()
 
     assert len(fastembed_fn(["hello"])[0]) == fastembed_model.embedding_dims
+    assert fastembed_model.embedding_dims == 384
