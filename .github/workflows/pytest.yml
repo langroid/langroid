@@ -80,6 +80,23 @@ jobs:
     - name: Install Poetry
       uses: Gr1N/setup-poetry@v8
 
+    - name: Clear cache
+      uses: actions/github-script@v6
+      with:
+        script: |
+          const caches = await github.rest.actions.getActionsCacheList({
+            owner: context.repo.owner,
+            repo: context.repo.repo,
+          })
+          for (const cache of caches.data.actions_caches) {
+            await github.rest.actions.deleteActionsCacheById({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              cache_id: cache.id,
+            })
+          }
+          console.log('Cache cleared')
+
     - name: Install Poetry dependencies
       run: |
         poetry --version
@@ -98,6 +115,7 @@ jobs:
       with:
         name: github-dependencies
         path: requirements_github.txt
+
 
     - name: Run ALL tests with coverage (GPT-4o)
       id: first_test
