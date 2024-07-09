@@ -37,7 +37,7 @@ def test_openai_gpt(test_settings: Settings, streaming, country, capital, use_ca
         max_output_tokens=100,
         min_output_tokens=10,
         completion_model=OpenAICompletionModel.GPT3_5_TURBO_INSTRUCT,
-        cache_config=RedisCacheConfig(fake=False) if use_cache else None,
+        cache_config=RedisCacheConfig(fake=True) if use_cache else None,
     )
 
     mdl = OpenAIGPT(config=cfg)
