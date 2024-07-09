@@ -133,12 +133,15 @@ class AzureGPT(OpenAIGPT):
         """
         Handles the setting of the GPT-4 model in the configuration.
         This function checks the `model_version` in the configuration.
-        If the version is not set, it raises a ValueError indicating that the model
-        version needs to be specified in the ``.env`` file.
-        It sets `OpenAIChatModel.GPT4_TURBO` if the version is
-        '1106-Preview', otherwise, it defaults to setting `OpenAIChatModel.GPT4`.
+        If the version is not set, it raises a ValueError indicating
+        that the model version needs to be specified in the ``.env``
+        file.  It sets `OpenAIChatMode.GPT4o` if the version is
+        '2024-05-13', `OpenAIChatModel.GPT4_TURBO` if the version is
+        '1106-Preview', otherwise, it defaults to setting
+        `OpenAIChatModel.GPT4`.
         """
         VERSION_1106_PREVIEW = "1106-Preview"
+        VERSION_GPT4o = "2024-05-13"
 
         if self.config.model_version == "":
             raise ValueError(
@@ -146,7 +149,9 @@ class AzureGPT(OpenAIGPT):
                 "Please set it to the chat model version used in your deployment."
             )
 
-        if self.config.model_version == VERSION_1106_PREVIEW:
+        if self.config.model_version == VERSION_GPT4o:
+            self.config.chat_model = OpenAIChatModel.GPT4o
+        elif self.config.model_version == VERSION_1106_PREVIEW:
             self.config.chat_model = OpenAIChatModel.GPT4_TURBO
         else:
             self.config.chat_model = OpenAIChatModel.GPT4

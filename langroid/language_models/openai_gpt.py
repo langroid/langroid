@@ -1,4 +1,3 @@
-import ast
 import hashlib
 import json
 import logging
@@ -797,7 +796,7 @@ class OpenAIGPT(LanguageModel):
         args = {}
         if has_function and function_args != "":
             try:
-                args = ast.literal_eval(function_args.strip())
+                args = json.loads(function_args.strip())
             except (SyntaxError, ValueError):
                 logging.warning(
                     f"Parsing OpenAI function args failed: {function_args};"

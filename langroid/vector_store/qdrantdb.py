@@ -102,11 +102,12 @@ class QdrantDB(VectorStore):
         load_dotenv()
         key = os.getenv("QDRANT_API_KEY")
         url = os.getenv("QDRANT_API_URL")
-        if config.cloud and None in [key, url]:
+        if config.cloud and url is None:
             logger.warning(
-                f"""QDRANT_API_KEY, QDRANT_API_URL env variable must be set to use 
-                QdrantDB in cloud mode. Please set these values 
-                in your .env file. 
+                f"""QDRANT_API_URL env variable must be set to use 
+                QdrantDB in cloud mode. If using Qdrant Cloud rather
+                than local docker mode, QDRANT_API_KEY must be set
+                as well. Please set these values in your .env file. 
                 Switching to local storage at {config.storage_path} 
                 """
             )
