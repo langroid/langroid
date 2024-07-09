@@ -129,6 +129,8 @@ teacher_task.run()
 <details>
 <summary> <b>Click to expand</b></summary>
 
+- **Jul 2024:**
+  - **[0.3.0](https://github.com/langroid/langroid/releases/tag/0.3.0)**: Added [FastEmbed](https://qdrant.github.io/fastembed/qdrant/Usage_With_Qdrant/) embeddings from Qdrant
 - **Jun 2024:**
   - **0.2.0:** Improved lineage tracking, granular sub-task configs, and a new tool, `RewindTool`, 
     that lets an agent "rewind and redo" a past message (and all dependent messages are cleared out 
