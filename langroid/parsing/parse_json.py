@@ -1,5 +1,6 @@
+import ast
 import json
-from typing import Any, Iterator, List
+from typing import Any, Dict, Iterator, List, Union
 
 import yaml
 from pyparsing import nestedExpr, originalTextFor
@@ -71,6 +72,31 @@ def add_quotes(s: str) -> str:
         return json.dumps(dct)
     except Exception:
         return s
+
+
+def parse_imperfect_json(json_string: str) -> Union[Dict[str, Any], List[Any]]:
+    if not json_string.strip():
+        raise ValueError("Empty string is not valid JSON")
+
+    # First, try parsing with ast.literal_eval
+    try:
+        result = ast.literal_eval(json_string)
+        if isinstance(result, (dict, list)):
+            return result
+    except (ValueError, SyntaxError):
+        pass
+
+    # If ast.literal_eval fails or returns non-dict/list, try json.loads
+    try:
+        str = add_quotes(json_string)
+        result = json.loads(str)
+        if isinstance(result, (dict, list)):
+            return result
+    except json.JSONDecodeError:
+        pass
+
+    # If all methods fail, raise ValueError
+    raise ValueError(f"Unable to parse as JSON: {json_string}")
 
 
 def repair_newlines(s: str) -> str:

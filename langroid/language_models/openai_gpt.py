@@ -48,6 +48,7 @@ from langroid.language_models.utils import (
     async_retry_with_exponential_backoff,
     retry_with_exponential_backoff,
 )
+from langroid.parsing.parse_json import parse_imperfect_json
 from langroid.pydantic_v1 import BaseModel
 from langroid.utils.configuration import settings
 from langroid.utils.constants import Colors
@@ -796,11 +797,24 @@ class OpenAIGPT(LanguageModel):
         args = {}
         if has_function and function_args != "":
             try:
-                args = json.loads(function_args.strip())
-            except (SyntaxError, ValueError):
+                stripped_fn_args = function_args.strip()
+                dict_or_list = parse_imperfect_json(stripped_fn_args)
+                if not isinstance(dict_or_list, dict):
+                    raise ValueError(
+                        f"""
+                        Invalid function args: {stripped_fn_args} 
+                        parsed as {dict_or_list},
+                        which is not a valid dict.
+                        """
+                    )
+                args = dict_or_list
+            except (SyntaxError, ValueError) as e:
                 logging.warning(
-                    f"Parsing OpenAI function args failed: {function_args};"
-                    " treating args as normal message"
+                    f"""
+                    Parsing OpenAI function args failed: {function_args};
+                    treating args as normal message. Error detail:
+                    {e}
+                    """
                 )
                 has_function = False
                 completion = completion + function_args
