@@ -792,7 +792,7 @@ class Agent(ABC):
             json_data = properties
         request = json_data.get("request")
 
-        if request is None:
+        if request is None and len(json_data) > 0:
             handled = [self.llm_tools_map[r] for r in self.llm_tools_handled]
 
             def maybe_parse(tool: type[ToolMessage]) -> Optional[ToolMessage]:
