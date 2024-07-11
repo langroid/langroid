@@ -799,24 +799,23 @@ class Agent(ABC):
         ):
             handled = [self.llm_tools_map[r] for r in self.llm_tools_handled]
 
-            def can_parse(tool: type[ToolMessage]) -> bool:
+            def maybe_parse(tool: type[ToolMessage]) -> Optional[ToolMessage]:
                 try:
-                    tool.parse_obj(json_data)
-                    return True
+                    return tool.parse_obj(json_data)
                 except ValidationError:
-                    return False
+                    return None
 
             candidate_tools = list(
                 filter(
-                    can_parse,
-                    handled,
+                    lambda t: t is not None,
+                    map(maybe_parse, handled),
                 )
             )
 
             # If only one valid candidate exists, we infer
             # "request" to be the only possible value
             if len(candidate_tools) == 1:
-                return candidate_tools[0].parse_obj(json_data)
+                return candidate_tools[0]
             else:
                 return None
 
