@@ -63,6 +63,7 @@ def is_valid_uuid(uuid_to_test: str) -> bool:
 
 class QdrantDBConfig(VectorStoreConfig):
     cloud: bool = True
+    docker: bool = False
     collection_name: str | None = "temp"
     storage_path: str = ".qdrant/data"
     embedding: EmbeddingModelsConfig = OpenAIEmbeddingsConfig()
@@ -102,16 +103,28 @@ class QdrantDB(VectorStore):
         load_dotenv()
         key = os.getenv("QDRANT_API_KEY")
         url = os.getenv("QDRANT_API_URL")
-        if config.cloud and url is None:
+        if config.docker:
+            if url is None:
+                logger.warning(
+                    f"""The QDRANT_API_URL env variable must be set to use
+                    QdrantDB in local docker mode. Please set this
+                    value in your .env file.
+                    Switching to local storage at {config.storage_path}
+                    """
+                )
+                config.cloud = False
+            else:
+                config.cloud = True
+        elif config.cloud and None in [key, url]:
             logger.warning(
-                f"""QDRANT_API_URL env variable must be set to use 
-                QdrantDB in cloud mode. If using Qdrant Cloud rather
-                than local docker mode, QDRANT_API_KEY must be set
-                as well. Please set these values in your .env file. 
+                f"""QDRANT_API_KEY, QDRANT_API_URL env variable must be set to use 
+                QdrantDB in cloud mode. Please set these values 
+                in your .env file. 
                 Switching to local storage at {config.storage_path} 
                 """
             )
             config.cloud = False
+
         if config.cloud:
             self.client = QdrantClient(
                 url=url,
@@ -386,7 +399,7 @@ class QdrantDB(VectorStore):
         # Note the records may NOT be in the order of the ids,
         # so we re-order them here.
         id2payload = {record.id: record.payload for record in records}
-        ordered_payloads = [id2payload[id] for id in _ids]
+        ordered_payloads = [id2payload[id] for id in _ids if id in id2payload]
         docs = [Document(**payload) for payload in ordered_payloads]  # type: ignore
         return docs
 
