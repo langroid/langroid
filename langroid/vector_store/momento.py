@@ -1,6 +1,7 @@
 """
 Momento Vector Index.
 https://docs.momentohq.com/vector-index/develop/api-reference
+DEPRECATED: API is unstable.
 """
 
 from __future__ import annotations

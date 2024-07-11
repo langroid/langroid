@@ -234,6 +234,7 @@ class LLMResponse(BaseModel):
             # in this case we ignore message, since all information is in function_call
             msg = ""
             args = self.function_call.arguments
+            recipient = ""
             if isinstance(args, dict):
                 recipient = args.get("recipient", "")
             return recipient, msg
