@@ -362,6 +362,58 @@ def test_agent_malformed_tool(
     assert "num_pair" in response.content and "yval" in response.content
 
 
+class EulerTool(ToolMessage):
+    request: str = "euler"
+    purpose: str = "to request computing the Euler transform of <num_pair>"
+    num_pair: NumPair
+
+    def handle(self) -> str:
+        return str(2 * self.num_pair.xval - self.num_pair.yval)
+
+
+class GaussTool(ToolMessage):
+    request: str = "gauss"
+    purpose: str = "to request computing the Gauss transform of (<x>, <y>)"
+    xval: int
+    yval: int
+
+    def handle(self) -> str:
+        return str((self.xval + self.yval) * self.yval)
+
+
+@pytest.mark.parametrize("use_functions_api", [True, False])
+def test_agent_infer_tool(
+    test_settings: Settings,
+    use_functions_api: bool,
+):
+    set_global(test_settings)
+    gauss_request = """{"xval": 1, "yval": 3}"""
+    nabrowski_or_euler_request = """{"num_pair": {"xval": 1, "yval": 3}}"""
+    euler_request = """{"request": "euler", "num_pair": {"xval": 1, "yval": 3}}"""
+
+    cfg = ChatAgentConfig(
+        use_tools=not use_functions_api,
+        use_functions_api=use_functions_api,
+    )
+    agent = ChatAgent(cfg)
+    agent.enable_message(NabroskiTool)
+    agent.enable_message(GaussTool)
+
+    # Nabrowski is the only option prior to enabling EulerTool
+    assert agent.agent_response(nabrowski_or_euler_request).content == "6"
+
+    agent.enable_message(EulerTool)
+
+    # Gauss is the only option
+    assert agent.agent_response(gauss_request).content == "12"
+
+    # Explicit requests are forwarded to the correct handler
+    assert agent.agent_response(euler_request).content == "-1"
+
+    # We cannot infer the correct tool if there exist multiple matches
+    assert agent.agent_response(nabrowski_or_euler_request) is None
+
+
 @pytest.mark.parametrize("use_functions_api", [True, False])
 def test_tool_no_llm_response(
     test_settings: Settings,

@@ -784,16 +784,41 @@ class Agent(ABC):
         #     ]
         # }
 
+        if not isinstance(json_data, dict):
+            return None
+
         properties = json_data.get("properties")
         if properties is not None:
             json_data = properties
         request = json_data.get("request")
+
         if (
             request is None
             or not (isinstance(request, str))
             or request not in self.llm_tools_handled
         ):
-            return None
+            handled = [self.llm_tools_map[r] for r in self.llm_tools_handled]
+
+            def can_parse(tool: type[ToolMessage]) -> bool:
+                try:
+                    tool.parse_obj(json_data)
+                    return True
+                except ValidationError:
+                    return False
+
+            candidate_tools = list(
+                filter(
+                    can_parse,
+                    handled,
+                )
+            )
+
+            # If only one valid candidate exists, we infer
+            # "request" to be the only possible value
+            if len(candidate_tools) == 1:
+                return candidate_tools[0].parse_obj(json_data)
+            else:
+                return None
 
         message_class = self.llm_tools_map.get(request)
         if message_class is None:
