@@ -398,10 +398,12 @@ def test_agent_infer_tool(
     agent = ChatAgent(cfg)
     agent.enable_message(NabroskiTool)
     agent.enable_message(GaussTool)
+    agent.enable_message(EulerTool, handle=False)
 
-    # Nabrowski is the only option prior to enabling EulerTool
+    # Nabrowski is the only option prior to enabling EulerTool handling
     assert agent.agent_response(nabrowski_or_euler_request).content == "6"
 
+    # Enable handling EulerTool, this makes nabrowski_or_euler_request ambiguous
     agent.enable_message(EulerTool)
 
     # Gauss is the only option
