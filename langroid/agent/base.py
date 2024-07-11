@@ -815,7 +815,7 @@ class Agent(ABC):
             else:
                 return None
 
-        if not (isinstance(request, str)) or request not in self.llm_tools_handled:
+        if not isinstance(request, str) or request not in self.llm_tools_handled:
             return None
 
         message_class = self.llm_tools_map.get(request)
