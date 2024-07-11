@@ -49,6 +49,7 @@ class ToolMessage(ABC, BaseModel):
         # do not include these fields in the generated schema
         # since we don't require the LLM to specify them
         schema_extra = {"exclude": {"purpose", "result"}}
+        extra = "forbid"
 
     @classmethod
     def instructions(cls) -> str:
