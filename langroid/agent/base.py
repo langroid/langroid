@@ -792,11 +792,7 @@ class Agent(ABC):
             json_data = properties
         request = json_data.get("request")
 
-        if (
-            request is None
-            or not (isinstance(request, str))
-            or request not in self.llm_tools_handled
-        ):
+        if request is None:
             handled = [self.llm_tools_map[r] for r in self.llm_tools_handled]
 
             def maybe_parse(tool: type[ToolMessage]) -> Optional[ToolMessage]:
@@ -818,6 +814,12 @@ class Agent(ABC):
                 return candidate_tools[0]
             else:
                 return None
+
+        if (
+            not (isinstance(request, str))
+            or request not in self.llm_tools_handled
+        ):
+            return None
 
         message_class = self.llm_tools_map.get(request)
         if message_class is None:
