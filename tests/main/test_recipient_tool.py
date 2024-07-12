@@ -97,9 +97,8 @@ def test_agents_with_recipient_tool(
         
         (a) If n is even:
          (a.1) if n is a multiple of 10, send it to EvenHandler,
-             using the `square` tool/function-call, specifying the `intended_recipient` 
-             field 
-             as "EvenHandler".
+             using the `square` tool/function-call, specifying the `recipient` 
+             field as "EvenHandler".
          (a.2) if n is NOT a multiple of 10, send it to EvenHandler,
              
         (b) If n is odd, send it to OddHandler. 
@@ -129,7 +128,11 @@ def test_agents_with_recipient_tool(
         SquareTool,
         use=False,  # LLM of this agent does not need to generate this tool/fn-call
         handle=True,  # this agent needs to handle this tool/fn-call
-        require_recipient=False,  # this agent does not need to specify recipient
+        # since recipient is required when this tool is used (generated),
+        # we must preserve this setting here, otherwise the presence of
+        # "recipient" field will raise an error due to
+        # ToolMessage's Config.extra="forbid" setting!
+        require_recipient=True,
     )
     even_task = Task(
         even_agent,
