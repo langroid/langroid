@@ -784,15 +784,51 @@ class Agent(ABC):
         #     ]
         # }
 
+        if not isinstance(json_data, dict):
+            return None
+
         properties = json_data.get("properties")
-        if properties is not None:
+        if isinstance(properties, dict):
             json_data = properties
         request = json_data.get("request")
-        if (
-            request is None
-            or not (isinstance(request, str))
-            or request not in self.llm_tools_handled
-        ):
+
+        if request is None:
+            handled = [self.llm_tools_map[r] for r in self.llm_tools_handled]
+            default_keys = set(ToolMessage.__fields__.keys())
+            request_keys = set(json_data.keys())
+
+            def maybe_parse(tool: type[ToolMessage]) -> Optional[ToolMessage]:
+                all_keys = set(tool.__fields__.keys())
+                non_inherited_keys = all_keys.difference(default_keys)
+                # If the request has any keys not valid for the tool and
+                # does not specify some key specific to the type
+                # (e.g. not just `purpose`), the LLM must explicitly specify `request`
+                if not (
+                    request_keys.issubset(all_keys)
+                    and len(request_keys.intersection(non_inherited_keys)) > 0
+                ):
+                    return None
+
+                try:
+                    return tool.parse_obj(json_data)
+                except ValidationError:
+                    return None
+
+            candidate_tools = list(
+                filter(
+                    lambda t: t is not None,
+                    map(maybe_parse, handled),
+                )
+            )
+
+            # If only one valid candidate exists, we infer
+            # "request" to be the only possible value
+            if len(candidate_tools) == 1:
+                return candidate_tools[0]
+            else:
+                return None
+
+        if not isinstance(request, str) or request not in self.llm_tools_handled:
             return None
 
         message_class = self.llm_tools_map.get(request)

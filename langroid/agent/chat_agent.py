@@ -427,11 +427,11 @@ class ChatAgent(Agent):
                 but the Assistant fn-calling seems to pay attn to these,
                 and if we don't want this, we should set this to False.)
         """
+        if require_recipient and message_class is not None:
+            message_class = message_class.require_recipient()
         super().enable_message_handling(message_class)  # enables handling only
         tools = self._get_tool_list(message_class)
         if message_class is not None:
-            if require_recipient:
-                message_class = message_class.require_recipient()
             request = message_class.default_value("request")
             llm_function = message_class.llm_function_schema(defaults=include_defaults)
             self.llm_functions_map[request] = llm_function
