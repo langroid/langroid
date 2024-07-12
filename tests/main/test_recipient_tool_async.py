@@ -130,7 +130,11 @@ async def test_agents_with_recipient_tool(
         SquareTool,
         use=False,  # LLM of this agent does not need to generate this tool/fn-call
         handle=True,  # this agent needs to handle this tool/fn-call
-        require_recipient=False,  # this agent does not to specify recipient
+        # since recipient is required when this tool is used (generated),
+        # we must preserve this setting here, otherwise the presence of
+        # "recipient" field will raise an error due to
+        # ToolMessage's Config.extra="forbid" setting!
+        require_recipient=True,
     )
     even_task = Task(
         even_agent,
