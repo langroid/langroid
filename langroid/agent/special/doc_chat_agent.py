@@ -538,12 +538,13 @@ class DocChatAgent(ChatAgent):
         ]
 
     def get_field_values(self, fields: list[str]) -> Dict[str, str]:
-        """Get string-listing of possible values of each filterable field,
+        """Get string-listing of possible values of each field,
         e.g.
         {
             "genre": "crime, drama, mystery, ... (10 more)",
             "certificate": "R, PG-13, PG, R",
         }
+        The field names may have "metadata." prefix, e.g. "metadata.genre".
         """
         field_values: Dict[str, Set[str]] = {}
         # make empty set for each field
@@ -556,8 +557,11 @@ class DocChatAgent(ChatAgent):
         for d in docs:
             # extract fields from d
             doc_field_vals = extract_fields(d, fields)
-            for field, val in doc_field_vals.items():
-                field_values[field].add(val)
+            # the `field` returned by extract_fields may contain only the last
+            # part of the field name, e.g. "genre" instead of "metadata.genre",
+            # so we use the orig_field name to fill in the values
+            for (field, val), orig_field in zip(doc_field_vals.items(), fields):
+                field_values[orig_field].add(val)
         # For each field make a string showing list of possible values,
         # truncate to 20 values, and if there are more, indicate how many
         # more there are, e.g. Genre: crime, drama, mystery, ... (20 more)
@@ -680,7 +684,13 @@ class DocChatAgent(ChatAgent):
                 )
             return response
         if query_str == "":
-            return None
+            return ChatDocument(
+                content=NO_ANSWER,
+                metadata=ChatDocMetaData(
+                    source="No query provided",
+                    sender=Entity.LLM,
+                ),
+            )
         elif query_str == "?" and self.response is not None:
             return self.justify_response()
         elif (query_str.startswith(("summar", "?")) and self.response is None) or (

@@ -138,7 +138,7 @@ def vecdb(request) -> VectorStore:
             collection_name="test-" + embed_cfg.model_type,
             storage_path=ldb_dir,
             embedding=embed_cfg,
-            document_class=MyDoc,  # IMPORTANT, to ensure table has full schema!
+            # document_class=MyDoc,  # IMPORTANT, to ensure table has full schema!
         )
         ldb = LanceDB(ldb_cfg)
         ldb.add_documents(stored_docs)
@@ -163,7 +163,7 @@ def vecdb(request) -> VectorStore:
 # add "momento" when their API docs are ready
 @pytest.mark.parametrize(
     "vecdb",
-    ["chroma", "lancedb", "qdrant_cloud", "qdrant_local"],
+    ["lancedb", "chroma", "qdrant_cloud", "qdrant_local"],
     indirect=True,
 )
 def test_vector_stores_search(
@@ -210,43 +210,63 @@ def test_hybrid_vector_search(
     assert set(results).issubset(set(matching_docs))
 
 
-# add "momento" when their API docs are ready.
 @pytest.mark.parametrize(
     "vecdb",
-    ["chroma", "lancedb", "qdrant_local", "qdrant_cloud"],
+    ["lancedb", "chroma", "qdrant_local", "qdrant_cloud"],
     indirect=True,
 )
 def test_vector_stores_access(vecdb):
     assert vecdb is not None
 
+    # test that we can ingest docs that are created
+    # via subclass of Document and  DocMetaData.
+    class MyDocMeta(DocMetaData):
+        category: str  # an extra field
+
+    class MyDocument(Document):
+        content: str
+        metadata: MyDocMeta
+
+    vecdb.config.document_class = MyDocument
+    vecdb.config.metadata_class = MyDocMeta
     coll_name = vecdb.config.collection_name
     assert coll_name is not None
 
     vecdb.delete_collection(collection_name=coll_name)
+    # LanceDB.create_collection() does nothing, since we can't create a table
+    # without a schema or data.
     vecdb.create_collection(collection_name=coll_name)
 
     # create random string of 10 arbitrary characters, not necessarily ascii
     import random
-    import string
 
     # Generate a random string of 10 characters
     ingested_docs = [
         Document(
-            content="".join(random.choices(string.ascii_letters + string.digits, k=10)),
-            metadata=DocMetaData(id=str(i)),
+            content=random.choice(["cow", "goat", "mouse"]),
+            metadata=MyDocMeta(id=str(i), category=random.choice(["a", "b"])),
         )
-        for i in range(533)
+        for i in range(20)
     ]
 
     vecdb.add_documents(ingested_docs)
+
+    # test get ALL docs
     all_docs = vecdb.get_all_documents()
     ids = [doc.id() for doc in all_docs]
     assert len(set(ids)) == len(ids)
     assert len(all_docs) == len(ingested_docs)
 
+    # test get docs by ids
     docs = vecdb.get_documents_by_ids(ids)
     assert len(docs) == len(ingested_docs)
 
+    # test similarity search
+    docs_and_scores = vecdb.similar_texts_with_scores("cow", k=1)
+    assert len(docs_and_scores) == 1
+    assert docs_and_scores[0][0].content == "cow"
+
+    # test collections: create, list, clear
     coll_names = [f"test_junk_{i}" for i in range(3)]
     for coll in coll_names:
         vecdb.create_collection(collection_name=coll)
@@ -254,12 +274,14 @@ def test_vector_stores_access(vecdb):
         [c for c in vecdb.list_collections(empty=True) if c.startswith("test_junk")]
     )
     n_dels = vecdb.clear_all_collections(really=True, prefix="test_junk")
-    assert n_colls == n_dels
+    # LanceDB.create_collection() does nothing, since we can't create a table
+    # without a schema or data.
+    assert n_colls == n_dels == (0 if isinstance(vecdb, LanceDB) else len(coll_names))
 
 
 @pytest.mark.parametrize(
     "vecdb",
-    ["chroma", "qdrant_cloud", "lancedb", "qdrant_local"],
+    ["lancedb", "chroma", "qdrant_cloud", "qdrant_local"],
     indirect=True,
 )
 def test_vector_stores_context_window(vecdb):
@@ -421,13 +443,6 @@ def test_lance_metadata():
     vecdb.add_documents([doc])
 
     # re-init the vecdb like above
-    ldb_cfg = LanceDBConfig(
-        cloud=False,
-        collection_name=DEFAULT_COLLECTION,
-        storage_path=ldb_dir,
-        embedding=embed_cfg,
-        document_class=Document,
-    )
     vecdb = LanceDB(ldb_cfg)
 
     # set to the SAME collection, so we don't create a new one
@@ -436,8 +451,7 @@ def test_lance_metadata():
     # adding a new doc to an existing collection, it has a structure
     # consistent with the previous doc added to this collection,
     # BUT NOT consistent with the DEFAULT_COLLECTION.
-    # We want to check that this goes well, i.e. in Lancedb.py we
-    # update the schema and config.document_class to accommodate this structure.
+    # We want to check that this goes well.
     doc = Document(
         content="abc",
         metadata=DocMetaData(

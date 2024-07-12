@@ -199,7 +199,7 @@ warnings.filterwarnings(
 
 
 @pytest.mark.parametrize(
-    "vecdb", ["qdrant_local", "qdrant_cloud", "chroma", "lancedb"], indirect=True
+    "vecdb", ["lancedb", "qdrant_local", "qdrant_cloud", "chroma"], indirect=True
 )
 @pytest.mark.parametrize("query, expected", QUERY_EXPECTED_PAIRS)
 def test_doc_chat_agent_llm(test_settings: Settings, agent, query: str, expected: str):
@@ -221,7 +221,7 @@ def test_doc_chat_agent_llm(test_settings: Settings, agent, query: str, expected
 
 
 @pytest.mark.parametrize(
-    "vecdb", ["qdrant_cloud", "qdrant_local", "chroma", "lancedb"], indirect=True
+    "vecdb", ["lancedb", "qdrant_cloud", "qdrant_local", "chroma"], indirect=True
 )
 @pytest.mark.parametrize("query, expected", QUERY_EXPECTED_PAIRS)
 @pytest.mark.asyncio
@@ -406,7 +406,7 @@ class _MyDocChatAgentConfig(DocChatAgentConfig):
     )
 
 
-@pytest.mark.parametrize("vecdb", ["chroma", "qdrant_local", "lancedb"], indirect=True)
+@pytest.mark.parametrize("vecdb", ["lancedb", "chroma", "qdrant_local"], indirect=True)
 @pytest.mark.parametrize(
     "splitter", [Splitter.PARA_SENTENCE, Splitter.SIMPLE, Splitter.TOKENS]
 )
@@ -611,7 +611,7 @@ def test_doc_chat_add_content_fields(
     assert "2084" in response.content and "1989" in response.content
 
 
-@pytest.mark.parametrize("vecdb", ["chroma", "qdrant_local", "lancedb"], indirect=True)
+@pytest.mark.parametrize("vecdb", ["lancedb", "chroma", "qdrant_local"], indirect=True)
 @pytest.mark.parametrize(
     "splitter", [Splitter.PARA_SENTENCE, Splitter.SIMPLE, Splitter.TOKENS]
 )

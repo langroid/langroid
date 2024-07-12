@@ -32,13 +32,7 @@ from langroid.utils.configuration import settings
 from langroid.utils.pydantic_utils import (
     dataframe_to_document_model,
     dataframe_to_documents,
-    extend_document_class,
-    extra_metadata,
-    flatten_pydantic_instance,
-    flatten_pydantic_model,
-    nested_dict_from_flat,
 )
-from langroid.utils.system import pydantic_major_version
 from langroid.vector_store.base import VectorStore, VectorStoreConfig
 
 try:
@@ -58,10 +52,6 @@ class LanceDBConfig(VectorStoreConfig):
     storage_path: str = ".lancedb/data"
     embedding: EmbeddingModelsConfig = OpenAIEmbeddingsConfig()
     distance: str = "cosine"
-    # document_class is used to store in lancedb with right schema,
-    # and also to retrieve the right type of Documents when searching.
-    document_class: Type[Document] = Document
-    flatten: bool = False  # flatten Document class into LanceSchema ?
 
 
 class LanceDB(VectorStore):
@@ -78,7 +68,6 @@ class LanceDB(VectorStore):
         self.port = config.port
         self.is_from_dataframe = False  # were docs ingested from a dataframe?
         self.df_metadata_columns: List[str] = []  # metadata columns from dataframe
-        self._setup_schemas(config.document_class)
 
         load_dotenv()
         if self.config.cloud:
@@ -103,40 +92,6 @@ class LanceDB(VectorStore):
                 self.client = lancedb.connect(
                     uri=new_storage_path,
                 )
-
-        # Note: Only create collection if a non-null collection name is provided.
-        # This is useful to delay creation of vecdb until we have a suitable
-        # collection name (e.g. we could get it from the url or folder path).
-        if config.collection_name is not None:
-            self.create_collection(
-                config.collection_name, replace=config.replace_collection
-            )
-
-    def _setup_schemas(self, doc_cls: Type[Document] | None) -> None:
-        try:
-            doc_cls = doc_cls or self.config.document_class
-            self.unflattened_schema = self._create_lance_schema(doc_cls)
-            self.schema = (
-                self._create_flat_lance_schema(doc_cls)
-                if self.config.flatten
-                else self.unflattened_schema
-            )
-        except (AttributeError, TypeError) as e:
-            pydantic_version = pydantic_major_version()
-            if pydantic_version > 1:
-                raise ValueError(
-                    f"""
-                    {e}
-                    ====
-                    You are using Pydantic v{pydantic_version},
-                    which is not yet compatible with Langroid's LanceDB integration.
-                    To use Lancedb with Langroid, please install the 
-                    latest pydantic 1.x instead of pydantic v2, e.g. 
-                    pip install "pydantic<2.0.0"
-                    """
-                )
-            else:
-                raise e
 
     def clear_empty_collections(self) -> int:
         coll_names = self.list_collections()
@@ -234,91 +189,8 @@ class LanceDB(VectorStore):
         )  # type: ignore
         return NewModel  # type: ignore
 
-    def _create_flat_lance_schema(self, doc_cls: Type[Document]) -> Type[BaseModel]:
-        """
-        Flat version of the lance_schema, as nested Pydantic schemas are not yet
-        supported by LanceDB.
-        """
-        if not has_lancedb:
-            raise LangroidImportError("lancedb", "lancedb")
-        lance_model = self._create_lance_schema(doc_cls)
-        FlatModel = flatten_pydantic_model(lance_model, base_model=LanceModel)
-        return FlatModel
-
     def create_collection(self, collection_name: str, replace: bool = False) -> None:
-        """
-        Create a collection with the given name, optionally replacing an existing
-            collection if `replace` is True.
-        Args:
-            collection_name (str): Name of the collection to create.
-            replace (bool): Whether to replace an existing collection
-                with the same name. Defaults to False.
-        """
-        self.config.collection_name = collection_name
-        collections = self.list_collections()
-        if collection_name in collections:
-            coll = self.client.open_table(collection_name)
-            if coll.head().shape[0] > 0:
-                logger.warning(f"Non-empty Collection {collection_name} already exists")
-                if not replace:
-                    logger.warning("Not replacing collection")
-                    return
-                else:
-                    logger.warning("Recreating fresh collection")
-        try:
-            self.client.create_table(
-                collection_name, schema=self.schema, mode="overwrite"
-            )
-        except (AttributeError, TypeError) as e:
-            pydantic_version = pydantic_major_version()
-            if pydantic_version > 1:
-                raise ValueError(
-                    f"""
-                    {e}
-                    ====
-                    You are using Pydantic v{pydantic_version},
-                    which is not yet compatible with Langroid's LanceDB integration.
-                    To use Lancedb with Langroid, please install the 
-                    latest pydantic 1.x instead of pydantic v2, e.g. 
-                    pip install "pydantic<2.0.0"
-                    """
-                )
-            else:
-                raise e
-
-        if settings.debug:
-            level = logger.getEffectiveLevel()
-            logger.setLevel(logging.INFO)
-            logger.setLevel(level)
-
-    def _maybe_set_doc_class_schema(self, doc: Document) -> None:
-        """
-        Set the config.document_class and self.schema based on doc if needed
-        Args:
-            doc: an instance of Document, to be added to a collection
-        """
-        extra_metadata_fields = extra_metadata(doc, self.config.document_class)
-        if len(extra_metadata_fields) > 0:
-            logger.warning(
-                f"""
-                    Added documents contain extra metadata fields:
-                    {extra_metadata_fields}
-                    which were not present in the original config.document_class.
-                    Trying to change document_class and corresponding schemas.
-                    Overriding LanceDBConfig.document_class with an auto-generated 
-                    Pydantic class that includes these extra fields.
-                    If this fails, or you see odd results, it is recommended that you 
-                    define a subclass of Document, with metadata of class derived from 
-                    DocMetaData, with extra fields defined via 
-                    `Field(..., description="...")` declarations,
-                    and set this document class as the value of the 
-                    LanceDBConfig.document_class attribute.
-                    """
-            )
-
-            doc_cls = extend_document_class(doc)
-            self.config.document_class = doc_cls
-            self._setup_schemas(doc_cls)
+        self.config.replace_collection = replace
 
     def add_documents(self, documents: Sequence[Document]) -> None:
         super().maybe_add_ids(documents)
@@ -329,39 +201,52 @@ class LanceDB(VectorStore):
         coll_name = self.config.collection_name
         if coll_name is None:
             raise ValueError("No collection name set, cannot ingest docs")
-        self._maybe_set_doc_class_schema(documents[0])
+        # self._maybe_set_doc_class_schema(documents[0])
+        table_exists = False
         if (
-            coll_name not in colls
-            or self.client.open_table(coll_name).head(1).shape[0] == 0
+            coll_name in colls
+            and self.client.open_table(coll_name).head(1).shape[0] > 0
         ):
-            # collection either doesn't exist or is empty, so replace it,
-            self.create_collection(coll_name, replace=True)
+            # collection exists and  is not empty:
+            # if replace_collection is True, we'll overwrite the existing collection,
+            # else we'll append to it.
+            if self.config.replace_collection:
+                self.client.drop_table(coll_name)
+            else:
+                table_exists = True
 
         ids = [str(d.id()) for d in documents]
         # don't insert all at once, batch in chunks of b,
         # else we get an API error
         b = self.config.batch_size
 
-        def make_batches() -> Generator[List[BaseModel], None, None]:
+        def make_batches() -> Generator[List[Dict[str, Any]], None, None]:
             for i in range(0, len(ids), b):
                 batch = [
-                    self.unflattened_schema(
+                    dict(
                         id=ids[i + j],
                         vector=embedding_vecs[i + j],
                         **doc.dict(),
                     )
                     for j, doc in enumerate(documents[i : i + b])
                 ]
-                if self.config.flatten:
-                    batch = [
-                        flatten_pydantic_instance(instance)  # type: ignore
-                        for instance in batch
-                    ]
                 yield batch
 
-        tbl = self.client.open_table(self.config.collection_name)
         try:
-            tbl.add(make_batches())
+            if table_exists:
+                tbl = self.client.open_table(coll_name)
+                tbl.add(make_batches())
+            else:
+                batch_gen = make_batches()
+                batch = next(batch_gen)
+                # use first batch to create table...
+                tbl = self.client.create_table(
+                    coll_name,
+                    data=batch,
+                    mode="create",
+                )
+                # ... and add the rest
+                tbl.add(batch_gen)
         except Exception as e:
             logger.error(
                 f"""
@@ -427,7 +312,6 @@ class LanceDB(VectorStore):
                 exclude=["vector"],
             )
             self.config.document_class = doc_cls  # type: ignore
-            self._setup_schemas(doc_cls)  # type: ignore
         else:
             # collection exists and is not empty, so append to it
             tbl = self.client.open_table(self.config.collection_name)
@@ -452,35 +336,19 @@ class LanceDB(VectorStore):
             return self._records_to_docs(records)
 
     def _records_to_docs(self, records: List[Dict[str, Any]]) -> List[Document]:
-        if self.config.flatten:
-            docs = [
-                self.unflattened_schema(**nested_dict_from_flat(rec)) for rec in records
-            ]
-        else:
-            try:
-                docs = [self.schema(**rec) for rec in records]
-            except ValidationError as e:
-                raise ValueError(
-                    f"""
-                Error validating LanceDB result: {e}
-                HINT: This could happen when you're re-using an 
-                existing LanceDB store with a different schema.
-                Try deleting your local lancedb storage at `{self.config.storage_path}`
-                re-ingesting your documents and/or replacing the collections.
-                """
-                )
-
-        doc_cls = self.config.document_class
-        doc_cls_field_names = doc_cls.__fields__.keys()
-        return [
-            doc_cls(
-                **{
-                    field_name: getattr(doc, field_name)
-                    for field_name in doc_cls_field_names
-                }
+        try:
+            docs = [self.config.document_class(**rec) for rec in records]
+        except ValidationError as e:
+            raise ValueError(
+                f"""
+            Error validating LanceDB result: {e}
+            HINT: This could happen when you're re-using an 
+            existing LanceDB store with a different schema.
+            Try deleting your local lancedb storage at `{self.config.storage_path}`
+            re-ingesting your documents and/or replacing the collections.
+            """
             )
-            for doc in docs
-        ]
+        return docs
 
     def get_all_documents(self, where: str = "") -> List[Document]:
         if self.config.collection_name is None:

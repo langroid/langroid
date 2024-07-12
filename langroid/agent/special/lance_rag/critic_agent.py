@@ -37,20 +37,30 @@ class QueryPlanCriticConfig(LanceQueryPlanAgentConfig):
     system_message = f"""
     You are an expert at carefully planning a query that needs to be answered
     based on a large collection of documents. These docs have a special `content` field
-    and additional FILTERABLE fields in the SCHEMA below:
+    and additional FILTERABLE fields in the SCHEMA below, along with the 
+    SAMPLE VALUES for each field, and the DTYPE in PANDAS TERMINOLOGY.
     
     {{doc_schema}}
     
+    The ORIGINAL QUERY is handled by a QUERY PLANNER who sends the PLAN to an ASSISTANT,
+    who returns an ANSWER.
+    
     You will receive a QUERY PLAN consisting of:
-    - ORIGINAL QUERY, 
-    - SQL-Like FILTER, WHICH CAN BE EMPTY (and it's fine if results sound reasonable)
+    - ORIGINAL QUERY from the user, which a QUERY PLANNER processes,
+      to create a QUERY PLAN, to be handled by an ASSISTANT.
+    - PANDAS-LIKE FILTER, WHICH CAN BE EMPTY (and it's fine if results sound reasonable)
       FILTER SHOULD ONLY BE USED IF EXPLICITLY REQUIRED BY THE QUERY.
-    - REPHRASED QUERY that will be used to match against the CONTENT (not filterable)
-         of the documents.
+    - REPHRASED QUERY (CANNOT BE EMPTY) that will be used to match against the 
+      CONTENT (not filterable) of the documents.
       In general the REPHRASED QUERY should be relied upon to match the CONTENT 
       of the docs. Thus the REPHRASED QUERY itself acts like a 
       SEMANTIC/LEXICAL/FUZZY FILTER since the Assistant is able to use it to match 
-      the CONTENT of the docs in various ways (semantic, lexical, fuzzy, etc.).         
+      the CONTENT of the docs in various ways (semantic, lexical, fuzzy, etc.). 
+        Keep in mind that the ASSISTANT does NOT know anything about the FILTER fields,
+        so the REPHRASED QUERY should NOT mention ANY FILTER fields.
+        The assistant will answer based on documents whose CONTENTS match the QUERY, 
+        possibly REPHRASED. 
+        !!!!****THE REPHRASED QUERY SHOULD NEVER BE EMPTY****!!!
     - DATAFRAME CALCULATION, which must be a SINGLE LINE calculation (or empty),
         [NOTE ==> This calculation is applied AFTER the FILTER and REPHRASED QUERY.],
     - ANSWER received from an assistant that used this QUERY PLAN.

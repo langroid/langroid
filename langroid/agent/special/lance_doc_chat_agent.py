@@ -22,7 +22,6 @@ from langroid.mytypes import DocMetaData, Document
 from langroid.parsing.table_loader import describe_dataframe
 from langroid.utils.constants import DONE, NO_ANSWER
 from langroid.utils.pydantic_utils import (
-    clean_schema,
     dataframe_to_documents,
 )
 from langroid.vector_store.lancedb import LanceDB
@@ -41,24 +40,26 @@ class LanceDocChatAgent(DocChatAgent):
     def _get_clean_vecdb_schema(self) -> str:
         """Get a cleaned schema of the vector-db, to pass to the LLM
         as part of instructions on how to generate a SQL filter."""
+
+        tbl_pandas = (
+            self.vecdb.client.open_table(self.vecdb.config.collection_name)
+            .search()
+            .limit(1)
+            .to_pandas(flatten=True)
+        )
         if len(self.config.filter_fields) == 0:
-            filterable_fields = (
-                self.vecdb.client.open_table(self.vecdb.config.collection_name)
-                .search()
-                .limit(1)
-                .to_pandas(flatten=True)
-                .columns.tolist()
-            )
+            filterable_fields = tbl_pandas.columns.tolist()
             # drop id, vector, metadata.id, metadata.window_ids, metadata.is_chunk
-            for fields in [
-                "id",
-                "vector",
-                "metadata.id",
-                "metadata.window_ids",
-                "metadata.is_chunk",
-            ]:
-                if fields in filterable_fields:
-                    filterable_fields.remove(fields)
+            filterable_fields = list(
+                set(filterable_fields)
+                - {
+                    "id",
+                    "vector",
+                    "metadata.id",
+                    "metadata.window_ids",
+                    "metadata.is_chunk",
+                }
+            )
             logger.warning(
                 f"""
             No filter_fields set in config, so using these fields as filterable fields:
@@ -69,15 +70,7 @@ class LanceDocChatAgent(DocChatAgent):
 
         if self.from_dataframe:
             return self.df_description
-        schema_dict = clean_schema(
-            self.vecdb.schema,
-            excludes=["id", "vector"],
-        )
-        # intersect config.filter_fields with schema_dict.keys() in case
-        # there are extraneous fields in config.filter_fields
-        filter_fields_set = set(
-            self.config.filter_fields or schema_dict.keys()
-        ).intersection(schema_dict.keys())
+        filter_fields_set = set(self.config.filter_fields)
 
         # remove 'content' from filter_fields_set, even if it's not in filter_fields_set
         filter_fields_set.discard("content")
@@ -85,10 +78,14 @@ class LanceDocChatAgent(DocChatAgent):
         # possible values of filterable fields
         filter_field_values = self.get_field_values(list(filter_fields_set))
 
+        schema_dict: Dict[str, Dict[str, Any]] = dict(
+            (field, {}) for field in filter_fields_set
+        )
         # add field values to schema_dict as another field `values` for each field
         for field, values in filter_field_values.items():
-            if field in schema_dict:
-                schema_dict[field]["values"] = values
+            schema_dict[field]["values"] = values
+            dtype = tbl_pandas[field].dtype.name
+            schema_dict[field]["dtype"] = dtype
         # if self.config.filter_fields is set, restrict to these:
         if len(self.config.filter_fields) > 0:
             schema_dict = {
