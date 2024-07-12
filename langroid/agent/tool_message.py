@@ -35,12 +35,10 @@ class ToolMessage(ABC, BaseModel):
         request (str): name of agent method to map to.
         purpose (str): purpose of agent method, expressed in general terms.
             (This is used when auto-generating the tool instruction to the LLM)
-        result (str): example of result of agent method.
     """
 
     request: str
     purpose: str
-    result: str = ""
 
     class Config:
         arbitrary_types_allowed = False
@@ -48,8 +46,7 @@ class ToolMessage(ABC, BaseModel):
         validate_assignment = True
         # do not include these fields in the generated schema
         # since we don't require the LLM to specify them
-        schema_extra = {"exclude": {"purpose", "result"}}
-        extra = "forbid"
+        schema_extra = {"exclude": {"purpose"}}
 
     @classmethod
     def instructions(cls) -> str:
@@ -111,13 +108,13 @@ class ToolMessage(ABC, BaseModel):
         return "\n\n".join(examples_jsons)
 
     def to_json(self) -> str:
-        return self.json(indent=4, exclude={"result", "purpose"})
+        return self.json(indent=4, exclude={"purpose"})
 
     def json_example(self) -> str:
-        return self.json(indent=4, exclude={"result", "purpose"})
+        return self.json(indent=4, exclude={"purpose"})
 
     def dict_example(self) -> Dict[str, Any]:
-        return self.dict(exclude={"result", "purpose"})
+        return self.dict(exclude={"purpose"})
 
     @classmethod
     def default_value(cls, f: str) -> Any:
@@ -221,9 +218,7 @@ class ToolMessage(ABC, BaseModel):
                 if "description" not in parameters["properties"][name]:
                     parameters["properties"][name]["description"] = description
 
-        excludes = (
-            ["result", "purpose"] if request else ["request", "result", "purpose"]
-        )
+        excludes = ["purpose"] if request else ["request", "purpose"]
         # exclude 'excludes' from parameters["properties"]:
         parameters["properties"] = {
             field: details
@@ -264,5 +259,5 @@ class ToolMessage(ABC, BaseModel):
         Returns:
             Dict[str, Any]: simplified schema
         """
-        schema = generate_simple_schema(cls, exclude=["result", "purpose"])
+        schema = generate_simple_schema(cls, exclude=["purpose"])
         return schema

@@ -788,14 +788,27 @@ class Agent(ABC):
             return None
 
         properties = json_data.get("properties")
-        if properties is not None:
+        if isinstance(properties, dict):
             json_data = properties
         request = json_data.get("request")
 
-        if request is None and len(json_data) > 0:
+        if request is None:
             handled = [self.llm_tools_map[r] for r in self.llm_tools_handled]
+            default_keys = set(ToolMessage.__fields__.keys())
+            request_keys = set(json_data.keys())
 
             def maybe_parse(tool: type[ToolMessage]) -> Optional[ToolMessage]:
+                all_keys = set(tool.__fields__.keys())
+                non_inherited_keys = all_keys.difference(default_keys)
+                # If the request has any keys not valid for the tool and
+                # does not specify some key specific to the type
+                # (e.g. not just `purpose`), the LLM must explicitly specify `request`
+                if not (
+                    request_keys.issubset(all_keys)
+                    and len(request_keys.intersection(non_inherited_keys)) > 0
+                ):
+                    return None
+
                 try:
                     return tool.parse_obj(json_data)
                 except ValidationError:

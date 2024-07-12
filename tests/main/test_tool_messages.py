@@ -1,6 +1,7 @@
 import itertools
 import json
-from typing import List, Optional
+import random
+from typing import List, Literal, Optional
 
 import pytest
 
@@ -20,7 +21,6 @@ class CountryCapitalMessage(ToolMessage):
     purpose: str = "To check whether <city> is the capital of <country>."
     country: str = "France"
     city: str = "Paris"
-    result: str = "yes"  # or "no"
 
     @classmethod
     def examples(cls) -> List["CountryCapitalMessage"]:
@@ -28,9 +28,9 @@ class CountryCapitalMessage(ToolMessage):
         return [
             (
                 "Need to check if Paris is the capital of France",
-                cls(country="France", city="Paris", result="yes"),
+                cls(country="France", city="Paris"),
             ),
-            cls(country="France", city="Marseille", result="no"),
+            cls(country="France", city="Marseille"),
         ]
 
 
@@ -38,26 +38,23 @@ class FileExistsMessage(ToolMessage):
     request: str = "file_exists"
     purpose: str = "To check whether a certain <filename> is in the repo."
     filename: str = Field(..., description="File name to check existence of")
-    result: str = "yes"  # or "no"
 
     @classmethod
     def examples(cls) -> List["FileExistsMessage"]:
         return [
-            cls(filename="README.md", result="yes"),
-            cls(filename="Dockerfile", result="no"),
+            cls(filename="README.md"),
+            cls(filename="Dockerfile"),
         ]
 
 
 class PythonVersionMessage(ToolMessage):
     request: str = "python_version"
     purpose: str = "To check which version of Python is needed."
-    result: str = "3.9"
 
     @classmethod
     def examples(cls) -> List["PythonVersionMessage"]:
         return [
-            cls(result="3.7"),
-            cls(result="3.8"),
+            cls(),
         ]
 
 
@@ -381,6 +378,15 @@ class GaussTool(ToolMessage):
         return str((self.xval + self.yval) * self.yval)
 
 
+class CoinFlipTool(ToolMessage):
+    request: str = "coin_flip"
+    purpose: str = "to request a random coin flip"
+
+    def handle(self) -> Literal["Heads", "Tails"]:
+        heads = random.random() > 0.5
+        return "Heads" if heads else "Tails"
+
+
 @pytest.mark.parametrize("use_functions_api", [True, False])
 def test_agent_infer_tool(
     test_settings: Settings,
@@ -390,6 +396,12 @@ def test_agent_infer_tool(
     gauss_request = """{"xval": 1, "yval": 3}"""
     nabrowski_or_euler_request = """{"num_pair": {"xval": 1, "yval": 3}}"""
     euler_request = """{"request": "euler", "num_pair": {"xval": 1, "yval": 3}}"""
+    additional_args_request = """{"xval": 1, "yval": 3, "zval": 4}"""
+    additional_args_request_specified = """
+    {"request": "gauss", "xval": 1, "yval": 3, "zval": 4}
+    """
+    no_args_request = """{}"""
+    no_args_request_specified = """{"request": "coin_flip"}"""
 
     cfg = ChatAgentConfig(
         use_tools=not use_functions_api,
@@ -398,6 +410,7 @@ def test_agent_infer_tool(
     agent = ChatAgent(cfg)
     agent.enable_message(NabroskiTool)
     agent.enable_message(GaussTool)
+    agent.enable_message(CoinFlipTool)
     agent.enable_message(EulerTool, handle=False)
 
     # Nabrowski is the only option prior to enabling EulerTool handling
@@ -414,6 +427,16 @@ def test_agent_infer_tool(
 
     # We cannot infer the correct tool if there exist multiple matches
     assert agent.agent_response(nabrowski_or_euler_request) is None
+
+    # We do not infer tools where the request has additional arguments
+    assert agent.agent_response(additional_args_request) is None
+    # But additional args are acceptable when the tool is specified
+    assert agent.agent_response(additional_args_request_specified).content == "12"
+
+    # We do not infer tools with no args
+    assert agent.agent_response(no_args_request) is None
+    # Request must be specified
+    assert agent.agent_response(no_args_request_specified).content in ["Heads", "Tails"]
 
 
 @pytest.mark.parametrize("use_functions_api", [True, False])
