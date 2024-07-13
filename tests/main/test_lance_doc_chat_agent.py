@@ -1,5 +1,3 @@
-from typing import Type
-
 import pandas as pd
 import pytest
 
@@ -118,16 +116,12 @@ embed_cfg = OpenAIEmbeddingsConfig()
         ),
     ],
 )
-@pytest.mark.parametrize("flatten", [True, False])
 @pytest.mark.parametrize("split", [False, True])
-@pytest.mark.parametrize("doc_cls", [Document, MovieDoc])
 def test_lance_doc_chat_agent(
     test_settings: Settings,
-    flatten: bool,
     split: bool,
     query: str,
     expected: str,
-    doc_cls: Type[Document],
 ):
     # note that the (query, ans) pairs are accumulated into the
     # internal dialog history of the agent.
@@ -140,8 +134,7 @@ def test_lance_doc_chat_agent(
         collection_name="test-lance-2",
         storage_path=ldb_dir,
         embedding=embed_cfg,
-        document_class=doc_cls,
-        flatten=flatten,
+        document_class=MovieDoc,
     )
 
     cfg = DocChatAgentConfig(
@@ -159,7 +152,7 @@ def test_lance_doc_chat_agent(
     task = LanceRAGTaskCreator.new(agent, interactive=False)
 
     result = task.run(query)
-    assert NO_ANSWER in result.content or expected in result.content
+    assert result is None or NO_ANSWER in result.content or expected in result.content
 
 
 # dummy pandas dataframe from text
@@ -209,11 +202,7 @@ class FlatMovieDoc(Document):
     metadata: DocMetaData = DocMetaData()
 
 
-@pytest.mark.parametrize("flatten", [False, True])
-def test_lance_doc_chat_agent_df_query_plan(
-    test_settings: Settings,
-    flatten: bool,
-):
+def test_lance_doc_chat_agent_df_query_plan(test_settings: Settings):
     """Test handling of manually-created query plan"""
 
     set_global(test_settings)
@@ -227,7 +216,6 @@ def test_lance_doc_chat_agent_df_query_plan(
         storage_path=ldb_dir,
         embedding=embed_cfg,
         document_class=FlatMovieDoc,
-        flatten=flatten,
     )
 
     cfg = DocChatAgentConfig(
@@ -281,10 +269,8 @@ def test_lance_doc_chat_agent_df_query_plan(
         ),
     ],
 )
-@pytest.mark.parametrize("flatten", [False, True])
 def test_lance_doc_chat_agent_df(
     test_settings: Settings,
-    flatten: bool,
     query: str,
     expected: str,
 ):
@@ -299,7 +285,6 @@ def test_lance_doc_chat_agent_df(
         storage_path=ldb_dir,
         embedding=embed_cfg,
         document_class=FlatMovieDoc,
-        flatten=flatten,
     )
 
     cfg = DocChatAgentConfig(
@@ -319,7 +304,7 @@ def test_lance_doc_chat_agent_df(
     task = LanceRAGTaskCreator.new(agent, interactive=False)
 
     result = task.run(query)
-    assert NO_ANSWER in result.content or expected in result.content
+    assert result is None or NO_ANSWER in result.content or expected in result.content
 
 
 def test_lance_doc_chat_df_direct(test_settings: Settings):

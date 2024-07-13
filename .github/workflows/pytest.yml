@@ -116,7 +116,7 @@ jobs:
       continue-on-error: true
 
 
-    - name: Retry FAILED tests ONLY with gpt-4 instead of gpt-4o (no coverage)
+    - name: Retry FAILED tests ONLY with gpt-4 instead of gpt-4o
       id: second_test
       if: steps.first_test.outcome == 'failure'
       env:
@@ -124,22 +124,6 @@ jobs:
       run: |
         poetry run coverage run --append --source=langroid \
           -m pytest --m gpt-4 -rf --show-capture=no \
-          --first-test-file=tests/main/test_llm.py \
-          --first-test-file=tests/main/test_llm_async.py \
-          --first-test-file=tests/main/test_task_inf_loop.py \
-          --first-test-file=tests/main/test_task.py \
-          --first-test-file=tests/main/test_lance_doc_chat_agent.py \
-          --lf --last-failed-no-failures none \
-          tests/main tests/extras/test_hf_embeddings.py tests/extras/test_fastembed_embeddings.py
-      continue-on-error: true
-
-    - name: Install Pydantic 1.x to pass lancedb tests
-      run: poetry add "pydantic<2.0.0"
-    - name: Retry FAILED tests ONLY with pydantic 1.x, gpt-4
-      if: steps.second_test.outcome == 'failure'
-      run: |
-        poetry run coverage run --append --source=langroid \
-          -m pytest --m gpt-4 \
           --first-test-file=tests/main/test_llm.py \
           --first-test-file=tests/main/test_llm_async.py \
           --first-test-file=tests/main/test_task_inf_loop.py \

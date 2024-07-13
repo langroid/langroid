@@ -380,7 +380,11 @@ class QdrantDB(VectorStore):
                 with_payload=True,
                 with_vectors=False,
             )
-            docs += [Document(**record.payload) for record in results]  # type: ignore
+            docs += [
+                self.config.document_class(**record.payload)  # type: ignore
+                for record in results
+            ]
+            # ignore
             if next_page_offset is None:
                 break
             offset = next_page_offset  # type: ignore
@@ -451,7 +455,7 @@ class QdrantDB(VectorStore):
         ]  # 2D list -> 1D list
         scores = [match.score for match in search_result if match is not None]
         docs = [
-            Document(**(match.payload))  # type: ignore
+            self.config.document_class(**(match.payload))  # type: ignore
             for match in search_result
             if match is not None
         ]

@@ -1,16 +1,21 @@
 import logging
 
 from langroid.agent.tool_message import ToolMessage
-from langroid.pydantic_v1 import BaseModel
+from langroid.pydantic_v1 import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
 
 class QueryPlan(BaseModel):
-    original_query: str
-    query: str
-    filter: str
-    dataframe_calc: str = ""
+    original_query: str = Field(..., description="The original query for reference")
+    query: str = Field(..., description="A possibly NON-EMPTY rephrased query")
+    filter: str = Field(
+        "",
+        description="Filter condition if needed (or empty if no filter is needed)",
+    )
+    dataframe_calc: str = Field(
+        "", description="An optional Pandas-dataframe calculation/aggregation string"
+    )
 
 
 class QueryPlanTool(ToolMessage):
@@ -19,8 +24,9 @@ class QueryPlanTool(ToolMessage):
     Given a user's query, generate a query <plan> consisting of:
     - <original_query> - the original query for reference
     - <filter> condition if needed (or empty string if no filter is needed)
-    - <query> - a possibly rephrased query that can be used to match the CONTENT
-        of the documents (can be same as <original_query> if no rephrasing is needed)
+    - <query> - a possibly NON-EMPTY rephrased query that can be used to match the 
+        CONTENT of the documents 
+        (can be same as <original_query> if no rephrasing is needed)
     - <dataframe_calc> - a Pandas-dataframe calculation/aggregation string
         that can be used to calculate the answer 
         (or empty string if no calculation is needed).
@@ -34,7 +40,7 @@ class QueryPlanAnswerTool(ToolMessage):
     Assemble query <plan> and <answer>
     """
     plan: QueryPlan
-    answer: str
+    answer: str = Field(..., description="The answer received from the assistant")
 
 
 class QueryPlanFeedbackTool(ToolMessage):

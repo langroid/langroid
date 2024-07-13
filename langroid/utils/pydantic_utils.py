@@ -9,8 +9,6 @@ from typing import (
     Tuple,
     Type,
     TypeVar,
-    get_args,
-    get_origin,
     no_type_check,
 )
 
@@ -311,54 +309,6 @@ def pydantic_obj_from_flat_dict(
     """Flattened dict with a__b__c style keys -> nested dict -> pydantic object"""
     nested_data = nested_dict_from_flat(flat_data, sub_dict)
     return model(**nested_data)
-
-
-def clean_schema(model: Type[BaseModel], excludes: List[str] = []) -> Dict[str, Any]:
-    """
-    Generate a simple schema for a given Pydantic model,
-    including inherited fields, with an option to exclude certain fields.
-    Handles cases where fields are Lists or other generic types and includes
-    field descriptions if available.
-
-    Args:
-        model (Type[BaseModel]): The Pydantic model class.
-        excludes (List[str]): A list of field names to exclude.
-
-    Returns:
-        Dict[str, Any]: A dictionary representing the simple schema.
-    """
-    schema = {}
-
-    for field_name, field_info in model.__fields__.items():
-        if field_name in excludes:
-            continue
-
-        field_type = field_info.outer_type_
-        description = field_info.field_info.description or ""
-
-        # Handle generic types like List[...]
-        if get_origin(field_type):
-            inner_types = get_args(field_type)
-            inner_type_names = [
-                t.__name__ if hasattr(t, "__name__") else str(t) for t in inner_types
-            ]
-            field_type_str = (
-                f"{get_origin(field_type).__name__}" f'[{", ".join(inner_type_names)}]'
-            )
-            schema[field_name] = {"type": field_type_str, "description": description}
-        elif issubclass(field_type, BaseModel):
-            # Directly use the nested model's schema,
-            # integrating it into the current level
-            nested_schema = clean_schema(field_type, excludes)
-            schema[field_name] = {**nested_schema, "description": description}
-        else:
-            # For basic types, use 'type'
-            schema[field_name] = {
-                "type": field_type.__name__,
-                "description": description,
-            }
-
-    return schema
 
 
 @contextmanager

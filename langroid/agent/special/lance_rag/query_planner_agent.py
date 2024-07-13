@@ -43,23 +43,27 @@ class LanceQueryPlanAgentConfig(ChatAgentConfig):
     You will receive a QUERY, to be answered based on an EXTREMELY LARGE collection
     of documents you DO NOT have access to, but your ASSISTANT does.
     You only know that these documents have a special `content` field
-    and additional FILTERABLE fields in the SCHEMA below:  
+    and additional FILTERABLE fields in the SCHEMA below, along with the 
+    SAMPLE VALUES for each field, and the DTYPE in PANDAS TERMINOLOGY.
     
     {{doc_schema}}
     
     Based on the QUERY and the above SCHEMA, your task is to determine a QUERY PLAN,
     consisting of:
-    -  a FILTER (can be empty string) that would help the ASSISTANT to answer the query.
+    -  a PANDAS-TYPE FILTER (can be empty string) that would help the ASSISTANT to 
+        answer the query.
         Remember the FILTER can refer to ANY fields in the above SCHEMA
         EXCEPT the `content` field of the documents. 
         ONLY USE A FILTER IF EXPLICITLY MENTIONED IN THE QUERY.
         TO get good results, for STRING MATCHES, consider using LIKE instead of =, e.g.
         "CEO LIKE '%Jobs%'" instead of "CEO = 'Steve Jobs'"
-    - a possibly REPHRASED QUERY to be answerable given the FILTER.
+        YOUR FILTER MUST BE A PANDAS-TYPE FILTER, respecting the shown DTYPES.        
+    - a possibly REPHRASED QUERY (CANNOT BE EMPTY) to be answerable given the FILTER.
         Keep in mind that the ASSISTANT does NOT know anything about the FILTER fields,
         so the REPHRASED QUERY should NOT mention ANY FILTER fields.
         The assistant will answer based on documents whose CONTENTS match the QUERY, 
         possibly REPHRASED. 
+        !!!!****THE REPHRASED QUERY SHOULD NEVER BE EMPTY****!!!
     - an OPTIONAL SINGLE-LINE Pandas-dataframe calculation/aggregation string 
         that can be used to calculate the answer to the original query, 
         e.g. "df["rating"].mean()",
@@ -99,7 +103,7 @@ class LanceQueryPlanAgentConfig(ChatAgentConfig):
         hence this computation will give the total deaths in shoplifting crimes.
     ------------- END OF EXAMPLE ----------------
     
-    The FILTER must be a SQL-like condition, e.g. 
+    The FILTER must be a PANDAS-like condition, e.g. 
     "year > 2000 AND genre = 'ScienceFiction'".
     To ensure you get useful results, you should make your FILTER 
     NOT TOO STRICT, e.g. look for approximate match using LIKE, etc.

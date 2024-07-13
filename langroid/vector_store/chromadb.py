@@ -8,7 +8,7 @@ from langroid.embedding_models.base import (
 )
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
 from langroid.exceptions import LangroidImportError
-from langroid.mytypes import DocMetaData, Document
+from langroid.mytypes import Document
 from langroid.utils.configuration import settings
 from langroid.utils.output.printing import print_long_text
 from langroid.vector_store.base import VectorStore, VectorStoreConfig
@@ -200,7 +200,9 @@ class ChromaDB(VectorStore):
             else:
                 m["window_ids"] = m["window_ids"].split(",")
         docs = [
-            Document(content=d, metadata=DocMetaData(**m))
+            self.config.document_class(
+                content=d, metadata=self.config.metadata_class(**m)
+            )
             for d, m in zip(contents, metadatas)
         ]
         return docs

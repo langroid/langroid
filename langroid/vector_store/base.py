@@ -1,14 +1,14 @@
 import copy
 import logging
 from abc import ABC, abstractmethod
-from typing import Dict, List, Optional, Sequence, Tuple
+from typing import Dict, List, Optional, Sequence, Tuple, Type
 
 import numpy as np
 import pandas as pd
 
 from langroid.embedding_models.base import EmbeddingModel, EmbeddingModelsConfig
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
-from langroid.mytypes import Document
+from langroid.mytypes import DocMetaData, Document
 from langroid.pydantic_v1 import BaseSettings
 from langroid.utils.algorithms.graph import components, topological_sort
 from langroid.utils.configuration import settings
@@ -32,6 +32,9 @@ class VectorStoreConfig(BaseSettings):
     timeout: int = 60
     host: str = "127.0.0.1"
     port: int = 6333
+    # used when parsing search results back as Document objects
+    document_class: Type[Document] = Document
+    metadata_class: Type[DocMetaData] = DocMetaData
     # compose_file: str = "langroid/vector_store/docker-compose-qdrant.yml"
 
 
@@ -113,8 +116,7 @@ class VectorStore(ABC):
         """
 
         self.config.collection_name = collection_name
-        if collection_name not in self.list_collections() or replace:
-            self.create_collection(collection_name, replace=replace)
+        self.config.replace_collection = replace
 
     @abstractmethod
     def create_collection(self, collection_name: str, replace: bool = False) -> None:
