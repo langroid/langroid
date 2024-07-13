@@ -685,7 +685,7 @@ class DocChatAgent(ChatAgent):
             return response
         if query_str == "":
             return ChatDocument(
-                content=NO_ANSWER,
+                content=NO_ANSWER + " since query was empty",
                 metadata=ChatDocMetaData(
                     source="No query provided",
                     sender=Entity.LLM,
