@@ -63,18 +63,19 @@ the goal is to monitor and evaluate the safety of drugs. In particular, the iden
 Here the **drug category** $C$ is _ACE inhibitors_, and the **outcome** $O$ is _angioedema_.
 Answering this question involves these steps:
 
-1. (a) **Find all drugs** in the ACE inhibitor category $C$, e.g. by searching the FDA 
+- **1(a): Find all drugs** in the ACE inhibitor category $C$, e.g. by searching the FDA 
 [National Drug Code](https://www.fda.gov/drugs/drug-approvals-and-databases/national-drug-code-directory) (NDC) 
    database. This can be done by a SQL query, with additional filters to handle variations in drug/category names 
    and inaccurate classifications.
-1. (b) **Find the prescription frequency** of each drug in $C$ from patient prescription data, e.g. the [MIMIC-IV]
+- **1(b): Find the prescription frequency** of each drug in $C$ from patient prescription data, e.g. the [MIMIC-IV]
    (https://physionet.org/content/mimiciv/2.2/) database. This can again be done by a SQL query.
-1. (c) **Identify the representative drugs** $D \subset C$ in this category, based on prescription frequency data from 
+- **1(c): Identify the representative drugs** $D \subset C$ in this category, based on prescription frequency data 
+     from 
    step 2.  
-2. For each drug $d \in D$, **summarize ADE information** about the effect of $d$ on the outcome $O$ of interest,
+- **2:** For each drug $d \in D$, **summarize ADE information** about the effect of $d$ on the outcome $O$ of interest,
    (in this case angioedema) from text-based pharmaceutical sources, 
     e.g. the [OpenFDA Drug Label](https://open.fda.gov/apis/drug/label/) database.
-3. **Aggregate** the information from all drugs in $D$ to make a statement about the category $C$ as a whole.
+- **3: Aggregate** the information from all drugs in $D$ to make a statement about the category $C$ as a whole.
 
 
 ## The role of LLMs
