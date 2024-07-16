@@ -23,7 +23,7 @@ simple as throwing a task at an LLM system and expecting it to get done. What is
 needed is a principled programming framework, offering the right set of
 abstractions and primitives to make developers productive when building LLM
 applications.
-
+<!-- more -->
 ## Langroid's Elegant Multi-Agent Paradigm
 
 The [Langroid](https://github.com/langroid/langroid) team (ex-CMU/UW-Madison researchers) 
