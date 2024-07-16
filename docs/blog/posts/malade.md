@@ -1,5 +1,5 @@
 ---
-title: 'MALADE: Orchestration of LLM-powered Agents with Retrieval Augmented Generation for Pharmacovigilance'
+title: 'MALADE: Multi-Agent Architecture for Pharmacovigilance'
 draft: true
 date: 2024-07-16
 authors:
