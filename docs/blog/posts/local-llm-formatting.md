@@ -23,6 +23,8 @@ TL/DR -- details like chat formatting matter a LOT,
 and trusting that the local LLM API is doing it correctly may be a mistake,
 leading to inferior results.
 
+<!-- more -->
+
 🤔Curious? Here are some notes from the trenches when we built an app
 (https://github.com/langroid/langroid/blob/main/examples/docqa/chat-multi-extract-local.py)
 based entirely on a locally running Mistral-7b-instruct-v0.2  

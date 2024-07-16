@@ -15,7 +15,7 @@ comments: true
 ## "Chat" with various sources of information
 LLMs are increasingly being used to let users converse in natural language with 
 a variety of types of data sources:
-
+<!-- more -->
 - unstructured text documents: a user's query is augmented with "relevant" documents or chunks
   (retrieved from an embedding-vector store) and fed to the LLM to generate a response -- 
   this is the idea behind Retrieval Augmented Generation (RAG).
