@@ -456,3 +456,25 @@ def test_tool_no_llm_response(
     nabroski_tool = NabroskiTool(num_pair=NumPair(xval=1, yval=2)).to_json()
     response = agent.llm_response(nabroski_tool)
     assert response is None
+
+
+@pytest.mark.parametrize("use_functions_api", [True, False])
+def test_tool_no_task(
+    test_settings: Settings,
+    use_functions_api: bool,
+):
+    """Test tool handling without running task, i.e. directly using
+    agent.llm_response and agent.agent_response methods."""
+
+    set_global(test_settings)
+    cfg = ChatAgentConfig(
+        use_tools=not use_functions_api,
+        use_functions_api=use_functions_api,
+    )
+    agent = ChatAgent(cfg)
+    agent.enable_message(NabroskiTool, use=True, handle=True)
+
+    response = agent.llm_response("What is Nabroski of 1 and 2?")
+    assert isinstance(agent.get_tool_messages(response)[0], NabroskiTool)
+    result = agent.agent_response(response)
+    assert result.content == "5"
