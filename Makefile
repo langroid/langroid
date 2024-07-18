@@ -21,7 +21,7 @@ type-check:
 	@git ls-files | grep '\.py$$' | xargs flake8 --exclude=.git,__pycache__,.venv,langroid/embedding_models/protoc/*
 	@poetry run ruff .
 	@echo "Running mypy...";
-	@poetry run mypy -p langroid
+	@poetry run mypy $(git ls-files "langroid/**/*.py")
 	@echo "All checks passed!"
 
 .PHONE: lint

@@ -363,7 +363,7 @@ class Neo4jChatAgent(ChatAgent):
             content=content,
             metadata=ChatDocMetaData(
                 # source=Entity.AGENT,
-                sender=Entity.LLM,
+                sender=Entity.AGENT,
                 sender_name=sender_name,
                 recipient=recipient,
             ),
