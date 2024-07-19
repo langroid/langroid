@@ -98,13 +98,13 @@ nav:
     - Three Agents, with Routing: quick-start/three-agent-chat-num-router.md
     - Agent with Retrieval: quick-start/chat-agent-docs.md
   # defer to gen-files + literate-nav
+  - FAQ: FAQ.md
   - Examples:
     - Guide: examples/guide.md
     - Hierarchical Agent Computation: examples/agent-tree.md
     - Demos:
       - Audience Targeting: demos/targeting/audience-targeting.md
   - Tutorials:
-    - FAQ: tutorials/FAQ.md
     - Local LLM Setup: tutorials/local-llm-setup.md
     - Non-OpenAI LLMs: tutorials/non-openai-llms.md
     - SQLChatAgent: tutorials/postgresql-agent.md

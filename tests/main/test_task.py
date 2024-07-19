@@ -12,6 +12,7 @@ from langroid.agent import ChatDocument
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
 from langroid.agent.tool_message import ToolMessage
+from langroid.language_models.mock_lm import MockLMConfig
 from langroid.mytypes import Entity
 from langroid.utils.configuration import (
     Settings,
@@ -51,6 +52,32 @@ def test_task_cost(test_settings: Settings):
         lr.StatusCode.MAX_COST,
         lr.StatusCode.MAX_TOKENS,
     ]
+
+
+@pytest.mark.parametrize("restart", [True, False])
+def test_task_restart(test_settings: Settings, restart: bool):
+    """Test whether the `restart` option works as expected"""
+    set_global(test_settings)
+    agent = ChatAgent(
+        ChatAgentConfig(
+            name="Test",
+            llm=MockLMConfig(response_fn=lambda x: int(x) + 1),  # increment
+        ),
+    )
+    task = Task(
+        agent,
+        interactive=False,
+        single_round=False,
+        restart=restart,
+    )
+    task.run("4", turns=1)  # msg hist = sys, user=4, asst=5
+    # if restart, erases agent history => msg hist = sys, user=10, asst=11
+    # otherwise, adds to msg history => msg hist = sys, user=4, asst=5, user=10, asst=11
+    task.run("10", turns=1)
+    if restart:
+        assert len(agent.message_history) == 3
+    else:
+        assert len(agent.message_history) == 5
 
 
 @pytest.mark.asyncio

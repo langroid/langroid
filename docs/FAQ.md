@@ -1,6 +1,6 @@
 # Frequently Asked Questions
 
-### How langroid handles long chat histories
+## How langroid handles long chat histories
 
 You may encounter an error like this:
 
@@ -46,3 +46,26 @@ use `ChatAgent._llm_response_temp_context`, which is used by default in the `Doc
 
 Another way to keep chat history tokens from growing too much is to use the `llm_response_forget` method, which 
 erases both the query and response, if that makes sense in your scenario.
+
+## Can I handle a tool without running a task?
+
+Yes, if you've enabled an agent to both _use_ (i.e. generate) and _handle_ a tool. 
+See the `test_tool_no_task` for an example of this. The `NabroskiTool` is enabled
+for the agent, and to get the agent's LLM to generate the tool, you first do 
+something like:
+```python
+response = agent.llm_response("What is Nabroski of 1 and 2?")
+```
+Now the `response` is a `ChatDocument` that will contain the JSON for the `NabroskiTool`.
+To _handle_ the tool, you will need to call the agent's `agent_response` method:
+
+```python
+result = agent.agent_response(response)
+```
+
+When you wrap the agent in a task object, and do `task.run()` the above two steps are done for you,
+since Langroid operates via a loop mechanism, see docs 
+[here](https://langroid.github.io/langroid/quick-start/multi-agent-task-delegation/#task-collaboration-via-sub-tasks).
+The *advantage* of using `task.run()` instead of doing this yourself, is that this method
+ensures that tool generation errors are sent back to the LLM so it retries the generation.
+
