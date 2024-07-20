@@ -478,3 +478,31 @@ def test_tool_no_task(
     assert isinstance(agent.get_tool_messages(response)[0], NabroskiTool)
     result = agent.agent_response(response)
     assert result.content == "5"
+
+
+@pytest.mark.parametrize("use_functions_api", [True, False])
+def test_tool_optional_args(
+    test_settings: Settings,
+    use_functions_api: bool,
+):
+    """Test that ToolMessage where some args are optional (i.e. have default values)
+    works well, i.e. LLM is able to generate all args if needed, including optionals."""
+
+    set_global(test_settings)
+    cfg = ChatAgentConfig(
+        use_tools=not use_functions_api,
+        use_functions_api=use_functions_api,
+    )
+    agent = ChatAgent(cfg)
+
+    class CoriolisTool(ToolMessage):
+        request: str = "my_tool"
+        purpose: str = "to request computing the Coriolis transform of <x> and <y>"
+        x: int
+        y: int = 5
+
+    agent.enable_message(CoriolisTool, use=True, handle=True)
+    response = agent.llm_response("What is the Coriolis of 1 and 2?")
+    assert isinstance(agent.get_tool_messages(response)[0], CoriolisTool)
+    tool = agent.get_tool_messages(response)[0]
+    assert tool.x == 1 and tool.y == 2
