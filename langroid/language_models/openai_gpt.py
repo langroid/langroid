@@ -82,6 +82,7 @@ class OpenAIChatModel(str, Enum):
     GPT4_32K = "gpt-4-32k"
     GPT4_TURBO = "gpt-4-turbo"
     GPT4o = "gpt-4o"
+    GPT4o_mini = "gpt-4o-mini"
 
 
 class OpenAICompletionModel(str, Enum):
@@ -98,6 +99,7 @@ _context_length: Dict[str, int] = {
     OpenAIChatModel.GPT4_32K: 32_768,
     OpenAIChatModel.GPT4_TURBO: 128_000,
     OpenAIChatModel.GPT4o: 128_000,
+    OpenAIChatModel.GPT4o_mini: 128_000,
     OpenAICompletionModel.TEXT_DA_VINCI_003: 4096,
     AnthropicModel.CLAUDE_3_5_SONNET: 200_000,
     AnthropicModel.CLAUDE_3_OPUS: 200_000,
@@ -112,6 +114,7 @@ _cost_per_1k_tokens: Dict[str, Tuple[float, float]] = {
     OpenAIChatModel.GPT4: (0.03, 0.06),  # 8K context
     OpenAIChatModel.GPT4_TURBO: (0.01, 0.03),  # 128K context
     OpenAIChatModel.GPT4o: (0.005, 0.015),  # 128K context
+    OpenAIChatModel.GPT4o_mini: (0.00015, 0.0006),  # 128K context
     AnthropicModel.CLAUDE_3_5_SONNET: (0.003, 0.015),
     AnthropicModel.CLAUDE_3_OPUS: (0.015, 0.075),
     AnthropicModel.CLAUDE_3_SONNET: (0.003, 0.015),
@@ -123,6 +126,7 @@ openAIChatModelPreferenceList = [
     OpenAIChatModel.GPT4o,
     OpenAIChatModel.GPT4_TURBO,
     OpenAIChatModel.GPT4,
+    OpenAIChatModel.GPT4o_mini,
     OpenAIChatModel.GPT3_5_TURBO,
 ]
 
