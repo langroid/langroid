@@ -11,10 +11,10 @@ from langroid.pydantic_v1 import BaseModel, BaseSettings
 if TYPE_CHECKING:
     import neo4j
 
-
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
-from langroid.agent.chat_document import ChatDocMetaData, ChatDocument
+from langroid.agent.chat_document import ChatDocument
 from langroid.agent.special.neo4j.utils.system_message import (
+    ADDRESSING_INSTRUCTION,
     DEFAULT_NEO4J_CHAT_SYSTEM_MESSAGE,
     DEFAULT_SYS_MSG,
     SCHEMA_TOOLS_SYS_MSG,
@@ -76,6 +76,7 @@ class Neo4jChatAgentConfig(ChatAgentConfig):
     use_schema_tools: bool = True
     use_functions_api: bool = True
     use_tools: bool = False
+    addressing_prefix: str = ""
 
 
 class Neo4jChatAgent(ChatAgent):
@@ -85,11 +86,20 @@ class Neo4jChatAgent(ChatAgent):
         Raises:
             ValueError: If database information is not provided in the config.
         """
-        self.config = config
+        self.config: Neo4jChatAgentConfig = config
         self._validate_config()
         self._import_neo4j()
         self._initialize_connection()
         self._init_tool_messages()
+
+    def handle_message_fallback(
+        self, msg: str | ChatDocument
+    ) -> str | ChatDocument | None:
+        """When LLM sends a no-tool msg, assume user is the intended recipient."""
+        if isinstance(msg, ChatDocument) and msg.metadata.sender == Entity.LLM:
+            msg.metadata.recipient = Entity.USER
+            return msg
+        return None
 
     def _validate_config(self) -> None:
         """Validate the configuration to ensure all necessary fields are present."""
@@ -318,6 +328,10 @@ class Neo4jChatAgent(ChatAgent):
         """Initialize message tools used for chatting."""
         message = self._format_message()
         self.config.system_message = self.config.system_message.format(mode=message)
+        if self.config.addressing_prefix != "":
+            self.config.system_message += ADDRESSING_INSTRUCTION.format(
+                prefix=self.config.addressing_prefix
+            )
         super().__init__(self.config)
         self.enable_message(CypherRetrievalTool)
         self.enable_message(CypherCreationTool)
@@ -331,40 +345,4 @@ class Neo4jChatAgent(ChatAgent):
             SCHEMA_TOOLS_SYS_MSG
             if self.config.use_schema_tools
             else DEFAULT_SYS_MSG.format(schema=self.get_schema(None))
-        )
-
-    def agent_response(
-        self,
-        msg: Optional[str | ChatDocument] = None,
-    ) -> Optional[ChatDocument]:
-        if msg is None:
-            return None
-
-        results = self.handle_message(msg)
-        if results is None:
-            return None
-
-        output = results
-        if NEO4J_ERROR_MSG in output:
-            output = "There was an error in the Cypher Query. Press enter to retry."
-
-        console.print(f"[red]{self.indent}", end="")
-        print(f"[red]Agent: {output}")
-        sender_name = self.config.name
-        if isinstance(msg, ChatDocument) and msg.function_call is not None:
-            sender_name = msg.function_call.name
-
-        content = results.content if isinstance(results, ChatDocument) else results
-        recipient = (
-            results.metadata.recipient if isinstance(results, ChatDocument) else ""
-        )
-
-        return ChatDocument(
-            content=content,
-            metadata=ChatDocMetaData(
-                # source=Entity.AGENT,
-                sender=Entity.AGENT,
-                sender_name=sender_name,
-                recipient=recipient,
-            ),
         )

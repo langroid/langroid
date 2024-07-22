@@ -20,7 +20,7 @@ docker run --rm \
     neo4j:latest
 ```
 
-Upon creating the account successfully, neo4j will create a text file contains
+Upon creating the account successfully, neo4j will create a text file that contains
 account settings, please provide the following information (uri, username,
 password, and database), while creating the constructor `Neo4jChatAgentConfig`. 
 These settings can be set inside the `.env` file as shown in [`.env-template`](../../.env-template)

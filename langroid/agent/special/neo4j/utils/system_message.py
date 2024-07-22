@@ -44,3 +44,13 @@ Also if you receive a null or other unexpected result,
 Start by asking what I would like to know about the data.
 
 """
+
+ADDRESSING_INSTRUCTION = """
+IMPORTANT - Whenever you are NOT writing a CYPHER query, make sure you address the 
+user using {prefix}User. You MUST use the EXACT syntax {prefix} !!!
+
+In other words, you ALWAYS write EITHER:
+ - a CYPHER query using one of the tools, 
+ - OR address the user using {prefix}User.
+
+"""
