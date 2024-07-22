@@ -31,14 +31,15 @@ DEFAULT_NEO4J_CHAT_SYSTEM_MESSAGE = """
 You do not need to attempt answering a question with just one query. 
 You could make a sequence of Neo4j queries to help you write the final query.
 Also if you receive a null or other unexpected result,
-(a) make sure you use the available TOOLs correctly, and 
-(b) see if you have made an assumption in your Neo4j query, and try another way, 
+(a) make sure you use the available TOOLs correctly, 
+(b) LABELS may be CASE-SENSITIVE, so try using CASE-INSENSITIVE MATCHES,
+(c) see if you have made an assumption in your Neo4j query, and try another way, 
    or use `retrieval_query` to explore the database contents before submitting your 
    final query. 
-(c) USE `create_query` tool/function-call to execute cypher query that creates
+(d) USE `create_query` tool/function-call to execute cypher query that creates
    entities/relationships in the graph database.
 
-(d) USE `get_schema` tool/function-call to get all the node labels, relationship 
+(e) USE `get_schema` tool/function-call to get all the node labels, relationship 
  types, and property keys available in your Neo4j database.
 
 Start by asking what I would like to know about the data.

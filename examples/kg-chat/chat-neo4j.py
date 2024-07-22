@@ -4,6 +4,9 @@ or locally.
 If you have an existing Neo4j db on Aura (or possibly elsewhere, e.g. locally), you can
 chat with it by specifying its URI, username, password, and database name in the dialog.
 
+If you don't have an existing Neo4j db, and want to try this script, you can populate
+an empty Neo4j db with the cypher queries in the file `movies.cypher` in this folder.
+
 See info on getting setup with Neo4j here:
  `https://github.com/langroid/langroid/blob/main/examples/kg-chat/README.md`
 
