@@ -1,5 +1,10 @@
 .PHONY: setup check lint tests docs nodocs loc
 
+## set branch-suffix to current branch name, unless it is main (in which case it is empty)
+## This allows publishing "special" versions from branches other than main,
+## e.g. 0.6.5neo4j
+BRANCH_SUFFIX := $(shell if [ `git rev-parse --abbrev-ref HEAD` = "main" ]; then echo ""; else echo "-" git rev-parse --abbrev-ref HEAD; fi)
+
 SHELL := /bin/bash
 
 .PHONY: setup update
@@ -74,16 +79,19 @@ loc:
 .PHONY: bump-patch
 bump-patch:
 	@poetry version patch
+	@poetry version $(shell poetry version -s)$(BRANCH_SUFFIX)
 	@git commit pyproject.toml -m "Bump version"
 
 .PHONY: bump-minor
 bump-minor:
 	@poetry version minor
+	@poetry version $(shell poetry version -s)$(BRANCH_SUFFIX)
 	@git commit pyproject.toml -m "Bump version"
 
 .PHONY: bump-major
 bump-major:
 	@poetry version major
+	@poetry version $(shell poetry version -s)$(BRANCH_SUFFIX)
 	@git commit pyproject.toml -m "Bump version"
 
 .PHONY: build
@@ -92,7 +100,7 @@ build:
 
 .PHONY: push
 push:
-	@git push origin main
+	@git push origin $(shell git rev-parse --abbrev-ref HEAD)
 
 .PHONY: clean
 clean:
