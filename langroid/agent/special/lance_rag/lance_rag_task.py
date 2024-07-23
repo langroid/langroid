@@ -51,11 +51,13 @@ class LanceRAGTaskCreator:
             critic_name=critic_name,
             doc_agent_name=doc_agent_name,
             doc_schema=agent._get_clean_vecdb_schema(),
+            llm=agent.config.llm,
         )
         query_plan_agent_config.set_system_message()
 
         critic_config = QueryPlanCriticConfig(
             doc_schema=agent._get_clean_vecdb_schema(),
+            llm=agent.config.llm,
         )
         critic_config.set_system_message()
 
