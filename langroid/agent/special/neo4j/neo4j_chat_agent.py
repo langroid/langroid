@@ -279,8 +279,10 @@ class Neo4jChatAgent(ChatAgent):
         response = self.read_query(query)
         if isinstance(response.data, list) and len(response.data) == 0:
             return """
-            No results found; perhaps try an approximate or case-insensitive match,
-            or the other RETRY-SUGGESTIONS in your instructions.
+            No results found; check if your query used the right label names -- 
+            remember these are case sensitive, so you have to use the exact label
+            names you found in the schema. 
+            Or retry using one of the  RETRY-SUGGESTIONS in your instructions. 
             """
         if response.success:
             return json.dumps(response.data)

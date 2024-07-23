@@ -41,7 +41,8 @@ If you receive a null or other unexpected result,
 (a) make sure you use the available TOOLs correctly,
 (b) USE `get_schema` tool/function-call to get all the node labels, relationship 
  types, and property keys available in your Neo4j database. 
-(c) LABELS may be CASE-SENSITIVE, so try using CASE-INSENSITIVE MATCHES,
+(c) LABELS are CASE-SENSITIVE -- make sure you adhere to the exact label name
+   you found in the schema.
 (d) see if you have made an assumption in your Neo4j query, and try another way, 
    or use `retrieval_query` to explore the database contents before submitting your 
    final query. 
