@@ -3,8 +3,7 @@
 ## set branch-suffix to current branch name, unless it is main (in which case it is empty)
 ## This allows publishing "special" versions from branches other than main,
 ## e.g. 0.6.5neo4j
-BRANCH_SUFFIX := $(shell if [ `git rev-parse --abbrev-ref HEAD` = "main" ]; then echo ""; else echo "-" git rev-parse --abbrev-ref HEAD; fi)
-
+BRANCH_NAME := $(shell git rev-parse --abbrev-ref HEAD)
 SHELL := /bin/bash
 
 .PHONY: setup update
@@ -78,21 +77,27 @@ loc:
 
 .PHONY: bump-patch
 bump-patch:
-	@poetry version patch
-	@poetry version $(shell poetry version -s)$(BRANCH_SUFFIX)
-	@git commit pyproject.toml -m "Bump version"
+    @if [ "$(BRANCH_NAME)" = "main" ]; then \
+        bumpversion patch; \
+    else \
+        bumpversion patch --new-version `bumpversion --dry-run --list patch | grep new_version | sed -r "s/new_version=//"`-$(BRANCH_NAME); \
+    fi
 
 .PHONY: bump-minor
 bump-minor:
-	@poetry version minor
-	@poetry version $(shell poetry version -s)$(BRANCH_SUFFIX)
-	@git commit pyproject.toml -m "Bump version"
+    @if [ "$(BRANCH_NAME)" = "main" ]; then \
+        bumpversion minor; \
+    else \
+        bumpversion minor --new-version `bumpversion --dry-run --list minor | grep new_version | sed -r "s/new_version=//"`-$(BRANCH_NAME); \
+    fi
 
 .PHONY: bump-major
 bump-major:
-	@poetry version major
-	@poetry version $(shell poetry version -s)$(BRANCH_SUFFIX)
-	@git commit pyproject.toml -m "Bump version"
+    @if [ "$(BRANCH_NAME)" = "main" ]; then \
+        bumpversion major; \
+    else \
+        bumpversion major --new-version `bumpversion --dry-run --list major | grep new_version | sed -r "s/new_version=//"`-$(BRANCH_NAME); \
+    fi
 
 .PHONY: build
 build:
