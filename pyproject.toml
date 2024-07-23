@@ -88,6 +88,7 @@ nest-asyncio = "^1.6.0"
 async-generator = "^1.10"
 
 python-magic = "^0.4.27"
+bumpversion = "^0.6.0"
 
 [tool.poetry.extras]
 # install these using, e.g.,
