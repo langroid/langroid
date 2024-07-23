@@ -77,26 +77,26 @@ loc:
 
 .PHONY: bump-patch
 bump-patch:
-    @if [ "$(BRANCH_NAME)" = "main" ]; then \
+    if [ "$(BRANCH_NAME)" = "main" ]; then \
         bumpversion patch; \
     else \
-        bumpversion patch --new-version `bumpversion --dry-run --list patch | grep new_version | sed -r "s/new_version=//"`-$(BRANCH_NAME); \
+        bumpversion patch --new-version $$(bumpversion --dry-run --list patch | grep new_version | sed -r "s/new_version=//")-$(BRANCH_NAME); \
     fi
 
 .PHONY: bump-minor
 bump-minor:
-    @if [ "$(BRANCH_NAME)" = "main" ]; then \
+    if [ "$(BRANCH_NAME)" = "main" ]; then \
         bumpversion minor; \
     else \
-        bumpversion minor --new-version `bumpversion --dry-run --list minor | grep new_version | sed -r "s/new_version=//"`-$(BRANCH_NAME); \
+        bumpversion minor --new-version $$(bumpversion --dry-run --list minor | grep new_version | sed -r "s/new_version=//")-$(BRANCH_NAME); \
     fi
 
 .PHONY: bump-major
 bump-major:
-    @if [ "$(BRANCH_NAME)" = "main" ]; then \
+    if [ "$(BRANCH_NAME)" = "main" ]; then \
         bumpversion major; \
     else \
-        bumpversion major --new-version `bumpversion --dry-run --list major | grep new_version | sed -r "s/new_version=//"`-$(BRANCH_NAME); \
+        bumpversion major --new-version $$(bumpversion --dry-run --list major | grep new_version | sed -r "s/new_version=//")-$(BRANCH_NAME); \
     fi
 
 .PHONY: build
