@@ -75,29 +75,53 @@ loc:
 	@echo "Lines in git-tracked files python files:"
 	@git ls-files | grep '\.py$$' | xargs cat | grep -v '^\s*$$' | wc -l
 
+
+.PHONY: test-condition
+test-condition:
+	@if [ "$(BRANCH_NAME)" = "main" ]; then \
+		echo "On main branch"; \
+	else \
+		echo "On branch $(BRANCH_NAME)"; \
+	fi
+
 .PHONY: bump-patch
 bump-patch:
-    if [ "$(BRANCH_NAME)" = "main" ]; then \
-        bumpversion patch; \
-    else \
-        bumpversion patch --new-version $$(bumpversion --dry-run --list patch | grep new_version | sed -r "s/new_version=//")-$(BRANCH_NAME); \
-    fi
+	@echo "Branch Name: $(BRANCH_NAME)"
+	@if [ "$(BRANCH_NAME)" = "main" ]; then \
+		echo "Bumping version for main branch"; \
+		bumpversion patch; \
+	else \
+		echo "Bumping version for $(BRANCH_NAME)"; \
+		NEW_VERSION=$$(bumpversion --dry-run --list patch | grep new_version | sed -r "s/new_version=//")-$(BRANCH_NAME); \
+		echo "New Version: $$NEW_VERSION"; \
+		bumpversion patch --new-version $$NEW_VERSION; \
+	fi
 
 .PHONY: bump-minor
 bump-minor:
-    if [ "$(BRANCH_NAME)" = "main" ]; then \
-        bumpversion minor; \
-    else \
-        bumpversion minor --new-version $$(bumpversion --dry-run --list minor | grep new_version | sed -r "s/new_version=//")-$(BRANCH_NAME); \
-    fi
+	@echo "Branch Name: $(BRANCH_NAME)"
+	@if [ "$(BRANCH_NAME)" = "main" ]; then \
+		echo "Bumping version for main branch"; \
+		bumpversion minor; \
+	else \
+		echo "Bumping version for $(BRANCH_NAME)"; \
+		NEW_VERSION=$$(bumpversion --dry-run --list minor | grep new_version | sed -r "s/new_version=//")-$(BRANCH_NAME); \
+		echo "New Version: $$NEW_VERSION"; \
+		bumpversion minor --new-version $$NEW_VERSION; \
+	fi
 
 .PHONY: bump-major
 bump-major:
-    if [ "$(BRANCH_NAME)" = "main" ]; then \
-        bumpversion major; \
-    else \
-        bumpversion major --new-version $$(bumpversion --dry-run --list major | grep new_version | sed -r "s/new_version=//")-$(BRANCH_NAME); \
-    fi
+	@echo "Branch Name: $(BRANCH_NAME)"
+	@if [ "$(BRANCH_NAME)" = "main" ]; then \
+		echo "Bumping version for main branch"; \
+		bumpversion major; \
+	else \
+		echo "Bumping version for $(BRANCH_NAME)"; \
+		NEW_VERSION=$$(bumpversion --dry-run --list major | grep new_version | sed -r "s/new_version=//")-$(BRANCH_NAME); \
+		echo "New Version: $$NEW_VERSION"; \
+		bumpversion major --new-version $$NEW_VERSION; \
+	fi
 
 .PHONY: build
 build:
