@@ -265,10 +265,23 @@ class Neo4jChatAgent(ChatAgent):
         Returns:
             str: The result of executing the cypher_query.
         """
+        if not self.tried_schema:
+            return """
+            You did not yet use the `get_schema` tool to get the schema 
+            of the neo4j knowledge-graph db. Use that tool first before using 
+            the `retrieval_query` tool, to ensure you know all the correct
+            node labels, relationship types, and property keys available in
+            the database.
+            """
         query = msg.cypher_query
 
         logger.info(f"Executing Cypher query: {query}")
         response = self.read_query(query)
+        if isinstance(response.data, list) and len(response.data) == 0:
+            return """
+            No results found; perhaps try an approximate or case-insensitive match,
+            or the other RETRY-SUGGESTIONS in your instructions.
+            """
         if response.success:
             return json.dumps(response.data)
         else:
@@ -316,6 +329,7 @@ class Neo4jChatAgent(ChatAgent):
             behavior of 'self.read_query' method, which might raise exceptions related
              to database connectivity or query execution.
         """
+        self.tried_schema = True
         schema_result = self.read_query("CALL db.schema.visualization()")
         if schema_result.success:
             # ther is a possibility that the schema is empty, which is a valid response
@@ -326,6 +340,7 @@ class Neo4jChatAgent(ChatAgent):
 
     def _init_tool_messages(self) -> None:
         """Initialize message tools used for chatting."""
+        self.tried_schema = False
         message = self._format_message()
         self.config.system_message = self.config.system_message.format(mode=message)
         if self.config.addressing_prefix != "":
