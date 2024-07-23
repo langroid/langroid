@@ -6,7 +6,6 @@ from rich import print
 from rich.console import Console
 
 from langroid.agent import ToolMessage
-from langroid.parsing.parse_json import datetime_to_json
 from langroid.pydantic_v1 import BaseModel, BaseSettings
 
 if TYPE_CHECKING:
@@ -285,14 +284,7 @@ class Neo4jChatAgent(ChatAgent):
             names you found in the schema. 
             Or retry using one of the  RETRY-SUGGESTIONS in your instructions. 
             """
-        if response.success:
-            try:
-                json_str = json.dumps(response.data, default=datetime_to_json)
-                return json_str
-            except TypeError:
-                return str(response.data)
-        else:
-            return str(response.data)
+        return str(response.data)
 
     def create_query(self, msg: CypherCreationTool) -> str:
         """ "
