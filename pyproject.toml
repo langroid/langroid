@@ -25,7 +25,7 @@ litellm = {version = "^1.30.1", optional = true}
 metaphor-python = {version = "^0.1.23", optional = true}
 chainlit = {version = "1.1.202", optional = true}
 python-socketio = {version="^5.11.0", optional=true}
-neo4j = {version = "^5.14.1", optional = true}
+neo4j = {version = "^4.0.0", optional = true}
 huggingface-hub = {version="^0.21.2", optional=true}
 transformers = {version="^4.40.1", optional=true}
 lancedb = {version="^0.8.2", optional=true}
