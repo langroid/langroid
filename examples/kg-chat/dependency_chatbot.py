@@ -43,7 +43,7 @@ from langroid.agent.special.neo4j.neo4j_chat_agent import (
     Neo4jSettings,
 )
 from langroid.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
-from langroid.utils.constants import NO_ANSWER
+from langroid.utils.constants import NO_ANSWER, SEND_TO
 from langroid.utils.configuration import set_global, Settings
 from langroid.agent.tool_message import ToolMessage
 from langroid.agent.tools.google_search_tool import GoogleSearchTool
@@ -239,6 +239,7 @@ def main(
             llm=OpenAIGPTConfig(
                 chat_model=model or OpenAIChatModel.GPT4o,
             ),
+            addressing_prefix=SEND_TO,
         ),
     )
 
@@ -275,6 +276,9 @@ def main(
         dependency_agent,
         name="DependencyAgent",
         system_message=system_message,
+        # non-interactive but await user ONLY if addressed or LLM sends a non-tool msg,
+        # (see the handle_message_fallback method in the agent)
+        interactive=False,
     )
 
     dependency_agent.enable_message(DepGraphTool)

@@ -1,5 +1,6 @@
 import ast
 import json
+from datetime import datetime
 from typing import Any, Dict, Iterator, List, Union
 
 import yaml
@@ -167,3 +168,10 @@ def top_level_json_field(s: str, f: str) -> Any:
             return json_data[f]
 
     return ""
+
+
+def datetime_to_json(obj: Any) -> Any:
+    if isinstance(obj, datetime):
+        return obj.isoformat()
+    # Let json.dumps() handle the raising of TypeError for non-serializable objects
+    return obj
