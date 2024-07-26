@@ -69,3 +69,14 @@ since Langroid operates via a loop mechanism, see docs
 The *advantage* of using `task.run()` instead of doing this yourself, is that this method
 ensures that tool generation errors are sent back to the LLM so it retries the generation.
 
+## OpenAI Tools support
+
+As of July 26 2024, OpenAI tools are not yet in langroid but coming soon. 
+We have the older OpenAI function-calling API that still works but is deprecated in favor of tools. 
+Langroid has always had its own native tool-calling support as well, 
+which works with **any** LLM -- you can define a subclass of `ToolMessage` (pydantic based) 
+and it is transpiled into system prompt instructions for the tool. 
+In practice we don't see much difference between using this vs OpenAI fn-calling. 
+Example here https://github.com/langroid/langroid/blob/main/examples/basic/fn-call-local-simple.py
+Or search for `ToolMessage` in any of the tests/ or examples/ files.
+
