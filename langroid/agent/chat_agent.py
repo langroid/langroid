@@ -16,8 +16,10 @@ from langroid.language_models.base import (
     LLMFunctionSpec,
     LLMMessage,
     LLMResponse,
+    OpenAIToolSpec,
     Role,
     StreamingIfAllowed,
+    ToolChoiceTypes,
 )
 from langroid.language_models.openai_gpt import OpenAIGPT
 from langroid.utils.configuration import settings
@@ -519,9 +521,14 @@ class ChatAgent(Agent):
         hist, output_len = self._prep_llm_messages(message)
         if len(hist) == 0:
             return None
+        tool_choice = (
+            "auto"
+            if isinstance(message, str)
+            else (message.oai_tool_choice if message is not None else "auto")
+        )
         with StreamingIfAllowed(self.llm, self.llm.get_stream()):
-            response = self.llm_response_messages(hist, output_len)
-        self.message_history.append(ChatDocument.to_LLMMessage(response))
+            response = self.llm_response_messages(hist, output_len, tool_choice)
+        self.message_history.extend(ChatDocument.to_LLMMessage(response))
         response.metadata.msg_idx = len(self.message_history) - 1
         response.metadata.agent_id = self.id
         # Preserve trail of tool_ids for OpenAI Assistant fn-calls
@@ -543,9 +550,16 @@ class ChatAgent(Agent):
         hist, output_len = self._prep_llm_messages(message)
         if len(hist) == 0:
             return None
+        tool_choice = (
+            "auto"
+            if isinstance(message, str)
+            else (message.oai_tool_choice if message is not None else "auto")
+        )
         with StreamingIfAllowed(self.llm, self.llm.get_stream()):
-            response = await self.llm_response_messages_async(hist, output_len)
-        self.message_history.append(ChatDocument.to_LLMMessage(response))
+            response = await self.llm_response_messages_async(
+                hist, output_len, tool_choice
+            )
+        self.message_history.extend(ChatDocument.to_LLMMessage(response))
         response.metadata.msg_idx = len(self.message_history) - 1
         response.metadata.agent_id = self.id
         # Preserve trail of tool_ids for OpenAI Assistant fn-calls
@@ -623,7 +637,7 @@ class ChatAgent(Agent):
                 # either the message is a str, or it is a fresh ChatDocument
                 # different from the last message in the history
                 llm_msg = ChatDocument.to_LLMMessage(message)
-                self.message_history.append(llm_msg)
+                self.message_history.extend(llm_msg)
 
         hist = self.message_history
         output_len = self.config.llm.max_output_tokens
@@ -707,18 +721,41 @@ class ChatAgent(Agent):
 
     def _function_args(
         self,
-    ) -> Tuple[Optional[List[LLMFunctionSpec]], str | Dict[str, str]]:
+    ) -> Tuple[
+        Optional[List[LLMFunctionSpec]],
+        str | Dict[str, str],
+        Optional[List[OpenAIToolSpec]],
+        Optional[Dict[str, Dict[str, str] | str]],
+    ]:
+        """Get function/tool spec arguments for OpenAI-compatible LLM API call"""
         functions: Optional[List[LLMFunctionSpec]] = None
         fun_call: str | Dict[str, str] = "none"
+        tools: Optional[List[OpenAIToolSpec]] = None
+        force_tool: Optional[Dict[str, Dict[str, str] | str]] = None
         if self.config.use_functions_api and len(self.llm_functions_usable) > 0:
             functions = [self.llm_functions_map[f] for f in self.llm_functions_usable]
             fun_call = (
                 "auto" if self.llm_function_force is None else self.llm_function_force
             )
-        return functions, fun_call
+            tools = [
+                OpenAIToolSpec(type="function", function=self.llm_functions_map[f])
+                for f in self.llm_functions_usable
+            ]
+            force_tool = (
+                None
+                if self.llm_function_force is None
+                else {
+                    "type": "function",
+                    "function": {"name": self.llm_function_force["name"]},
+                }
+            )
+        return functions, fun_call, tools, force_tool
 
     def llm_response_messages(
-        self, messages: List[LLMMessage], output_len: Optional[int] = None
+        self,
+        messages: List[LLMMessage],
+        output_len: Optional[int] = None,
+        tool_choice: ToolChoiceTypes | Dict[str, str | Dict[str, str]] = "auto",
     ) -> ChatDocument:
         """
         Respond to a series of messages, e.g. with OpenAI ChatCompletion
@@ -748,13 +785,13 @@ class ChatAgent(Agent):
                 stack.enter_context(cm)
             if self.llm.get_stream() and not settings.quiet:
                 console.print(f"[green]{self.indent}", end="")
-            functions, fun_call = self._function_args()
+            _, _, tools, force_tool = self._function_args()
             assert self.llm is not None
             response = self.llm.chat(
                 messages,
                 output_len,
-                functions=functions,
-                function_call=fun_call,
+                tools=tools,
+                tool_choice=force_tool or tool_choice,
             )
         if self.llm.get_stream():
             self.callbacks.finish_llm_stream(
@@ -778,20 +815,17 @@ class ChatAgent(Agent):
         return chat_doc
 
     async def llm_response_messages_async(
-        self, messages: List[LLMMessage], output_len: Optional[int] = None
+        self,
+        messages: List[LLMMessage],
+        output_len: Optional[int] = None,
+        tool_choice: ToolChoiceTypes | Dict[str, str | Dict[str, str]] = "auto",
     ) -> ChatDocument:
         """
         Async version of `llm_response_messages`. See there for details.
         """
         assert self.config.llm is not None and self.llm is not None
         output_len = output_len or self.config.llm.max_output_tokens
-        functions: Optional[List[LLMFunctionSpec]] = None
-        fun_call: str | Dict[str, str] = "none"
-        if self.config.use_functions_api and len(self.llm_functions_usable) > 0:
-            functions = [self.llm_functions_map[f] for f in self.llm_functions_usable]
-            fun_call = (
-                "auto" if self.llm_function_force is None else self.llm_function_force
-            )
+        _, _, tools, force_tool = self._function_args()
         assert self.llm is not None
 
         streamer = noop_fn
@@ -802,8 +836,8 @@ class ChatAgent(Agent):
         response = await self.llm.achat(
             messages,
             output_len,
-            functions=functions,
-            function_call=fun_call,
+            tools=tools,
+            tool_choice=force_tool or tool_choice,
         )
         if self.llm.get_stream():
             self.callbacks.finish_llm_stream(
@@ -847,6 +881,7 @@ class ChatAgent(Agent):
                     if isinstance(response, ChatDocument)
                     else ChatDocument.from_LLMResponse(response, displayed=True)
                 )
+                # TODO: prepend TOOL: or OAI-TOOL: if it's a tool-call
                 print(cached + "[green]" + escape(str(response)))
                 self.callbacks.show_llm_response(
                     content=str(response),

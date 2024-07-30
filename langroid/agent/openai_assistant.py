@@ -192,7 +192,7 @@ class OpenAIAssistant(ChatAgent):
             self.set_system_message(sys_msg.content)
         if not self.config.use_functions_api:
             return
-        functions, _ = self._function_args()
+        functions, _, _, _ = self._function_args()
         if functions is None:
             return
         # add the functions to the assistant:
@@ -720,7 +720,12 @@ class OpenAIAssistant(ChatAgent):
         """
         is_tool_output = False
         if message is not None:
-            llm_msg = ChatDocument.to_LLMMessage(message)
+            # note: to_LLMMessage returns a list of LLMMessage,
+            # which is allowed to have len > 1, in case the msg
+            # represents results of multiple (non-assistant) tool-calls.
+            # But for OAI Assistant, we only assume exactly one tool-call at a time.
+            # TODO look into multi-tools
+            llm_msg = ChatDocument.to_LLMMessage(message)[0]
             tool_id = llm_msg.tool_id
             if tool_id in self.pending_tool_ids:
                 if isinstance(message, ChatDocument):

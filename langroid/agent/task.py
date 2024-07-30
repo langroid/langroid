@@ -923,7 +923,6 @@ class Task:
                 # create dummy msg for logging
                 log_doc = ChatDocument(
                     content="[CANNOT RESPOND]",
-                    function_call=None,
                     metadata=ChatDocMetaData(
                         sender=r if isinstance(r, Entity) else Entity.USER,
                         sender_name=str(r),
@@ -1027,7 +1026,6 @@ class Task:
                 # create dummy msg for logging
                 log_doc = ChatDocument(
                     content="[CANNOT RESPOND]",
-                    function_call=None,
                     metadata=ChatDocMetaData(
                         sender=r if isinstance(r, Entity) else Entity.USER,
                         sender_name=str(r),
@@ -1111,7 +1109,7 @@ class Task:
                 self.pending_sender = r
             self.pending_message = result
         # set the parent/child links ONLY if not already set by agent internally,
-        # which may happen when using the RewindTool
+        # which may happen when using the RewindTool, or in other scenarios.
         if parent is not None and not result.metadata.parent_id:
             result.metadata.parent_id = parent.id()
         if parent is not None and not parent.metadata.child_id:
@@ -1186,7 +1184,9 @@ class Task:
                 max_tokens=self.max_tokens,
             )
             result_str = (  # only used by callback to display content and possible tool
-                "NONE" if result is None else str(ChatDocument.to_LLMMessage(result))
+                "NONE"
+                if result is None
+                else "\n\n".join(str(m) for m in ChatDocument.to_LLMMessage(result))
             )
             maybe_tool = len(extract_top_level_json(result_str)) > 0
             self.callbacks.show_subtask_response(
@@ -1266,7 +1266,11 @@ class Task:
                 max_cost=self.max_cost,
                 max_tokens=self.max_tokens,
             )
-            result_str = str(ChatDocument.to_LLMMessage(result))
+            result_str = (  # only used by callback to display content and possible tool
+                "NONE"
+                if result is None
+                else "\n\n".join(str(m) for m in ChatDocument.to_LLMMessage(result))
+            )
             maybe_tool = len(extract_top_level_json(result_str)) > 0
             self.callbacks.show_subtask_response(
                 task=e,
@@ -1301,6 +1305,8 @@ class Task:
         if DONE in content:
             # assuming it is of the form "DONE: <content>"
             content = content.replace(DONE, "").strip()
+        oai_tool_calls = result_msg.oai_tool_calls if result_msg else None
+        oai_tool_id2result = result_msg.oai_tool_id2result if result_msg else None
         fun_call = result_msg.function_call if result_msg else None
         tool_messages = result_msg.tool_messages if result_msg else []
         block = result_msg.metadata.block if result_msg else None
@@ -1312,6 +1318,8 @@ class Task:
         # since to the "parent" task, this result is equivalent to a response from USER
         result_doc = ChatDocument(
             content=content,
+            oai_tool_calls=oai_tool_calls,
+            oai_tool_id2result=oai_tool_id2result,
             function_call=fun_call,
             tool_messages=tool_messages,
             metadata=ChatDocMetaData(
@@ -1346,6 +1354,8 @@ class Task:
                 isinstance(msg, ChatDocument)
                 and msg.content.strip() in [PASS, ""]
                 and msg.function_call is None
+                and msg.oai_tool_calls is None
+                and msg.oai_tool_id2result is None
                 and msg.tool_messages == []
             )
         )

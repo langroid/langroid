@@ -130,7 +130,7 @@ def test_chat_documents():
     assert b_doc.child is a_doc, "B's child should be A"
 
     # convert to LLMMessage
-    llm_msg = ChatDocument.to_LLMMessage(a_doc)
+    llm_msg = ChatDocument.to_LLMMessage(a_doc)[0]
     assert isinstance(llm_msg, LLMMessage)
     assert llm_msg.chat_document_id == a_doc.id()
 

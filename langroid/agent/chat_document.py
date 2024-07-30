@@ -3,7 +3,7 @@ from __future__ import annotations
 import copy
 import json
 from enum import Enum
-from typing import Any, List, Optional, Union, cast
+from typing import Any, Dict, List, Optional, Union, cast
 
 from langroid.agent.tool_message import ToolMessage
 from langroid.language_models.base import (
@@ -11,7 +11,9 @@ from langroid.language_models.base import (
     LLMMessage,
     LLMResponse,
     LLMTokenUsage,
+    OpenAIToolCall,
     Role,
+    ToolChoiceTypes,
 )
 from langroid.mytypes import DocMetaData, Document, Entity
 from langroid.parsing.agent_chats import parse_message
@@ -86,6 +88,31 @@ class ChatDocLoggerFields(BaseModel):
 
 
 class ChatDocument(Document):
+    """
+    Represents a message in a conversation among agents. All responders of an agent
+    have signature ChatDocument -> ChatDocument (modulo None, str, etc),
+    and so does the Task.run() method.
+
+    Attributes:
+        oai_tool_calls (List[OpenAIToolCall]): Tool-calls from an OpenAI-compatible API
+        oai_tool_id2results (Dict[str, str]): Results of tool-calls from OpenAI
+            (dict is a map of tool_id -> result)
+        oai_tool_choice: ToolChoiceTypes | Dict[str, str]: Param controlling how the
+            LLM should choose tool-use in its response
+            (auto, none, required, or a specific tool)
+        function_call (LLMFunctionCall): Function-call from an OpenAI-compatible API
+                (deprecated; use oai_tool_calls instead)
+        tool_messages (List[ToolMessage]): Langroid ToolMessages extracted from
+            - `content` field (via JSON parsing),
+            - `oai_tool_calls`, or
+            - `function_call`
+        metadata (ChatDocMetaData): Metadata for the message, e.g. sender, recipient.
+        attachment (None | ChatDocAttachment): Any additional data attached.
+    """
+
+    oai_tool_calls: Optional[List[OpenAIToolCall]] = None
+    oai_tool_id2result: Optional[Dict[str, str]] = None
+    oai_tool_choice: ToolChoiceTypes | Dict[str, Dict[str, str] | str] = "auto"
     function_call: Optional[LLMFunctionCall] = None
     tool_messages: List[ToolMessage] = []
     metadata: ChatDocMetaData
@@ -199,6 +226,24 @@ class ChatDocument(Document):
             self.metadata.tool_ids.pop()
 
     @staticmethod
+    def _clean_fn_call(fc: LLMFunctionCall | None) -> None:
+        # Sometimes an OpenAI LLM (esp gpt-4o) may generate a function-call
+        # with odditities:
+        # (a) the `name` is set, as well as `arguments.request` is set,
+        #  and in langroid we use the `request` value as the `name`.
+        #  In this case we override the `name` with the `request` value.
+        # (b) the `name` looks like "functions blah" or just "functions"
+        #   In this case we strip the "functions" part.
+        if fc is None:
+            return
+        fc.name = fc.name.replace("functions", "").strip()
+        if fc.arguments is not None:
+            request = fc.arguments.get("request")
+            if request is not None and request != "":
+                fc.name = request
+                fc.arguments.pop("request")
+
+    @staticmethod
     def from_LLMResponse(
         response: LLMResponse,
         displayed: bool = False,
@@ -216,22 +261,14 @@ class ChatDocument(Document):
         if message in ["''", '""']:
             message = ""
         if response.function_call is not None:
-            # Sometimes an OpenAI LLM (esp gpt-4o) may generate a function-call
-            # with odditities:
-            # (a) the `name` is set, as well as `arugments.request` is set,
-            #  and in langroid we use the `request` value as the `name`.
-            #  In this case we override the `name` with the `request` value.
-            # (b) the `name` looks like "functions blah" or just "functions"
-            #   In this case we strip the "functions" part.
-            fc = response.function_call
-            fc.name = fc.name.replace("functions", "").strip()
-            if fc.arguments is not None:
-                request = fc.arguments.get("request")
-                if request is not None and request != "":
-                    fc.name = request
-                    fc.arguments.pop("request")
+            ChatDocument._clean_fn_call(response.function_call)
+        if response.oai_tool_calls is not None:
+            # there must be at least one if it's not None
+            for oai_tc in response.oai_tool_calls:
+                ChatDocument._clean_fn_call(oai_tc.function)
         return ChatDocument(
             content=message,
+            oai_tool_calls=response.oai_tool_calls,
             function_call=response.function_call,
             metadata=ChatDocMetaData(
                 source=Entity.LLM,
@@ -261,24 +298,28 @@ class ChatDocument(Document):
         )
 
     @staticmethod
-    def to_LLMMessage(message: Union[str, "ChatDocument"]) -> LLMMessage:
+    def to_LLMMessage(message: Union[str, "ChatDocument"]) -> List[LLMMessage]:
         """
-        Convert to LLMMessage for use with LLM.
+        Convert to list of LLMMessage, to incorporate into msg-history sent to LLM API.
+        Usually there will be just a single LLMMessage, but when the ChatDocument
+        contains results from multiple OpenAI tool-calls, we would have a sequence
+        LLMMessages, one per tool-call result.
 
         Args:
             message (str|ChatDocument): Message to convert.
         Returns:
-            LLMMessage: LLMMessage representation of this str or ChatDocument.
-
+            List[LLMMessage]: list of LLMMessages corresponding to this ChatDocument.
         """
         sender_name = None
         sender_role = Role.USER
         fun_call = None
-        tool_id = ""
+        oai_tool_calls = None
+        tool_id = ""  # for OpenAI Assistant
         chat_document_id: str = ""
         if isinstance(message, ChatDocument):
             content = message.content
             fun_call = message.function_call
+            oai_tool_calls = message.oai_tool_calls
             if message.metadata.sender == Entity.USER and fun_call is not None:
                 # This may happen when a (parent agent's) LLM generates a
                 # a Function-call, and it ends up being sent to the current task's
@@ -289,6 +330,10 @@ class ChatDocument(Document):
                 # in the content of the message.
                 content += " " + str(fun_call)
                 fun_call = None
+            if message.metadata.sender == Entity.USER and oai_tool_calls is not None:
+                # same reasoning as for function-call above
+                content += " " + "\n\n".join(str(tc) for tc in oai_tool_calls)
+                oai_tool_calls = None
             sender_name = message.metadata.sender_name
             tool_ids = message.metadata.tool_ids
             tool_id = tool_ids[-1] if len(tool_ids) > 0 else ""
@@ -299,22 +344,62 @@ class ChatDocument(Document):
                 message.metadata.parent is not None
                 and message.metadata.parent.function_call is not None
             ):
+                # This is a response to a function call, so set the role to FUNCTION.
                 sender_role = Role.FUNCTION
                 sender_name = message.metadata.parent.function_call.name
+            elif (
+                message.metadata.parent is not None
+                and message.metadata.parent.oai_tool_calls is not None
+            ):
+                # The parent message had OpenAI tool-call(s), so the current
+                # ChatDocument contains results from some/all/none of them.
+
+                # Case 1:
+                # If there was just ONE tool-call, then the current ChatDocument.content
+                # would contain the result of that tool-call.
+                if len(message.metadata.parent.oai_tool_calls) == 1:
+                    return [
+                        LLMMessage(
+                            role=Role.TOOL,
+                            tool_call_id=(message.metadata.parent.oai_tool_calls[0].id),
+                            content=content,
+                            chat_document_id=chat_document_id,
+                        )
+                    ]
+
+                # Case 2:
+                # There were > 1 tool-calls in parent message, so we create an
+                # LLMMessage for each result of applying the tool-call(s).
+                if (
+                    message.oai_tool_id2result is not None
+                    and len(message.oai_tool_id2result) > 0
+                ):
+                    return [
+                        LLMMessage(
+                            role=Role.TOOL,
+                            tool_call_id=tool_id,
+                            content=result,
+                            chat_document_id=chat_document_id,
+                        )
+                        for tool_id, result in message.oai_tool_id2result.items()
+                    ]
             elif message.metadata.sender == Entity.LLM:
                 sender_role = Role.ASSISTANT
         else:
             # LLM can only respond to text content, so extract it
             content = message
 
-        return LLMMessage(
-            role=sender_role,
-            tool_id=tool_id,
-            content=content,
-            function_call=fun_call,
-            name=sender_name,
-            chat_document_id=chat_document_id,
-        )
+        return [
+            LLMMessage(
+                role=sender_role,
+                tool_id=tool_id,  # for OpenAI Assistant
+                content=content,
+                function_call=fun_call,
+                tool_calls=oai_tool_calls,
+                name=sender_name,
+                chat_document_id=chat_document_id,
+            )
+        ]
 
 
 LLMMessage.update_forward_refs()
