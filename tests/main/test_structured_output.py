@@ -99,10 +99,12 @@ class PresidentTool(ToolMessage):
         ]
 
 
+@pytest.mark.parametrize("use_tools_api", [True, False])
 @pytest.mark.parametrize("use_functions_api", [True, False])
 def test_llm_structured_output_list(
     test_settings: Settings,
     use_functions_api: bool,
+    use_tools_api: bool,
 ):
     """
     Test whether LLM is able to GENERATE structured output.
@@ -111,6 +113,7 @@ def test_llm_structured_output_list(
     agent = ChatAgent(cfg)
     agent.config.use_functions_api = use_functions_api
     agent.config.use_tools = not use_functions_api
+    agent.config.use_tools_api = use_tools_api
     agent.enable_message(PresidentListTool)
     N = 3
     prompt = f"Show me examples of {N} Presidents of any set of countries you choose"
@@ -120,10 +123,12 @@ def test_llm_structured_output_list(
     assert agent_result.content == str(N)
 
 
+@pytest.mark.parametrize("use_tools_api", [True, False])
 @pytest.mark.parametrize("use_functions_api", [True, False])
 def test_llm_structured_output_nested(
     test_settings: Settings,
     use_functions_api: bool,
+    use_tools_api: bool,
 ):
     """
     Test whether LLM is able to GENERATE nested structured output.
@@ -132,6 +137,7 @@ def test_llm_structured_output_nested(
     agent = ChatAgent(cfg)
     agent.config.use_functions_api = use_functions_api
     agent.config.use_tools = not use_functions_api
+    agent.config.use_tools_api = use_tools_api
     agent.enable_message(PresidentTool)
     country = "France"
     prompt = f"Show me an example of a President of {country}"
