@@ -179,13 +179,7 @@ async def test_llm_tool_message(
     agent.enable_message(CountryCapitalMessage)
 
     llm_msg = await agent.llm_response_forget_async(prompt)
-    tool_name = message_class.default_value("request")
-    if use_functions_api:
-        assert llm_msg.function_call.name == tool_name
-    else:
-        tools = agent.get_tool_messages(llm_msg)
-        assert len(tools) == 1
-        assert isinstance(tools[0], message_class)
+    assert isinstance(agent.get_tool_messages(llm_msg)[0], message_class)
 
     agent_result = agent.handle_message(llm_msg)
     assert result.lower() in agent_result.lower()

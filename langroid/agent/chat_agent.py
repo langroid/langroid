@@ -207,6 +207,23 @@ class ChatAgent(Agent):
             msgs.append(LLMMessage(role=Role.USER, content=self.user_message))
         return msgs
 
+    def _drop_msg_update_tool_calls(self, msg: LLMMessage) -> None:
+        id2idx = {t.id: i for i, t in enumerate(self.oai_tool_calls)}
+        if msg.role == Role.TOOL:
+            # dropping tool result, so ADD the corresponding tool-call back
+            # to the list of pending calls!
+            id = msg.tool_call_id
+            if id in self.oai_tool_id2call:
+                self.oai_tool_calls.append(self.oai_tool_id2call[id])
+        elif msg.tool_calls is not None:
+            # dropping a msg with tool-calls, so DROP these from pending list
+            # as well as from id -> call map
+            for tool_call in msg.tool_calls:
+                if tool_call.id in id2idx:
+                    self.oai_tool_calls.pop(id2idx[tool_call.id])
+                if tool_call.id in self.oai_tool_id2call:
+                    del self.oai_tool_id2call[tool_call.id]
+
     def clear_history(self, start: int = -2) -> None:
         """
         Clear the message history, starting at the index `start`
@@ -220,7 +237,10 @@ class ChatAgent(Agent):
             n = len(self.message_history)
             start = max(0, n + start)
         dropped = self.message_history[start:]
-        for msg in dropped:
+        # consider the dropped msgs in REVERSE order, so we are
+        # carefully updating self.oai_tool_calls
+        for msg in reversed(dropped):
+            self._drop_msg_update_tool_calls(msg)
             # clear out the chat document from the ObjectRegistry
             ChatDocument.delete_id(msg.chat_document_id)
         self.message_history = self.message_history[:start]
@@ -636,8 +656,14 @@ class ChatAgent(Agent):
             ):
                 # either the message is a str, or it is a fresh ChatDocument
                 # different from the last message in the history
-                llm_msg = ChatDocument.to_LLMMessage(message)
-                self.message_history.extend(llm_msg)
+                llm_msgs = ChatDocument.to_LLMMessage(message, self.oai_tool_calls)
+
+                # process tools if any
+                done_tools = [m.tool_call_id for m in llm_msgs if m.role == Role.TOOL]
+                self.oai_tool_calls = [
+                    t for t in self.oai_tool_calls if t.id not in done_tools
+                ]
+                self.message_history.extend(llm_msgs)
 
         hist = self.message_history
         output_len = self.config.llm.max_output_tokens
@@ -812,6 +838,10 @@ class ChatAgent(Agent):
             print_response_stats=self.config.show_stats and not settings.quiet,
         )
         chat_doc = ChatDocument.from_LLMResponse(response, displayed=True)
+        self.oai_tool_calls = response.oai_tool_calls or []
+        self.oai_tool_id2call.update(
+            {t.id: t for t in self.oai_tool_calls if t.id is not None}
+        )
         return chat_doc
 
     async def llm_response_messages_async(
@@ -858,6 +888,10 @@ class ChatAgent(Agent):
             print_response_stats=self.config.show_stats and not settings.quiet,
         )
         chat_doc = ChatDocument.from_LLMResponse(response, displayed=True)
+        self.oai_tool_calls = response.oai_tool_calls or []
+        self.oai_tool_id2call.update(
+            {t.id: t for t in self.oai_tool_calls if t.id is not None}
+        )
         return chat_doc
 
     def _render_llm_response(
@@ -958,8 +992,14 @@ class ChatAgent(Agent):
         # If there is a response, then we will have two additional
         # messages in the message history, i.e. the user message and the
         # assistant response. We want to (carefully) remove these two messages.
-        self.message_history.pop() if len(self.message_history) > n_msgs else None
-        self.message_history.pop() if len(self.message_history) > n_msgs else None
+        if len(self.message_history) > n_msgs:
+            msg = self.message_history.pop()
+            self._drop_msg_update_tool_calls(msg)
+
+        if len(self.message_history) > n_msgs:
+            msg = self.message_history.pop()
+            self._drop_msg_update_tool_calls(msg)
+
         return response
 
     async def llm_response_forget_async(self, message: str) -> ChatDocument:
@@ -976,8 +1016,13 @@ class ChatAgent(Agent):
         # If there is a response, then we will have two additional
         # messages in the message history, i.e. the user message and the
         # assistant response. We want to (carefully) remove these two messages.
-        self.message_history.pop() if len(self.message_history) > n_msgs else None
-        self.message_history.pop() if len(self.message_history) > n_msgs else None
+        if len(self.message_history) > n_msgs:
+            msg = self.message_history.pop()
+            self._drop_msg_update_tool_calls(msg)
+
+        if len(self.message_history) > n_msgs:
+            msg = self.message_history.pop()
+            self._drop_msg_update_tool_calls(msg)
         return response
 
     def chat_num_tokens(self, messages: Optional[List[LLMMessage]] = None) -> int:

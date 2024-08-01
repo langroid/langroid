@@ -53,6 +53,8 @@ class ChatDocMetaData(DocMetaData):
     agent_id: str = ""  # ChatAgent that generated this message
     msg_idx: int = -1  # index of this message in the agent `message_history`
     sender: Entity  # sender of the message
+    # tool_id corresponding to single tool result in ChatDocument.content
+    oai_tool_id: str | None = None
     tool_ids: List[str] = []  # stack of tool_ids; used by OpenAIAssistant
     block: None | Entity = None
     sender_name: str = ""
@@ -298,7 +300,10 @@ class ChatDocument(Document):
         )
 
     @staticmethod
-    def to_LLMMessage(message: Union[str, "ChatDocument"]) -> List[LLMMessage]:
+    def to_LLMMessage(
+        message: Union[str, "ChatDocument"],
+        oai_tools: Optional[List[OpenAIToolCall]] = None,
+    ) -> List[LLMMessage]:
         """
         Convert to list of LLMMessage, to incorporate into msg-history sent to LLM API.
         Usually there will be just a single LLMMessage, but when the ChatDocument
@@ -307,6 +312,8 @@ class ChatDocument(Document):
 
         Args:
             message (str|ChatDocument): Message to convert.
+            oai_tools (Optional[List[OpenAIToolCall]]): Tool-calls currently awaiting
+                response, from the ChatAgent's latest message.
         Returns:
             List[LLMMessage]: list of LLMMessages corresponding to this ChatDocument.
         """
@@ -347,33 +354,45 @@ class ChatDocument(Document):
                 # This is a response to a function call, so set the role to FUNCTION.
                 sender_role = Role.FUNCTION
                 sender_name = message.metadata.parent.function_call.name
-            elif (
-                message.metadata.parent is not None
-                and message.metadata.parent.oai_tool_calls is not None
-            ):
-                # The parent message had OpenAI tool-call(s), so the current
-                # ChatDocument contains results from some/all/none of them.
+            elif oai_tools is not None and len(oai_tools) > 0:
+                pending_tool_ids = [tc.id for tc in oai_tools]
+                # The ChatAgent has pending OpenAI tool-call(s),
+                # so the current ChatDocument contains
+                # results for some/all/none of them.
 
-                # Case 1:
-                # If there was just ONE tool-call, then the current ChatDocument.content
-                # would contain the result of that tool-call.
-                if len(message.metadata.parent.oai_tool_calls) == 1:
+                if len(oai_tools) == 1:
+                    # Case 1:
+                    # There was exactly 1 pending tool-call, and in this case
+                    # the result would be a plain string in `content`
                     return [
                         LLMMessage(
                             role=Role.TOOL,
-                            tool_call_id=(message.metadata.parent.oai_tool_calls[0].id),
+                            tool_call_id=oai_tools[0].id,
                             content=content,
                             chat_document_id=chat_document_id,
                         )
                     ]
 
-                # Case 2:
-                # There were > 1 tool-calls in parent message, so we create an
-                # LLMMessage for each result of applying the tool-call(s).
-                if (
-                    message.oai_tool_id2result is not None
-                    and len(message.oai_tool_id2result) > 0
+                elif (
+                    message.metadata.oai_tool_id is not None
+                    and message.metadata.oai_tool_id in pending_tool_ids
                 ):
+                    # Case 2:
+                    # ChatDocument.content has result of a single tool-call
+                    return [
+                        LLMMessage(
+                            role=Role.TOOL,
+                            tool_call_id=message.metadata.oai_tool_id,
+                            content=content,
+                            chat_document_id=chat_document_id,
+                        )
+                    ]
+                elif message.oai_tool_id2result is not None:
+                    # Case 2:
+                    # There were > 1 tool-calls awaiting response,
+                    assert (
+                        len(message.oai_tool_id2result) > 1
+                    ), "oai_tool_id2result must have more than 1 item."
                     return [
                         LLMMessage(
                             role=Role.TOOL,

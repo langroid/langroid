@@ -313,8 +313,17 @@ class LLMResponse(BaseModel):
             return recipient, msg
         else:
             msg = self.message
+            if self.oai_tool_calls is not None:
+                # get the first tool that has a recipient field, if any
+                for tc in self.oai_tool_calls:
+                    if tc.function is not None and tc.function.arguments is not None:
+                        recipient = tc.function.arguments.get(
+                            "recipient"
+                        )  # type: ignore
+                        if recipient is not None and recipient != "":
+                            return recipient, ""
 
-        # It's not a function call, so continue looking to see
+        # It's not a function or tool call, so continue looking to see
         # if a recipient is specified in the message.
 
         # First check if message contains "TO: <recipient> <content>"

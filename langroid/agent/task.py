@@ -1183,6 +1183,20 @@ class Task:
                 max_cost=self.max_cost,
                 max_tokens=self.max_tokens,
             )
+            if result is not None:
+                content, id2result, oai_tool_id = self.agent._process_tool_results(
+                    result.content,
+                    result.oai_tool_id2result,
+                    (
+                        self.pending_message.oai_tool_calls
+                        if isinstance(self.pending_message, ChatDocument)
+                        else None
+                    ),
+                )
+                result.content = content
+                result.oai_tool_id2result = id2result
+                result.metadata.oai_tool_id = oai_tool_id
+
             result_str = (  # only used by callback to display content and possible tool
                 "NONE"
                 if result is None

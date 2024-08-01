@@ -60,13 +60,7 @@ def test_agent_google_search_tool(
     llm_msg = agent.llm_response_forget(
         "Find 3 results on the internet about the LK-99 superconducting material."
     )
-    tool_name = search_tool_cls.default_value("request")
-    if use_functions_api:
-        assert llm_msg.function_call.name == tool_name
-    else:
-        tools = agent.get_tool_messages(llm_msg)
-        assert len(tools) == 1
-        assert isinstance(tools[0], search_tool_cls)
+    assert isinstance(agent.get_tool_messages(llm_msg)[0], search_tool_cls)
 
     try:
         agent_result = agent.handle_message(llm_msg)

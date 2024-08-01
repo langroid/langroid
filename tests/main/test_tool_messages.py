@@ -539,7 +539,7 @@ def test_tool_optional_args(
 
 @pytest.mark.parametrize("tool", [NabroskiTool, CoriolisTool])
 @pytest.mark.parametrize("stream", [False, True])
-@pytest.mark.parametrize("use_functions_api", [False, True])
+@pytest.mark.parametrize("use_functions_api", [True, False])
 def test_llm_tool_task(
     test_settings: Settings,
     use_functions_api: bool,
@@ -575,7 +575,7 @@ def test_llm_tool_task(
 
 
 @pytest.mark.parametrize("stream", [False, True])
-@pytest.mark.parametrize("use_functions_api", [False, True])
+@pytest.mark.parametrize("use_functions_api", [True, False])
 def test_multi_tool(
     test_settings: Settings,
     use_functions_api: bool,

@@ -211,13 +211,13 @@ def test_openai_assistant_recipient_tool(test_settings: Settings, fn_api: bool):
     agent.enable_message(RecipientTool)
 
     # Within a task loop
-    doubler_confg = OpenAIAssistantConfig(
+    doubler_config = OpenAIAssistantConfig(
         name="Doubler",
         system_message=""" 
         When you receive a number, simply double it and  return the answer
         """,
     )
-    doubler_agent = OpenAIAssistant(doubler_confg)
+    doubler_agent = OpenAIAssistant(doubler_config)
     doubler_task = Task(
         doubler_agent,
         interactive=False,

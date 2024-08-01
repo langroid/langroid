@@ -316,7 +316,7 @@ def test_task_tool_agent_response(
         return response.content == ""
 
     def fn_call_valid():
-        return response.function_call.name == "next_num"
+        return isinstance(agent.get_tool_messages(response)[0], AugmentTool)
 
     def tool_valid():
         return "next_num" in response.content

@@ -26,6 +26,9 @@ class CapitalTool(ToolMessage):
     entity: str
     capital: str
 
+    def handle(self):
+        return f"The capital of {self.entity} is {self.capital}"
+
 
 # Define the configurations
 config = OpenAIGPTConfig(
@@ -102,17 +105,20 @@ def test_token_usage_tool(fn, stream):
     )
     agent = ChatAgent(cfg)
     agent.llm.reset_usage_cost()
-    agent.enable_message(CapitalTool, use=True, handle=False)
+    agent.enable_message(CapitalTool, use=True, handle=True)
 
     question = "What is the capital of China?"
     response1 = agent.llm_response(question)
-    response2 = agent.llm_response(question)
+    result = agent.agent_response(response1)
+    agent.llm_response(result)
+    response3 = agent.llm_response(question)
 
     assert (
-        response2.metadata.usage.prompt_tokens
+        response3.metadata.usage.prompt_tokens
         >= response1.metadata.usage.prompt_tokens
         + response1.metadata.usage.completion_tokens
         + agent.num_tokens(question)
+        + agent.num_tokens(result.content)
     )
 
 
