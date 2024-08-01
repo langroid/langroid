@@ -211,13 +211,13 @@ def test_openai_assistant_recipient_tool(test_settings: Settings, fn_api: bool):
     agent.enable_message(RecipientTool)
 
     # Within a task loop
-    doubler_confg = OpenAIAssistantConfig(
+    doubler_config = OpenAIAssistantConfig(
         name="Doubler",
         system_message=""" 
         When you receive a number, simply double it and  return the answer
         """,
     )
-    doubler_agent = OpenAIAssistant(doubler_confg)
+    doubler_agent = OpenAIAssistant(doubler_config)
     doubler_task = Task(
         doubler_agent,
         interactive=False,
@@ -231,6 +231,14 @@ def test_openai_assistant_recipient_tool(test_settings: Settings, fn_api: bool):
         assert "20" in result.content
 
 
+@pytest.mark.skip(
+    """
+This no longer works since the OpenAI Assistants API for file_search
+has changed, and requires explicit vector-store creation:
+https://platform.openai.com/docs/assistants/tools/file-search
+We will update langroid to catch up with this at some point.
+"""
+)
 def test_openai_assistant_retrieval(test_settings: Settings):
     """
     Test that Assistant can answer question
@@ -239,13 +247,15 @@ def test_openai_assistant_retrieval(test_settings: Settings):
     set_global(test_settings)
     cfg = OpenAIAssistantConfig(
         llm=OpenAIGPTConfig(),
-        system_message="Answer questions based on the provided document.",
+        system_message="""
+        Answer questions based on the provided file, using the `file_search` tool
+        """,
     )
     agent = OpenAIAssistant(cfg)
 
     # create temp file with in-code text content
     text = """
-    Vlad Nabrosky was born in Russia. He then emigrated to the United States,
+    Vladislav Nabrosky was born in China. He then emigrated to the United States,
     where he wrote the novel Lomita. He was a professor at Purnell University.
     """
     # open a temp file and write text to it
@@ -259,8 +269,8 @@ def test_openai_assistant_retrieval(test_settings: Settings):
     agent.add_assistant_tools([AssistantTool(type=ToolType.RETRIEVAL)])
     agent.add_assistant_files([filename])
 
-    response = agent.llm_response("where was Vlad Nabrosky born?")
-    assert "Russia" in response.content
+    response = agent.llm_response("where was Vladislav Nabrosky born?")
+    assert "China" in response.content
 
     response = agent.llm_response("what novel did he write?")
     assert "Lomita" in response.content

@@ -4,6 +4,7 @@ import logging
 import os
 import sys
 import warnings
+from collections import defaultdict
 from enum import Enum
 from functools import cache
 from itertools import chain
@@ -37,7 +38,10 @@ from langroid.language_models.base import (
     LLMMessage,
     LLMResponse,
     LLMTokenUsage,
+    OpenAIToolCall,
+    OpenAIToolSpec,
     Role,
+    ToolChoiceTypes,
 )
 from langroid.language_models.config import HFPromptFormatterConfig
 from langroid.language_models.prompt_formatter.hf_formatter import (
@@ -544,7 +548,7 @@ class OpenAIGPT(LanguageModel):
         Order of priority:
         - (1) Params (mainly max_tokens) in the chat/achat/generate/agenerate call
                 (these are passed in via kwargs)
-        - (2) Params in OpenAIGPTConfi.params (of class OpenAICallParams)
+        - (2) Params in OpenAIGPTConfig.params (of class OpenAICallParams)
         - (3) Specific Params in OpenAIGPTConfig (just temperature for now)
         """
         params = dict(
@@ -614,6 +618,7 @@ class OpenAIGPT(LanguageModel):
         self,
         event,
         chat: bool = False,
+        tool_deltas: List[Dict[str, Any]] = [],
         has_function: bool = False,
         completion: str = "",
         function_args: str = "",
@@ -637,6 +642,7 @@ class OpenAIGPT(LanguageModel):
             choices = [{}]
         event_args = ""
         event_fn_name = ""
+        event_tool_deltas: Optional[List[Dict[str, Any]]] = None
 
         # The first two events in the stream of Azure OpenAI is useless.
         # In the 1st: choices list is empty, in the 2nd: the dict delta has null content
@@ -648,6 +654,10 @@ class OpenAIGPT(LanguageModel):
                     event_fn_name = delta["function_call"]["name"]
                 if "arguments" in delta["function_call"]:
                     event_args = delta["function_call"]["arguments"]
+            if "tool_calls" in delta and delta["tool_calls"] is not None:
+                # it's a list of deltas, usually just one
+                event_tool_deltas = delta["tool_calls"]
+                tool_deltas += event_tool_deltas
         else:
             event_text = choices[0]["text"]
         if event_text:
@@ -670,7 +680,31 @@ class OpenAIGPT(LanguageModel):
                 sys.stdout.write(Colors().GREEN + event_args)
                 sys.stdout.flush()
                 self.config.streamer(event_args)
-        if choices[0].get("finish_reason", "") in ["stop", "function_call"]:
+
+        if event_tool_deltas is not None:
+            # print out streaming tool calls
+            for td in event_tool_deltas:
+                if td["function"]["name"] is not None:
+                    tool_fn_name = td["function"]["name"]
+                    if not is_async:
+                        sys.stdout.write(
+                            Colors().GREEN + "OAI-TOOL: " + tool_fn_name + ": "
+                        )
+                        sys.stdout.flush()
+                        self.config.streamer(tool_fn_name)
+                if td["function"]["arguments"] != "":
+                    tool_fn_args = td["function"]["arguments"]
+                    if not is_async:
+                        sys.stdout.write(Colors().GREEN + tool_fn_args)
+                        sys.stdout.flush()
+                        self.config.streamer(tool_fn_args)
+
+        # show this delta in the stream
+        if choices[0].get("finish_reason", "") in [
+            "stop",
+            "function_call",
+            "tool_calls",
+        ]:
             # for function_call, finish_reason does not necessarily
             # contain "function_call" as mentioned in the docs.
             # So we check for "stop" or "function_call" here.
@@ -699,6 +733,7 @@ class OpenAIGPT(LanguageModel):
         sys.stdout.write(Colors().GREEN)
         sys.stdout.flush()
         has_function = False
+        tool_deltas: List[Dict[str, Any]] = []
         try:
             for event in response:
                 (
@@ -710,6 +745,7 @@ class OpenAIGPT(LanguageModel):
                 ) = self._process_stream_event(
                     event,
                     chat=chat,
+                    tool_deltas=tool_deltas,
                     has_function=has_function,
                     completion=completion,
                     function_args=function_args,
@@ -725,11 +761,11 @@ class OpenAIGPT(LanguageModel):
 
         return self._create_stream_response(
             chat=chat,
+            tool_deltas=tool_deltas,
             has_function=has_function,
             completion=completion,
             function_args=function_args,
             function_name=function_name,
-            is_async=False,
         )
 
     @async_retry_with_exponential_backoff
@@ -754,6 +790,7 @@ class OpenAIGPT(LanguageModel):
         sys.stdout.write(Colors().GREEN)
         sys.stdout.flush()
         has_function = False
+        tool_deltas: List[Dict[str, Any]] = []
         try:
             async for event in response:
                 (
@@ -765,6 +802,7 @@ class OpenAIGPT(LanguageModel):
                 ) = self._process_stream_event(
                     event,
                     chat=chat,
+                    tool_deltas=tool_deltas,
                     has_function=has_function,
                     completion=completion,
                     function_args=function_args,
@@ -780,52 +818,182 @@ class OpenAIGPT(LanguageModel):
 
         return self._create_stream_response(
             chat=chat,
+            tool_deltas=tool_deltas,
             has_function=has_function,
             completion=completion,
             function_args=function_args,
             function_name=function_name,
-            is_async=True,
         )
 
-    def _create_stream_response(
-        self,
-        chat: bool = False,
-        has_function: bool = False,
-        completion: str = "",
-        function_args: str = "",
-        function_name: str = "",
-        is_async: bool = False,
-    ) -> Tuple[LLMResponse, Dict[str, Any]]:
-        # check if function_call args are valid, if not,
-        # treat this as a normal msg, not a function call
-        args = {}
-        if has_function and function_args != "":
-            try:
-                stripped_fn_args = function_args.strip()
-                dict_or_list = parse_imperfect_json(stripped_fn_args)
-                if not isinstance(dict_or_list, dict):
-                    raise ValueError(
-                        f"""
+    @staticmethod
+    def tool_deltas_to_tools(tools: List[Dict[str, Any]]) -> Tuple[
+        str,
+        List[OpenAIToolCall],
+        List[Dict[str, Any]],
+    ]:
+        """
+        Convert accumulated tool-call deltas to OpenAIToolCall objects.
+        Adapted from this excellent code:
+         https://community.openai.com/t/help-for-function-calls-with-streaming/627170/2
+
+        Args:
+            tools: list of tool deltas received from streaming API
+
+        Returns:
+            str: plain text corresponding to tool calls that failed to parse
+            List[OpenAIToolCall]: list of OpenAIToolCall objects
+            List[Dict[str, Any]]: list of tool dicts
+                (to reconstruct OpenAI API response, so it can be cached)
+        """
+        # Initialize a dictionary with default values
+
+        # idx -> dict repr of tool
+        # (used to simulate OpenAIResponse object later, and also to
+        # accumulate function args as strings)
+        idx2tool_dict: Dict[str, Dict[str, Any]] = defaultdict(
+            lambda: {
+                "id": None,
+                "function": {"arguments": "", "name": None},
+                "type": None,
+            }
+        )
+
+        for tool_delta in tools:
+            if tool_delta["id"] is not None:
+                idx2tool_dict[tool_delta["index"]]["id"] = tool_delta["id"]
+
+            if tool_delta["function"]["name"] is not None:
+                idx2tool_dict[tool_delta["index"]]["function"]["name"] = tool_delta[
+                    "function"
+                ]["name"]
+
+            idx2tool_dict[tool_delta["index"]]["function"]["arguments"] += tool_delta[
+                "function"
+            ]["arguments"]
+
+            if tool_delta["type"] is not None:
+                idx2tool_dict[tool_delta["index"]]["type"] = tool_delta["type"]
+
+        # (try to) parse the fn args of each tool
+        contents: List[str] = []
+        good_indices = []
+        id2args: Dict[str, None | Dict[str, Any]] = {}
+        for idx, tool_dict in idx2tool_dict.items():
+            failed_content, args_dict = OpenAIGPT._parse_function_args(
+                tool_dict["function"]["arguments"]
+            )
+            # used to build tool_calls_list below
+            id2args[tool_dict["id"]] = args_dict or None  # if {}, store as None
+            if failed_content != "":
+                contents.append(failed_content)
+            else:
+                good_indices.append(idx)
+
+        # remove the failed tool calls
+        idx2tool_dict = {
+            idx: tool_dict
+            for idx, tool_dict in idx2tool_dict.items()
+            if idx in good_indices
+        }
+
+        # create OpenAIToolCall list
+        tool_calls_list = [
+            OpenAIToolCall(
+                id=tool_dict["id"],
+                function=LLMFunctionCall(
+                    name=tool_dict["function"]["name"],
+                    arguments=id2args.get(tool_dict["id"]),
+                ),
+                type=tool_dict["type"],
+            )
+            for tool_dict in idx2tool_dict.values()
+        ]
+        return "\n".join(contents), tool_calls_list, list(idx2tool_dict.values())
+
+    @staticmethod
+    def _parse_function_args(args: str) -> Tuple[str, Dict[str, Any]]:
+        """
+        Try to parse the `args` string as function args.
+
+        Args:
+            args: string containing function args
+
+        Returns:
+            Tuple of content, function name and args dict.
+            If parsing unsuccessful, returns the original string as content,
+            else returns the args dict.
+        """
+        content = ""
+        args_dict = {}
+        try:
+            stripped_fn_args = args.strip()
+            dict_or_list = parse_imperfect_json(stripped_fn_args)
+            if not isinstance(dict_or_list, dict):
+                raise ValueError(
+                    f"""
                         Invalid function args: {stripped_fn_args} 
                         parsed as {dict_or_list},
                         which is not a valid dict.
                         """
-                    )
-                args = dict_or_list
-            except (SyntaxError, ValueError) as e:
-                logging.warning(
-                    f"""
-                    Parsing OpenAI function args failed: {function_args};
+                )
+            args_dict = dict_or_list
+        except (SyntaxError, ValueError) as e:
+            logging.warning(
+                f"""
+                    Parsing OpenAI function args failed: {args};
                     treating args as normal message. Error detail:
                     {e}
                     """
-                )
+            )
+            content = args
+
+        return content, args_dict
+
+    def _create_stream_response(
+        self,
+        chat: bool = False,
+        tool_deltas: List[Dict[str, Any]] = [],
+        has_function: bool = False,
+        completion: str = "",
+        function_args: str = "",
+        function_name: str = "",
+    ) -> Tuple[LLMResponse, Dict[str, Any]]:
+        """
+        Create an LLMResponse object from the streaming API response.
+
+        Args:
+            chat: whether in chat-mode (or else completion-mode)
+            tool_deltas: list of tool deltas received from streaming API
+            has_function: whether the response contains a function_call
+            completion: completion text
+            function_args: string representing function args
+            function_name: name of the function
+        Returns:
+            Tuple consisting of:
+                LLMResponse object (with message, usage),
+                Dict version of OpenAIResponse object (with choices, usage)
+                    (this is needed so we can cache the response, as if it were
+                    a non-streaming response)
+        """
+        # check if function_call args are valid, if not,
+        # treat this as a normal msg, not a function call
+        args: Dict[str, Any] = {}
+        if has_function and function_args != "":
+            content, args = self._parse_function_args(function_args)
+            completion = completion + content
+            if content != "":
                 has_function = False
-                completion = completion + function_args
 
         # mock openai response so we can cache it
         if chat:
+            failed_content, tool_calls, tool_dicts = OpenAIGPT.tool_deltas_to_tools(
+                tool_deltas,
+            )
+            completion = completion + "\n" + failed_content
             msg: Dict[str, Any] = dict(message=dict(content=completion))
+            if len(tool_dicts) > 0:
+                msg["message"]["tool_calls"] = tool_dicts
+
             if has_function:
                 function_call = LLMFunctionCall(name=function_name)
                 function_call_dict = function_call.dict()
@@ -839,6 +1007,8 @@ class OpenAIGPT(LanguageModel):
             # non-chat mode has no function_call
             msg = dict(text=completion)
 
+        # create an OpenAIResponse object so we can cache it as if it were
+        # a non-streaming response
         openai_response = OpenAIResponse(
             choices=[msg],
             usage=dict(total_tokens=0),
@@ -847,6 +1017,7 @@ class OpenAIGPT(LanguageModel):
             LLMResponse(
                 message=completion,
                 cached=False,
+                oai_tool_calls=tool_calls or None,  # don't allow empty list [] here
                 function_call=function_call if has_function else None,
             ),
             openai_response.dict(),
@@ -1061,16 +1232,19 @@ class OpenAIGPT(LanguageModel):
         self,
         messages: Union[str, List[LLMMessage]],
         max_tokens: int = 200,
+        tools: Optional[List[OpenAIToolSpec]] = None,
+        tool_choice: ToolChoiceTypes | Dict[str, str | Dict[str, str]] = "auto",
         functions: Optional[List[LLMFunctionSpec]] = None,
         function_call: str | Dict[str, str] = "auto",
     ) -> LLMResponse:
         self.run_on_first_use()
 
-        if functions is not None and not self.is_openai_chat_model():
+        if [functions, tools] != [None, None] and not self.is_openai_chat_model():
             raise ValueError(
                 f"""
-                `functions` can only be specified for OpenAI chat models;
-                {self.config.chat_model} does not support function-calling.
+                `functions` and `tools` can only be specified for OpenAI chat LLMs, 
+                or LLMs served via an OpenAI-compatible API.
+                {self.config.chat_model} does not support function-calling or tools.
                 Instead, please use Langroid's ToolMessages, which are equivalent.
                 In the ChatAgentConfig, set `use_functions_api=False` 
                 and `use_tools=True`, this will enable ToolMessages.
@@ -1094,7 +1268,9 @@ class OpenAIGPT(LanguageModel):
             prompt = self.config.hf_formatter.format(messages)
             return self.generate(prompt=prompt, max_tokens=max_tokens)
         try:
-            return self._chat(messages, max_tokens, functions, function_call)
+            return self._chat(
+                messages, max_tokens, tools, tool_choice, functions, function_call
+            )
         except Exception as e:
             # log and re-raise exception
             logging.error(friendly_error(e, "Error in OpenAIGPT.chat: "))
@@ -1104,16 +1280,18 @@ class OpenAIGPT(LanguageModel):
         self,
         messages: Union[str, List[LLMMessage]],
         max_tokens: int = 200,
+        tools: Optional[List[OpenAIToolSpec]] = None,
+        tool_choice: ToolChoiceTypes | Dict[str, str | Dict[str, str]] = "auto",
         functions: Optional[List[LLMFunctionSpec]] = None,
         function_call: str | Dict[str, str] = "auto",
     ) -> LLMResponse:
         self.run_on_first_use()
 
-        if functions is not None and not self.is_openai_chat_model():
+        if [functions, tools] != [None, None] and not self.is_openai_chat_model():
             raise ValueError(
                 f"""
-                `functions` can only be specified for OpenAI chat models;
-                {self.config.chat_model} does not support function-calling.
+                `functions` and `tools` can only be specified for OpenAI chat models;
+                {self.config.chat_model} does not support function-calling or tools.
                 Instead, please use Langroid's ToolMessages, which are equivalent.
                 In the ChatAgentConfig, set `use_functions_api=False` 
                 and `use_tools=True`, this will enable ToolMessages.
@@ -1146,7 +1324,14 @@ class OpenAIGPT(LanguageModel):
             prompt = formatter.format(messages)
             return await self.agenerate(prompt=prompt, max_tokens=max_tokens)
         try:
-            result = await self._achat(messages, max_tokens, functions, function_call)
+            result = await self._achat(
+                messages,
+                max_tokens,
+                tools,
+                tool_choice,
+                functions,
+                function_call,
+            )
             return result
         except Exception as e:
             # log and re-raise exception
@@ -1209,9 +1394,12 @@ class OpenAIGPT(LanguageModel):
         self,
         messages: Union[str, List[LLMMessage]],
         max_tokens: int,
+        tools: Optional[List[OpenAIToolSpec]] = None,
+        tool_choice: ToolChoiceTypes | Dict[str, str | Dict[str, str]] = "auto",
         functions: Optional[List[LLMFunctionSpec]] = None,
         function_call: str | Dict[str, str] = "auto",
     ) -> Dict[str, Any]:
+        """Prepare args for LLM chat-completion API call"""
         if isinstance(messages, str):
             llm_messages = [
                 LLMMessage(role=Role.SYSTEM, content="You are a helpful assistant."),
@@ -1241,6 +1429,19 @@ class OpenAIGPT(LanguageModel):
                 dict(
                     functions=[f.dict() for f in functions],
                     function_call=function_call,
+                )
+            )
+        if tools is not None:
+            args.update(
+                dict(
+                    tools=[
+                        dict(
+                            type="function",
+                            function=t.function.dict(),
+                        )
+                        for t in tools
+                    ],
+                    tool_choice=tool_choice,
                 )
             )
         return args
@@ -1281,6 +1482,7 @@ class OpenAIGPT(LanguageModel):
         """
         message = response["choices"][0]["message"]
         msg = message["content"] or ""
+
         if message.get("function_call") is None:
             fun_call = None
         else:
@@ -1297,10 +1499,24 @@ class OpenAIGPT(LanguageModel):
                 args_str = message["function_call"]["arguments"] or ""
                 msg_str = message["content"] or ""
                 msg = msg_str + args_str
-
+        oai_tool_calls = None
+        if message.get("tool_calls") is not None:
+            oai_tool_calls = []
+            for tool_call_dict in message["tool_calls"]:
+                try:
+                    tool_call = OpenAIToolCall.from_dict(tool_call_dict)
+                    oai_tool_calls.append(tool_call)
+                except (ValueError, SyntaxError):
+                    logging.warning(
+                        "Could not parse tool call: "
+                        f"{json.dumps(tool_call_dict)} "
+                        "treating as normal non-tool message"
+                    )
+                    msg = msg + "\n" + json.dumps(tool_call_dict)
         return LLMResponse(
             message=msg.strip() if msg is not None else "",
             function_call=fun_call,
+            oai_tool_calls=oai_tool_calls or None,  # don't allow empty list [] here
             cached=cached,
             usage=self._get_non_stream_token_usage(cached, response),
         )
@@ -1309,6 +1525,8 @@ class OpenAIGPT(LanguageModel):
         self,
         messages: Union[str, List[LLMMessage]],
         max_tokens: int,
+        tools: Optional[List[OpenAIToolSpec]] = None,
+        tool_choice: ToolChoiceTypes | Dict[str, str | Dict[str, str]] = "auto",
         functions: Optional[List[LLMFunctionSpec]] = None,
         function_call: str | Dict[str, str] = "auto",
     ) -> LLMResponse:
@@ -1333,6 +1551,8 @@ class OpenAIGPT(LanguageModel):
         args = self._prep_chat_completion(
             messages,
             max_tokens,
+            tools,
+            tool_choice,
             functions,
             function_call,
         )
@@ -1351,6 +1571,8 @@ class OpenAIGPT(LanguageModel):
         self,
         messages: Union[str, List[LLMMessage]],
         max_tokens: int,
+        tools: Optional[List[OpenAIToolSpec]] = None,
+        tool_choice: ToolChoiceTypes | Dict[str, str | Dict[str, str]] = "auto",
         functions: Optional[List[LLMFunctionSpec]] = None,
         function_call: str | Dict[str, str] = "auto",
     ) -> LLMResponse:
@@ -1360,6 +1582,8 @@ class OpenAIGPT(LanguageModel):
         args = self._prep_chat_completion(
             messages,
             max_tokens,
+            tools,
+            tool_choice,
             functions,
             function_call,
         )

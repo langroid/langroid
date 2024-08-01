@@ -39,6 +39,7 @@ class ToolMessage(ABC, BaseModel):
 
     request: str
     purpose: str
+    id: str = ""  # placeholder for OpenAI-API tool_call_id
 
     class Config:
         arbitrary_types_allowed = False
@@ -46,7 +47,7 @@ class ToolMessage(ABC, BaseModel):
         validate_assignment = True
         # do not include these fields in the generated schema
         # since we don't require the LLM to specify them
-        schema_extra = {"exclude": {"purpose"}}
+        schema_extra = {"exclude": {"purpose", "id"}}
 
     @classmethod
     def instructions(cls) -> str:
@@ -108,13 +109,13 @@ class ToolMessage(ABC, BaseModel):
         return "\n\n".join(examples_jsons)
 
     def to_json(self) -> str:
-        return self.json(indent=4, exclude={"purpose"})
+        return self.json(indent=4, exclude=self.Config.schema_extra["exclude"])
 
     def json_example(self) -> str:
-        return self.json(indent=4, exclude={"purpose"})
+        return self.json(indent=4, exclude=self.Config.schema_extra["exclude"])
 
     def dict_example(self) -> Dict[str, Any]:
-        return self.dict(exclude={"purpose"})
+        return self.dict(exclude=self.Config.schema_extra["exclude"])
 
     @classmethod
     def default_value(cls, f: str) -> Any:
@@ -218,7 +219,9 @@ class ToolMessage(ABC, BaseModel):
                 if "description" not in parameters["properties"][name]:
                     parameters["properties"][name]["description"] = description
 
-        excludes = ["purpose"] if request else ["request", "purpose"]
+        excludes = cls.Config.schema_extra["exclude"]
+        if not request:
+            excludes = excludes.union({"request"})
         # exclude 'excludes' from parameters["properties"]:
         parameters["properties"] = {
             field: details

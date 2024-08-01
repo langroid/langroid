@@ -129,6 +129,8 @@ teacher_task.run()
 <details>
 <summary> <b>Click to expand</b></summary>
 
+- **Aug 2024:** 
+  - **[0.7.0](https://github.com/langroid/langroid/releases/tag/0.7.0)** OpenAI tools API support.
 - **Jul 2024:**
   - **[0.3.0](https://github.com/langroid/langroid/releases/tag/0.3.0)**: Added [FastEmbed](https://qdrant.github.io/fastembed/qdrant/Usage_With_Qdrant/) embeddings from Qdrant
 - **Jun 2024:**

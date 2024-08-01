@@ -132,6 +132,7 @@ Hope you can tell me!
     "use_functions_api",
     [True, False],
 )
+@pytest.mark.parametrize("use_tools_api", [True, False])
 @pytest.mark.parametrize(
     "message_class, prompt, result",
     [
@@ -155,6 +156,7 @@ Hope you can tell me!
 async def test_llm_tool_message(
     test_settings: Settings,
     use_functions_api: bool,
+    use_tools_api: bool,
     message_class: ToolMessage,
     prompt: str,
     result: str,
@@ -173,19 +175,14 @@ async def test_llm_tool_message(
     set_global(test_settings)
     agent = MessageHandlingAgent(cfg)
     agent.config.use_functions_api = use_functions_api
+    agent.config.use_tools = use_tools_api
     agent.config.use_tools = not use_functions_api
     agent.enable_message(FileExistsMessage)
     agent.enable_message(PythonVersionMessage)
     agent.enable_message(CountryCapitalMessage)
 
     llm_msg = await agent.llm_response_forget_async(prompt)
-    tool_name = message_class.default_value("request")
-    if use_functions_api:
-        assert llm_msg.function_call.name == tool_name
-    else:
-        tools = agent.get_tool_messages(llm_msg)
-        assert len(tools) == 1
-        assert isinstance(tools[0], message_class)
+    assert isinstance(agent.get_tool_messages(llm_msg)[0], message_class)
 
     agent_result = agent.handle_message(llm_msg)
     assert result.lower() in agent_result.lower()
@@ -193,9 +190,11 @@ async def test_llm_tool_message(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("use_functions_api", [True, False])
+@pytest.mark.parametrize("use_tools_api", [True, False])
 async def test_tool_no_llm_response_async(
     test_settings: Settings,
     use_functions_api: bool,
+    use_tools_api: bool,
 ):
     """Test that agent.llm_response does not respond to tool messages."""
 
@@ -203,6 +202,7 @@ async def test_tool_no_llm_response_async(
     cfg = ChatAgentConfig(
         use_tools=not use_functions_api,
         use_functions_api=use_functions_api,
+        use_tools_api=use_tools_api,
     )
     agent = ChatAgent(cfg)
     agent.enable_message(CountryCapitalMessage)

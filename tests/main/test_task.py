@@ -248,6 +248,7 @@ def test_task_default_human_response(
 
 
 @pytest.mark.parametrize("use_fn_api", [True, False])
+@pytest.mark.parametrize("use_tools_api", [True, False])
 @pytest.mark.parametrize(
     "agent_response",
     [f"{DONE} {PASS}", DONE],
@@ -255,6 +256,7 @@ def test_task_default_human_response(
 def test_task_tool_agent_response(
     test_settings: Settings,
     use_fn_api: bool,
+    use_tools_api: bool,
     agent_response: str,
 ):
     """
@@ -300,6 +302,7 @@ def test_task_tool_agent_response(
         ChatAgentConfig(
             name="Test",
             use_functions_api=use_fn_api,
+            use_tools_api=use_tools_api,
             use_tools=not use_fn_api,
             system_message="""
             User will send a number. Present this number and its successor,
@@ -316,7 +319,7 @@ def test_task_tool_agent_response(
         return response.content == ""
 
     def fn_call_valid():
-        return response.function_call.name == "next_num"
+        return isinstance(agent.get_tool_messages(response)[0], AugmentTool)
 
     def tool_valid():
         return "next_num" in response.content
@@ -332,10 +335,12 @@ def test_task_tool_agent_response(
 
 
 @pytest.mark.parametrize("use_fn_api", [True, False])
+@pytest.mark.parametrize("use_tools_api", [True, False])
 @pytest.mark.parametrize("agent_response", ["{successor}", f"{DONE} {{successor}}"])
 def test_task_tool_num(
     test_settings: Settings,
     use_fn_api: bool,
+    use_tools_api: bool,
     agent_response: str,
 ):
     """
@@ -364,6 +369,7 @@ def test_task_tool_num(
         ChatAgentConfig(
             name="Test",
             use_functions_api=use_fn_api,
+            use_tools_api=use_tools_api,
             use_tools=not use_fn_api,
             system_message=f"""
             User will send a number. Augment it with its successor,
@@ -385,9 +391,11 @@ def test_task_tool_num(
 
 
 @pytest.mark.parametrize("use_fn_api", [True, False])
+@pytest.mark.parametrize("use_tools_api", [True, False])
 def test_task_2_agent_tool(
     test_settings: Settings,
     use_fn_api: bool,
+    use_tools_api: bool,
 ):
     """
     Test task loop where Agent B's task is a subtask of Agent A's task, and:
@@ -419,6 +427,7 @@ def test_task_2_agent_tool(
         ChatAgentConfig(
             name="Requestor",
             use_functions_api=use_fn_api,
+            use_tools_api=use_tools_api,
             use_tools=not use_fn_api,
             system_message=f"""
                 User will send a number. Your job is to find out what is
@@ -454,6 +463,7 @@ def test_task_2_agent_tool(
         ChatAgentConfig(
             name="Polinsky",
             use_functions_api=use_fn_api,
+            use_tools_api=use_tools_api,
             use_tools=not use_fn_api,
             system_message="""
                 When you receive a number, respond with the DOUBLE of that number,
@@ -477,9 +487,11 @@ def test_task_2_agent_tool(
 
 
 @pytest.mark.parametrize("use_fn_api", [True, False])
+@pytest.mark.parametrize("use_tools_api", [True, False])
 def test_task_2_agent_2_tool(
     test_settings: Settings,
     use_fn_api: bool,
+    use_tools_api: bool,
 ):
     """
     QueryTool: Task A uses and handles (validates), Task B handles but doesn't use
@@ -531,6 +543,7 @@ def test_task_2_agent_2_tool(
         ChatAgentConfig(
             name="Requestor",
             use_functions_api=use_fn_api,
+            use_tools_api=use_tools_api,
             use_tools=not use_fn_api,
             system_message=f"""
                     Your mission is to find the "Polinsky transform" of TWO NUMBERS:
@@ -579,6 +592,7 @@ def test_task_2_agent_2_tool(
         ChatAgentConfig(
             name="Critic",
             use_functions_api=use_fn_api,
+            use_tools_api=use_tools_api,
             use_tools=not use_fn_api,
             system_message="""
                     When you receive a query asking whether the Polinsky

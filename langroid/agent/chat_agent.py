@@ -16,8 +16,10 @@ from langroid.language_models.base import (
     LLMFunctionSpec,
     LLMMessage,
     LLMResponse,
+    OpenAIToolSpec,
     Role,
     StreamingIfAllowed,
+    ToolChoiceTypes,
 )
 from langroid.language_models.openai_gpt import OpenAIGPT
 from langroid.utils.configuration import settings
@@ -39,14 +41,19 @@ class ChatAgentConfig(AgentConfig):
         user_message: user message to include in message sequence.
              Used only if `task` is not specified in the constructor.
         use_tools: whether to use our own ToolMessages mechanism
-        use_functions_api: whether to use functions native to the LLM API
-                (e.g. OpenAI's `function_call` mechanism)
+        use_functions_api: whether to use functions/tools native to the LLM API
+                (e.g. OpenAI's `function_call` or `tool_call` mechanism)
+        use_tools_api: When `use_functions_api` is True, if this is also True,
+            the OpenAI tool-call API is used, rather than the older/deprecated
+            function-call API. However the tool-call API has some tricky aspects,
+            hence we set this to False by default.
     """
 
     system_message: str = "You are a helpful assistant."
     user_message: Optional[str] = None
     use_tools: bool = False
     use_functions_api: bool = True
+    use_tools_api: bool = False
 
     def _set_fn_or_tools(self, fn_available: bool) -> None:
         """
@@ -205,6 +212,23 @@ class ChatAgent(Agent):
             msgs.append(LLMMessage(role=Role.USER, content=self.user_message))
         return msgs
 
+    def _drop_msg_update_tool_calls(self, msg: LLMMessage) -> None:
+        id2idx = {t.id: i for i, t in enumerate(self.oai_tool_calls)}
+        if msg.role == Role.TOOL:
+            # dropping tool result, so ADD the corresponding tool-call back
+            # to the list of pending calls!
+            id = msg.tool_call_id
+            if id in self.oai_tool_id2call:
+                self.oai_tool_calls.append(self.oai_tool_id2call[id])
+        elif msg.tool_calls is not None:
+            # dropping a msg with tool-calls, so DROP these from pending list
+            # as well as from id -> call map
+            for tool_call in msg.tool_calls:
+                if tool_call.id in id2idx:
+                    self.oai_tool_calls.pop(id2idx[tool_call.id])
+                if tool_call.id in self.oai_tool_id2call:
+                    del self.oai_tool_id2call[tool_call.id]
+
     def clear_history(self, start: int = -2) -> None:
         """
         Clear the message history, starting at the index `start`
@@ -218,7 +242,10 @@ class ChatAgent(Agent):
             n = len(self.message_history)
             start = max(0, n + start)
         dropped = self.message_history[start:]
-        for msg in dropped:
+        # consider the dropped msgs in REVERSE order, so we are
+        # carefully updating self.oai_tool_calls
+        for msg in reversed(dropped):
+            self._drop_msg_update_tool_calls(msg)
             # clear out the chat document from the ObjectRegistry
             ChatDocument.delete_id(msg.chat_document_id)
         self.message_history = self.message_history[:start]
@@ -519,9 +546,14 @@ class ChatAgent(Agent):
         hist, output_len = self._prep_llm_messages(message)
         if len(hist) == 0:
             return None
+        tool_choice = (
+            "auto"
+            if isinstance(message, str)
+            else (message.oai_tool_choice if message is not None else "auto")
+        )
         with StreamingIfAllowed(self.llm, self.llm.get_stream()):
-            response = self.llm_response_messages(hist, output_len)
-        self.message_history.append(ChatDocument.to_LLMMessage(response))
+            response = self.llm_response_messages(hist, output_len, tool_choice)
+        self.message_history.extend(ChatDocument.to_LLMMessage(response))
         response.metadata.msg_idx = len(self.message_history) - 1
         response.metadata.agent_id = self.id
         # Preserve trail of tool_ids for OpenAI Assistant fn-calls
@@ -543,9 +575,16 @@ class ChatAgent(Agent):
         hist, output_len = self._prep_llm_messages(message)
         if len(hist) == 0:
             return None
+        tool_choice = (
+            "auto"
+            if isinstance(message, str)
+            else (message.oai_tool_choice if message is not None else "auto")
+        )
         with StreamingIfAllowed(self.llm, self.llm.get_stream()):
-            response = await self.llm_response_messages_async(hist, output_len)
-        self.message_history.append(ChatDocument.to_LLMMessage(response))
+            response = await self.llm_response_messages_async(
+                hist, output_len, tool_choice
+            )
+        self.message_history.extend(ChatDocument.to_LLMMessage(response))
         response.metadata.msg_idx = len(self.message_history) - 1
         response.metadata.agent_id = self.id
         # Preserve trail of tool_ids for OpenAI Assistant fn-calls
@@ -622,8 +661,14 @@ class ChatAgent(Agent):
             ):
                 # either the message is a str, or it is a fresh ChatDocument
                 # different from the last message in the history
-                llm_msg = ChatDocument.to_LLMMessage(message)
-                self.message_history.append(llm_msg)
+                llm_msgs = ChatDocument.to_LLMMessage(message, self.oai_tool_calls)
+
+                # process tools if any
+                done_tools = [m.tool_call_id for m in llm_msgs if m.role == Role.TOOL]
+                self.oai_tool_calls = [
+                    t for t in self.oai_tool_calls if t.id not in done_tools
+                ]
+                self.message_history.extend(llm_msgs)
 
         hist = self.message_history
         output_len = self.config.llm.max_output_tokens
@@ -707,18 +752,47 @@ class ChatAgent(Agent):
 
     def _function_args(
         self,
-    ) -> Tuple[Optional[List[LLMFunctionSpec]], str | Dict[str, str]]:
+    ) -> Tuple[
+        Optional[List[LLMFunctionSpec]],
+        str | Dict[str, str],
+        Optional[List[OpenAIToolSpec]],
+        Optional[Dict[str, Dict[str, str] | str]],
+    ]:
+        """Get function/tool spec arguments for OpenAI-compatible LLM API call"""
         functions: Optional[List[LLMFunctionSpec]] = None
         fun_call: str | Dict[str, str] = "none"
+        tools: Optional[List[OpenAIToolSpec]] = None
+        force_tool: Optional[Dict[str, Dict[str, str] | str]] = None
         if self.config.use_functions_api and len(self.llm_functions_usable) > 0:
-            functions = [self.llm_functions_map[f] for f in self.llm_functions_usable]
-            fun_call = (
-                "auto" if self.llm_function_force is None else self.llm_function_force
-            )
-        return functions, fun_call
+            if not self.config.use_tools_api:
+                functions = [
+                    self.llm_functions_map[f] for f in self.llm_functions_usable
+                ]
+                fun_call = (
+                    "auto"
+                    if self.llm_function_force is None
+                    else self.llm_function_force
+                )
+            else:
+                tools = [
+                    OpenAIToolSpec(type="function", function=self.llm_functions_map[f])
+                    for f in self.llm_functions_usable
+                ]
+                force_tool = (
+                    None
+                    if self.llm_function_force is None
+                    else {
+                        "type": "function",
+                        "function": {"name": self.llm_function_force["name"]},
+                    }
+                )
+        return functions, fun_call, tools, force_tool
 
     def llm_response_messages(
-        self, messages: List[LLMMessage], output_len: Optional[int] = None
+        self,
+        messages: List[LLMMessage],
+        output_len: Optional[int] = None,
+        tool_choice: ToolChoiceTypes | Dict[str, str | Dict[str, str]] = "auto",
     ) -> ChatDocument:
         """
         Respond to a series of messages, e.g. with OpenAI ChatCompletion
@@ -748,11 +822,13 @@ class ChatAgent(Agent):
                 stack.enter_context(cm)
             if self.llm.get_stream() and not settings.quiet:
                 console.print(f"[green]{self.indent}", end="")
-            functions, fun_call = self._function_args()
+            functions, fun_call, tools, force_tool = self._function_args()
             assert self.llm is not None
             response = self.llm.chat(
                 messages,
                 output_len,
+                tools=tools,
+                tool_choice=force_tool or tool_choice,
                 functions=functions,
                 function_call=fun_call,
             )
@@ -775,23 +851,24 @@ class ChatAgent(Agent):
             print_response_stats=self.config.show_stats and not settings.quiet,
         )
         chat_doc = ChatDocument.from_LLMResponse(response, displayed=True)
+        self.oai_tool_calls = response.oai_tool_calls or []
+        self.oai_tool_id2call.update(
+            {t.id: t for t in self.oai_tool_calls if t.id is not None}
+        )
         return chat_doc
 
     async def llm_response_messages_async(
-        self, messages: List[LLMMessage], output_len: Optional[int] = None
+        self,
+        messages: List[LLMMessage],
+        output_len: Optional[int] = None,
+        tool_choice: ToolChoiceTypes | Dict[str, str | Dict[str, str]] = "auto",
     ) -> ChatDocument:
         """
         Async version of `llm_response_messages`. See there for details.
         """
         assert self.config.llm is not None and self.llm is not None
         output_len = output_len or self.config.llm.max_output_tokens
-        functions: Optional[List[LLMFunctionSpec]] = None
-        fun_call: str | Dict[str, str] = "none"
-        if self.config.use_functions_api and len(self.llm_functions_usable) > 0:
-            functions = [self.llm_functions_map[f] for f in self.llm_functions_usable]
-            fun_call = (
-                "auto" if self.llm_function_force is None else self.llm_function_force
-            )
+        functions, fun_call, tools, force_tool = self._function_args()
         assert self.llm is not None
 
         streamer = noop_fn
@@ -802,6 +879,8 @@ class ChatAgent(Agent):
         response = await self.llm.achat(
             messages,
             output_len,
+            tools=tools,
+            tool_choice=force_tool or tool_choice,
             functions=functions,
             function_call=fun_call,
         )
@@ -824,6 +903,10 @@ class ChatAgent(Agent):
             print_response_stats=self.config.show_stats and not settings.quiet,
         )
         chat_doc = ChatDocument.from_LLMResponse(response, displayed=True)
+        self.oai_tool_calls = response.oai_tool_calls or []
+        self.oai_tool_id2call.update(
+            {t.id: t for t in self.oai_tool_calls if t.id is not None}
+        )
         return chat_doc
 
     def _render_llm_response(
@@ -847,6 +930,7 @@ class ChatAgent(Agent):
                     if isinstance(response, ChatDocument)
                     else ChatDocument.from_LLMResponse(response, displayed=True)
                 )
+                # TODO: prepend TOOL: or OAI-TOOL: if it's a tool-call
                 print(cached + "[green]" + escape(str(response)))
                 self.callbacks.show_llm_response(
                     content=str(response),
@@ -923,8 +1007,14 @@ class ChatAgent(Agent):
         # If there is a response, then we will have two additional
         # messages in the message history, i.e. the user message and the
         # assistant response. We want to (carefully) remove these two messages.
-        self.message_history.pop() if len(self.message_history) > n_msgs else None
-        self.message_history.pop() if len(self.message_history) > n_msgs else None
+        if len(self.message_history) > n_msgs:
+            msg = self.message_history.pop()
+            self._drop_msg_update_tool_calls(msg)
+
+        if len(self.message_history) > n_msgs:
+            msg = self.message_history.pop()
+            self._drop_msg_update_tool_calls(msg)
+
         return response
 
     async def llm_response_forget_async(self, message: str) -> ChatDocument:
@@ -941,8 +1031,13 @@ class ChatAgent(Agent):
         # If there is a response, then we will have two additional
         # messages in the message history, i.e. the user message and the
         # assistant response. We want to (carefully) remove these two messages.
-        self.message_history.pop() if len(self.message_history) > n_msgs else None
-        self.message_history.pop() if len(self.message_history) > n_msgs else None
+        if len(self.message_history) > n_msgs:
+            msg = self.message_history.pop()
+            self._drop_msg_update_tool_calls(msg)
+
+        if len(self.message_history) > n_msgs:
+            msg = self.message_history.pop()
+            self._drop_msg_update_tool_calls(msg)
         return response
 
     def chat_num_tokens(self, messages: Optional[List[LLMMessage]] = None) -> int:

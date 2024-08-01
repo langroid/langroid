@@ -115,15 +115,7 @@ def test_llm_structured_output_list(
     N = 3
     prompt = f"Show me examples of {N} Presidents of any set of countries you choose"
     llm_msg = agent.llm_response_forget(prompt)
-    tool_name = PresidentListTool.default_value("request")
-    if use_functions_api:
-        assert llm_msg.function_call is not None
-        assert llm_msg.function_call.name == tool_name
-    else:
-        tools = agent.get_tool_messages(llm_msg)
-        assert len(tools) == 1
-        assert isinstance(tools[0], PresidentListTool)
-
+    assert isinstance(agent.get_tool_messages(llm_msg)[0], PresidentListTool)
     agent_result = agent.agent_response(llm_msg)
     assert agent_result.content == str(N)
 
@@ -144,13 +136,5 @@ def test_llm_structured_output_nested(
     country = "France"
     prompt = f"Show me an example of a President of {country}"
     llm_msg = agent.llm_response_forget(prompt)
-    tool_name = PresidentTool.default_value("request")
-    if use_functions_api:
-        assert llm_msg.function_call is not None
-        assert llm_msg.function_call.name == tool_name
-    else:
-        tools = agent.get_tool_messages(llm_msg)
-        assert len(tools) == 1
-        assert isinstance(tools[0], PresidentTool)
-
+    assert isinstance(agent.get_tool_messages(llm_msg)[0], PresidentTool)
     assert country == agent.agent_response(llm_msg).content
