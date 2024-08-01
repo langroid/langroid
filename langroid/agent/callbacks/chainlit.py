@@ -58,7 +58,7 @@ async def setup_llm() -> None:
     timeout = llm_settings.get("timeout", 90)
     logger.info(f"Using model: {model}")
     llm_config = lm.OpenAIGPTConfig(
-        chat_model=model or lm.OpenAIChatModel.GPT4_TURBO,
+        chat_model=model or lm.OpenAIChatModel.GPT4o,
         # or, other possibilities for example:
         # "litellm/ollama_chat/mistral"
         # "litellm/ollama_chat/mistral:7b-instruct-v0.2-q8_0"
