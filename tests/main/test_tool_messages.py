@@ -363,15 +363,17 @@ wrong_nabroski_tool = """
 """
 
 
+@pytest.mark.parametrize("use_tools_api", [True, False])
 @pytest.mark.parametrize("use_functions_api", [True, False])
 @pytest.mark.parametrize("stream", [True, False])
 def test_agent_malformed_tool(
-    test_settings: Settings, use_functions_api: bool, stream: bool
+    test_settings: Settings, use_tools_api: bool, use_functions_api: bool, stream: bool
 ):
     set_global(test_settings)
     cfg = ChatAgentConfig(
         use_tools=not use_functions_api,
         use_functions_api=use_functions_api,
+        use_tools_api=use_tools_api,
     )
     cfg.llm.stream = stream
     agent = ChatAgent(cfg)
@@ -419,10 +421,12 @@ class CoinFlipTool(ToolMessage):
         return "Heads" if heads else "Tails"
 
 
+@pytest.mark.parametrize("use_tools_api", [True, False])
 @pytest.mark.parametrize("use_functions_api", [True, False])
 def test_agent_infer_tool(
     test_settings: Settings,
     use_functions_api: bool,
+    use_tools_api: bool,
 ):
     set_global(test_settings)
     gauss_request = """{"xval": 1, "yval": 3}"""
@@ -438,6 +442,7 @@ def test_agent_infer_tool(
     cfg = ChatAgentConfig(
         use_tools=not use_functions_api,
         use_functions_api=use_functions_api,
+        use_tools_api=use_tools_api,
     )
     agent = ChatAgent(cfg)
     agent.enable_message(NabroskiTool)
@@ -471,10 +476,12 @@ def test_agent_infer_tool(
     assert agent.agent_response(no_args_request_specified).content in ["Heads", "Tails"]
 
 
+@pytest.mark.parametrize("use_tools_api", [True, False])
 @pytest.mark.parametrize("use_functions_api", [True, False])
 def test_tool_no_llm_response(
     test_settings: Settings,
     use_functions_api: bool,
+    use_tools_api: bool,
 ):
     """Test that agent.llm_response does not respond to tool messages."""
 
@@ -482,6 +489,7 @@ def test_tool_no_llm_response(
     cfg = ChatAgentConfig(
         use_tools=not use_functions_api,
         use_functions_api=use_functions_api,
+        use_tools_api=use_tools_api,
     )
     agent = ChatAgent(cfg)
     agent.enable_message(NabroskiTool)
@@ -515,10 +523,12 @@ def test_tool_no_task(
     assert result.content == "5"
 
 
+@pytest.mark.parametrize("use_tools_api", [True, False])
 @pytest.mark.parametrize("use_functions_api", [True, False])
 def test_tool_optional_args(
     test_settings: Settings,
     use_functions_api: bool,
+    use_tools_api: bool,
 ):
     """Test that ToolMessage where some args are optional (i.e. have default values)
     works well, i.e. LLM is able to generate all args if needed, including optionals."""
@@ -527,6 +537,7 @@ def test_tool_optional_args(
     cfg = ChatAgentConfig(
         use_tools=not use_functions_api,
         use_functions_api=use_functions_api,
+        use_tools_api=use_tools_api,
     )
     agent = ChatAgent(cfg)
 
@@ -539,10 +550,12 @@ def test_tool_optional_args(
 
 @pytest.mark.parametrize("tool", [NabroskiTool, CoriolisTool])
 @pytest.mark.parametrize("stream", [False, True])
+@pytest.mark.parametrize("use_tools_api", [True, False])
 @pytest.mark.parametrize("use_functions_api", [True, False])
 def test_llm_tool_task(
     test_settings: Settings,
     use_functions_api: bool,
+    use_tools_api: bool,
     stream: bool,
     tool: ToolMessage,
 ):
@@ -559,6 +572,7 @@ def test_llm_tool_task(
     cfg = ChatAgentConfig(
         use_tools=not use_functions_api,
         use_functions_api=use_functions_api,
+        use_tools_api=use_tools_api,
         system_message=f"""
         You will be asked to compute a certain transform of two numbers, 
         using a tool/function-call that you have access to. 
@@ -575,10 +589,12 @@ def test_llm_tool_task(
 
 
 @pytest.mark.parametrize("stream", [False, True])
+@pytest.mark.parametrize("use_tools_api", [True, False])
 @pytest.mark.parametrize("use_functions_api", [True, False])
 def test_multi_tool(
     test_settings: Settings,
     use_functions_api: bool,
+    use_tools_api: bool,
     stream: bool,
 ):
     """
@@ -594,6 +610,7 @@ def test_multi_tool(
     cfg = ChatAgentConfig(
         use_tools=not use_functions_api,
         use_functions_api=use_functions_api,
+        use_tools_api=use_tools_api,
         system_message=f"""
         You will be asked to compute transforms of two numbers, 
         using tools/function-calls that you have access to.

@@ -230,8 +230,9 @@ def test_openai_assistant_recipient_tool(test_settings: Settings, fn_api: bool):
     if fn_api and result.content not in ("", NO_ANSWER):
         assert "20" in result.content
 
+
 @pytest.mark.skip(
-"""
+    """
 This no longer works since the OpenAI Assistants API for file_search
 has changed, and requires explicit vector-store creation:
 https://platform.openai.com/docs/assistants/tools/file-search

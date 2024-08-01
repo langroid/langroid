@@ -41,14 +41,19 @@ class ChatAgentConfig(AgentConfig):
         user_message: user message to include in message sequence.
              Used only if `task` is not specified in the constructor.
         use_tools: whether to use our own ToolMessages mechanism
-        use_functions_api: whether to use functions native to the LLM API
-                (e.g. OpenAI's `function_call` mechanism)
+        use_functions_api: whether to use functions/tools native to the LLM API
+                (e.g. OpenAI's `function_call` or `tool_call` mechanism)
+        use_tools_api: When `use_functions_api` is True, if this is also True,
+            the OpenAI tool-call API is used, rather than the older/deprecated
+            function-call API. However the tool-call API has some tricky aspects,
+            hence we set this to False by default.
     """
 
     system_message: str = "You are a helpful assistant."
     user_message: Optional[str] = None
     use_tools: bool = False
     use_functions_api: bool = True
+    use_tools_api: bool = False
 
     def _set_fn_or_tools(self, fn_available: bool) -> None:
         """
@@ -759,22 +764,28 @@ class ChatAgent(Agent):
         tools: Optional[List[OpenAIToolSpec]] = None
         force_tool: Optional[Dict[str, Dict[str, str] | str]] = None
         if self.config.use_functions_api and len(self.llm_functions_usable) > 0:
-            functions = [self.llm_functions_map[f] for f in self.llm_functions_usable]
-            fun_call = (
-                "auto" if self.llm_function_force is None else self.llm_function_force
-            )
-            tools = [
-                OpenAIToolSpec(type="function", function=self.llm_functions_map[f])
-                for f in self.llm_functions_usable
-            ]
-            force_tool = (
-                None
-                if self.llm_function_force is None
-                else {
-                    "type": "function",
-                    "function": {"name": self.llm_function_force["name"]},
-                }
-            )
+            if not self.config.use_tools_api:
+                functions = [
+                    self.llm_functions_map[f] for f in self.llm_functions_usable
+                ]
+                fun_call = (
+                    "auto"
+                    if self.llm_function_force is None
+                    else self.llm_function_force
+                )
+            else:
+                tools = [
+                    OpenAIToolSpec(type="function", function=self.llm_functions_map[f])
+                    for f in self.llm_functions_usable
+                ]
+                force_tool = (
+                    None
+                    if self.llm_function_force is None
+                    else {
+                        "type": "function",
+                        "function": {"name": self.llm_function_force["name"]},
+                    }
+                )
         return functions, fun_call, tools, force_tool
 
     def llm_response_messages(
@@ -811,13 +822,15 @@ class ChatAgent(Agent):
                 stack.enter_context(cm)
             if self.llm.get_stream() and not settings.quiet:
                 console.print(f"[green]{self.indent}", end="")
-            _, _, tools, force_tool = self._function_args()
+            functions, fun_call, tools, force_tool = self._function_args()
             assert self.llm is not None
             response = self.llm.chat(
                 messages,
                 output_len,
                 tools=tools,
                 tool_choice=force_tool or tool_choice,
+                functions=functions,
+                function_call=fun_call,
             )
         if self.llm.get_stream():
             self.callbacks.finish_llm_stream(
@@ -855,7 +868,7 @@ class ChatAgent(Agent):
         """
         assert self.config.llm is not None and self.llm is not None
         output_len = output_len or self.config.llm.max_output_tokens
-        _, _, tools, force_tool = self._function_args()
+        functions, fun_call, tools, force_tool = self._function_args()
         assert self.llm is not None
 
         streamer = noop_fn
@@ -868,6 +881,8 @@ class ChatAgent(Agent):
             output_len,
             tools=tools,
             tool_choice=force_tool or tool_choice,
+            functions=functions,
+            function_call=fun_call,
         )
         if self.llm.get_stream():
             self.callbacks.finish_llm_stream(
