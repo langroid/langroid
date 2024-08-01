@@ -79,7 +79,7 @@ class OpenAIAssistantConfig(ChatAgentConfig):
     # set to True once we can add Assistant msgs in threads
     cache_responses: bool = True
     timeout: int = 30  # can be different from llm.timeout
-    llm = OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT4_TURBO)
+    llm = OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT4o)
     tools: List[AssistantTool] = []
     files: List[str] = []
 
