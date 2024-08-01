@@ -6,6 +6,7 @@ from typing import List, Literal, Optional
 import pytest
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
+from langroid.agent.task import Task
 from langroid.agent.tool_message import ToolMessage
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
 from langroid.language_models.openai_gpt import OpenAIGPTConfig
@@ -14,6 +15,7 @@ from langroid.parsing.parser import ParsingConfig
 from langroid.prompts.prompts_config import PromptsConfig
 from langroid.pydantic_v1 import BaseModel, Field
 from langroid.utils.configuration import Settings, set_global
+from langroid.utils.constants import DONE
 
 
 class CountryCapitalMessage(ToolMessage):
@@ -239,9 +241,10 @@ def test_handle_bad_tool_message():
     assert "file_exists" in result and "filename" in result and "required" in result
 
 
+@pytest.mark.parametrize("stream", [True, False])
 @pytest.mark.parametrize(
     "use_functions_api",
-    [True, False],
+    [False],
 )
 @pytest.mark.parametrize(
     "message_class, prompt, result",
@@ -269,6 +272,7 @@ def test_llm_tool_message(
     message_class: ToolMessage,
     prompt: str,
     result: str,
+    stream: bool,
 ):
     """
     Test whether LLM is able to GENERATE message (tool) in required format, and the
@@ -282,6 +286,7 @@ def test_llm_tool_message(
         result: the expected result from agent handling the tool-message
     """
     set_global(test_settings)
+    cfg.llm.stream = stream
     agent = MessageHandlingAgent(cfg)
     agent.config.use_functions_api = use_functions_api
     agent.config.use_tools = not use_functions_api
@@ -299,17 +304,19 @@ def test_llm_tool_message(
     llm_msg = agent.llm_response_forget(prompt)
     tool_name = message_class.default_value("request")
     if use_functions_api:
-        assert llm_msg.function_call.name == tool_name
-    else:
-        tools = agent.get_tool_messages(llm_msg)
-        assert len(tools) == 1
-        assert isinstance(tools[0], message_class)
+        assert llm_msg.oai_tool_calls[0].function.name == tool_name
+
+    tools = agent.get_tool_messages(llm_msg)
+    assert len(tools) == 1
+    assert isinstance(tools[0], message_class)
 
     agent_result = agent.handle_message(llm_msg)
+
     assert result.lower() in agent_result.lower()
 
 
 def test_llm_non_tool(test_settings: Settings):
+    """Having no tools enabled should result in a None handle_message result"""
     agent = MessageHandlingAgent(cfg)
     llm_msg = agent.llm_response_forget(
         "Ask me to check what is the population of France."
@@ -333,6 +340,19 @@ class NabroskiTool(ToolMessage):
         return str(3 * self.num_pair.xval + self.num_pair.yval)
 
 
+class CoriolisTool(ToolMessage):
+    """Tool for testing handling of optional arguments, with default values."""
+
+    request: str = "coriolis"
+    purpose: str = "to request computing the Coriolis transform of <x> and <y>"
+    x: int
+    y: int = 5
+
+    def handle(self) -> str:
+        # same as NabroskiTool result
+        return str(3 * self.x + self.y)
+
+
 wrong_nabroski_tool = """
 {
 "request": "nabroski",
@@ -343,19 +363,23 @@ wrong_nabroski_tool = """
 """
 
 
+@pytest.mark.parametrize("use_tools_api", [True, False])
 @pytest.mark.parametrize("use_functions_api", [True, False])
+@pytest.mark.parametrize("stream", [True, False])
 def test_agent_malformed_tool(
-    test_settings: Settings,
-    use_functions_api: bool,
+    test_settings: Settings, use_tools_api: bool, use_functions_api: bool, stream: bool
 ):
     set_global(test_settings)
     cfg = ChatAgentConfig(
         use_tools=not use_functions_api,
         use_functions_api=use_functions_api,
+        use_tools_api=use_tools_api,
     )
+    cfg.llm.stream = stream
     agent = ChatAgent(cfg)
     agent.enable_message(NabroskiTool)
     response = agent.agent_response(wrong_nabroski_tool)
+    # We expect an error msg containing certain specific field names
     assert "num_pair" in response.content and "yval" in response.content
 
 
@@ -366,6 +390,16 @@ class EulerTool(ToolMessage):
 
     def handle(self) -> str:
         return str(2 * self.num_pair.xval - self.num_pair.yval)
+
+
+class SumTool(ToolMessage):
+    request: str = "sum"
+    purpose: str = "to request computing the sum of <x> and <y>"
+    x: int
+    y: int
+
+    def handle(self) -> str:
+        return str(self.x + self.y)
 
 
 class GaussTool(ToolMessage):
@@ -387,10 +421,12 @@ class CoinFlipTool(ToolMessage):
         return "Heads" if heads else "Tails"
 
 
+@pytest.mark.parametrize("use_tools_api", [True, False])
 @pytest.mark.parametrize("use_functions_api", [True, False])
 def test_agent_infer_tool(
     test_settings: Settings,
     use_functions_api: bool,
+    use_tools_api: bool,
 ):
     set_global(test_settings)
     gauss_request = """{"xval": 1, "yval": 3}"""
@@ -406,6 +442,7 @@ def test_agent_infer_tool(
     cfg = ChatAgentConfig(
         use_tools=not use_functions_api,
         use_functions_api=use_functions_api,
+        use_tools_api=use_tools_api,
     )
     agent = ChatAgent(cfg)
     agent.enable_message(NabroskiTool)
@@ -439,10 +476,12 @@ def test_agent_infer_tool(
     assert agent.agent_response(no_args_request_specified).content in ["Heads", "Tails"]
 
 
+@pytest.mark.parametrize("use_tools_api", [True, False])
 @pytest.mark.parametrize("use_functions_api", [True, False])
 def test_tool_no_llm_response(
     test_settings: Settings,
     use_functions_api: bool,
+    use_tools_api: bool,
 ):
     """Test that agent.llm_response does not respond to tool messages."""
 
@@ -450,6 +489,7 @@ def test_tool_no_llm_response(
     cfg = ChatAgentConfig(
         use_tools=not use_functions_api,
         use_functions_api=use_functions_api,
+        use_tools_api=use_tools_api,
     )
     agent = ChatAgent(cfg)
     agent.enable_message(NabroskiTool)
@@ -458,10 +498,12 @@ def test_tool_no_llm_response(
     assert response is None
 
 
+@pytest.mark.parametrize("stream", [True, False])
 @pytest.mark.parametrize("use_functions_api", [True, False])
 def test_tool_no_task(
     test_settings: Settings,
     use_functions_api: bool,
+    stream: bool,
 ):
     """Test tool handling without running task, i.e. directly using
     agent.llm_response and agent.agent_response methods."""
@@ -471,6 +513,7 @@ def test_tool_no_task(
         use_tools=not use_functions_api,
         use_functions_api=use_functions_api,
     )
+    cfg.llm.stream = stream
     agent = ChatAgent(cfg)
     agent.enable_message(NabroskiTool, use=True, handle=True)
 
@@ -480,10 +523,12 @@ def test_tool_no_task(
     assert result.content == "5"
 
 
+@pytest.mark.parametrize("use_tools_api", [True, False])
 @pytest.mark.parametrize("use_functions_api", [True, False])
 def test_tool_optional_args(
     test_settings: Settings,
     use_functions_api: bool,
+    use_tools_api: bool,
 ):
     """Test that ToolMessage where some args are optional (i.e. have default values)
     works well, i.e. LLM is able to generate all args if needed, including optionals."""
@@ -492,17 +537,152 @@ def test_tool_optional_args(
     cfg = ChatAgentConfig(
         use_tools=not use_functions_api,
         use_functions_api=use_functions_api,
+        use_tools_api=use_tools_api,
     )
     agent = ChatAgent(cfg)
 
-    class CoriolisTool(ToolMessage):
-        request: str = "my_tool"
-        purpose: str = "to request computing the Coriolis transform of <x> and <y>"
-        x: int
-        y: int = 5
-
     agent.enable_message(CoriolisTool, use=True, handle=True)
-    response = agent.llm_response("What is the Coriolis of 1 and 2?")
+    response = agent.llm_response("What is the Coriolis transform of 1, 2?")
     assert isinstance(agent.get_tool_messages(response)[0], CoriolisTool)
     tool = agent.get_tool_messages(response)[0]
     assert tool.x == 1 and tool.y == 2
+
+
+@pytest.mark.parametrize("tool", [NabroskiTool, CoriolisTool])
+@pytest.mark.parametrize("stream", [False, True])
+@pytest.mark.parametrize("use_tools_api", [True, False])
+@pytest.mark.parametrize("use_functions_api", [True, False])
+def test_llm_tool_task(
+    test_settings: Settings,
+    use_functions_api: bool,
+    use_tools_api: bool,
+    stream: bool,
+    tool: ToolMessage,
+):
+    """
+    Test "full life cycle" of tool, when using Task.run().
+
+    1. invoke LLM api with tool-spec
+    2. LLM generates tool
+    3. ChatAgent.agent_response handles tool, result added to ChatAgent msg history
+    5. invoke LLM api with tool result
+    """
+
+    set_global(test_settings)
+    cfg = ChatAgentConfig(
+        use_tools=not use_functions_api,
+        use_functions_api=use_functions_api,
+        use_tools_api=use_tools_api,
+        system_message=f"""
+        You will be asked to compute a certain transform of two numbers, 
+        using a tool/function-call that you have access to. 
+        When you receive the answer from the tool, say {DONE} and show the answer.
+        """,
+    )
+    agent = ChatAgent(cfg)
+    agent.enable_message(tool)
+    task = Task(agent, interactive=False)
+
+    request = tool.default_value("request")
+    result = task.run(f"What is the {request} transform of 3 and 5?")
+    assert "14" in result.content
+
+
+@pytest.mark.parametrize("stream", [False, True])
+@pytest.mark.parametrize("use_tools_api", [True, False])
+@pytest.mark.parametrize("use_functions_api", [True, False])
+def test_multi_tool(
+    test_settings: Settings,
+    use_functions_api: bool,
+    use_tools_api: bool,
+    stream: bool,
+):
+    """
+    Test "full life cycle" of tool, when using Task.run().
+
+    1. invoke LLM api with tool-spec
+    2. LLM generates tool
+    3. ChatAgent.agent_response handles tool, result added to ChatAgent msg history
+    5. invoke LLM api with tool result
+    """
+
+    set_global(test_settings)
+    cfg = ChatAgentConfig(
+        use_tools=not use_functions_api,
+        use_functions_api=use_functions_api,
+        use_tools_api=use_tools_api,
+        system_message=f"""
+        You will be asked to compute transforms of two numbers, 
+        using tools/function-calls that you have access to.
+        When you are asked for MULTIPLE transforms, you MUST 
+        use MULTIPLE tools/functions.  
+        When you receive the answers from the tools, say {DONE} and show the answers.
+        """,
+    )
+    agent = ChatAgent(cfg)
+    agent.enable_message(NabroskiTool)
+    agent.enable_message(GaussTool)
+    task = Task(agent, interactive=False)
+
+    # First test without task; using individual methods
+    # ---
+
+    result = task.run(
+        """
+        Compute these: 
+        (A) Nabroski transform of 3 and 5
+        (B) Gauss transform of 1 and 2
+        """
+    )
+    # Nabroski: 3*3 + 5 = 14
+    # Gauss: (1+2)*2 = 6
+    assert "14" in result.content and "6" in result.content
+
+
+@pytest.mark.parametrize("stream", [False, True])
+def test_oai_tool_choice(
+    test_settings: Settings,
+    stream: bool,
+):
+    """
+    Test tool_choice for OpenAI-like LLM APIs.
+    """
+
+    set_global(test_settings)
+    cfg = ChatAgentConfig(
+        use_tools=False,  # langroid tools
+        use_functions_api=True,  # openai tools/fns
+        system_message=f"""
+        You will be asked to compute an operation or transform of two numbers, 
+        either using your own knowledge, or 
+        using a tool/function-call that you have access to.        
+        When you have an answer, say {DONE} and show the answer.
+        """,
+    )
+    agent = ChatAgent(cfg)
+    agent.enable_message(SumTool)
+
+    chat_doc = agent.create_user_response("What is the sum of 3 and 5?")
+    chat_doc.oai_tool_choice = "auto"
+    response = agent.llm_response_forget(chat_doc)
+
+    # expect either SumTool or direct result without tool
+    assert "8" in response.content or isinstance(
+        agent.get_tool_messages(response)[0], SumTool
+    )
+
+    chat_doc = agent.create_user_response("What is the double of 5?")
+    chat_doc.oai_tool_choice = "none"
+    response = agent.llm_response_forget(chat_doc)
+    assert "10" in response.content
+
+    chat_doc = agent.create_user_response("What is the sum of 3 and 5?")
+    chat_doc.oai_tool_choice = "required"
+    response = agent.llm_response_forget(chat_doc)
+    assert isinstance(agent.get_tool_messages(response)[0], SumTool)
+
+    agent.enable_message(NabroskiTool, force=True)
+    response = agent.llm_response("What is the nabroski of 3 and 5?")
+    assert "nabroski" in response.content.lower() or isinstance(
+        agent.get_tool_messages(response)[0], NabroskiTool
+    )

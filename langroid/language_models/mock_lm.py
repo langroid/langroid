@@ -4,7 +4,12 @@ from typing import Callable, Dict, List, Optional, Union
 
 import langroid.language_models as lm
 from langroid.language_models import LLMResponse
-from langroid.language_models.base import LanguageModel, LLMConfig
+from langroid.language_models.base import (
+    LanguageModel,
+    LLMConfig,
+    OpenAIToolSpec,
+    ToolChoiceTypes,
+)
 
 
 def none_fn(x: str) -> None | str:
@@ -50,6 +55,8 @@ class MockLM(LanguageModel):
         self,
         messages: Union[str, List[lm.LLMMessage]],
         max_tokens: int = 200,
+        tools: Optional[List[OpenAIToolSpec]] = None,
+        tool_choice: ToolChoiceTypes | Dict[str, str | Dict[str, str]] = "auto",
         functions: Optional[List[lm.LLMFunctionSpec]] = None,
         function_call: str | Dict[str, str] = "auto",
     ) -> lm.LLMResponse:
@@ -63,6 +70,8 @@ class MockLM(LanguageModel):
         self,
         messages: Union[str, List[lm.LLMMessage]],
         max_tokens: int = 200,
+        tools: Optional[List[OpenAIToolSpec]] = None,
+        tool_choice: ToolChoiceTypes | Dict[str, str | Dict[str, str]] = "auto",
         functions: Optional[List[lm.LLMFunctionSpec]] = None,
         function_call: str | Dict[str, str] = "auto",
     ) -> lm.LLMResponse:

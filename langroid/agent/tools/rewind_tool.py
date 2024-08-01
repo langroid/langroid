@@ -127,7 +127,7 @@ class RewindTool(ToolMessage):
         result_doc.metadata.msg_idx = idx
 
         # replace the message at idx with this new message
-        agent.message_history.append(ChatDocument.to_LLMMessage(result_doc))
+        agent.message_history.extend(ChatDocument.to_LLMMessage(result_doc))
 
         # set the replaced doc's parent's child to this result_doc
         if parent is not None:
