@@ -197,7 +197,7 @@ def main(
             ),
         )
     )
-    task = Task(agent, interactive=False)
+    task = Task(agent, interactive=False, only_user_quits_root=True)
     task.run()
 
 
