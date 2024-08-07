@@ -1498,8 +1498,8 @@ class Task:
             and (result.content in USER_QUIT_STRINGS or DONE in result.content)
             and result.metadata.sender == Entity.USER
         )
-        if self._level == 0 and self.interactive and self.only_user_quits_root:
-            # for top-level task, in interactive mode, only user can quit out
+        if self._level == 0 and self._user_can_respond() and self.only_user_quits_root:
+            # for top-level task, only user can quit out
             return (user_quit, StatusCode.USER_QUIT if user_quit else StatusCode.OK)
 
         if self.is_done:
@@ -1654,13 +1654,16 @@ class Task:
             and recipient != self.name  # case sensitive
         )
 
-    def _can_respond(self, e: Responder) -> bool:
-        user_can_respond = self.interactive or (
+    def _user_can_respond(self) -> bool:
+        return self.interactive or (
             # regardless of self.interactive, if a msg is explicitly addressed to
             # user, then wait for user response
             self.pending_message is not None
             and self.pending_message.metadata.recipient == Entity.USER
         )
+
+    def _can_respond(self, e: Responder) -> bool:
+        user_can_respond = self._user_can_respond()
 
         if self.pending_sender == e or (e == Entity.USER and not user_can_respond):
             # sender is same as e (an entity cannot respond to its own msg),

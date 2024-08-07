@@ -733,8 +733,12 @@ class Agent(ABC):
             # (either via OpenAI Fn-call or Langroid-native ToolMessage)
             return msg.tool_messages
         assert isinstance(msg, ChatDocument)
-        # when `content` is non-empty, we assume there will be no tools/fn_calls
-        if msg.content != "":
+        if (
+            msg.content != ""
+            and msg.oai_tool_calls is None
+            and msg.function_call is None
+        ):
+
             tools = self.get_json_tool_messages(msg.content)
             msg.tool_messages = tools
             return tools

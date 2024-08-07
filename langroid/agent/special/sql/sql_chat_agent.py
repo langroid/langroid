@@ -14,11 +14,12 @@ from rich import print
 from rich.console import Console
 
 from langroid.exceptions import LangroidImportError
+from langroid.utils.constants import DONE
 
 try:
     from sqlalchemy import MetaData, Row, create_engine, inspect, text
     from sqlalchemy.engine import Engine
-    from sqlalchemy.exc import SQLAlchemyError
+    from sqlalchemy.exc import ResourceClosedError, SQLAlchemyError
     from sqlalchemy.orm import Session, sessionmaker
 except ImportError as e:
     raise LangroidImportError(extra="sql", error=str(e))
@@ -49,8 +50,8 @@ logger = logging.getLogger(__name__)
 
 console = Console()
 
-DEFAULT_SQL_CHAT_SYSTEM_MESSAGE = """
-{mode}
+DEFAULT_SQL_CHAT_SYSTEM_MESSAGE = f"""
+{{mode}}
 
 You do not need to attempt answering a question with just one query. 
 You could make a sequence of SQL queries to help you write the final query.
@@ -64,16 +65,19 @@ are "Male" and "Female".
 
 Start by asking what I would like to know about the data.
 
+When you have FINISHED the given query or database update task, 
+say {DONE} and show your answer.
+
 """
 
-ADDRESSING_INSTRUCTION = """
+ADDRESSING_INSTRUCTION = f"""
 IMPORTANT - Whenever you are NOT writing a SQL query, make sure you address the user
-using {prefix}User. You MUST use the EXACT syntax {prefix} !!!
+using {{prefix}}User. You MUST use the EXACT syntax {{prefix}} !!!
 
 In other words, you ALWAYS write EITHER:
  - a SQL query using the `run_query` tool, 
- - OR address the user using {prefix}User.
-
+ - OR address the user using {{prefix}}User, and include {DONE} to indicate your 
+     task is FINISHED. 
 """
 
 
@@ -134,6 +138,9 @@ class SQLChatAgent(ChatAgent):
     """
     Agent for chatting with a SQL database
     """
+
+    used_run_query: bool = False
+    llm_responded: bool = False
 
     def __init__(self, config: "SQLChatAgentConfig") -> None:
         """Initialize the SQLChatAgent.
@@ -246,7 +253,49 @@ class SQLChatAgent(ChatAgent):
         self.enable_message(GetTableSchemaTool)
         self.enable_message(GetColumnDescriptionsTool)
 
-    def agent_response(
+    def llm_response(
+        self, message: Optional[str | ChatDocument] = None
+    ) -> Optional[ChatDocument]:
+        self.llm_responded = True
+        return super().llm_response(message)
+
+    def user_response(
+        self,
+        msg: Optional[str | ChatDocument] = None,
+    ) -> Optional[ChatDocument]:
+        self.llm_responded = False
+        self.used_run_query = False
+        return super().user_response(msg)
+
+    def handle_message_fallback(
+        self, msg: str | ChatDocument
+    ) -> str | ChatDocument | None:
+
+        if not self.llm_responded:
+            return None
+        if self.used_run_query:
+            prefix = (
+                self.config.addressing_prefix + "User"
+                if self.config.addressing_prefix
+                else ""
+            )
+            return (
+                DONE + prefix + (msg.content if isinstance(msg, ChatDocument) else msg)
+            )
+
+        else:
+            reminder = """
+            You may have forgotten to use the `run_query` tool to execute an SQL query
+            for the user's question/request            
+            """
+            if self.config.addressing_prefix != "":
+                reminder += f"""
+                OR you may have forgotten to address the user using the prefix
+                {self.config.addressing_prefix} 
+                """
+            return reminder
+
+    def _agent_response(
         self,
         msg: Optional[str | ChatDocument] = None,
     ) -> Optional[ChatDocument]:
@@ -326,16 +375,23 @@ class SQLChatAgent(ChatAgent):
         """
         query = msg.query
         session = self.Session
-        response_message = ""
-
+        self.used_run_query = True
         try:
             logger.info(f"Executing SQL query: {query}")
 
             query_result = session.execute(text(query))
             session.commit()
-
-            rows = query_result.fetchall()
-            response_message = self._format_rows(rows)
+            try:
+                # attempt to fetch results: should work for normal SELECT queries
+                rows = query_result.fetchall()
+                response_message = self._format_rows(rows)
+            except ResourceClosedError:
+                # If we get here, it's a non-SELECT query (UPDATE, INSERT, DELETE)
+                affected_rows = query_result.rowcount  # type: ignore
+                response_message = f"""
+                    Non-SELECT query executed successfully. 
+                    Rows affected: {affected_rows}
+                    """
 
         except SQLAlchemyError as e:
             session.rollback()
