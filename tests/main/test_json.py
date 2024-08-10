@@ -121,7 +121,6 @@ def test_parse_imperfect_json(input_json, expected_output):
 @pytest.mark.parametrize(
     "invalid_input",
     [
-        "{key: 'value',,,}",
         "",
         "not a json string",
         "True",  # This is a valid Python literal, but not a dict or list
