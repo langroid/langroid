@@ -294,8 +294,9 @@ class LLMResponse(BaseModel):
         of the recipient name if specified.
 
         Two cases:
-        (a) `message` contains "TO: <name> <content>", or
-        (b) `message` is empty and `function_call` with `to: <name>`
+        (a) `message` contains addressing string "TO: <name> <content>", or
+        (b) `message` is empty and function_call/tool_call with explicit `recipient`
+
 
         Returns:
             (str): name of recipient, which may be empty string if no recipient
