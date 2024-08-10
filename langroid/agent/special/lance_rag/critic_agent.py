@@ -26,8 +26,8 @@ from langroid.agent.special.lance_tools import (
     QueryPlanAnswerTool,
     QueryPlanFeedbackTool,
 )
-from langroid.mytypes import Entity
-from langroid.utils.constants import DONE, NO_ANSWER, PASS
+from langroid.agent.tools.orchestration import AgentDoneTool
+from langroid.utils.constants import NO_ANSWER
 
 logger = logging.getLogger(__name__)
 
@@ -50,6 +50,9 @@ class QueryPlanCriticConfig(LanceQueryPlanAgentConfig):
       to create a QUERY PLAN, to be handled by an ASSISTANT.
     - PANDAS-LIKE FILTER, WHICH CAN BE EMPTY (and it's fine if results sound reasonable)
       FILTER SHOULD ONLY BE USED IF EXPLICITLY REQUIRED BY THE QUERY.
+      This filter selects the documents over which the REPHRASED QUERY will be applied,
+      thus naturally, the Re-phrased Query should NOT mention any FILTER fields,
+      since it applies to the documents AFTER FILTERING.
     - REPHRASED QUERY (CANNOT BE EMPTY) that will be used to match against the 
       CONTENT (not filterable) of the documents.
       In general the REPHRASED QUERY should be relied upon to match the CONTENT 
@@ -61,9 +64,31 @@ class QueryPlanCriticConfig(LanceQueryPlanAgentConfig):
         The assistant will answer based on documents whose CONTENTS match the QUERY, 
         possibly REPHRASED. 
         !!!!****THE REPHRASED QUERY SHOULD NEVER BE EMPTY****!!!
+        
+        
     - DATAFRAME CALCULATION, which must be a SINGLE LINE calculation (or empty),
         [NOTE ==> This calculation is applied AFTER the FILTER and REPHRASED QUERY.],
     - ANSWER received from an assistant that used this QUERY PLAN.
+      IT IS TOTALLY FINE FOR THE ANSWER TO NOT MENTION ANY FILTERING CONDITIONS,
+      or if the ANSWER STATEMENT is MISSING SOME CRITERIA in the ORIGINAL QUERY.
+
+        Here is an example of a VALID Plan + Answer:
+        
+        ORIGINAL QUERY: "Which crime novels were written by Russian authors after 1900?"
+        FILTER: "author_nationality == 'Russian' and year_written > 1900"
+        REPHRASED QUERY: "crime novel" [NOTICE NO FILTER FIELDS MENTIONED!!!]
+        DATAFRAME CALC: ""
+        ANSWER: "The Master and Margarita by Mikhail Bulgakov" 
+            [NOTICE the answer does NOT need to say "crime novel" or "russian author"]
+            
+            
+        Other examples of VALID ANSWER for a given ORIGINAL QUERY:
+        
+        ORIGINAL QUERY: "Which mountain is taller than 8000 meters?"
+        ANSWER: "Mount Everest" [NOTICE no mention of "taller than 8000 meters"]
+        
+        ORIGINAL QUERY: "Which country has hosted the most olympics?"
+        ANSWER: "United States" [NOTICE no mention of "most olympics"]
 
     In addition to the above SCHEMA fields there is a `content` field which:
     - CANNOT appear in a FILTER, 
@@ -141,21 +166,28 @@ class QueryPlanCritic(ChatAgent):
         self.config = cfg
         self.enable_message(QueryPlanAnswerTool, use=False, handle=True)
         self.enable_message(QueryPlanFeedbackTool, use=True, handle=True)
+        self.enable_message(AgentDoneTool, use=False, handle=True)
+
+    def init_state(self) -> None:
+        self.expecting_feedback_tool = False
 
     def query_plan_answer(self, msg: QueryPlanAnswerTool) -> str:
         """Present query plan + answer in plain text (not JSON)
         so LLM can give feedback"""
+        self.expecting_feedback_tool = True
         return plain_text_query_plan(msg)
 
-    def query_plan_feedback(self, msg: QueryPlanFeedbackTool) -> str:
+    def query_plan_feedback(self, msg: QueryPlanFeedbackTool) -> AgentDoneTool:
         """Format Valid so return to Query Planner"""
-        return DONE + " " + PASS  # return to Query Planner
+        self.expecting_feedback_tool = False
+        # indicate this task is Done, and return the tool as result
+        return AgentDoneTool(tools=[msg])
 
     def handle_message_fallback(
         self, msg: str | ChatDocument
     ) -> str | ChatDocument | None:
         """Remind the LLM to use QueryPlanFeedbackTool since it forgot"""
-        if isinstance(msg, ChatDocument) and msg.metadata.sender == Entity.LLM:
+        if self.expecting_feedback_tool:
             return """
             You forgot to use the `query_plan_feedback` tool/function.
             Re-try your response using the `query_plan_feedback` tool/function,
