@@ -157,7 +157,7 @@ class LanceQueryPlanAgent(ChatAgent):
         self.expecting_query_plan = True
         return super().llm_response(message)
 
-    def query_plan(self, msg: QueryPlanTool) -> ForwardTool:
+    def query_plan(self, msg: QueryPlanTool) -> ForwardTool | str:
         """Valid, tool msg, forward chat_doc to RAG Agent.
         Note this chat_doc will already have the
         QueryPlanTool in its tool_messages list.
