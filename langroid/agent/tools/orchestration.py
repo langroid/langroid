@@ -124,10 +124,10 @@ class ForwardTool(PassTool):
     Similar to PassTool, but with a specified recipient agent.
     """
 
-    purpose = """
+    purpose: str = """
     To forward the current message to an <agent>.
     """
-    request = "forward_tool"
+    request: str = "forward_tool"
     agent: str
 
     def response(self, agent: ChatAgent, chat_doc: ChatDocument) -> ChatDocument:
