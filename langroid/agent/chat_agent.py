@@ -47,6 +47,8 @@ class ChatAgentConfig(AgentConfig):
             the OpenAI tool-call API is used, rather than the older/deprecated
             function-call API. However the tool-call API has some tricky aspects,
             hence we set this to False by default.
+        enable_orchestration_tool_handling: whether to enable handling of orchestration
+            tools, e.g. ForwardTool, DoneTool, PassTool, etc.
     """
 
     system_message: str = "You are a helpful assistant."
@@ -54,6 +56,7 @@ class ChatAgentConfig(AgentConfig):
     use_tools: bool = False
     use_functions_api: bool = True
     use_tools_api: bool = False
+    enable_orchestration_tool_handling: bool = True
 
     def _set_fn_or_tools(self, fn_available: bool) -> None:
         """
@@ -144,6 +147,22 @@ class ChatAgent(Agent):
         self.llm_functions_handled: Set[str] = set()
         self.llm_functions_usable: Set[str] = set()
         self.llm_function_force: Optional[Dict[str, str]] = None
+
+        if self.config.enable_orchestration_tool_handling:
+            # Only enable HANDLING by `agent_response`, NOT LLM generation of these.
+            # This is useful where tool-handlers or agent_response generate these
+            # tools, and need to be handled.
+            from langroid.agent.tools.orchestration import (
+                DonePassTool,
+                DoneTool,
+                ForwardTool,
+                PassTool,
+            )
+
+            self.enable_message(ForwardTool, use=False, handle=True)
+            self.enable_message(DoneTool, use=False, handle=True)
+            self.enable_message(PassTool, use=False, handle=True)
+            self.enable_message(DonePassTool, use=False, handle=True)
 
     @staticmethod
     def from_id(id: str) -> "ChatAgent":
@@ -420,6 +439,13 @@ class ChatAgent(Agent):
         # remove leading and trailing newlines and other whitespace
         return LLMMessage(role=Role.SYSTEM, content=content.strip())
 
+    def unhanded_tools(self) -> set[str]:
+        """The set of tools that are known but not handled.
+        Useful in task flow: an agent can refuse to accept an incoming msg
+        when it only has unhandled tools.
+        """
+        return self.llm_tools_known - self.llm_tools_handled
+
     def enable_message(
         self,
         message_class: Optional[Type[ToolMessage]],
@@ -448,7 +474,7 @@ class ChatAgent(Agent):
                  `force` is ignored if `message_class` is None.
             require_recipient: whether to require that recipient be specified
                 when using the tool message (only applies if `use` is True).
-            require_defaults: whether to include fields that have default values,
+            include_defaults: whether to include fields that have default values,
                 in the "properties" section of the JSON format instructions.
                 (Normally the OpenAI completion API ignores these fields,
                 but the Assistant fn-calling seems to pay attn to these,
@@ -468,6 +494,8 @@ class ChatAgent(Agent):
                 self.llm_function_force = None
 
         for t in tools:
+            self.llm_tools_known.add(t)
+
             if handle:
                 self.llm_tools_handled.add(t)
                 self.llm_functions_handled.add(t)
@@ -662,7 +690,11 @@ class ChatAgent(Agent):
                 # either the message is a str, or it is a fresh ChatDocument
                 # different from the last message in the history
                 llm_msgs = ChatDocument.to_LLMMessage(message, self.oai_tool_calls)
-
+                # LLM only responds to the content, so only those msgs with
+                # non-empty content should be kept
+                llm_msgs = [m for m in llm_msgs if m.content != ""]
+                if len(llm_msgs) == 0:
+                    return [], 0
                 # process tools if any
                 done_tools = [m.tool_call_id for m in llm_msgs if m.role == Role.TOOL]
                 self.oai_tool_calls = [
