@@ -105,6 +105,7 @@ def parse_imperfect_json(json_string: str) -> Union[Dict[str, Any], List[Any]]:
     try:
         # last resort: try to repair the json using a lib
         from json_repair import repair_json
+
         repaired_json = repair_json(json_string)
         result = json.loads(repaired_json)
         if isinstance(result, (dict, list)):
