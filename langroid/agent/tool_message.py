@@ -15,7 +15,7 @@ from typing import Any, Dict, List, Tuple, Type
 from docstring_parser import parse
 
 from langroid.language_models.base import LLMFunctionSpec
-from langroid.pydantic_v1 import BaseModel
+from langroid.pydantic_v1 import BaseModel, ConfigDict, Extra
 from langroid.utils.pydantic_utils import (
     _recursive_purge_dict_key,
     generate_simple_schema,
@@ -41,13 +41,15 @@ class ToolMessage(ABC, BaseModel):
     purpose: str
     id: str = ""  # placeholder for OpenAI-API tool_call_id
 
+    model_config = ConfigDict(extra=Extra.allow)
+
     class Config:
         arbitrary_types_allowed = False
         validate_all = True
         validate_assignment = True
         # do not include these fields in the generated schema
         # since we don't require the LLM to specify them
-        schema_extra = {"exclude": {"purpose", "id"}}
+        schema_extra = {"exclude": {"purpose", "id", "model_config"}}
 
     @classmethod
     def instructions(cls) -> str:
@@ -262,5 +264,8 @@ class ToolMessage(ABC, BaseModel):
         Returns:
             Dict[str, Any]: simplified schema
         """
-        schema = generate_simple_schema(cls, exclude=["purpose"])
+        schema = generate_simple_schema(
+            cls,
+            exclude=list(cls.Config.schema_extra["exclude"]),
+        )
         return schema
