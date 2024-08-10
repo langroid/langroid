@@ -15,6 +15,7 @@ from langroid.utils.configuration import settings
 from langroid.utils.object_registry import ObjectRegistry
 from langroid.utils.output.printing import print_long_text
 from langroid.utils.pandas_utils import stringify
+from langroid.utils.pydantic_utils import flatten_dict
 
 logger = logging.getLogger(__name__)
 
@@ -136,7 +137,8 @@ class VectorStore(ABC):
         """Compute a result on a set of documents,
         using a dataframe calc string like `df.groupby('state')['income'].mean()`.
         """
-        dicts = [doc.dict() for doc in docs]
+        # convert each doc to a dict, using dotted paths for nested fields
+        dicts = [flatten_dict(doc.dict(by_alias=True)) for doc in docs]
         df = pd.DataFrame(dicts)
 
         try:

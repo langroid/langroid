@@ -147,6 +147,8 @@ class LanceDB(VectorStore):
 
     def _create_lance_schema(self, doc_cls: Type[Document]) -> Type[BaseModel]:
         """
+        NOTE: NOT USED, but leaving it here as it may be useful.
+
         Create a subclass of LanceModel with fields:
          - id (str)
          - Vector field that has dims equal to
