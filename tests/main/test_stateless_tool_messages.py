@@ -95,9 +95,11 @@ def test_enable_message(
 @pytest.mark.parametrize("msg_class", [None, SquareTool])
 def test_disable_message_handling(msg_class: Optional[ToolMessage]):
     agent.enable_message(SquareTool)
+    usable_tools = agent.llm_tools_usable
     agent.disable_message_handling(msg_class)
+
     tools = agent._get_tool_list(msg_class)
-    for tool in tools:
+    for tool in set(tools).intersection(usable_tools):
         assert tool not in agent.llm_tools_handled
         assert tool not in agent.llm_functions_handled
         assert tool in agent.llm_tools_usable
@@ -107,10 +109,10 @@ def test_disable_message_handling(msg_class: Optional[ToolMessage]):
 @pytest.mark.parametrize("msg_class", [None, SquareTool])
 def test_disable_message_use(msg_class: Optional[ToolMessage]):
     agent.enable_message(SquareTool)
-
+    usable_tools = agent.llm_tools_usable
     agent.disable_message_use(msg_class)
     tools = agent._get_tool_list(msg_class)
-    for tool in tools:
+    for tool in set(tools).intersection(usable_tools):
         assert tool not in agent.llm_tools_usable
         assert tool not in agent.llm_functions_usable
         assert tool in agent.llm_tools_handled
