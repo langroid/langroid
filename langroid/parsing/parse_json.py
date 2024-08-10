@@ -94,7 +94,13 @@ def parse_imperfect_json(json_string: str) -> Union[Dict[str, Any], List[Any]]:
         if isinstance(result, (dict, list)):
             return result
     except json.JSONDecodeError:
-        pass
+        try:
+            # fallback on yaml
+            yaml_result = yaml.safe_load(json_string)
+            if isinstance(yaml_result, (dict, list)):
+                return yaml_result
+        except yaml.YAMLError:
+            pass
 
     # If all methods fail, raise ValueError
     raise ValueError(f"Unable to parse as JSON: {json_string}")
