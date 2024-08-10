@@ -31,6 +31,7 @@ from langroid.agent.task import Task
 from langroid.agent.tool_message import ToolMessage
 from langroid.agent.tools.orchestration import DoneTool
 from langroid.agent.tools.recipient_tool import RecipientTool
+from langroid.language_models.mock_lm import MockLMConfig
 from langroid.language_models.openai_gpt import OpenAIGPTConfig
 from langroid.mytypes import Entity
 from langroid.utils.configuration import Settings, set_global
@@ -142,7 +143,15 @@ def test_agents_with_recipient_tool(
         Be very concise in your messages, do not say anything unnecessary.
         """,
     )
-    even_agent = ChatAgent(config)
+    even_agent = ChatAgent(
+        ChatAgentConfig(
+            llm=MockLMConfig(
+                response_fn=lambda x: (
+                    str(int(x) // 2) if int(x) % 2 == 0 and int(x) % 10 != 0 else "-10"
+                )
+            )
+        )
+    )
     even_agent.enable_message(
         SquareTool,
         use=False,  # LLM of this agent does not need to generate this tool/fn-call
@@ -154,26 +163,20 @@ def test_agents_with_recipient_tool(
         name="EvenHandler",
         interactive=False,
         done_if_response=[Entity.LLM],  # done as soon as LLM responds
-        system_message="""
-        You will be given a number. 
-        If it is even and not a multiple of 10:
-            simply return HALF of that number, 
-            WITHOUT using any tools/functions; say nothing else.
-        Otherwise, say -10
-        """,
     )
 
-    odd_agent = ChatAgent(config)
+    odd_agent = ChatAgent(
+        ChatAgentConfig(
+            llm=MockLMConfig(
+                response_fn=lambda x: str(int(x) * 3 + 1) if int(x) % 2 else "-10"
+            )
+        )
+    )
     odd_task = Task(
         odd_agent,
         name="OddHandler",
         interactive=False,
         done_if_response=[Entity.LLM],  # done as soon as LLM responds
-        system_message="""
-        You will be given a number n. 
-        If it is odd, return (n*3+1), say nothing else. 
-        If it is even, say -10
-        """,
     )
 
     processor_task.add_sub_task([even_task, odd_task])

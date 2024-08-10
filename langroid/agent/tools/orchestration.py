@@ -3,7 +3,7 @@ Various tools to for agents to be able to control flow of Task, e.g.
 termination, routing to another agent, etc.
 """
 
-from typing import List
+from typing import List, Tuple
 
 from langroid.agent.chat_agent import ChatAgent
 from langroid.agent.chat_document import ChatDocument
@@ -148,3 +148,67 @@ class ForwardTool(PassTool):
         use the `forward_tool` to do so, 
         setting the `recipient` field to the name of the recipient agent.
         """
+
+
+class SendTool(ToolMessage):
+    """Tool for agent or LLM to send content to a specified agent.
+    Similar to RecipientTool.
+    """
+
+    purpose: str = """
+    To send message <content> to agent specified in <to> field.
+    """
+    request: str = "send_tool"
+    to: str
+    content: str = ""
+
+    def response(self, agent: ChatAgent) -> ChatDocument:
+        return agent.create_agent_response(
+            self.content,
+            recipient=self.to,
+        )
+
+    @classmethod
+    def instructions(cls) -> str:
+        return """
+        If you need to send a message to another agent, 
+        use the `send_tool` to do so, with these field values:
+        - `to` field = name of the recipient agent,
+        - `content` field = the message to send.
+        """
+
+    @classmethod
+    def examples(cls) -> List["ToolMessage" | Tuple[str, "ToolMessage"]]:
+        return [
+            cls(to="agent1", content="Hello, agent1!"),
+            (
+                """
+                I need to send the content 'Who built the Gemini model?', 
+                to the 'Searcher' agent.
+                """,
+                cls(to="Searcher", content="Who built the Gemini model?"),
+            ),
+        ]
+
+
+class AgentSendTool(ToolMessage):
+    """Tool for Agent (i.e. agent_response) to send content and tool_messages
+    to a specified agent. Similar to SendTool except that AgentSendTool is only
+    usable by agent_response (or handler of another tool), to send both content and
+    tools to another agent.
+    """
+
+    purpose: str = """
+    To send message <content> and <tools> to agent specified in <to> field. 
+    """
+    request: str = "agent_send_tool"
+    to: str
+    content: str = ""
+    tools: List[ToolMessage] = []
+
+    def response(self, agent: ChatAgent) -> ChatDocument:
+        return agent.create_agent_response(
+            self.content,
+            tool_messages=self.tools,
+            recipient=self.to,
+        )

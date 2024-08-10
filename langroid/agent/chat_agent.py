@@ -152,17 +152,25 @@ class ChatAgent(Agent):
             # Only enable HANDLING by `agent_response`, NOT LLM generation of these.
             # This is useful where tool-handlers or agent_response generate these
             # tools, and need to be handled.
+            # We don't want enable orch tool GENERATION by default, since that
+            # might clutter-up the LLM system message unnecessarily.
             from langroid.agent.tools.orchestration import (
+                AgentSendTool,
                 DonePassTool,
                 DoneTool,
                 ForwardTool,
                 PassTool,
+                SendTool,
             )
+            from langroid.agent.tools.recipient_tool import RecipientTool
 
             self.enable_message(ForwardTool, use=False, handle=True)
             self.enable_message(DoneTool, use=False, handle=True)
             self.enable_message(PassTool, use=False, handle=True)
             self.enable_message(DonePassTool, use=False, handle=True)
+            self.enable_message(SendTool, use=False, handle=True)
+            self.enable_message(AgentSendTool, use=False, handle=True)
+            self.enable_message(RecipientTool, use=False, handle=True)
 
     @staticmethod
     def from_id(id: str) -> "ChatAgent":

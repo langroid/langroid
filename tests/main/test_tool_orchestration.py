@@ -253,3 +253,122 @@ def test_orch_tools(
 
     result = task.run("1200", turns=60)  # 1200 -> 120 -> 12 -> 6 -> 3 -> done
     assert "3" in result.content
+
+
+@pytest.mark.parametrize("use_functions_api", [True, False])
+@pytest.mark.parametrize("use_tools_api", [True, False])
+def test_send_tools(
+    test_settings: Settings,
+    use_functions_api: bool,
+    use_tools_api: bool,
+):
+
+    set_global(test_settings)
+
+    SendTool = lr.agent.tools.orchestration.SendTool
+    AgentSendTool = lr.agent.tools.orchestration.AgentSendTool
+    DoneTool = lr.agent.tools.orchestration.DoneTool
+    AgentDoneTool = lr.agent.tools.orchestration.AgentDoneTool
+
+    send_tool_name = SendTool.default_value("request")
+    done_tool_name = DoneTool.default_value("request")
+
+    class ThreeTool(lr.ToolMessage):
+        purpose = "to handle a <number> that is a MULTIPLE of 3"
+        request = "three_tool"
+        number: int
+
+    class SubThreeTool(lr.ToolMessage):
+        purpose = "to subtract 3 from a number, and if result is zero, add 1 again"
+        request = "sub_three_tool"
+        number: int
+
+        def handle(self) -> int:
+            ans = self.number - 3
+            final = ans if ans != 0 else 1
+            return AgentDoneTool(content=str(final))
+
+    three_tool_name = ThreeTool.default_value("request")
+
+    class ProcessorAgent(lr.ChatAgent):
+
+        def three_tool(self, msg: ThreeTool) -> AgentSendTool:
+            # validate and pass on
+            return AgentSendTool(
+                to="ThreeHandler",
+                tools=[SubThreeTool(number=msg.number)],
+            )
+
+    processor = ProcessorAgent(
+        lr.ChatAgentConfig(
+            name="Processor",
+            use_functions_api=use_functions_api,
+            use_tools_api=use_tools_api,
+            use_tools=not use_functions_api,
+            system_message=f"""
+            Your task is to HANDLE an incoming number OR a tool-result, 
+            EXACTLY in the FALLBACK order below.
+            
+            - if number or result is > 0 AND a multiple of 10, send it to "ZeroHandler" 
+                Agent, using the TOOL: `{send_tool_name}`.
+            - ELSE if number or result is a multiple of 5, send it to "FiveHandler" 
+                Agent, 
+                using the TOOL: `{send_tool_name}`.
+            - ELSE if the number or result is a multiple of 3, use the TOOL: 
+              `{three_tool_name}` to process it,
+            - OTHERWISE, use the TOOL: `{done_tool_name}` to indicate you are finished,
+                with `content` field set to the received number.
+            """,
+        )
+    )
+    processor_task = lr.Task(processor, interactive=False)
+    processor.enable_message(SendTool, use=True, handle=True)
+    processor.enable_message(ThreeTool, use=True, handle=True)
+
+    five_agent = lr.ChatAgent(
+        lr.ChatAgentConfig(
+            name="FiveHandler",
+            llm=MockLMConfig(
+                response_fn=lambda x: (
+                    f"""
+                    result is {int(x)//5}, apply the number-handling rules to 
+                    decide what to do next
+                    """
+                ),
+            ),
+        )
+    )
+    five_task = lr.Task(five_agent, single_round=True, interactive=False)
+
+    zero_agent = lr.ChatAgent(
+        lr.ChatAgentConfig(
+            name="ZeroHandler",
+            llm=MockLMConfig(
+                response_fn=lambda x: (
+                    f"""
+                 result is {int(x)//10}, apply the number-handling rules to
+                 decide what to do next
+                 """
+                ),
+            ),
+        )
+    )
+    zero_task = lr.Task(zero_agent, single_round=True, interactive=False)
+
+    three_agent = lr.ChatAgent(
+        lr.ChatAgentConfig(
+            name="ThreeHandler",
+            llm=None,
+        )
+    )
+    three_agent.enable_message(SubThreeTool, use=False, handle=True)
+    three_task = lr.Task(three_agent, interactive=False)
+
+    processor_task.add_sub_task([five_task, zero_task, three_task])
+
+    result = processor_task.run("180", turns=20)
+    # 180 -> 18 -> 15 -> 3 -> 1 -> done
+    assert result.content == "1"
+
+    result = processor_task.run("250", turns=20)  # 250 -> 25 -> 5 -> 1 -> done
+    assert result.content == "1"

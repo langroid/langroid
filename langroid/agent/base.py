@@ -1072,10 +1072,12 @@ class Agent(ABC):
         # multi-tools with one or more orch tools.
         from langroid.agent.tools.orchestration import (
             AgentDoneTool,
+            AgentSendTool,
             DonePassTool,
             DoneTool,
             ForwardTool,
             PassTool,
+            SendTool,
         )
         from langroid.agent.tools.recipient_tool import RecipientTool
 
@@ -1086,6 +1088,8 @@ class Agent(ABC):
             DonePassTool,
             ForwardTool,
             RecipientTool,
+            SendTool,
+            AgentSendTool,
         )
 
         has_orch = any(isinstance(t, ORCHESTRATION_TOOLS) for t in tools)
