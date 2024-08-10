@@ -140,10 +140,11 @@ def test_enable_message(
 def test_disable_message_handling(msg_class: Optional[ToolMessage]):
     agent.enable_message(FileExistsMessage)
     agent.enable_message(PythonVersionMessage)
+    usable_tools = agent.llm_tools_usable
 
     agent.disable_message_handling(msg_class)
     tools = agent._get_tool_list(msg_class)
-    for tool in tools:
+    for tool in set(tools).intersection(usable_tools):
         assert tool not in agent.llm_tools_handled
         assert tool not in agent.llm_functions_handled
         assert tool in agent.llm_tools_usable
@@ -154,10 +155,11 @@ def test_disable_message_handling(msg_class: Optional[ToolMessage]):
 def test_disable_message_use(msg_class: Optional[ToolMessage]):
     agent.enable_message(FileExistsMessage)
     agent.enable_message(PythonVersionMessage)
+    usable_tools = agent.llm_tools_usable
 
     agent.disable_message_use(msg_class)
     tools = agent._get_tool_list(msg_class)
-    for tool in tools:
+    for tool in set(tools).intersection(usable_tools):
         assert tool not in agent.llm_tools_usable
         assert tool not in agent.llm_functions_usable
         assert tool in agent.llm_tools_handled
@@ -652,6 +654,7 @@ def test_oai_tool_choice(
     cfg = ChatAgentConfig(
         use_tools=False,  # langroid tools
         use_functions_api=True,  # openai tools/fns
+        use_tools_api=True,  # openai tools/fns
         system_message=f"""
         You will be asked to compute an operation or transform of two numbers, 
         either using your own knowledge, or 

@@ -9,9 +9,12 @@ in metadata fields:
 
 from typing import Optional
 
+import pytest
+
 import langroid as lr
 from langroid import ChatDocument
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
+from langroid.agent.tools.orchestration import DoneTool
 from langroid.agent.tools.rewind_tool import RewindTool, prune_messages
 from langroid.language_models.mock_lm import MockLMConfig
 from langroid.utils.configuration import (
@@ -42,7 +45,7 @@ def test_lineage_1_task():
             llm=MockLMConfig(
                 response_dict={
                     "1": "2",
-                    "3": DONE + " 100",
+                    "3": DoneTool(content="100").to_json(),
                 },
             )
         )
@@ -56,7 +59,8 @@ def test_lineage_1_task():
     # - u1: user: 1
     # - a1: assistant: 2
     # - u2: user: 3
-    # - a2: assistant: DONE 100
+    # - a2: assistant: DoneTool(100)
+    # - ag: 100
     # Then user says "q" -> this results in a pending_message update
     # Finally the task result is another ChatDocument
 
@@ -71,6 +75,7 @@ def test_lineage_1_task():
     cd_a1 = ChatDocument.from_id(msg_a1.chat_document_id)
     cd_u2 = ChatDocument.from_id(msg_u2.chat_document_id)
     cd_a2 = ChatDocument.from_id(msg_a2.chat_document_id)
+    cd_ag = cd_a2.child
 
     assert cd_u1.parent is None
     assert cd_u1.child is cd_a1
@@ -88,7 +93,9 @@ def test_lineage_1_task():
     assert cd_u2.metadata.msg_idx == 3
 
     assert cd_a2.parent is cd_u2
-    assert cd_a2.child is result
+    assert cd_a2.child is cd_ag
+    assert cd_ag.child is result
+    assert result.parent is cd_ag
     assert cd_a2.metadata.agent_id == agent.id
     assert cd_a2.metadata.msg_idx == 4
 
@@ -104,7 +111,13 @@ def test_lineage_1_task():
     assert ChatDocument.from_id(result.id()) is None
 
 
-def test_lineage_2_task():
+@pytest.mark.parametrize("use_done_tool", [True, False])
+def test_lineage_2_task(use_done_tool: bool):
+    def done_num(num: int) -> str:
+        return (
+            DoneTool(content=str(num)).to_json() if use_done_tool else f"{DONE} {num}"
+        )
+
     # set up two agents with no user interaction, only LLM talk to each other
     alice = MockAgent(
         ChatAgentConfig(
@@ -114,7 +127,7 @@ def test_lineage_2_task():
                     "1": "2",
                     "3": "4",
                     "5": "6",
-                    "7": DONE + " 100",
+                    "7": done_num(100),
                 },
             ),
         )
@@ -127,12 +140,12 @@ def test_lineage_2_task():
             name="Bob",
             llm=MockLMConfig(
                 response_dict={
-                    "2": DONE + " 3",
-                    "4": DONE + " 5",
-                    "6": DONE + " 7",
-                    "20": DONE + " 30",
-                    "40": DONE + " 50",
-                    "60": DONE + " 70",
+                    "2": done_num(3),
+                    "4": done_num(5),
+                    "6": done_num(7),
+                    "20": done_num(30),
+                    "40": done_num(50),
+                    "60": done_num(70),
                 },
             ),
         )
@@ -190,7 +203,7 @@ def test_lineage_2_task():
         "1": "20",
         "30": "40",
         "50": "60",
-        "70": DONE + " 200",
+        "70": done_num(200),
     }
     result = alice_task.run()
     assert "200" in result.content
@@ -202,7 +215,7 @@ def test_lineage_2_task():
         "1": "2",
         "3": "4",
         "5": "6",
-        "7": DONE + " 100",
+        "7": done_num(100),
     }
 
     # manually apply rewind tool:
@@ -226,7 +239,7 @@ def test_lineage_2_task():
         "7": "{'request': 'rewind_tool', 'n': 1, 'content': '20'}",
         "30": "40",
         "50": "60",
-        "70": DONE + " 200",
+        "70": done_num(200),
     }
 
     alice.enable_message(RewindTool)
@@ -236,13 +249,22 @@ def test_lineage_2_task():
     assert "200" in result.content
 
 
-def test_rewind_tool(test_settings: Settings):
+@pytest.mark.parametrize("use_done_tool", [True, False])
+def test_rewind_tool(test_settings: Settings, use_done_tool: bool):
     set_global(test_settings)
+
+    done_tool_name = DoneTool.default_value("request")
+    if use_done_tool:
+        done_response = f"""
+        use the TOOL: `{done_tool_name}` with `content` field set to your final answer
+        """
+    else:
+        done_response = f"say {DONE} and show your final answer"
 
     alice = lr.ChatAgent(
         lr.ChatAgentConfig(
             name="Alice",
-            system_message="""
+            system_message=f"""
             You only know english and have absolutely no calculation abilities.
             
             You are trying to find out the Polinsky transform of the number 5.
@@ -261,8 +283,8 @@ def test_rewind_tool(test_settings: Settings):
             and ONLY after 3 unsuccessful tries with the 
             original question and its variants.
 
-            Once you are satisfied with the answers, say DONE and show your 
-            final answer.
+            Once you are satisfied with the answers, 
+            {done_response}
             """,
         )
     )

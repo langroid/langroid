@@ -5,6 +5,7 @@ import pytest
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.chat_document import StatusCode
 from langroid.agent.task import Task
+from langroid.agent.tools.orchestration import DoneTool
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
 from langroid.language_models.base import Role
 from langroid.language_models.openai_gpt import OpenAIGPTConfig
@@ -12,7 +13,7 @@ from langroid.mytypes import DocMetaData, Document, Entity
 from langroid.parsing.parser import ParsingConfig
 from langroid.prompts.prompts_config import PromptsConfig
 from langroid.utils.configuration import Settings, set_global
-from langroid.utils.constants import NO_ANSWER
+from langroid.utils.constants import DONE, NO_ANSWER
 from langroid.vector_store.base import VectorStoreConfig
 
 
@@ -99,7 +100,8 @@ class _MultiplierAgent(ChatAgent):
 EXPONENTIALS = "3**5 8**3 9**3"
 
 
-def test_multi_agent(test_settings: Settings):
+@pytest.mark.parametrize("use_done_tool", [True, False])
+def test_multi_agent(test_settings: Settings, use_done_tool: bool):
     set_global(test_settings)
     master_cfg = _TestChatAgentConfig(name="Master")
 
@@ -109,6 +111,21 @@ def test_multi_agent(test_settings: Settings):
 
     # master asks a series of expenenential questions, e.g. 3^6, 8^5, etc.
     master = _MasterAgent(master_cfg)
+    master.enable_message(DoneTool)
+    done_tool_name = DoneTool.default_value("request")
+    if use_done_tool:
+        done_response = f"""
+        use the TOOL: `{done_tool_name}` with `content` field 
+        equal to a string containing the answers as a SEQUENCE without commas, 
+        e.g. "243 512 729 125".
+        """
+    else:
+        done_response = f"""
+        say {DONE}  followed by the sequence of answers without commas,
+        e.g. "{DONE}: 243 512 729 125".
+        """
+
+    f"say {DONE} and show me the result"
     task_master = Task(
         master,
         interactive=False,
@@ -120,26 +137,27 @@ def test_multi_agent(test_settings: Settings):
                 Say nothing else, only the numerical operation.
                 When you receive the answer, say RIGHT or WRONG, and ask 
                 the next exponential question, e.g.: "RIGHT 8**2".
-                When done asking the series of questions, simply 
-                say "DONE:" followed by the answers without commas, 
-                e.g. "DONE: 243 512 729 125".
+                When done asking the series of questions, 
+                {done_response}
                 """,
         user_message="Start by asking me an exponential question.",
     )
 
     # For a given exponential computation, plans a sequence of multiplications.
     planner = _PlannerAgent(planner_cfg)
+    planner.enable_message(DoneTool)
+
     task_planner = Task(
         planner,
         interactive=False,
-        system_message="""
+        system_message=f"""
                 You understand exponentials, but you do not know how to multiply.
                 You will be given an exponential to compute, and you have to ask a 
                 sequence of multiplication questions, to figure out the exponential. 
                 Present the question using only numbers, e.g, "3 * 5", and it should 
                 only involve a SINGLE multiplication. 
-                When you have your final answer, reply with something like 
-                "DONE: 92"
+                When you have your final answer, use the TOOL: `{done_tool_name}`
+                with content equal to the answer as a string, e.g. "92". 
                 """,
     )
 

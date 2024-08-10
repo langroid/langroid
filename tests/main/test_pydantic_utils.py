@@ -1,5 +1,7 @@
+import pytest
+
 from langroid.pydantic_v1 import BaseModel
-from langroid.utils.pydantic_utils import extract_fields
+from langroid.utils.pydantic_utils import extract_fields, flatten_dict
 
 
 class DetailsModel(BaseModel):
@@ -46,3 +48,30 @@ def test_extract_fields():
     # Test with empty fields list
     result = extract_fields(test_instance, [])
     assert result == {}
+
+
+@pytest.mark.parametrize(
+    "input_dict, expected_output",
+    [
+        ({"a": 1, "b": 2, "c": 3}, {"a": 1, "b": 2, "c": 3}),
+        ({"a": 1, "b": {"c": 2, "d": 3}, "e": 4}, {"a": 1, "b.c": 2, "b.d": 3, "e": 4}),
+        ({"a": {"b": {"c": {"d": 1}}}}, {"a.b.c.d": 1}),
+        ({"a": [1, 2, 3], "b": {"c": [4, 5, 6]}}, {"a": [1, 2, 3], "b.c": [4, 5, 6]}),
+        ({"a": 1, "b": {}, "c": 3}, {"a": 1, "c": 3}),
+        ({}, {}),
+        ({"a": None, "b": {"c": None}}, {"a": None, "b.c": None}),
+    ],
+)
+def test_flatten_dict(input_dict, expected_output):
+    assert flatten_dict(input_dict) == expected_output
+
+
+@pytest.mark.parametrize(
+    "input_dict, separator, expected_output",
+    [
+        ({"a": 1, "b": {"c": 2, "d": 3}}, "__", {"a": 1, "b__c": 2, "b__d": 3}),
+        ({"x": {"y": {"z": 1}}}, "->", {"x->y->z": 1}),
+    ],
+)
+def test_flatten_dict_custom_separator(input_dict, separator, expected_output):
+    assert flatten_dict(input_dict, sep=separator) == expected_output

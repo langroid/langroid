@@ -2,6 +2,7 @@ import pytest
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
+from langroid.agent.tools.orchestration import DoneTool
 from langroid.agent.tools.recipient_tool import RecipientTool
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
 from langroid.language_models.openai_gpt import OpenAIGPTConfig
@@ -9,6 +10,7 @@ from langroid.mytypes import Entity
 from langroid.parsing.parser import ParsingConfig
 from langroid.prompts.prompts_config import PromptsConfig
 from langroid.utils.configuration import Settings, set_global
+from langroid.utils.constants import DONE
 from langroid.vector_store.base import VectorStoreConfig
 
 
@@ -30,10 +32,14 @@ EXPONENTIALS = "3**4 8**3"
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("fn_api", [True, False])
+@pytest.mark.parametrize("tools_api", [True, False])
 @pytest.mark.parametrize("constrain_recipients", [True, False])
+@pytest.mark.parametrize("use_done_tool", [True, False])
 async def test_agents_with_recipient(
     test_settings: Settings,
     fn_api: bool,
+    tools_api: bool,
+    use_done_tool: bool,
     constrain_recipients: bool,
 ):
     set_global(test_settings)
@@ -43,12 +49,27 @@ async def test_agents_with_recipient(
         name="Planner",
         use_tools=not fn_api,
         use_functions_api=fn_api,
+        use_tools_api=tools_api,
     )
 
     multiplier_cfg = _TestChatAgentConfig(name="Multiplier")
 
+    done_tool_name = DoneTool.default_value("request")
+
+    if use_done_tool:
+        done_response = f"""
+            summarize the answers using the TOOL: `{done_tool_name}` with `content` 
+            field equal to a string containing the answers without commas,   
+            e.g. "243 512 729 125".
+        """
+    else:
+        done_response = f"""
+            simply say "{DONE}:" followed by the answers without commas, 
+            e.g. "{DONE}: 243 512 729 125".
+        """
     # master asks a series of exponential questions, e.g. 3^6, 8^5, etc.
     master = ChatAgent(master_cfg)
+    master.enable_message(DoneTool)
     task_master = Task(
         master,
         interactive=False,
@@ -60,9 +81,8 @@ async def test_agents_with_recipient(
                 Say nothing else, only the numerical operation.
                 When you receive the answer, say RIGHT or WRONG, and ask 
                 the next exponential question, e.g.: "RIGHT 8**2".
-                When done asking the series of questions, simply 
-                say "DONE:" followed by the answers without commas, 
-                e.g. "DONE: 243 512 729 125".
+                When done asking the series of questions, 
+                {done_response}
                 """,
         user_message="Start by asking me an exponential question.",
     )

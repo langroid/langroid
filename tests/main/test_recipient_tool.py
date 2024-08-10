@@ -29,6 +29,7 @@ import pytest
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
 from langroid.agent.tool_message import ToolMessage
+from langroid.agent.tools.orchestration import DoneTool
 from langroid.agent.tools.recipient_tool import RecipientTool
 from langroid.language_models.openai_gpt import OpenAIGPTConfig
 from langroid.mytypes import Entity
@@ -46,24 +47,30 @@ class SquareTool(ToolMessage):
 
     # this is a stateless tool, so we can define the handler here,
     # without having to define a `square` method in the agent.
-    def handle(self) -> str:
+    def handle(self) -> str | DoneTool:
         if self.number % 10 == 0:
             return DONE + str(self.number**2)
         else:
-            return DONE + "-1"
+            # test that DoneTool works just like saying DONE
+            return DoneTool(content="-1")
 
 
 @pytest.mark.parametrize("fn_api", [True, False])
+@pytest.mark.parametrize("tools_api", [True, False])
 @pytest.mark.parametrize("constrain_recipients", [True, False])
+@pytest.mark.parametrize("done_tool", [True, False])
 def test_agents_with_recipient_tool(
     test_settings: Settings,
     fn_api: bool,
+    tools_api: bool,
     constrain_recipients: bool,
+    done_tool: bool,
 ):
     set_global(test_settings)
     config = ChatAgentConfig(
         llm=OpenAIGPTConfig(),
         use_tools=not fn_api,
+        use_tools_api=tools_api,
         use_functions_api=fn_api,
         vecdb=None,
     )
@@ -79,6 +86,16 @@ def test_agents_with_recipient_tool(
     processor_agent.enable_message(
         SquareTool, require_recipient=True, use=True, handle=False
     )
+    if done_tool:
+        processor_agent.enable_message(DoneTool)
+        done_tool_name = DoneTool.default_value("request")
+
+    done_response = (
+        f"use the TOOL: `{done_tool_name}` with `content` field set to the result"
+        if done_tool
+        else f"say {DONE} and show me the result"
+    )
+
     processor_task = Task(
         processor_agent,
         name="Processor",
@@ -116,8 +133,10 @@ def test_agents_with_recipient_tool(
         in the next step.
         
         Once all {len(INPUT_NUMBERS)} numbers in the given list have been transformed
-        to positive values, say DONE and show me the result, showing only the 
-        positive transformations, in the same order as the original list.
+        to positive values, 
+        {done_response}, 
+        showing only the positive transformations, 
+        in the same order as the original list.
         
         Start by requesting a transformation for the first number.
         Be very concise in your messages, do not say anything unnecessary.

@@ -83,6 +83,10 @@ def test_extract_top_level_json(s, expected):
         ("{key: 'value'}", {"key": "value"}),
         ("{'key': value}", {"key": "value"}),
         ("{key: value}", {"key": "value"}),
+        (
+            '{"key": "you said "hello" yesterday"}',  # did not escape inner quotes
+            {"key": 'you said "hello" yesterday'},
+        ),
         ("[1, 2, 3]", [1, 2, 3]),
         (
             """
