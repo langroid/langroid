@@ -91,7 +91,7 @@ jobs:
           --with dev
 
     - name: Download NLTK data
-      run: poetry run python -c "import nltk; nltk.download('punkt')"
+      run: poetry run python -c "import nltk; nltk.download('punkt_tab')"
 
     - name: Dump dependencies to file
       run: pip freeze > requirements_github.txt
