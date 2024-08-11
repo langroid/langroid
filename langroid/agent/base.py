@@ -144,6 +144,7 @@ class Agent(ABC):
             show_start_response=noop_fn,
         )
         Agent.init_state(self)
+        self.init_state()
 
     def init_state(self) -> None:
         """Initialize all state vars. Called by Task.run() if restart is True"""

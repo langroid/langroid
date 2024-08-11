@@ -173,3 +173,15 @@ def test_simple_task(test_settings: Settings):
 
     response = task.run(msg="7")
     assert "49" in response.content
+
+
+def test_agent_init_state():
+
+    class MyAgent(ChatAgent):
+        def init_state(self):
+            self.x = 0
+
+    agent = MyAgent(_TestChatAgentConfig())
+    assert agent.x == 0
+    assert agent.total_llm_token_cost == 0
+    assert agent.total_llm_token_usage == 0

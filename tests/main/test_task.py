@@ -707,7 +707,6 @@ def test_task_tool_responses():
     class ProcessorAgent(lr.ChatAgent):
         def init_state(self):
             self.expecting_result: bool = False
-            super().init_state()
 
         def llm_response(
             self, message: Optional[str | ChatDocument] = None
