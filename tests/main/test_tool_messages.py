@@ -138,8 +138,7 @@ def test_enable_message(
 
 @pytest.mark.parametrize("msg_class", [None, FileExistsMessage, PythonVersionMessage])
 def test_disable_message_handling(msg_class: Optional[ToolMessage]):
-    agent.enable_message(FileExistsMessage)
-    agent.enable_message(PythonVersionMessage)
+    agent.enable_message([FileExistsMessage, PythonVersionMessage])
     usable_tools = agent.llm_tools_usable
 
     agent.disable_message_handling(msg_class)
@@ -299,9 +298,13 @@ def test_llm_tool_message(
             """
         )
 
-    agent.enable_message(FileExistsMessage)
-    agent.enable_message(PythonVersionMessage)
-    agent.enable_message(CountryCapitalMessage)
+    agent.enable_message(
+        [
+            FileExistsMessage,
+            PythonVersionMessage,
+            CountryCapitalMessage,
+        ]
+    )
 
     llm_msg = agent.llm_response_forget(prompt)
     tool_name = message_class.default_value("request")
@@ -447,9 +450,13 @@ def test_agent_infer_tool(
         use_tools_api=use_tools_api,
     )
     agent = ChatAgent(cfg)
-    agent.enable_message(NabroskiTool)
-    agent.enable_message(GaussTool)
-    agent.enable_message(CoinFlipTool)
+    agent.enable_message(
+        [
+            NabroskiTool,
+            GaussTool,
+            CoinFlipTool,
+        ]
+    )
     agent.enable_message(EulerTool, handle=False)
 
     # Nabrowski is the only option prior to enabling EulerTool handling

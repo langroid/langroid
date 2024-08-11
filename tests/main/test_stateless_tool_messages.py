@@ -1,4 +1,3 @@
-import itertools
 from typing import Optional
 
 import pytest
@@ -57,19 +56,14 @@ handle_vals = [True, False]
 force_vals = [True, False]
 message_classes = [None, SquareTool]
 
-# Get the cartesian product
-cartesian_product = list(
-    itertools.product(message_classes, use_vals, handle_vals, force_vals)
-)
 
 agent.enable_message(SquareTool)
 
 
-@pytest.mark.parametrize(
-    # cartesian product of all combinations of use, handle, force
-    "msg_class, use, handle, force",
-    cartesian_product,
-)
+@pytest.mark.parametrize("msg_class", [None, SquareTool])
+@pytest.mark.parametrize("use", [True, False])
+@pytest.mark.parametrize("handle", [True, False])
+@pytest.mark.parametrize("force", [True, False])
 def test_enable_message(
     msg_class: Optional[ToolMessage], use: bool, handle: bool, force: bool
 ):
