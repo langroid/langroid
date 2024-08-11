@@ -160,7 +160,7 @@ class OpenAIAssistant(ChatAgent):
 
     def enable_message(
         self,
-        message_class: Optional[Type[ToolMessage]],
+        message_class: Optional[Type[ToolMessage] | List[Type[ToolMessage]]],
         use: bool = True,
         handle: bool = True,
         force: bool = False,
@@ -173,6 +173,17 @@ class OpenAIAssistant(ChatAgent):
         fn-calling seems to pay attn to these, and if we don't want this,
         we should set this to False.
         """
+        if message_class is not None and isinstance(message_class, list):
+            for msg_class in message_class:
+                self.enable_message(
+                    msg_class,
+                    use=use,
+                    handle=handle,
+                    force=force,
+                    require_recipient=require_recipient,
+                    include_defaults=include_defaults,
+                )
+            return
         super().enable_message(
             message_class,
             use=use,

@@ -155,22 +155,18 @@ class ChatAgent(Agent):
             # We don't want enable orch tool GENERATION by default, since that
             # might clutter-up the LLM system message unnecessarily.
             from langroid.agent.tools.orchestration import (
-                AgentSendTool,
                 DonePassTool,
                 DoneTool,
                 ForwardTool,
                 PassTool,
                 SendTool,
             )
-            from langroid.agent.tools.recipient_tool import RecipientTool
 
             self.enable_message(ForwardTool, use=False, handle=True)
             self.enable_message(DoneTool, use=False, handle=True)
             self.enable_message(PassTool, use=False, handle=True)
             self.enable_message(DonePassTool, use=False, handle=True)
             self.enable_message(SendTool, use=False, handle=True)
-            self.enable_message(AgentSendTool, use=False, handle=True)
-            self.enable_message(RecipientTool, use=False, handle=True)
 
     @staticmethod
     def from_id(id: str) -> "ChatAgent":
@@ -299,19 +295,25 @@ class ChatAgent(Agent):
         Returns:
             str: formatting rules
         """
-        enabled_classes: List[Type[ToolMessage]] = list(self.llm_tools_map.values())
-        if len(enabled_classes) == 0:
+        # ONLY Usable tools (i.e. LLM-generation allowed),
+        usable_tool_classes: List[Type[ToolMessage]] = [
+            t
+            for t in list(self.llm_tools_map.values())
+            if not t.Config.handle_only
+            and t.default_value("request") in self.llm_tools_usable
+        ]
+
+        if len(usable_tool_classes) == 0:
             return "You can ask questions in natural language."
         json_instructions = "\n\n".join(
             [
                 msg_cls.json_instructions(tool=self.config.use_tools)
-                for _, msg_cls in enumerate(enabled_classes)
-                if msg_cls.default_value("request") in self.llm_tools_usable
+                for _, msg_cls in enumerate(usable_tool_classes)
             ]
         )
         # if any of the enabled classes has json_group_instructions, then use that,
         # else fall back to ToolMessage.json_group_instructions
-        for msg_cls in enabled_classes:
+        for msg_cls in usable_tool_classes:
             if hasattr(msg_cls, "json_group_instructions") and callable(
                 getattr(msg_cls, "json_group_instructions")
             ):
@@ -456,7 +458,7 @@ class ChatAgent(Agent):
 
     def enable_message(
         self,
-        message_class: Optional[Type[ToolMessage]],
+        message_class: Optional[Type[ToolMessage] | List[Type[ToolMessage]]],
         use: bool = True,
         handle: bool = True,
         force: bool = False,
@@ -469,8 +471,10 @@ class ChatAgent(Agent):
         - tool HANDLING (i.e. the agent can handle JSON from this tool),
 
         Args:
-            message_class: The ToolMessage class to enable,
+            message_class: The ToolMessage class OR List of such classes to enable,
                 for USE, or HANDLING, or both.
+                If this is a list of ToolMessage classes, then the remain args are
+                applied to all classes.
                 Optional; if None, then apply the enabling to all tools in the
                 agent's toolset that have been enabled so far.
             use: IF True, allow the agent (LLM) to use this tool (or all tools),
@@ -488,6 +492,17 @@ class ChatAgent(Agent):
                 but the Assistant fn-calling seems to pay attn to these,
                 and if we don't want this, we should set this to False.)
         """
+        if message_class is not None and isinstance(message_class, list):
+            for mc in message_class:
+                self.enable_message(
+                    mc,
+                    use=use,
+                    handle=handle,
+                    force=force,
+                    require_recipient=require_recipient,
+                    include_defaults=include_defaults,
+                )
+            return None
         if require_recipient and message_class is not None:
             message_class = message_class.require_recipient()
         super().enable_message_handling(message_class)  # enables handling only
