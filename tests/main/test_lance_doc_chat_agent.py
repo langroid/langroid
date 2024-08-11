@@ -4,13 +4,13 @@ import pytest
 from langroid.agent.special.doc_chat_agent import DocChatAgentConfig
 from langroid.agent.special.lance_doc_chat_agent import LanceDocChatAgent
 from langroid.agent.special.lance_rag.lance_rag_task import LanceRAGTaskCreator
-from langroid.agent.special.lance_tools import QueryPlan, QueryPlanTool
+from langroid.agent.special.lance_tools import AnswerTool, QueryPlan, QueryPlanTool
+from langroid.agent.tools.orchestration import AgentDoneTool
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
 from langroid.mytypes import DocMetaData, Document
 from langroid.parsing.parser import ParsingConfig, Splitter
 from langroid.pydantic_v1 import Field
 from langroid.utils.configuration import Settings, set_global
-from langroid.utils.constants import NO_ANSWER
 from langroid.utils.system import rmdir
 from langroid.vector_store.lancedb import LanceDBConfig
 
@@ -64,12 +64,12 @@ movie_docs = [
     ),
     MovieDoc(
         content="""
-        The Godfeather is a 1972 crime movie directed by Frank Copula.
+        The GodPapa is a 1972 crime movie directed by Frank Copula.
         
         Copulas were used in the computer graphics to simulate the crime scenes.
         """,
         metadata=MovieMetadata(
-            title="The Godfeather",
+            title="The GodPapa",
             year=1972,
             director="Frank Copula",
             genre="Crime",
@@ -99,6 +99,10 @@ embed_cfg = OpenAIEmbeddingsConfig()
     "query, expected",
     [
         (
+            "Which Crime movie had a rating over 9?",
+            "GodPapa",
+        ),
+        (
             "How many movies have rating above 9?",
             "1",
         ),
@@ -107,21 +111,21 @@ embed_cfg = OpenAIEmbeddingsConfig()
             "Vector",
         ),
         (
-            "Which Crime movie had a rating over 9?",
-            "Godfeather",
-        ),
-        (
             "What was the Science Fiction movie directed by Stanley Hendrick?",
             "Sparse Odyssey",
         ),
     ],
 )
 @pytest.mark.parametrize("split", [False, True])
+@pytest.mark.parametrize("functions_api", [True, False])
+@pytest.mark.parametrize("tools_api", [True, False])
 def test_lance_doc_chat_agent(
     test_settings: Settings,
     split: bool,
     query: str,
     expected: str,
+    functions_api: bool,
+    tools_api: bool,
 ):
     # note that the (query, ans) pairs are accumulated into the
     # internal dialog history of the agent.
@@ -145,6 +149,9 @@ def test_lance_doc_chat_agent(
             splitter=Splitter.SIMPLE,
             n_similar_docs=3,
         ),
+        use_functions_api=functions_api,
+        use_tools=not functions_api,
+        use_tools_api=tools_api,
     )
 
     agent = LanceDocChatAgent(cfg)
@@ -152,7 +159,7 @@ def test_lance_doc_chat_agent(
     task = LanceRAGTaskCreator.new(agent, interactive=False)
 
     result = task.run(query)
-    assert result is None or NO_ANSWER in result.content or expected in result.content
+    assert expected in result.content
 
 
 # dummy pandas dataframe from text
@@ -161,7 +168,7 @@ df = pd.DataFrame(
         "title": [
             "The Vector",
             "Sparse Odyssey",
-            "The Godfeather",
+            "The GodPapa",
             "Lamb Shank Redemption",
             "Escape from Alcoona",
         ],
@@ -170,7 +177,7 @@ df = pd.DataFrame(
             "and directed by Jomes Winkowski.",
             "Sparse Odyssey is a 1968 science fiction film produced "
             "and directed by Stanley Hendrick.",
-            "The Godfeather is a 1972 movie about birds directed by Frank Copula.",
+            "The GodPapa is a 1972 movie about birds directed by Frank Copula.",
             "The Lamb Shank Redemption is a 1994 American drama "
             "film directed by Garth Brook about a prison escape.",
             "Escape from Alcoona is a 1979 American prison action film  "
@@ -241,12 +248,20 @@ def test_lance_doc_chat_agent_df_query_plan(test_settings: Settings):
         )
     )
     result = agent.query_plan(query_plan)
-    assert "Alcoona" in result
+    assert (
+        isinstance(result, AgentDoneTool)
+        and isinstance(result.tools[0], AnswerTool)
+        and "Alcoona" in result.tools[0].answer
+    )
 
 
 @pytest.mark.parametrize(
     "query, expected",
     [
+        (
+            "Tell me about a movie about birds rated over 9",
+            "GodPapa",
+        ),
         (
             "Average rating of Science Fiction movies?",
             "9",
@@ -254,10 +269,6 @@ def test_lance_doc_chat_agent_df_query_plan(test_settings: Settings):
         (
             "Which Science Fiction movie is rated highest?",
             "Odyssey",
-        ),
-        (
-            "Tell me about a movie about birds rated over 9",
-            "Godfeather",
         ),
         (
             "What was the Science Fiction movie directed by Stanley Hendrick?",
@@ -304,7 +315,7 @@ def test_lance_doc_chat_agent_df(
     task = LanceRAGTaskCreator.new(agent, interactive=False)
 
     result = task.run(query)
-    assert result is None or NO_ANSWER in result.content or expected in result.content
+    assert expected in result.content
 
 
 def test_lance_doc_chat_df_direct(test_settings: Settings):

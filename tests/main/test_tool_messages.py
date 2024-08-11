@@ -138,12 +138,12 @@ def test_enable_message(
 
 @pytest.mark.parametrize("msg_class", [None, FileExistsMessage, PythonVersionMessage])
 def test_disable_message_handling(msg_class: Optional[ToolMessage]):
-    agent.enable_message(FileExistsMessage)
-    agent.enable_message(PythonVersionMessage)
+    agent.enable_message([FileExistsMessage, PythonVersionMessage])
+    usable_tools = agent.llm_tools_usable
 
     agent.disable_message_handling(msg_class)
     tools = agent._get_tool_list(msg_class)
-    for tool in tools:
+    for tool in set(tools).intersection(usable_tools):
         assert tool not in agent.llm_tools_handled
         assert tool not in agent.llm_functions_handled
         assert tool in agent.llm_tools_usable
@@ -154,10 +154,11 @@ def test_disable_message_handling(msg_class: Optional[ToolMessage]):
 def test_disable_message_use(msg_class: Optional[ToolMessage]):
     agent.enable_message(FileExistsMessage)
     agent.enable_message(PythonVersionMessage)
+    usable_tools = agent.llm_tools_usable
 
     agent.disable_message_use(msg_class)
     tools = agent._get_tool_list(msg_class)
-    for tool in tools:
+    for tool in set(tools).intersection(usable_tools):
         assert tool not in agent.llm_tools_usable
         assert tool not in agent.llm_functions_usable
         assert tool in agent.llm_tools_handled
@@ -297,9 +298,13 @@ def test_llm_tool_message(
             """
         )
 
-    agent.enable_message(FileExistsMessage)
-    agent.enable_message(PythonVersionMessage)
-    agent.enable_message(CountryCapitalMessage)
+    agent.enable_message(
+        [
+            FileExistsMessage,
+            PythonVersionMessage,
+            CountryCapitalMessage,
+        ]
+    )
 
     llm_msg = agent.llm_response_forget(prompt)
     tool_name = message_class.default_value("request")
@@ -445,9 +450,13 @@ def test_agent_infer_tool(
         use_tools_api=use_tools_api,
     )
     agent = ChatAgent(cfg)
-    agent.enable_message(NabroskiTool)
-    agent.enable_message(GaussTool)
-    agent.enable_message(CoinFlipTool)
+    agent.enable_message(
+        [
+            NabroskiTool,
+            GaussTool,
+            CoinFlipTool,
+        ]
+    )
     agent.enable_message(EulerTool, handle=False)
 
     # Nabrowski is the only option prior to enabling EulerTool handling
@@ -652,6 +661,7 @@ def test_oai_tool_choice(
     cfg = ChatAgentConfig(
         use_tools=False,  # langroid tools
         use_functions_api=True,  # openai tools/fns
+        use_tools_api=True,  # openai tools/fns
         system_message=f"""
         You will be asked to compute an operation or transform of two numbers, 
         either using your own knowledge, or 

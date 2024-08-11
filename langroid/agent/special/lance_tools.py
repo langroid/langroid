@@ -34,9 +34,17 @@ class QueryPlanTool(ToolMessage):
     plan: QueryPlan
 
 
+class AnswerTool(ToolMessage):
+    """Wrapper for answer from LanceDocChatAgent"""
+
+    purpose: str = "To package the answer from LanceDocChatAgent"
+    request: str = "answer_tool"
+    answer: str
+
+
 class QueryPlanAnswerTool(ToolMessage):
-    request = "query_plan_answer"  # the agent method name that handles this tool
-    purpose = """
+    request: str = "query_plan_answer"  # the agent method name that handles this tool
+    purpose: str = """
     Assemble query <plan> and <answer>
     """
     plan: QueryPlan

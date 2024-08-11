@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import json
+from collections import OrderedDict
 from enum import Enum
 from typing import Any, Dict, List, Optional, Union, cast
 
@@ -96,14 +97,16 @@ class ChatDocument(Document):
     and so does the Task.run() method.
 
     Attributes:
-        oai_tool_calls (List[OpenAIToolCall]): Tool-calls from an OpenAI-compatible API
-        oai_tool_id2results (Dict[str, str]): Results of tool-calls from OpenAI
-            (dict is a map of tool_id -> result)
+        oai_tool_calls (Optional[List[OpenAIToolCall]]):
+            Tool-calls from an OpenAI-compatible API
+        oai_tool_id2results (Optional[OrderedDict[str, str]]):
+            Results of tool-calls from OpenAI (dict is a map of tool_id -> result)
         oai_tool_choice: ToolChoiceTypes | Dict[str, str]: Param controlling how the
             LLM should choose tool-use in its response
             (auto, none, required, or a specific tool)
-        function_call (LLMFunctionCall): Function-call from an OpenAI-compatible API
-                (deprecated; use oai_tool_calls instead)
+        function_call (Optional[LLMFunctionCall]):
+            Function-call from an OpenAI-compatible API
+                (deprecated by OpenAI, in favor of tool-calls)
         tool_messages (List[ToolMessage]): Langroid ToolMessages extracted from
             - `content` field (via JSON parsing),
             - `oai_tool_calls`, or
@@ -113,10 +116,14 @@ class ChatDocument(Document):
     """
 
     oai_tool_calls: Optional[List[OpenAIToolCall]] = None
-    oai_tool_id2result: Optional[Dict[str, str]] = None
+    oai_tool_id2result: Optional[OrderedDict[str, str]] = None
     oai_tool_choice: ToolChoiceTypes | Dict[str, Dict[str, str] | str] = "auto"
     function_call: Optional[LLMFunctionCall] = None
-    tool_messages: List[ToolMessage] = []
+    tool_messages: List[ToolMessage] = []  # only handle-able tools
+    # all known tools in the msg that are in an agent's llm_tools_known list,
+    # even if non-used/handled
+    all_tool_messages: List[ToolMessage] = []
+
     metadata: ChatDocMetaData
     attachment: None | ChatDocAttachment = None
 
@@ -136,6 +143,8 @@ class ChatDocument(Document):
     def deepcopy(doc: ChatDocument) -> ChatDocument:
         new_doc = copy.deepcopy(doc)
         new_doc.metadata.id = ObjectRegistry.new_id()
+        new_doc.metadata.child_id = ""
+        new_doc.metadata.parent_id = ""
         ObjectRegistry.register_object(new_doc)
         return new_doc
 

@@ -5,6 +5,7 @@ import json
 import logging
 import re
 from abc import ABC
+from collections import OrderedDict
 from contextlib import ExitStack
 from types import SimpleNamespace
 from typing import (
@@ -31,11 +32,13 @@ from langroid.agent.tool_message import ToolMessage
 from langroid.language_models.base import (
     LanguageModel,
     LLMConfig,
+    LLMFunctionCall,
     LLMMessage,
     LLMResponse,
     LLMTokenUsage,
     OpenAIToolCall,
     StreamingIfAllowed,
+    ToolChoiceTypes,
 )
 from langroid.language_models.openai_gpt import OpenAIGPT, OpenAIGPTConfig
 from langroid.mytypes import Entity
@@ -44,11 +47,12 @@ from langroid.parsing.parser import Parser, ParsingConfig
 from langroid.prompts.prompts_config import PromptsConfig
 from langroid.pydantic_v1 import BaseSettings, Field, ValidationError, validator
 from langroid.utils.configuration import settings
-from langroid.utils.constants import NO_ANSWER
+from langroid.utils.constants import DONE, NO_ANSWER, PASS, PASS_TO, SEND_TO
 from langroid.utils.object_registry import ObjectRegistry
 from langroid.utils.output import status
 from langroid.vector_store.base import VectorStore, VectorStoreConfig
 
+ORCHESTRATION_STRINGS = [DONE, PASS, PASS_TO, SEND_TO]
 console = Console(quiet=settings.quiet)
 
 logger = logging.getLogger(__name__)
@@ -108,9 +112,8 @@ class Agent(ABC):
         self.llm_tools_map: Dict[str, Type[ToolMessage]] = {}
         self.llm_tools_handled: Set[str] = set()
         self.llm_tools_usable: Set[str] = set()
+        self.llm_tools_known: Set[str] = set()  # all known tools, handled/used or not
         self.interactive: bool | None = None
-        self.total_llm_token_cost = 0.0
-        self.total_llm_token_usage = 0
         self.token_stats_str = ""
         self.default_human_response: Optional[str] = None
         self._indent = ""
@@ -140,6 +143,13 @@ class Agent(ABC):
             show_error_message=noop_fn,
             show_start_response=noop_fn,
         )
+        Agent.init_state(self)
+        self.init_state()
+
+    def init_state(self) -> None:
+        """Initialize all state vars. Called by Task.run() if restart is True"""
+        self.total_llm_token_cost = 0.0
+        self.total_llm_token_usage = 0
 
     @staticmethod
     def from_id(id: str) -> "Agent":
@@ -239,7 +249,7 @@ class Agent(ABC):
         ):
             """
             If the message class has a `handle` method,
-            and does NOT have a method with the same name as the tool,
+            and agent does NOT have a method with the same name as the tool,
             then we create a method for the agent whose name
             is the value of `tool`, and whose body is the `handle` method.
             This removes a separate step of having to define this method
@@ -247,13 +257,25 @@ class Agent(ABC):
             in one place, i.e. in the message class.
             See `tests/main/test_stateless_tool_messages.py` for an example.
             """
-            setattr(self, tool, lambda obj: obj.handle())
+            has_chat_doc_arg = (
+                len(inspect.signature(message_class.handle).parameters) > 1
+            )
+            if has_chat_doc_arg:
+                setattr(self, tool, lambda obj, chat_doc: obj.handle(chat_doc))
+            else:
+                setattr(self, tool, lambda obj: obj.handle())
         elif (
             hasattr(message_class, "response")
             and inspect.isfunction(message_class.response)
             and not hasattr(self, tool)
         ):
-            setattr(self, tool, lambda obj: obj.response(self))
+            has_chat_doc_arg = (
+                len(inspect.signature(message_class.response).parameters) > 2
+            )
+            if has_chat_doc_arg:
+                setattr(self, tool, lambda obj, chat_doc: obj.response(self, chat_doc))
+            else:
+                setattr(self, tool, lambda obj: obj.response(self))
 
         if hasattr(message_class, "handle_message_fallback") and (
             inspect.isfunction(message_class.handle_message_fallback)
@@ -311,9 +333,27 @@ class Agent(ABC):
         ]
         return "\n\n".join(sample_convo)
 
-    def create_agent_response(self, content: str | None = None) -> ChatDocument:
+    def create_agent_response(
+        self,
+        content: str | None = None,
+        tool_messages: List[ToolMessage] = [],
+        oai_tool_calls: Optional[List[OpenAIToolCall]] = None,
+        oai_tool_choice: ToolChoiceTypes | Dict[str, Dict[str, str] | str] = "auto",
+        oai_tool_id2result: OrderedDict[str, str] | None = None,
+        function_call: LLMFunctionCall | None = None,
+        recipient: str = "",
+    ) -> ChatDocument:
         """Template for agent_response."""
-        return self._response_template(Entity.AGENT, content)
+        return self.response_template(
+            Entity.AGENT,
+            content=content,
+            tool_messages=tool_messages,
+            oai_tool_calls=oai_tool_calls,
+            oai_tool_choice=oai_tool_choice,
+            oai_tool_id2result=oai_tool_id2result,
+            function_call=function_call,
+            recipient=recipient,
+        )
 
     async def agent_response_async(
         self,
@@ -366,7 +406,7 @@ class Agent(ABC):
             # set sender_name to name of the function_call
             sender_name = msg.function_call.name
 
-        results_str, id2result, oai_tool_id = self._process_tool_results(
+        results_str, id2result, oai_tool_id = self.process_tool_results(
             results if isinstance(results, str) else "",
             id2result=None if isinstance(results, str) else results,
             tool_calls=(msg.oai_tool_calls if isinstance(msg, ChatDocument) else None),
@@ -384,21 +424,29 @@ class Agent(ABC):
             ),
         )
 
-    def _process_tool_results(
+    def process_tool_results(
         self,
         results: str,
-        id2result: Dict[str, str] | None,
+        id2result: OrderedDict[str, str] | None,
         tool_calls: List[OpenAIToolCall] | None = None,
     ) -> Tuple[str, Dict[str, str] | None, str | None]:
         """
         Process results from a response, based on whether
-        they are results of OpenAI tool-calls from THIS agent.
+        they are results of OpenAI tool-calls from THIS agent, so that
+        we can construct an appropriate LLMMessage that contains tool results.
+
+        Args:
+            results (str): A possible string result from handling tool(s)
+            id2result (OrderedDict[str,str]|None): A dict of OpenAI tool id -> result,
+                if there are multiple tool results.
+            tool_calls (List[OpenAIToolCall]|None): List of OpenAI tool-calls that the
+                results are a response to.
 
         Return:
             - str: The response string
             - Dict[str,str]|None: A dict of OpenAI tool id -> result, if there are
                 multiple tool results.
-            - str|None: tool_id if we there was a single tool result
+            - str|None: tool_id if there was a single tool result
 
         """
         id2result_ = copy.deepcopy(id2result) if id2result is not None else None
@@ -409,11 +457,11 @@ class Agent(ABC):
             # in this case ignore id2result
             assert (
                 id2result is None
-            ), "id2result should be None when results is not empty!"
+            ), "id2result should be None when results string is non-empty!"
             results_str = results
             if len(self.oai_tool_calls) > 0:
-                # There may be multiple tool-calls, but we only have one result,
-                # so we return it as a map of the first tool-call id to the result.
+                # We only have one result, so in case there is a
+                # "pending" OpenAI tool-call, we expect no more than 1 such.
                 assert (
                     len(self.oai_tool_calls) == 1
                 ), "There are multiple pending tool-calls, but only one result!"
@@ -422,70 +470,115 @@ class Agent(ABC):
                 # can properly set the `tool_call_id` field of the LLMMessage.
                 oai_tool_id = self.oai_tool_calls[0].id
         elif id2result is not None and id2result_ is not None:  # appease mypy
-            assert (
-                tool_calls is not None
-            ), "tool_calls cannot be None when id2result is not None!"
-            # This must be an OpenAI tool id -> result map;
-            # However some ids may not correspond to the tool-calls in the list of
-            # pending tool-calls (self.oai_tool_calls). Such results are concatenated
-            # into a simple string, to store in the ChatDocument.content,
-            # and the rest
-            # (i.e. those that DO correspond to tools in self.oai_tool_calls)
-            # are stored as a dict in ChatDocument.oa_tool_id2result.
-
-            # OAI tools from THIS agent, awaiting response
-            pending_tool_ids = [tc.id for tc in self.oai_tool_calls]
-            # tool_calls that the results are a response to
-            # (but these may have been sent from another agent, hence may not be in
-            # self.oai_tool_calls)
-            parent_tool_id2name = {
-                tc.id: tc.function.name
-                for tc in tool_calls or []
-                if tc.function is not None
-            }
-
-            # (id, result) for result NOT corresponding to self.oai_tool_calls,
-            # i.e. these are results of EXTERNAL tool-calls from another agent.
-            external_tool_id_results = []
-
-            for tc_id, result in id2result.items():
-                if tc_id not in pending_tool_ids:
-                    external_tool_id_results.append((tc_id, result))
-                    id2result_.pop(tc_id)
-            if len(external_tool_id_results) == 0:
+            if len(id2result_) == len(self.oai_tool_calls):
+                # if the number of pending tool calls equals the number of results,
+                # then ignore the ids in id2result, and use the results in order,
+                # which is preserved since id2result is an OrderedDict.
+                assert len(id2result_) > 1, "Expected to see > 1 result in id2result!"
                 results_str = ""
-            elif len(external_tool_id_results) == 1:
-                results_str = external_tool_id_results[0][1]
-            else:
-                results_str = "\n\n".join(
-                    [
-                        f"Result from tool/function {parent_tool_id2name[id]}: {result}"
-                        for id, result in external_tool_id_results
-                    ]
+                id2result_ = OrderedDict(
+                    zip(
+                        [tc.id or "" for tc in self.oai_tool_calls], id2result_.values()
+                    )
                 )
+            else:
+                assert (
+                    tool_calls is not None
+                ), "tool_calls cannot be None when id2result is not None!"
+                # This must be an OpenAI tool id -> result map;
+                # However some ids may not correspond to the tool-calls in the list of
+                # pending tool-calls (self.oai_tool_calls).
+                # Such results are concatenated into a simple string, to store in the
+                # ChatDocument.content, and the rest
+                # (i.e. those that DO correspond to tools in self.oai_tool_calls)
+                # are stored as a dict in ChatDocument.oai_tool_id2result.
 
-            if len(id2result_) == 0:
-                id2result_ = None
-            elif len(id2result_) == 1 and len(external_tool_id_results) == 0:
-                results_str = list(id2result_.values())[0]
-                oai_tool_id = list(id2result_.keys())[0]
-                id2result_ = None
+                # OAI tools from THIS agent, awaiting response
+                pending_tool_ids = [tc.id for tc in self.oai_tool_calls]
+                # tool_calls that the results are a response to
+                # (but these may have been sent from another agent, hence may not be in
+                # self.oai_tool_calls)
+                parent_tool_id2name = {
+                    tc.id: tc.function.name
+                    for tc in tool_calls or []
+                    if tc.function is not None
+                }
+
+                # (id, result) for result NOT corresponding to self.oai_tool_calls,
+                # i.e. these are results of EXTERNAL tool-calls from another agent.
+                external_tool_id_results = []
+
+                for tc_id, result in id2result.items():
+                    if tc_id not in pending_tool_ids:
+                        external_tool_id_results.append((tc_id, result))
+                        id2result_.pop(tc_id)
+                if len(external_tool_id_results) == 0:
+                    results_str = ""
+                elif len(external_tool_id_results) == 1:
+                    results_str = external_tool_id_results[0][1]
+                else:
+                    results_str = "\n\n".join(
+                        [
+                            f"Result from tool/function "
+                            f"{parent_tool_id2name[id]}: {result}"
+                            for id, result in external_tool_id_results
+                        ]
+                    )
+
+                if len(id2result_) == 0:
+                    id2result_ = None
+                elif len(id2result_) == 1 and len(external_tool_id_results) == 0:
+                    results_str = list(id2result_.values())[0]
+                    oai_tool_id = list(id2result_.keys())[0]
+                    id2result_ = None
 
         return results_str, id2result_, oai_tool_id
 
-    def _response_template(self, e: Entity, content: str | None = None) -> ChatDocument:
+    def response_template(
+        self,
+        e: Entity,
+        content: str | None = None,
+        tool_messages: List[ToolMessage] = [],
+        oai_tool_calls: Optional[List[OpenAIToolCall]] = None,
+        oai_tool_choice: ToolChoiceTypes | Dict[str, Dict[str, str] | str] = "auto",
+        oai_tool_id2result: OrderedDict[str, str] | None = None,
+        function_call: LLMFunctionCall | None = None,
+        recipient: str = "",
+    ) -> ChatDocument:
         """Template for response from entity `e`."""
         return ChatDocument(
             content=content or "",
-            tool_messages=[],
+            tool_messages=tool_messages,
+            oai_tool_calls=oai_tool_calls,
+            oai_tool_id2result=oai_tool_id2result,
+            function_call=function_call,
+            oai_tool_choice=oai_tool_choice,
             metadata=ChatDocMetaData(
-                source=e, sender=e, sender_name=self.config.name, tool_ids=[]
+                source=e, sender=e, sender_name=self.config.name, recipient=recipient
             ),
         )
 
-    def create_user_response(self, content: str | None = None) -> ChatDocument:
+    def create_user_response(
+        self,
+        content: str | None = None,
+        tool_messages: List[ToolMessage] = [],
+        oai_tool_calls: List[OpenAIToolCall] | None = None,
+        oai_tool_choice: ToolChoiceTypes | Dict[str, Dict[str, str] | str] = "auto",
+        oai_tool_id2result: OrderedDict[str, str] | None = None,
+        function_call: LLMFunctionCall | None = None,
+        recipient: str = "",
+    ) -> ChatDocument:
         """Template for user_response."""
-        return self._response_template(Entity.USER, content)
+        return self.response_template(
+            e=Entity.USER,
+            content=content,
+            tool_messages=tool_messages,
+            oai_tool_calls=oai_tool_calls,
+            oai_tool_choice=oai_tool_choice,
+            oai_tool_id2result=oai_tool_id2result,
+            function_call=function_call,
+            recipient=recipient,
+        )
 
     async def user_response_async(
         self,
@@ -579,9 +672,27 @@ class Agent(ABC):
 
         return True
 
-    def create_llm_response(self, content: str | None = None) -> ChatDocument:
+    def create_llm_response(
+        self,
+        content: str | None = None,
+        tool_messages: List[ToolMessage] = [],
+        oai_tool_calls: None | List[OpenAIToolCall] = None,
+        oai_tool_choice: ToolChoiceTypes | Dict[str, Dict[str, str] | str] = "auto",
+        oai_tool_id2result: OrderedDict[str, str] | None = None,
+        function_call: LLMFunctionCall | None = None,
+        recipient: str = "",
+    ) -> ChatDocument:
         """Template for llm_response."""
-        return self._response_template(Entity.LLM, content)
+        return self.response_template(
+            Entity.LLM,
+            content=content,
+            tool_messages=tool_messages,
+            oai_tool_calls=oai_tool_calls,
+            oai_tool_choice=oai_tool_choice,
+            oai_tool_id2result=oai_tool_id2result,
+            function_call=function_call,
+            recipient=recipient,
+        )
 
     @no_type_check
     async def llm_response_async(
@@ -725,12 +836,60 @@ class Agent(ABC):
             return True
         return False
 
-    def get_tool_messages(self, msg: str | ChatDocument) -> List[ToolMessage]:
+    def _tool_recipient_match(self, tool: ToolMessage) -> bool:
+        """Is tool is handled by this agent
+        and an explicit `recipient` field doesn't preclude this agent from handling it?
+        """
+        if tool.default_value("request") not in self.llm_tools_handled:
+            return False
+        if hasattr(tool, "recipient") and isinstance(tool.recipient, str):
+            return tool.recipient == "" or tool.recipient == self.config.name
+        return True
+
+    def has_only_unhandled_tools(self, msg: str | ChatDocument) -> bool:
+        """
+        Does the msg have at least one tool, and ALL tools are
+        disabled for handling by this agent?
+        """
+        tools = self.get_tool_messages(msg, all_tools=True)
+        if len(tools) == 0:
+            return False
+        return all(not self._tool_recipient_match(t) for t in tools)
+
+    def get_tool_messages(
+        self,
+        msg: str | ChatDocument,
+        all_tools: bool = False,
+    ) -> List[ToolMessage]:
+        """
+        Get ToolMessages recognized in msg, handle-able by this agent.
+        If all_tools is True:
+        - return all tools, i.e. any tool in self.llm_tools_known,
+            whether it is handled by this agent or not;
+        - otherwise, return only the tools handled by this agent.
+        """
+
         if isinstance(msg, str):
-            return self.get_json_tool_messages(msg)
+            json_tools = self.get_json_tool_messages(msg)
+            if all_tools:
+                return json_tools
+            else:
+                return [
+                    t
+                    for t in json_tools
+                    if self._tool_recipient_match(t) and t.default_value("request")
+                ]
+
+        if all_tools and len(msg.all_tool_messages) > 0:
+            # We've already identified all_tool_messages in the msg;
+            # return the corresponding ToolMessage objects
+            return msg.all_tool_messages
         if len(msg.tool_messages) > 0:
-            # We've already found tool_messages
-            # (either via OpenAI Fn-call or Langroid-native ToolMessage)
+            # We've already found tool_messages,
+            # (either via OpenAI Fn-call or Langroid-native ToolMessage);
+            # or they were added by an agent_response.
+            # note these could be from a forwarded msg from another agent,
+            # so return ONLY the messages THIS agent to enabled to handle.
             return msg.tool_messages
         assert isinstance(msg, ChatDocument)
         if (
@@ -740,19 +899,32 @@ class Agent(ABC):
         ):
 
             tools = self.get_json_tool_messages(msg.content)
-            msg.tool_messages = tools
-            return tools
+            msg.all_tool_messages = tools
+            my_tools = [t for t in tools if self._tool_recipient_match(t)]
+            msg.tool_messages = my_tools
+
+            if all_tools:
+                return tools
+            else:
+                return my_tools
 
         # otherwise, we look for `tool_calls` (possibly multiple)
         tools = self.get_oai_tool_calls_classes(msg)
-        msg.tool_messages = tools
+        msg.all_tool_messages = tools
+        my_tools = [t for t in tools if self._tool_recipient_match(t)]
+        msg.tool_messages = my_tools
 
         if len(tools) == 0:
             # otherwise, we look for a `function_call`
             fun_call_cls = self.get_function_call_class(msg)
             tools = [fun_call_cls] if fun_call_cls is not None else []
-            msg.tool_messages = tools
-        return tools
+            msg.all_tool_messages = tools
+            my_tools = [t for t in tools if self._tool_recipient_match(t)]
+            msg.tool_messages = my_tools
+        if all_tools:
+            return tools
+        else:
+            return my_tools
 
     def get_json_tool_messages(self, input_str: str) -> List[ToolMessage]:
         """
@@ -853,7 +1025,7 @@ class Agent(ABC):
 
     def handle_message(
         self, msg: str | ChatDocument
-    ) -> None | str | Dict[str, str] | ChatDocument:
+    ) -> None | str | OrderedDict[str, str] | ChatDocument:
         """
         Handle a "tool" message either a string containing one or more
         valid "tool" JSON substrings,  or a
@@ -889,16 +1061,63 @@ class Agent(ABC):
             # for this agent.
             return None
         if len(tools) == 0:
-            return self.handle_message_fallback(msg)
+            fallback_result = self.handle_message_fallback(msg)
+            if fallback_result is not None and isinstance(fallback_result, ToolMessage):
+                return self.create_agent_response(tool_messages=[fallback_result])
+            return fallback_result
         has_ids = all([t.id != "" for t in tools])
-        results = [self.handle_tool_message(t) for t in tools]
+        chat_doc = msg if isinstance(msg, ChatDocument) else None
+
+        # check whether there are multiple orchestration-tools (e.g. DoneTool etc),
+        # in which case set result to error-string since we don't yet support
+        # multi-tools with one or more orch tools.
+        from langroid.agent.tools.orchestration import (
+            AgentDoneTool,
+            AgentSendTool,
+            DonePassTool,
+            DoneTool,
+            ForwardTool,
+            PassTool,
+            SendTool,
+        )
+        from langroid.agent.tools.recipient_tool import RecipientTool
+
+        ORCHESTRATION_TOOLS = (
+            AgentDoneTool,
+            DoneTool,
+            PassTool,
+            DonePassTool,
+            ForwardTool,
+            RecipientTool,
+            SendTool,
+            AgentSendTool,
+        )
+
+        has_orch = any(isinstance(t, ORCHESTRATION_TOOLS) for t in tools)
+        results: List[str | ChatDocument | None]
+        if has_orch and len(tools) > 1:
+            err_str = "ERROR: Use ONE tool at a time!"
+            results = [err_str for _ in tools]
+        else:
+            results = [self.handle_tool_message(t, chat_doc=chat_doc) for t in tools]
+
         tool_names = [t.default_value("request") for t in tools]
         if has_ids:
-            id2result = {
-                t.id: r
+            id2result = OrderedDict(
+                (t.id, r)
                 for t, r in zip(tools, results)
                 if r is not None and isinstance(r, str)
-            }
+            )
+            result_values = list(id2result.values())
+            if len(id2result) > 1 and any(
+                orch_str in r
+                for r in result_values
+                for orch_str in ORCHESTRATION_STRINGS
+            ):
+                # Cannot support multi-tool results containing orchestration strings!
+                # Replace results with err string to force LLM to retry
+                err_str = "ERROR: Please use ONE tool at a time!"
+                id2result = OrderedDict((id, err_str) for id in id2result.keys())
 
         name_results_list = [
             (name, r) for name, r in zip(tool_names, results) if r is not None
@@ -940,19 +1159,28 @@ class Agent(ABC):
         self, msg: str | ChatDocument
     ) -> str | ChatDocument | None:
         """
-        Fallback method to handle possible "tool" msg if no other method applies
-        or if an error is thrown.
-        This method can be overridden by subclasses.
+        Fallback method for the "no-tools" scenario.
+        This method can be overridden by subclasses, e.g.,
+        to create a "reminder" message when a tool is expected but the LLM "forgot"
+        to generate one.
 
         Args:
             msg (str | ChatDocument): The input msg to handle
         Returns:
             str: The result of the handler method in string form so it can
-                be sent back to the LLM.
+                be handled by LLM
         """
         return None
 
     def _get_one_tool_message(self, json_str: str) -> Optional[ToolMessage]:
+        """
+        Parse the json str into ANY ToolMessage KNOWN to agent --
+        This includes non-used/handled tools, i.e. any tool in self.llm_tools_known.
+        The exception to this is below where we try our best to infer the tool
+        when the LLM has "forgotten" to include the "request" field in the JSON --
+        in this case we ONLY look at the possible set of HANDLED tools, i.e.
+        self.llm_tools_handled.
+        """
         json_data = json.loads(json_str)
         # check if the json_data contains a "properties" field
         # which further contains the actual tool-call
@@ -976,9 +1204,8 @@ class Agent(ABC):
         if isinstance(properties, dict):
             json_data = properties
         request = json_data.get("request")
-
         if request is None:
-            handled = [self.llm_tools_map[r] for r in self.llm_tools_handled]
+            possible = [self.llm_tools_map[r] for r in self.llm_tools_handled]
             default_keys = set(ToolMessage.__fields__.keys())
             request_keys = set(json_data.keys())
 
@@ -1002,7 +1229,7 @@ class Agent(ABC):
             candidate_tools = list(
                 filter(
                     lambda t: t is not None,
-                    map(maybe_parse, handled),
+                    map(maybe_parse, possible),
                 )
             )
 
@@ -1013,7 +1240,7 @@ class Agent(ABC):
             else:
                 return None
 
-        if not isinstance(request, str) or request not in self.llm_tools_handled:
+        if not isinstance(request, str) or request not in self.llm_tools_known:
             return None
 
         message_class = self.llm_tools_map.get(request)
@@ -1027,11 +1254,18 @@ class Agent(ABC):
             raise ve
         return message
 
-    def handle_tool_message(self, tool: ToolMessage) -> None | str | ChatDocument:
+    def handle_tool_message(
+        self,
+        tool: ToolMessage,
+        chat_doc: Optional[ChatDocument] = None,
+    ) -> None | str | ChatDocument:
         """
         Respond to a tool request from the LLM, in the form of an ToolMessage object.
         Args:
             tool: ToolMessage object representing the tool request.
+            chat_doc: Optional ChatDocument object containing the tool request.
+                This is passed to the tool-handler method only if it has a `chat_doc`
+                argument.
 
         Returns:
 
@@ -1040,9 +1274,34 @@ class Agent(ABC):
         handler_method = getattr(self, tool_name, None)
         if handler_method is None:
             return None
-
+        has_chat_doc_arg = (
+            chat_doc is not None
+            and "chat_doc" in inspect.signature(handler_method).parameters
+        )
         try:
-            result = handler_method(tool)
+            if has_chat_doc_arg:
+                maybe_result = handler_method(tool, chat_doc=chat_doc)
+            else:
+                maybe_result = handler_method(tool)
+            if isinstance(maybe_result, ToolMessage):
+                # result is a ToolMessage, so...
+                result_tool_name = maybe_result.default_value("request")
+                if (
+                    result_tool_name in self.llm_tools_handled
+                    and tool_name != result_tool_name
+                ):
+                    # TODO: do we need to remove the tool message from the chat_doc?
+                    # if (chat_doc is not None and
+                    #     maybe_result in chat_doc.tool_messages):
+                    #    chat_doc.tool_messages.remove(maybe_result)
+                    # if we can handle it, do so
+                    result = self.handle_tool_message(maybe_result, chat_doc=chat_doc)
+                else:
+                    # else wrap it in an agent response and return it so
+                    # orchestrator can find a respondent
+                    result = self.create_agent_response(tool_messages=[maybe_result])
+            else:
+                result = maybe_result
         except Exception as e:
             # raise the error here since we are sure it's
             # not a pydantic validation error,

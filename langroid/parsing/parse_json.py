@@ -89,11 +89,28 @@ def parse_imperfect_json(json_string: str) -> Union[Dict[str, Any], List[Any]]:
 
     # If ast.literal_eval fails or returns non-dict/list, try json.loads
     try:
-        str = add_quotes(json_string)
-        result = json.loads(str)
+        json_string = add_quotes(json_string)
+        result = json.loads(json_string)
         if isinstance(result, (dict, list)):
             return result
     except json.JSONDecodeError:
+        try:
+            # fallback on yaml
+            yaml_result = yaml.safe_load(json_string)
+            if isinstance(yaml_result, (dict, list)):
+                return yaml_result
+        except yaml.YAMLError:
+            pass
+
+    try:
+        # last resort: try to repair the json using a lib
+        from json_repair import repair_json
+
+        repaired_json = repair_json(json_string)
+        result = json.loads(repaired_json)
+        if isinstance(result, (dict, list)):
+            return result
+    except Exception:
         pass
 
     # If all methods fail, raise ValueError

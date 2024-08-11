@@ -17,10 +17,11 @@ from typing import Any, Dict, List, Tuple
 import pandas as pd
 
 from langroid.agent.special.doc_chat_agent import DocChatAgent, DocChatAgentConfig
-from langroid.agent.special.lance_tools import QueryPlanTool
+from langroid.agent.special.lance_tools import AnswerTool, QueryPlanTool
+from langroid.agent.tools.orchestration import AgentDoneTool
 from langroid.mytypes import DocMetaData, Document
 from langroid.parsing.table_loader import describe_dataframe
-from langroid.utils.constants import DONE, NO_ANSWER
+from langroid.utils.constants import NO_ANSWER
 from langroid.utils.pydantic_utils import (
     dataframe_to_documents,
 )
@@ -106,7 +107,7 @@ class LanceDocChatAgent(DocChatAgent):
             """
         return schema
 
-    def query_plan(self, msg: QueryPlanTool) -> str:
+    def query_plan(self, msg: QueryPlanTool) -> AgentDoneTool | str:
         """
         Handle the LLM's use of the FilterTool.
         Temporarily set the config filter and either return the final answer
@@ -120,13 +121,15 @@ class LanceDocChatAgent(DocChatAgent):
         except Exception as e:
             logger.error(f"Error setting up documents: {e}")
             # say DONE with err msg so it goes back to LanceFilterAgent
-            return f"""
-            {DONE} Possible Filter Error:\n {e}
-            
-            Note that only the following fields are allowed in the filter
-            of a query plan: 
-            {", ".join(self.config.filter_fields)}
-            """
+            return AgentDoneTool(
+                content=f"""
+                Possible Filter Error:\n {e}
+                
+                Note that only the following fields are allowed in the filter
+                of a query plan: 
+                {", ".join(self.config.filter_fields)}
+                """
+            )
 
         # update the filter so it is used in the DocChatAgent
         self.config.filter = plan.filter or None
@@ -139,22 +142,25 @@ class LanceDocChatAgent(DocChatAgent):
             # The calc step can later be done with a separate Agent/Tool.
             if plan.query is None or plan.query.strip() == "":
                 if plan.filter is None or plan.filter.strip() == "":
-                    return """DONE
-                    Cannot execute Query Plan since filter as well as 
-                    rephrased query are empty.
-                    """
+                    return AgentDoneTool(
+                        content="""
+                        Cannot execute Query Plan since filter as well as 
+                        rephrased query are empty.                    
+                        """
+                    )
                 else:
                     # no query to match, so just get all docs matching filter
                     docs = self.vecdb.get_all_documents(plan.filter)
             else:
                 _, docs = self.get_relevant_extracts(plan.query)
             if len(docs) == 0:
-                return DONE + " " + NO_ANSWER
-            result = self.vecdb.compute_from_docs(docs, plan.dataframe_calc)
-            return DONE + " " + result
+                return AgentDoneTool(content=NO_ANSWER)
+            answer = self.vecdb.compute_from_docs(docs, plan.dataframe_calc)
         else:
             # pass on the query so LLM can handle it
-            return plan.query
+            response = self.llm_response(plan.query)
+            answer = NO_ANSWER if response is None else response.content
+        return AgentDoneTool(tools=[AnswerTool(answer=answer)])
 
     def ingest_docs(
         self,
@@ -242,6 +248,7 @@ class LanceDocChatAgent(DocChatAgent):
             .replace("NOT", "not")
             .replace("'", "")
             .replace('"', "")
+            .replace(":", "--")
         )
 
         tbl = self.vecdb.client.open_table(self.vecdb.config.collection_name)

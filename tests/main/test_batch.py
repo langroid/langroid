@@ -12,7 +12,8 @@ from langroid.agent.batch import (
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
 from langroid.agent.tool_message import ToolMessage
-from langroid.cachedb.redis_cachedb import RedisCacheConfig
+from langroid.agent.tools.orchestration import DoneTool
+from langroid.language_models.mock_lm import MockLMConfig
 from langroid.language_models.openai_gpt import OpenAIGPTConfig
 from langroid.mytypes import Entity
 from langroid.utils.configuration import Settings, set_global
@@ -22,10 +23,7 @@ from langroid.vector_store.base import VectorStoreConfig
 
 class _TestChatAgentConfig(ChatAgentConfig):
     vecdb: VectorStoreConfig = None
-    llm: OpenAIGPTConfig = OpenAIGPTConfig(
-        cache_config=RedisCacheConfig(fake=False),
-        use_chat_for_completion=True,
-    )
+    llm = MockLMConfig(response_fn=lambda x: str(eval(x)))
 
 
 @pytest.mark.parametrize("batch_size", [1, 2, 3, None])
@@ -67,18 +65,14 @@ def test_task_batch(
         assert any(str(e) in a.content.lower() for a in answers)
 
 
-class _TestChatAgent(ChatAgent):
-    def handle_message_fallback(
-        self, msg: str | ChatDocument
-    ) -> str | ChatDocument | None:
-        if isinstance(msg, ChatDocument) and msg.metadata.sender == Entity.LLM:
-            return DONE + " " + str(msg.content)
-
-
 @pytest.mark.parametrize("batch_size", [1, 2, 3, None])
 @pytest.mark.parametrize("sequential", [True, False])
+@pytest.mark.parametrize("use_done_tool", [True, False])
 def test_task_batch_turns(
-    test_settings: Settings, sequential: bool, batch_size: Optional[int]
+    test_settings: Settings,
+    sequential: bool,
+    batch_size: Optional[int],
+    use_done_tool: bool,
 ):
     """Test if `turns`, `max_cost`, `max_tokens` params work as expected.
     The latter two are not really tested (since we need to turn off caching etc)
@@ -86,6 +80,18 @@ def test_task_batch_turns(
     """
     set_global(test_settings)
     cfg = _TestChatAgentConfig()
+
+    class _TestChatAgent(ChatAgent):
+        def handle_message_fallback(
+            self, msg: str | ChatDocument
+        ) -> str | DoneTool | None:
+
+            if isinstance(msg, ChatDocument) and msg.metadata.sender == Entity.LLM:
+                return (
+                    DoneTool(content=str(msg.content))
+                    if use_done_tool
+                    else DONE + " " + str(msg.content)
+                )
 
     agent = _TestChatAgent(cfg)
     agent.llm.reset_usage_cost()
@@ -166,37 +172,43 @@ def test_agent_llm_response_batch(test_settings: Settings, sequential: bool):
 @pytest.mark.parametrize("batch_size", [1, 2, 3, None])
 @pytest.mark.parametrize("sequential", [True, False])
 def test_task_gen_batch(
-    test_settings: Settings, sequential: bool, batch_size: Optional[int]
+    test_settings: Settings,
+    sequential: bool,
+    batch_size: Optional[int],
 ):
     set_global(test_settings)
 
     def task_gen(i: int) -> Task:
+        def response_fn(x):
+            match i:
+                case 0:
+                    return str(x)
+                case 1:
+                    return "hmm"
+                case _:
+                    return str(2 * int(x))
+
+        class _TestChatAgentConfig(ChatAgentConfig):
+            vecdb: VectorStoreConfig = None
+            llm = MockLMConfig(response_fn=lambda x: response_fn(x))
+
         cfg = _TestChatAgentConfig()
         if i == 0:
             return Task(
                 ChatAgent(cfg),
                 name=f"Test-{i}",
-                system_message="""
-                I will provide you with a value, and you will repeat it exactly.
-                """,
                 single_round=True,
             )
         elif i == 1:
             return Task(
                 ChatAgent(cfg),
                 name=f"Test-{i}",
-                system_message="""
-                You will always respond with the word "hmm"
-                """,
                 single_round=True,
             )
         else:
             return Task(
                 ChatAgent(cfg),
                 name=f"Test-{i}",
-                system_message="""
-                You will respond with twice the number I send you.
-                """,
                 single_round=True,
             )
 
@@ -217,11 +229,17 @@ def test_task_gen_batch(
         assert expected in answer.content.lower()
 
 
-@pytest.mark.parametrize("batch_size", [1, 2, 3, None])
-@pytest.mark.parametrize("handle_exceptions", [True, False])
+@pytest.mark.parametrize("batch_size", [None, 1, 2, 3])
+@pytest.mark.parametrize("handle_exceptions", [False, True])
 @pytest.mark.parametrize("sequential", [True, False])
+@pytest.mark.parametrize("fn_api", [False, True])
+@pytest.mark.parametrize("tools_api", [False, True])
+@pytest.mark.parametrize("use_done_tool", [True, False])
 def test_task_gen_batch_exceptions(
     test_settings: Settings,
+    fn_api: bool,
+    tools_api: bool,
+    use_done_tool: bool,
     sequential: bool,
     handle_exceptions: bool,
     batch_size: Optional[int],
@@ -239,9 +257,17 @@ def test_task_gen_batch_exceptions(
     """
 
     def task_gen(i: int) -> Task:
-        cfg = _TestChatAgentConfig()
+        cfg = ChatAgentConfig(
+            vecdb=None,
+            llm=OpenAIGPTConfig(),
+            use_functions_api=fn_api,
+            use_tools=not fn_api,
+            use_tools_api=tools_api,
+        )
         agent = ChatAgent(cfg)
         agent.enable_message(ComputeTool)
+        if use_done_tool:
+            agent.enable_message(DoneTool)
         task = Task(
             agent,
             name=f"Test-{i}",
@@ -249,9 +275,11 @@ def test_task_gen_batch_exceptions(
             interactive=False,
         )
 
-        def handle(m: ComputeTool) -> str:
+        def handle(m: ComputeTool) -> str | DoneTool:
             if i != 1:
-                return f"{DONE} success"
+                return (
+                    DoneTool(content="success") if use_done_tool else f"{DONE} success"
+                )
             else:
                 raise RuntimeError("disaster")
 

@@ -83,6 +83,10 @@ def test_extract_top_level_json(s, expected):
         ("{key: 'value'}", {"key": "value"}),
         ("{'key': value}", {"key": "value"}),
         ("{key: value}", {"key": "value"}),
+        (
+            '{"key": "you said "hello" yesterday"}',  # did not escape inner quotes
+            {"key": 'you said "hello" yesterday'},
+        ),
         ("[1, 2, 3]", [1, 2, 3]),
         (
             """
@@ -117,7 +121,6 @@ def test_parse_imperfect_json(input_json, expected_output):
 @pytest.mark.parametrize(
     "invalid_input",
     [
-        "{key: 'value',,,}",
         "",
         "not a json string",
         "True",  # This is a valid Python literal, but not a dict or list

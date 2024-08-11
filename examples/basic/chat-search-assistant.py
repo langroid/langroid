@@ -49,6 +49,7 @@ import langroid.language_models as lm
 from langroid.agent.tools.google_search_tool import GoogleSearchTool
 from langroid.agent.tools.duckduckgo_search_tool import DuckduckgoSearchTool
 from langroid.utils.configuration import Settings, set_global
+from langroid.utils.constants import DONE
 
 app = typer.Typer()
 
@@ -90,13 +91,13 @@ def main(
     )
 
     assistant_config = lr.ChatAgentConfig(
-        system_message="""
+        system_message=f"""
         You are a resourceful assistant, able to think step by step to answer
         complex questions from the user. You must break down complex questions into
         simpler questions that can be answered by a web search. You must ask me 
         (the user) each question ONE BY ONE, and I will do a web search and send you
         a brief answer. Once you have enough information to answer my original
-        (complex) question, you MUST say DONE and present the answer to me.
+        (complex) question, you MUST say {DONE} and present the answer to me.
         """,
         llm=llm_config,
         vecdb=None,
@@ -125,11 +126,11 @@ def main(
         `{search_tool_handler_method}` tool/function-call to get up to 5 results.
         I WILL SEND YOU THE RESULTS; DO NOT MAKE UP THE RESULTS!!
         Once you receive the results, you must compose a CONCISE answer 
-        based on the search results and say DONE and show the answer to me,
+        based on the search results and say {DONE} and show the answer to me,
         in this format:
-        DONE [... your CONCISE answer here ...]
+        {DONE} [... your CONCISE answer here ...]
         IMPORTANT: YOU MUST WAIT FOR ME TO SEND YOU THE 
-        SEARCH RESULTS BEFORE saying you're DONE.
+        SEARCH RESULTS BEFORE saying  {DONE}.
         """,
     )
     search_agent = lr.ChatAgent(search_agent_config)

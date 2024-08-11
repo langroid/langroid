@@ -1,4 +1,5 @@
 import logging
+from collections.abc import MutableMapping
 from contextlib import contextmanager
 from typing import (
     Any,
@@ -19,6 +20,24 @@ from langroid.mytypes import DocMetaData, Document
 from langroid.pydantic_v1 import BaseModel, ValidationError, create_model
 
 logger = logging.getLogger(__name__)
+
+
+def flatten_dict(
+    d: MutableMapping[str, Any], parent_key: str = "", sep: str = "."
+) -> Dict[str, Any]:
+    """Flatten a nested dictionary, using a separator in the keys.
+    Useful for pydantic_v1 models with nested fields -- first use
+        dct = mdl.model_dump()
+    to get a nested dictionary, then use this function to flatten it.
+    """
+    items: List[Tuple[str, Any]] = []
+    for k, v in d.items():
+        new_key = f"{parent_key}{sep}{k}" if parent_key else k
+        if isinstance(v, MutableMapping):
+            items.extend(flatten_dict(v, new_key, sep=sep).items())
+        else:
+            items.append((new_key, v))
+    return dict(items)
 
 
 def has_field(model_class: Type[BaseModel], field_name: str) -> bool:

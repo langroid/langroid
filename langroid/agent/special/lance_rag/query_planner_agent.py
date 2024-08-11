@@ -15,17 +15,19 @@ This agent has access to two tools:
 """
 
 import logging
+from typing import Optional
 
-import langroid as lr
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.chat_document import ChatDocument
 from langroid.agent.special.lance_tools import (
+    AnswerTool,
     QueryPlan,
     QueryPlanAnswerTool,
     QueryPlanFeedbackTool,
     QueryPlanTool,
 )
-from langroid.utils.constants import DONE, NO_ANSWER, PASS_TO
+from langroid.agent.tools.orchestration import AgentDoneTool, ForwardTool
+from langroid.utils.constants import NO_ANSWER
 
 logger = logging.getLogger(__name__)
 
@@ -39,14 +41,14 @@ class LanceQueryPlanAgentConfig(ChatAgentConfig):
     max_retries: int = 5  # max number of retries for query plan
     use_functions_api = True
 
-    system_message = f"""
+    system_message = """
     You will receive a QUERY, to be answered based on an EXTREMELY LARGE collection
     of documents you DO NOT have access to, but your ASSISTANT does.
     You only know that these documents have a special `content` field
     and additional FILTERABLE fields in the SCHEMA below, along with the 
     SAMPLE VALUES for each field, and the DTYPE in PANDAS TERMINOLOGY.
     
-    {{doc_schema}}
+    {doc_schema}
     
     Based on the QUERY and the above SCHEMA, your task is to determine a QUERY PLAN,
     consisting of:
@@ -116,10 +118,7 @@ class LanceQueryPlanAgentConfig(ChatAgentConfig):
     You may receive FEEDBACK on your QUERY PLAN and received ANSWER,
     from the 'QueryPlanCritic' who may offer suggestions for
     a better FILTER, REPHRASED QUERY, or DATAFRAME CALCULATION.
-            
-    If you keep getting feedback or keep getting a {NO_ANSWER} from the assistant
-    at least 3 times, then simply say '{DONE} {NO_ANSWER}' and nothing else.
-      
+                  
     At the BEGINNING if there is no query, ASK the user what they want to know.
     """
 
@@ -133,88 +132,128 @@ class LanceQueryPlanAgent(ChatAgent):
     def __init__(self, config: LanceQueryPlanAgentConfig):
         super().__init__(config)
         self.config: LanceQueryPlanAgentConfig = config
-        self.curr_query_plan: QueryPlan | None = None
-        # how many times re-trying query plan in response to feedback:
-        self.n_retries: int = 0
-        self.result: str = ""  # answer received from LanceRAG
         # This agent should generate the QueryPlanTool
         # as well as handle it for validation
         self.enable_message(QueryPlanTool, use=True, handle=True)
         self.enable_message(QueryPlanFeedbackTool, use=False, handle=True)
+        self.enable_message(AnswerTool, use=False, handle=True)
+        # neither use nor handle! Added to "known" tools so that the Planner agent
+        # can avoid processing it
+        self.enable_message(QueryPlanAnswerTool, use=False, handle=False)
+        # LLM will not use this, so set use=False (Agent generates it)
+        self.enable_message(AgentDoneTool, use=False, handle=True)
 
-    def query_plan(self, msg: QueryPlanTool) -> str:
-        """Valid, forward to RAG Agent"""
+    def init_state(self) -> None:
+        self.curr_query_plan: QueryPlan | None = None
+        self.expecting_query_plan: bool = False
+        # how many times re-trying query plan in response to feedback:
+        self.n_retries: int = 0
+        self.n_query_plan_reminders: int = 0
+        self.result: str = ""  # answer received from LanceRAG
+
+    def llm_response(
+        self, message: Optional[str | ChatDocument] = None
+    ) -> Optional[ChatDocument]:
+        self.expecting_query_plan = True
+        return super().llm_response(message)
+
+    def query_plan(self, msg: QueryPlanTool) -> ForwardTool | str:
+        """Valid, tool msg, forward chat_doc to RAG Agent.
+        Note this chat_doc will already have the
+        QueryPlanTool in its tool_messages list.
+        We just update the recipient to the doc_agent_name.
+        """
         # save, to be used to assemble QueryPlanResultTool
         if len(msg.plan.dataframe_calc.split("\n")) > 1:
             return "DATAFRAME CALCULATION must be a SINGLE LINE; Retry the `query_plan`"
         self.curr_query_plan = msg.plan
-        return PASS_TO + self.config.doc_agent_name
+        self.expecting_query_plan = False
 
-    def query_plan_feedback(self, msg: QueryPlanFeedbackTool) -> str:
+        # To forward the QueryPlanTool to doc_agent, we could either:
+
+        # (a) insert `recipient` in the QueryPlanTool:
+        # QPWithRecipient = QueryPlanTool.require_recipient()
+        # qp = QPWithRecipient(**msg.dict(), recipient=self.config.doc_agent_name)
+        # return qp
+        #
+        # OR
+        #
+        # (b) create an agent response with recipient and tool_messages.
+        # response = self.create_agent_response(
+        #     recipient=self.config.doc_agent_name, tool_messages=[msg]
+        # )
+        # return response
+
+        # OR
+        # (c) use the ForwardTool:
+        return ForwardTool(agent=self.config.doc_agent_name)
+
+    def query_plan_feedback(self, msg: QueryPlanFeedbackTool) -> str | AgentDoneTool:
         """Process Critic feedback on QueryPlan + Answer from RAG Agent"""
         # We should have saved answer in self.result by this time,
         # since this Agent seeks feedback only after receiving RAG answer.
-        if msg.suggested_fix == "":
-            self.n_retries = 0
-            # This means the Query Plan or Result is good, as judged by Critic
-            if self.result == "":
-                # This was feedback for query with no result
-                return "QUERY PLAN LOOKS GOOD!"
-            elif self.result == NO_ANSWER:
-                return NO_ANSWER
-            else:  # non-empty and non-null answer
-                return DONE + " " + self.result
+        if (
+            msg.suggested_fix == ""
+            and NO_ANSWER not in self.result
+            and self.result != ""
+        ):
+            # This means the result is good AND Query Plan is fine,
+            # as judged by Critic
+            # (Note sometimes critic may have empty suggested_fix even when
+            # the result is NO_ANSWER)
+            self.n_retries = 0  # good answer, so reset this
+            return AgentDoneTool(content=self.result)
         self.n_retries += 1
         if self.n_retries >= self.config.max_retries:
             # bail out to avoid infinite loop
             self.n_retries = 0
-            return DONE + " " + NO_ANSWER
+            return AgentDoneTool(content=NO_ANSWER)
+
+        # there is a suggested_fix, OR the result is empty or NO_ANSWER
+        if self.result == "" or NO_ANSWER in self.result:
+            # if result is empty or NO_ANSWER, we should retry the query plan
+            feedback = """
+            There was no answer, which might mean there is a problem in your query.
+            """
+            suggested = "Retry the `query_plan` to try to get a non-null answer"
+        else:
+            feedback = msg.feedback
+            suggested = msg.suggested_fix
+
+        self.expecting_query_plan = True
+
         return f"""
         here is FEEDBACK about your QUERY PLAN, and a SUGGESTED FIX.
         Modify the QUERY PLAN if needed:
-        FEEDBACK: {msg.feedback}
-        SUGGESTED FIX: {msg.suggested_fix}
+        ANSWER: {self.result}
+        FEEDBACK: {feedback}
+        SUGGESTED FIX: {suggested}
         """
+
+    def answer_tool(self, msg: AnswerTool) -> QueryPlanAnswerTool:
+        """Handle AnswerTool received from LanceRagAgent:
+        Construct a QueryPlanAnswerTool with the answer"""
+        self.result = msg.answer  # save answer to interpret feedback later
+        assert self.curr_query_plan is not None
+        query_plan_answer_tool = QueryPlanAnswerTool(
+            plan=self.curr_query_plan,
+            answer=msg.answer,
+        )
+        self.curr_query_plan = None  # reset
+        return query_plan_answer_tool
 
     def handle_message_fallback(
         self, msg: str | ChatDocument
     ) -> str | ChatDocument | None:
         """
-        Process answer received from RAG Agent:
-         Construct a QueryPlanAnswerTool with the answer,
-         and forward to Critic for feedback.
+        Remind to use QueryPlanTool if we are expecting it.
         """
-        # TODO we don't need to use this fallback method. instead we can
-        # first call result = super().agent_response(), and if result is None,
-        # then we know there was no tool, so we run below code
-        if (
-            isinstance(msg, ChatDocument)
-            and self.curr_query_plan is not None
-            and msg.metadata.parent is not None
-        ):
-            # save result, to be used in query_plan_feedback()
-            self.result = msg.content
-            # assemble QueryPlanAnswerTool...
-            query_plan_answer_tool = QueryPlanAnswerTool(  # type: ignore
-                plan=self.curr_query_plan,
-                answer=self.result,
-            )
-            response_tmpl = self.create_agent_response()
-            # ... add the QueryPlanAnswerTool to the response
-            # (Notice how the Agent is directly sending a tool, not the LLM)
-            response_tmpl.tool_messages = [query_plan_answer_tool]
-            # set the recipient to the Critic so it can give feedback
-            response_tmpl.metadata.recipient = self.config.critic_name
-            self.curr_query_plan = None  # reset
-            return response_tmpl
-        if (
-            isinstance(msg, ChatDocument)
-            and not self.has_tool_message_attempt(msg)
-            and msg.metadata.sender == lr.Entity.LLM
-        ):
-            # remind LLM to use the QueryPlanFeedbackTool
+        if self.expecting_query_plan and self.n_query_plan_reminders < 5:
+            self.n_query_plan_reminders += 1
             return """
-            You forgot to use the `query_plan` tool/function.
-            Re-try your response using the `query_plan` tool/function.
+            You FORGOT to use the `query_plan` tool/function, 
+            OR you had a WRONG JSON SYNTAX when trying to use it.
+            Re-try your response using the `query_plan` tool/function CORRECTLY.
             """
+        self.n_query_plan_reminders = 0  # reset
         return None
