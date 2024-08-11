@@ -308,7 +308,7 @@ class ChatAgent(Agent):
         json_instructions = "\n\n".join(
             [
                 msg_cls.json_instructions(tool=self.config.use_tools)
-                for _, msg_cls in enumerate(usable_tool_classes)
+                for msg_cls in usable_tool_classes
             ]
         )
         # if any of the enabled classes has json_group_instructions, then use that,
