@@ -155,6 +155,8 @@ class ChatAgent(Agent):
             # We don't want enable orch tool GENERATION by default, since that
             # might clutter-up the LLM system message unnecessarily.
             from langroid.agent.tools.orchestration import (
+                AgentDoneTool,
+                AgentSendTool,
                 DonePassTool,
                 DoneTool,
                 ForwardTool,
@@ -164,9 +166,11 @@ class ChatAgent(Agent):
 
             self.enable_message(ForwardTool, use=False, handle=True)
             self.enable_message(DoneTool, use=False, handle=True)
+            self.enable_message(AgentDoneTool, use=False, handle=True)
             self.enable_message(PassTool, use=False, handle=True)
             self.enable_message(DonePassTool, use=False, handle=True)
             self.enable_message(SendTool, use=False, handle=True)
+            self.enable_message(AgentSendTool, use=False, handle=True)
 
     @staticmethod
     def from_id(id: str) -> "ChatAgent":
@@ -299,7 +303,7 @@ class ChatAgent(Agent):
         usable_tool_classes: List[Type[ToolMessage]] = [
             t
             for t in list(self.llm_tools_map.values())
-            if not t.Config.handle_only
+            if not t._handle_only
             and t.default_value("request") in self.llm_tools_usable
         ]
 
