@@ -23,6 +23,10 @@ class AgentDoneTool(ToolMessage):
     content: str = ""
     tools: List[ToolMessage] = []
 
+    class Config:
+        # do not allow LLM-generation, since tool-sending is only for agent
+        handle_only: bool = True
+
     def response(self, agent: ChatAgent) -> ChatDocument:
         return agent.create_agent_response(
             self.content,
@@ -192,10 +196,10 @@ class SendTool(ToolMessage):
 
 
 class AgentSendTool(ToolMessage):
-    """Tool for Agent (i.e. agent_response) to send content and tool_messages
+    """Tool for Agent (i.e. agent_response) to send content or tool_messages
     to a specified agent. Similar to SendTool except that AgentSendTool is only
-    usable by agent_response (or handler of another tool), to send both content and
-    tools to another agent.
+    usable by agent_response (or handler of another tool), to send content or
+    tools to another agent. SendTool does not allow sending tools.
     """
 
     purpose: str = """
@@ -205,6 +209,10 @@ class AgentSendTool(ToolMessage):
     to: str
     content: str = ""
     tools: List[ToolMessage] = []
+
+    class Config:
+        # do not allow LLM-generation, since tool-sending is only for agent
+        handle_only: bool = True
 
     def response(self, agent: ChatAgent) -> ChatDocument:
         return agent.create_agent_response(
