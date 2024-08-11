@@ -32,12 +32,7 @@ class AddRecipientTool(ToolMessage):
         "to clarify who the message is intended for."
     )
     intended_recipient: str
-    saved_content: str = ""
-
-    class Config:
-        # do not include these fields in the generated schema
-        # since we don't require the LLM to specify them
-        schema_extra = {"exclude": {"saved_content", "purpose"}}
+    _saved_content: str = ""
 
     def response(self, agent: ChatAgent) -> ChatDocument:
         """
@@ -49,7 +44,7 @@ class AddRecipientTool(ToolMessage):
             "[red]RecipientTool: "
             f"Added recipient {self.intended_recipient} to message."
         )
-        if self.__class__.saved_content == "":
+        if self.__class__._saved_content == "":
             recipient_request_name = RecipientTool.default_value("request")
             content = f"""
                 Recipient specified but content is empty!
@@ -58,9 +53,9 @@ class AddRecipientTool(ToolMessage):
                 Resend the message using `{recipient_request_name}` tool/function.
                 """
         else:
-            content = self.__class__.saved_content  # use class-level attrib value
+            content = self.__class__._saved_content  # use class-level attrib value
             # erase content since we just used it.
-            self.__class__.saved_content = ""
+            self.__class__._saved_content = ""
         return ChatDocument(
             content=content,
             metadata=ChatDocMetaData(
@@ -152,7 +147,7 @@ class RecipientTool(ToolMessage):
             # save the content as a class-variable, so that
             # we can construct the ChatDocument once the LLM specifies a recipient.
             # This avoids having to re-generate the entire message, saving time + cost.
-            AddRecipientTool.saved_content = self.content
+            AddRecipientTool._saved_content = self.content
             agent.enable_message(AddRecipientTool)
             return ChatDocument(
                 content="""
@@ -214,7 +209,7 @@ class RecipientTool(ToolMessage):
         # save the content as a class-variable, so that
         # we can construct the ChatDocument once the LLM specifies a recipient.
         # This avoids having to re-generate the entire message, saving time + cost.
-        AddRecipientTool.saved_content = content
+        AddRecipientTool._saved_content = content
         agent.enable_message(AddRecipientTool)
         print("[red]RecipientTool: Recipient not specified, asking LLM to clarify.")
         return ChatDocument(
