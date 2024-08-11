@@ -130,7 +130,8 @@ teacher_task.run()
 <summary> <b>Click to expand</b></summary>
 
 - **Aug 2024:** 
-  - **[0.7.0](https://github.com/langroid/langroid/releases/tag/0.7.0)** OpenAI tools API support.
+  - **[0.9.0](https://github.com/langroid/langroid/releases/tag/0.9.0)** Orchestration Tools, to signal various task statuses, and to pass messages between agents.
+  - **[0.7.0](https://github.com/langroid/langroid/releases/tag/0.7.0)** OpenAI tools API support, including multi-tools.
 - **Jul 2024:**
   - **[0.3.0](https://github.com/langroid/langroid/releases/tag/0.3.0)**: Added [FastEmbed](https://qdrant.github.io/fastembed/qdrant/Usage_With_Qdrant/) embeddings from Qdrant
 - **Jun 2024:**
