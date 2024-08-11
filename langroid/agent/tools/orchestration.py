@@ -22,10 +22,7 @@ class AgentDoneTool(ToolMessage):
     request: str = "agent_done_tool"
     content: str = ""
     tools: List[ToolMessage] = []
-
-    class Config:
-        # do not allow LLM-generation, since tool-sending is only for agent
-        handle_only: bool = True
+    _handle_only: bool = True
 
     def response(self, agent: ChatAgent) -> ChatDocument:
         return agent.create_agent_response(
@@ -209,10 +206,7 @@ class AgentSendTool(ToolMessage):
     to: str
     content: str = ""
     tools: List[ToolMessage] = []
-
-    class Config:
-        # do not allow LLM-generation, since tool-sending is only for agent
-        handle_only: bool = True
+    _handle_only: bool = True
 
     def response(self, agent: ChatAgent) -> ChatDocument:
         return agent.create_agent_response(

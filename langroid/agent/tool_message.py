@@ -43,6 +43,8 @@ class ToolMessage(ABC, BaseModel):
 
     model_config = ConfigDict(extra=Extra.allow)
 
+    _handle_only: bool = False  # only allow handling, but not use (LLM-generation)?
+
     class Config:
         # only HANDLING allowed, NOT "use" (i.e LLM generation)
         handle_only: bool = False
