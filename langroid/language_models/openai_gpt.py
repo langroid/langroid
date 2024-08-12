@@ -85,7 +85,7 @@ class OpenAIChatModel(str, Enum):
     GPT4 = "gpt-4"
     GPT4_32K = "gpt-4-32k"
     GPT4_TURBO = "gpt-4-turbo"
-    GPT4o = "gpt-4o"
+    GPT4o = "gpt-4o-2024-08-06"
     GPT4o_MINI = "gpt-4o-mini"
 
 
@@ -117,7 +117,7 @@ _cost_per_1k_tokens: Dict[str, Tuple[float, float]] = {
     OpenAIChatModel.GPT3_5_TURBO: (0.001, 0.002),
     OpenAIChatModel.GPT4: (0.03, 0.06),  # 8K context
     OpenAIChatModel.GPT4_TURBO: (0.01, 0.03),  # 128K context
-    OpenAIChatModel.GPT4o: (0.005, 0.015),  # 128K context
+    OpenAIChatModel.GPT4o: (0.0025, 0.010),  # 128K context
     OpenAIChatModel.GPT4o_MINI: (0.00015, 0.0006),  # 128K context
     AnthropicModel.CLAUDE_3_5_SONNET: (0.003, 0.015),
     AnthropicModel.CLAUDE_3_OPUS: (0.015, 0.075),
