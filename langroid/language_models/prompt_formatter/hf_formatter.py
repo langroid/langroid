@@ -61,12 +61,14 @@ def find_hf_formatter(model_name: str) -> str:
         )
         try:
             mdl = next(models)
-        except StopIteration:
+            tokenizer = AutoTokenizer.from_pretrained(mdl.id)
+            if tokenizer.chat_template is not None:
+                return str(mdl.id)
+            else:
+                continue
+        except Exception:
             continue
 
-        tokenizer = AutoTokenizer.from_pretrained(mdl.id)
-        if tokenizer.chat_template is not None:
-            return str(mdl.id)
     return ""
 
 

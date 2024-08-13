@@ -1017,7 +1017,8 @@ class OpenAIGPT(LanguageModel):
             LLMResponse(
                 message=completion,
                 cached=False,
-                oai_tool_calls=tool_calls or None,  # don't allow empty list [] here
+                # don't allow empty list [] here
+                oai_tool_calls=tool_calls or None if len(tool_deltas) > 0 else None,
                 function_call=function_call if has_function else None,
             ),
             openai_response.dict(),
