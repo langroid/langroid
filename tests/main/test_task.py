@@ -344,9 +344,9 @@ def test_task_tool_agent_response(
         assert content_empty()
 
 
-@pytest.mark.parametrize("use_fn_api", [True, False])
+@pytest.mark.parametrize("use_fn_api", [False, True])
 @pytest.mark.parametrize("use_tools_api", [True, False])
-@pytest.mark.parametrize("agent_response_done", [True, False])
+@pytest.mark.parametrize("agent_response_done", [False, True])
 @pytest.mark.parametrize("use_orch_tools", [True, False])
 def test_task_tool_num(
     test_settings: Settings,
@@ -404,6 +404,7 @@ def test_task_tool_num(
         )
     )
     agent.enable_message(AugmentTool)
+    agent.enable_message(DonePassTool)
     task = Task(
         agent,
         interactive=False,
@@ -476,6 +477,7 @@ def test_task_2_agent_tool(
                 """,
         )
     )
+    requestor_agent.enable_message(DonePassTool)
     requestor_task = Task(
         requestor_agent,
         interactive=False,
@@ -522,7 +524,7 @@ def test_task_2_agent_tool(
     assert "200" in response.content
 
 
-@pytest.mark.parametrize("use_fn_api", [True, False])
+@pytest.mark.parametrize("use_fn_api", [False, True])
 @pytest.mark.parametrize("use_tools_api", [True, False])
 @pytest.mark.parametrize("use_orch_tools", [False, True])
 def test_task_2_agent_2_tool(
@@ -558,6 +560,7 @@ def test_task_2_agent_2_tool(
             super().__init__(config)
             self.enable_message(QueryTool, use=True, handle=True)
             self.enable_message(FeedbackTool, use=False, handle=True)
+            self.enable_message(DoneTool)
 
         def polinsky_query(self, msg: QueryTool) -> str | PassTool:
             # No validation err, so pass it on so other agent can respond
