@@ -18,7 +18,7 @@ from langroid.language_models.prompt_formatter.base import PromptFormatter
 logger = logging.getLogger(__name__)
 
 
-def try_import_hf_modules() -> Tuple[Type[Any], Type[Any], Type[Any]]:
+def try_import_hf_modules() -> Tuple[Type[Any], Type[Any]]:
     """
     Attempts to import the AutoTokenizer class from the transformers package.
     Returns:
@@ -27,17 +27,16 @@ def try_import_hf_modules() -> Tuple[Type[Any], Type[Any], Type[Any]]:
         ImportError: If the transformers package is not installed.
     """
     try:
-        from huggingface_hub import HfApi, ModelFilter
+        from huggingface_hub import HfApi
         from transformers import AutoTokenizer
 
-        return AutoTokenizer, HfApi, ModelFilter
+        return AutoTokenizer, HfApi
     except ImportError:
         raise ImportError(
             """
             You are trying to use some/all of:
             HuggingFace transformers.AutoTokenizer,
-            huggingface_hub.HfApi, 
-            huggingface_hub.ModelFilter,
+            huggingface_hub.HfApi,
             but these are not not installed 
             by default with Langroid. Please install langroid using the 
             `transformers` extra, like so:
@@ -48,7 +47,7 @@ def try_import_hf_modules() -> Tuple[Type[Any], Type[Any], Type[Any]]:
 
 
 def find_hf_formatter(model_name: str) -> str:
-    AutoTokenizer, HfApi, ModelFilter = try_import_hf_modules()
+    AutoTokenizer, HfApi = try_import_hf_modules()
     hf_api = HfApi()
     # try to find a matching model, with progressivly shorter prefixes of model_name
     model_name = model_name.lower().split("/")[-1]
@@ -57,19 +56,19 @@ def find_hf_formatter(model_name: str) -> str:
     for i in range(len(parts), 0, -1):
         prefix = "-".join(parts[:i])
         models = hf_api.list_models(
-            filter=ModelFilter(
-                task="text-generation",
-                model_name=prefix,
-            )
+            task="text-generation",
+            model_name=prefix,
         )
         try:
             mdl = next(models)
-        except StopIteration:
+            tokenizer = AutoTokenizer.from_pretrained(mdl.id)
+            if tokenizer.chat_template is not None:
+                return str(mdl.id)
+            else:
+                continue
+        except Exception:
             continue
 
-        tokenizer = AutoTokenizer.from_pretrained(mdl.id)
-        if tokenizer.chat_template is not None:
-            return str(mdl.id)
     return ""
 
 
@@ -78,14 +77,12 @@ class HFFormatter(PromptFormatter):
 
     def __init__(self, config: HFPromptFormatterConfig):
         super().__init__(config)
-        AutoTokenizer, HfApi, ModelFilter = try_import_hf_modules()
+        AutoTokenizer, HfApi = try_import_hf_modules()
         self.config: HFPromptFormatterConfig = config
         hf_api = HfApi()
         models = hf_api.list_models(
-            filter=ModelFilter(
-                task="text-generation",
-                model_name=config.model_name,
-            )
+            task="text-generation",
+            model_name=config.model_name,
         )
         try:
             mdl = next(models)
