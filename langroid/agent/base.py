@@ -45,7 +45,13 @@ from langroid.mytypes import Entity
 from langroid.parsing.parse_json import extract_top_level_json
 from langroid.parsing.parser import Parser, ParsingConfig
 from langroid.prompts.prompts_config import PromptsConfig
-from langroid.pydantic_v1 import BaseSettings, Field, ValidationError, validator
+from langroid.pydantic_v1 import (
+    BaseModel,
+    BaseSettings,
+    Field,
+    ValidationError,
+    validator,
+)
 from langroid.utils.configuration import settings
 from langroid.utils.constants import DONE, NO_ANSWER, PASS, PASS_TO, SEND_TO
 from langroid.utils.object_registry import ObjectRegistry
@@ -1300,8 +1306,25 @@ class Agent(ABC):
                     # else wrap it in an agent response and return it so
                     # orchestrator can find a respondent
                     result = self.create_agent_response(tool_messages=[maybe_result])
-            else:
+            elif isinstance(maybe_result, (ChatDocument, str)):
                 result = maybe_result
+            elif isinstance(maybe_result, BaseModel):
+                result = maybe_result.json()
+            else:
+                # last resort: use json.dumps() or str() to make it a str
+                try:
+                    result = json.dumps(maybe_result)
+                except Exception:
+                    try:
+                        result = str(maybe_result)
+                    except Exception as e:
+                        logger.error(
+                            f"""
+                            Error converting result of {tool_name} to str: {e}", 
+                            """,
+                            exc_info=True,
+                        )
+                        result = None
         except Exception as e:
             # raise the error here since we are sure it's
             # not a pydantic validation error,
