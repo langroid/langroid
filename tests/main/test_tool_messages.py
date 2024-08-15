@@ -1,15 +1,18 @@
 import itertools
 import json
 import random
-from typing import List, Literal, Optional
+from typing import Any, List, Literal, Optional
 
 import pytest
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
+from langroid.agent.chat_document import ChatDocMetaData, ChatDocument
 from langroid.agent.task import Task
 from langroid.agent.tool_message import ToolMessage
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
+from langroid.language_models.mock_lm import MockLMConfig
 from langroid.language_models.openai_gpt import OpenAIGPTConfig
+from langroid.mytypes import Entity
 from langroid.parsing.parse_json import extract_top_level_json
 from langroid.parsing.parser import ParsingConfig
 from langroid.prompts.prompts_config import PromptsConfig
@@ -696,3 +699,148 @@ def test_oai_tool_choice(
     assert "nabroski" in response.content.lower() or isinstance(
         agent.get_tool_messages(response)[0], NabroskiTool
     )
+
+
+@pytest.mark.parametrize(
+    "result_type", ["int", "list", "dict", "ChatDocument", "pydantic", "toolmsg"]
+)
+@pytest.mark.parametrize("tool_handler", ["handle", "response", "response_with_doc"])
+def test_tool_handlers_and_results(
+    test_settings: Settings,
+    result_type: Literal["int", "list", "dict", "ChatDocument", "pydantic", "toolmsg"],
+    tool_handler: Literal["handle", "response", "response_with_doc"],
+):
+    """Test various types of ToolMessage handlers, and check that they can
+    return arbitrary result types"""
+
+    class SpecialResult(BaseModel):
+        answer: int
+        details: str = "nothing"
+
+    class NonEnabledTool(ToolMessage):
+        """If you have a desired pydantic structure that you want to pass
+        back as a result (WITHOUT serializing it to a string or JSON), you can
+        wrap it in a ToolMessage, and it is handled specially,
+        i.e. it should appear in the final result ChatDocument's `tool_messages` list.
+        Note that this tool is NOT enabled in the agent, so it is NOT handled,
+        NOT available for LLM-use. It is purely a way to pass back an
+        arbitrary object (not necessarily just a Pydantic obj)
+        as part of the final result.
+        """
+
+        request: str = "do not care but need to specify to make it a tool"
+        purpose: str = "does not matter but need to specify to make it a tool"
+
+        special: SpecialResult
+
+        # make config to ALLOW extras
+        class Config:
+            extra = "allow"
+
+    def result_fn(x: int) -> Any:
+        match result_type:
+            case "int":
+                return x + 5
+            case "dict":
+                return {"answer": x + 5, "details": "something"}
+            case "list":
+                return [x + 5, x * 2]
+            case "ChatDocument":
+                return ChatDocument(
+                    content=str(x + 5),
+                    metadata=ChatDocMetaData(sender="Agent"),
+                )
+            case "pydantic":
+                return SpecialResult(answer=x + 5)
+            case "toolmsg":
+                return NonEnabledTool(
+                    special=SpecialResult(answer=x + 5),  # explicitly declared
+                    # arbitrary new fields that were not declared in the class...
+                    extra_special=SpecialResult(answer=x + 10),
+                    # ... does not need to be a Pydantic object
+                    arbitrary_obj=dict(answer=x + 15),
+                )
+
+    class CoolToolWithHandle(ToolMessage):
+        request: str = "cool_tool"
+        purpose: str = "to request the 'cool' transform of a  number <x>"
+
+        x: int
+
+        def handle(self) -> Any:
+            return result_fn(self.x)
+
+    class MyAgent(ChatAgent):
+        def init_state(self) -> None:
+            self.state: int = 100
+            self.sender: str = ""
+
+    class CoolToolWithResponse(ToolMessage):
+        """To test that `response` handler works as expected,
+        and is able to read and modify agent state.
+        """
+
+        request: str = "cool_tool"
+        purpose: str = "to request the 'cool' transform of a  number <x>"
+
+        x: int
+
+        def response(self, agent: MyAgent) -> Any:
+            agent.state += 1
+            return result_fn(self.x)
+
+    class CoolToolWithResponseDoc(ToolMessage):
+        """
+        To test that `response` handler works as expected,
+        is able to read and modify agent state, and
+        when using a `chat_doc` argument, and is able to read values from it.
+        """
+
+        request: str = "cool_tool"
+        purpose: str = "to request the 'cool' transform of a  number <x>"
+
+        x: int
+
+        def response(self, agent: MyAgent, chat_doc: ChatDocument) -> Any:
+            agent.state += 1
+            agent.sender = chat_doc.metadata.sender
+            return result_fn(self.x)
+
+    match tool_handler:
+        case "handle":
+            tool_class = CoolToolWithHandle
+        case "response":
+            tool_class = CoolToolWithResponse
+        case "response_with_doc":
+            tool_class = CoolToolWithResponseDoc
+
+    agent = MyAgent(
+        ChatAgentConfig(
+            name="Test",
+            # no need for a real LLM, use a mock
+            llm=MockLMConfig(
+                # use a CoolTool variant
+                response_fn=lambda x: tool_class(x=int(x)).json(),
+            ),
+        )
+    )
+
+    agent.enable_message(tool_class)
+
+    task = Task(agent, interactive=False, done_if_response=[Entity.AGENT])
+    result = task.run("3")
+    if result_type != "toolmsg":
+        assert "8" in result.content
+    else:
+        tool = result.tool_messages[0]
+        assert isinstance(tool, NonEnabledTool)
+        assert isinstance(tool.special, SpecialResult)
+        assert tool.special.answer == 8
+        assert tool.extra_special.answer == 13
+        assert tool.arbitrary_obj["answer"] == 18
+
+    if tool_handler == "response":
+        assert agent.state == 101
+    if tool_handler == "response_with_doc":
+        assert agent.state == 101
+        assert agent.sender == "LLM"
