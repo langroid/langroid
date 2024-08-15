@@ -705,12 +705,13 @@ def test_oai_tool_choice(
     "result_type", ["int", "list", "dict", "ChatDocument", "pydantic"]
 )
 @pytest.mark.parametrize("tool_handler", ["handle", "response", "response_with_doc"])
-def test_tool_result_type(
+def test_tool_handlers_and_results(
     test_settings: Settings,
     result_type: Literal["int", "list", "dict", "ChatDocument", "pydantic"],
     tool_handler: Literal["handle", "response", "response_with_doc"],
 ):
-    """Test that a tool handler can return various types of results"""
+    """Test various types of ToolMessage handlers, and check that they can
+    return arbitrary result types"""
 
     class SpecialResult(BaseModel):
         answer: int
@@ -772,7 +773,7 @@ def test_tool_result_type(
 
         x: int
 
-        def response(self, agent: MyAgent, chat_doc: ChatDocument) -> ChatDocument:
+        def response(self, agent: MyAgent, chat_doc: ChatDocument) -> Any:
             agent.state += 1
             agent.sender = chat_doc.metadata.sender
             return result_fn(self.x)
