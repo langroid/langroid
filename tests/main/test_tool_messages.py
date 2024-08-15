@@ -717,9 +717,10 @@ def test_tool_handlers_and_results(
         answer: int
         details: str = "nothing"
 
-    class UnhandledTool(ToolMessage):
+    class NonEnabledTool(ToolMessage):
         """If you have a desired pydantic structure that you want to pass
-        back as a result, wrap it in a ToolMessage, and it is handled specially,
+        back as a result (WITHOUT serializing it to a string or JSON), you can
+        wrap it in a ToolMessage, and it is handled specially,
         i.e. it should appear in the final result ChatDocument's `tool_messages` list.
         Note that this tool is NOT enabled in the agent, so it is NOT handled,
         NOT available for LLM-use. It is purely a way to pass back an
@@ -752,10 +753,12 @@ def test_tool_handlers_and_results(
             case "pydantic":
                 return SpecialResult(answer=x + 5)
             case "toolmsg":
-                return UnhandledTool(
+                return NonEnabledTool(
                     special=SpecialResult(answer=x + 5),  # explicitly declared
-                    # arbitrary new field that was not declared in the class
+                    # arbitrary new fields that were not declared in the class...
                     extra_special=SpecialResult(answer=x + 10),
+                    # ... does not need to be a Pydantic object
+                    arbitrary_obj=dict(answer=x + 15),
                 )
 
     class CoolToolWithHandle(ToolMessage):
@@ -830,10 +833,11 @@ def test_tool_handlers_and_results(
         assert "8" in result.content
     else:
         tool = result.tool_messages[0]
-        assert isinstance(tool, UnhandledTool)
+        assert isinstance(tool, NonEnabledTool)
         assert isinstance(tool.special, SpecialResult)
         assert tool.special.answer == 8
         assert tool.extra_special.answer == 13
+        assert tool.arbitrary_obj["answer"] == 18
 
     if tool_handler == "response":
         assert agent.state == 101
