@@ -702,12 +702,12 @@ def test_oai_tool_choice(
 
 
 @pytest.mark.parametrize(
-    "result_type", ["int", "list", "dict", "ChatDocument", "pydantic"]
+    "result_type", ["int", "list", "dict", "ChatDocument", "pydantic", "toolmsg"]
 )
 @pytest.mark.parametrize("tool_handler", ["handle", "response", "response_with_doc"])
 def test_tool_handlers_and_results(
     test_settings: Settings,
-    result_type: Literal["int", "list", "dict", "ChatDocument", "pydantic"],
+    result_type: Literal["int", "list", "dict", "ChatDocument", "pydantic", "toolmsg"],
     tool_handler: Literal["handle", "response", "response_with_doc"],
 ):
     """Test various types of ToolMessage handlers, and check that they can
@@ -716,6 +716,25 @@ def test_tool_handlers_and_results(
     class SpecialResult(BaseModel):
         answer: int
         details: str = "nothing"
+
+    class UnhandledTool(ToolMessage):
+        """If you have a desired pydantic structure that you want to pass
+        back as a result, wrap it in a ToolMessage, and it is handled specially,
+        i.e. it should appear in the final result ChatDocument's `tool_messages` list.
+        Note that this tool is NOT enabled in the agent, so it is NOT handled,
+        NOT available for LLM-use. It is purely a way to pass back an
+        arbitrary object (not necessarily just a Pydantic obj)
+        as part of the final result.
+        """
+
+        request: str = "do not care but need to specify to make it a tool"
+        purpose: str = "does not matter but need to specify to make it a tool"
+
+        special: SpecialResult
+
+        # make config to ALLOW extras
+        class Config:
+            extra = "allow"
 
     def result_fn(x: int) -> Any:
         match result_type:
@@ -732,6 +751,12 @@ def test_tool_handlers_and_results(
                 )
             case "pydantic":
                 return SpecialResult(answer=x + 5)
+            case "toolmsg":
+                return UnhandledTool(
+                    special=SpecialResult(answer=x + 5),  # explicitly declared
+                    # arbitrary new field that was not declared in the class
+                    extra_special=SpecialResult(answer=x + 10),
+                )
 
     class CoolToolWithHandle(ToolMessage):
         request: str = "cool_tool"
@@ -801,7 +826,15 @@ def test_tool_handlers_and_results(
 
     task = Task(agent, interactive=False, done_if_response=[Entity.AGENT])
     result = task.run("3")
-    assert "8" in result.content
+    if result_type != "toolmsg":
+        assert "8" in result.content
+    else:
+        tool = result.tool_messages[0]
+        assert isinstance(tool, UnhandledTool)
+        assert isinstance(tool.special, SpecialResult)
+        assert tool.special.answer == 8
+        assert tool.extra_special.answer == 13
+
     if tool_handler == "response":
         assert agent.state == 101
     if tool_handler == "response_with_doc":
