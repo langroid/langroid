@@ -178,11 +178,20 @@ mkdocs-section-index = "^0.3.5"
 mkdocs-jupyter = "^0.24.1"
 
 
+[tool.poetry.scripts]
+nltk_download = "nltk_downloader:download_punkt"
+
+[tool.nltk_downloader]
+def download_punkt():
+    import nltk
+    nltk.download('punkt')
+
 
 # ========================================
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
+requires = ["nltk"]
 
 [tool.black]
 line-length = 88
