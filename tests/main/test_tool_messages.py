@@ -705,7 +705,12 @@ def test_oai_tool_choice(
 @pytest.mark.parametrize(
     "result_type",
     [
-        # "int", "list", "dict", "ChatDocument", "pydantic",
+        "int",
+        "list",
+        "dict",
+        "ChatDocument",
+        "pydantic",
+        "tool",
         "final_tool",
         "agent_done",
     ],
@@ -756,6 +761,9 @@ def test_tool_handlers_and_results(result_type: str, tool_handler: str):
                 )
             case "pydantic":
                 return SpecialResult(answer=x + 5)
+            case "tool":
+                # return tool, to be handled by sub-task
+                return UberTool(x=x)
             case "final_tool":
                 return SpecialMessage(
                     special=SpecialResult(answer=x + 5),  # explicitly declared
@@ -850,7 +858,7 @@ def test_tool_handlers_and_results(result_type: str, tool_handler: str):
         done_if_response=[Entity.AGENT] if result_type != "final_tool" else [],
     )
     result = task.run("3")
-    if result_type not in ["final_tool", "agent_done"]:
+    if result_type not in ["tool", "final_tool", "agent_done"]:
         assert "8" in result.content
     elif result_type == "final_tool":
         tool = result.tool_messages[0]
@@ -868,16 +876,16 @@ def test_tool_handlers_and_results(result_type: str, tool_handler: str):
 
     if result_type in ["final_tool", "agent_done"]:
         # test cascaded handling/exit from parent task
-        parent_agent = ChatAgent(
+        another_agent = ChatAgent(
             ChatAgentConfig(
                 name="Parent",
                 llm=MockLMConfig(response_fn=lambda x: x),  # pass thru
             )
         )
-        parent_agent.enable_message(UberTool)
-        parent_task = Task(parent_agent, interactive=False)
-        parent_task.add_sub_task(task)
-        result = parent_task.run("3")
+        another_agent.enable_message(UberTool)
+        another_task = Task(another_agent, interactive=False)
+        another_task.add_sub_task(task)
+        result = another_task.run("3")
 
         if result_type == "final_tool":
             # exit from root task, with SpecialMessage as final result
@@ -890,4 +898,11 @@ def test_tool_handlers_and_results(result_type: str, tool_handler: str):
         else:
             # inner task says Done, passing on UberTool to parent task;
             # parent task handles 3 using UberTool => 8
+            assert "8" in result.content
+
+        if result_type == "tool":
+            # test handling returned tool by sub-task
+            another_task = Task(another_agent, interactive=False)
+            task.add_sub_task(another_task)
+            result = task.run("3")
             assert "8" in result.content
