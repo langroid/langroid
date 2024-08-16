@@ -103,12 +103,12 @@ def main(
         if question == "q":
             break
         result = task.run(question)
-        print(f"""
+        print(
+            f"""
             Here's your answer:
             {result.content}
             """
         )
-
 
 
 if __name__ == "__main__":
