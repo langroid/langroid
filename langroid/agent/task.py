@@ -33,7 +33,7 @@ from langroid.agent.chat_document import (
     ChatDocument,
     StatusCode,
 )
-from langroid.agent.tool_message import ToolMessage
+from langroid.agent.tool_message import FinalResultToolMessage, ToolMessage
 from langroid.agent.tools.orchestration import AgentDoneTool, DoneTool
 from langroid.cachedb.redis_cachedb import RedisCache, RedisCacheConfig
 from langroid.exceptions import InfiniteLoopException
@@ -1399,14 +1399,18 @@ class Task:
         # if there is an LLMDoneTool or AgentDoneTool among these,
         # we extract content and tools from here, and ignore all others
         for t in tool_messages:
-            if isinstance(t, (AgentDoneTool, DoneTool)):
+            if isinstance(t, FinalResultToolMessage):
+                content = ""
+                tool_messages = [t]  # pass it on to parent so it also quits
+                break
+            elif isinstance(t, (AgentDoneTool, DoneTool)):
                 # there shouldn't be multiple tools like this; just take the first
                 content = t.content
                 if isinstance(t, AgentDoneTool):
                     tool_messages = t.tools
                 break
         # drop the "Done" tools since they should not be part of the task result,
-        # or else they would cause the parent task to get done!
+        # or else they would cause the parent task to get unintentionally done!
         tool_messages = [
             t for t in tool_messages if not isinstance(t, (DoneTool, AgentDoneTool))
         ]
@@ -1473,7 +1477,7 @@ class Task:
                 and (
                     DONE in result.content
                     or any(
-                        isinstance(t, (DoneTool, AgentDoneTool))
+                        isinstance(t, (DoneTool, AgentDoneTool, FinalResultToolMessage))
                         for t in result.tool_messages
                     )
                 )
@@ -1594,7 +1598,8 @@ class Task:
         done_result = result is not None and (
             DONE in (result.content if isinstance(result, str) else result.content)
             or any(
-                isinstance(t, (DoneTool, AgentDoneTool)) for t in result.tool_messages
+                isinstance(t, (DoneTool, AgentDoneTool, FinalResultToolMessage))
+                for t in result.tool_messages
             )
         )
 

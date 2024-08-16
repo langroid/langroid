@@ -119,7 +119,9 @@ class ChatDocument(Document):
     oai_tool_id2result: Optional[OrderedDict[str, str]] = None
     oai_tool_choice: ToolChoiceTypes | Dict[str, Dict[str, str] | str] = "auto"
     function_call: Optional[LLMFunctionCall] = None
-    tool_messages: List[ToolMessage] = []  # only handle-able tools
+    # tools that are explicitly added by agent response/handler,
+    # or tools recognized in the ChatDocument as handle-able tools
+    tool_messages: List[ToolMessage] = []
     # all known tools in the msg that are in an agent's llm_tools_known list,
     # even if non-used/handled
     all_tool_messages: List[ToolMessage] = []

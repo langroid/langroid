@@ -273,3 +273,18 @@ class ToolMessage(ABC, BaseModel):
             exclude=list(cls.Config.schema_extra["exclude"]),
         )
         return schema
+
+
+class FinalResultToolMessage(ToolMessage):
+    """Class to use as a wrapper for sending arbitrary results from an Agent's
+    agent_response or tool handlers, to:
+    (a) trigger completion of the current task as well as all parent tasks, and
+    (b) be returned as the final result of the root task.
+    See test_tool_handlers_and_results in test_tool_messages.py.
+    """
+
+    request: str = ""
+    purpose: str = "Ignored; Wrapper for a structured message"
+
+    class Config:
+        extra = Extra.allow
