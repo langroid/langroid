@@ -156,9 +156,18 @@ def main(
     """
     )
 
-    task = LanceRAGTaskCreator.new(agent, interactive=True)
+    task = LanceRAGTaskCreator.new(agent, interactive=False)
 
-    task.run("Can you help with some questions about these movies?")
+    while True:
+        question = Prompt.ask("What do you want to know? [q to quit]")
+        if question == "q":
+            break
+        result = task.run(question)
+        print(f"""
+            Here's your answer:
+            {result.content}
+            """
+        )
 
 
 if __name__ == "__main__":
