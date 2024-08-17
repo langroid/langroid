@@ -839,7 +839,6 @@ def test_tool_handlers_and_results(result_type: str, tool_handler: str):
         done_if_response=[] if tool_result else [Entity.AGENT],
     )
     result = task.run("3")
-
     if tool_handler == "response":
         assert agent.state == 101
     if tool_handler == "response_with_doc":
@@ -851,7 +850,6 @@ def test_tool_handlers_and_results(result_type: str, tool_handler: str):
         # we terminate task on agent_response, via done_if_response,
         # so the result.content == 8
         assert "8" in result.content
-
     else:
         # When CoolTool handler returns a ToolMessage,
         # test that it is handled correctly by sub-task or a parent.
