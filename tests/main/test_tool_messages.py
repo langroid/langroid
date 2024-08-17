@@ -913,3 +913,63 @@ def test_tool_handlers_and_results(result_type: str, tool_handler: str):
             result = task.run("3")
             # subtask stalls, parent stalls, returns None
             assert result is None
+
+
+@pytest.mark.parametrize("result_type", ["agent_done", "final_tool"])
+def test_llm_end_with_tool(result_type: str):
+    """
+    Test that an LLM can indirectly trigger task-end, and return a Tool as result.
+    """
+
+    class PairTool(ToolMessage):
+        """Handle the LLM-generated tool, signal done or final-result and
+        return it as the result."""
+
+        request: str = "pair_tool"
+        purpose: str = "to return a pair of numbers <a>, <b>"
+        a: int
+        b: int
+
+        def handle(self) -> Any:
+            if result_type == "final_tool":
+                return FinalResultTool(pair=self)
+            else:
+                return AgentDoneTool(tools=[self])
+
+    class MyAgent(ChatAgent):
+        def init_state(self) -> None:
+            self.numbers: List[int] = []
+
+        def user_response(
+            self,
+            msg: Optional[str | ChatDocument] = None,
+        ) -> Optional[ChatDocument]:
+            """Mock human user input: they start with 0, then increment by 1"""
+            last_num = self.numbers[-1] if self.numbers else 0
+            new_num = last_num + 1
+            self.numbers.append(new_num)
+            return self.create_user_response(content=str(new_num))
+
+    pair_tool_name = PairTool.default_value("request")
+    agent = MyAgent(
+        ChatAgentConfig(
+            name="MyAgent",
+            system_message=f"""   
+            Ask the user for their next number. 
+            Once you have collected 2 distinct numbers, present these as `a` and `b`
+            fields using the TOOL: `{pair_tool_name}`.
+            """,
+        )
+    )
+    agent.enable_message(PairTool)
+    # we are mocking user response, so need to set only_user_quits_root=False
+    # so that the done signal (AgentDoneTool or FinalResultTool) actually end the task.
+    task = Task(agent, interactive=True, only_user_quits_root=False)
+    result = task.run()
+    tool = result.tool_messages[0]
+    if result_type == "final_tool":
+        assert isinstance(tool, FinalResultTool)
+        assert tool.pair.a == 1 and tool.pair.b == 2
+    else:
+        assert isinstance(tool, PairTool)
+        assert tool.a == 1 and tool.b == 2
