@@ -1056,6 +1056,7 @@ class Agent(ABC):
         """
         try:
             tools = self.get_tool_messages(msg)
+            tools = [t for t in tools if self._tool_recipient_match(t)]
         except ValidationError as ve:
             # correct tool name but bad fields
             return self.tool_validation_error(ve)

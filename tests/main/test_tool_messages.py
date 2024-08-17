@@ -8,7 +8,8 @@ import pytest
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.chat_document import ChatDocMetaData, ChatDocument
 from langroid.agent.task import Task
-from langroid.agent.tool_message import ToolMessage
+from langroid.agent.tool_message import FinalResultTool, ToolMessage
+from langroid.agent.tools.orchestration import AgentDoneTool
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
 from langroid.language_models.mock_lm import MockLMConfig
 from langroid.language_models.openai_gpt import OpenAIGPTConfig
@@ -702,14 +703,20 @@ def test_oai_tool_choice(
 
 
 @pytest.mark.parametrize(
-    "result_type", ["int", "list", "dict", "ChatDocument", "pydantic", "toolmsg"]
+    "result_type",
+    [
+        "final_tool",
+        "agent_done",
+        "tool",
+        "int",
+        "list",
+        "dict",
+        "ChatDocument",
+        "pydantic",
+    ],
 )
 @pytest.mark.parametrize("tool_handler", ["handle", "response", "response_with_doc"])
-def test_tool_handlers_and_results(
-    test_settings: Settings,
-    result_type: Literal["int", "list", "dict", "ChatDocument", "pydantic", "toolmsg"],
-    tool_handler: Literal["handle", "response", "response_with_doc"],
-):
+def test_tool_handlers_and_results(result_type: str, tool_handler: str):
     """Test various types of ToolMessage handlers, and check that they can
     return arbitrary result types"""
 
@@ -717,25 +724,27 @@ def test_tool_handlers_and_results(
         answer: int
         details: str = "nothing"
 
-    class NonEnabledTool(ToolMessage):
+    class SpecialMessage(FinalResultTool):
         """If you have a desired pydantic structure that you want to pass
-        back as a result (WITHOUT serializing it to a string or JSON), you can
-        wrap it in a ToolMessage, and it is handled specially,
+        back intact (i.e. WITHOUT serializing it to a string)
+        as a final root-level task result (i.e. exits parent tasks recursively),
+        you can wrap it in a FinalResultTool, and it is handled specially,
         i.e. it should appear in the final result ChatDocument's `tool_messages` list.
         Note that this tool is NOT enabled in the agent, so it is NOT handled,
         NOT available for LLM-use. It is purely a way to pass back an
         arbitrary object (not necessarily just a Pydantic obj)
         as part of the final result.
+        FinalResultTool has a Config that allows extras, so as we see below,
+        any arbitrary field can be added to SpecialMessage at construction time.
+
+        On the other hand if you want to only exit the current task and return a
+        ToolMessage result back to the parent task for further handling,
+        you can return an AgentDoneTool, with `tools` set to a list containing
+        the desired ToolMessage instance (see `agent_done` case below, where
+        the handler returns AgentDoneTool(tools=[UberTool(x=x)]).
         """
 
-        request: str = "do not care but need to specify to make it a tool"
-        purpose: str = "does not matter but need to specify to make it a tool"
-
         special: SpecialResult
-
-        # make config to ALLOW extras
-        class Config:
-            extra = "allow"
 
     def result_fn(x: int) -> Any:
         match result_type:
@@ -752,14 +761,29 @@ def test_tool_handlers_and_results(
                 )
             case "pydantic":
                 return SpecialResult(answer=x + 5)
-            case "toolmsg":
-                return NonEnabledTool(
+            case "tool":
+                # return tool, to be handled by sub-task
+                return UberTool(x=x)
+            case "final_tool":
+                return FinalResultTool(
                     special=SpecialResult(answer=x + 5),  # explicitly declared
                     # arbitrary new fields that were not declared in the class...
                     extra_special=SpecialResult(answer=x + 10),
                     # ... does not need to be a Pydantic object
                     arbitrary_obj=dict(answer=x + 15),
                 )
+            case "agent_done":
+                # pass on to parent, to handle with UberTool,
+                # which is NOT enabled for this agent
+                return AgentDoneTool(tools=[UberTool(x=x)])
+
+    class UberTool(ToolMessage):
+        request: str = "uber_tool"
+        purpose: str = "to request the 'uber' transform of a  number <x>"
+        x: int
+
+        def handle(self) -> Any:
+            return FinalResultTool(answer=self.x + 5)
 
     class CoolToolWithHandle(ToolMessage):
         request: str = "cool_tool"
@@ -826,21 +850,87 @@ def test_tool_handlers_and_results(
     )
 
     agent.enable_message(tool_class)
-
-    task = Task(agent, interactive=False, done_if_response=[Entity.AGENT])
+    # whether to terminate task on agent_response
+    tool_result = result_type in ["final_tool", "agent_done", "tool"]
+    task = Task(
+        agent,
+        interactive=False,
+        # need to specify task done when result is not FinalResultTool
+        done_if_response=[] if tool_result else [Entity.AGENT],
+    )
     result = task.run("3")
-    if result_type != "toolmsg":
+    if not tool_result:
+        # CoolTool handler returns a non-tool result containing 8, and
+        # we terminate task on agent_response, via done_if_response,
+        # so the result.content == 8
         assert "8" in result.content
-    else:
-        tool = result.tool_messages[0]
-        assert isinstance(tool, NonEnabledTool)
-        assert isinstance(tool.special, SpecialResult)
-        assert tool.special.answer == 8
-        assert tool.extra_special.answer == 13
-        assert tool.arbitrary_obj["answer"] == 18
 
     if tool_handler == "response":
         assert agent.state == 101
     if tool_handler == "response_with_doc":
         assert agent.state == 101
         assert agent.sender == "LLM"
+
+    if tool_result:
+        # When CoolTool handler returns a ToolMessage,
+        # test that it is handled correctly by sub-task or a parent.
+
+        another_agent = ChatAgent(
+            ChatAgentConfig(
+                name="Another",
+                llm=MockLMConfig(response_fn=lambda x: x),  # pass thru
+            )
+        )
+        another_agent.enable_message(UberTool)
+        another_task = Task(another_agent, interactive=False)
+        another_task.add_sub_task(task)
+        result = another_task.run("3")
+
+        if result_type == "final_tool":
+            # task's CoolTool handler returns FinalResultTool
+            # which short-circuits parent task and returns as a tool
+            # in tool_messages list of the final result
+            tool = result.tool_messages[0]
+            assert isinstance(tool, FinalResultTool)
+            assert isinstance(tool.special, SpecialResult)
+            assert tool.special.answer == 8
+            assert tool.extra_special.answer == 13
+            assert tool.arbitrary_obj["answer"] == 18
+        elif result_type == "agent_done":
+            # inner task's CoolTool handler returns a DoneTool containing
+            # UberTool to parent task, which is handled by the parent "another_agent"
+            # which returns a FinalResultTool containing answer == 8
+            tool = result.tool_messages[0]
+            assert isinstance(tool, FinalResultTool)
+            assert tool.answer == 8
+
+            # Now disable parent agent's handling of UberTool
+            another_agent.disable_message_handling(UberTool)
+            # another_task = Task(another_agent, interactive=False)
+            # another_task.add_sub_task(task)
+            result = another_task.run("3")
+            # parent task is unable to handle UberTool, so will stall
+            # will stall and return None
+            assert result is None
+            another_agent.enable_message(UberTool)
+
+        elif result_type == "tool":
+            # inner Task CoolTool handler returns UberTool (with NO done signal),
+            # which it is unable to handle, so stalls and returns None,
+            # and so does parent another_task
+            assert result is None
+
+            # Now reverse it: make another_task a sub-task of task, and
+            # test handling UberTool returned by task handler, by sub-task another_task
+            another_task = Task(another_agent, interactive=False)
+            # task = Task(agent, interactive=False)
+            task.add_sub_task(another_task)
+            result = task.run("3")
+            tool = result.tool_messages[0]
+            assert isinstance(tool, FinalResultTool)
+            assert tool.answer == 8
+
+            another_agent.disable_message_handling(UberTool)
+            result = task.run("3")
+            # subtask stalls, parent stalls, returns None
+            assert result is None

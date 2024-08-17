@@ -453,7 +453,7 @@ class ChatAgent(Agent):
         # remove leading and trailing newlines and other whitespace
         return LLMMessage(role=Role.SYSTEM, content=content.strip())
 
-    def unhanded_tools(self) -> set[str]:
+    def unhandled_tools(self) -> set[str]:
         """The set of tools that are known but not handled.
         Useful in task flow: an agent can refuse to accept an incoming msg
         when it only has unhandled tools.
@@ -719,7 +719,7 @@ class ChatAgent(Agent):
                 llm_msgs = ChatDocument.to_LLMMessage(message, self.oai_tool_calls)
                 # LLM only responds to the content, so only those msgs with
                 # non-empty content should be kept
-                llm_msgs = [m for m in llm_msgs if m.content != ""]
+                llm_msgs = [m for m in llm_msgs if m.content.strip() != ""]
                 if len(llm_msgs) == 0:
                     return [], 0
                 # process tools if any
