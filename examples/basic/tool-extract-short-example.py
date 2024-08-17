@@ -11,30 +11,13 @@ python3 examples/basic/tool-extract-short-example.py
 import langroid as lr
 from langroid.pydantic_v1 import BaseModel, Field
 from langroid.agent.tools.orchestration import AgentDoneTool
-
+from langroid.agent.tool_message import FinalResultTool
 
 # desired output structure
 class CompanyInfo(BaseModel):
     name: str = Field(..., description="name of company")
     shares: int = Field(..., description="shares outstanding of company")
     price: float = Field(..., description="price per share of company")
-
-
-class CompanyResult(lr.agent.ToolMessage):
-    """Class for desired final result. We wrap it in a ToolMessage, so that
-    the result is returned as an object without conversion to string.
-    Note that we do NOT enable this tool for the agent, since it is NOT
-    meant to be either USED by the LLM or to be HANDLED by the agent.
-    It is simply a wrapper for a desired result to be returned as the
-    result of handling the CompanyInfoTool.
-    """
-
-    request: str = ""  # ignored but required
-    purpose: str = ""  # ignored but required
-
-    market_cap: float = Field(..., description="market capitalization of company")
-    info: CompanyInfo = Field(..., description="company info")
-
 
 # tool definition based on this
 class CompanyInfoTool(lr.agent.ToolMessage):
@@ -63,21 +46,21 @@ class CompanyInfoTool(lr.agent.ToolMessage):
             ),
         ]
 
-    def handle(self) -> AgentDoneTool:
+    def handle(self) -> FinalResultTool:
         """Handle LLM's structured output if it matches CompanyInfo structure.
         This suffices for a "stateless" tool.
         If the tool handling requires agent state, then
         instead of this `handle` method, define a `company_info_tool`
         method in the agent.
+        Since this method is returning a  FinalResultTool,
+        the task of this agent as well as any parent tasks will be terminated,
+        with this tool T appearing in the final ChatDocument's `tool_messages` list.
         """
         mkt_cap = self.company_info.shares * self.company_info.price
-        return AgentDoneTool(
-            tools=[
-                CompanyResult(
-                    market_cap=mkt_cap,
-                    info=self.company_info,
-                ),
-            ]
+        return FinalResultTool(
+            market_cap=mkt_cap,
+            info=self.company_info,
+            comment="success",  # arbitrary undeclared fields allowed
         )
 
 
@@ -106,9 +89,12 @@ result = task.run(
 # note the result.tool_messages will be a list containing
 # an obj of type CompanyResult, so we can extract fields from it.
 company_result = result.tool_messages[0]
-assert isinstance(company_result, CompanyResult)
+assert isinstance(company_result, FinalResultTool)
+assert isinstance(company_result.info, CompanyInfo)
+
 info = company_result.info
 mktcap = company_result.market_cap
+assert company_result.comment == "success"
 print(
     f"""
     Found company info: {info} and market cap: {mktcap}
