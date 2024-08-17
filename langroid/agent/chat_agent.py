@@ -453,7 +453,7 @@ class ChatAgent(Agent):
         # remove leading and trailing newlines and other whitespace
         return LLMMessage(role=Role.SYSTEM, content=content.strip())
 
-    def unhanded_tools(self) -> set[str]:
+    def unhandled_tools(self) -> set[str]:
         """The set of tools that are known but not handled.
         Useful in task flow: an agent can refuse to accept an incoming msg
         when it only has unhandled tools.

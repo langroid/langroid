@@ -6,7 +6,7 @@ from .chat_document import (
     ChatDocument,
 )
 from .chat_agent import ChatAgentConfig, ChatAgent
-from .tool_message import ToolMessage, FinalResultToolMessage
+from .tool_message import ToolMessage, FinalResultTool
 from .task import Task
 
 from . import base
@@ -29,7 +29,7 @@ __all__ = [
     "ChatAgent",
     "ChatAgentConfig",
     "ToolMessage",
-    "FinalResultToolMessage",
+    "FinalResultTool",
     "Task",
     "base",
     "chat_document",

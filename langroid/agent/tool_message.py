@@ -275,7 +275,7 @@ class ToolMessage(ABC, BaseModel):
         return schema
 
 
-class FinalResultToolMessage(ToolMessage):
+class FinalResultTool(ToolMessage):
     """Class to use as a wrapper for sending arbitrary results from an Agent's
     agent_response or tool handlers, to:
     (a) trigger completion of the current task as well as all parent tasks, and

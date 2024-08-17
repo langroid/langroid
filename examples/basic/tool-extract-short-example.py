@@ -20,8 +20,8 @@ class CompanyInfo(BaseModel):
     price: float = Field(..., description="price per share of company")
 
 
-class CompanyResult(lr.agent.FinalResultToolMessage):
-    """Class for desired final result. We wrap it in a ResultToolMessage
+class CompanyResult(lr.agent.FinalResultTool):
+    """Class for desired final result. We wrap it in a FinalResultTool
     (which inherits from ToolMessage), so that the result is returned as an object
     without conversion to string. Note that we do NOT enable this tool for the agent,
     since it is NOT meant to be either USED by the LLM or to be HANDLED by the agent.
@@ -66,7 +66,7 @@ class CompanyInfoTool(lr.agent.ToolMessage):
         If the tool handling requires agent state, then
         instead of this `handle` method, define a `company_info_tool`
         method in the agent.
-        Since CompanyResult inherits from FinalResultToolMessage,
+        Since CompanyResult inherits from FinalResultTool,
         the task of this agent as well as parent tasks will be terminated,
         with this tool as the final result.
         """

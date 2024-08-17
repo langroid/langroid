@@ -33,7 +33,7 @@ from langroid.agent.chat_document import (
     ChatDocument,
     StatusCode,
 )
-from langroid.agent.tool_message import FinalResultToolMessage, ToolMessage
+from langroid.agent.tool_message import FinalResultTool, ToolMessage
 from langroid.agent.tools.orchestration import AgentDoneTool, DoneTool
 from langroid.cachedb.redis_cachedb import RedisCache, RedisCacheConfig
 from langroid.exceptions import InfiniteLoopException
@@ -1399,7 +1399,7 @@ class Task:
         # if there is an LLMDoneTool or AgentDoneTool among these,
         # we extract content and tools from here, and ignore all others
         for t in tool_messages:
-            if isinstance(t, FinalResultToolMessage):
+            if isinstance(t, FinalResultTool):
                 content = ""
                 tool_messages = [t]  # pass it on to parent so it also quits
                 break
@@ -1477,7 +1477,7 @@ class Task:
                 and (
                     DONE in result.content
                     or any(
-                        isinstance(t, (DoneTool, AgentDoneTool, FinalResultToolMessage))
+                        isinstance(t, (DoneTool, AgentDoneTool, FinalResultTool))
                         for t in result.tool_messages
                     )
                 )
@@ -1598,7 +1598,7 @@ class Task:
         done_result = result is not None and (
             DONE in (result.content if isinstance(result, str) else result.content)
             or any(
-                isinstance(t, (DoneTool, AgentDoneTool, FinalResultToolMessage))
+                isinstance(t, (DoneTool, AgentDoneTool, FinalResultTool))
                 for t in result.tool_messages
             )
         )
