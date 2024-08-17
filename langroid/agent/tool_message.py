@@ -279,8 +279,19 @@ class FinalResultTool(ToolMessage):
     """Class to use as a wrapper for sending arbitrary results from an Agent's
     agent_response or tool handlers, to:
     (a) trigger completion of the current task as well as all parent tasks, and
-    (b) be returned as the final result of the root task.
-    See test_tool_handlers_and_results in test_tool_messages.py.
+    (b) be returned as the final result of the root task, i.e. this tool would appear
+         in the final ChatDocument's `tool_messages` list.
+    See test_tool_handlers_and_results in test_tool_messages.py, and
+    examples/basic/tool-extract-short-example.py.
+
+    Note:
+        - when defining a tool handler or agent_response, you can directly return
+            FinalResultTool(field1 = val1, ...),
+            where the values can be aribitrary data structures, including nested
+            Pydantic objs, or you can define a subclass of FinalResultTool with the
+            fields you want to return.
+        - This is a special ToolMessage that is NOT meant to be used or handled
+            by an agent.
     """
 
     request: str = ""
