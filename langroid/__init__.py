@@ -2,6 +2,27 @@
 Main langroid package
 """
 
+import os
+import nltk
+
+def download_punkt_venv():
+    # Set NLTK_DATA path to the .venv-specific directory
+    nltk_data_path = os.path.join(os.path.dirname(__file__), '..', '.venv', 'nltk_data')
+    if not os.path.exists(nltk_data_path):
+        os.makedirs(nltk_data_path)
+
+    # Update NLTK's default data path
+    nltk.data.path.append(nltk_data_path)
+
+    # Check if 'punkt' is available, otherwise download it
+    try:
+        nltk.data.find('tokenizers/punkt')
+    except LookupError:
+        print(f"Downloading 'punkt' tokenizer into {nltk_data_path}...")
+        nltk.download('punkt', download_dir=nltk_data_path)
+
+download_punkt_venv()
+
 from . import mytypes
 from . import utils
 
