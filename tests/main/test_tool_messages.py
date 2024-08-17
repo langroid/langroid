@@ -914,11 +914,21 @@ def test_tool_handlers_and_results(result_type: str, tool_handler: str):
             # subtask stalls, parent stalls, returns None
             assert result is None
 
+
 @pytest.mark.parametrize("llm_tool", ["pair", "final_tool"])
 @pytest.mark.parametrize("handler_result_type", ["agent_done", "final_tool"])
-def test_llm_end_with_tool(handler_result_type:str, llm_tool:str):
+def test_llm_end_with_tool(handler_result_type: str, llm_tool: str):
     """
-    Test that an LLM can indirectly trigger task-end, and return a Tool as result.
+    Test that an LLM can directly or indirectly trigger task-end, and return a Tool as
+    result. There are 3 ways:
+    - case llm_tool == "final_tool":
+        LLM returns a Tool (llm_tool == "final_tool") derived from FinalResultTool,
+        with field(s) containing a structured Pydantic object -- in this case the task
+        ends immediately without any agent response handling the tool
+    - case llm_tool == "pair":
+        LLM returns a PairTool, which is handled by the agent, which returns either
+        - AgentDoneTool, with `tools` field set to [self], or
+        - FinalResultTool, with `result` field set to the PairTool
     """
 
     class Pair(BaseModel):
@@ -935,13 +945,14 @@ def test_llm_end_with_tool(handler_result_type:str, llm_tool:str):
 
         def handle(self) -> Any:
             if handler_result_type == "final_tool":
+                # field name can be anything; `result` is just an example.
                 return FinalResultTool(result=self)
             else:
                 return AgentDoneTool(tools=[self])
 
     class FinalResultPairTool(FinalResultTool):
-        request:str = "final_result_pair_tool"
-        purpose:str = "Present final result <pair>"
+        request: str = "final_result_pair_tool"
+        purpose: str = "Present final result <pair>"
         pair: Pair
 
     final_result_pair_tool_name = FinalResultPairTool.default_value("request")
@@ -962,10 +973,9 @@ def test_llm_end_with_tool(handler_result_type:str, llm_tool:str):
 
     pair_tool_name = PairTool.default_value("request")
 
-
     if llm_tool == "pair":
         # LLM generates just PairTool , to be handled by its tool handler
-        system_message=f"""   
+        system_message = f"""   
             Ask the user for their next number. 
             Once you have collected 2 distinct numbers, present these as a pair 
             using the TOOL: `{pair_tool_name}`.
@@ -977,7 +987,6 @@ def test_llm_end_with_tool(handler_result_type:str, llm_tool:str):
             final result using the TOOL: `{final_result_pair_tool_name}`.
         """
 
-    system_mess
     agent = MyAgent(
         ChatAgentConfig(
             name="MyAgent",
