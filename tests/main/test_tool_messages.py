@@ -914,27 +914,37 @@ def test_tool_handlers_and_results(result_type: str, tool_handler: str):
             # subtask stalls, parent stalls, returns None
             assert result is None
 
-
-@pytest.mark.parametrize("result_type", ["agent_done", "final_tool"])
-def test_llm_end_with_tool(result_type: str):
+@pytest.mark.parametrize("llm_tool", ["pair", "final_tool"])
+@pytest.mark.parametrize("handler_result_type", ["agent_done", "final_tool"])
+def test_llm_end_with_tool(handler_result_type:str, llm_tool:str):
     """
     Test that an LLM can indirectly trigger task-end, and return a Tool as result.
     """
+
+    class Pair(BaseModel):
+        a: int
+        b: int
 
     class PairTool(ToolMessage):
         """Handle the LLM-generated tool, signal done or final-result and
         return it as the result."""
 
         request: str = "pair_tool"
-        purpose: str = "to return a pair of numbers <a>, <b>"
-        a: int
-        b: int
+        purpose: str = "to return a <pair> of numbers"
+        pair: Pair
 
         def handle(self) -> Any:
-            if result_type == "final_tool":
-                return FinalResultTool(pair=self)
+            if handler_result_type == "final_tool":
+                return FinalResultTool(result=self)
             else:
                 return AgentDoneTool(tools=[self])
+
+    class FinalResultPairTool(FinalResultTool):
+        request:str = "final_result_pair_tool"
+        purpose:str = "Present final result <pair>"
+        pair: Pair
+
+    final_result_pair_tool_name = FinalResultPairTool.default_value("request")
 
     class MyAgent(ChatAgent):
         def init_state(self) -> None:
@@ -951,25 +961,46 @@ def test_llm_end_with_tool(result_type: str):
             return self.create_user_response(content=str(new_num))
 
     pair_tool_name = PairTool.default_value("request")
+
+
+    if llm_tool == "pair":
+        # LLM generates just PairTool , to be handled by its tool handler
+        system_message=f"""   
+            Ask the user for their next number. 
+            Once you have collected 2 distinct numbers, present these as a pair 
+            using the TOOL: `{pair_tool_name}`.
+            """
+    else:
+        system_message = f"""
+            Ask the user for their next number. 
+            Once you have collected 2 distinct numbers, present these as the 
+            final result using the TOOL: `{final_result_pair_tool_name}`.
+        """
+
+    system_mess
     agent = MyAgent(
         ChatAgentConfig(
             name="MyAgent",
-            system_message=f"""   
-            Ask the user for their next number. 
-            Once you have collected 2 distinct numbers, present these as `a` and `b`
-            fields using the TOOL: `{pair_tool_name}`.
-            """,
+            system_message=system_message,
         )
     )
-    agent.enable_message(PairTool)
+    if llm_tool == "pair":
+        agent.enable_message(PairTool)
+    else:
+        agent.enable_message(FinalResultPairTool)
+
     # we are mocking user response, so need to set only_user_quits_root=False
     # so that the done signal (AgentDoneTool or FinalResultTool) actually end the task.
     task = Task(agent, interactive=True, only_user_quits_root=False)
     result = task.run()
     tool = result.tool_messages[0]
-    if result_type == "final_tool":
-        assert isinstance(tool, FinalResultTool)
-        assert tool.pair.a == 1 and tool.pair.b == 2
+    if llm_tool == "pair":
+        if handler_result_type == "final_tool":
+            assert isinstance(tool, FinalResultTool)
+            assert tool.result.pair.a == 1 and tool.result.pair.b == 2
+        else:
+            assert isinstance(tool, PairTool)
+            assert tool.pair.a == 1 and tool.pair.b == 2
     else:
-        assert isinstance(tool, PairTool)
-        assert tool.a == 1 and tool.b == 2
+        assert isinstance(tool, FinalResultPairTool)
+        assert tool.pair.a == 1 and tool.pair.b == 2
