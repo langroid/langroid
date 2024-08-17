@@ -721,30 +721,10 @@ def test_tool_handlers_and_results(result_type: str, tool_handler: str):
     return arbitrary result types"""
 
     class SpecialResult(BaseModel):
+        """To illustrating returning an arbitrary Pydantic object as a result"""
+
         answer: int
         details: str = "nothing"
-
-    class SpecialMessage(FinalResultTool):
-        """If you have a desired pydantic structure that you want to pass
-        back intact (i.e. WITHOUT serializing it to a string)
-        as a final root-level task result (i.e. exits parent tasks recursively),
-        you can wrap it in a FinalResultTool, and it is handled specially,
-        i.e. it should appear in the final result ChatDocument's `tool_messages` list.
-        Note that this tool is NOT enabled in the agent, so it is NOT handled,
-        NOT available for LLM-use. It is purely a way to pass back an
-        arbitrary object (not necessarily just a Pydantic obj)
-        as part of the final result.
-        FinalResultTool has a Config that allows extras, so as we see below,
-        any arbitrary field can be added to SpecialMessage at construction time.
-
-        On the other hand if you want to only exit the current task and return a
-        ToolMessage result back to the parent task for further handling,
-        you can return an AgentDoneTool, with `tools` set to a list containing
-        the desired ToolMessage instance (see `agent_done` case below, where
-        the handler returns AgentDoneTool(tools=[UberTool(x=x)]).
-        """
-
-        special: SpecialResult
 
     def result_fn(x: int) -> Any:
         match result_type:
@@ -843,7 +823,7 @@ def test_tool_handlers_and_results(result_type: str, tool_handler: str):
             name="Test",
             # no need for a real LLM, use a mock
             llm=MockLMConfig(
-                # use a CoolTool variant
+                # mock LLM generating a CoolTool variant
                 response_fn=lambda x: tool_class(x=int(x)).json(),
             ),
         )
@@ -859,11 +839,6 @@ def test_tool_handlers_and_results(result_type: str, tool_handler: str):
         done_if_response=[] if tool_result else [Entity.AGENT],
     )
     result = task.run("3")
-    if not tool_result:
-        # CoolTool handler returns a non-tool result containing 8, and
-        # we terminate task on agent_response, via done_if_response,
-        # so the result.content == 8
-        assert "8" in result.content
 
     if tool_handler == "response":
         assert agent.state == 101
@@ -871,7 +846,13 @@ def test_tool_handlers_and_results(result_type: str, tool_handler: str):
         assert agent.state == 101
         assert agent.sender == "LLM"
 
-    if tool_result:
+    if not tool_result:
+        # CoolTool handler returns a non-tool result containing 8, and
+        # we terminate task on agent_response, via done_if_response,
+        # so the result.content == 8
+        assert "8" in result.content
+
+    else:
         # When CoolTool handler returns a ToolMessage,
         # test that it is handled correctly by sub-task or a parent.
 
@@ -898,7 +879,7 @@ def test_tool_handlers_and_results(result_type: str, tool_handler: str):
             assert tool.arbitrary_obj["answer"] == 18
         elif result_type == "agent_done":
             # inner task's CoolTool handler returns a DoneTool containing
-            # UberTool to parent task, which is handled by the parent "another_agent"
+            # UberTool, which is handled by the parent "another_agent"
             # which returns a FinalResultTool containing answer == 8
             tool = result.tool_messages[0]
             assert isinstance(tool, FinalResultTool)
