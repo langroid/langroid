@@ -115,5 +115,7 @@ class CodeParser:
             for d in docs
             if d.metadata.language in self.config.extensions  # type: ignore
         ]
+        if len(chunked_docs) == 0:
+            return []
         # collapse the list of lists into a single list
         return reduce(lambda x, y: x + y, chunked_docs)
