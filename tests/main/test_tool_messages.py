@@ -1034,3 +1034,127 @@ def test_llm_end_with_tool(handler_result_type: str, llm_tool: str):
     else:
         assert isinstance(tool, FinalResultPairTool)
         assert tool.pair.a == 1 and tool.pair.b == 2
+
+
+@pytest.mark.parametrize("tool", ["none", "a", "aa", "b"])
+def test_agent_respond_only_tools(tool: str):
+    """
+    Test that we can have an agent that only responds to certain tools,
+    and no plain-text msgs, by defining the handle_message_fallback to
+    return AgentDone(content="")
+    """
+
+    class ATool(ToolMessage):
+        request: str = "a_tool"
+        purpose: str = "to present a number <num>"
+        num: int
+
+        def handle(self) -> FinalResultTool:
+            return FinalResultTool(answer=self.num * 2)
+
+    class AATool(ToolMessage):
+        request: str = "aa_tool"
+        purpose: str = "to present a number <num>"
+        num: int
+
+        def handle(self) -> FinalResultTool:
+            return FinalResultTool(answer=self.num * 3)
+
+    class BTool(ToolMessage):
+        request: str = "b_tool"
+        purpose: str = "to present a number <num>"
+        num: int
+
+        def handle(self) -> FinalResultTool:
+            return FinalResultTool(answer=self.num * 4)
+
+    match tool:
+        case "a":
+            tool_class = ATool
+        case "aa":
+            tool_class = AATool
+        case "b":
+            tool_class = BTool
+        case "none":
+            tool_class = None
+
+    main_agent = ChatAgent(
+        ChatAgentConfig(
+            name="Main",
+            llm=MockLMConfig(
+                response_fn=lambda x: (
+                    tool_class(num=int(x)).json() if tool_class is not None else x
+                ),
+            ),
+        )
+    )
+
+    if tool_class is not None:
+        main_agent.enable_message(tool_class, use=True, handle=False)
+
+    class AliceAgent(ChatAgent):
+        def handle_message_fallback(self, msg: str | ChatDocument) -> Any:
+            if isinstance(msg, str) or len(msg.tool_messages) == 0:
+                return AgentDoneTool(content="")
+
+    alice_agent = AliceAgent(
+        ChatAgentConfig(
+            name="Alice",
+            llm=MockLMConfig(response_fn=lambda x: x),
+        )
+    )
+    alice_agent.enable_message([ATool, AATool], use=False, handle=True)
+
+    class BobAgent(ChatAgent):
+        def handle_message_fallback(self, msg: str | ChatDocument) -> Any:
+            if isinstance(msg, str) or len(msg.tool_messages) == 0:
+                return AgentDoneTool(content="")
+
+    bob_agent = BobAgent(
+        ChatAgentConfig(
+            name="Bob",
+            llm=MockLMConfig(response_fn=lambda x: x),
+        )
+    )
+    bob_agent.enable_message([BTool], use=False, handle=True)
+
+    class FallbackAgent(ChatAgent):
+        def agent_response(self, msg: str | ChatDocument) -> Any:
+            return FinalResultTool(answer=int(msg.content) * 5)
+
+    fallback_agent = FallbackAgent(
+        ChatAgentConfig(
+            name="Fallback",
+            llm=None,
+        )
+    )
+    fallback_task = Task(fallback_agent, interactive=False)
+
+    main_task = Task(main_agent, interactive=False)
+    alice_task = Task(alice_agent, interactive=False)
+    bob_task = Task(bob_agent, interactive=False)
+
+    main_task.add_sub_task([alice_task, bob_task, fallback_task])
+    result = main_task.run("3")
+    tool = result.tool_messages[0]
+
+    # Note: when Main generates a tool, task orchestrator will not allow
+    # Alice to respond at all when the tool is not handled by Alice,
+    # and similarly for Bob (this uses agent.has_only_unhandled_tools()).
+    # However when main generates a non-tool string,
+    # we want to ensure that the above handle_message_fallback methods
+    # effectively return a null msg (and not get into a stalled loop inside the agent),
+    # and is finally handled by the FallbackAgent
+    assert isinstance(tool, FinalResultTool)
+
+    match tool:
+        case "a":
+            assert tool.answer == "6"
+        case "aa":
+            assert tool.answer == "9"
+        case "b":
+            assert tool.answer == "12"
+        case "none":
+            assert tool.answer == "15"
+            assert alice_task.n_stalled_steps == 0
+            assert bob_task.n_stalled_steps == 0
