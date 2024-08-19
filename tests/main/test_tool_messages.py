@@ -715,7 +715,9 @@ def test_oai_tool_choice(
         "pydantic",
     ],
 )
-@pytest.mark.parametrize("tool_handler", ["handle", "response", "response_with_doc"])
+@pytest.mark.parametrize(
+    "tool_handler", ["notool", "handle", "response", "response_with_doc"]
+)
 def test_tool_handlers_and_results(result_type: str, tool_handler: str):
     """Test various types of ToolMessage handlers, and check that they can
     return arbitrary result types"""
@@ -778,6 +780,21 @@ def test_tool_handlers_and_results(result_type: str, tool_handler: str):
         def init_state(self) -> None:
             self.state: int = 100
             self.sender: str = ""
+            self.llm_sent: bool = False
+
+        def llm_response(
+            self, message: Optional[str | ChatDocument] = None
+        ) -> Optional[ChatDocument]:
+            self.llm_sent = True
+            return super().llm_response(message)
+
+        def handle_message_fallback(
+            self, msg: str | ChatDocument
+        ) -> str | ChatDocument | None:
+            """Handle non-tool LLM response"""
+            if self.llm_sent:
+                x = int(msg.content)
+                return result_fn(x)
 
     class CoolToolWithResponse(ToolMessage):
         """To test that `response` handler works as expected,
@@ -817,6 +834,8 @@ def test_tool_handlers_and_results(result_type: str, tool_handler: str):
             tool_class = CoolToolWithResponse
         case "response_with_doc":
             tool_class = CoolToolWithResponseDoc
+        case "notool":
+            tool_class = None
 
     agent = MyAgent(
         ChatAgentConfig(
@@ -824,12 +843,14 @@ def test_tool_handlers_and_results(result_type: str, tool_handler: str):
             # no need for a real LLM, use a mock
             llm=MockLMConfig(
                 # mock LLM generating a CoolTool variant
-                response_fn=lambda x: tool_class(x=int(x)).json(),
+                response_fn=lambda x: (
+                    tool_class(x=int(x)).json() if tool_class is not None else x
+                ),
             ),
         )
     )
-
-    agent.enable_message(tool_class)
+    if tool_class is not None:
+        agent.enable_message(tool_class)
     # whether to terminate task on agent_response
     tool_result = result_type in ["final_tool", "agent_done", "tool"]
     task = Task(

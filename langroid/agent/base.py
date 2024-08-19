@@ -1069,9 +1069,12 @@ class Agent(ABC):
             return None
         if len(tools) == 0:
             fallback_result = self.handle_message_fallback(msg)
-            if fallback_result is not None and isinstance(fallback_result, ToolMessage):
-                return self.create_agent_response(tool_messages=[fallback_result])
-            return fallback_result
+            if fallback_result is None:
+                return None
+            return self._process_handle_message_result(
+                fallback_result,
+                chat_doc=msg if isinstance(msg, ChatDocument) else None,
+            )
         has_ids = all([t.id != "" for t in tools])
         chat_doc = msg if isinstance(msg, ChatDocument) else None
 
@@ -1261,6 +1264,52 @@ class Agent(ABC):
             raise ve
         return message
 
+    def _process_handle_message_result(
+        self,
+        msg: Any,
+        orig_tool_name: str | None = None,
+        chat_doc: Optional[ChatDocument] = None,
+    ) -> None | str | ChatDocument:
+        """
+        Process result of agent_response or tool handler, or handle_message_fallback.
+        """
+        if isinstance(msg, ToolMessage):
+            # result is a ToolMessage, so...
+            result_tool_name = msg.default_value("request")
+            if result_tool_name in self.llm_tools_handled and (
+                orig_tool_name is None or orig_tool_name != result_tool_name
+            ):
+                # TODO: do we need to remove the tool message from the chat_doc?
+                # if (chat_doc is not None and
+                #     msg in chat_doc.tool_messages):
+                #    chat_doc.tool_messages.remove(msg)
+                # if we can handle it, do so
+                result = self.handle_tool_message(msg, chat_doc=chat_doc)
+            else:
+                # else wrap it in an agent response and return it so
+                # orchestrator can find a respondent
+                result = self.create_agent_response(tool_messages=[msg])
+        elif isinstance(msg, (ChatDocument, str)):
+            result = msg
+        elif isinstance(msg, BaseModel):
+            result = msg.json()
+        else:
+            # last resort: use json.dumps() or str() to make it a str
+            try:
+                result = json.dumps(msg)
+            except Exception:
+                try:
+                    result = str(msg)
+                except Exception as e:
+                    logger.error(
+                        f"""
+                            Error converting msg handler result to str: {e}", 
+                            """,
+                        exc_info=True,
+                    )
+                    result = None
+        return result
+
     def handle_tool_message(
         self,
         tool: ToolMessage,
@@ -1290,42 +1339,9 @@ class Agent(ABC):
                 maybe_result = handler_method(tool, chat_doc=chat_doc)
             else:
                 maybe_result = handler_method(tool)
-            if isinstance(maybe_result, ToolMessage):
-                # result is a ToolMessage, so...
-                result_tool_name = maybe_result.default_value("request")
-                if (
-                    result_tool_name in self.llm_tools_handled
-                    and tool_name != result_tool_name
-                ):
-                    # TODO: do we need to remove the tool message from the chat_doc?
-                    # if (chat_doc is not None and
-                    #     maybe_result in chat_doc.tool_messages):
-                    #    chat_doc.tool_messages.remove(maybe_result)
-                    # if we can handle it, do so
-                    result = self.handle_tool_message(maybe_result, chat_doc=chat_doc)
-                else:
-                    # else wrap it in an agent response and return it so
-                    # orchestrator can find a respondent
-                    result = self.create_agent_response(tool_messages=[maybe_result])
-            elif isinstance(maybe_result, (ChatDocument, str)):
-                result = maybe_result
-            elif isinstance(maybe_result, BaseModel):
-                result = maybe_result.json()
-            else:
-                # last resort: use json.dumps() or str() to make it a str
-                try:
-                    result = json.dumps(maybe_result)
-                except Exception:
-                    try:
-                        result = str(maybe_result)
-                    except Exception as e:
-                        logger.error(
-                            f"""
-                            Error converting result of {tool_name} to str: {e}", 
-                            """,
-                            exc_info=True,
-                        )
-                        result = None
+            result = self._process_handle_message_result(
+                maybe_result, tool_name, chat_doc
+            )
         except Exception as e:
             # raise the error here since we are sure it's
             # not a pydantic validation error,
