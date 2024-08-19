@@ -1165,9 +1165,7 @@ class Agent(ABC):
         final = "\n\n".join(str_results)
         return final
 
-    def handle_message_fallback(
-        self, msg: str | ChatDocument
-    ) -> str | ChatDocument | None:
+    def handle_message_fallback(self, msg: str | ChatDocument) -> Any:
         """
         Fallback method for the "no-tools" scenario.
         This method can be overridden by subclasses, e.g.,
@@ -1177,8 +1175,7 @@ class Agent(ABC):
         Args:
             msg (str | ChatDocument): The input msg to handle
         Returns:
-            str: The result of the handler method in string form so it can
-                be handled by LLM
+            Any: The result of the handler method
         """
         return None
 
