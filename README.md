@@ -55,6 +55,9 @@ into simplifying the developer experience; it does not use `Langchain`.
 :fire: See this [Intro to Langroid](https://lancedb.substack.com/p/langoid-multi-agent-programming-framework)
 blog post from the LanceDB team
 
+:fire: Just published in ML for Healthcare (2024): a Langroid-based Multi-Agent RAG system for 
+pharmacovigilance, see [blog post](https://langroid.github.io/langroid/blog/2024/08/12/malade-multi-agent-architecture-for-pharmacovigilance/)
+
 
 We welcome contributions -- See the [contributions](./CONTRIBUTING.md) document
 for ideas on what to contribute.
