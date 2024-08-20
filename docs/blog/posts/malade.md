@@ -21,6 +21,8 @@ comments: true
 
 # MALADE: Multi-Agent Architecture for Pharmacovigilance
 
+[Published in ML for HealthCare 2024](https://www.mlforhc.org/2024-abstracts)
+
 [Arxiv](https://arxiv.org/abs/2408.01869) 
 
 [GitHub](https://github.com/jihyechoi77/malade)

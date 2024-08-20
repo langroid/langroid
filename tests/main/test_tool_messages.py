@@ -715,7 +715,9 @@ def test_oai_tool_choice(
         "pydantic",
     ],
 )
-@pytest.mark.parametrize("tool_handler", ["handle", "response", "response_with_doc"])
+@pytest.mark.parametrize(
+    "tool_handler", ["notool", "handle", "response", "response_with_doc"]
+)
 def test_tool_handlers_and_results(result_type: str, tool_handler: str):
     """Test various types of ToolMessage handlers, and check that they can
     return arbitrary result types"""
@@ -778,6 +780,21 @@ def test_tool_handlers_and_results(result_type: str, tool_handler: str):
         def init_state(self) -> None:
             self.state: int = 100
             self.sender: str = ""
+            self.llm_sent: bool = False
+
+        def llm_response(
+            self, message: Optional[str | ChatDocument] = None
+        ) -> Optional[ChatDocument]:
+            self.llm_sent = True
+            return super().llm_response(message)
+
+        def handle_message_fallback(
+            self, msg: str | ChatDocument
+        ) -> str | ChatDocument | None:
+            """Handle non-tool LLM response"""
+            if self.llm_sent:
+                x = int(msg.content)
+                return result_fn(x)
 
     class CoolToolWithResponse(ToolMessage):
         """To test that `response` handler works as expected,
@@ -817,6 +834,8 @@ def test_tool_handlers_and_results(result_type: str, tool_handler: str):
             tool_class = CoolToolWithResponse
         case "response_with_doc":
             tool_class = CoolToolWithResponseDoc
+        case "notool":
+            tool_class = None
 
     agent = MyAgent(
         ChatAgentConfig(
@@ -824,12 +843,14 @@ def test_tool_handlers_and_results(result_type: str, tool_handler: str):
             # no need for a real LLM, use a mock
             llm=MockLMConfig(
                 # mock LLM generating a CoolTool variant
-                response_fn=lambda x: tool_class(x=int(x)).json(),
+                response_fn=lambda x: (
+                    tool_class(x=int(x)).json() if tool_class is not None else x
+                ),
             ),
         )
     )
-
-    agent.enable_message(tool_class)
+    if tool_class is not None:
+        agent.enable_message(tool_class)
     # whether to terminate task on agent_response
     tool_result = result_type in ["final_tool", "agent_done", "tool"]
     task = Task(
@@ -913,3 +934,227 @@ def test_tool_handlers_and_results(result_type: str, tool_handler: str):
             result = task.run("3")
             # subtask stalls, parent stalls, returns None
             assert result is None
+
+
+@pytest.mark.parametrize("llm_tool", ["pair", "final_tool"])
+@pytest.mark.parametrize("handler_result_type", ["agent_done", "final_tool"])
+def test_llm_end_with_tool(handler_result_type: str, llm_tool: str):
+    """
+    Test that an LLM can directly or indirectly trigger task-end, and return a Tool as
+    result. There are 3 ways:
+    - case llm_tool == "final_tool":
+        LLM returns a Tool (llm_tool == "final_tool") derived from FinalResultTool,
+        with field(s) containing a structured Pydantic object -- in this case the task
+        ends immediately without any agent response handling the tool
+    - case llm_tool == "pair":
+        LLM returns a PairTool, which is handled by the agent, which returns either
+        - AgentDoneTool, with `tools` field set to [self], or
+        - FinalResultTool, with `result` field set to the PairTool
+    """
+
+    class Pair(BaseModel):
+        a: int
+        b: int
+
+    class PairTool(ToolMessage):
+        """Handle the LLM-generated tool, signal done or final-result and
+        return it as the result."""
+
+        request: str = "pair_tool"
+        purpose: str = "to return a <pair> of numbers"
+        pair: Pair
+
+        def handle(self) -> Any:
+            if handler_result_type == "final_tool":
+                # field name can be anything; `result` is just an example.
+                return FinalResultTool(result=self)
+            else:
+                return AgentDoneTool(tools=[self])
+
+    class FinalResultPairTool(FinalResultTool):
+        request: str = "final_result_pair_tool"
+        purpose: str = "Present final result <pair>"
+        pair: Pair
+
+    final_result_pair_tool_name = FinalResultPairTool.default_value("request")
+
+    class MyAgent(ChatAgent):
+        def init_state(self) -> None:
+            self.numbers: List[int] = []
+
+        def user_response(
+            self,
+            msg: Optional[str | ChatDocument] = None,
+        ) -> Optional[ChatDocument]:
+            """Mock human user input: they start with 0, then increment by 1"""
+            last_num = self.numbers[-1] if self.numbers else 0
+            new_num = last_num + 1
+            self.numbers.append(new_num)
+            return self.create_user_response(content=str(new_num))
+
+    pair_tool_name = PairTool.default_value("request")
+
+    if llm_tool == "pair":
+        # LLM generates just PairTool , to be handled by its tool handler
+        system_message = f"""   
+            Ask the user for their next number. 
+            Once you have collected 2 distinct numbers, present these as a pair 
+            using the TOOL: `{pair_tool_name}`.
+            """
+    else:
+        system_message = f"""
+            Ask the user for their next number. 
+            Once you have collected 2 distinct numbers, present these as the 
+            final result using the TOOL: `{final_result_pair_tool_name}`.
+        """
+
+    agent = MyAgent(
+        ChatAgentConfig(
+            name="MyAgent",
+            system_message=system_message,
+        )
+    )
+    if llm_tool == "pair":
+        agent.enable_message(PairTool)
+    else:
+        agent.enable_message(FinalResultPairTool)
+
+    # we are mocking user response, so need to set only_user_quits_root=False
+    # so that the done signal (AgentDoneTool or FinalResultTool) actually end the task.
+    task = Task(agent, interactive=True, only_user_quits_root=False)
+    result = task.run()
+    tool = result.tool_messages[0]
+    if llm_tool == "pair":
+        if handler_result_type == "final_tool":
+            assert isinstance(tool, FinalResultTool)
+            assert tool.result.pair.a == 1 and tool.result.pair.b == 2
+        else:
+            assert isinstance(tool, PairTool)
+            assert tool.pair.a == 1 and tool.pair.b == 2
+    else:
+        assert isinstance(tool, FinalResultPairTool)
+        assert tool.pair.a == 1 and tool.pair.b == 2
+
+
+@pytest.mark.parametrize("tool", ["none", "a", "aa", "b"])
+def test_agent_respond_only_tools(tool: str):
+    """
+    Test that we can have an agent that only responds to certain tools,
+    and no plain-text msgs, by defining the handle_message_fallback to
+    return AgentDone(content="")
+    """
+
+    class ATool(ToolMessage):
+        request: str = "a_tool"
+        purpose: str = "to present a number <num>"
+        num: int
+
+        def handle(self) -> FinalResultTool:
+            return FinalResultTool(answer=self.num * 2)
+
+    class AATool(ToolMessage):
+        request: str = "aa_tool"
+        purpose: str = "to present a number <num>"
+        num: int
+
+        def handle(self) -> FinalResultTool:
+            return FinalResultTool(answer=self.num * 3)
+
+    class BTool(ToolMessage):
+        request: str = "b_tool"
+        purpose: str = "to present a number <num>"
+        num: int
+
+        def handle(self) -> FinalResultTool:
+            return FinalResultTool(answer=self.num * 4)
+
+    match tool:
+        case "a":
+            tool_class = ATool
+        case "aa":
+            tool_class = AATool
+        case "b":
+            tool_class = BTool
+        case "none":
+            tool_class = None
+
+    main_agent = ChatAgent(
+        ChatAgentConfig(
+            name="Main",
+            llm=MockLMConfig(
+                response_fn=lambda x: (
+                    tool_class(num=int(x)).json() if tool_class is not None else x
+                ),
+            ),
+        )
+    )
+
+    if tool_class is not None:
+        main_agent.enable_message(tool_class, use=True, handle=False)
+
+    class AliceAgent(ChatAgent):
+        def handle_message_fallback(self, msg: str | ChatDocument) -> Any:
+            if isinstance(msg, str) or len(msg.tool_messages) == 0:
+                return AgentDoneTool(content="")
+
+    alice_agent = AliceAgent(
+        ChatAgentConfig(
+            name="Alice",
+            llm=MockLMConfig(response_fn=lambda x: x),
+        )
+    )
+    alice_agent.enable_message([ATool, AATool], use=False, handle=True)
+
+    class BobAgent(ChatAgent):
+        def handle_message_fallback(self, msg: str | ChatDocument) -> Any:
+            if isinstance(msg, str) or len(msg.tool_messages) == 0:
+                return AgentDoneTool(content="")
+
+    bob_agent = BobAgent(
+        ChatAgentConfig(
+            name="Bob",
+            llm=MockLMConfig(response_fn=lambda x: x),
+        )
+    )
+    bob_agent.enable_message([BTool], use=False, handle=True)
+
+    class FallbackAgent(ChatAgent):
+        def agent_response(self, msg: str | ChatDocument) -> Any:
+            return FinalResultTool(answer=int(msg.content) * 5)
+
+    fallback_agent = FallbackAgent(
+        ChatAgentConfig(
+            name="Fallback",
+            llm=None,
+        )
+    )
+    fallback_task = Task(fallback_agent, interactive=False)
+
+    main_task = Task(main_agent, interactive=False)
+    alice_task = Task(alice_agent, interactive=False)
+    bob_task = Task(bob_agent, interactive=False)
+
+    main_task.add_sub_task([alice_task, bob_task, fallback_task])
+    result = main_task.run("3")
+    tool = result.tool_messages[0]
+
+    # Note: when Main generates a tool, task orchestrator will not allow
+    # Alice to respond at all when the tool is not handled by Alice,
+    # and similarly for Bob (this uses agent.has_only_unhandled_tools()).
+    # However when main generates a non-tool string,
+    # we want to ensure that the above handle_message_fallback methods
+    # effectively return a null msg (and not get into a stalled loop inside the agent),
+    # and is finally handled by the FallbackAgent
+    assert isinstance(tool, FinalResultTool)
+
+    match tool:
+        case "a":
+            assert tool.answer == "6"
+        case "aa":
+            assert tool.answer == "9"
+        case "b":
+            assert tool.answer == "12"
+        case "none":
+            assert tool.answer == "15"
+            assert alice_task.n_stalled_steps == 0
+            assert bob_task.n_stalled_steps == 0

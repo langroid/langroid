@@ -296,6 +296,17 @@ class FinalResultTool(ToolMessage):
 
     request: str = ""
     purpose: str = "Ignored; Wrapper for a structured message"
+    id: str = ""  # placeholder for OpenAI-API tool_call_id
+
+    _handle_only: bool = False  # only allow handling, but not use (LLM-generation)?
 
     class Config:
         extra = Extra.allow
+        # only HANDLING allowed, NOT "use" (i.e LLM generation)
+        handle_only: bool = False
+        arbitrary_types_allowed = False
+        validate_all = True
+        validate_assignment = True
+        # do not include these fields in the generated schema
+        # since we don't require the LLM to specify them
+        schema_extra = {"exclude": {"purpose", "id"}}

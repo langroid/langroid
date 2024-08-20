@@ -10,7 +10,6 @@ python3 examples/basic/tool-extract-short-example.py
 
 import langroid as lr
 from langroid.pydantic_v1 import BaseModel, Field
-from langroid.agent.tools.orchestration import AgentDoneTool
 from langroid.agent.tool_message import FinalResultTool
 
 
@@ -89,7 +88,7 @@ result = task.run(
 )
 
 # note the result.tool_messages will be a list containing
-# an obj of type CompanyResult, so we can extract fields from it.
+# an obj of type FinalResultTool, so we can extract fields from it.
 company_result = result.tool_messages[0]
 assert isinstance(company_result, FinalResultTool)
 assert isinstance(company_result.info, CompanyInfo)
