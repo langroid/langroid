@@ -13,11 +13,13 @@ from langroid.pydantic_v1 import BaseModel, Field
 from langroid.agent.tools.orchestration import AgentDoneTool
 from langroid.agent.tool_message import FinalResultTool
 
+
 # desired output structure
 class CompanyInfo(BaseModel):
     name: str = Field(..., description="name of company")
     shares: int = Field(..., description="shares outstanding of company")
     price: float = Field(..., description="price per share of company")
+
 
 # tool definition based on this
 class CompanyInfoTool(lr.agent.ToolMessage):

@@ -1,7 +1,10 @@
 import difflib
 import logging
+import os
 import random
 import re
+import sys
+import zipfile
 from functools import cache
 from itertools import islice
 from typing import Iterable, List, Sequence, TypeVar
@@ -25,10 +28,54 @@ logger = logging.getLogger(__name__)
 # Ensures the NLTK resource is available
 @cache
 def download_nltk_resource(resource: str) -> None:
+    """
+    Set NLTK_DATA path to the environment-specific directory and handle
+    resource downloading and unzipping (only for 'punkt') if necessary.
+    """
+    # Set NLTK_DATA path
+    nltk_data_path = os.path.join(sys.prefix, "nltk_data")
+
+    # Create nltk_data directory if it doesn't exist
+    os.makedirs(nltk_data_path, exist_ok=True)
+
+    # Update NLTK's default data path
+    nltk.data.path.append(nltk_data_path)
+
+    # Try to find the resource, otherwise download it
     try:
         nltk.data.find(resource)
     except LookupError:
-        nltk.download(resource, quiet=True)
+        nltk.download(resource, download_dir=nltk_data_path, quiet=True)
+
+        # Handle unzipping specifically for 'punkt'
+        if resource == "punkt":
+            resource_dir = os.path.join(nltk_data_path, "tokenizers", resource)
+            if not os.path.isdir(resource_dir):
+                zip_file_path = os.path.join(nltk_data_path, "tokenizers", "punkt.zip")
+                if os.path.exists(zip_file_path) and zipfile.is_zipfile(zip_file_path):
+                    with zipfile.ZipFile(zip_file_path, "r") as zip_ref:
+                        # Extract files, adjusting target extraction path
+                        for member in zip_ref.namelist():
+                            # Skip empty or directory entries
+                            if not member or member.endswith("/"):
+                                continue
+                            # Set the extraction path under 'punkt' directory
+                            target_path = os.path.join(
+                                resource_dir,
+                                (
+                                    member[len("punkt/") :]
+                                    if member.startswith("punkt/")
+                                    else member
+                                ),
+                            )
+                            target_dir = os.path.dirname(target_path)
+                            # Create directories if they don't exist
+                            os.makedirs(target_dir, exist_ok=True)
+                            # Extract the file
+                            with zip_ref.open(member) as source, open(
+                                target_path, "wb"
+                            ) as target:
+                                target.write(source.read())
 
 
 T = TypeVar("T")
