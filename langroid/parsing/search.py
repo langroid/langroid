@@ -114,7 +114,7 @@ def preprocess_text(text: str) -> str:
         str: The preprocessed text.
     """
     # Ensure the NLTK resources are available
-    for resource in ["punkt", "wordnet", "stopwords"]:
+    for resource in ["punkt_tab", "punkt", "wordnet", "stopwords"]:
         download_nltk_resource(resource)
 
     # Lowercase the text
