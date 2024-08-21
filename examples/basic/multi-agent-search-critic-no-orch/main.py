@@ -19,7 +19,7 @@ See also: chat-search for a basic single-agent search
 
 Run like this from root of repo:
 
-python3 -m examples.basic.multi-agent-search-critic.main_no_orch
+python3 -m examples.basic.multi-agent-search-critic-no-orch.main
 
 There are optional args, especially note these:
 
@@ -72,7 +72,7 @@ def main(
     )
     load_dotenv()
 
-    assistant_task = make_assistant_task(model, restart=False, has_subtasks=False)
+    assistant_task = make_assistant_task(model, restart=False)
     search_task = make_search_task(model)
     critic_task = make_critic_task(model)
 
@@ -100,8 +100,10 @@ def main(
 
     def query_to_final_answer(question: str) -> FinalAnswerTool:
         """
-        Take user's question, return FinalAnswerTool.
+        Take user's question, return FinalAnswerTool after
+        iterating based on feedback from Critic.
         """
+
         question_tool_name = QuestionTool.default_value("request")
         final_answer_tool_name = FinalAnswerTool.default_value("request")
 
@@ -133,6 +135,7 @@ def main(
                     # suggested fix => ask again
                     response = assistant_task.run(feedback_doc)
 
+    # Interactive loop with user
     while True:
         question = Prompt.ask("What do you want to know?")
         if question.lower() in ["x", "q"]:

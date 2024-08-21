@@ -169,7 +169,7 @@ optional = true
 
 mkdocs = "^1.4.2"
 mkdocs-material = "^9.1.5"
-mkdocstrings = {extras = ["python"], version = "^0.21.2"}
+mkdocstrings = {extras = ["python"], version = "^0.25.2"}
 mkdocs-awesome-pages-plugin = "^2.8.0"
 mkdocs-rss-plugin = "^1.8.0"
 mkdocs-gen-files = "^0.4.0"

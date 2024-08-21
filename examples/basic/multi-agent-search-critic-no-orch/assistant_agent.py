@@ -35,7 +35,6 @@ app = typer.Typer()
 
 
 class AssistantAgent(lr.ChatAgent):
-
     def init_state(self):
         super().init_state()
         self.expecting_question_tool: bool = False
@@ -71,7 +70,7 @@ class AssistantAgent(lr.ChatAgent):
         self.expecting_question_tool = False
         # return the tool so it is handled by SearcherAgent
         # validated incoming, pass it on
-        return PassTool()
+        return AgentDoneTool(tools=[msg])
 
     def answer_tool(self, msg: AnswerTool) -> str:
         self.expecting_question_or_final_answer = True
@@ -92,7 +91,7 @@ class AssistantAgent(lr.ChatAgent):
         # insert the original query into the tool, in case LLM forgot to do so.
         msg.query = self.original_query
         # fwd to critic
-        return ForwardTool(agent="Critic")
+        return AgentDoneTool(tools=[msg])
 
     def feedback_tool(self, msg: FeedbackTool) -> str:
         if msg.suggested_fix == "":
