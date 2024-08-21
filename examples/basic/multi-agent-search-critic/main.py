@@ -13,7 +13,7 @@ says DONE and presents the answer to the user.
 
 See also: chat-search for a basic single-agent search
 
-Run like this from rool of repo:
+Run like this from root of repo:
 
 python3 -m examples.basic.multi-agent-search-critic.main
 
