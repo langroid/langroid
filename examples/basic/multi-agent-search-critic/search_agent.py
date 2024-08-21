@@ -119,12 +119,6 @@ class SearcherAgent(lr.ChatAgent):
                 Here are the web-search results for the question: {curr_query}.
                 ===
                 {result.content}
-                ===
-                Decide whether you want to: 
-                - ask further questions, for the user's original question, or 
-                - if you think you have enough information to answer the user's question,
-                    then present your reasoning steps and final answer using the
-                    `final_answer_tool` in the specified JSON format.
                 """
 
             ans_tool = AnswerTool(answer=answer)
