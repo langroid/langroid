@@ -11,7 +11,7 @@ python3 -m venv .venv
 . ./.venv/bin/activate
 ```
 To see how to use Langroid in your own repo, you can take a look at the
-[`langroid-examples`](https://github.com/langroid/langroid-exmaples) repo, which can be a good starting point for your own repo.
+[`langroid-examples`](https://github.com/langroid/langroid-examples) repo, which can be a good starting point for your own repo.
 The `langroid-examples` repo already contains a `pyproject.toml` file so that you can 
 use `Poetry` to manage your virtual environment and dependencies. 
 For example you can do 
