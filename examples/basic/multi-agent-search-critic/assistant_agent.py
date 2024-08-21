@@ -34,8 +34,17 @@ import langroid.language_models as lm
 app = typer.Typer()
 
 
+class AssistantAgentConfig(lr.ChatAgentConfig):
+    has_subtasks: bool = True
+
+
 class AssistantAgent(lr.ChatAgent):
+    def __init__(self, config: AssistantAgentConfig):
+        super().__init__(config)
+        self.config: AssistantAgentConfig = config
+
     def init_state(self):
+        super().init_state()
         self.expecting_question_tool: bool = False
         self.expecting_question_or_final_answer: bool = False  # expecting one of these
         # tools
@@ -69,7 +78,7 @@ class AssistantAgent(lr.ChatAgent):
         self.expecting_question_tool = False
         # return the tool so it is handled by SearcherAgent
         # validated incoming, pass it on
-        return PassTool()
+        return PassTool() if self.config.has_subtasks else AgentDoneTool(tools=[msg])
 
     def answer_tool(self, msg: AnswerTool) -> str:
         self.expecting_question_or_final_answer = True
@@ -90,7 +99,11 @@ class AssistantAgent(lr.ChatAgent):
         # insert the original query into the tool, in case LLM forgot to do so.
         msg.query = self.original_query
         # fwd to critic
-        return ForwardTool(agent="Critic")
+        return (
+            ForwardTool(agent="Critic")
+            if self.config.has_subtasks
+            else AgentDoneTool(tools=[msg])
+        )
 
     def feedback_tool(self, msg: FeedbackTool) -> str:
         if msg.suggested_fix == "":
@@ -123,7 +136,11 @@ class AssistantAgent(lr.ChatAgent):
             return super().llm_response(message)
 
 
-def make_assistant_task(model: str):
+def make_assistant_task(
+    model: str,
+    restart: bool = True,
+    has_subtasks: bool = False,
+) -> lr.Task:
     llm_config = lm.OpenAIGPTConfig(
         chat_model=model or lm.OpenAIChatModel.GPT4o,
         chat_context_length=16_000,
@@ -132,7 +149,8 @@ def make_assistant_task(model: str):
         timeout=45,
     )
 
-    assistant_config = lr.ChatAgentConfig(
+    assistant_config = AssistantAgentConfig(
+        has_subtasks=has_subtasks,
         system_message="""
         You are a resourceful assistant, able to think step by step to answer
         complex questions from the user. You must break down complex questions into
@@ -163,6 +181,7 @@ def make_assistant_task(model: str):
         llm_delegate=True,
         single_round=False,
         interactive=False,
+        restart=restart,
     )
 
     return assistant_task

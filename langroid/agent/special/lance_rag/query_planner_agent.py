@@ -144,6 +144,7 @@ class LanceQueryPlanAgent(ChatAgent):
         self.enable_message(AgentDoneTool, use=False, handle=True)
 
     def init_state(self) -> None:
+        super().init_state()
         self.curr_query_plan: QueryPlan | None = None
         self.expecting_query_plan: bool = False
         # how many times re-trying query plan in response to feedback:

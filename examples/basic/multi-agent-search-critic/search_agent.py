@@ -39,6 +39,7 @@ app = typer.Typer()
 
 class SearcherAgent(lr.ChatAgent):
     def init_state(self):
+        super().init_state()
         self.curr_query: str | None = None
         self.expecting_search_results: bool = False
         self.expecting_search_tool: bool = False

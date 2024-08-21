@@ -60,6 +60,7 @@ def main(model: str = ""):
         def init_state(self) -> None:
             # self.expecting_course_answer = False
             # self.expecting_finance_answer = False
+            super().init_state()
             self.llm_responded = False
 
         def user_response(

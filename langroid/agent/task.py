@@ -259,8 +259,7 @@ class Task:
         agent = cast(ChatAgent, agent)
         self.agent: ChatAgent = agent
         if isinstance(agent, ChatAgent) and len(agent.message_history) == 0 or restart:
-            self.agent.clear_history(0)
-            self.agent.clear_dialog()
+            self.agent.init_state()
             # possibly change the system and user messages
             if system_message:
                 # we always have at least 1 task_message
@@ -579,8 +578,6 @@ class Task:
         Recursively reset message history & state of own agent and
         those of all sub-tasks.
         """
-        self.agent.clear_history(0)
-        self.agent.clear_dialog()
         self.agent.init_state()
         for t in self.sub_tasks:
             t.reset_all_sub_tasks()

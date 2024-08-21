@@ -27,6 +27,7 @@ app = typer.Typer()
 
 class CriticAgent(lr.ChatAgent):
     def init_state(self):
+        super().init_state()
         self.expecting_feedback_tool: bool = False
 
     def final_answer_tool(self, msg: FinalAnswerTool) -> str:

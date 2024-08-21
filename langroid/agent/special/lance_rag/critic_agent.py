@@ -169,6 +169,7 @@ class QueryPlanCritic(ChatAgent):
         self.enable_message(AgentDoneTool, use=False, handle=True)
 
     def init_state(self) -> None:
+        super().init_state()
         self.expecting_feedback_tool = False
 
     def query_plan_answer(self, msg: QueryPlanAnswerTool) -> str:
