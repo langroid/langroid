@@ -15,6 +15,7 @@ To see how to use Langroid in your own repo, you can take a look at the
 The `langroid-examples` repo already contains a `pyproject.toml` file so that you can 
 use `Poetry` to manage your virtual environment and dependencies. 
 For example you can do 
+
 ```bash
 poetry install # installs latest version of langroid
 ```
