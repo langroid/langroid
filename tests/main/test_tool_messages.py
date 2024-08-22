@@ -778,6 +778,7 @@ def test_tool_handlers_and_results(result_type: str, tool_handler: str):
 
     class MyAgent(ChatAgent):
         def init_state(self) -> None:
+            super().init_state()
             self.state: int = 100
             self.sender: str = ""
             self.llm_sent: bool = False
@@ -980,6 +981,7 @@ def test_llm_end_with_tool(handler_result_type: str, llm_tool: str):
 
     class MyAgent(ChatAgent):
         def init_state(self) -> None:
+            super().init_state()
             self.numbers: List[int] = []
 
         def user_response(

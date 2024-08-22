@@ -90,6 +90,7 @@ async-generator = "^1.10"
 python-magic = "^0.4.27"
 json-repair = "^0.27.0"
 
+
 [tool.poetry.extras]
 # install these using, e.g.,
 # `poetry install -E [...]` where [...] is one of the extras below
@@ -169,14 +170,14 @@ optional = true
 
 mkdocs = "^1.4.2"
 mkdocs-material = "^9.1.5"
-mkdocstrings = {extras = ["python"], version = "^0.21.2"}
+mkdocstrings = {extras = ["python"], version = "^0.25.2"}
 mkdocs-awesome-pages-plugin = "^2.8.0"
 mkdocs-rss-plugin = "^1.8.0"
 mkdocs-gen-files = "^0.4.0"
 mkdocs-literate-nav = "^0.6.0"
 mkdocs-section-index = "^0.3.5"
 mkdocs-jupyter = "^0.24.1"
-
+griffe = "<1.0.0"
 
 
 # ========================================

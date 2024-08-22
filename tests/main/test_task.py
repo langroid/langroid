@@ -709,6 +709,7 @@ def test_task_tool_responses():
 
     class ProcessorAgent(lr.ChatAgent):
         def init_state(self):
+            super().init_state()
             self.expecting_result: bool = False
 
         def llm_response(

@@ -13,19 +13,19 @@ says DONE and presents the answer to the user.
 
 See also: chat-search for a basic single-agent search
 
-Run like this from rool of repo:
+Run like this from root of repo:
 
 python3 -m examples.basic.multi-agent-search-critic.main
 
 There are optional args, especially note these:
 
--m <model_name>: to run with a different LLM model (default: gpt4-turbo)
+-m <model_name>: to run with a different LLM model (default: gpt4o)
 
 For example try this question:
 
-during which years did Beethoven live, and does his life overlap with that of Liszt?
+did Bach make more music than Beethoven?
 
-You can specify a local in a few different ways, e.g. `-m local/localhost:8000/v1`
+You can specify a local LLM in a few different ways, e.g. `-m local/localhost:8000/v1`
 or `-m ollama/mistral` etc. See here how to use Langroid with local LLMs:
 https://langroid.github.io/langroid/tutorials/local-llm-setup/
 

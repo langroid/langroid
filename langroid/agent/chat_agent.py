@@ -118,7 +118,7 @@ class ChatAgent(Agent):
         self.config: ChatAgentConfig = config
         self.config._set_fn_or_tools(self._fn_call_available())
         self.message_history: List[LLMMessage] = []
-        self.tool_instructions_added: bool = False
+        self.init_state()
         # An agent's "task" is defined by a system msg and an optional user msg;
         # These are "priming" messages that kick off the agent's conversation.
         self.system_message: str = self.config.system_message
@@ -171,6 +171,15 @@ class ChatAgent(Agent):
             self.enable_message(DonePassTool, use=False, handle=True)
             self.enable_message(SendTool, use=False, handle=True)
             self.enable_message(AgentSendTool, use=False, handle=True)
+
+    def init_state(self) -> None:
+        """
+        Initialize the state of the agent. Just conversation state here,
+        but subclasses can override this to initialize other state.
+        """
+        super().init_state()
+        self.clear_history(0)
+        self.clear_dialog()
 
     @staticmethod
     def from_id(id: str) -> "ChatAgent":

@@ -179,9 +179,19 @@ def test_agent_init_state():
 
     class MyAgent(ChatAgent):
         def init_state(self):
+            super().init_state()
             self.x = 0
 
     agent = MyAgent(_TestChatAgentConfig())
+    assert agent.x == 0
+    assert agent.total_llm_token_cost == 0
+    assert agent.total_llm_token_usage == 0
+
+    agent.total_llm_token_cost = 10
+    agent.total_llm_token_usage = 20
+    agent.x = 5
+
+    agent.init_state()
     assert agent.x == 0
     assert agent.total_llm_token_cost == 0
     assert agent.total_llm_token_usage == 0
