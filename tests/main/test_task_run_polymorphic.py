@@ -39,16 +39,6 @@ def test_task_in_out_types(
     i.e., task.run() can take a variety of input types and return desired output type
     """
 
-    # TODO
-    # - add more input types, like list, dict etc
-    # - add more handler-result types, e.g. GenPair tool can return other than str,
-    #   e.g. list of 2 nums, pydantic Pair object etc
-    # - AgentDoneTool should accept content of any type, which we can stick into
-    # content_any field etc. Maybe same thing for DoneTool
-    #  - have a good way to check for compound types inside
-    #  ToolMessage.find_value_of_type, e.g. list, dict etc
-    # - carefully define content_any in various places
-
     class Pair(BaseModel):
         x: int
         y: int
