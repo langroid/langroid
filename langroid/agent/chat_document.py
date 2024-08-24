@@ -22,6 +22,7 @@ from langroid.parsing.parse_json import extract_top_level_json, top_level_json_f
 from langroid.pydantic_v1 import BaseModel, Extra
 from langroid.utils.object_registry import ObjectRegistry
 from langroid.utils.output.printing import shorten_text
+from langroid.utils.types import to_string
 
 
 class ChatDocAttachment(BaseModel):
@@ -115,6 +116,7 @@ class ChatDocument(Document):
         attachment (None | ChatDocAttachment): Any additional data attached.
     """
 
+    content_any: Any = None  # to hold arbitrary data returned by responders
     oai_tool_calls: Optional[List[OpenAIToolCall]] = None
     oai_tool_id2result: Optional[OrderedDict[str, str]] = None
     oai_tool_choice: ToolChoiceTypes | Dict[str, Dict[str, str] | str] = "auto"
@@ -281,6 +283,7 @@ class ChatDocument(Document):
                 ChatDocument._clean_fn_call(oai_tc.function)
         return ChatDocument(
             content=message,
+            content_any=message,
             oai_tool_calls=response.oai_tool_calls,
             function_call=response.function_call,
             metadata=ChatDocMetaData(
@@ -303,6 +306,7 @@ class ChatDocument(Document):
             message = msg  # retain the whole msg in this case
         return ChatDocument(
             content=message,
+            content_any=message,
             metadata=ChatDocMetaData(
                 source=Entity.USER,
                 sender=Entity.USER,
@@ -335,7 +339,7 @@ class ChatDocument(Document):
         tool_id = ""  # for OpenAI Assistant
         chat_document_id: str = ""
         if isinstance(message, ChatDocument):
-            content = message.content
+            content = message.content or to_string(message.content_any) or ""
             fun_call = message.function_call
             oai_tool_calls = message.oai_tool_calls
             if message.metadata.sender == Entity.USER and fun_call is not None:

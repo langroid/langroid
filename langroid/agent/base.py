@@ -18,7 +18,10 @@ from typing import (
     Set,
     Tuple,
     Type,
+    TypeVar,
     cast,
+    get_args,
+    get_origin,
     no_type_check,
 )
 
@@ -46,7 +49,6 @@ from langroid.parsing.parse_json import extract_top_level_json
 from langroid.parsing.parser import Parser, ParsingConfig
 from langroid.prompts.prompts_config import PromptsConfig
 from langroid.pydantic_v1 import (
-    BaseModel,
     BaseSettings,
     Field,
     ValidationError,
@@ -56,12 +58,15 @@ from langroid.utils.configuration import settings
 from langroid.utils.constants import DONE, NO_ANSWER, PASS, PASS_TO, SEND_TO
 from langroid.utils.object_registry import ObjectRegistry
 from langroid.utils.output import status
+from langroid.utils.types import from_string, to_string
 from langroid.vector_store.base import VectorStore, VectorStoreConfig
 
 ORCHESTRATION_STRINGS = [DONE, PASS, PASS_TO, SEND_TO]
 console = Console(quiet=settings.quiet)
 
 logger = logging.getLogger(__name__)
+
+T = TypeVar("T")
 
 
 class AgentConfig(BaseSettings):
@@ -78,6 +83,7 @@ class AgentConfig(BaseSettings):
     prompts: Optional[PromptsConfig] = PromptsConfig()
     show_stats: bool = True  # show token usage/cost stats?
     add_to_registry: bool = True  # register agent in ObjectRegistry?
+    respond_tools_only: bool = False  # respond only to tool messages (not plain text)?
 
     @validator("name")
     def check_name_alphanum(cls, v: str) -> str:
@@ -341,6 +347,7 @@ class Agent(ABC):
     def create_agent_response(
         self,
         content: str | None = None,
+        content_any: Any | None = None,
         tool_messages: List[ToolMessage] = [],
         oai_tool_calls: Optional[List[OpenAIToolCall]] = None,
         oai_tool_choice: ToolChoiceTypes | Dict[str, Dict[str, str] | str] = "auto",
@@ -352,6 +359,7 @@ class Agent(ABC):
         return self.response_template(
             Entity.AGENT,
             content=content,
+            content_any=content_any,
             tool_messages=tool_messages,
             oai_tool_calls=oai_tool_calls,
             oai_tool_choice=oai_tool_choice,
@@ -543,6 +551,7 @@ class Agent(ABC):
         self,
         e: Entity,
         content: str | None = None,
+        content_any: Any | None = None,
         tool_messages: List[ToolMessage] = [],
         oai_tool_calls: Optional[List[OpenAIToolCall]] = None,
         oai_tool_choice: ToolChoiceTypes | Dict[str, Dict[str, str] | str] = "auto",
@@ -553,6 +562,7 @@ class Agent(ABC):
         """Template for response from entity `e`."""
         return ChatDocument(
             content=content or "",
+            content_any=content_any,
             tool_messages=tool_messages,
             oai_tool_calls=oai_tool_calls,
             oai_tool_id2result=oai_tool_id2result,
@@ -566,6 +576,7 @@ class Agent(ABC):
     def create_user_response(
         self,
         content: str | None = None,
+        content_any: Any | None = None,
         tool_messages: List[ToolMessage] = [],
         oai_tool_calls: List[OpenAIToolCall] | None = None,
         oai_tool_choice: ToolChoiceTypes | Dict[str, Dict[str, str] | str] = "auto",
@@ -577,6 +588,7 @@ class Agent(ABC):
         return self.response_template(
             e=Entity.USER,
             content=content,
+            content_any=content_any,
             tool_messages=tool_messages,
             oai_tool_calls=oai_tool_calls,
             oai_tool_choice=oai_tool_choice,
@@ -677,9 +689,26 @@ class Agent(ABC):
 
         return True
 
+    def can_respond(self, message: Optional[str | ChatDocument] = None) -> bool:
+        """
+        Whether the agent can respond to a message.
+        Used in Task.py to skip a sub-task when we know it would not respond.
+        Args:
+            message (str|ChatDocument): message or ChatDocument object to respond to.
+        """
+        tools = self.get_tool_messages(message)
+        if len(tools) == 0 and self.config.respond_tools_only:
+            return False
+        if message is not None and self.has_only_unhandled_tools(message):
+            # The message has tools that are NOT enabled to be handled by this agent,
+            # which means the agent cannot respond to it.
+            return False
+        return True
+
     def create_llm_response(
         self,
         content: str | None = None,
+        content_any: Any | None = None,
         tool_messages: List[ToolMessage] = [],
         oai_tool_calls: None | List[OpenAIToolCall] = None,
         oai_tool_choice: ToolChoiceTypes | Dict[str, Dict[str, str] | str] = "auto",
@@ -691,6 +720,7 @@ class Agent(ABC):
         return self.response_template(
             Entity.LLM,
             content=content,
+            content_any=content_any,
             tool_messages=tool_messages,
             oai_tool_calls=oai_tool_calls,
             oai_tool_choice=oai_tool_choice,
@@ -856,6 +886,8 @@ class Agent(ABC):
         Does the msg have at least one tool, and ALL tools are
         disabled for handling by this agent?
         """
+        if msg is None:
+            return False
         tools = self.get_tool_messages(msg, all_tools=True)
         if len(tools) == 0:
             return False
@@ -863,7 +895,7 @@ class Agent(ABC):
 
     def get_tool_messages(
         self,
-        msg: str | ChatDocument,
+        msg: str | ChatDocument | None,
         all_tools: bool = False,
     ) -> List[ToolMessage]:
         """
@@ -873,6 +905,9 @@ class Agent(ABC):
             whether it is handled by this agent or not;
         - otherwise, return only the tools handled by this agent.
         """
+
+        if msg is None:
+            return []
 
         if isinstance(msg, str):
             json_tools = self.get_json_tool_messages(msg)
@@ -1070,7 +1105,7 @@ class Agent(ABC):
             fallback_result = self.handle_message_fallback(msg)
             if fallback_result is None:
                 return None
-            return self._process_handle_message_result(
+            return self.to_ChatDocument(
                 fallback_result,
                 chat_doc=msg if isinstance(msg, ChatDocument) else None,
             )
@@ -1109,7 +1144,13 @@ class Agent(ABC):
             results = [err_str for _ in tools]
         else:
             results = [self.handle_tool_message(t, chat_doc=chat_doc) for t in tools]
+            # if there's a solitary ChatDocument|str result, return it as is
+            if len(results) == 1 and isinstance(results[0], (str, ChatDocument)):
+                return results[0]
+            # extract content from ChatDocument results so we have all str|None
+            results = [r.content if isinstance(r, ChatDocument) else r for r in results]
 
+        # now all results are str|None
         tool_names = [t.default_value("request") for t in tools]
         if has_ids:
             id2result = OrderedDict(
@@ -1132,35 +1173,16 @@ class Agent(ABC):
             (name, r) for name, r in zip(tool_names, results) if r is not None
         ]
         if len(name_results_list) == 0:
-            return None  # self.handle_message_fallback(msg)
+            return None
+
         # there was a non-None result
-        chat_doc_results = [
-            r for _, r in name_results_list if isinstance(r, ChatDocument)
-        ]
-        if len(chat_doc_results) > 1:
-            logger.warning(
-                """There were multiple ChatDocument results from tools,
-                which is unexpected. The first one will be returned, and the others
-                will be ignored.
-                """
-            )
-        if len(chat_doc_results) > 0:
-            return chat_doc_results[0]
 
         if has_ids and len(id2result) > 1:
             # if there are multiple OpenAI Tool results, return them as a dict
             return id2result
 
-        if len(name_results_list) == 1 and isinstance(name_results_list[0][1], str):
-            # single str result -- return it as is
-            return name_results_list[0][1]
-
         # multi-results: prepend the tool name to each result
-        str_results = [
-            f"Result from {name}: {r}"
-            for name, r in name_results_list
-            if isinstance(r, str)
-        ]
+        str_results = [f"Result from {name}: {r}" for name, r in name_results_list]
         final = "\n\n".join(str_results)
         return final
 
@@ -1260,20 +1282,41 @@ class Agent(ABC):
             raise ve
         return message
 
-    def _process_handle_message_result(
+    def to_ChatDocument(
         self,
         msg: Any,
         orig_tool_name: str | None = None,
         chat_doc: Optional[ChatDocument] = None,
-    ) -> None | str | ChatDocument:
+        author_entity: Entity = Entity.AGENT,
+    ) -> Optional[ChatDocument]:
         """
-        Process result of agent_response or tool handler, or handle_message_fallback.
+        Convert result of a responder (agent_response or llm_response, or task.run()),
+        or tool handler, or handle_message_fallback,
+        to a ChatDocument, to enabling handling by other
+        responders/tasks in a task loop possibly involving multiple agents.
+
+        Args:
+            msg (Any): The result of a responder or tool handler or task.run()
+            orig_tool_name (str): The original tool name that generated the response,
+                if any.
+            chat_doc (ChatDocument): The original ChatDocument object that `msg`
+                is a response to.
+            author_entity (Entity): The intended author of the result ChatDocument
         """
-        if isinstance(msg, ToolMessage):
+        if msg is None or isinstance(msg, ChatDocument):
+            return msg
+
+        is_agent_author = author_entity == Entity.AGENT
+
+        if isinstance(msg, str):
+            return self.response_template(author_entity, content=msg, content_any=msg)
+        elif isinstance(msg, ToolMessage):
             # result is a ToolMessage, so...
             result_tool_name = msg.default_value("request")
-            if result_tool_name in self.llm_tools_handled and (
-                orig_tool_name is None or orig_tool_name != result_tool_name
+            if (
+                is_agent_author
+                and result_tool_name in self.llm_tools_handled
+                and (orig_tool_name is None or orig_tool_name != result_tool_name)
             ):
                 # TODO: do we need to remove the tool message from the chat_doc?
                 # if (chat_doc is not None and
@@ -1281,30 +1324,70 @@ class Agent(ABC):
                 #    chat_doc.tool_messages.remove(msg)
                 # if we can handle it, do so
                 result = self.handle_tool_message(msg, chat_doc=chat_doc)
+                if result is not None and isinstance(result, ChatDocument):
+                    return result
             else:
                 # else wrap it in an agent response and return it so
                 # orchestrator can find a respondent
-                result = self.create_agent_response(tool_messages=[msg])
-        elif isinstance(msg, (ChatDocument, str)):
-            result = msg
-        elif isinstance(msg, BaseModel):
-            result = msg.json()
+                return self.response_template(author_entity, tool_messages=[msg])
         else:
-            # last resort: use json.dumps() or str() to make it a str
-            try:
-                result = json.dumps(msg)
-            except Exception:
-                try:
-                    result = str(msg)
-                except Exception as e:
-                    logger.error(
-                        f"""
-                            Error converting msg handler result to str: {e}", 
-                            """,
-                        exc_info=True,
-                    )
-                    result = None
-        return result
+            result = to_string(msg)
+
+        return (
+            None
+            if result is None
+            else self.response_template(author_entity, content=result, content_any=msg)
+        )
+
+    def from_ChatDocument(self, msg: ChatDocument, output_type: Type[T]) -> Optional[T]:
+        """
+        Extract a desired output_type from a ChatDocument object.
+        We use this fallback order:
+        - if `msg.content_any` exists and matches the output_type, return it
+        - if `msg.content` exists and output_type is str return it
+        - if output_type is a ToolMessage, return the first tool in `msg.tool_messages`
+        - if output_type is a list of ToolMessage,
+            return all tools in `msg.tool_messages`
+        - search for a tool in `msg.tool_messages` that has a field of output_type,
+             and if found, return that field value
+        - return None if all the above fail
+        """
+        content = msg.content
+        if output_type is str and content != "":
+            return cast(T, content)
+        content_any = msg.content_any
+        if content_any is not None and isinstance(content_any, output_type):
+            return cast(T, content_any)
+
+        tools = self.get_tool_messages(msg, all_tools=True)
+
+        if get_origin(output_type) is list:
+            list_element_type = get_args(output_type)[0]
+            if issubclass(list_element_type, ToolMessage):
+                # output_type = List[<ToolMessage],
+                # i.e. list of ToolMessage-derived objects
+                return cast(T, tools)
+        elif get_origin(output_type) is None and issubclass(output_type, ToolMessage):
+            # output_type is a subclass of ToolMessage:
+            # return the first tool that has this specific output_type
+            for tool in tools:
+                if isinstance(tool, output_type):
+                    return cast(T, tool)
+            return None
+        elif get_origin(output_type) is None and output_type in (str, int, float, bool):
+            # attempt to get the output_type from the content,
+            # if it's a primitive type
+            primitive_value = from_string(content, output_type)  # type: ignore
+            if primitive_value is not None:
+                return cast(T, primitive_value)
+
+        # then search for output_type as a field in a tool
+        for tool in tools:
+            value = tool.get_value_of_type(output_type)
+            if value is not None:
+                return cast(T, value)
+
+        return None
 
     def handle_tool_message(
         self,
@@ -1335,9 +1418,7 @@ class Agent(ABC):
                 maybe_result = handler_method(tool, chat_doc=chat_doc)
             else:
                 maybe_result = handler_method(tool)
-            result = self._process_handle_message_result(
-                maybe_result, tool_name, chat_doc
-            )
+            result = self.to_ChatDocument(maybe_result, tool_name, chat_doc)
         except Exception as e:
             # raise the error here since we are sure it's
             # not a pydantic validation error,

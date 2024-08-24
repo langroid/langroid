@@ -18,7 +18,9 @@ from typing import (
     Optional,
     Tuple,
     Type,
+    TypeVar,
     cast,
+    overload,
 )
 
 import numpy as np
@@ -33,8 +35,8 @@ from langroid.agent.chat_document import (
     ChatDocument,
     StatusCode,
 )
-from langroid.agent.tool_message import FinalResultTool, ToolMessage
-from langroid.agent.tools.orchestration import AgentDoneTool, DoneTool
+from langroid.agent.tool_message import ToolMessage
+from langroid.agent.tools.orchestration import AgentDoneTool, DoneTool, FinalResultTool
 from langroid.cachedb.redis_cachedb import RedisCache, RedisCacheConfig
 from langroid.exceptions import InfiniteLoopException
 from langroid.mytypes import Entity
@@ -53,10 +55,13 @@ from langroid.utils.constants import (
 from langroid.utils.logging import RichFileLogger, setup_file_logger
 from langroid.utils.object_registry import scheduled_cleanup
 from langroid.utils.system import hash
+from langroid.utils.types import to_string
 
 logger = logging.getLogger(__name__)
 
 Responder = Entity | Type["Task"]
+
+T = TypeVar("T")
 
 
 def noop_fn(*args: List[Any], **kwargs: Dict[str, Any]) -> None:
@@ -582,16 +587,44 @@ class Task:
         for t in self.sub_tasks:
             t.reset_all_sub_tasks()
 
-    def run(
+    @overload
+    def run(  # noqa
         self,
-        msg: Optional[str | ChatDocument] = None,
+        msg: Any | None = None,
+        *,
         turns: int = -1,
         caller: None | Task = None,
         max_cost: float = 0,
         max_tokens: int = 0,
         session_id: str = "",
         allow_restart: bool = True,
-    ) -> Optional[ChatDocument]:
+    ) -> Optional[ChatDocument]: ...  # noqa
+
+    @overload
+    def run(  # noqa
+        self,
+        msg: Any | None = None,
+        *,
+        turns: int = -1,
+        caller: None | Task = None,
+        max_cost: float = 0,
+        max_tokens: int = 0,
+        session_id: str = "",
+        allow_restart: bool = True,
+        return_type: Type[T],
+    ) -> Optional[T]: ...  # noqa
+
+    def run(
+        self,
+        msg: Any | None = None,
+        turns: int = -1,
+        caller: None | Task = None,
+        max_cost: float = 0,
+        max_tokens: int = 0,
+        session_id: str = "",
+        allow_restart: bool = True,
+        return_type: Optional[Type[T]] = None,
+    ) -> Optional[ChatDocument | T]:
         """Synchronous version of `run_async()`.
         See `run_async()` for details."""
         if allow_restart and (
@@ -614,19 +647,18 @@ class Task:
         self._init_message_counter()
         self.history.clear()
 
-        assert (
-            msg is None or isinstance(msg, str) or isinstance(msg, ChatDocument)
-        ), f"msg arg in Task.run() must be None, str, or ChatDocument, not {type(msg)}"
+        msg_input = self.agent.to_ChatDocument(msg, author_entity=Entity.USER)
 
         if (
-            isinstance(msg, ChatDocument)
-            and msg.metadata.recipient != ""
-            and msg.metadata.recipient != self.name
+            isinstance(msg_input, ChatDocument)
+            and msg_input.metadata.recipient != ""
+            and msg_input.metadata.recipient != self.name
         ):
             # this task is not the intended recipient so return None
             return None
+
         self._pre_run_loop(
-            msg=msg,
+            msg=msg_input,
             caller=caller,
             is_async=False,
         )
@@ -677,24 +709,56 @@ class Task:
 
         final_result = self.result(status)
         self._post_run_loop()
+        if final_result is None:
+            return None
+        if return_type is not None and return_type != ChatDocument:
+            return self.agent.from_ChatDocument(final_result, return_type)
         return final_result
 
-    async def run_async(
+    @overload
+    async def run_async(  # noqa
         self,
-        msg: Optional[str | ChatDocument] = None,
+        msg: Any,
+        *,
         turns: int = -1,
         caller: None | Task = None,
         max_cost: float = 0,
         max_tokens: int = 0,
         session_id: str = "",
         allow_restart: bool = True,
-    ) -> Optional[ChatDocument]:
+    ) -> Optional[ChatDocument]: ...  # noqa
+
+    @overload
+    async def run_async(  # noqa
+        self,
+        msg: Any,
+        *,
+        turns: int = -1,
+        caller: None | Task = None,
+        max_cost: float = 0,
+        max_tokens: int = 0,
+        session_id: str = "",
+        allow_restart: bool = True,
+        return_type: Type[T],
+    ) -> Optional[T]: ...  # noqa
+
+    async def run_async(
+        self,
+        msg: Any,
+        turns: int = -1,
+        caller: None | Task = None,
+        max_cost: float = 0,
+        max_tokens: int = 0,
+        session_id: str = "",
+        allow_restart: bool = True,
+        return_type: Optional[Type[T]] = None,
+    ) -> Optional[ChatDocument | T]:
         """
         Loop over `step()` until task is considered done or `turns` is reached.
         Runs asynchronously.
 
         Args:
-            msg (str|ChatDocument): initial *user-role* message to process; if None,
+            msg (Any): initial *user-role* message to process; if None,
                 the LLM will respond to its initial `self.task_messages`
                 which set up and kick off the overall task.
                 The agent tries to achieve this goal by looping
@@ -710,6 +774,7 @@ class Task:
             max_tokens (int): max tokens allowed for the task (default 0 -> no limit)
             session_id (str): session id for the task
             allow_restart (bool): whether to allow restarting the task
+            return_type (Optional[Type[T]]): desired final result type
 
         Returns:
             Optional[ChatDocument]: valid result of the task.
@@ -740,17 +805,20 @@ class Task:
         self._init_message_counter()
         self.history.clear()
 
+        msg_input = self.agent.to_ChatDocument(msg, author_entity=Entity.USER)
+
         if (
-            isinstance(msg, ChatDocument)
-            and msg.metadata.recipient != ""
-            and msg.metadata.recipient != self.name
+            isinstance(msg_input, ChatDocument)
+            and msg_input.metadata.recipient != ""
+            and msg_input.metadata.recipient != self.name
         ):
             # this task is not the intended recipient so return None
             return None
+
         self._pre_run_loop(
-            msg=msg,
+            msg=msg_input,
             caller=caller,
-            is_async=True,
+            is_async=False,
         )
         # self.turns overrides if it is > 0 and turns not set (i.e. = -1)
         turns = self.turns if turns < 0 else turns
@@ -800,6 +868,10 @@ class Task:
 
         final_result = self.result(status)
         self._post_run_loop()
+        if final_result is None:
+            return None
+        if return_type is not None and return_type != ChatDocument:
+            return self.agent.from_ChatDocument(final_result, return_type)
         return final_result
 
     def _pre_run_loop(
@@ -1246,7 +1318,13 @@ class Task:
         else:
             response_fn = self._entity_responder_map[cast(Entity, e)]
             result = response_fn(self.pending_message)
-        return self._process_result_routing(result, e)
+
+        result_chat_doc = self.agent.to_ChatDocument(
+            result,
+            chat_doc=self.pending_message,
+            author_entity=e if isinstance(e, Entity) else Entity.USER,
+        )
+        return self._process_result_routing(result_chat_doc, e)
 
     def _process_result_routing(
         self, result: ChatDocument | None, e: Responder
@@ -1364,7 +1442,13 @@ class Task:
         else:
             response_fn = self._entity_responder_async_map[cast(Entity, e)]
             result = await response_fn(self.pending_message)
-        return self._process_result_routing(result, e)
+
+        result_chat_doc = self.agent.to_ChatDocument(
+            result,
+            chat_doc=self.pending_message,
+            author_entity=e if isinstance(e, Entity) else Entity.USER,
+        )
+        return self._process_result_routing(result_chat_doc, e)
 
     def result(self, status: StatusCode | None = None) -> ChatDocument | None:
         """
@@ -1386,6 +1470,7 @@ class Task:
         result_msg = self.pending_message
 
         content = result_msg.content if result_msg else ""
+        content_any = result_msg.content_any if result_msg else None
         if DONE in content:
             # assuming it is of the form "DONE: <content>"
             content = content.replace(DONE, "").strip()
@@ -1398,11 +1483,13 @@ class Task:
         for t in tool_messages:
             if isinstance(t, FinalResultTool):
                 content = ""
+                content_any = None
                 tool_messages = [t]  # pass it on to parent so it also quits
                 break
             elif isinstance(t, (AgentDoneTool, DoneTool)):
                 # there shouldn't be multiple tools like this; just take the first
-                content = t.content
+                content = to_string(t.content)
+                content_any = t.content
                 if isinstance(t, AgentDoneTool):
                     tool_messages = t.tools
                 break
@@ -1420,6 +1507,7 @@ class Task:
         # since to the "parent" task, this result is equivalent to a response from USER
         result_doc = ChatDocument(
             content=content,
+            content_any=content_any,
             oai_tool_calls=oai_tool_calls,
             oai_tool_id2result=oai_tool_id2result,
             function_call=fun_call,
@@ -1778,9 +1866,7 @@ class Task:
 
         if self.pending_message is None:
             return True
-        if isinstance(e, Task) and e.agent.has_only_unhandled_tools(
-            self.pending_message
-        ):
+        if isinstance(e, Task) and not e.agent.can_respond(self.pending_message):
             return False
 
         if self._recipient_mismatch(e):

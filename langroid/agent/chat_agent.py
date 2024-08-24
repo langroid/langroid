@@ -161,6 +161,7 @@ class ChatAgent(Agent):
                 DoneTool,
                 ForwardTool,
                 PassTool,
+                ResultTool,
                 SendTool,
             )
 
@@ -171,6 +172,7 @@ class ChatAgent(Agent):
             self.enable_message(DonePassTool, use=False, handle=True)
             self.enable_message(SendTool, use=False, handle=True)
             self.enable_message(AgentSendTool, use=False, handle=True)
+            self.enable_message(ResultTool, use=False, handle=True)
 
     def init_state(self) -> None:
         """
@@ -312,8 +314,7 @@ class ChatAgent(Agent):
         usable_tool_classes: List[Type[ToolMessage]] = [
             t
             for t in list(self.llm_tools_map.values())
-            if not t._handle_only
-            and t.default_value("request") in self.llm_tools_usable
+            if t.default_value("request") in self.llm_tools_usable
         ]
 
         if len(usable_tool_classes) == 0:
@@ -522,6 +523,13 @@ class ChatAgent(Agent):
         tools = self._get_tool_list(message_class)
         if message_class is not None:
             request = message_class.default_value("request")
+            if request == "":
+                raise ValueError(
+                    f"""
+                    ToolMessage class {message_class} must have a non-empty 
+                    'request' field if it is to be enabled as a tool.
+                    """
+                )
             llm_function = message_class.llm_function_schema(defaults=include_defaults)
             self.llm_functions_map[request] = llm_function
             if force:
@@ -540,8 +548,21 @@ class ChatAgent(Agent):
                 self.llm_functions_handled.discard(t)
 
             if use:
-                self.llm_tools_usable.add(t)
-                self.llm_functions_usable.add(t)
+                tool_class = self.llm_tools_map[t]
+                if tool_class._allow_llm_use:
+                    self.llm_tools_usable.add(t)
+                    self.llm_functions_usable.add(t)
+                else:
+                    logger.warning(
+                        f"""
+                        ToolMessage class {tool_class} does not allow LLM use,
+                        because `_allow_llm_use=False` either in the Tool or a 
+                        parent class of this tool;
+                        so not enabling LLM use for this tool!
+                        If you intended an LLM to use this tool, 
+                        set `_allow_llm_use=True` when you define the tool.
+                        """
+                    )
             else:
                 self.llm_tools_usable.discard(t)
                 self.llm_functions_usable.discard(t)
