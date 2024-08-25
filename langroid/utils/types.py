@@ -14,7 +14,7 @@ def is_instance_of(obj: Any, type_hint: Type[T]) -> bool:
     Check if an object is an instance of a type hint, e.g.
     to check whether x is of type `List[ToolMessage]` or type `int`
     """
-    if type_hint is Any:
+    if get_origin(type_hint) is Any:
         return True
 
     if type_hint is type(obj):
