@@ -80,17 +80,13 @@ def main(
         """
         Take a QuestionTool, return an AnswerTool
         """
-        answer_tool = search_task.run(qtool, return_type=AnswerTool)
-        assert isinstance(answer_tool, AnswerTool)
-        return answer_tool
+        return search_task.run(qtool, return_type=AnswerTool)
 
     def critic_feedback(fa: FinalAnswerTool) -> FeedbackTool:
         """
         Take a FinalAnswerTool, return a FeedbackTool
         """
-        fb_tool = critic_task.run(fa, return_type=FeedbackTool)
-        assert isinstance(fb_tool, FeedbackTool)
-        return fb_tool
+        return critic_task.run(fa, return_type=FeedbackTool)
 
     def query_to_final_answer(question: str) -> FinalAnswerTool:
         """
