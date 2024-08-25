@@ -48,10 +48,13 @@ class WebSearchResult:
         return self.full_content[: self.max_summary_length]
 
     def get_full_content(self) -> str:
-        response: Response = requests.get(self.link)
-        soup: BeautifulSoup = BeautifulSoup(response.text, "lxml")
-        text = " ".join(soup.stripped_strings)
-        return text[: self.max_content_length]
+        try:
+            response: Response = requests.get(self.link)
+            soup: BeautifulSoup = BeautifulSoup(response.text, "lxml")
+            text = " ".join(soup.stripped_strings)
+            return text[: self.max_content_length]
+        except Exception as e:
+            return f"Error fetching content from {self.link}: {e}"
 
     def __str__(self) -> str:
         return f"Title: {self.title}\nLink: {self.link}\nSummary: {self.summary}"

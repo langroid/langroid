@@ -100,7 +100,7 @@ def main(
         tool = assistant_task.run(question, return_type=lr.ToolMessage)
 
         while True:
-            if tool is None or not isinstance(tool, (QuestionTool, FinalAnswerTool)):
+            if not isinstance(tool, (QuestionTool, FinalAnswerTool)):
                 # no tool => nudge
                 tool = assistant_task.run(
                     f"""
@@ -115,7 +115,6 @@ def main(
                 tool = assistant_task.run(answer_tool, return_type=lr.ToolMessage)
             else:
                 # FinalAnswerTool => get feedback
-                assert isinstance(tool, FinalAnswerTool)
                 fb_tool = critic_feedback(tool)
                 if fb_tool.suggested_fix == "":
                     # no suggested fix => return tool (which is a FinalAnswerTool)

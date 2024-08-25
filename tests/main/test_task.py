@@ -692,7 +692,7 @@ def test_task_tool_responses():
         x: int
 
         def handle(self) -> str:
-            return DoneTool(content=str(self.x // 2))
+            return DoneTool(content=self.x // 2) # note: content can be any type
 
     class ProcessTool(ToolMessage):
         request = "process"
@@ -764,5 +764,5 @@ def test_task_tool_responses():
     result = processor_task.run(str(16))
     assert result.content == str(8)
 
-    result = processor_task.run(str(10))
-    assert result.content == str(11)
+    result = processor_task.run(10, return_type=int)
+    assert result == 11
