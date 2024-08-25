@@ -9,12 +9,12 @@ PrimitiveType = Union[int, float, bool, str]
 T = TypeVar("T")
 
 
-def is_instance_of(obj: Any, type_hint: Type[T]) -> bool:
+def is_instance_of(obj: Any, type_hint: Type[T] | Any) -> bool:
     """
     Check if an object is an instance of a type hint, e.g.
     to check whether x is of type `List[ToolMessage]` or type `int`
     """
-    if get_origin(type_hint) is Any:
+    if type_hint == Any:
         return True
 
     if type_hint is type(obj):
