@@ -68,8 +68,9 @@ def test_enable_message(
     msg_class: Optional[ToolMessage], use: bool, handle: bool, force: bool
 ):
     agent.enable_message(msg_class, use=use, handle=handle, force=force)
+    usable_tools = agent.llm_tools_usable
     tools = agent._get_tool_list(msg_class)
-    for tool in tools:
+    for tool in set(tools).intersection(usable_tools):
         assert tool in agent.llm_tools_map
         if msg_class is not None:
             assert agent.llm_tools_map[tool] == msg_class
@@ -132,7 +133,7 @@ def test_agent_handle_message():
     """
     agent.enable_message(SquareTool)
     assert agent.handle_message(NONE_MSG) is None
-    assert agent.handle_message(SQUARE_MSG) == "144"
+    assert agent.handle_message(SQUARE_MSG).content == "144"
 
     agent.disable_message_handling(SquareTool)
     assert agent.handle_message(SQUARE_MSG) is None
@@ -141,7 +142,7 @@ def test_agent_handle_message():
     assert agent.handle_message(SQUARE_MSG) is None
 
     agent.enable_message(SquareTool)
-    assert agent.handle_message(SQUARE_MSG) == "144"
+    assert agent.handle_message(SQUARE_MSG).content == "144"
 
 
 BAD_SQUARE_MSG = """
@@ -209,7 +210,7 @@ def test_llm_tool_message(
     llm_msg = agent.llm_response_forget(prompt)
     assert isinstance(agent.get_tool_messages(llm_msg)[0], message_class)
 
-    agent_result = agent.handle_message(llm_msg)
+    agent_result = agent.handle_message(llm_msg).content
     assert result.lower() in agent_result.lower()
 
 
@@ -258,5 +259,5 @@ async def test_llm_tool_message_async(
     llm_msg = await agent.llm_response_forget_async(prompt)
     assert isinstance(agent.get_tool_messages(llm_msg)[0], message_class)
 
-    agent_result = agent.handle_message(llm_msg)
+    agent_result = agent.handle_message(llm_msg).content
     assert result.lower() in agent_result.lower()
