@@ -80,13 +80,13 @@ def main(
         """
         Take a QuestionTool, return an AnswerTool
         """
-        return search_task.run(qtool, return_type=AnswerTool)
+        return search_task[AnswerTool].run(qtool)
 
     def critic_feedback(fa: FinalAnswerTool) -> FeedbackTool:
         """
         Take a FinalAnswerTool, return a FeedbackTool
         """
-        return critic_task.run(fa, return_type=FeedbackTool)
+        return critic_task[FeedbackTool].run(fa)
 
     def query_to_final_answer(question: str) -> FinalAnswerTool:
         """
@@ -97,22 +97,21 @@ def main(
         question_tool_name = QuestionTool.default_value("request")
         final_answer_tool_name = FinalAnswerTool.default_value("request")
 
-        tool = assistant_task.run(question, return_type=lr.ToolMessage)
+        tool = assistant_task[lr.ToolMessage].run(question)
 
         while True:
             if not isinstance(tool, (QuestionTool, FinalAnswerTool)):
                 # no tool => nudge
-                tool = assistant_task.run(
+                tool = assistant_task[lr.ToolMessage].run(
                     f"""
                      You forgot to use one of the tools:
                      `{question_tool_name}` or `{final_answer_tool_name}`.
                      """,
-                    return_type=lr.ToolMessage,
                 )
             elif isinstance(tool, QuestionTool):
                 # QuestionTool => get search result
                 answer_tool = search_answer(tool)
-                tool = assistant_task.run(answer_tool, return_type=lr.ToolMessage)
+                tool = assistant_task[lr.ToolMessage].run(answer_tool)
             else:
                 # FinalAnswerTool => get feedback
                 fb_tool = critic_feedback(tool)
@@ -121,7 +120,7 @@ def main(
                     return tool
                 else:
                     # suggested fix => ask again
-                    tool = assistant_task.run(fb_tool, return_type=lr.ToolMessage)
+                    tool = assistant_task[lr.ToolMessage].run(fb_tool)
 
     # Interactive loop with user
     while True:

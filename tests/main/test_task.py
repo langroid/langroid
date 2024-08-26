@@ -764,5 +764,5 @@ def test_task_tool_responses():
     result = processor_task.run(str(16))
     assert result.content == str(8)
 
-    result = processor_task.run(10, return_type=int)
+    result = processor_task[int].run(10)
     assert result == 11

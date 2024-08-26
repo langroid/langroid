@@ -58,7 +58,7 @@ def test_llm_done_tool(
     # test DoneTool in task
     task = lr.Task(agent, interactive=False)
 
-    result = task.run(12, return_type=int)  # 12 -> 6 -> 3 -> done
+    result = task[int].run(12)  # 12 -> 6 -> 3 -> done
     assert result == 3
 
 
@@ -110,7 +110,7 @@ def test_agent_done_tool(test_settings: Settings):
 
     # test agent generation of AgentDoneTool directly (in agent_response)
     task = lr.Task(agent, interactive=False)
-    result = task.run(1, return_type=int)  # note, input, return-type needn't be str
+    result = task[int].run(1)  # note, input, return-type needn't be str
     assert result == 3
 
     class MyAgent(lr.ChatAgent):
@@ -144,13 +144,13 @@ def test_agent_done_tool(test_settings: Settings):
     main_task = lr.Task(main_agent, interactive=False)
     task = lr.Task(agent, interactive=False)
     main_task.add_sub_task(task)
-    result = main_task.run(1, return_type=int)
+    result = main_task[int].run(1)
     # when MyAgent sees x=3, it generates AgentDoneTool, with tools = [XYTool(3, 5)],
     # which is in turn handled by the MainAgent, to produce
     # AgentDoneTool(content=8)
     assert result == 8
 
-    result = main_task.run(1, return_type=ResultTool)
+    result = main_task[ResultTool].run(1)
     assert isinstance(result, ResultTool)
     assert result.arbitrary_obj == 4
 
@@ -259,7 +259,7 @@ def test_orch_tools(
     task.add_sub_task([triple_task, reducer_task, even_task])
 
     # 1200 -> 120 -> 12 -> 6 -> 3 -> done
-    result = task.run(1200, turns=60, return_type=float)
+    result = task[float].run(1200, turns=60)
 
     assert result == 3
 
@@ -375,10 +375,10 @@ def test_send_tools(
 
     processor_task.add_sub_task([five_task, zero_task, three_task])
 
-    result = processor_task.run(180, turns=20, return_type=int)
+    result = processor_task[int].run(180, turns=20)
     # 180 -> 18 -> 15 -> 3 -> 1 -> done
     assert result == 1
 
-    result = processor_task.run(250, turns=20, return_type=int)
+    result = processor_task[int].run(250, turns=20)
     # 250 -> 25 -> 5 -> 1 -> done
     assert result == 1
