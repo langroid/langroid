@@ -132,7 +132,9 @@ teacher_task.run()
 <details>
 <summary> <b>Click to expand</b></summary>
 
-- **Aug 2024:** 
+- **Aug 2024:**
+  - **[0.11.0](https://github.com/langroid/langroid/releases/tag/0.11.0) Polymorphic `Task.run(), Task.run_async`.
+  - **[0.10.0](https://github.com/langroid/langroid/releases/tag/0.10.0) Allow tool handlers to return arbitrary result type, including other tools.
   - **[0.9.0](https://github.com/langroid/langroid/releases/tag/0.9.0)** Orchestration Tools, to signal various task statuses, and to pass messages between agents.
   - **[0.7.0](https://github.com/langroid/langroid/releases/tag/0.7.0)** OpenAI tools API support, including multi-tools.
 - **Jul 2024:**
