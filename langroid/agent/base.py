@@ -347,7 +347,7 @@ class Agent(ABC):
     def create_agent_response(
         self,
         content: str | None = None,
-        content_any: Any | None = None,
+        content_any: Any = None,
         tool_messages: List[ToolMessage] = [],
         oai_tool_calls: Optional[List[OpenAIToolCall]] = None,
         oai_tool_choice: ToolChoiceTypes | Dict[str, Dict[str, str] | str] = "auto",
@@ -551,7 +551,7 @@ class Agent(ABC):
         self,
         e: Entity,
         content: str | None = None,
-        content_any: Any | None = None,
+        content_any: Any = None,
         tool_messages: List[ToolMessage] = [],
         oai_tool_calls: Optional[List[OpenAIToolCall]] = None,
         oai_tool_choice: ToolChoiceTypes | Dict[str, Dict[str, str] | str] = "auto",
@@ -576,7 +576,7 @@ class Agent(ABC):
     def create_user_response(
         self,
         content: str | None = None,
-        content_any: Any | None = None,
+        content_any: Any = None,
         tool_messages: List[ToolMessage] = [],
         oai_tool_calls: List[OpenAIToolCall] | None = None,
         oai_tool_choice: ToolChoiceTypes | Dict[str, Dict[str, str] | str] = "auto",
@@ -708,7 +708,7 @@ class Agent(ABC):
     def create_llm_response(
         self,
         content: str | None = None,
-        content_any: Any | None = None,
+        content_any: Any = None,
         tool_messages: List[ToolMessage] = [],
         oai_tool_calls: None | List[OpenAIToolCall] = None,
         oai_tool_choice: ToolChoiceTypes | Dict[str, Dict[str, str] | str] = "auto",
@@ -1364,9 +1364,12 @@ class Agent(ABC):
         if get_origin(output_type) is list:
             list_element_type = get_args(output_type)[0]
             if issubclass(list_element_type, ToolMessage):
-                # output_type = List[<ToolMessage],
-                # i.e. list of ToolMessage-derived objects
-                return cast(T, tools)
+                # list_element_type is a subclass of ToolMessage:
+                # We output a list of objects derived from list_element_type
+                return cast(
+                    T,
+                    [t for t in tools if isinstance(t, list_element_type)],
+                )
         elif get_origin(output_type) is None and issubclass(output_type, ToolMessage):
             # output_type is a subclass of ToolMessage:
             # return the first tool that has this specific output_type

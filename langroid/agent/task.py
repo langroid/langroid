@@ -600,7 +600,7 @@ class Task:
     @overload
     def run(  # noqa
         self,
-        msg: Any | None = None,
+        msg: Any = None,
         *,
         turns: int = -1,
         caller: None | Task = None,
@@ -613,7 +613,7 @@ class Task:
     @overload
     def run(  # noqa
         self,
-        msg: Any | None = None,
+        msg: Any = None,
         *,
         turns: int = -1,
         caller: None | Task = None,
@@ -626,7 +626,7 @@ class Task:
 
     def run(
         self,
-        msg: Any | None = None,
+        msg: Any = None,
         turns: int = -1,
         caller: None | Task = None,
         max_cost: float = 0,
@@ -732,7 +732,7 @@ class Task:
     @overload
     async def run_async(  # noqa
         self,
-        msg: Any | None = None,
+        msg: Any = None,
         *,
         turns: int = -1,
         caller: None | Task = None,
@@ -745,7 +745,7 @@ class Task:
     @overload
     async def run_async(  # noqa
         self,
-        msg: Any | None = None,
+        msg: Any = None,
         *,
         turns: int = -1,
         caller: None | Task = None,
@@ -758,7 +758,7 @@ class Task:
 
     async def run_async(
         self,
-        msg: Any | None = None,
+        msg: Any = None,
         turns: int = -1,
         caller: None | Task = None,
         max_cost: float = 0,
