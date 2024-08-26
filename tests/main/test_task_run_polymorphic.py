@@ -2,7 +2,7 @@
 Other tests for Task are in test_chat_agent.py
 """
 
-from typing import Any, Dict, List
+from typing import Any
 
 import pytest
 
@@ -127,16 +127,34 @@ def test_task_in_out_types(
             msg = Pair(x=2, y=4)  # gets converted to str via .json()
 
     if final_result_type == "agent_done_tool":
-        result = task.run(msg)
-        # default result -> Optional[ChatDocument]
-        assert isinstance(result, lr.ChatDocument)
-        # in the `content_any` field of the final ChatDocument,
-        # an arbitrary type can be stored, as returned by AgentDoneTool(content=...)
-        assert isinstance(result.content_any, DetailedAnswer)
-        assert result.content_any.answer == 6
-        assert result.content_any.comment != ""
+        # Run twice: ensure default is not overriden
+        for _ in range(2):
+            result = task.run(msg)
+            # default result -> Optional[ChatDocument]
+            assert isinstance(result, lr.ChatDocument)
+            # in the `content_any` field of the final ChatDocument,
+            # an arbitrary type can be stored, as returned by AgentDoneTool(content=...)
+            assert isinstance(result.content_any, DetailedAnswer)
+            assert result.content_any.answer == 6
+            assert result.content_any.comment != ""
 
-        result = task.run(msg, return_type=DetailedAnswer)
+            result = task[DetailedAnswer].run(msg)
+            assert isinstance(result, DetailedAnswer)
+            assert result.answer == 6
+            assert result.comment != ""
+
+        # Overridden return type takes precedence
+        result = task[float].run(msg, return_type=DetailedAnswer)
+        assert isinstance(result, DetailedAnswer)
+        assert result.answer == 6
+        assert result.comment != ""
+
+        # Test default return type
+        result = lr.Task(
+            agent=agent,
+            interactive=False,
+            default_return_type=DetailedAnswer,
+        ).run(msg)
         assert isinstance(result, DetailedAnswer)
         assert result.answer == 6
         assert result.comment != ""
@@ -148,33 +166,48 @@ def test_task_in_out_types(
         assert isinstance(tools[0], ResultTool)
         assert tools[0].answer == 6
 
-        result = task.run(msg, return_type=ResultTool)
+        # Test overriden return type
+        result = task[str].run(msg, return_type=ResultTool)
         assert isinstance(result, ResultTool)
         assert result.answer == 6
 
-        result = task.run(msg, return_type=List[ResultTool])
+        result = task[ResultTool].run(msg)
+        assert isinstance(result, ResultTool)
+        assert result.answer == 6
+
+        result = task[list[ResultTool]].run(msg)
         assert isinstance(result, list) and isinstance(result[0], ResultTool)
         assert result[0].answer == 6
 
-        result = task.run(msg, return_type=ToolMessage)
+        result = task[ToolMessage].run(msg)
         assert isinstance(result, ResultTool)
         assert result.answer == 6
 
-        result = task.run(msg, return_type=int)
+        result = task[int].run(msg)
         assert result == 6
 
         # check handling of invalid return type: receive None
-        result = task.run(msg, return_type=Pair)
+        result = task[Pair].run(msg)
         assert result is None
 
         # check we can return a Pydantic model
-        result = task.run(msg, return_type=DetailedAnswer)
+        result = task[DetailedAnswer].run(msg)
         assert isinstance(result, DetailedAnswer)
         assert result.answer == 6
         assert result.comment != ""
 
         # check we can return a dictionary
-        result = task.run(msg, return_type=Dict[str, Any])
+        result = task[dict[str, Any]].run(msg)
+        assert isinstance(result, dict)
+        assert result["answer"] == 6
+        assert result["comment"] != ""
+
+        # Test default return type
+        result = lr.Task(
+            agent=agent,
+            interactive=False,
+            default_return_type=dict[str, Any],
+        ).run(msg)
         assert isinstance(result, dict)
         assert result["answer"] == 6
         assert result["comment"] != ""

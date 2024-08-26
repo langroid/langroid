@@ -692,7 +692,7 @@ def test_task_tool_responses():
         x: int
 
         def handle(self) -> str:
-            return DoneTool(content=self.x // 2) # note: content can be any type
+            return DoneTool(content=self.x // 2)  # note: content can be any type
 
     class ProcessTool(ToolMessage):
         request = "process"

@@ -158,6 +158,7 @@ class Task:
         erase_substeps: bool = False,
         allow_null_result: bool = False,
         max_stalled_steps: int = 5,
+        default_return_type: Optional[type] = None,
         done_if_no_response: List[Responder] = [],
         done_if_response: List[Responder] = [],
         config: TaskConfig = TaskConfig(),
@@ -195,6 +196,8 @@ class Task:
             default_human_response (str|None): default response from user; useful for
                 testing, to avoid interactive input from user.
                 [Instead of this, setting `interactive` usually suffices]
+            default_return_type: if not None, extracts a value of this type from the
+                result of self.run()
             interactive (bool): if true, wait for human input after each non-human
                 response (prevents infinite loop of non-human responses).
                 Default is true. If false, then `default_human_response` is set to ""
@@ -303,6 +306,7 @@ class Task:
         self.agent.interactive = interactive
         self.only_user_quits_root = only_user_quits_root
         self.message_history_idx = -1
+        self.default_return_type = default_return_type
 
         # set to True if we want to collapse multi-turn conversation with sub-tasks into
         # just the first outgoing message and last incoming message.
@@ -587,6 +591,12 @@ class Task:
         for t in self.sub_tasks:
             t.reset_all_sub_tasks()
 
+    def __getitem__(self, return_type: type) -> Task:
+        """Returns a (shallow) copy of `self` with a default return type."""
+        clone = copy.copy(self)
+        clone.default_return_type = return_type
+        return clone
+
     @overload
     def run(  # noqa
         self,
@@ -711,6 +721,10 @@ class Task:
         self._post_run_loop()
         if final_result is None:
             return None
+
+        if return_type is None:
+            return_type = self.default_return_type
+
         if return_type is not None and return_type != ChatDocument:
             return self.agent.from_ChatDocument(final_result, return_type)
         return final_result
@@ -870,6 +884,10 @@ class Task:
         self._post_run_loop()
         if final_result is None:
             return None
+
+        if return_type is None:
+            return_type = self.default_return_type
+
         if return_type is not None and return_type != ChatDocument:
             return self.agent.from_ChatDocument(final_result, return_type)
         return final_result
