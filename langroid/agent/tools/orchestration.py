@@ -3,12 +3,14 @@ Various tools to for agents to be able to control flow of Task, e.g.
 termination, routing to another agent, etc.
 """
 
-from typing import List, Tuple
+from typing import Any, List, Tuple
 
 from langroid.agent.chat_agent import ChatAgent
 from langroid.agent.chat_document import ChatDocument
 from langroid.agent.tool_message import ToolMessage
 from langroid.mytypes import Entity
+from langroid.pydantic_v1 import Extra
+from langroid.utils.types import to_string
 
 
 class AgentDoneTool(ToolMessage):
@@ -17,16 +19,20 @@ class AgentDoneTool(ToolMessage):
 
     purpose: str = """
     To signal the current task is done, along with an optional message <content>
-    (default empty string) and an optional list of <tools> (default empty list).
+    of arbitrary type (default None) and an 
+    optional list of <tools> (default empty list).
     """
     request: str = "agent_done_tool"
-    content: str = ""
+    content: Any = None
     tools: List[ToolMessage] = []
-    _handle_only: bool = True
+    # only meant for agent_response or tool-handlers, not for LLM generation:
+    _allow_llm_use: bool = False
 
     def response(self, agent: ChatAgent) -> ChatDocument:
+        content_str = "" if self.content is None else to_string(self.content)
         return agent.create_agent_response(
-            self.content,
+            content=content_str,
+            content_any=self.content,
             tool_messages=[self] + self.tools,
         )
 
@@ -37,14 +43,15 @@ class DoneTool(ToolMessage):
 
     purpose = """
     To signal the current task is done, along with an optional message <content>
-    (default empty string).
+    of arbitrary type (default None).
     """
     request = "done_tool"
     content: str = ""
 
     def response(self, agent: ChatAgent) -> ChatDocument:
         return agent.create_agent_response(
-            self.content,
+            content=self.content,
+            content_any=self.content,
             tool_messages=[self],
         )
 
@@ -56,6 +63,78 @@ class DoneTool(ToolMessage):
         use the tool `{tool_name}` to signal this,
         along with any message or result, in the `content` field. 
         """
+
+
+class ResultTool(ToolMessage):
+    """Class to use as a wrapper for sending arbitrary results from an Agent's
+    agent_response or tool handlers, to:
+    (a) trigger completion of the current task (similar to (Agent)DoneTool), and
+    (b) be returned as the result of the current task, i.e. this tool would appear
+         in the resulting ChatDocument's `tool_messages` list.
+    See test_tool_handlers_and_results in test_tool_messages.py, and
+    examples/basic/tool-extract-short-example.py.
+
+    Note:
+        - when defining a tool handler or agent_response, you can directly return
+            ResultTool(field1 = val1, ...),
+            where the values can be aribitrary data structures, including nested
+            Pydantic objs, or you can define a subclass of ResultTool with the
+            fields you want to return.
+        - This is a special ToolMessage that is NOT meant to be used or handled
+            by an agent.
+        - AgentDoneTool is more restrictive in that you can only send a `content`
+            or `tools` in the result.
+    """
+
+    request: str = "result_tool"
+    purpose: str = "Ignored; Wrapper for a structured message"
+    id: str = ""  # placeholder for OpenAI-API tool_call_id
+
+    class Config:
+        extra = Extra.allow
+        arbitrary_types_allowed = False
+        validate_all = True
+        validate_assignment = True
+        # do not include these fields in the generated schema
+        # since we don't require the LLM to specify them
+        schema_extra = {"exclude": {"purpose", "id"}}
+
+    def handle(self) -> AgentDoneTool:
+        return AgentDoneTool(tools=[self])
+
+
+class FinalResultTool(ToolMessage):
+    """Class to use as a wrapper for sending arbitrary results from an Agent's
+    agent_response or tool handlers, to:
+    (a) trigger completion of the current task as well as all parent tasks, and
+    (b) be returned as the final result of the root task, i.e. this tool would appear
+         in the final ChatDocument's `tool_messages` list.
+    See test_tool_handlers_and_results in test_tool_messages.py, and
+    examples/basic/tool-extract-short-example.py.
+
+    Note:
+        - when defining a tool handler or agent_response, you can directly return
+            FinalResultTool(field1 = val1, ...),
+            where the values can be aribitrary data structures, including nested
+            Pydantic objs, or you can define a subclass of FinalResultTool with the
+            fields you want to return.
+        - This is a special ToolMessage that is NOT meant to be used or handled
+            by an agent.
+    """
+
+    request: str = ""
+    purpose: str = "Ignored; Wrapper for a structured message"
+    id: str = ""  # placeholder for OpenAI-API tool_call_id
+    _allow_llm_use: bool = False
+
+    class Config:
+        extra = Extra.allow
+        arbitrary_types_allowed = False
+        validate_all = True
+        validate_assignment = True
+        # do not include these fields in the generated schema
+        # since we don't require the LLM to specify them
+        schema_extra = {"exclude": {"purpose", "id"}}
 
 
 class PassTool(ToolMessage):
@@ -206,7 +285,7 @@ class AgentSendTool(ToolMessage):
     to: str
     content: str = ""
     tools: List[ToolMessage] = []
-    _handle_only: bool = True
+    _allow_llm_use: bool = False
 
     def response(self, agent: ChatAgent) -> ChatDocument:
         return agent.create_agent_response(

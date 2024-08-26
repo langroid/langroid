@@ -40,12 +40,12 @@ import typer
 from dotenv import load_dotenv
 from rich import print
 from rich.prompt import Prompt
+import langroid as lr
 from .tools import QuestionTool, AnswerTool, FinalAnswerTool, FeedbackTool
 from .search_agent import make_search_task
 from .critic_agent import make_critic_task
 from .assistant_agent import make_assistant_task
 from langroid.utils.configuration import Settings, set_global
-from langroid.agent.chat_document import ChatDocument
 
 app = typer.Typer()
 
@@ -76,27 +76,17 @@ def main(
     search_task = make_search_task(model)
     critic_task = make_critic_task(model)
 
-    def search_answer(qtool: QuestionTool) -> ChatDocument:
+    def search_answer(qtool: QuestionTool) -> AnswerTool:
         """
         Take a QuestionTool, return an AnswerTool
         """
-        response = search_task.run(
-            search_task.agent.create_user_response(tool_messages=[qtool])
-        )
-        assert len(response.tool_messages) == 1
-        assert isinstance(response.tool_messages[0], AnswerTool)
-        return response
+        return search_task.run(qtool, return_type=AnswerTool)
 
-    def critic_feedback(fa: FinalAnswerTool) -> ChatDocument:
+    def critic_feedback(fa: FinalAnswerTool) -> FeedbackTool:
         """
         Take a FinalAnswerTool, return a FeedbackTool
         """
-        response = critic_task.run(
-            critic_task.agent.create_user_response(tool_messages=[fa])
-        )
-        assert len(response.tool_messages) == 1
-        assert isinstance(response.tool_messages[0], FeedbackTool)
-        return response
+        return critic_task.run(fa, return_type=FeedbackTool)
 
     def query_to_final_answer(question: str) -> FinalAnswerTool:
         """
@@ -107,33 +97,31 @@ def main(
         question_tool_name = QuestionTool.default_value("request")
         final_answer_tool_name = FinalAnswerTool.default_value("request")
 
-        response = assistant_task.run(question)
+        tool = assistant_task.run(question, return_type=lr.ToolMessage)
 
         while True:
-            if len(response.tool_messages) == 0 or not isinstance(
-                response.tool_messages[0], (QuestionTool, FinalAnswerTool)
-            ):
+            if not isinstance(tool, (QuestionTool, FinalAnswerTool)):
                 # no tool => nudge
-                response = assistant_task.run(
+                tool = assistant_task.run(
                     f"""
                      You forgot to use one of the tools:
                      `{question_tool_name}` or `{final_answer_tool_name}`.
-                     """
+                     """,
+                    return_type=lr.ToolMessage,
                 )
-            elif isinstance(response.tool_messages[0], QuestionTool):
+            elif isinstance(tool, QuestionTool):
                 # QuestionTool => get search result
-                answer_doc = search_answer(response.tool_messages[0])
-                response = assistant_task.run(answer_doc)
+                answer_tool = search_answer(tool)
+                tool = assistant_task.run(answer_tool, return_type=lr.ToolMessage)
             else:
                 # FinalAnswerTool => get feedback
-                assert isinstance(response.tool_messages[0], FinalAnswerTool)
-                feedback_doc = critic_feedback(response.tool_messages[0])
-                if feedback_doc.tool_messages[0].suggested_fix == "":
-                    # no suggested fix => DONE
-                    return response.tool_messages[0]
+                fb_tool = critic_feedback(tool)
+                if fb_tool.suggested_fix == "":
+                    # no suggested fix => return tool (which is a FinalAnswerTool)
+                    return tool
                 else:
                     # suggested fix => ask again
-                    response = assistant_task.run(feedback_doc)
+                    tool = assistant_task.run(fb_tool, return_type=lr.ToolMessage)
 
     # Interactive loop with user
     while True:

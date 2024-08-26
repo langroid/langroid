@@ -4,7 +4,7 @@ for SearcherAgent to answer, and then presents the final answer; It then conside
 feedback from CriticAgent, and may ask more questions or present the final answer
 using a corrected reasoning.
 
-Flow:
+Flow: (L stands for LLM, i.e. llm_response; A stands for Agent i.e. agent_response)
 
 User Q ->
 [L] -> QuestionTool(q1) ->
@@ -125,7 +125,7 @@ class AssistantAgent(lr.ChatAgent):
 
 
 def make_assistant_task(
-    model: str,
+    model: str = "",
     restart: bool = True,
 ) -> lr.Task:
     llm_config = lm.OpenAIGPTConfig(
@@ -171,3 +171,10 @@ def make_assistant_task(
     )
 
     return assistant_task
+
+
+if __name__ == "__main__":
+    # restart = False, to preserve state across task.run() calls
+    task = make_assistant_task(restart=False)
+    question = task.run("which planet has more moons, Jupiter or Saturn?")
+    assert isinstance(question.tool_messages[0], QuestionTool)

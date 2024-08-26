@@ -146,7 +146,7 @@ fastembed = ["fastembed"]
 [tool.poetry.group.dev.dependencies]
 black = {extras = ["jupyter"], version = "^24.3.0"}
 flake8 = "^6.0.0"
-mypy = "^1.7.0"
+mypy = "^1.11.2"
 ruff = "^0.2.2"
 pre-commit = "^3.3.2"
 autopep8 = "^2.0.2"

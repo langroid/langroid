@@ -66,7 +66,7 @@ def test_agent_google_search_tool(
     assert isinstance(agent.get_tool_messages(llm_msg)[0], search_tool_cls)
 
     try:
-        agent_result = agent.handle_message(llm_msg)
+        agent_result = agent.handle_message(llm_msg).content
     except DuckDuckGoSearchException as e:
         pytest.skip(f"Skipping test: {e}")
     assert len(agent_result.split("\n\n")) == 3

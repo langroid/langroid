@@ -15,11 +15,12 @@ from typing import Any, Dict, List, Tuple, Type
 from docstring_parser import parse
 
 from langroid.language_models.base import LLMFunctionSpec
-from langroid.pydantic_v1 import BaseModel, ConfigDict, Extra
+from langroid.pydantic_v1 import BaseModel, Extra
 from langroid.utils.pydantic_utils import (
     _recursive_purge_dict_key,
     generate_simple_schema,
 )
+from langroid.utils.types import is_instance_of
 
 
 class ToolMessage(ABC, BaseModel):
@@ -41,19 +42,18 @@ class ToolMessage(ABC, BaseModel):
     purpose: str
     id: str = ""  # placeholder for OpenAI-API tool_call_id
 
-    model_config = ConfigDict(extra=Extra.allow)
+    _allow_llm_use: bool = True  # allow an LLM to use (i.e. generate) this tool?
 
-    _handle_only: bool = False  # only allow handling, but not use (LLM-generation)?
+    # model_config = ConfigDict(extra=Extra.allow)
 
     class Config:
-        # only HANDLING allowed, NOT "use" (i.e LLM generation)
-        handle_only: bool = False
+        extra = Extra.allow
         arbitrary_types_allowed = False
         validate_all = True
         validate_assignment = True
         # do not include these fields in the generated schema
         # since we don't require the LLM to specify them
-        schema_extra = {"exclude": {"purpose", "id", "model_config"}}
+        schema_extra = {"exclude": {"purpose", "id"}}
 
     @classmethod
     def instructions(cls) -> str:
@@ -122,6 +122,15 @@ class ToolMessage(ABC, BaseModel):
 
     def dict_example(self) -> Dict[str, Any]:
         return self.dict(exclude=self.Config.schema_extra["exclude"])
+
+    def get_value_of_type(self, target_type: Type[Any]) -> Any:
+        """Try to find a value of a desired type in the fields of the ToolMessage."""
+        ignore_fields = self.Config.schema_extra["exclude"].union(["request"])
+        for field_name in set(self.dict().keys()) - ignore_fields:
+            value = getattr(self, field_name)
+            if is_instance_of(value, target_type):
+                return value
+        return None
 
     @classmethod
     def default_value(cls, f: str) -> Any:
@@ -273,40 +282,3 @@ class ToolMessage(ABC, BaseModel):
             exclude=list(cls.Config.schema_extra["exclude"]),
         )
         return schema
-
-
-class FinalResultTool(ToolMessage):
-    """Class to use as a wrapper for sending arbitrary results from an Agent's
-    agent_response or tool handlers, to:
-    (a) trigger completion of the current task as well as all parent tasks, and
-    (b) be returned as the final result of the root task, i.e. this tool would appear
-         in the final ChatDocument's `tool_messages` list.
-    See test_tool_handlers_and_results in test_tool_messages.py, and
-    examples/basic/tool-extract-short-example.py.
-
-    Note:
-        - when defining a tool handler or agent_response, you can directly return
-            FinalResultTool(field1 = val1, ...),
-            where the values can be aribitrary data structures, including nested
-            Pydantic objs, or you can define a subclass of FinalResultTool with the
-            fields you want to return.
-        - This is a special ToolMessage that is NOT meant to be used or handled
-            by an agent.
-    """
-
-    request: str = ""
-    purpose: str = "Ignored; Wrapper for a structured message"
-    id: str = ""  # placeholder for OpenAI-API tool_call_id
-
-    _handle_only: bool = False  # only allow handling, but not use (LLM-generation)?
-
-    class Config:
-        extra = Extra.allow
-        # only HANDLING allowed, NOT "use" (i.e LLM generation)
-        handle_only: bool = False
-        arbitrary_types_allowed = False
-        validate_all = True
-        validate_assignment = True
-        # do not include these fields in the generated schema
-        # since we don't require the LLM to specify them
-        schema_extra = {"exclude": {"purpose", "id"}}

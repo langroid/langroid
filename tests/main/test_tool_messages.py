@@ -8,8 +8,12 @@ import pytest
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.chat_document import ChatDocMetaData, ChatDocument
 from langroid.agent.task import Task
-from langroid.agent.tool_message import FinalResultTool, ToolMessage
-from langroid.agent.tools.orchestration import AgentDoneTool
+from langroid.agent.tool_message import ToolMessage
+from langroid.agent.tools.orchestration import (
+    AgentDoneTool,
+    FinalResultTool,
+    ResultTool,
+)
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
 from langroid.language_models.mock_lm import MockLMConfig
 from langroid.language_models.openai_gpt import OpenAIGPTConfig
@@ -113,17 +117,17 @@ agent.enable_message(FileExistsMessage)
 agent.enable_message(PythonVersionMessage)
 
 
-@pytest.mark.parametrize(
-    # cartesian product of all combinations of use, handle, force
-    "msg_class, use, handle, force",
-    cartesian_product,
-)
+@pytest.mark.parametrize("msg_class", [None, FileExistsMessage, PythonVersionMessage])
+@pytest.mark.parametrize("use", [True, False])
+@pytest.mark.parametrize("handle", [True, False])
+@pytest.mark.parametrize("force", [True, False])
 def test_enable_message(
     msg_class: Optional[ToolMessage], use: bool, handle: bool, force: bool
 ):
     agent.enable_message(msg_class, use=use, handle=handle, force=force)
+    usable_tools = agent.llm_tools_usable
     tools = agent._get_tool_list(msg_class)
-    for tool in tools:
+    for tool in set(tools).intersection(usable_tools):
         assert tool in agent.llm_tools_map
         if msg_class is not None:
             assert agent.llm_tools_map[tool] == msg_class
@@ -205,24 +209,24 @@ def test_agent_handle_message():
     agent.enable_message(FileExistsMessage)
     agent.enable_message(PythonVersionMessage)
     assert agent.handle_message(NONE_MSG) is None
-    assert agent.handle_message(FILE_EXISTS_MSG) == "no"
-    assert agent.handle_message(PYTHON_VERSION_MSG) == "3.9"
+    assert agent.handle_message(FILE_EXISTS_MSG).content == "no"
+    assert agent.handle_message(PYTHON_VERSION_MSG).content == "3.9"
 
     agent.disable_message_handling(FileExistsMessage)
     assert agent.handle_message(FILE_EXISTS_MSG) is None
-    assert agent.handle_message(PYTHON_VERSION_MSG) == "3.9"
+    assert agent.handle_message(PYTHON_VERSION_MSG).content == "3.9"
 
     agent.disable_message_handling(PythonVersionMessage)
     assert agent.handle_message(FILE_EXISTS_MSG) is None
     assert agent.handle_message(PYTHON_VERSION_MSG) is None
 
     agent.enable_message(FileExistsMessage)
-    assert agent.handle_message(FILE_EXISTS_MSG) == "no"
+    assert agent.handle_message(FILE_EXISTS_MSG).content == "no"
     assert agent.handle_message(PYTHON_VERSION_MSG) is None
 
     agent.enable_message(PythonVersionMessage)
-    assert agent.handle_message(FILE_EXISTS_MSG) == "no"
-    assert agent.handle_message(PYTHON_VERSION_MSG) == "3.9"
+    assert agent.handle_message(FILE_EXISTS_MSG).content == "no"
+    assert agent.handle_message(PYTHON_VERSION_MSG).content == "3.9"
 
 
 BAD_FILE_EXISTS_MSG = """
@@ -319,7 +323,7 @@ def test_llm_tool_message(
     assert len(tools) == 1
     assert isinstance(tools[0], message_class)
 
-    agent_result = agent.handle_message(llm_msg)
+    agent_result = agent.handle_message(llm_msg).content
 
     assert result.lower() in agent_result.lower()
 
@@ -706,6 +710,7 @@ def test_oai_tool_choice(
     "result_type",
     [
         "final_tool",
+        "result_tool",
         "agent_done",
         "tool",
         "int",
@@ -746,6 +751,8 @@ def test_tool_handlers_and_results(result_type: str, tool_handler: str):
             case "tool":
                 # return tool, to be handled by sub-task
                 return UberTool(x=x)
+            case "result_tool":
+                return ResultTool(answer=x + 5)
             case "final_tool":
                 return FinalResultTool(
                     special=SpecialResult(answer=x + 5),  # explicitly declared
@@ -852,8 +859,8 @@ def test_tool_handlers_and_results(result_type: str, tool_handler: str):
     )
     if tool_class is not None:
         agent.enable_message(tool_class)
-    # whether to terminate task on agent_response
-    tool_result = result_type in ["final_tool", "agent_done", "tool"]
+
+    tool_result = result_type in ["final_tool", "agent_done", "tool", "result_tool"]
     task = Task(
         agent,
         interactive=False,
@@ -872,6 +879,11 @@ def test_tool_handlers_and_results(result_type: str, tool_handler: str):
         # we terminate task on agent_response, via done_if_response,
         # so the result.content == 8
         assert "8" in result.content
+    elif result_type == "result_tool":
+        # CoolTool handler/response returns a ResultTool containing answer == 8
+        tool = result.tool_messages[0]
+        assert isinstance(tool, ResultTool)
+        assert tool.answer == 8
     else:
         # When CoolTool handler returns a ToolMessage,
         # test that it is handled correctly by sub-task or a parent.
@@ -910,8 +922,7 @@ def test_tool_handlers_and_results(result_type: str, tool_handler: str):
             # another_task = Task(another_agent, interactive=False)
             # another_task.add_sub_task(task)
             result = another_task.run("3")
-            # parent task is unable to handle UberTool, so will stall
-            # will stall and return None
+            # parent task is unable to handle UberTool, so will stall and return None
             assert result is None
             another_agent.enable_message(UberTool)
 
@@ -939,7 +950,14 @@ def test_tool_handlers_and_results(result_type: str, tool_handler: str):
 
 @pytest.mark.parametrize("llm_tool", ["pair", "final_tool"])
 @pytest.mark.parametrize("handler_result_type", ["agent_done", "final_tool"])
-def test_llm_end_with_tool(handler_result_type: str, llm_tool: str):
+@pytest.mark.parametrize("use_fn_api", [True, False])
+@pytest.mark.parametrize("use_tools_api", [True, False])
+def test_llm_end_with_tool(
+    handler_result_type: str,
+    llm_tool: str,
+    use_fn_api: bool,
+    use_tools_api: bool,
+):
     """
     Test that an LLM can directly or indirectly trigger task-end, and return a Tool as
     result. There are 3 ways:
@@ -976,6 +994,7 @@ def test_llm_end_with_tool(handler_result_type: str, llm_tool: str):
         request: str = "final_result_pair_tool"
         purpose: str = "Present final result <pair>"
         pair: Pair
+        _allow_llm_use: bool = True
 
     final_result_pair_tool_name = FinalResultPairTool.default_value("request")
 
@@ -1014,6 +1033,9 @@ def test_llm_end_with_tool(handler_result_type: str, llm_tool: str):
         ChatAgentConfig(
             name="MyAgent",
             system_message=system_message,
+            use_functions_api=use_fn_api,
+            use_tools_api=use_tools_api,
+            use_tools=not use_fn_api,
         )
     )
     if llm_tool == "pair":
@@ -1042,8 +1064,7 @@ def test_llm_end_with_tool(handler_result_type: str, llm_tool: str):
 def test_agent_respond_only_tools(tool: str):
     """
     Test that we can have an agent that only responds to certain tools,
-    and no plain-text msgs, by defining the handle_message_fallback to
-    return AgentDone(content="")
+    and no plain-text msgs, by setting ChatAgentConfig.respond_only_tools=True.
     """
 
     class ATool(ToolMessage):
@@ -1094,28 +1115,25 @@ def test_agent_respond_only_tools(tool: str):
     if tool_class is not None:
         main_agent.enable_message(tool_class, use=True, handle=False)
 
-    class AliceAgent(ChatAgent):
-        def handle_message_fallback(self, msg: str | ChatDocument) -> Any:
-            if isinstance(msg, str) or len(msg.tool_messages) == 0:
-                return AgentDoneTool(content="")
-
-    alice_agent = AliceAgent(
+    alice_agent = ChatAgent(
         ChatAgentConfig(
             name="Alice",
             llm=MockLMConfig(response_fn=lambda x: x),
+            respond_tools_only=True,
         )
     )
     alice_agent.enable_message([ATool, AATool], use=False, handle=True)
 
-    class BobAgent(ChatAgent):
-        def handle_message_fallback(self, msg: str | ChatDocument) -> Any:
-            if isinstance(msg, str) or len(msg.tool_messages) == 0:
-                return AgentDoneTool(content="")
+    # class BobAgent(ChatAgent):
+    #     def handle_message_fallback(self, msg: str | ChatDocument) -> Any:
+    #         if isinstance(msg, str) or len(msg.tool_messages) == 0:
+    #             return AgentDoneTool(content="")
 
-    bob_agent = BobAgent(
+    bob_agent = ChatAgent(
         ChatAgentConfig(
             name="Bob",
             llm=MockLMConfig(response_fn=lambda x: x),
+            respond_tools_only=True,
         )
     )
     bob_agent.enable_message([BTool], use=False, handle=True)

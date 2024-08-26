@@ -184,7 +184,7 @@ async def test_llm_tool_message(
     llm_msg = await agent.llm_response_forget_async(prompt)
     assert isinstance(agent.get_tool_messages(llm_msg)[0], message_class)
 
-    agent_result = agent.handle_message(llm_msg)
+    agent_result = agent.handle_message(llm_msg).content
     assert result.lower() in agent_result.lower()
 
 

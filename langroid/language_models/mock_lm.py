@@ -10,6 +10,7 @@ from langroid.language_models.base import (
     OpenAIToolSpec,
     ToolChoiceTypes,
 )
+from langroid.utils.types import to_string
 
 
 def none_fn(x: str) -> None | str:
@@ -43,11 +44,11 @@ class MockLM(LanguageModel):
         # - response_dict
         # - response_fn
         # - default_response
+        mapped_response = self.config.response_dict.get(
+            msg, self.config.response_fn(msg) or self.config.default_response
+        )
         return lm.LLMResponse(
-            message=self.config.response_dict.get(
-                msg,
-                self.config.response_fn(msg) or self.config.default_response,
-            ),
+            message=to_string(mapped_response),
             cached=False,
         )
 

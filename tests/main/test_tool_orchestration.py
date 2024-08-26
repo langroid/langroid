@@ -1,4 +1,3 @@
-import json
 from typing import Optional
 
 import pytest
@@ -25,8 +24,8 @@ def test_llm_done_tool(
         def agent_response(
             self,
             msg: Optional[str | ChatDocument] = None,
-        ) -> Optional[ChatDocument]:
-            return self.create_agent_response(content=msg.content)
+        ) -> str:
+            return msg.content
 
     set_global(test_settings)
     DoneTool = lr.agent.tools.orchestration.DoneTool
@@ -59,8 +58,8 @@ def test_llm_done_tool(
     # test DoneTool in task
     task = lr.Task(agent, interactive=False)
 
-    result = task.run("12")  # 12 -> 6 -> 3 -> done
-    assert "3" in result.content
+    result = task.run(12, return_type=int)  # 12 -> 6 -> 3 -> done
+    assert result == 3
 
 
 def test_agent_done_tool(test_settings: Settings):
@@ -70,6 +69,7 @@ def test_agent_done_tool(test_settings: Settings):
     """
     set_global(test_settings)
     AgentDoneTool = lr.agent.tools.orchestration.AgentDoneTool
+    ResultTool = lr.agent.tools.orchestration.ResultTool
 
     class XTool(lr.ToolMessage):
         purpose = "to show x"
@@ -83,23 +83,25 @@ def test_agent_done_tool(test_settings: Settings):
         y: int
 
         def handle(self) -> AgentDoneTool:
-            return AgentDoneTool(content=str(self.x + self.y))
+            return AgentDoneTool(
+                content=self.x + self.y,  # can be of any type
+                tools=[ResultTool(arbitrary_obj=4)],
+            )
 
     class MyAgent(lr.ChatAgent):
+        # Note that agent_response needn't return a ChatDocument or str.
         def agent_response(
             self,
             msg: Optional[str | ChatDocument] = None,
-        ) -> Optional[ChatDocument]:
+        ) -> int | AgentDoneTool:
             value = int(str) if isinstance(msg, str) else int(msg.content)
             if value == 3:
-                return self.create_agent_response(
-                    tool_messages=[AgentDoneTool(content="3")]
-                )
+                return AgentDoneTool(content=3)
             else:
-                return self.create_agent_response(content=str(value))
+                return value
 
     agent = MyAgent(
-        lr.ChatAgentConfig(llm=MockLMConfig(response_fn=lambda x: str(int(x) + 1)))
+        lr.ChatAgentConfig(llm=MockLMConfig(response_fn=lambda x: int(x) + 1))
     )
     # use = False, since LLM is not generating any of these
     agent.enable_message(AgentDoneTool, use=False, handle=True)
@@ -108,16 +110,16 @@ def test_agent_done_tool(test_settings: Settings):
 
     # test agent generation of AgentDoneTool directly (in agent_response)
     task = lr.Task(agent, interactive=False)
-    result = task.run("1")
-    assert result.content == "3"
+    result = task.run(1, return_type=int)  # note, input, return-type needn't be str
+    assert result == 3
 
     class MyAgent(lr.ChatAgent):
-        def x_tool(self, msg: XTool) -> AgentDoneTool | str:
+        def x_tool(self, msg: XTool) -> AgentDoneTool | int:
             if msg.x == 3:
                 xy = XYTool(x=3, y=5)
                 return AgentDoneTool(content="xy", tools=[xy])
             else:
-                return str(msg.x)
+                return msg.x
 
     # Test agent generation of AgentDoneTool indirectly (in tool).
     # LLM generates next number via XTool, agent handles it.
@@ -125,13 +127,14 @@ def test_agent_done_tool(test_settings: Settings):
         lr.ChatAgentConfig(
             name="MyAgent",
             llm=MockLMConfig(
-                response_fn=lambda x: json.dumps(XTool(x=int(x) + 1).dict())
+                # note: response need not be str; will be converted to str via .json()
+                response_fn=lambda x: XTool(x=int(x) + 1)
             ),
         )
     )
 
     agent.enable_message(AgentDoneTool, use=False, handle=True)
-    agent.enable_message(XTool, use=False, handle=True)
+    agent.enable_message(XTool, use=True, handle=True)
 
     main_agent = lr.ChatAgent(
         lr.ChatAgentConfig(name="Main", llm=MockLMConfig(response_fn=lambda x: x))
@@ -141,11 +144,15 @@ def test_agent_done_tool(test_settings: Settings):
     main_task = lr.Task(main_agent, interactive=False)
     task = lr.Task(agent, interactive=False)
     main_task.add_sub_task(task)
-    result = main_task.run("1")
+    result = main_task.run(1, return_type=int)
     # when MyAgent sees x=3, it generates AgentDoneTool, with tools = [XYTool(3, 5)],
     # which is in turn handled by the MainAgent, to produce
     # AgentDoneTool(content=8)
-    assert result.content == "8"
+    assert result == 8
+
+    result = main_task.run(1, return_type=ResultTool)
+    assert isinstance(result, ResultTool)
+    assert result.arbitrary_obj == 4
 
 
 @pytest.mark.parametrize("use_functions_api", [True, False])
@@ -251,8 +258,10 @@ def test_orch_tools(
 
     task.add_sub_task([triple_task, reducer_task, even_task])
 
-    result = task.run("1200", turns=60)  # 1200 -> 120 -> 12 -> 6 -> 3 -> done
-    assert "3" in result.content
+    # 1200 -> 120 -> 12 -> 6 -> 3 -> done
+    result = task.run(1200, turns=60, return_type=float)
+
+    assert result == 3
 
 
 @pytest.mark.parametrize("use_functions_api", [True, False])
@@ -366,9 +375,10 @@ def test_send_tools(
 
     processor_task.add_sub_task([five_task, zero_task, three_task])
 
-    result = processor_task.run("180", turns=20)
+    result = processor_task.run(180, turns=20, return_type=int)
     # 180 -> 18 -> 15 -> 3 -> 1 -> done
-    assert result.content == "1"
+    assert result == 1
 
-    result = processor_task.run("250", turns=20)  # 250 -> 25 -> 5 -> 1 -> done
-    assert result.content == "1"
+    result = processor_task.run(250, turns=20, return_type=int)
+    # 250 -> 25 -> 5 -> 1 -> done
+    assert result == 1
