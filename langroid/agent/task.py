@@ -1000,9 +1000,10 @@ class Task:
             and not self.human_tried
             and not self.agent.has_tool_message_attempt(self.pending_message)
         ):
-            # When in interactive mode,
             # Give human first chance if they haven't been tried in last step,
             # and the msg is not a tool-call attempt;
+            # (When `interactive=False`, human is only allowed to respond only if
+            #  if explicitly addressed)
             # This ensures human gets a chance to respond,
             #   other than to a LLM tool-call.
             # When there's a tool msg attempt we want the
