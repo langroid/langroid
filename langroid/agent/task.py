@@ -726,8 +726,36 @@ class Task:
         if return_type is None:
             return_type = self.default_return_type
 
+        # Take a final strict decoding step
         if return_type is not None and return_type != ChatDocument:
-            return self.agent.from_ChatDocument(final_result, return_type)
+            parsed_result = self.agent.from_ChatDocument(final_result, return_type)
+
+            if (
+                parsed_result is None
+                and isinstance(self.agent, ChatAgent)
+                and issubclass(return_type, ToolMessage)
+            ):
+                strict_agent = self.agent[return_type]
+                schema = return_type.llm_function_schema(
+                    defaults=strict_agent.config.output_format_include_defaults
+                )
+                strict_result = strict_agent.llm_response(
+                    f"""
+                    A response adhering to the following JSON schema was expected:
+                    {schema}
+
+                    Please resubmit with the correct schema. 
+                    """
+                )
+
+                if strict_result is not None:
+                    parsed_result: Optional[T] = cast(
+                        Optional[T],
+                        strict_agent.from_ChatDocument(strict_result, return_type),
+                    )
+
+            return parsed_result
+
         return final_result
 
     @overload

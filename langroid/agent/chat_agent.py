@@ -1,5 +1,6 @@
 import copy
 import inspect
+import json
 import logging
 import textwrap
 from contextlib import ExitStack
@@ -157,6 +158,11 @@ class ChatAgent(Agent):
         self.llm_function_force: Optional[Dict[str, str]] = None
 
         self.output_format = config.output_format
+        # Consider only the required output type for tool call inference
+        if self.output_format is not None:
+            self.enabled_requests_for_inference = {
+                self.output_format.default_value("request")
+            }
 
         if self.config.enable_orchestration_tool_handling:
             # Only enable HANDLING by `agent_response`, NOT LLM generation of these.
@@ -587,6 +593,7 @@ class ChatAgent(Agent):
         """Returns a (shallow) copy of `self` with a forced output type."""
         clone = copy.copy(self)
         clone.output_format = output_type
+        clone.enabled_requests_for_inference = {output_type.default_value("request")}
         return clone
 
     def disable_message_handling(
@@ -664,6 +671,16 @@ class ChatAgent(Agent):
             if isinstance(message, str)
             else message.metadata.tool_ids if message is not None else []
         )
+
+        # If using strict output format, parse the output JSON
+        if self.output_format is not None:
+            try:
+                response.content_any = self.output_format.parse_obj(
+                    json.loads(response.content)
+                )
+            except Exception:
+                pass
+
         return response
 
     async def llm_response_async(
@@ -695,6 +712,16 @@ class ChatAgent(Agent):
             if isinstance(message, str)
             else message.metadata.tool_ids if message is not None else []
         )
+
+        # If using strict output format, parse the output JSON
+        if self.output_format is not None:
+            try:
+                response.content_any = self.output_format.parse_obj(
+                    json.loads(response.content)
+                )
+            except Exception:
+                pass
+
         return response
 
     def init_message_history(self) -> None:
@@ -902,11 +929,15 @@ class ChatAgent(Agent):
                 )
         output_format = None
         if self.output_format is not None:
+            spec = self.output_format.llm_function_schema(
+                defaults=self.config.output_format_include_defaults,
+            )
+            spec.parameters["additionalProperties"] = False
+
             output_format = OpenAIJsonSchemaSpec(
-                strict=self.output_format.default_value("strict"),
-                function=self.output_format.llm_function_schema(
-                    defaults=self.config.output_format_include_defaults
-                ),
+                # We always require that outputs strictly match the schema
+                strict=True,
+                function=spec,
             )
         return functions, fun_call, tools, force_tool, output_format
 
@@ -980,6 +1011,16 @@ class ChatAgent(Agent):
         self.oai_tool_id2call.update(
             {t.id: t for t in self.oai_tool_calls if t.id is not None}
         )
+
+        # If using strict output format, parse the output JSON
+        if self.output_format is not None:
+            try:
+                chat_doc.content_any = self.output_format.parse_obj(
+                    json.loads(chat_doc.content)
+                )
+            except Exception:
+                pass
+
         return chat_doc
 
     async def llm_response_messages_async(
@@ -1033,6 +1074,16 @@ class ChatAgent(Agent):
         self.oai_tool_id2call.update(
             {t.id: t for t in self.oai_tool_calls if t.id is not None}
         )
+
+        # If using strict output format, parse the output JSON
+        if self.output_format is not None:
+            try:
+                chat_doc.content_any = self.output_format.parse_obj(
+                    json.loads(chat_doc.content)
+                )
+            except Exception:
+                pass
+
         return chat_doc
 
     def _render_llm_response(
@@ -1140,6 +1191,15 @@ class ChatAgent(Agent):
         if len(self.message_history) > n_msgs:
             msg = self.message_history.pop()
             self._drop_msg_update_tool_calls(msg)
+
+        # If using strict output format, parse the output JSON
+        if self.output_format is not None:
+            try:
+                response.content_any = self.output_format.parse_obj(
+                    json.loads(response.content)
+                )
+            except Exception:
+                pass
 
         return response
 

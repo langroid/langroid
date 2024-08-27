@@ -125,6 +125,9 @@ class Agent(ABC):
         self.llm_tools_handled: Set[str] = set()
         self.llm_tools_usable: Set[str] = set()
         self.llm_tools_known: Set[str] = set()  # all known tools, handled/used or not
+        self.enabled_requests_for_inference: Optional[Set[str]] = (
+            None  # If None, we allow all
+        )
         self.interactive: bool | None = None
         self.token_stats_str = ""
         self.default_human_response: Optional[str] = None
@@ -1232,8 +1235,16 @@ class Agent(ABC):
         if isinstance(properties, dict):
             json_data = properties
         request = json_data.get("request")
+
         if request is None:
-            possible = [self.llm_tools_map[r] for r in self.llm_tools_handled]
+            if self.enabled_requests_for_inference is None:
+                possible = [self.llm_tools_map[r] for r in self.llm_tools_handled]
+            else:
+                allowable = self.enabled_requests_for_inference.intersection(
+                    self.llm_tools_handled
+                )
+                possible = [self.llm_tools_map[r] for r in allowable]
+
             default_keys = set(ToolMessage.__fields__.keys())
             request_keys = set(json_data.keys())
 
@@ -1389,7 +1400,6 @@ class Agent(ABC):
             value = tool.get_value_of_type(output_type)
             if value is not None:
                 return cast(T, value)
-
         return None
 
     def handle_tool_message(
