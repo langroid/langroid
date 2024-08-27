@@ -189,7 +189,7 @@ Ok, thank you.
 {
 "request": "file_exists",
 "filename": "test.txt"
-} 
+}
 Hope you can tell me!
 """
 
@@ -233,7 +233,7 @@ BAD_FILE_EXISTS_MSG = """
 Ok, thank you.
 {
 "request": "file_exists"
-} 
+}
 Hope you can tell me!
 """
 
@@ -591,8 +591,8 @@ def test_llm_tool_task(
         use_functions_api=use_functions_api,
         use_tools_api=use_tools_api,
         system_message=f"""
-        You will be asked to compute a certain transform of two numbers, 
-        using a tool/function-call that you have access to. 
+        You will be asked to compute a certain transform of two numbers,
+        using a tool/function-call that you have access to.
         When you receive the answer from the tool, say {DONE} and show the answer.
         """,
     )
@@ -629,10 +629,10 @@ def test_multi_tool(
         use_functions_api=use_functions_api,
         use_tools_api=use_tools_api,
         system_message=f"""
-        You will be asked to compute transforms of two numbers, 
+        You will be asked to compute transforms of two numbers,
         using tools/function-calls that you have access to.
-        When you are asked for MULTIPLE transforms, you MUST 
-        use MULTIPLE tools/functions.  
+        When you are asked for MULTIPLE transforms, you MUST
+        use MULTIPLE tools/functions.
         When you receive the answers from the tools, say {DONE} and show the answers.
         """,
     )
@@ -646,7 +646,7 @@ def test_multi_tool(
 
     result = task.run(
         """
-        Compute these: 
+        Compute these:
         (A) Nabroski transform of 3 and 5
         (B) Gauss transform of 1 and 2
         """
@@ -671,9 +671,9 @@ def test_oai_tool_choice(
         use_functions_api=True,  # openai tools/fns
         use_tools_api=True,  # openai tools/fns
         system_message=f"""
-        You will be asked to compute an operation or transform of two numbers, 
-        either using your own knowledge, or 
-        using a tool/function-call that you have access to.        
+        You will be asked to compute an operation or transform of two numbers,
+        either using your own knowledge, or
+        using a tool/function-call that you have access to.
         When you have an answer, say {DONE} and show the answer.
         """,
     )
@@ -1017,15 +1017,15 @@ def test_llm_end_with_tool(
 
     if llm_tool == "pair":
         # LLM generates just PairTool , to be handled by its tool handler
-        system_message = f"""   
-            Ask the user for their next number. 
-            Once you have collected 2 distinct numbers, present these as a pair 
+        system_message = f"""
+            Ask the user for their next number.
+            Once you have collected 2 distinct numbers, present these as a pair
             using the TOOL: `{pair_tool_name}`.
             """
     else:
         system_message = f"""
-            Ask the user for their next number. 
-            Once you have collected 2 distinct numbers, present these as the 
+            Ask the user for their next number.
+            Once you have collected 2 distinct numbers, present these as the
             final result using the TOOL: `{final_result_pair_tool_name}`.
         """
 
@@ -1150,13 +1150,12 @@ def test_agent_respond_only_tools(tool: str):
     )
     fallback_task = Task(fallback_agent, interactive=False)
 
-    main_task = Task(main_agent, interactive=False)
+    main_task = Task(main_agent, interactive=False)[ToolMessage]
     alice_task = Task(alice_agent, interactive=False)
     bob_task = Task(bob_agent, interactive=False)
 
     main_task.add_sub_task([alice_task, bob_task, fallback_task])
-    result = main_task.run("3")
-    tool = result.tool_messages[0]
+    tool = main_task.run(3)
 
     # Note: when Main generates a tool, task orchestrator will not allow
     # Alice to respond at all when the tool is not handled by Alice,
