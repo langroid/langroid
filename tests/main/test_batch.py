@@ -1,3 +1,4 @@
+import time
 from typing import Optional
 
 import pytest
@@ -21,15 +22,27 @@ from langroid.utils.constants import DONE
 from langroid.vector_store.base import VectorStoreConfig
 
 
+def process_int(x: str) -> str:
+    if int(x) == 0:
+        return str(int(x) + 1)
+    else:
+        time.sleep(2)
+        return str(int(x) + 1)
+
+
 class _TestChatAgentConfig(ChatAgentConfig):
     vecdb: VectorStoreConfig = None
-    llm = MockLMConfig(response_fn=lambda x: str(eval(x)))
+    llm = MockLMConfig(response_fn=lambda x: process_int(x))
 
 
 @pytest.mark.parametrize("batch_size", [1, 2, 3, None])
 @pytest.mark.parametrize("sequential", [True, False])
+@pytest.mark.parametrize("stop_on_first", [True, False])
 def test_task_batch(
-    test_settings: Settings, sequential: bool, batch_size: Optional[int]
+    test_settings: Settings,
+    sequential: bool,
+    batch_size: Optional[int],
+    stop_on_first: bool,
 ):
     set_global(test_settings)
     cfg = _TestChatAgentConfig()
@@ -46,23 +59,27 @@ def test_task_batch(
     # run clones of this task on these inputs
     N = 3
     questions = list(range(N))
-    expected_answers = [(i + 3) for i in range(N)]
+    expected_answers = [(i + 1) for i in range(N)]
 
     # batch run
     answers = run_batch_tasks(
         task,
         questions,
-        input_map=lambda x: str(x) + "+" + str(3),  # what to feed to each task
+        input_map=lambda x: str(x),  # what to feed to each task
         output_map=lambda x: x,  # how to process the result of each task
         sequential=sequential,
         batch_size=batch_size,
+        stop_on_first_result=stop_on_first,
     )
 
-    # expected_answers are simple numbers, but
-    # actual answers may be more wordy like "sum of 1 and 3 is 4",
-    # so we just check if the expected answer is contained in the actual answer
-    for e in expected_answers:
-        assert any(str(e) in a.content.lower() for a in answers)
+    if stop_on_first:
+        # only the task with input 0 succeeds since it's fastest
+        non_null_answer = [a for a in answers if a is not None][0]
+        assert non_null_answer is not None
+        assert non_null_answer.content == str(expected_answers[0])
+    else:
+        for e in expected_answers:
+            assert any(str(e) in a.content.lower() for a in answers)
 
 
 @pytest.mark.parametrize("batch_size", [1, 2, 3, None])
@@ -127,7 +144,12 @@ def test_task_batch_turns(
 
 
 @pytest.mark.parametrize("sequential", [True, False])
-def test_agent_llm_response_batch(test_settings: Settings, sequential: bool):
+@pytest.mark.parametrize("stop_on_first", [True, False])
+def test_agent_llm_response_batch(
+    test_settings: Settings,
+    sequential: bool,
+    stop_on_first: bool,
+):
     set_global(test_settings)
     cfg = _TestChatAgentConfig()
 
@@ -136,44 +158,54 @@ def test_agent_llm_response_batch(test_settings: Settings, sequential: bool):
     # get llm_response_async result on clones of this agent, on these inputs:
     N = 3
     questions = list(range(N))
-    expected_answers = [(i + 3) for i in range(N)]
+    expected_answers = [(i + 1) for i in range(N)]
 
     # batch run
     answers = run_batch_agent_method(
         agent,
         agent.llm_response_async,
         questions,
-        input_map=lambda x: str(x) + "+" + str(3),  # what to feed to each task
+        input_map=lambda x: str(x),  # what to feed to each task
         output_map=lambda x: x,  # how to process the result of each task
         sequential=sequential,
+        stop_on_first_result=stop_on_first,
     )
 
-    # expected_answers are simple numbers, but
-    # actual answers may be more wordy like "sum of 1 and 3 is 4",
-    # so we just check if the expected answer is contained in the actual answer
-    for e in expected_answers:
-        assert any(str(e) in a.content.lower() for a in answers)
+    if stop_on_first:
+        # only the task with input 0 succeeds since it's fastest
+        non_null_answer = [a for a in answers if a is not None][0]
+        assert non_null_answer is not None
+        assert non_null_answer.content == str(expected_answers[0])
+    else:
+        for e in expected_answers:
+            assert any(str(e) in a.content.lower() for a in answers)
 
     answers = llm_response_batch(
         agent,
         questions,
-        input_map=lambda x: str(x) + "+" + str(3),  # what to feed to each task
+        input_map=lambda x: str(x),  # what to feed to each task
         output_map=lambda x: x,  # how to process the result of each task
         sequential=sequential,
+        stop_on_first_result=stop_on_first,
     )
 
-    # expected_answers are simple numbers, but
-    # actual answers may be more wordy like "sum of 1 and 3 is 4",
-    # so we just check if the expected answer is contained in the actual answer
-    for e in expected_answers:
-        assert any(str(e) in a.content.lower() for a in answers)
+    if stop_on_first:
+        # only the task with input 0 succeeds since it's fastest
+        non_null_answer = [a for a in answers if a is not None][0]
+        assert non_null_answer is not None
+        assert non_null_answer.content == str(expected_answers[0])
+    else:
+        for e in expected_answers:
+            assert any(str(e) in a.content.lower() for a in answers)
 
 
+@pytest.mark.parametrize("stop_on_first", [True, False])
 @pytest.mark.parametrize("batch_size", [1, 2, 3, None])
 @pytest.mark.parametrize("sequential", [True, False])
 def test_task_gen_batch(
     test_settings: Settings,
     sequential: bool,
+    stop_on_first: bool,
     batch_size: Optional[int],
 ):
     set_global(test_settings)
@@ -184,8 +216,10 @@ def test_task_gen_batch(
                 case 0:
                     return str(x)
                 case 1:
+                    time.sleep(2)
                     return "hmm"
                 case _:
+                    time.sleep(2)
                     return str(2 * int(x))
 
         class _TestChatAgentConfig(ChatAgentConfig):
@@ -221,12 +255,20 @@ def test_task_gen_batch(
         task_gen,
         questions,
         sequential=sequential,
+        stop_on_first_result=stop_on_first,
         batch_size=batch_size,
     )
 
-    for answer, expected in zip(answers, expected_answers):
-        assert answer is not None
-        assert expected in answer.content.lower()
+    if stop_on_first:
+        # we've defined the first task to be fastest,
+        # so we should only get the answer from the first task
+        non_null_answer = [a for a in answers if a is not None][0]
+        assert "0" in non_null_answer.content
+    else:
+
+        for answer, expected in zip(answers, expected_answers):
+            assert answer is not None
+            assert expected in answer.content.lower()
 
 
 @pytest.mark.parametrize("batch_size", [None, 1, 2, 3])

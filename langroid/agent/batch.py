@@ -26,6 +26,7 @@ def run_batch_task_gen(
     items: list[T],
     input_map: Callable[[T], str | ChatDocument] = lambda x: str(x),
     output_map: Callable[[ChatDocument | None], U] = lambda x: x,  # type: ignore
+    stop_on_first_result: bool = False,
     sequential: bool = True,
     batch_size: Optional[int] = None,
     turns: int = -1,
@@ -45,6 +46,9 @@ def run_batch_task_gen(
             initial message to process
         output_map (Callable[[ChatDocument|str], U]): function to map result
             to final result
+        stop_on_first_result (bool): whether to stop after the first result.
+            In this case all other tasks are cancelled, and their corresponding
+            result is None in the returned list.
         sequential (bool): whether to run sequentially
             (e.g. some APIs such as ooba don't support concurrent requests)
         batch_size (Optional[int]): The number of tasks to run at a time,
@@ -66,17 +70,39 @@ def run_batch_task_gen(
         if task_i.agent.llm is not None:
             task_i.agent.llm.set_stream(False)
         task_i.agent.config.show_stats = False
-
-        result = await task_i.run_async(
-            input, turns=turns, max_cost=max_cost, max_tokens=max_tokens
-        )
-        return result
+        try:
+            result = await task_i.run_async(
+                input, turns=turns, max_cost=max_cost, max_tokens=max_tokens
+            )
+            return result
+        except asyncio.CancelledError:
+            task_i.kill()
+            raise
 
     async def _do_all(
         inputs: Iterable[str | ChatDocument], start_idx: int = 0
     ) -> list[U]:
         results: list[Optional[ChatDocument]] = []
-        if sequential:
+        if stop_on_first_result:
+            results = [None] * len(list(inputs))
+            tasks = [
+                asyncio.create_task(_do_task(input, i + start_idx))
+                for i, input in enumerate(inputs)
+            ]
+            try:
+                done, pending = await asyncio.wait(
+                    tasks, return_when=asyncio.FIRST_COMPLETED
+                )
+                for task in done:
+                    index = tasks.index(task)
+                    results[index] = await task
+            finally:
+                # Cancel all remaining tasks
+                for task in pending:
+                    task.cancel()
+                # Wait for cancellations to complete
+                await asyncio.gather(*pending, return_exceptions=True)
+        elif sequential:
             for i, input in enumerate(inputs):
                 try:
                     result = await _do_task(input, i + start_idx)
@@ -124,6 +150,7 @@ def run_batch_tasks(
     items: list[T],
     input_map: Callable[[T], str | ChatDocument] = lambda x: str(x),
     output_map: Callable[[ChatDocument | None], U] = lambda x: x,  # type: ignore
+    stop_on_first_result: bool = False,
     sequential: bool = True,
     batch_size: Optional[int] = None,
     turns: int = -1,
@@ -158,6 +185,7 @@ def run_batch_tasks(
         items,
         input_map,
         output_map,
+        stop_on_first_result,
         sequential,
         batch_size,
         turns,
@@ -176,6 +204,7 @@ def run_batch_agent_method(
     input_map: Callable[[Any], str | ChatDocument] = lambda x: str(x),
     output_map: Callable[[ChatDocument | None], Any] = lambda x: x,
     sequential: bool = True,
+    stop_on_first_result: bool = False,
 ) -> List[Any]:
     """
     Run the `method` on copies of `agent`, async/concurrently one per
@@ -225,7 +254,25 @@ def run_batch_agent_method(
         return output_map(result)
 
     async def _do_all() -> List[Any]:
-        if sequential:
+        if stop_on_first_result:
+            tasks = [
+                asyncio.create_task(_do_task(input, i))
+                for i, input in enumerate(inputs)
+            ]
+            results = [None] * len(tasks)
+            try:
+                done, pending = await asyncio.wait(
+                    tasks, return_when=asyncio.FIRST_COMPLETED
+                )
+                for task in done:
+                    index = tasks.index(task)
+                    results[index] = await task
+            finally:
+                for task in pending:
+                    task.cancel()
+                await asyncio.gather(*pending, return_exceptions=True)
+            return results
+        elif sequential:
             results = []
             for i, input in enumerate(inputs):
                 result = await _do_task(input, i)
@@ -249,6 +296,7 @@ def llm_response_batch(
     input_map: Callable[[Any], str | ChatDocument] = lambda x: str(x),
     output_map: Callable[[ChatDocument | None], Any] = lambda x: x,
     sequential: bool = True,
+    stop_on_first_result: bool = False,
 ) -> List[Any]:
     return run_batch_agent_method(
         agent,
@@ -257,6 +305,7 @@ def llm_response_batch(
         input_map=input_map,
         output_map=output_map,
         sequential=sequential,
+        stop_on_first_result=stop_on_first_result,
     )
 
 
@@ -266,6 +315,7 @@ def agent_response_batch(
     input_map: Callable[[Any], str | ChatDocument] = lambda x: str(x),
     output_map: Callable[[ChatDocument | None], Any] = lambda x: x,
     sequential: bool = True,
+    stop_on_first_result: bool = False,
 ) -> List[Any]:
     return run_batch_agent_method(
         agent,
@@ -274,4 +324,5 @@ def agent_response_batch(
         input_map=input_map,
         output_map=output_map,
         sequential=sequential,
+        stop_on_first_result=stop_on_first_result,
     )
