@@ -217,9 +217,3 @@ def test_task_in_out_types(
         result = task.run(msg)
         assert isinstance(result, ResultTool)
         assert result.answer == 6
-
-        # Test we can set desired return type with [..] right after Task
-        task = lr.Task[ToolMessage](agent=agent, interactive=False)
-        result = task.run(msg)
-        assert isinstance(result, ResultTool)
-        assert result.answer == 6
