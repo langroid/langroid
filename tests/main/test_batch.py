@@ -121,13 +121,13 @@ def test_task_batch_turns(
     # run clones of this task on these inputs
     N = 3
     questions = list(range(N))
-    expected_answers = [(i + 3) for i in range(N)]
+    expected_answers = [(i + 1) for i in range(N)]
 
     # batch run
     answers = run_batch_tasks(
         task,
         questions,
-        input_map=lambda x: str(x) + "+" + str(3),  # what to feed to each task
+        input_map=lambda x: str(x),  # what to feed to each task
         output_map=lambda x: x,  # how to process the result of each task
         sequential=sequential,
         batch_size=batch_size,
