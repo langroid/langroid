@@ -3,7 +3,7 @@ import inspect
 import logging
 import textwrap
 from contextlib import ExitStack
-from typing import Dict, List, Optional, Set, Tuple, Type, cast
+from typing import Dict, List, Optional, Self, Set, Tuple, Type, cast
 
 from rich import print
 from rich.console import Console
@@ -16,6 +16,7 @@ from langroid.language_models.base import (
     LLMFunctionSpec,
     LLMMessage,
     LLMResponse,
+    OpenAIJsonSchemaSpec,
     OpenAIToolSpec,
     Role,
     StreamingIfAllowed,
@@ -49,6 +50,10 @@ class ChatAgentConfig(AgentConfig):
             hence we set this to False by default.
         enable_orchestration_tool_handling: whether to enable handling of orchestration
             tools, e.g. ForwardTool, DoneTool, PassTool, etc.
+        output_format: Currently ONLY works with OpenAI LLMs; ensures that the output
+            is a JSON matching the corresponding schema via grammar-based decoding
+        output_format_include_defaults: Whether to include fields with default arguments
+            in the output schema
     """
 
     system_message: str = "You are a helpful assistant."
@@ -57,6 +62,8 @@ class ChatAgentConfig(AgentConfig):
     use_functions_api: bool = True
     use_tools_api: bool = False
     enable_orchestration_tool_handling: bool = True
+    output_format: Optional[type[ToolMessage]] = None
+    output_format_include_defaults: bool = True
 
     def _set_fn_or_tools(self, fn_available: bool) -> None:
         """
@@ -144,9 +151,12 @@ class ChatAgent(Agent):
         self.system_json_tool_instructions: str = ""
 
         self.llm_functions_map: Dict[str, LLMFunctionSpec] = {}
+        self.llm_functions_class_map: Dict[str, type[ToolMessage]] = {}
         self.llm_functions_handled: Set[str] = set()
         self.llm_functions_usable: Set[str] = set()
         self.llm_function_force: Optional[Dict[str, str]] = None
+
+        self.output_format = config.output_format
 
         if self.config.enable_orchestration_tool_handling:
             # Only enable HANDLING by `agent_response`, NOT LLM generation of these.
@@ -532,6 +542,7 @@ class ChatAgent(Agent):
                 )
             llm_function = message_class.llm_function_schema(defaults=include_defaults)
             self.llm_functions_map[request] = llm_function
+            self.llm_functions_class_map[request] = message_class
             if force:
                 self.llm_function_force = dict(name=request)
             else:
@@ -571,6 +582,12 @@ class ChatAgent(Agent):
         if self.config.use_tools:
             self.system_json_tool_instructions = self.json_format_rules()
         self.system_tool_instructions = self.tool_instructions()
+
+    def __getitem__(self, output_type: type[ToolMessage]) -> Self:
+        """Returns a (shallow) copy of `self` with a forced output type."""
+        clone = copy.copy(self)
+        clone.output_format = output_type
+        return clone
 
     def disable_message_handling(
         self,
@@ -846,8 +863,12 @@ class ChatAgent(Agent):
         str | Dict[str, str],
         Optional[List[OpenAIToolSpec]],
         Optional[Dict[str, Dict[str, str] | str]],
+        Optional[OpenAIJsonSchemaSpec],
     ]:
-        """Get function/tool spec arguments for OpenAI-compatible LLM API call"""
+        """
+        Get function/tool spec/output format arguments for
+        OpenAI-compatible LLM API call
+        """
         functions: Optional[List[LLMFunctionSpec]] = None
         fun_call: str | Dict[str, str] = "none"
         tools: Optional[List[OpenAIToolSpec]] = None
@@ -864,7 +885,11 @@ class ChatAgent(Agent):
                 )
             else:
                 tools = [
-                    OpenAIToolSpec(type="function", function=self.llm_functions_map[f])
+                    OpenAIToolSpec(
+                        type="function",
+                        strict=self.llm_functions_class_map[f].default_value("strict"),
+                        function=self.llm_functions_map[f],
+                    )
                     for f in self.llm_functions_usable
                 ]
                 force_tool = (
@@ -875,7 +900,15 @@ class ChatAgent(Agent):
                         "function": {"name": self.llm_function_force["name"]},
                     }
                 )
-        return functions, fun_call, tools, force_tool
+        output_format = None
+        if self.output_format is not None:
+            output_format = OpenAIJsonSchemaSpec(
+                strict=self.output_format.default_value("strict"),
+                function=self.output_format.llm_function_schema(
+                    defaults=self.config.output_format_include_defaults
+                ),
+            )
+        return functions, fun_call, tools, force_tool, output_format
 
     def llm_response_messages(
         self,
@@ -911,7 +944,9 @@ class ChatAgent(Agent):
                 stack.enter_context(cm)
             if self.llm.get_stream() and not settings.quiet:
                 console.print(f"[green]{self.indent}", end="")
-            functions, fun_call, tools, force_tool = self._function_args()
+            functions, fun_call, tools, force_tool, output_format = (
+                self._function_args()
+            )
             assert self.llm is not None
             response = self.llm.chat(
                 messages,
@@ -920,6 +955,7 @@ class ChatAgent(Agent):
                 tool_choice=force_tool or tool_choice,
                 functions=functions,
                 function_call=fun_call,
+                response_format=output_format,
             )
         if self.llm.get_stream():
             self.callbacks.finish_llm_stream(
@@ -957,7 +993,7 @@ class ChatAgent(Agent):
         """
         assert self.config.llm is not None and self.llm is not None
         output_len = output_len or self.config.llm.max_output_tokens
-        functions, fun_call, tools, force_tool = self._function_args()
+        functions, fun_call, tools, force_tool, output_format = self._function_args()
         assert self.llm is not None
 
         streamer = noop_fn
@@ -972,6 +1008,7 @@ class ChatAgent(Agent):
             tool_choice=force_tool or tool_choice,
             functions=functions,
             function_call=fun_call,
+            response_format=output_format,
         )
         if self.llm.get_stream():
             self.callbacks.finish_llm_stream(

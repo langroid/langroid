@@ -145,7 +145,27 @@ class OpenAIToolCall(BaseModel):
 
 class OpenAIToolSpec(BaseModel):
     type: ToolTypes
+    strict: Optional[bool] = None
     function: LLMFunctionSpec
+
+
+class OpenAIJsonSchemaSpec(BaseModel):
+    strict: Optional[bool] = None
+    function: LLMFunctionSpec
+
+    def to_dict(self) -> Dict[str, Any]:
+        json_schema: Dict[str, Any] = {
+            "name": self.function.name,
+            "description": self.function.description,
+            "schema": self.function.parameters,
+        }
+        if self.strict is not None:
+            json_schema["strict"] = self.strict
+
+        return {
+            "type": "json_schema",
+            "json_schema": json_schema,
+        }
 
 
 class LLMTokenUsage(BaseModel):
@@ -483,6 +503,7 @@ class LanguageModel(ABC):
         tool_choice: ToolChoiceTypes | Dict[str, str | Dict[str, str]] = "auto",
         functions: Optional[List[LLMFunctionSpec]] = None,
         function_call: str | Dict[str, str] = "auto",
+        response_format: Optional[OpenAIJsonSchemaSpec] = None,
     ) -> LLMResponse:
         """
         Get chat-completion response from LLM.
@@ -509,6 +530,7 @@ class LanguageModel(ABC):
         tool_choice: ToolChoiceTypes | Dict[str, str | Dict[str, str]] = "auto",
         functions: Optional[List[LLMFunctionSpec]] = None,
         function_call: str | Dict[str, str] = "auto",
+        response_format: Optional[OpenAIJsonSchemaSpec] = None,
     ) -> LLMResponse:
         """Async version of `chat`. See `chat` for details."""
         pass

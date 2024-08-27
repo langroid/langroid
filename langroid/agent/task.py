@@ -16,6 +16,7 @@ from typing import (
     Dict,
     List,
     Optional,
+    Self,
     Tuple,
     Type,
     TypeVar,
@@ -591,7 +592,7 @@ class Task:
         for t in self.sub_tasks:
             t.reset_all_sub_tasks()
 
-    def __getitem__(self, return_type: type) -> Task:
+    def __getitem__(self, return_type: type) -> Self:
         """Returns a (shallow) copy of `self` with a default return type."""
         clone = copy.copy(self)
         clone.default_return_type = return_type

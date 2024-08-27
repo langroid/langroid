@@ -38,6 +38,7 @@ from langroid.language_models.base import (
     LLMMessage,
     LLMResponse,
     LLMTokenUsage,
+    OpenAIJsonSchemaSpec,
     OpenAIToolCall,
     OpenAIToolSpec,
     Role,
@@ -202,6 +203,15 @@ def gpt_3_5_warning() -> None:
     )
 
 
+@cache
+def parallel_strict_warning() -> None:
+    logging.warning(
+        "OpenAI tool calling in strict mode is not supported when "
+        "parallel tool calls are made. Disable parallel tool calling "
+        "to ensure correct behavior."
+    )
+
+
 def noop() -> None:
     """Does nothing."""
     return None
@@ -258,6 +268,7 @@ class OpenAIGPTConfig(LLMConfig):
     chat_model: str = defaultOpenAIChatModel
     completion_model: str = defaultOpenAICompletionModel
     run_on_first_use: Callable[[], None] = noop
+    parallel_tool_calls: Optional[bool] = None
     # a string that roughly matches a HuggingFace chat_template,
     # e.g. "mistral-instruct-v0.2 (a fuzzy search is done to find the closest match)
     formatter: str | None = None
@@ -1237,6 +1248,7 @@ class OpenAIGPT(LanguageModel):
         tool_choice: ToolChoiceTypes | Dict[str, str | Dict[str, str]] = "auto",
         functions: Optional[List[LLMFunctionSpec]] = None,
         function_call: str | Dict[str, str] = "auto",
+        response_format: Optional[OpenAIJsonSchemaSpec] = None,
     ) -> LLMResponse:
         self.run_on_first_use()
 
@@ -1270,7 +1282,13 @@ class OpenAIGPT(LanguageModel):
             return self.generate(prompt=prompt, max_tokens=max_tokens)
         try:
             return self._chat(
-                messages, max_tokens, tools, tool_choice, functions, function_call
+                messages,
+                max_tokens,
+                tools,
+                tool_choice,
+                functions,
+                function_call,
+                response_format,
             )
         except Exception as e:
             # log and re-raise exception
@@ -1285,6 +1303,7 @@ class OpenAIGPT(LanguageModel):
         tool_choice: ToolChoiceTypes | Dict[str, str | Dict[str, str]] = "auto",
         functions: Optional[List[LLMFunctionSpec]] = None,
         function_call: str | Dict[str, str] = "auto",
+        response_format: Optional[OpenAIJsonSchemaSpec] = None,
     ) -> LLMResponse:
         self.run_on_first_use()
 
@@ -1332,6 +1351,7 @@ class OpenAIGPT(LanguageModel):
                 tool_choice,
                 functions,
                 function_call,
+                response_format,
             )
             return result
         except Exception as e:
@@ -1399,6 +1419,7 @@ class OpenAIGPT(LanguageModel):
         tool_choice: ToolChoiceTypes | Dict[str, str | Dict[str, str]] = "auto",
         functions: Optional[List[LLMFunctionSpec]] = None,
         function_call: str | Dict[str, str] = "auto",
+        response_format: Optional[OpenAIJsonSchemaSpec] = None,
     ) -> Dict[str, Any]:
         """Prepare args for LLM chat-completion API call"""
         if isinstance(messages, str):
@@ -1433,18 +1454,30 @@ class OpenAIGPT(LanguageModel):
                 )
             )
         if tools is not None:
+            if self.config.parallel_tool_calls is not None:
+                args["parallel_tool_calls"] = self.config.parallel_tool_calls
+
+            if any(t.strict for t in tools) and (
+                self.config.parallel_tool_calls is None
+                or self.config.parallel_tool_calls
+            ):
+                parallel_strict_warning()
             args.update(
                 dict(
                     tools=[
                         dict(
                             type="function",
-                            function=t.function.dict(),
+                            function=t.function.dict()
+                            | ({"strict": t.strict} if t.strict is not None else {}),
                         )
                         for t in tools
                     ],
                     tool_choice=tool_choice,
                 )
             )
+        if response_format is not None:
+            args["response_format"] = response_format.to_dict()
+
         return args
 
     def _process_chat_completion_response(
@@ -1530,6 +1563,7 @@ class OpenAIGPT(LanguageModel):
         tool_choice: ToolChoiceTypes | Dict[str, str | Dict[str, str]] = "auto",
         functions: Optional[List[LLMFunctionSpec]] = None,
         function_call: str | Dict[str, str] = "auto",
+        response_format: Optional[OpenAIJsonSchemaSpec] = None,
     ) -> LLMResponse:
         """
         ChatCompletion API call to OpenAI.
@@ -1556,6 +1590,7 @@ class OpenAIGPT(LanguageModel):
             tool_choice,
             functions,
             function_call,
+            response_format,
         )
         cached, hashed_key, response = self._chat_completions_with_backoff(**args)
         if self.get_stream() and not cached:
@@ -1576,6 +1611,7 @@ class OpenAIGPT(LanguageModel):
         tool_choice: ToolChoiceTypes | Dict[str, str | Dict[str, str]] = "auto",
         functions: Optional[List[LLMFunctionSpec]] = None,
         function_call: str | Dict[str, str] = "auto",
+        response_format: Optional[OpenAIJsonSchemaSpec] = None,
     ) -> LLMResponse:
         """
         Async version of _chat(). See that function for details.
@@ -1587,6 +1623,7 @@ class OpenAIGPT(LanguageModel):
             tool_choice,
             functions,
             function_call,
+            response_format,
         )
         cached, hashed_key, response = await self._achat_completions_with_backoff(
             **args
