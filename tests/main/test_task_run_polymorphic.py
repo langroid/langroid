@@ -102,7 +102,7 @@ def test_task_in_out_types(
             system_message=f"""
             When you receive a PAIR of numbers, request the Cool Transform of the pair,
             using the TOOL: `{cool_tool_name}`
-            
+
             When you receive a SINGLE number, generate a PAIR of numbers from it,
             using the TOOL: `{gen_pair_tool_name}`
             """,
@@ -211,3 +211,15 @@ def test_task_in_out_types(
         assert isinstance(result, dict)
         assert result["answer"] == 6
         assert result["comment"] != ""
+
+        # Test we can set desired return type when creating task, using [...] syntax
+        task = lr.Task(agent=agent, interactive=False)[ResultTool]
+        result = task.run(msg)
+        assert isinstance(result, ResultTool)
+        assert result.answer == 6
+
+        # Test we can set desired return type with [..] right after Task
+        task = lr.Task[ToolMessage](agent=agent, interactive=False)
+        result = task.run(msg)
+        assert isinstance(result, ResultTool)
+        assert result.answer == 6
