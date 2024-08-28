@@ -34,7 +34,7 @@ def run_batch_task_gen(
     handle_exceptions: bool = False,
     max_cost: float = 0.0,
     max_tokens: int = 0,
-) -> list[U]:
+) -> list[Optional[U]]:
     """
     Generate and run copies of a task async/concurrently one per item in `items` list.
     For each item, apply `input_map` to get the initial message to process.
@@ -45,7 +45,9 @@ def run_batch_task_gen(
         input_map (Callable[[T], str|ChatDocument]): function to map item to
             initial message to process
         output_map (Callable[[ChatDocument|str], U]): function to map result
-            to final result
+            to final result. If stop_on_first_result is enabled, then
+            map any invalid output to None. We continue until some non-None
+            result is obtained.
         stop_on_first_result (bool): whether to stop after the first result.
             In this case all other tasks are cancelled, and their corresponding
             result is None in the returned list.
@@ -65,7 +67,11 @@ def run_batch_task_gen(
     """
     inputs = [input_map(item) for item in items]
 
-    async def _do_task(input: str | ChatDocument, i: int) -> Optional[ChatDocument]:
+    async def _do_task(
+            input: str | ChatDocument,
+            i: int,
+            return_idx: bool=False,
+    ) -> Optional[ChatDocument] | tuple[int, Optional[ChatDocument]]:
         task_i = gen_task(i)
         if task_i.agent.llm is not None:
             task_i.agent.llm.set_stream(False)
@@ -74,34 +80,49 @@ def run_batch_task_gen(
             result = await task_i.run_async(
                 input, turns=turns, max_cost=max_cost, max_tokens=max_tokens
             )
-            return result
+            if return_idx:
+                return i, result
+            else:
+                return result
         except asyncio.CancelledError:
             task_i.kill()
             raise
 
     async def _do_all(
         inputs: Iterable[str | ChatDocument], start_idx: int = 0
-    ) -> list[U]:
+    ) -> list[Optional[U]]:
         results: list[Optional[ChatDocument]] = []
         if stop_on_first_result:
             results = [None] * len(list(inputs))
-            tasks = [
-                asyncio.create_task(_do_task(input, i + start_idx))
+            tasks = set(
+                asyncio.create_task(_do_task(input, i + start_idx, return_idx=True))
                 for i, input in enumerate(inputs)
-            ]
-            try:
-                done, pending = await asyncio.wait(
-                    tasks, return_when=asyncio.FIRST_COMPLETED
-                )
-                for task in done:
-                    index = tasks.index(task)
-                    results[index] = await task
-            finally:
-                # Cancel all remaining tasks
-                for task in pending:
-                    task.cancel()
-                # Wait for cancellations to complete
-                await asyncio.gather(*pending, return_exceptions=True)
+            )
+            while tasks:
+                try:
+                    done, tasks = await asyncio.wait(
+                        tasks, return_when=asyncio.FIRST_COMPLETED
+                    )
+                    for task in done:
+                        index, result = task.result()
+                        results[index] = output_map(result)
+
+                    if any(r is not None for r in results):
+                        return results
+                except BaseException as e:
+                    if not handle_exceptions:
+                        raise e
+                finally:
+                    # Cancel all remaining tasks
+                    for task in tasks:
+                        task.cancel()
+                    # Wait for cancellations to complete
+                    try: 
+                        await asyncio.gather(*tasks, return_exceptions=True)
+                    except BaseException as e:
+                        if not handle_exceptions:
+                            raise e
+            return results
         elif sequential:
             for i, input in enumerate(inputs):
                 try:
