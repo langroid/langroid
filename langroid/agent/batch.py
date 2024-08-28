@@ -1,7 +1,7 @@
 import asyncio
 import copy
 import inspect
-from typing import Any, Callable, Coroutine, Iterable, List, Optional, TypeVar
+from typing import Any, Callable, Coroutine, Iterable, List, Optional, TypeVar, cast
 
 from dotenv import load_dotenv
 
@@ -68,9 +68,10 @@ def run_batch_task_gen(
     inputs = [input_map(item) for item in items]
 
     async def _do_task(
-            input: str | ChatDocument,
-            i: int,
-            return_idx: bool=False,
+        input: str | ChatDocument,
+        i: int,
+        return_i: Optional[int] = None,
+        return_idx: bool = False,
     ) -> Optional[ChatDocument] | tuple[int, Optional[ChatDocument]]:
         task_i = gen_task(i)
         if task_i.agent.llm is not None:
@@ -81,7 +82,7 @@ def run_batch_task_gen(
                 input, turns=turns, max_cost=max_cost, max_tokens=max_tokens
             )
             if return_idx:
-                return i, result
+                return (return_i if return_i is not None else i), result
             else:
                 return result
         except asyncio.CancelledError:
@@ -93,9 +94,11 @@ def run_batch_task_gen(
     ) -> list[Optional[U]]:
         results: list[Optional[ChatDocument]] = []
         if stop_on_first_result:
-            results = [None] * len(list(inputs))
+            outputs: list[Optional[U]] = [None] * len(list(inputs))
             tasks = set(
-                asyncio.create_task(_do_task(input, i + start_idx, return_idx=True))
+                asyncio.create_task(
+                    _do_task(input, i + start_idx, return_i=i, return_idx=True)
+                )
                 for i, input in enumerate(inputs)
             )
             while tasks:
@@ -104,11 +107,14 @@ def run_batch_task_gen(
                         tasks, return_when=asyncio.FIRST_COMPLETED
                     )
                     for task in done:
-                        index, result = task.result()
-                        results[index] = output_map(result)
+                        idx_result = task.result()
+                        if not isinstance(idx_result, tuple):
+                            continue
+                        index, output = idx_result
+                        outputs[index] = output_map(output)
 
-                    if any(r is not None for r in results):
-                        return results
+                    if any(r is not None for r in outputs):
+                        return outputs
                 except BaseException as e:
                     if not handle_exceptions:
                         raise e
@@ -117,16 +123,18 @@ def run_batch_task_gen(
                     for task in tasks:
                         task.cancel()
                     # Wait for cancellations to complete
-                    try: 
+                    try:
                         await asyncio.gather(*tasks, return_exceptions=True)
                     except BaseException as e:
                         if not handle_exceptions:
                             raise e
-            return results
+            return outputs
         elif sequential:
             for i, input in enumerate(inputs):
                 try:
-                    result = await _do_task(input, i + start_idx)
+                    result: Optional[ChatDocument] = await _do_task(
+                        input, i + start_idx
+                    )  # type: ignore
                 except BaseException as e:
                     if handle_exceptions:
                         result = None
@@ -134,9 +142,12 @@ def run_batch_task_gen(
                         raise e
                 results.append(result)
         else:
-            results_with_exceptions = await asyncio.gather(
-                *(_do_task(input, i + start_idx) for i, input in enumerate(inputs)),
-                return_exceptions=handle_exceptions,
+            results_with_exceptions = cast(
+                list[Optional[ChatDocument | BaseException]],
+                await asyncio.gather(
+                    *(_do_task(input, i + start_idx) for i, input in enumerate(inputs)),
+                    return_exceptions=handle_exceptions,
+                ),
             )
 
             results = [
@@ -146,7 +157,7 @@ def run_batch_task_gen(
 
         return list(map(output_map, results))
 
-    results: List[U] = []
+    results: List[Optional[U]] = []
     if batch_size is None:
         msg = message or f"[bold green]Running {len(items)} tasks:"
 
@@ -160,8 +171,11 @@ def run_batch_task_gen(
             complete_str = f", {start_idx} complete" if start_idx > 0 else ""
             msg = message or f"[bold green]Running {len(items)} tasks{complete_str}:"
 
-            with status(msg), SuppressLoggerWarnings():
-                results.extend(asyncio.run(_do_all(batch, start_idx=start_idx)))
+            if stop_on_first_result and any(r is not None for r in results):
+                results.extend([None] * len(batch))
+            else:
+                with status(msg), SuppressLoggerWarnings():
+                    results.extend(asyncio.run(_do_all(batch, start_idx=start_idx)))
 
     return results
 
@@ -177,7 +191,7 @@ def run_batch_tasks(
     turns: int = -1,
     max_cost: float = 0.0,
     max_tokens: int = 0,
-) -> List[U]:
+) -> List[Optional[U]]:
     """
     Run copies of `task` async/concurrently one per item in `items` list.
     For each item, apply `input_map` to get the initial message to process.

@@ -1253,12 +1253,12 @@ class DocChatAgent(ChatAgent):
             interactive=False,
         )
 
-        extracts = run_batch_tasks(
+        extracts: list[str] = run_batch_tasks(
             task,
             passages,
             input_map=lambda msg: msg.content,
             output_map=lambda ans: ans.content if ans is not None else NO_ANSWER,
-        )
+        )  # type: ignore
 
         # Caution: Retain ALL other fields in the Documents (which could be
         # other than just `content` and `metadata`), while simply replacing
