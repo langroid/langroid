@@ -48,9 +48,10 @@ def run_batch_task_gen(
             to final result. If stop_on_first_result is enabled, then
             map any invalid output to None. We continue until some non-None
             result is obtained.
-        stop_on_first_result (bool): whether to stop after the first result.
-            In this case all other tasks are cancelled, and their corresponding
-            result is None in the returned list.
+        stop_on_first_result (bool): whether to stop after the first valid
+            (not-None) result. In this case all other tasks are
+            cancelled, and their corresponding result is None in the
+            returned list.
         sequential (bool): whether to run sequentially
             (e.g. some APIs such as ooba don't support concurrent requests)
         batch_size (Optional[int]): The number of tasks to run at a time,
@@ -63,7 +64,8 @@ def run_batch_task_gen(
 
 
     Returns:
-        list[Any]: list of final results
+        list[Optional[U]]: list of final results. Always list[U] if
+        `stop_on_first_result` is disabled
     """
     inputs = [input_map(item) for item in items]
 
@@ -209,7 +211,8 @@ def run_batch_tasks(
         max_tokens: int: maximum token usage (in and out) (default 0 for unlimited)
 
     Returns:
-        list[Any]: list of final results
+        list[Optional[U]]: list of final results. Always list[U] if
+        `stop_on_first_result` is disabled
     """
     message = f"[bold green]Running {len(items)} copies of {task.name}..."
     return run_batch_task_gen(
