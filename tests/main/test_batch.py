@@ -214,12 +214,12 @@ def test_task_gen_batch(
         def response_fn(x):
             match i:
                 case 0:
+                    time.sleep(10)
                     return str(x)
                 case 1:
-                    time.sleep(2)
                     return "hmm"
                 case _:
-                    time.sleep(2)
+                    time.sleep(10)
                     return str(2 * int(x))
 
         class _TestChatAgentConfig(ChatAgentConfig):
@@ -227,24 +227,11 @@ def test_task_gen_batch(
             llm = MockLMConfig(response_fn=lambda x: response_fn(x))
 
         cfg = _TestChatAgentConfig()
-        if i == 0:
-            return Task(
-                ChatAgent(cfg),
-                name=f"Test-{i}",
-                single_round=True,
-            )
-        elif i == 1:
-            return Task(
-                ChatAgent(cfg),
-                name=f"Test-{i}",
-                single_round=True,
-            )
-        else:
-            return Task(
-                ChatAgent(cfg),
-                name=f"Test-{i}",
-                single_round=True,
-            )
+        return Task(
+            ChatAgent(cfg),
+            name=f"Test-{i}",
+            single_round=True,
+        )
 
     # run the generated tasks on these inputs
     questions = list(range(3))
@@ -263,7 +250,7 @@ def test_task_gen_batch(
         # we've defined the first task to be fastest,
         # so we should only get the answer from the first task
         non_null_answer = [a for a in answers if a is not None][0]
-        assert "0" in non_null_answer.content
+        assert "hmm" in non_null_answer.content
     else:
 
         for answer, expected in zip(answers, expected_answers):
