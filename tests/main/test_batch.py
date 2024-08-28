@@ -1,3 +1,4 @@
+import asyncio
 import time
 from typing import Optional
 
@@ -211,20 +212,20 @@ def test_task_gen_batch(
     set_global(test_settings)
 
     def task_gen(i: int) -> Task:
-        def response_fn(x):
+        async def response_fn_async(x):
             match i:
                 case 0:
-                    time.sleep(10)
+                    await asyncio.sleep(0.1)
                     return str(x)
                 case 1:
                     return "hmm"
                 case _:
-                    time.sleep(10)
+                    await asyncio.sleep(0.2)
                     return str(2 * int(x))
 
         class _TestChatAgentConfig(ChatAgentConfig):
             vecdb: VectorStoreConfig = None
-            llm = MockLMConfig(response_fn=lambda x: response_fn(x))
+            llm = MockLMConfig(response_fn_async=response_fn_async)
 
         cfg = _TestChatAgentConfig()
         return Task(
@@ -247,12 +248,15 @@ def test_task_gen_batch(
     )
 
     if stop_on_first:
-        # we've defined the first task to be fastest,
-        # so we should only get the answer from the first task
-        non_null_answer = [a for a in answers if a is not None][0]
-        assert "hmm" in non_null_answer.content
-    else:
+        non_null_answer = [a for a in answers if a is not None][0].content
 
+        # Unless the first task is scheduled alone,
+        # the second task should always finish first
+        if batch_size == 1:
+            assert "0" in non_null_answer
+        else:
+            assert "hmm" in non_null_answer
+    else:
         for answer, expected in zip(answers, expected_answers):
             assert answer is not None
             assert expected in answer.content.lower()
