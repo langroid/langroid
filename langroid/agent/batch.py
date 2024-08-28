@@ -73,7 +73,7 @@ def run_batch_task_gen(
         input: str | ChatDocument,
         i: int,
         return_idx: Optional[int] = None,
-    ) -> Optional[ChatDocument] | tuple[int, Optional[ChatDocument]]:
+    ) -> BaseException | Optional[ChatDocument] | tuple[int, Optional[ChatDocument]]:
         task_i = gen_task(i)
         if task_i.agent.llm is not None:
             task_i.agent.llm.set_stream(False)
@@ -86,9 +86,17 @@ def run_batch_task_gen(
                 return return_idx, result
             else:
                 return result
-        except asyncio.CancelledError:
+        except asyncio.CancelledError as e:
             task_i.kill()
-            raise
+            if handle_exceptions:
+                return e
+            else:
+                raise e
+        except BaseException as e:
+            if handle_exceptions:
+                return e
+            else:
+                raise e
 
     async def _do_all(
         inputs: Iterable[str | ChatDocument], start_idx: int = 0
@@ -114,9 +122,6 @@ def run_batch_task_gen(
 
                     if any(r is not None for r in outputs):
                         return outputs
-                except BaseException as e:
-                    if not handle_exceptions:
-                        raise e
                 finally:
                     # Cancel all remaining tasks
                     for task in tasks:
@@ -130,22 +135,19 @@ def run_batch_task_gen(
             return outputs
         elif sequential:
             for i, input in enumerate(inputs):
-                try:
-                    result: Optional[ChatDocument] = await _do_task(
-                        input, i + start_idx
-                    )  # type: ignore
-                except BaseException as e:
-                    if handle_exceptions:
-                        result = None
-                    else:
-                        raise e
+                result: Optional[ChatDocument] | BaseException = await _do_task(
+                    input, i + start_idx
+                )  # type: ignore
+
+                if isinstance(result, BaseException):
+                    result = None
+
                 results.append(result)
         else:
             results_with_exceptions = cast(
                 list[Optional[ChatDocument | BaseException]],
                 await asyncio.gather(
                     *(_do_task(input, i + start_idx) for i, input in enumerate(inputs)),
-                    return_exceptions=handle_exceptions,
                 ),
             )
 
