@@ -70,8 +70,7 @@ def run_batch_task_gen(
     async def _do_task(
         input: str | ChatDocument,
         i: int,
-        return_i: Optional[int] = None,
-        return_idx: bool = False,
+        return_idx: Optional[int] = None,
     ) -> Optional[ChatDocument] | tuple[int, Optional[ChatDocument]]:
         task_i = gen_task(i)
         if task_i.agent.llm is not None:
@@ -81,8 +80,8 @@ def run_batch_task_gen(
             result = await task_i.run_async(
                 input, turns=turns, max_cost=max_cost, max_tokens=max_tokens
             )
-            if return_idx:
-                return (return_i if return_i is not None else i), result
+            if return_idx is not None:
+                return return_idx, result
             else:
                 return result
         except asyncio.CancelledError:
@@ -96,9 +95,7 @@ def run_batch_task_gen(
         if stop_on_first_result:
             outputs: list[Optional[U]] = [None] * len(list(inputs))
             tasks = set(
-                asyncio.create_task(
-                    _do_task(input, i + start_idx, return_i=i, return_idx=True)
-                )
+                asyncio.create_task(_do_task(input, i + start_idx, return_idx=i))
                 for i, input in enumerate(inputs)
             )
             while tasks:
