@@ -1,7 +1,7 @@
 import asyncio
 import copy
 import inspect
-from typing import Any, Callable, Coroutine, Iterable, List, Optional, TypeVar
+from typing import Any, Callable, Coroutine, Iterable, List, Optional, TypeVar, cast
 
 from dotenv import load_dotenv
 
@@ -26,6 +26,7 @@ def run_batch_task_gen(
     items: list[T],
     input_map: Callable[[T], str | ChatDocument] = lambda x: str(x),
     output_map: Callable[[ChatDocument | None], U] = lambda x: x,  # type: ignore
+    stop_on_first_result: bool = False,
     sequential: bool = True,
     batch_size: Optional[int] = None,
     turns: int = -1,
@@ -33,7 +34,7 @@ def run_batch_task_gen(
     handle_exceptions: bool = False,
     max_cost: float = 0.0,
     max_tokens: int = 0,
-) -> list[U]:
+) -> list[Optional[U]]:
     """
     Generate and run copies of a task async/concurrently one per item in `items` list.
     For each item, apply `input_map` to get the initial message to process.
@@ -44,7 +45,13 @@ def run_batch_task_gen(
         input_map (Callable[[T], str|ChatDocument]): function to map item to
             initial message to process
         output_map (Callable[[ChatDocument|str], U]): function to map result
-            to final result
+            to final result. If stop_on_first_result is enabled, then
+            map any invalid output to None. We continue until some non-None
+            result is obtained.
+        stop_on_first_result (bool): whether to stop after the first valid
+            (not-None) result. In this case all other tasks are
+            cancelled, and their corresponding result is None in the
+            returned list.
         sequential (bool): whether to run sequentially
             (e.g. some APIs such as ooba don't support concurrent requests)
         batch_size (Optional[int]): The number of tasks to run at a time,
@@ -57,39 +64,91 @@ def run_batch_task_gen(
 
 
     Returns:
-        list[Any]: list of final results
+        list[Optional[U]]: list of final results. Always list[U] if
+        `stop_on_first_result` is disabled
     """
     inputs = [input_map(item) for item in items]
 
-    async def _do_task(input: str | ChatDocument, i: int) -> Optional[ChatDocument]:
+    async def _do_task(
+        input: str | ChatDocument,
+        i: int,
+        return_idx: Optional[int] = None,
+    ) -> BaseException | Optional[ChatDocument] | tuple[int, Optional[ChatDocument]]:
         task_i = gen_task(i)
         if task_i.agent.llm is not None:
             task_i.agent.llm.set_stream(False)
         task_i.agent.config.show_stats = False
-
-        result = await task_i.run_async(
-            input, turns=turns, max_cost=max_cost, max_tokens=max_tokens
-        )
-        return result
+        try:
+            result = await task_i.run_async(
+                input, turns=turns, max_cost=max_cost, max_tokens=max_tokens
+            )
+            if return_idx is not None:
+                return return_idx, result
+            else:
+                return result
+        except asyncio.CancelledError as e:
+            task_i.kill()
+            if handle_exceptions:
+                return e
+            else:
+                raise e
+        except BaseException as e:
+            if handle_exceptions:
+                return e
+            else:
+                raise e
 
     async def _do_all(
         inputs: Iterable[str | ChatDocument], start_idx: int = 0
-    ) -> list[U]:
+    ) -> list[Optional[U]]:
         results: list[Optional[ChatDocument]] = []
-        if sequential:
-            for i, input in enumerate(inputs):
+        if stop_on_first_result:
+            outputs: list[Optional[U]] = [None] * len(list(inputs))
+            tasks = set(
+                asyncio.create_task(_do_task(input, i + start_idx, return_idx=i))
+                for i, input in enumerate(inputs)
+            )
+            while tasks:
                 try:
-                    result = await _do_task(input, i + start_idx)
-                except BaseException as e:
-                    if handle_exceptions:
-                        result = None
-                    else:
-                        raise e
+                    done, tasks = await asyncio.wait(
+                        tasks, return_when=asyncio.FIRST_COMPLETED
+                    )
+                    for task in done:
+                        idx_result = task.result()
+                        if not isinstance(idx_result, tuple):
+                            continue
+                        index, output = idx_result
+                        outputs[index] = output_map(output)
+
+                    if any(r is not None for r in outputs):
+                        return outputs
+                finally:
+                    # Cancel all remaining tasks
+                    for task in tasks:
+                        task.cancel()
+                    # Wait for cancellations to complete
+                    try:
+                        await asyncio.gather(*tasks, return_exceptions=True)
+                    except BaseException as e:
+                        if not handle_exceptions:
+                            raise e
+            return outputs
+        elif sequential:
+            for i, input in enumerate(inputs):
+                result: Optional[ChatDocument] | BaseException = await _do_task(
+                    input, i + start_idx
+                )  # type: ignore
+
+                if isinstance(result, BaseException):
+                    result = None
+
                 results.append(result)
         else:
-            results_with_exceptions = await asyncio.gather(
-                *(_do_task(input, i + start_idx) for i, input in enumerate(inputs)),
-                return_exceptions=handle_exceptions,
+            results_with_exceptions = cast(
+                list[Optional[ChatDocument | BaseException]],
+                await asyncio.gather(
+                    *(_do_task(input, i + start_idx) for i, input in enumerate(inputs)),
+                ),
             )
 
             results = [
@@ -99,7 +158,7 @@ def run_batch_task_gen(
 
         return list(map(output_map, results))
 
-    results: List[U] = []
+    results: List[Optional[U]] = []
     if batch_size is None:
         msg = message or f"[bold green]Running {len(items)} tasks:"
 
@@ -113,8 +172,11 @@ def run_batch_task_gen(
             complete_str = f", {start_idx} complete" if start_idx > 0 else ""
             msg = message or f"[bold green]Running {len(items)} tasks{complete_str}:"
 
-            with status(msg), SuppressLoggerWarnings():
-                results.extend(asyncio.run(_do_all(batch, start_idx=start_idx)))
+            if stop_on_first_result and any(r is not None for r in results):
+                results.extend([None] * len(batch))
+            else:
+                with status(msg), SuppressLoggerWarnings():
+                    results.extend(asyncio.run(_do_all(batch, start_idx=start_idx)))
 
     return results
 
@@ -124,12 +186,13 @@ def run_batch_tasks(
     items: list[T],
     input_map: Callable[[T], str | ChatDocument] = lambda x: str(x),
     output_map: Callable[[ChatDocument | None], U] = lambda x: x,  # type: ignore
+    stop_on_first_result: bool = False,
     sequential: bool = True,
     batch_size: Optional[int] = None,
     turns: int = -1,
     max_cost: float = 0.0,
     max_tokens: int = 0,
-) -> List[U]:
+) -> List[Optional[U]]:
     """
     Run copies of `task` async/concurrently one per item in `items` list.
     For each item, apply `input_map` to get the initial message to process.
@@ -150,7 +213,8 @@ def run_batch_tasks(
         max_tokens: int: maximum token usage (in and out) (default 0 for unlimited)
 
     Returns:
-        list[Any]: list of final results
+        list[Optional[U]]: list of final results. Always list[U] if
+        `stop_on_first_result` is disabled
     """
     message = f"[bold green]Running {len(items)} copies of {task.name}..."
     return run_batch_task_gen(
@@ -158,6 +222,7 @@ def run_batch_tasks(
         items,
         input_map,
         output_map,
+        stop_on_first_result,
         sequential,
         batch_size,
         turns,
@@ -176,6 +241,7 @@ def run_batch_agent_method(
     input_map: Callable[[Any], str | ChatDocument] = lambda x: str(x),
     output_map: Callable[[ChatDocument | None], Any] = lambda x: x,
     sequential: bool = True,
+    stop_on_first_result: bool = False,
 ) -> List[Any]:
     """
     Run the `method` on copies of `agent`, async/concurrently one per
@@ -225,7 +291,25 @@ def run_batch_agent_method(
         return output_map(result)
 
     async def _do_all() -> List[Any]:
-        if sequential:
+        if stop_on_first_result:
+            tasks = [
+                asyncio.create_task(_do_task(input, i))
+                for i, input in enumerate(inputs)
+            ]
+            results = [None] * len(tasks)
+            try:
+                done, pending = await asyncio.wait(
+                    tasks, return_when=asyncio.FIRST_COMPLETED
+                )
+                for task in done:
+                    index = tasks.index(task)
+                    results[index] = await task
+            finally:
+                for task in pending:
+                    task.cancel()
+                await asyncio.gather(*pending, return_exceptions=True)
+            return results
+        elif sequential:
             results = []
             for i, input in enumerate(inputs):
                 result = await _do_task(input, i)
@@ -249,6 +333,7 @@ def llm_response_batch(
     input_map: Callable[[Any], str | ChatDocument] = lambda x: str(x),
     output_map: Callable[[ChatDocument | None], Any] = lambda x: x,
     sequential: bool = True,
+    stop_on_first_result: bool = False,
 ) -> List[Any]:
     return run_batch_agent_method(
         agent,
@@ -257,6 +342,7 @@ def llm_response_batch(
         input_map=input_map,
         output_map=output_map,
         sequential=sequential,
+        stop_on_first_result=stop_on_first_result,
     )
 
 
@@ -266,6 +352,7 @@ def agent_response_batch(
     input_map: Callable[[Any], str | ChatDocument] = lambda x: str(x),
     output_map: Callable[[ChatDocument | None], Any] = lambda x: x,
     sequential: bool = True,
+    stop_on_first_result: bool = False,
 ) -> List[Any]:
     return run_batch_agent_method(
         agent,
@@ -274,4 +361,5 @@ def agent_response_batch(
         input_map=input_map,
         output_map=output_map,
         sequential=sequential,
+        stop_on_first_result=stop_on_first_result,
     )
