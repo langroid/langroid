@@ -82,7 +82,6 @@ def main(
         embedding=embed_cfg,
         replace_collection=False,
         document_class=MusicianDocument,
-        flatten=False,
     )
     config = DocChatAgentConfig(
         name="MusicianBot",
