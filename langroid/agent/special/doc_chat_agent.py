@@ -49,7 +49,6 @@ from langroid.parsing.search import (
 from langroid.parsing.table_loader import describe_dataframe
 from langroid.parsing.url_loader import URLLoader
 from langroid.parsing.urls import get_list_from_user, get_urls_paths_bytes_indices
-from langroid.parsing.utils import batched
 from langroid.prompts.prompts_config import PromptsConfig
 from langroid.prompts.templates import SUMMARY_ANSWER_PROMPT_GPT4
 from langroid.utils.constants import NO_ANSWER
@@ -137,7 +136,6 @@ class DocChatAgentConfig(ChatAgentConfig):
     rerank_diversity: bool = True  # rerank to maximize diversity?
     rerank_periphery: bool = True  # rerank to avoid Lost In the Middle effect?
     rerank_after_adding_context: bool = True  # rerank after adding context window?
-    embed_batch_size: int = 500  # get embedding of at most this many at a time
     cache: bool = True  # cache results
     debug: bool = False
     stream: bool = True  # allow streaming where needed
@@ -400,10 +398,9 @@ class DocChatAgent(ChatAgent):
         if split:
             docs = self.parser.split(docs)
         else:
-            if self.config.n_neighbor_chunks > 0:
-                self.parser.add_window_ids(docs)
+            self.parser.add_window_ids(docs)
+            # we're not splitting, so we mark each doc as a chunk
             for d in docs:
-                # we're not splitting, so we treat each doc as a chunk
                 d.metadata.is_chunk = True
         if self.vecdb is None:
             raise ValueError("VecDB not set")
@@ -426,10 +423,9 @@ class DocChatAgent(ChatAgent):
                         + d.content
                     )
         docs = docs[: self.config.parsing.max_chunks]
-        # add embeddings in batches, to stay under limit of embeddings API
-        batches = list(batched(docs, self.config.embed_batch_size))
-        for batch in batches:
-            self.vecdb.add_documents(batch)
+        # vecdb should take care of adding docs in batches;
+        # batching can be controlled via vecdb.config.batch_size
+        self.vecdb.add_documents(docs)
         self.original_docs_length = self.doc_length(docs)
         self.setup_documents(docs, filter=self.config.filter)
         return len(docs)

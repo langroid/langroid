@@ -206,7 +206,7 @@ class FlatMovieDoc(Document):
     )
     genre: str = Field(..., description="The genre of the movie.")
     rating: float = Field(..., description="The rating of the movie.")
-    metadata: DocMetaData = DocMetaData()
+    metadata: DocMetaData = Field(default_factory=DocMetaData)
 
 
 def test_lance_doc_chat_agent_df_query_plan(test_settings: Settings):
@@ -259,12 +259,12 @@ def test_lance_doc_chat_agent_df_query_plan(test_settings: Settings):
     "query, expected",
     [
         (
-            "Tell me about a movie about birds rated over 9",
-            "GodPapa",
-        ),
-        (
             "Average rating of Science Fiction movies?",
             "9",
+        ),
+        (
+            "Tell me about a movie about birds rated over 9",
+            "GodPapa",
         ),
         (
             "Which Science Fiction movie is rated highest?",
