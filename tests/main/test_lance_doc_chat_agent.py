@@ -206,6 +206,8 @@ class FlatMovieDoc(Document):
     )
     genre: str = Field(..., description="The genre of the movie.")
     rating: float = Field(..., description="The rating of the movie.")
+    # Use factory to ensure different metadata (especially id) for each doc --
+    # important for proper working of doc ingest and retrieval
     metadata: DocMetaData = Field(default_factory=DocMetaData)
 
 

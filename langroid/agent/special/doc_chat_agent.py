@@ -398,7 +398,8 @@ class DocChatAgent(ChatAgent):
         if split:
             docs = self.parser.split(docs)
         else:
-            self.parser.add_window_ids(docs)
+            if self.config.n_neighbor_chunks > 0:
+                self.parser.add_window_ids(docs)
             # we're not splitting, so we mark each doc as a chunk
             for d in docs:
                 d.metadata.is_chunk = True
