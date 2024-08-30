@@ -27,7 +27,7 @@ def find_fuzzy_matches_in_docs(
     k: int,
     words_before: int | None = None,
     words_after: int | None = None,
-) -> List[Document]:
+) -> List[Tuple[Document, float]]:
     """
     Find approximate matches of the query in the docs and return surrounding
     characters.
@@ -35,6 +35,7 @@ def find_fuzzy_matches_in_docs(
     Args:
         query (str): The search string.
         docs (List[Document]): List of Document objects to search through.
+        docs_clean (List[Document]): List of Document objects with cleaned content.
         k (int): Number of best matches to return.
         words_before (int|None): Number of words to include before each match.
             Default None => return max
@@ -42,8 +43,7 @@ def find_fuzzy_matches_in_docs(
             Default None => return max
 
     Returns:
-        List[Document]: List of Documents containing the matches,
-            including the given number of words around the match.
+        List[Tuple[Document,float]]: List of (Document, score) tuples.
     """
     if len(docs) == 0:
         return []
@@ -54,19 +54,19 @@ def find_fuzzy_matches_in_docs(
         scorer=fuzz.partial_ratio,
     )
 
-    real_matches = [m for m, score in best_matches if score > 50]
+    real_matches = [(m, score) for m, score in best_matches if score > 50]
     # find the original docs that corresponding to the matches
     orig_doc_matches = []
-    for i, m in enumerate(real_matches):
+    for i, (m, s) in enumerate(real_matches):
         for j, doc_clean in enumerate(docs_clean):
             if m in doc_clean.content:
-                orig_doc_matches.append(docs[j])
+                orig_doc_matches.append((docs[j], s))
                 break
     if words_after is None and words_before is None:
         return orig_doc_matches
     if len(orig_doc_matches) == 0:
         return []
-    if set(orig_doc_matches[0].__fields__) != {"content", "metadata"}:
+    if set(orig_doc_matches[0][0].__fields__) != {"content", "metadata"}:
         # If there are fields beyond just content and metadata,
         # we do NOT want to create new document objects with content fields
         # based on words_before and words_after, since we don't know how to
@@ -74,7 +74,7 @@ def find_fuzzy_matches_in_docs(
         return orig_doc_matches
 
     contextual_matches = []
-    for match in orig_doc_matches:
+    for match, score in orig_doc_matches:
         choice_text = match.content
         contexts = []
         while choice_text != "":
@@ -89,9 +89,12 @@ def find_fuzzy_matches_in_docs(
             choice_text = " ".join(words[end_pos:])
         if len(contexts) > 0:
             contextual_matches.append(
-                Document(
-                    content=" ... ".join(contexts),
-                    metadata=match.metadata,
+                (
+                    Document(
+                        content=" ... ".join(contexts),
+                        metadata=match.metadata,
+                    ),
+                    score,
                 )
             )
 

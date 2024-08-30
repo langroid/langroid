@@ -400,7 +400,11 @@ class DocChatAgent(ChatAgent):
         if split:
             docs = self.parser.split(docs)
         else:
-            self.parser.add_window_ids(docs)
+            if self.config.n_neighbor_chunks > 0:
+                self.parser.add_window_ids(docs)
+            for d in docs:
+                # we're not splitting, so we treat each doc as a chunk
+                d.metadata.is_chunk = True
         if self.vecdb is None:
             raise ValueError("VecDB not set")
 
@@ -894,7 +898,9 @@ class DocChatAgent(ChatAgent):
             )
         return docs_scores
 
-    def get_fuzzy_matches(self, query: str, multiple: int) -> List[Document]:
+    def get_fuzzy_matches(
+        self, query: str, multiple: int
+    ) -> List[Tuple[Document, float]]:
         # find similar docs using fuzzy matching:
         # these may sometimes be more likely to contain a relevant verbatim extract
         with status("[cyan]Finding fuzzy matches in chunks..."):
@@ -909,8 +915,8 @@ class DocChatAgent(ChatAgent):
                 self.chunked_docs,
                 self.chunked_docs_clean,
                 k=self.config.parsing.n_similar_docs * multiple,
-                words_before=self.config.n_fuzzy_neighbor_words,
-                words_after=self.config.n_fuzzy_neighbor_words,
+                words_before=self.config.n_fuzzy_neighbor_words or None,
+                words_after=self.config.n_fuzzy_neighbor_words or None,
             )
         return fuzzy_match_docs
 
@@ -1127,12 +1133,14 @@ class DocChatAgent(ChatAgent):
         # ]
 
         if self.config.use_bm25_search:
+            # TODO: Add score threshold in config
             docs_scores = self.get_similar_chunks_bm25(query, retrieval_multiple)
             passages += [d for (d, _) in docs_scores]
 
         if self.config.use_fuzzy_match:
-            fuzzy_match_docs = self.get_fuzzy_matches(query, retrieval_multiple)
-            passages += fuzzy_match_docs
+            # TODO: Add score threshold in config
+            fuzzy_match_doc_scores = self.get_fuzzy_matches(query, retrieval_multiple)
+            passages += [d for (d, _) in fuzzy_match_doc_scores]
 
         # keep unique passages
         id2passage = {p.id(): p for p in passages}
