@@ -49,7 +49,6 @@ from langroid.parsing.search import (
 from langroid.parsing.table_loader import describe_dataframe
 from langroid.parsing.url_loader import URLLoader
 from langroid.parsing.urls import get_list_from_user, get_urls_paths_bytes_indices
-from langroid.parsing.utils import batched
 from langroid.prompts.prompts_config import PromptsConfig
 from langroid.prompts.templates import SUMMARY_ANSWER_PROMPT_GPT4
 from langroid.utils.constants import NO_ANSWER
@@ -137,7 +136,6 @@ class DocChatAgentConfig(ChatAgentConfig):
     rerank_diversity: bool = True  # rerank to maximize diversity?
     rerank_periphery: bool = True  # rerank to avoid Lost In the Middle effect?
     rerank_after_adding_context: bool = True  # rerank after adding context window?
-    embed_batch_size: int = 500  # get embedding of at most this many at a time
     cache: bool = True  # cache results
     debug: bool = False
     stream: bool = True  # allow streaming where needed
@@ -400,7 +398,11 @@ class DocChatAgent(ChatAgent):
         if split:
             docs = self.parser.split(docs)
         else:
-            self.parser.add_window_ids(docs)
+            if self.config.n_neighbor_chunks > 0:
+                self.parser.add_window_ids(docs)
+            # we're not splitting, so we mark each doc as a chunk
+            for d in docs:
+                d.metadata.is_chunk = True
         if self.vecdb is None:
             raise ValueError("VecDB not set")
 
@@ -422,10 +424,9 @@ class DocChatAgent(ChatAgent):
                         + d.content
                     )
         docs = docs[: self.config.parsing.max_chunks]
-        # add embeddings in batches, to stay under limit of embeddings API
-        batches = list(batched(docs, self.config.embed_batch_size))
-        for batch in batches:
-            self.vecdb.add_documents(batch)
+        # vecdb should take care of adding docs in batches;
+        # batching can be controlled via vecdb.config.batch_size
+        self.vecdb.add_documents(docs)
         self.original_docs_length = self.doc_length(docs)
         self.setup_documents(docs, filter=self.config.filter)
         return len(docs)
@@ -894,7 +895,9 @@ class DocChatAgent(ChatAgent):
             )
         return docs_scores
 
-    def get_fuzzy_matches(self, query: str, multiple: int) -> List[Document]:
+    def get_fuzzy_matches(
+        self, query: str, multiple: int
+    ) -> List[Tuple[Document, float]]:
         # find similar docs using fuzzy matching:
         # these may sometimes be more likely to contain a relevant verbatim extract
         with status("[cyan]Finding fuzzy matches in chunks..."):
@@ -909,8 +912,8 @@ class DocChatAgent(ChatAgent):
                 self.chunked_docs,
                 self.chunked_docs_clean,
                 k=self.config.parsing.n_similar_docs * multiple,
-                words_before=self.config.n_fuzzy_neighbor_words,
-                words_after=self.config.n_fuzzy_neighbor_words,
+                words_before=self.config.n_fuzzy_neighbor_words or None,
+                words_after=self.config.n_fuzzy_neighbor_words or None,
             )
         return fuzzy_match_docs
 
@@ -1127,12 +1130,14 @@ class DocChatAgent(ChatAgent):
         # ]
 
         if self.config.use_bm25_search:
+            # TODO: Add score threshold in config
             docs_scores = self.get_similar_chunks_bm25(query, retrieval_multiple)
             passages += [d for (d, _) in docs_scores]
 
         if self.config.use_fuzzy_match:
-            fuzzy_match_docs = self.get_fuzzy_matches(query, retrieval_multiple)
-            passages += fuzzy_match_docs
+            # TODO: Add score threshold in config
+            fuzzy_match_doc_scores = self.get_fuzzy_matches(query, retrieval_multiple)
+            passages += [d for (d, _) in fuzzy_match_doc_scores]
 
         # keep unique passages
         id2passage = {p.id(): p for p in passages}

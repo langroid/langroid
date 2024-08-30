@@ -65,10 +65,11 @@ def test_find_match_with_surrounding_words(
 ):
     query = "sample"
     k = 1
+    # returns a list of tuples (Document, score)
     results = find_fuzzy_matches_in_docs(
         query, original_docs, sample_docs, k, words_before, words_after
     )
-    assert all(e in results[0].content for e in expected)
+    assert all(e in results[0][0].content for e in expected)
 
 
 def test_empty_docs():
