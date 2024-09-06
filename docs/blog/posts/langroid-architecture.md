@@ -106,7 +106,7 @@ simple yet versatile orchestration mechanism that seamlessly handles:
 - sub-task delegation
 
 We view an agent as a message transformer; 
-it may transform an incoming message using one of its three ``native'' responder methods, all of which have the same 
+it may transform an incoming message using one of its three "native" responder methods, all of which have the same 
 function signature: `string -> string`. These methods are:
 
 - `llm_response` returns the LLM's response to the input message.
