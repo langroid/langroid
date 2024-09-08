@@ -1,10 +1,13 @@
 """
 Barebones example of a single agent using 3 tools.
-
+Similar to 1-agent-3-tools.py, but here the task is set up
+with `interactive=False`, meaning user input is awaited only
+when user is explicitly addressed using an addressing prefix.
 """
 
 from typing import List, Tuple
 
+from langroid.utils.constants import AT
 import langroid as lr
 
 # (1) DEFINE THE TOOLS
@@ -72,15 +75,17 @@ class NumberAgent(lr.ChatAgent):
         return f"Added {msg.number} to stored number => {self.secret}"
 
     def show(self, msg: ShowTool) -> str:
-        return f"HERE IS MY STORED SECRET NUMBER! {self.secret}"
+        return f"Inform the user that the SECRET NUMBER is {self.secret}"
 
 
 # (3) CREATE THE AGENT
 agent_config = lr.ChatAgentConfig(
     name="NumberAgent",
-    system_message="""
+    system_message=f"""
     When the user's request matches one of your available tools, use it, 
     otherwise respond directly to the user.
+    NOTE: Whenever you want to address the user directly, you MUST
+    use "{AT}User", followed by your message. 
     """,
 )
 
@@ -95,7 +100,8 @@ agent.enable_message(ShowTool)
 
 
 # (5) CREATE AND RUN THE TASK
-task = lr.Task(agent, interactive=True)
+task_config = lr.TaskConfig(addressing_prefix=AT)
+task = lr.Task(agent, interactive=False, config=task_config)
 
 """
 Note: try saying these when it waits for user input:
@@ -103,7 +109,7 @@ Note: try saying these when it waits for user input:
 add 10
 update 50
 add 3
-show <--- in this case remember to hit enter when it waits for your input.
+show 
 """
 
 task.run()
