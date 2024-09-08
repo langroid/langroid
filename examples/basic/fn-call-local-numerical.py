@@ -5,8 +5,9 @@ Function-calling example using a local LLM, with ollama.
 a structured response, typically a JSON object, instead of a plain text response,
 which is then interpreted by your code to perform some action.
 This is also referred to in various scenarios as "Tools", "Actions" or "Plugins".
+See more here: https://langroid.github.io/langroid/quick-start/chat-agent-tool/
 
-This script is designed to have a basic ChatAgent (powered by a LocalLLM)
+This script is designed to have a basic ChatAgent (powered by an Open-LLM)
 engage in a multi-round conversation where the user may occasionally
 ask for the "Polinsky transform" of a number, which requires the LLM to
 use a `Polinsky` tool/function-call. This is a fictitious transform,
@@ -19,28 +20,25 @@ to a few different types of user messages:
 - user asks a general question -> LLM should answer the question directly
 - user asks for the Polinsky transform of a number -> LLM should use the Polinsky tool
 - result from applying Polinsky transform -> LLM should present this to the user
-- user says there was a format error in using the Polinsky tool -> LLM should try this tool again
+- user (tool-handler) says there was a format error in using the Polinsky tool -> LLM
+    should try this tool again
 
 Many models quickly get confused in a multi-round conversation like this.
-However `dolphin-mixtral` seems to do well here.
+However (as of Sep 2024), `llama-3.1-70b` seems to do well here (we run this via groq).
 
 Run like this --
 
-python3 examples/basic/fn-call-local-numerical.py -m <local_model_name>
+python3 examples/basic/fn-call-local-numerical.py -m groq/llama-3.1-70b-versatile
 
-Local model with best results is dolphin-mixtral:
-```
-ollama run dolphin-mixtral
-python3 examples/basic/fn-call-local-numerical.py -m ollama/dolphin-mixtral:latest
-```
+(if the optional -m <model_name> is not provided, it defaults to GPT-4o).
 
-See here for how to set up a Local LLM to work with Langroid:
+See here for ways to set up a Local/Open LLM to work with Langroid:
 https://langroid.github.io/langroid/tutorials/local-llm-setup/
 
 """
 
 import os
-from typing import List
+from typing import List, Optional
 import fire
 
 import langroid as lr
@@ -49,6 +47,7 @@ from langroid.utils.configuration import settings
 from langroid.agent.tool_message import ToolMessage
 import langroid.language_models as lm
 from langroid.agent.chat_document import ChatDocument
+from langroid.agent.tools.orchestration import ForwardTool
 
 DEFAULT_LLM = lm.OpenAIChatModel.GPT4o
 
@@ -66,18 +65,12 @@ class PolinskyTool(lr.agent.ToolMessage):
 
     request: str = "polinsky"
     purpose: str = (
-        "To respond to user request for the Polinsky transform of a <number>."
+        """
+        To respond to user request for the Polinsky transform of a <number>.
+        NOTE: ONLY USE THIS TOOL AFTER THE USER ASKS FOR A POLINSKY TRANSFORM. 
+        """
     )
     number: int
-
-    @classmethod
-    def json_instructions(cls, tool: bool = True) -> str:
-        inst = super().json_instructions()
-        return f"""
-        {inst}
-        
-        ONLY USE THIS TOOL AFTER THE USER ASKS FOR A POLINSKY TRANSFORM.
-        """
 
     @classmethod
     def examples(cls) -> List["ToolMessage"]:
@@ -93,35 +86,39 @@ class PolinskyTool(lr.agent.ToolMessage):
 
 
 class MyChatAgent(lr.ChatAgent):
-    tool_called: bool = False
+    def init_state(self) -> None:
+        self.tool_expected = False
 
     def polinsky(self, msg: PolinskyTool) -> str:
         """Handle LLM's structured output if it matches Polinsky tool"""
-        self.tool_called = True
+        self.tool_expected = False
         result = msg.number * 3 + 1
         response = f"""
         SUCCESS! The Polinksy transform of {msg.number} is {result}.
-        Present this result to me, and ask for another number.
+        Present this result to the user, and ask what they need help with.
         """
         return response
 
-    def handle_message_fallback(
-        self, msg: str | ChatDocument
-    ) -> str | ChatDocument | None:
-        """Fallback method when LLM does not generate a tool,
-        and agent ends up handling the msg"""
+    def llm_response(
+        self, message: Optional[str | ChatDocument] = None
+    ) -> Optional[ChatDocument]:
+        self.tool_expected = True
+        return super().llm_response(message)
+
+    def user_response(
+        self,
+        msg: Optional[str | ChatDocument] = None,
+    ) -> Optional[ChatDocument]:
+        self.tool_expected = False
+        return super().user_response(msg)
+
+    def handle_message_fallback(self, msg: str | ChatDocument) -> ForwardTool:
+        """
+        We end up here when there was no recognized tool msg from the LLM;
+        In this case forward the message to the user using ForwardTool.
+        """
         if isinstance(msg, ChatDocument) and msg.metadata.sender == "LLM":
-            if self.tool_called:
-                self.tool_called = False
-                return "Ask the user what they need help with"
-            else:
-                return """
-                    You must use the "polinsky" tool/function to 
-                    request the Polinsky transform of a number.
-                    You either forgot to use it, or you used it with the wrong format.
-                    Make sure all fields are filled out and pay attention to the 
-                    required types of the fields.
-                    """
+            return ForwardTool(agent="User")
 
 
 def app(
@@ -190,7 +187,7 @@ def app(
                 YOU(Assistant): "The polinsky transform of 5 is 16. What else can I help with?"
                 ME(User): "The answer is 16. What is the Polinsky transform of 19?"
                 YOU(Assistant): <polinsky tool request in JSON format>
-        4. When I say there was an error in using the `polinsky` function/tool,
+        4. If you receive an error msg when using the `polinsky` function/tool,
            you must try the function/tool again with the same number.
               Example:
                ME(User): "There was an error in your use of the polinsky tool:..."
@@ -205,7 +202,7 @@ def app(
     agent.enable_message(PolinskyTool)
 
     # (5) Create task and run it to start an interactive loop
-    task = lr.Task(agent)
+    task = lr.Task(agent, interactive=False)
     task.run("Can you help me with some questions?")
 
 

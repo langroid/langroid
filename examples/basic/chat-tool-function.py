@@ -13,6 +13,7 @@ python3 examples/basic/chat-tool-function.py -m ollama/mistral:7b-instruct-v0.2-
 
 import langroid as lr
 import langroid.language_models as lm
+from langroid.agent.tools.orchestration import FinalResultTool
 from langroid.pydantic_v1 import BaseModel, Field
 from fire import Fire
 
@@ -70,7 +71,7 @@ class CompanyInfoTool(lr.agent.ToolMessage):
             ),
         ]
 
-    def handle(self) -> str:
+    def handle(self) -> FinalResultTool:
         """Handle LLM's structured output if it matches CompanyInfo structure.
         This suffices for a "stateless" tool.
         If the tool handling requires agent state, then
@@ -82,9 +83,13 @@ class CompanyInfoTool(lr.agent.ToolMessage):
         )
         print(
             f"""
-            DONE! Got Valid Company Info.
+            Got Valid Company Info.
             The market cap of {self.company_info.name} is ${mkt_cap/1e9}B.
             """
+        )
+        return FinalResultTool(
+            market_cap=mkt_cap,
+            info=self.company_info,
         )
 
 
@@ -120,7 +125,9 @@ def run(model: str = ""):  # or, e.g., "ollama/mistral:7b-instruct-v0.2-q8_0"
     # wrap the agent in a Task, so that the ToolMessage is handled
 
     task = lr.Task(agent, interactive=False)
-    task.run(paragraph, turns=2)
+    result = task[FinalResultTool].run(paragraph)
+    assert result.market_cap > 0
+    assert "Apple" in result.info.name
 
 
 if __name__ == "__main__":

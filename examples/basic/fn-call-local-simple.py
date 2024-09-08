@@ -5,10 +5,11 @@ Function-calling example using a local LLM, with ollama.
 a structured response, typically a JSON object, instead of a plain text response,
 which is then interpreted by your code to perform some action.
 This is also referred to in various scenarios as "Tools", "Actions" or "Plugins".
+See more here: https://langroid.github.io/langroid/quick-start/chat-agent-tool/
 
-Run like this --
+Run like this (to run with llama-3.1-8b-instant via groq):
 
-python3 examples/basic/fn-call-local-simple.py -m <local_model_name>
+python3 examples/basic/fn-call-local-simple.py -m groq/llama-3.1-8b-instant
 
 See here for how to set up a Local LLM to work with Langroid:
 https://langroid.github.io/langroid/tutorials/local-llm-setup/
@@ -25,6 +26,7 @@ import langroid as lr
 from langroid.utils.configuration import settings
 from langroid.agent.tool_message import ToolMessage
 import langroid.language_models as lm
+from langroid.agent.tools.orchestration import ForwardTool
 from langroid.agent.chat_document import ChatDocument
 
 # for best results:
@@ -72,15 +74,13 @@ class CityTool(lr.agent.ToolMessage):
     @staticmethod
     def handle_message_fallback(
         agent: lr.ChatAgent, msg: str | ChatDocument
-    ) -> str | ChatDocument | None:
-        """Fallback method when LLM forgets to generate a tool"""
+    ) -> ForwardTool:
+        """
+        We end up here when there was no recognized tool msg from the LLM;
+        In this case forward the message to the user using ForwardTool.
+        """
         if isinstance(msg, ChatDocument) and msg.metadata.sender == "LLM":
-            return """
-                You must use the "city_tool" to generate city information.
-                You either forgot to use it, or you used it with the wrong format.
-                Make sure all fields are filled out and pay attention to the 
-                required types of the fields.
-                """
+            return ForwardTool(agent="User")
 
     @classmethod
     def examples(cls) -> List["ToolMessage"]:
@@ -155,11 +155,11 @@ def app(
     agent = lr.ChatAgent(config)
 
     # (4) Enable the Tool for this agent --> this auto-inserts JSON instructions
-    # and few-shot examples into the system message
+    # and few-shot examples (specified in the tool defn above) into the system message
     agent.enable_message(CityTool)
 
     # (5) Create task and run it to start an interactive loop
-    task = lr.Task(agent)
+    task = lr.Task(agent, interactive=False)
     task.run("Start by asking me for a city name")
 
 
