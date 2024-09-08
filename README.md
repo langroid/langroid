@@ -46,6 +46,8 @@ This Multi-Agent paradigm is inspired by the
 `Langroid` is a fresh take on LLM app-development, where considerable thought has gone 
 into simplifying the developer experience; it does not use `Langchain`.
 
+:fire: Read the (WIP) [overview of the langroid architecture](https://langroid.github.io/langroid/blog/2024/08/15/overview-of-langroids-multi-agent-architecture-prelim/)
+
 📢 Companies are using/adapting Langroid in **production**. Here is a quote:
 
 >[Nullify](https://www.nullify.ai) uses AI Agents for secure software development. 
