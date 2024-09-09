@@ -14,6 +14,7 @@ pip install "langroid[hf-embeddings]"
 """
 
 import logging
+from collections import OrderedDict
 from functools import cache
 from typing import Any, Dict, List, Optional, Set, Tuple, no_type_check
 
@@ -130,12 +131,16 @@ class DocChatAgentConfig(ChatAgentConfig):
     n_fuzzy_neighbor_words: int = 100  # num neighbor words to retrieve for fuzzy match
     use_fuzzy_match: bool = True
     use_bm25_search: bool = True
+    use_reciprocal_rank_fusion: bool = True  # ignored if using cross-encoder reranking
     cross_encoder_reranking_model: str = (
         "cross-encoder/ms-marco-MiniLM-L-6-v2" if has_sentence_transformers else ""
     )
     rerank_diversity: bool = True  # rerank to maximize diversity?
     rerank_periphery: bool = True  # rerank to avoid Lost In the Middle effect?
     rerank_after_adding_context: bool = True  # rerank after adding context window?
+    # RRF (Reciprocal Rank Fusion) score = 1/(rank + reciprocal_rank_fusion_constant)
+    # see https://learn.microsoft.com/en-us/azure/search/hybrid-search-ranking#how-rrf-ranking-works
+    reciprocal_rank_fusion_constant: float = 60.0
     cache: bool = True  # cache results
     debug: bool = False
     stream: bool = True  # allow streaming where needed
@@ -1105,10 +1110,17 @@ class DocChatAgent(ChatAgent):
         Returns:
 
         """
-        # if we are using cross-encoder reranking, we can retrieve more docs
-        # during retrieval, and leave it to the cross-encoder re-ranking
-        # to whittle down to self.config.parsing.n_similar_docs
-        retrieval_multiple = 1 if self.config.cross_encoder_reranking_model == "" else 3
+        # if we are using cross-encoder reranking or reciprocal rank fusion (RRF),
+        # we can retrieve more docs during retrieval, and leave it to the cross-encoder
+        # or RRF reranking to whittle down to self.config.parsing.n_similar_docs
+        retrieval_multiple = (
+            1
+            if (
+                self.config.cross_encoder_reranking_model == ""
+                and not self.config.use_reciprocal_rank_fusion
+            )
+            else 3
+        )
 
         if self.vecdb is None:
             raise ValueError("VecDB not set")
@@ -1120,28 +1132,98 @@ class DocChatAgent(ChatAgent):
                     q,
                     k=self.config.parsing.n_similar_docs * retrieval_multiple,
                 )
-        # keep only docs with unique d.id()
-        id2doc_score = {d.id(): (d, s) for d, s in docs_and_scores}
-        docs_and_scores = list(id2doc_score.values())
-        passages = [d for (d, _) in docs_and_scores]
-        # passages = [
-        #     Document(content=d.content, metadata=d.metadata)
-        #     for (d, _) in docs_and_scores
-        # ]
+                # sort by score descending
+                docs_and_scores = sorted(
+                    docs_and_scores, key=lambda x: x[1], reverse=True
+                )
 
+        # keep only docs with unique d.id()
+        id2_rank_semantic = {d.id(): i for i, (d, _) in enumerate(docs_and_scores)}
+        id2doc = {d.id(): d for d, _ in docs_and_scores}
+        # make sure we get unique docs
+        passages = [id2doc[id] for id, _ in id2_rank_semantic.items()]
+
+        id2_rank_bm25 = {}
         if self.config.use_bm25_search:
             # TODO: Add score threshold in config
             docs_scores = self.get_similar_chunks_bm25(query, retrieval_multiple)
-            passages += [d for (d, _) in docs_scores]
+            if self.config.cross_encoder_reranking_model == "":
+                # only if we're not re-ranking with a cross-encoder,
+                # we collect these ranks for Reciprocal Rank Fusion down below.
+                docs_scores = sorted(docs_scores, key=lambda x: x[1], reverse=True)
+                id2_rank_bm25 = {d.id(): i for i, (d, _) in enumerate(docs_scores)}
+                id2doc.update({d.id(): d for d, _ in docs_scores})
+            else:
+                passages += [d for (d, _) in docs_scores]
 
+        id2_rank_fuzzy = {}
         if self.config.use_fuzzy_match:
             # TODO: Add score threshold in config
             fuzzy_match_doc_scores = self.get_fuzzy_matches(query, retrieval_multiple)
-            passages += [d for (d, _) in fuzzy_match_doc_scores]
+            if self.config.cross_encoder_reranking_model == "":
+                # only if we're not re-ranking with a cross-encoder,
+                # we collect these ranks for Reciprocal Rank Fusion down below.
+                fuzzy_match_doc_scores = sorted(
+                    fuzzy_match_doc_scores, key=lambda x: x[1], reverse=True
+                )
+                id2_rank_fuzzy = {
+                    d.id(): i for i, (d, _) in enumerate(fuzzy_match_doc_scores)
+                }
+                id2doc.update({d.id(): d for d, _ in fuzzy_match_doc_scores})
+            else:
+                passages += [d for (d, _) in fuzzy_match_doc_scores]
 
-        # keep unique passages
-        id2passage = {p.id(): p for p in passages}
-        passages = list(id2passage.values())
+        if (
+            self.config.cross_encoder_reranking_model == ""
+            and self.config.use_reciprocal_rank_fusion
+            and (self.config.use_bm25_search or self.config.use_fuzzy_match)
+        ):
+            # Since we're not using cross-enocder re-ranking,
+            # we need to re-order the retrieved chunks from potentially three
+            # different retrieval methods (semantic, bm25, fuzzy), where the
+            # similarity scores are on different scales.
+            # We order the retrieved chunks using Reciprocal Rank Fusion (RRF) score.
+            # Combine the ranks from each id2doc_rank_* dict into a single dict,
+            # where the reciprocal rank score is the sum of
+            # 1/(rank + self.config.reciprocal_rank_fusion_constant).
+            # See https://learn.microsoft.com/en-us/azure/search/hybrid-search-ranking
+            #
+            # Note: diversity/periphery-reranking below may modify the final ranking.
+            id2_reciprocal_score = {}
+            for id_ in (
+                set(id2_rank_semantic.keys())
+                | set(id2_rank_bm25.keys())
+                | set(id2_rank_fuzzy.keys())
+            ):
+                rank_semantic = id2_rank_semantic.get(id_, float("inf"))
+                rank_bm25 = id2_rank_bm25.get(id_, float("inf"))
+                rank_fuzzy = id2_rank_fuzzy.get(id_, float("inf"))
+                c = self.config.reciprocal_rank_fusion_constant
+                reciprocal_fusion_score = (
+                    1 / (rank_semantic + c) + 1 / (rank_bm25 + c) + 1 / (rank_fuzzy + c)
+                )
+                id2_reciprocal_score[id_] = reciprocal_fusion_score
+
+            # sort the docs by the reciprocal score, in descending order
+            id2_reciprocal_score = OrderedDict(
+                sorted(
+                    id2_reciprocal_score.items(),
+                    key=lambda x: x[1],
+                    reverse=True,
+                )
+            )
+            # each method retrieved up to retrieval_multiple * n_similar_docs,
+            # so we need to take the top n_similar_docs from the combined list
+            passages = [
+                id2doc[id]
+                for i, (id, _) in enumerate(id2_reciprocal_score.items())
+                if i < self.config.parsing.n_similar_docs
+            ]
+            # passages must have distinct ids
+            assert len(passages) == len(set([d.id() for d in passages])), (
+                f"Duplicate passages in retrieved docs: {len(passages)} != "
+                f"{len(set([d.id() for d in passages]))}"
+            )
 
         if len(passages) == 0:
             return []
@@ -1171,7 +1253,7 @@ class DocChatAgent(ChatAgent):
             passages_scores = self.add_context_window(passages_scores)
             passages = [p for p, _ in passages_scores]
 
-        return passages
+        return passages[: self.config.parsing.n_similar_docs]
 
     @no_type_check
     def get_relevant_extracts(self, query: str) -> Tuple[str, List[Document]]:

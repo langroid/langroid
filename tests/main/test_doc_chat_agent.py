@@ -498,6 +498,50 @@ def test_doc_chat_rerank_diversity(test_settings: Settings, vecdb):
 
 
 @pytest.mark.parametrize("vecdb", ["qdrant_local", "chroma"], indirect=True)
+def test_reciprocal_rank_fusion(test_settings: Settings, vecdb):
+    """
+    Test that RRF (Reciprocal Rank Fusion) works.
+    """
+
+    cfg = _MyDocChatAgentConfig(
+        n_neighbor_chunks=0,
+        cross_encoder_reranking_model="",
+        use_bm25_search=True,
+        use_fuzzy_match=True,
+        use_reciprocal_rank_fusion=True,
+    )
+    cfg.parsing.n_similar_docs = 3
+    agent = DocChatAgent(cfg)
+    agent.vecdb = vecdb
+
+    set_global(test_settings)
+
+    phrases = SimpleNamespace(
+        g1="time flies like an arrow",
+        g2="a fly is very small",
+        g3="we like apples",
+        g4="the river bank got flooded",
+        g5="there was a run on the bank",
+        g6="JPMChase is a bank",
+        g7="Chase is one of the banks",
+    )
+    docs = [
+        Document(content=p, metadata=DocMetaData(source="user"))
+        for p in vars(phrases).values()
+    ]
+    agent.ingest_docs(docs, split=False)
+    chunks = agent.get_relevant_chunks("I like to chase banks")
+    assert len(chunks) == 3
+    assert any(phrases.g7 in chunk.content for chunk in chunks)
+    assert any(phrases.g6 in chunk.content for chunk in chunks)
+
+    chunks = agent.get_relevant_chunks("I like oranges")
+    assert len(chunks) == 3
+    assert any(phrases.g3 in chunk.content for chunk in chunks)
+    assert any(phrases.g1 in chunk.content for chunk in chunks)
+
+
+@pytest.mark.parametrize("vecdb", ["qdrant_local", "chroma"], indirect=True)
 def test_doc_chat_rerank_periphery(test_settings: Settings, vecdb):
     """
     Test that reranking to periphery works.
