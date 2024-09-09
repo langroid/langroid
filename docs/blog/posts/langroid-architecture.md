@@ -148,13 +148,13 @@ responders in the parent task object.
 A task always maintains a *current pending message* (CPM), which is the latest message "awaiting" a valid response 
 from a responder, which updates the CPM. 
 At a high level the `run` method of a task attempts to repeatedly find a valid response to the 
-CPM, until the task is done. (Note that this paradigm is somewhat reminescent of a "Blackboard" architecture, where
+CPM, until the task is done. (Note that this paradigm is somewhat reminescent of a *Blackboard* architecture, where
 agents take turns deciding whether they can update the shared message on the "blackboard".)
 This is achieved by repeatedly invoking the `step` method, which represents a "turn" in the conversation.
 The `step` method sequentially tries the eligible responders from the beginning of the eligible-responders list, until it
 finds a valid response, defined as a non-null or terminating message (i.e. one that signals that the task is done). In
 particular, this `step()` algorithm implies that a Task delegates (or "fails over") to a sub-task only if the task's 
-native responders have no valid response. (This set up is reminescent of the Blackboard architecture).
+native responders have no valid response. 
 
 There are a few simple rules that govern how `step` works: 
 
