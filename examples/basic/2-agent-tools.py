@@ -16,9 +16,23 @@ When it waits for user input, try asking things like:
     => Main says do not know, handled by helper, who returns answer
 """
 
-import langroid as lr
+from typing import Any
 
-main = lr.ChatAgent(
+import langroid as lr
+from langroid.agent.tools.orchestration import AgentDoneTool, ForwardTool
+
+
+class MainChatAgent(lr.ChatAgent):
+    def handle_message_fallback(self, msg: str | lr.ChatDocument) -> Any:
+        """
+        We'd be here if there were no recognized tools in the incoming msg.
+        If this was from LLM, forward to user.
+        """
+        if isinstance(msg, lr.ChatDocument) and msg.metadata.sender == "LLM":
+            return ForwardTool(agent="User")
+
+
+main = MainChatAgent(
     lr.ChatAgentConfig(
         name="Main",
         system_message=f"""
@@ -38,9 +52,9 @@ class PolinskyTool(lr.ToolMessage):
     purpose = "To compute the polinsky transform of a <number>"
     number: int
 
-    def handle(self):
+    def handle(self) -> AgentDoneTool:
         p = 3 * self.number + 1
-        return f"The Polinsky transform of {self.number} is {p}"
+        return AgentDoneTool(content=f"The Polinsky transform of {self.number} is {p}")
 
 
 class ChichikovTool(lr.ToolMessage):
@@ -48,9 +62,9 @@ class ChichikovTool(lr.ToolMessage):
     purpose = "To compute the Chichikov transform of a <number>"
     number: int
 
-    def handle(self):
+    def handle(self) -> AgentDoneTool:
         n = self.number**2
-        return f"The Chichikov transform of {self.number} is {n}"
+        return AgentDoneTool(content=f"The Chichikov transform of {self.number} is {n}")
 
 
 helper = lr.ChatAgent(
@@ -66,8 +80,8 @@ helper = lr.ChatAgent(
 helper.enable_message(PolinskyTool)
 helper.enable_message(ChichikovTool)
 
-main_task = lr.Task(main, interactive=True)
-helper_task = lr.Task(helper, interactive=False, done_if_response=[lr.Entity.AGENT])
+main_task = lr.Task(main, interactive=False)
+helper_task = lr.Task(helper, interactive=False)
 
 main_task.add_sub_task(helper_task)
 
