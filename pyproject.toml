@@ -89,6 +89,7 @@ async-generator = "^1.10"
 
 python-magic = "^0.4.27"
 json-repair = "^0.27.0"
+cerebras-cloud-sdk = "^1.1.0"
 
 
 [tool.poetry.extras]

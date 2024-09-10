@@ -21,6 +21,7 @@ from typing import (
 )
 
 import openai
+from cerebras.cloud.sdk import AsyncCerebras, Cerebras
 from groq import AsyncGroq, Groq
 from httpx import Timeout
 from openai import AsyncOpenAI, OpenAI
@@ -371,8 +372,8 @@ class OpenAIGPT(LanguageModel):
     Class for OpenAI LLMs
     """
 
-    client: OpenAI | Groq
-    async_client: AsyncOpenAI | AsyncGroq
+    client: OpenAI | Groq | Cerebras
+    async_client: AsyncOpenAI | AsyncGroq | AsyncCerebras
 
     def __init__(self, config: OpenAIGPTConfig = OpenAIGPTConfig()):
         """
@@ -479,6 +480,7 @@ class OpenAIGPT(LanguageModel):
             self.api_key = DUMMY_API_KEY
 
         self.is_groq = self.config.chat_model.startswith("groq/")
+        self.is_cerebras = self.config.chat_model.startswith("cerebras/")
 
         if self.is_groq:
             self.config.chat_model = self.config.chat_model.replace("groq/", "")
@@ -487,6 +489,16 @@ class OpenAIGPT(LanguageModel):
                 api_key=self.api_key,
             )
             self.async_client = AsyncGroq(
+                api_key=self.api_key,
+            )
+        elif self.is_cerebras:
+            self.config.chat_model = self.config.chat_model.replace("cerebras/", "")
+            self.api_key = os.getenv("CEREBRAS_API_KEY", DUMMY_API_KEY)
+            self.client = Cerebras(
+                api_key=self.api_key,
+            )
+            # TODO there is not async client, so should we do anything here?
+            self.async_client = AsyncCerebras(
                 api_key=self.api_key,
             )
         else:
@@ -1096,8 +1108,8 @@ class OpenAIGPT(LanguageModel):
         if self.config.use_chat_for_completion:
             return self.chat(messages=prompt, max_tokens=max_tokens)
 
-        if self.is_groq:
-            raise ValueError("Groq does not support pure completions")
+        if self.is_groq or self.is_cerebras:
+            raise ValueError("Groq, Cerebras do not support pure completions")
 
         if settings.debug:
             print(f"[grey37]PROMPT: {escape(prompt)}[/grey37]")
@@ -1174,8 +1186,8 @@ class OpenAIGPT(LanguageModel):
         if self.config.use_chat_for_completion:
             return await self.achat(messages=prompt, max_tokens=max_tokens)
 
-        if self.is_groq:
-            raise ValueError("Groq does not support pure completions")
+        if self.is_groq or self.is_cerebras:
+            raise ValueError("Groq, Cerebras do not support pure completions")
 
         if settings.debug:
             print(f"[grey37]PROMPT: {escape(prompt)}[/grey37]")

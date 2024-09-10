@@ -1,7 +1,9 @@
 import asyncio
 
+import groq
 import openai
 import pytest
+from cerebras.cloud.sdk import BadRequestError as CerebrasBadRequestError
 
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
 from langroid.language_models.base import LLMMessage, Role
@@ -75,7 +77,10 @@ async def test_openai_gpt_async(test_settings: Settings, streaming, country, cap
     try:
         _ = await mdl.achat(messages=messages, max_tokens=50)
     except Exception as e:
-        assert isinstance(e, openai.BadRequestError)
+        assert isinstance(
+            e,
+            openai.BadRequestError | groq.BadRequestError | CerebrasBadRequestError,
+        )
 
 
 @pytest.mark.asyncio
