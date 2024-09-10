@@ -3,6 +3,7 @@ import warnings
 import groq
 import openai
 import pytest
+from cerebras.cloud.sdk import BadRequestError as CerebrasBadRequestError
 
 import langroid as lr
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
@@ -81,7 +82,10 @@ def test_openai_gpt(test_settings: Settings, streaming, country, capital, use_ca
     try:
         _ = mdl.chat(messages=messages, max_tokens=50)
     except Exception as e:
-        assert isinstance(e, groq.BadRequestError | openai.BadRequestError)
+        assert isinstance(
+            e,
+            groq.BadRequestError | openai.BadRequestError | CerebrasBadRequestError,
+        )
 
 
 @pytest.mark.parametrize(
