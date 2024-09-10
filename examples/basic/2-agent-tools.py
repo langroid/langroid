@@ -28,7 +28,7 @@ class MainChatAgent(lr.ChatAgent):
         We'd be here if there were no recognized tools in the incoming msg.
         If this was from LLM, forward to user.
         """
-        if isinstance(msg, lr.ChatDocument) and msg.metadata.sender == "LLM":
+        if isinstance(msg, lr.ChatDocument) and msg.metadata.sender == lr.Entity.LLM:
             return ForwardTool(agent="User")
 
 

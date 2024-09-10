@@ -79,7 +79,7 @@ class CityTool(lr.agent.ToolMessage):
         We end up here when there was no recognized tool msg from the LLM;
         In this case forward the message to the user using ForwardTool.
         """
-        if isinstance(msg, ChatDocument) and msg.metadata.sender == "LLM":
+        if isinstance(msg, ChatDocument) and msg.metadata.sender == lr.Entity.LLM:
             return ForwardTool(agent="User")
 
     @classmethod

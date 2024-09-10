@@ -5,10 +5,15 @@ with `interactive=False`, meaning user input is awaited only
 when user is explicitly addressed using an addressing prefix.
 """
 
-from typing import List, Tuple
-
+from typing import Any, List, Tuple
+import fire
 from langroid.utils.constants import AT
+from langroid.agent.tools.orchestration import ForwardTool
 import langroid as lr
+import langroid.language_models as lm
+from langroid.utils.configuration import settings
+
+DEFAULT_LLM = lm.OpenAIChatModel.GPT4o
 
 # (1) DEFINE THE TOOLS
 
@@ -77,39 +82,67 @@ class NumberAgent(lr.ChatAgent):
     def show(self, msg: ShowTool) -> str:
         return f"Inform the user that the SECRET NUMBER is {self.secret}"
 
-
-# (3) CREATE THE AGENT
-agent_config = lr.ChatAgentConfig(
-    name="NumberAgent",
-    system_message=f"""
-    When the user's request matches one of your available tools, use it, 
-    otherwise respond directly to the user.
-    NOTE: Whenever you want to address the user directly, you MUST
-    use "{AT}User", followed by your message. 
-    """,
-)
-
-agent = NumberAgent(agent_config)
+    def handle_message_fallback(self, msg: str | lr.ChatDocument) -> Any:
+        """
+        If we're here it means there was no recognized tool in `msg`.
+        So if it was from LLM, use ForwardTool to send to user.
+        """
+        if isinstance(msg, lr.ChatDocument) and msg.metadata.sender == lr.Entity.LLM:
+            return ForwardTool(agent="User")
 
 
-# (4) ENABLE/ATTACH THE TOOLS to the AGENT
+def app(
+    m: str = DEFAULT_LLM,  # pass -d <model> to use non-default LLM
+    d: bool = False,  # pass -d to enable debug mode (see prompts etc)
+    nc: bool = False,  # pass -nc to disable cache-retrieval (i.e. get fresh answers)
+):
+    settings.debug = d
+    settings.cache = not nc
+    # create LLM config
+    llm_cfg = lm.OpenAIGPTConfig(
+        chat_model=m or DEFAULT_LLM,
+        chat_context_length=4096,  # set this based on model
+        max_output_tokens=100,
+        temperature=0.2,
+        stream=True,
+        timeout=45,
+    )
 
-agent.enable_message(UpdateTool)
-agent.enable_message(AddTool)
-agent.enable_message(ShowTool)
+    # (3) CREATE THE AGENT
+    agent_config = lr.ChatAgentConfig(
+        name="NumberAgent",
+        llm=llm_cfg,
+        system_message=f"""
+        When the user's request matches one of your available tools, use it, 
+        otherwise respond directly to the user.
+        NOTE: Whenever you want to address the user directly, you MUST
+        use "{AT}User", followed by your message. 
+        """,
+    )
+
+    agent = NumberAgent(agent_config)
+
+    # (4) ENABLE/ATTACH THE TOOLS to the AGENT
+
+    agent.enable_message(UpdateTool)
+    agent.enable_message(AddTool)
+    agent.enable_message(ShowTool)
+
+    # (5) CREATE AND RUN THE TASK
+    task_config = lr.TaskConfig(addressing_prefix=AT)
+    task = lr.Task(agent, interactive=False, config=task_config)
+
+    """
+    Note: try saying these when it waits for user input:
+    
+    add 10
+    update 50
+    add 3
+    show 
+    """
+
+    task.run()
 
 
-# (5) CREATE AND RUN THE TASK
-task_config = lr.TaskConfig(addressing_prefix=AT)
-task = lr.Task(agent, interactive=False, config=task_config)
-
-"""
-Note: try saying these when it waits for user input:
-
-add 10
-update 50
-add 3
-show 
-"""
-
-task.run()
+if __name__ == "__main__":
+    fire.Fire(app)
