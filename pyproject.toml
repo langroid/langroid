@@ -5,8 +5,7 @@ description = "Harness LLMs with Multi-Agent Programming"
 authors = ["Prasad Chalasani <pchalasani@gmail.com>"]
 readme = "README.md"
 license = "MIT"
-include = ["pyproject.toml"]
-
+include = ["pyproject.toml", "langroid/py.typed"]
 
 # =============== MAIN DEPS ==============
 [tool.poetry.dependencies]
