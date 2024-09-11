@@ -91,6 +91,7 @@ class Neo4jChatAgent(ChatAgent):
         self._import_neo4j()
         self._initialize_connection()
         self._init_tool_messages()
+        self.current_retrieval_cypher_query: str
 
     def handle_message_fallback(
         self, msg: str | ChatDocument
@@ -274,7 +275,7 @@ class Neo4jChatAgent(ChatAgent):
             the database.
             """
         query = msg.cypher_query
-
+        self.current_retrieval_cypher_query = query
         logger.info(f"Executing Cypher query: {query}")
         response = self.read_query(query)
         if isinstance(response.data, list) and len(response.data) == 0:
