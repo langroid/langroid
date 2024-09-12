@@ -92,7 +92,7 @@ class Neo4jChatAgent(ChatAgent):
         self._initialize_connection()
         self._init_tool_messages()
         self.init_state()
-        
+
     def init_state(self) -> None:
         super().init_state()
         self.current_retrieval_cypher_query: str = ""
