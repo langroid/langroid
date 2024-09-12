@@ -1,16 +1,11 @@
 import json
 import logging
-from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union
 
 from rich import print
 from rich.console import Console
 
 from langroid.agent import ToolMessage
-from langroid.pydantic_v1 import BaseModel, BaseSettings
-
-if TYPE_CHECKING:
-    import neo4j
-
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.chat_document import ChatDocument
 from langroid.agent.special.neo4j.utils.system_message import (
@@ -20,6 +15,7 @@ from langroid.agent.special.neo4j.utils.system_message import (
     SCHEMA_TOOLS_SYS_MSG,
 )
 from langroid.mytypes import Entity
+from langroid.pydantic_v1 import BaseModel, BaseSettings
 
 logger = logging.getLogger(__name__)
 
