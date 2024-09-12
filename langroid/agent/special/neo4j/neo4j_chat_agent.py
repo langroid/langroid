@@ -86,12 +86,12 @@ class Neo4jChatAgent(ChatAgent):
         Raises:
             ValueError: If database information is not provided in the config.
         """
-        super().__init__(config)
         self.config: Neo4jChatAgentConfig = config
         self._validate_config()
         self._import_neo4j()
         self._initialize_connection()
         self._init_tool_messages()
+        self.init_state()
 
     def init_state(self) -> None:
         super().init_state()
