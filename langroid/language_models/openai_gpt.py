@@ -88,6 +88,8 @@ class OpenAIChatModel(str, Enum):
     GPT4_TURBO = "gpt-4-turbo"
     GPT4o = "gpt-4o-2024-08-06"
     GPT4o_MINI = "gpt-4o-mini"
+    O1_PREVIEW = "o1-preview"
+    O1_MINI = "o1-mini"
 
 
 class OpenAICompletionModel(str, Enum):
@@ -105,6 +107,8 @@ _context_length: Dict[str, int] = {
     OpenAIChatModel.GPT4_TURBO: 128_000,
     OpenAIChatModel.GPT4o: 128_000,
     OpenAIChatModel.GPT4o_MINI: 128_000,
+    OpenAIChatModel.O1_PREVIEW: 128_000,
+    OpenAIChatModel.O1_MINI: 128_000,
     OpenAICompletionModel.TEXT_DA_VINCI_003: 4096,
     AnthropicModel.CLAUDE_3_5_SONNET: 200_000,
     AnthropicModel.CLAUDE_3_OPUS: 200_000,
@@ -120,6 +124,8 @@ _cost_per_1k_tokens: Dict[str, Tuple[float, float]] = {
     OpenAIChatModel.GPT4_TURBO: (0.01, 0.03),  # 128K context
     OpenAIChatModel.GPT4o: (0.0025, 0.010),  # 128K context
     OpenAIChatModel.GPT4o_MINI: (0.00015, 0.0006),  # 128K context
+    OpenAIChatModel.O1_PREVIEW: (0.015, 0.060),  # 128K context
+    OpenAIChatModel.O1_MINI: (0.003, 0.012),  # 128K context
     AnthropicModel.CLAUDE_3_5_SONNET: (0.003, 0.015),
     AnthropicModel.CLAUDE_3_OPUS: (0.015, 0.075),
     AnthropicModel.CLAUDE_3_SONNET: (0.003, 0.015),
@@ -132,6 +138,8 @@ openAIChatModelPreferenceList = [
     OpenAIChatModel.GPT4_TURBO,
     OpenAIChatModel.GPT4,
     OpenAIChatModel.GPT4o_MINI,
+    OpenAIChatModel.O1_MINI,
+    OpenAIChatModel.O1_PREVIEW,
     OpenAIChatModel.GPT3_5_TURBO,
 ]
 
@@ -140,6 +148,15 @@ openAICompletionModelPreferenceList = [
     OpenAICompletionModel.TEXT_DA_VINCI_003,
 ]
 
+NON_STREAMING_MODELS = [
+    OpenAIChatModel.O1_MINI,
+    OpenAIChatModel.O1_PREVIEW,
+]
+
+NON_SYSTEM_MESSAGE_MODELS = [
+    OpenAIChatModel.O1_MINI,
+    OpenAIChatModel.O1_PREVIEW,
+]
 
 if "OPENAI_API_KEY" in os.environ:
     try:
@@ -579,6 +596,16 @@ class OpenAIGPT(LanguageModel):
         openai_completion_models = [e.value for e in OpenAICompletionModel]
         return self.config.completion_model in openai_completion_models
 
+    def unsupported_params(self) -> List[str]:
+        """
+        List of params that are not supported by the current model
+        """
+        match self.config.chat_model:
+            case OpenAIChatModel.O1_MINI | OpenAIChatModel.O1_PREVIEW:
+                return ["temperature", "stream"]
+            case _:
+                return []
+
     def chat_context_length(self) -> int:
         """
         Context-length for chat-completion models/endpoints
@@ -623,7 +650,11 @@ class OpenAIGPT(LanguageModel):
 
     def get_stream(self) -> bool:
         """Get streaming status"""
-        return self.config.stream and settings.stream
+        return (
+            self.config.stream
+            and settings.stream
+            and self.config.chat_model not in NON_STREAMING_MODELS
+        )
 
     @no_type_check
     def _process_stream_event(
@@ -1155,7 +1186,7 @@ class OpenAIGPT(LanguageModel):
             kwargs["prompt"] = prompt
         args = dict(
             **kwargs,
-            max_tokens=max_tokens,  # for output/completion
+            max_completion_tokens=max_tokens,  # for output/completion
             stream=self.get_stream(),
         )
         args = self._openai_api_call_params(args)
@@ -1230,7 +1261,7 @@ class OpenAIGPT(LanguageModel):
             kwargs["prompt"] = prompt
         cached, hashed_key, response = await completions_with_backoff(
             **kwargs,
-            max_tokens=max_tokens,
+            max_completion_tokens=max_tokens,
             stream=False,
         )
         if not isinstance(response, dict):
@@ -1421,6 +1452,12 @@ class OpenAIGPT(LanguageModel):
         else:
             llm_messages = messages
 
+        # for models that don't support system msg, change SYSTEM role to USER
+        if self.config.chat_model in NON_SYSTEM_MESSAGE_MODELS:
+            for i, m in enumerate(llm_messages):
+                if m.role == Role.SYSTEM:
+                    llm_messages[i].role = Role.USER
+
         # Azure uses different parameters. It uses ``engine`` instead of ``model``
         # and the value should be the deployment_name not ``self.config.chat_model``
         chat_model = self.config.chat_model
@@ -1431,7 +1468,7 @@ class OpenAIGPT(LanguageModel):
         args: Dict[str, Any] = dict(
             model=chat_model,
             messages=[m.api_dict() for m in llm_messages],
-            max_tokens=max_tokens,
+            max_completion_tokens=max_tokens,
             stream=self.get_stream(),
         )
         args.update(self._openai_api_call_params(args))
@@ -1457,6 +1494,10 @@ class OpenAIGPT(LanguageModel):
                     tool_choice=tool_choice,
                 )
             )
+        for p in self.unsupported_params():
+            # some models e.g. o1-mini (as of sep 2024) don't support some params,
+            # like temperature and stream, so we need to remove them.
+            args.pop(p, None)
         return args
 
     def _process_chat_completion_response(
