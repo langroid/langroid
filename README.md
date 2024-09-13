@@ -134,6 +134,11 @@ teacher_task.run()
 <details>
 <summary> <b>Click to expand</b></summary>
 
+- **Sep 2024:**
+  - **[0.16.0](https://github.com/langroid/langroid/releases/tag/0.16.0)**  Support for OpenAI `o1-mini` and `o1-preview` models.
+  - **[0.15.0](https://github.com/langroid/langroid/releases/tag/0.15.0)** Cerebras API support -- run llama-3.1 models hosted on Cerebras Cloud (very fast inference).
+  - **[0.14.0](https://github.com/langroid/langroid/releases/tag/0.14.0)** `DocChatAgent` uses Reciprocal Rank Fusion (RRF) to rank chunks retrieved by different methods.
+  - **[0.12.0](https://github.com/langroid/langroid/releases/tag/0.12.0)** `run_batch_task` new option -- `stop_on_first_result` - allows termination of batch as soon as any task returns a result.  
 - **Aug 2024:**
   - **[0.11.0](https://github.com/langroid/langroid/releases/tag/0.11.0)** Polymorphic `Task.run(), Task.run_async`.
   - **[0.10.0](https://github.com/langroid/langroid/releases/tag/0.10.0)** Allow tool handlers to return arbitrary result type, including other tools.
