@@ -605,7 +605,7 @@ class OpenAIGPT(LanguageModel):
                 return ["temperature", "stream"]
             case _:
                 return []
-                
+
     def rename_params(self) -> Dict[str, str]:
         """
         Map of param name -> new name for specific models.
@@ -616,7 +616,7 @@ class OpenAIGPT(LanguageModel):
                 return {"max_tokens": "max_completion_tokens"}
             case _:
                 return {}
-                
+
     def chat_context_length(self) -> int:
         """
         Context-length for chat-completion models/endpoints
@@ -1509,7 +1509,7 @@ class OpenAIGPT(LanguageModel):
             # some models e.g. o1-mini (as of sep 2024) don't support some params,
             # like temperature and stream, so we need to remove them.
             args.pop(p, None)
-            
+
         param_rename_map = self.rename_params()
         for old_param, new_param in param_rename_map.items():
             if old_param in args:
