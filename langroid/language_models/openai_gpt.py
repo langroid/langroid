@@ -605,7 +605,18 @@ class OpenAIGPT(LanguageModel):
                 return ["temperature", "stream"]
             case _:
                 return []
-
+                
+    def rename_params(self) -> Dict[str, str]:
+        """
+        Map of param name -> new name for specific models.
+        Currently main troublemaker is o1* series.
+        """
+        match self.config.chat_model:
+            case OpenAIChatModel.O1_MINI | OpenAIChatModel.O1_PREVIEW:
+                return {"max_tokens": "max_completion_tokens"}
+            case _:
+                return {}
+                
     def chat_context_length(self) -> int:
         """
         Context-length for chat-completion models/endpoints
@@ -1186,7 +1197,7 @@ class OpenAIGPT(LanguageModel):
             kwargs["prompt"] = prompt
         args = dict(
             **kwargs,
-            max_completion_tokens=max_tokens,  # for output/completion
+            max_tokens=max_tokens,  # for output/completion
             stream=self.get_stream(),
         )
         args = self._openai_api_call_params(args)
@@ -1261,7 +1272,7 @@ class OpenAIGPT(LanguageModel):
             kwargs["prompt"] = prompt
         cached, hashed_key, response = await completions_with_backoff(
             **kwargs,
-            max_completion_tokens=max_tokens,
+            max_tokens=max_tokens,
             stream=False,
         )
         if not isinstance(response, dict):
@@ -1468,7 +1479,7 @@ class OpenAIGPT(LanguageModel):
         args: Dict[str, Any] = dict(
             model=chat_model,
             messages=[m.api_dict() for m in llm_messages],
-            max_completion_tokens=max_tokens,
+            max_tokens=max_tokens,
             stream=self.get_stream(),
         )
         args.update(self._openai_api_call_params(args))
@@ -1498,6 +1509,11 @@ class OpenAIGPT(LanguageModel):
             # some models e.g. o1-mini (as of sep 2024) don't support some params,
             # like temperature and stream, so we need to remove them.
             args.pop(p, None)
+            
+        param_rename_map = self.rename_params()
+        for old_param, new_param in param_rename_map.items():
+            if old_param in args:
+                args[new_param] = args.pop(old_param)
         return args
 
     def _process_chat_completion_response(
