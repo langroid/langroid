@@ -25,9 +25,9 @@ set_global(Settings(stream=True))
 
 @pytest.mark.parametrize(
     "streaming, country, capital",
-    [(True, "France", "Paris"), (False, "India", "Delhi")],
+    [(False, "India", "Delhi"), (True, "France", "Paris")],
 )
-@pytest.mark.parametrize("use_cache", [False, True])
+@pytest.mark.parametrize("use_cache", [True, False])
 def test_openai_gpt(test_settings: Settings, streaming, country, capital, use_cache):
     test_settings.cache = False  # cache response but don't retrieve from cache
     set_global(test_settings)
@@ -48,7 +48,7 @@ def test_openai_gpt(test_settings: Settings, streaming, country, capital, use_ca
     # actually calls `chat` under the hood
     cfg.use_chat_for_completion = True
     # check that "generate" works when "use_chat_for_completion" is True
-    response = mdl.generate(prompt=question, max_tokens=50)
+    response = mdl.generate(prompt=question, max_tokens=800)
     assert capital in response.message
     assert not response.cached
 
@@ -60,14 +60,14 @@ def test_openai_gpt(test_settings: Settings, streaming, country, capital, use_ca
         ),
         LLMMessage(role=Role.USER, content=question),
     ]
-    response = mdl.chat(messages=messages, max_tokens=50)
+    response = mdl.chat(messages=messages, max_tokens=500)
     assert capital in response.message
     assert not response.cached
 
     test_settings.cache = True
     set_global(test_settings)
     # should be from cache this time, Provided config.cache_config is not None
-    response = mdl.chat(messages=messages, max_tokens=50)
+    response = mdl.chat(messages=messages, max_tokens=500)
     assert capital in response.message
     assert response.cached == use_cache
 
@@ -80,7 +80,7 @@ def test_openai_gpt(test_settings: Settings, streaming, country, capital, use_ca
     ]
 
     try:
-        _ = mdl.chat(messages=messages, max_tokens=50)
+        _ = mdl.chat(messages=messages, max_tokens=500)
     except Exception as e:
         assert isinstance(
             e,
