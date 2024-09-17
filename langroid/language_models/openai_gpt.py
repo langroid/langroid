@@ -591,10 +591,11 @@ class OpenAIGPT(LanguageModel):
     def is_openai_chat_model(self) -> bool:
         openai_chat_models = [e.value for e in OpenAIChatModel]
         return self.config.chat_model in openai_chat_models
-        
+
     def supports_functions_or_tools(self) -> bool:
         return self.is_openai_chat_model() and self.config.chat_model not in [
-            OpenAIChatModel.O1_MINI, OpenAIChatModel.O1_PREVIEW
+            OpenAIChatModel.O1_MINI,
+            OpenAIChatModel.O1_PREVIEW,
         ]
 
     def is_openai_completion_model(self) -> bool:
@@ -1468,7 +1469,6 @@ class OpenAIGPT(LanguageModel):
         else:
             llm_messages = messages
 
-
         # Azure uses different parameters. It uses ``engine`` instead of ``model``
         # and the value should be the deployment_name not ``self.config.chat_model``
         chat_model = self.config.chat_model
@@ -1480,8 +1480,8 @@ class OpenAIGPT(LanguageModel):
             model=chat_model,
             messages=[
                 m.api_dict(
-                    has_system_role=self.config.chat_model not
-                                    in NON_SYSTEM_MESSAGE_MODELS
+                    has_system_role=self.config.chat_model
+                    not in NON_SYSTEM_MESSAGE_MODELS
                 )
                 for m in (llm_messages)
             ],

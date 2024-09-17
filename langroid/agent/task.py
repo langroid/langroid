@@ -1570,9 +1570,7 @@ class Task:
         pass_str = PASS if self.config.recognize_string_signals else ""
         return (
             msg is None
-            or (
-                isinstance(msg, str) and
-                msg.strip() in [pass_str, ""])
+            or (isinstance(msg, str) and msg.strip() in [pass_str, ""])
             or (
                 isinstance(msg, ChatDocument)
                 and msg.content.strip() in [pass_str, ""]

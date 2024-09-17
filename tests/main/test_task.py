@@ -428,9 +428,6 @@ def test_task_tool_num(
         assert len(agent.message_history) > 7
 
 
-
-
-
 @pytest.mark.parametrize("use_fn_api", [True, False])
 @pytest.mark.parametrize("use_tools_api", [True, False])
 @pytest.mark.parametrize("use_orch_tools", [True, False])
