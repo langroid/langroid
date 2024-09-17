@@ -201,16 +201,24 @@ class LLMMessage(BaseModel):
     # link to corresponding chat document, for provenance/rewind purposes
     chat_document_id: str = ""
 
-    def api_dict(self) -> Dict[str, Any]:
+    def api_dict(self, has_system_role: bool = True) -> Dict[str, Any]:
         """
         Convert to dictionary for API request, keeping ONLY
         the fields that are expected in an API call!
         E.g., DROP the tool_id, since it is only for use in the Assistant API,
             not the completion API.
+
+        Args:
+            has_system_role: whether the message has a system role (if not,
+                set to "user" role)
         Returns:
             dict: dictionary representation of LLM message
         """
         d = self.dict()
+        # if there is a key k = "role" with value "system", change to "user"
+        # in case has_system_role is False
+        if not has_system_role and "role" in d and d["role"] == "system":
+            d["role"] = "user"
         # drop None values since API doesn't accept them
         dict_no_none = {k: v for k, v in d.items() if v is not None}
         if "name" in dict_no_none and dict_no_none["name"] == "":

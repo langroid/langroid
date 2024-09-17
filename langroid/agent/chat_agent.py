@@ -226,6 +226,7 @@ class ChatAgent(Agent):
             self.llm is not None
             and isinstance(self.llm, OpenAIGPT)
             and self.llm.is_openai_chat_model()
+            and self.llm.supports_functions_or_tools()
         )
 
     def set_system_message(self, msg: str) -> None:

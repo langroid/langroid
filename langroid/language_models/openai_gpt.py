@@ -592,6 +592,12 @@ class OpenAIGPT(LanguageModel):
         openai_chat_models = [e.value for e in OpenAIChatModel]
         return self.config.chat_model in openai_chat_models
 
+    def supports_functions_or_tools(self) -> bool:
+        return self.is_openai_chat_model() and self.config.chat_model not in [
+            OpenAIChatModel.O1_MINI,
+            OpenAIChatModel.O1_PREVIEW,
+        ]
+
     def is_openai_completion_model(self) -> bool:
         openai_completion_models = [e.value for e in OpenAICompletionModel]
         return self.config.completion_model in openai_completion_models
@@ -1463,12 +1469,6 @@ class OpenAIGPT(LanguageModel):
         else:
             llm_messages = messages
 
-        # for models that don't support system msg, change SYSTEM role to USER
-        if self.config.chat_model in NON_SYSTEM_MESSAGE_MODELS:
-            for i, m in enumerate(llm_messages):
-                if m.role == Role.SYSTEM:
-                    llm_messages[i].role = Role.USER
-
         # Azure uses different parameters. It uses ``engine`` instead of ``model``
         # and the value should be the deployment_name not ``self.config.chat_model``
         chat_model = self.config.chat_model
@@ -1478,7 +1478,13 @@ class OpenAIGPT(LanguageModel):
 
         args: Dict[str, Any] = dict(
             model=chat_model,
-            messages=[m.api_dict() for m in llm_messages],
+            messages=[
+                m.api_dict(
+                    has_system_role=self.config.chat_model
+                    not in NON_SYSTEM_MESSAGE_MODELS
+                )
+                for m in (llm_messages)
+            ],
             max_tokens=max_tokens,
             stream=self.get_stream(),
         )

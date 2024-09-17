@@ -98,6 +98,12 @@ class TaskConfig(BaseModel):
             (Search for "SEND_TO" in the examples/ dir to see how this is used.)
         allow_subtask_multi_oai_tools (bool): whether to allow multiple OpenAI
             tool-calls to be sent to a sub-task.
+        recognize_string_signals (bool): whether to recognize string-based signaling
+            like DONE, SEND_TO, PASS, etc. Default is True, but note that we don't need
+            to use string-based signaling, and it is recommended to use the
+            new Orchestration tools instead (see agent/tools/orchestration.py),
+            e.g. DoneTool, SendTool, etc.
+
     """
 
     inf_loop_cycle_len: int = 10
@@ -107,6 +113,7 @@ class TaskConfig(BaseModel):
     logs_dir: str = "logs"
     addressing_prefix: str = ""
     allow_subtask_multi_oai_tools: bool = True
+    recognize_string_signals: bool = True
 
 
 class Task:
@@ -1363,7 +1370,10 @@ class Task:
             else:
                 # e must be this agent's Entity (LLM, AGENT or USER)
                 return self.agent.response_template(e=e, tool_messages=[result])
-        # if result content starts with @name, set recipient to name
+        if not self.config.recognize_string_signals:
+            # ignore all string-based signaling/routing
+            return result
+        # parse various routing/addressing strings in result
         is_pass, recipient, content = parse_routing(
             result,
             addressing_prefix=self.config.addressing_prefix,
@@ -1490,7 +1500,7 @@ class Task:
 
         content = result_msg.content if result_msg else ""
         content_any = result_msg.content_any if result_msg else None
-        if DONE in content:
+        if DONE in content and self.config.recognize_string_signals:
             # assuming it is of the form "DONE: <content>"
             content = content.replace(DONE, "").strip()
         oai_tool_calls = result_msg.oai_tool_calls if result_msg else None
@@ -1556,12 +1566,14 @@ class Task:
         Returns:
             bool: True if msg is (equivalent to) empty or None, False otherwise
         """
+        # if ignoring string-based signaling, set pass_str to ""
+        pass_str = PASS if self.config.recognize_string_signals else ""
         return (
             msg is None
-            or (isinstance(msg, str) and msg.strip() in [PASS, ""])
+            or (isinstance(msg, str) and msg.strip() in [pass_str, ""])
             or (
                 isinstance(msg, ChatDocument)
-                and msg.content.strip() in [PASS, ""]
+                and msg.content.strip() in [pass_str, ""]
                 and msg.function_call is None
                 and msg.oai_tool_calls is None
                 and msg.oai_tool_id2result is None
@@ -1574,12 +1586,13 @@ class Task:
     ) -> bool:
         """Is the task done based on the response from the given responder?"""
 
+        allow_done_string = self.config.recognize_string_signals
         response_says_done = result is not None and (
-            (isinstance(result, str) and DONE in result)
+            (isinstance(result, str) and DONE in result and allow_done_string)
             or (
                 isinstance(result, ChatDocument)
                 and (
-                    DONE in result.content
+                    (DONE in result.content and allow_done_string)
                     or any(
                         isinstance(t, (DoneTool, AgentDoneTool, FinalResultTool))
                         for t in result.tool_messages
@@ -1697,10 +1710,14 @@ class Task:
         if self._is_kill():
             return (True, StatusCode.KILL)
         result = result or self.pending_message
+        allow_done_string = self.config.recognize_string_signals
         # An entity decided task is done, either via DoneTool,
         # or by explicitly saying DONE
         done_result = result is not None and (
-            DONE in (result.content if isinstance(result, str) else result.content)
+            (
+                DONE in (result.content if isinstance(result, str) else result.content)
+                and allow_done_string
+            )
             or any(
                 isinstance(t, (DoneTool, AgentDoneTool, FinalResultTool))
                 for t in result.tool_messages
