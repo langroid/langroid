@@ -219,6 +219,8 @@ class LLMMessage(BaseModel):
         # in case has_system_role is False
         if not has_system_role and "role" in d and d["role"] == "system":
             d["role"] = "user"
+            if "content" in d:
+                d["content"] = "[ADDITIONAL SYSTEM MESSAGE:]\n\n" + d["content"]
         # drop None values since API doesn't accept them
         dict_no_none = {k: v for k, v in d.items() if v is not None}
         if "name" in dict_no_none and dict_no_none["name"] == "":

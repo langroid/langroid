@@ -1123,8 +1123,13 @@ class OpenAIGPT(LanguageModel):
     ) -> LLMTokenUsage:
         """
         Extracts token usage from ``response`` and computes cost, only when NOT
-        in streaming mode, since the LLM API (OpenAI currently) does not populate the
-        usage fields in streaming mode. In streaming mode, these are set to zero for
+        in streaming mode, since the LLM API (OpenAI currently) was not
+        populating the usage fields in streaming mode (but as of Sep 2024, streaming
+        responses include  usage info as well, so we should update the code
+        to directly use usage information from the streaming response, which is more
+        accurate, esp with "thinking" LLMs like o1 series which consume
+        thinking tokens).
+        In streaming mode, these are set to zero for
         now, and will be updated later by the fn ``update_token_usage``.
         """
         cost = 0.0
