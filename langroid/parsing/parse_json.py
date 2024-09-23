@@ -69,6 +69,9 @@ def add_quotes(s: str) -> str:
     if is_valid_json(s):
         return s
     try:
+        s_repaired = repair_newlines(s)
+        if is_valid_json(s_repaired):
+            return s_repaired
         dct = yaml.load(s, yaml.SafeLoader)
         return json.dumps(dct)
     except Exception:
@@ -119,7 +122,8 @@ def parse_imperfect_json(json_string: str) -> Union[Dict[str, Any], List[Any]]:
 
 def repair_newlines(s: str) -> str:
     """
-    Attempt to load as json, and if it fails, try with newlines replaced by space.
+    Attempt to load as json, and if it fails, try escaping unescaped newlines.
+    If that fails, replace any \n with space.
     Intended to handle cases where weak LLMs produce JSON-like strings where
     some string-values contain explicit newlines, e.g.:
     {"text": "This is a text\n with a newline"}
@@ -128,12 +132,17 @@ def repair_newlines(s: str) -> str:
     try:
         json.loads(s)
         return s
-    except Exception:
+    except json.JSONDecodeError:
+        import re
+
+        # Escape unescaped newlines
+        s = re.sub(r"(?<!\\)\n", r"\\n", s)
         try:
-            s = s.replace("\n", " ")
             json.loads(s)
             return s
-        except Exception:
+        except json.JSONDecodeError:
+            # If it still fails, replace any \n with space
+            s = s.replace("\n", " ")
             return s
 
 
