@@ -10,11 +10,11 @@ from langroid.parsing.parse_json import extract_top_level_json, parse_imperfect_
     [
         ("nothing to see here", []),
         (
-            '{"key": "value \n with unescaped \nnewline"}',
+            '{\n"key": \n"value \n with unescaped \nnewline"\n}',
             ['{"key": "value \\n with unescaped \\nnewline"}'],
         ),
         (
-            '{"key": "value \\n with escaped \\nnewline"}',
+            '{\n"key": \n"value \\n with escaped \\nnewline"}',
             ['{"key": "value \\n with escaped \\nnewline"}'],
         ),
         (
