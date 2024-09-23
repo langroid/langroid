@@ -60,13 +60,11 @@ def parse_imperfect_json(json_string: str) -> Union[Dict[str, Any], List[Any]]:
     except (ValueError, SyntaxError):
         pass
 
-    # If ast.literal_eval fails or returns non-dict/list, try json.loads
-    try:
-        json_string = repair_json(json_string)
-        result = json.loads(json_string)
-        if isinstance(result, (dict, list)):
-            return result
-    except json.JSONDecodeError:
+    # If ast.literal_eval fails or returns non-dict/list, try repair_json
+    json_repaired_obj = repair_json(json_string, return_objects=True)
+    if isinstance(json_repaired_obj, (dict, list)):
+        return json_repaired_obj
+    else:
         try:
             # fallback on yaml
             yaml_result = yaml.safe_load(json_string)
@@ -86,9 +84,14 @@ def try_repair_json_yaml(s: str) -> str | None:
     NOTE - replacing \n with space will result in format loss,
     which may matter in generated code (e.g. python, toml, etc)
     """
-    s_repaired = repair_json(s)
-    if s_repaired != "":
-        return s_repaired  # type: ignore
+    s_repaired_obj = repair_json(s, return_objects=True)
+    if isinstance(s_repaired_obj, list):
+        if len(s_repaired_obj) > 0:
+            s_repaired_obj = s_repaired_obj[0]
+        else:
+            s_repaired_obj = None
+    if s_repaired_obj is not None:
+        return json.dumps(s_repaired_obj)  # type: ignore
     else:
         try:
             yaml_result = yaml.safe_load(s)
