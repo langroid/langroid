@@ -87,7 +87,7 @@ nest-asyncio = "^1.6.0"
 async-generator = "^1.10"
 
 python-magic = "^0.4.27"
-json-repair = "^0.27.0"
+json-repair = "^0.29.0"
 cerebras-cloud-sdk = "^1.1.0"
 
 
