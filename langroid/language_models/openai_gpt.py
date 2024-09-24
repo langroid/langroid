@@ -329,7 +329,7 @@ class OpenAIGPTConfig(LLMConfig):
         litellm.drop_params = True  # drop un-supported params without crashing
         # modify params to fit the model expectations, and avoid crashing
         # (e.g. anthropic doesn't like first msg to be system msg)
-        litellm.modify_params = True  
+        litellm.modify_params = True
         self.seed = None  # some local mdls don't support seed
         keys_dict = litellm.utils.validate_environment(self.chat_model)
         missing_keys = keys_dict.get("missing_keys", [])
