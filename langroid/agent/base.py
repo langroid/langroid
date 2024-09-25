@@ -1507,26 +1507,6 @@ class Agent(ABC):
         if response is None or self.llm is None:
             return
 
-        # Note: If response was not streamed, then
-        # `response.usage` would already have been set by the API,
-        # so we only need to update in the stream case.
-        if stream:
-            # usage, cost = 0 when response is from cache
-            prompt_tokens = 0
-            completion_tokens = 0
-            cost = 0.0
-            if not response.cached:
-                prompt_tokens = self.num_tokens(prompt)
-                completion_tokens = self.num_tokens(response.message)
-                if response.function_call is not None:
-                    completion_tokens += self.num_tokens(str(response.function_call))
-                cost = self.compute_token_cost(prompt_tokens, completion_tokens)
-            response.usage = LLMTokenUsage(
-                prompt_tokens=prompt_tokens,
-                completion_tokens=completion_tokens,
-                cost=cost,
-            )
-
         # update total counters
         if response.usage is not None:
             self.total_llm_token_cost += response.usage.cost
