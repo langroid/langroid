@@ -72,7 +72,7 @@ ensures that tool generation errors are sent back to the LLM so it retries the g
 ## OpenAI Tools and Function-calling support
 
 Langroid supports OpenAI tool-calls API as well as OpenAI function-calls API.
-Read more here: https://github.com/langroid/langroid/releases/tag/0.7.0
+Read more [here](https://github.com/langroid/langroid/releases/tag/0.7.0).
 
 Langroid has always had its own native tool-calling support as well, 
 which works with **any** LLM -- you can define a subclass of `ToolMessage` (pydantic based) 
@@ -80,4 +80,22 @@ and it is transpiled into system prompt instructions for the tool.
 In practice, we don't see much difference between using this vs OpenAI fn-calling. 
 Example [here](https://github.com/langroid/langroid/blob/main/examples/basic/fn-call-local-simple.py).
 Or search for `ToolMessage` in any of the `tests/` or `examples/` folders.
+
+## Some example scripts appear to return to user input immediately without handling a tool.
+
+This is because the `task` has been set up with `interactive=True` 
+(which is the default). With this setting, the task loop waits for user input after
+either the `llm_response` or `agent_response` (typically a tool-handling response) 
+returns a valid response. If you want to progress through the task, you can simply 
+hit return, unless the prompt indicates that the user needs to enter a response.
+
+Alternatively, the `task` can be set up with `interactive=False` -- with this setting,
+the task loop will _only_ wait for user input when an entity response (`llm_response` 
+or `agent_response`) _explicitly_ addresses the user. Explicit user addressing can
+be done using either:
+- an orchestration tool, e.g. `SendTool` (see details in
+the release notes for [0.9.0](https://github.com/langroid/langroid/releases/tag/0.9.0)), an example script is the [multi-agent-triage.py](https://github.com/langroid/langroid/blob/main/examples/basic/multi-agent-triage.py), or 
+- a special addressing prefix, see the example script [1-agent-3-tools-address-user.py](https://github.com/langroid/langroid/blob/main/examples/basic/1-agent-3-tools-address-user.py)
+
+
 
