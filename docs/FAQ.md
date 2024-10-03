@@ -93,6 +93,7 @@ Alternatively, the `task` can be set up with `interactive=False` -- with this se
 the task loop will _only_ wait for user input when an entity response (`llm_response` 
 or `agent_response`) _explicitly_ addresses the user. Explicit user addressing can
 be done using either:
+
 - an orchestration tool, e.g. `SendTool` (see details in
 the release notes for [0.9.0](https://github.com/langroid/langroid/releases/tag/0.9.0)), an example script is the [multi-agent-triage.py](https://github.com/langroid/langroid/blob/main/examples/basic/multi-agent-triage.py), or 
 - a special addressing prefix, see the example script [1-agent-3-tools-address-user.py](https://github.com/langroid/langroid/blob/main/examples/basic/1-agent-3-tools-address-user.py)
