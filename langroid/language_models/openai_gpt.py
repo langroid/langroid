@@ -230,6 +230,8 @@ class OpenAICallParams(BaseModel):
     Various params that can be sent to an OpenAI API chat-completion call.
     When specified, any param here overrides the one with same name in the
     OpenAIGPTConfig.
+    See OpenAI API Reference for details on the params:
+    https://platform.openai.com/docs/api-reference/chat
     """
 
     max_tokens: int = 1024
@@ -239,7 +241,7 @@ class OpenAICallParams(BaseModel):
     response_format: Dict[str, str] | None = None
     logit_bias: Dict[int, float] | None = None  # token_id -> bias
     logprobs: bool = False
-    top_p: int | None = 1
+    top_p: float | None = 1.0
     top_logprobs: int | None = None  # if int, requires logprobs=True
     n: int = 1  # how many completions to generate (n > 1 is NOT handled now)
     stop: str | List[str] | None = None  # (list of) stop sequence(s)
