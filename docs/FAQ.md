@@ -99,4 +99,12 @@ the release notes for [0.9.0](https://github.com/langroid/langroid/releases/tag/
 - a special addressing prefix, see the example script [1-agent-3-tools-address-user.py](https://github.com/langroid/langroid/blob/main/examples/basic/1-agent-3-tools-address-user.py)
 
 
+## Can I specify top_k in OpenAIGPTConfig (for LLM API calls)?
+
+No; Langroid currently only supports parameters accepted by OpenAI's API, and `top_k` is _not_ one of them. See:
+
+- [OpenAI API Reference](https://platform.openai.com/docs/api-reference/chat/create)
+- [Discussion on top_k, top_p, temperature](https://community.openai.com/t/temperature-top-p-and-top-k-for-chatbot-responses/295542/5)
+- [Langroid example](https://github.com/langroid/langroid/blob/main/examples/basic/fn-call-local-numerical.py) showing how you can set other OpenAI API parameters, using the `OpenAICallParams` object.
+
 
