@@ -9,12 +9,17 @@ class XMLToolMessage(ToolMessage):
     """
     Abstract class for tools formatted using XML instead of JSON.
     Mainly tested for non-nested tool structures.
-    For any field named `code`, its value will be:
+
+    When a subclass defines a field with the attribute `verbatim=True`,
+    instructions are sent to the LLM to ensure the field's content is:
         - preserved as is, including whitespace, indents, quotes, newlines, etc
             with no escaping, and
         - enclosed in a CDATA section in the XML output.
-    This can be lead to far superior code-gen results from LLMs,
-    compared to generating code within JSON-formatted tools.
+    This is useful for LLMs sending code as part of a tool;
+    results can be far superior compared to sending code in JSON-formatted tools,
+    where code needs to confirm to JSON's strict rules and escaping requirements.
+    (see test_xml_tool_message.py for an example).
+
     """
 
     request: str
@@ -85,7 +90,7 @@ class XMLToolMessage(ToolMessage):
             formatted_string (str): The XML-formatted string to parse.
 
         Returns:
-            Optional["XmlToolMessage"]: An instance of the class if parsing succeeds,
+            Optional["XMLToolMessage"]: An instance of the class if parsing succeeds,
                 None otherwise.
         """
         parsed_data = cls.extract_field_values(formatted_string)
@@ -195,7 +200,7 @@ class XMLToolMessage(ToolMessage):
 
         This method searches for XML-like structures in the input text that match
         the expected format of the tool message. It looks for opening and closing
-        tags that correspond to the root element defined in the XmlToolMessage class,
+        tags that correspond to the root element defined in the XMLToolMessage class,
         which is by default <tool>.
 
         Args:
