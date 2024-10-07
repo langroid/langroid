@@ -523,7 +523,9 @@ class ChatAgent(Agent):
         if require_recipient and message_class is not None:
             message_class = message_class.require_recipient()
         if isinstance(message_class, XMLToolMessage):
-            # XmlToolMessage is not compatible with OpenAI's Tools/functions API
+            # XMLToolMessage is not compatible with OpenAI's Tools/functions API,
+            # so we disable use of functions API, enable langroid-native Tools,
+            # which are prompt-based.
             self.config.use_functions_api = False
             self.config.use_tools = True
         super().enable_message_handling(message_class)  # enables handling only
