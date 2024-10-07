@@ -7,6 +7,7 @@ from enum import Enum
 from typing import Any, Dict, List, Optional, Union, cast
 
 from langroid.agent.tool_message import ToolMessage
+from langroid.agent.xml_tool_message import XMLToolMessage
 from langroid.language_models.base import (
     LLMFunctionCall,
     LLMMessage,
@@ -181,21 +182,29 @@ class ChatDocument(Document):
             f"{recipient_str}{tool_str}{fields.content}"
         )
 
-    def get_json_tools(self) -> List[str]:
+    def get_tool_names(self) -> List[str]:
         """
-        Get names of attempted JSON tool usages in the content
+        Get names of attempted tool usages (JSON or non-JSON) in the content
             of the message.
         Returns:
-            List[str]: list of JSON tool names
+            List[str]: list of *attempted* tool names
+            (We say "attempted" since we ONLY look at the `request` component of the
+            tool-call representation, and we're not fully parsing it into the
+            corresponding tool message class)
+
         """
-        jsons = extract_top_level_json(self.content)
-        tools = []
-        for j in jsons:
-            json_data = json.loads(j)
-            tool = json_data.get("request")
-            if tool is not None:
-                tools.append(str(tool))
-        return tools
+        tool_candidates = XMLToolMessage.find_candidates(self.content)
+        if len(tool_candidates) == 0:
+            tool_candidates = extract_top_level_json(self.content)
+            if len(tool_candidates) == 0:
+                return []
+            tools = [json.loads(tc).get("request") for tc in tool_candidates]
+        else:
+            tool_dicts = [
+                XMLToolMessage.extract_field_values(tc) for tc in tool_candidates
+            ]
+            tools = [td.get("request") for td in tool_dicts if td is not None]
+        return [str(tool) for tool in tools if tool is not None]
 
     def log_fields(self) -> ChatDocLoggerFields:
         """
@@ -208,9 +217,9 @@ class ChatDocument(Document):
         if self.function_call is not None:
             tool_type = "FUNC"
             tool = self.function_call.name
-        elif self.get_json_tools() != []:
+        elif (json_tools := self.get_tool_names()) != []:
             tool_type = "TOOL"
-            tool = self.get_json_tools()[0]
+            tool = json_tools[0]
         recipient = self.metadata.recipient
         content = self.content
         sender_entity = self.metadata.sender

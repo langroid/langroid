@@ -12,6 +12,7 @@ from rich.markup import escape
 from langroid.agent.base import Agent, AgentConfig, noop_fn
 from langroid.agent.chat_document import ChatDocument
 from langroid.agent.tool_message import ToolMessage
+from langroid.agent.xml_tool_message import XMLToolMessage
 from langroid.language_models.base import (
     LLMFunctionSpec,
     LLMMessage,
@@ -141,7 +142,7 @@ class ChatAgent(Agent):
         #   if they are specified in a ToolMessage class as a classmethod `instructions`
         self.system_tool_instructions: str = ""
         # (b) these are only for the builtin in Langroid TOOLS mechanism:
-        self.system_json_tool_instructions: str = ""
+        self.system_tool_format_instructions: str = ""
 
         self.llm_functions_map: Dict[str, LLMFunctionSpec] = {}
         self.llm_functions_handled: Set[str] = set()
@@ -207,7 +208,7 @@ class ChatAgent(Agent):
         config_copy.name = f"{config_copy.name}-{i}"
         new_agent = agent_cls(config_copy)
         new_agent.system_tool_instructions = self.system_tool_instructions
-        new_agent.system_json_tool_instructions = self.system_json_tool_instructions
+        new_agent.system_tool_format_instructions = self.system_tool_format_instructions
         new_agent.llm_tools_map = self.llm_tools_map
         new_agent.llm_functions_map = self.llm_functions_map
         new_agent.llm_functions_handled = self.llm_functions_handled
@@ -303,10 +304,11 @@ class ChatAgent(Agent):
             ]
         )
 
-    def json_format_rules(self) -> str:
+    def tool_format_rules(self) -> str:
         """
-        Specification of JSON formatting rules, based on the currently enabled
-        usable `ToolMessage`s
+        Specification of tool formatting rules
+        (typically JSON-based but can be non-JSON, e.g. XMLToolMessage),
+        based on the currently enabled usable `ToolMessage`s
 
         Returns:
             str: formatting rules
@@ -320,9 +322,9 @@ class ChatAgent(Agent):
 
         if len(usable_tool_classes) == 0:
             return "You can ask questions in natural language."
-        json_instructions = "\n\n".join(
+        format_instructions = "\n\n".join(
             [
-                msg_cls.json_instructions(tool=self.config.use_tools)
+                msg_cls.format_instructions(tool=self.config.use_tools)
                 for msg_cls in usable_tool_classes
             ]
         )
@@ -332,11 +334,11 @@ class ChatAgent(Agent):
             if hasattr(msg_cls, "json_group_instructions") and callable(
                 getattr(msg_cls, "json_group_instructions")
             ):
-                return msg_cls.json_group_instructions().format(
-                    json_instructions=json_instructions
+                return msg_cls.group_format_instructions().format(
+                    format_instructions=format_instructions
                 )
-        return ToolMessage.json_group_instructions().format(
-            json_instructions=json_instructions
+        return ToolMessage.group_format_instructions().format(
+            format_instructions=format_instructions
         )
 
     def tool_instructions(self) -> str:
@@ -358,7 +360,7 @@ class ChatAgent(Agent):
                 and inspect.ismethod(msg_cls.instructions)
                 and msg_cls.default_value("request") in self.llm_tools_usable
             ):
-                # example will be shown in json_format_rules() when using TOOLs,
+                # example will be shown in tool_format_rules() when using TOOLs,
                 # so we don't need to show it here.
                 example = "" if self.config.use_tools else (msg_cls.usage_examples())
                 if example != "":
@@ -457,7 +459,7 @@ class ChatAgent(Agent):
             
             {self.system_tool_instructions}
             
-            {self.system_json_tool_instructions}
+            {self.system_tool_format_instructions}
             
             """.lstrip()
         )
@@ -520,6 +522,10 @@ class ChatAgent(Agent):
             return None
         if require_recipient and message_class is not None:
             message_class = message_class.require_recipient()
+        if isinstance(message_class, XMLToolMessage):
+            # XmlToolMessage is not compatible with OpenAI's Tools/functions API
+            self.config.use_functions_api = False
+            self.config.use_tools = True
         super().enable_message_handling(message_class)  # enables handling only
         tools = self._get_tool_list(message_class)
         if message_class is not None:
@@ -570,7 +576,7 @@ class ChatAgent(Agent):
 
         # Set tool instructions and JSON format instructions
         if self.config.use_tools:
-            self.system_json_tool_instructions = self.json_format_rules()
+            self.system_tool_format_instructions = self.tool_format_rules()
         self.system_tool_instructions = self.tool_instructions()
 
     def disable_message_handling(

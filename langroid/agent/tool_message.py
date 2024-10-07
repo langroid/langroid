@@ -72,7 +72,7 @@ class ToolMessage(ABC, BaseModel):
     @classmethod
     def examples(cls) -> List["ToolMessage" | Tuple[str, "ToolMessage"]]:
         """
-        Examples to use in few-shot demos with JSON formatting instructions.
+        Examples to use in few-shot demos with formatting instructions.
         Each example can be either:
         - just a ToolMessage instance, e.g. MyTool(param1=1, param2="hello"), or
         - a tuple (description, ToolMessage instance), where the description is
@@ -104,20 +104,20 @@ class ToolMessage(ABC, BaseModel):
             examples = [choice(cls.examples())]
         else:
             examples = cls.examples()
-        examples_jsons = [
+        formatted_examples = [
             (
-                f"EXAMPLE {i}: (THOUGHT: {ex[0]}) => \n{ex[1].json_example()}"
+                f"EXAMPLE {i}: (THOUGHT: {ex[0]}) => \n{ex[1].format_example()}"
                 if isinstance(ex, tuple)
-                else f"EXAMPLE {i}:\n {ex.json_example()}"
+                else f"EXAMPLE {i}:\n {ex.format_example()}"
             )
             for i, ex in enumerate(examples, 1)
         ]
-        return "\n\n".join(examples_jsons)
+        return "\n\n".join(formatted_examples)
 
     def to_json(self) -> str:
         return self.json(indent=4, exclude=self.Config.schema_extra["exclude"])
 
-    def json_example(self) -> str:
+    def format_example(self) -> str:
         return self.json(indent=4, exclude=self.Config.schema_extra["exclude"])
 
     def dict_example(self) -> Dict[str, Any]:
@@ -148,7 +148,7 @@ class ToolMessage(ABC, BaseModel):
         return properties.get(f, {}).get("default", None)
 
     @classmethod
-    def json_instructions(cls, tool: bool = False) -> str:
+    def format_instructions(cls, tool: bool = False) -> str:
         """
         Default Instructions to the LLM showing how to use the tool/function-call.
         Works for GPT4 but override this for weaker LLMs if needed.
@@ -181,19 +181,19 @@ class ToolMessage(ABC, BaseModel):
         )
 
     @staticmethod
-    def json_group_instructions() -> str:
+    def group_format_instructions() -> str:
         """Template for instructions for a group of tools.
         Works with GPT4 but override this for weaker LLMs if needed.
         """
         return textwrap.dedent(
             """
-            === ALL AVAILABLE TOOLS and THEIR JSON FORMAT INSTRUCTIONS ===
+            === ALL AVAILABLE TOOLS and THEIR FORMAT INSTRUCTIONS ===
             You have access to the following TOOLS to accomplish your task:
 
-            {json_instructions}
+            {format_instructions}
             
             When one of the above TOOLs is applicable, you must express your 
-            request as "TOOL:" followed by the request in the above JSON format.
+            request as "TOOL:" followed by the request in the above format.
             """
         )
 

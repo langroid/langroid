@@ -1,3 +1,4 @@
+import difflib
 import getpass
 import hashlib
 import importlib
@@ -8,6 +9,7 @@ import shutil
 import socket
 import traceback
 import uuid
+from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
@@ -182,3 +184,79 @@ def hash(s: str) -> str:
 def generate_unique_id() -> str:
     """Generate a unique ID using UUID4."""
     return str(uuid.uuid4())
+
+
+def create_file(filepath: str | Path, content: str = "") -> None:
+    """
+    Create a file with the given content in the specified directory.
+    If content is empty, it will simply touch to create an empty file.
+
+    Args:
+        filepath (str|Path): The relative path of the file to be created
+        content (str): The content to be written to the file
+    """
+    Path(filepath).parent.mkdir(parents=True, exist_ok=True)
+    if content == "":
+        Path(filepath).touch()
+    else:
+        # the newline = '\n` argument is used to ensure that
+        # newlines in the content are written as actual line breaks
+        with open(filepath, "w", newline="\n") as f:
+            f.write(content)
+    logger.warning(f"File created/updated: {filepath}")
+
+
+def read_file(path: str, line_numbers: bool = False) -> str:
+    """
+    Read the contents of a file.
+
+    Args:
+        path (str): The path to the file to be read.
+        line_numbers (bool, optional): If True, prepend line numbers to each line.
+            Defaults to False.
+
+    Returns:
+        str: The contents of the file, optionally with line numbers.
+
+    Raises:
+        FileNotFoundError: If the specified file does not exist.
+    """
+    # raise an error if the file does not exist
+    if not Path(path).exists():
+        raise FileNotFoundError(f"File not found: {path}")
+    file = Path(path).expanduser()
+    content = file.read_text()
+    if line_numbers:
+        lines = content.splitlines()
+        numbered_lines = [f"{i+1}: {line}" for i, line in enumerate(lines)]
+        return "\n".join(numbered_lines)
+    return content
+
+
+def diff_files(file1: str, file2: str) -> str:
+    """
+    Find the diffs between two files, in unified diff format.
+    """
+    with open(file1, "r") as f1, open(file2, "r") as f2:
+        lines1 = f1.readlines()
+        lines2 = f2.readlines()
+
+    differ = difflib.unified_diff(lines1, lines2, fromfile=file1, tofile=file2)
+    diff_result = "".join(differ)
+    return diff_result
+
+
+def list_dir(path: str | Path) -> list[str]:
+    """
+    List the contents of a directory.
+
+    Args:
+        path (str): The path to the directory.
+
+    Returns:
+        list[str]: A list of the files and directories in the specified directory.
+    """
+    dir_path = Path(path)
+    if not dir_path.is_dir():
+        raise NotADirectoryError(f"Path is not a directory: {dir_path}")
+    return [str(p) for p in dir_path.iterdir()]
