@@ -528,7 +528,7 @@ class ChatAgent(Agent):
             self.config.use_tools = True
         super().enable_message_handling(message_class)  # enables handling only
         tools = self._get_tool_list(message_class)
-        if message_class is not None and self.config.use_functions_api:
+        if message_class is not None:
             request = message_class.default_value("request")
             if request == "":
                 raise ValueError(
