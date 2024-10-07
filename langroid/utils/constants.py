@@ -26,3 +26,5 @@ TOOL = "TOOL"
 # it no letters, digits or underscores.
 # See tests/main/test_msg_routing for example usage
 AT = "|@|"
+TOOL_BEGIN = "TOOL_BEGIN"
+TOOL_END = "TOOL_END"
