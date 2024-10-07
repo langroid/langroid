@@ -35,7 +35,7 @@
 </h3>
 
 `Langroid` is an intuitive, lightweight, extensible and principled
-Python framework to easily build LLM-powered applications, from ex-CMU and UW-Madison researchers. 
+Python framework to easily build LLM-powered applications, from CMU and UW-Madison researchers. 
 You set up Agents, equip them with optional components (LLM, 
 vector-store and tools/functions), assign them tasks, and have them 
 collaboratively solve a problem by exchanging messages. 
