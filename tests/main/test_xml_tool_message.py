@@ -5,6 +5,7 @@ import pytest
 import langroid as lr
 from langroid.agent.tools.orchestration import ResultTool
 from langroid.agent.xml_tool_message import XMLToolMessage
+from langroid.pydantic_v1 import Field
 from langroid.utils.configuration import Settings, set_global
 
 
@@ -12,9 +13,12 @@ class CodeTool(XMLToolMessage):
     request: str = "code_tool"
     purpose: str = "Tool for writing <code> with a certain <version> to a <filepath>"
 
-    filepath: str
-    version: int
-    code: str
+    filepath: str = Field(..., description="The path to the file to write the code to")
+    version: int = Field(..., description="The version number of the code")
+    # NOTE: we are setting a custom attrib verbatim to True to indicate that
+    # parsing/formatting should be verbatim, and to ensure that LLM is instructed
+    # to enclose the content in a CDATA section
+    code: str = Field(..., description="The code to write to the file", verbatim=True)
 
     @classmethod
     def examples(cls) -> List[XMLToolMessage | Tuple[str, XMLToolMessage]]:
@@ -50,7 +54,9 @@ def test_find_candidates():
         <request>code_tool</request>
         <filepath>/path/to/file.py</filepath>
         <version>1</version>
-        <code><![CDATA[print("Hello, World!")]]></code>
+        <code><![CDATA[
+print("Hello, World!")
+]]></code>
     </{root_tag}>
     Some text in between
     <{root_tag}>
@@ -100,7 +106,11 @@ def test_parse():
         <request>code_tool</request>
         <filepath>/path/to/file.py</filepath>
         <version>1</version>
-        <code><![CDATA[print("Hello, World!")]]></code>
+        <code><![CDATA[
+```
+print("Hello, World!")
+```
+]]></code>
     </{root_tag}>
     """
     code_tool = CodeTool.parse(xml_string)

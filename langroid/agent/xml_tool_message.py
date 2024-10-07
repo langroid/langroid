@@ -3,7 +3,6 @@ from typing import Any, Dict, List, Optional
 from lxml import etree
 
 from langroid.agent.tool_message import ToolMessage
-from langroid.language_models.base import LLMFunctionSpec
 
 
 class XMLToolMessage(ToolMessage):
@@ -26,8 +25,8 @@ class XMLToolMessage(ToolMessage):
     class Config(ToolMessage.Config):
         root_element = "tool"
 
-    @staticmethod
-    def extract_field_values(formatted_string: str) -> Optional[Dict[str, Any]]:
+    @classmethod
+    def extract_field_values(cls, formatted_string: str) -> Optional[Dict[str, Any]]:
         """
         Extracts field values from an XML-formatted string.
 
@@ -46,10 +45,24 @@ class XMLToolMessage(ToolMessage):
         parser = etree.XMLParser(strip_cdata=False)
         root = etree.fromstring(formatted_string.encode("utf-8"), parser=parser)
 
-        def parse_element(element: etree._Element) -> Dict[str, Any] | str:
-            if element.tag == "code":
+        def parse_element(element: etree._Element) -> Any | Dict[str, Any] | str:
+            # Skip elements starting with underscore
+            field_info = cls.__fields__.get(element.tag)
+            is_verbatim = field_info and field_info.field_info.extra.get(
+                "verbatim", False
+            )
+
+            if is_verbatim:
                 # For code elements, preserve the content as is, including whitespace
-                return element.text if element.text else ""
+                content = element.text if element.text else ""
+                # Strip leading and trailing triple backticks if present,
+                # accounting for whitespace
+                return (
+                    content.strip().removeprefix("```").removesuffix("```").strip()
+                    if content.strip().startswith("```")
+                    and content.strip().endswith("```")
+                    else content
+                )
             elif len(element) == 0:
                 # For non-code leaf elements, strip whitespace
                 return element.text.strip() if element.text else ""
@@ -60,7 +73,8 @@ class XMLToolMessage(ToolMessage):
         result = parse_element(root)
         if not isinstance(result, dict):
             return None
-        return result
+        # Filter out empty dictionaries from skipped underscore fields
+        return {k: v for k, v in result.items() if v != {}}
 
     @classmethod
     def parse(cls, formatted_string: str) -> Optional["XMLToolMessage"]:
@@ -107,11 +121,18 @@ class XMLToolMessage(ToolMessage):
         for field in fields:
             preamble += f"{field.upper()} = [value for {field}]\n"
 
-        code_alert = ""
-        if "code" in fields:
-            code_alert = """
-            EXTREMELY IMPORTANT: Any `code` fields you provide 
-            MUST be wrapped in a CDATA section, and your code
+        verbatim_fields = [
+            field
+            for field, field_info in cls.__fields__.items()
+            if field_info.field_info.extra.get("verbatim", False)
+        ]
+
+        verbatim_alert = ""
+        if len(verbatim_fields) > 0:
+            verbatim_alert = f"""
+            EXTREMELY IMPORTANT: For these fields:
+            {', '.join(verbatim_fields)},
+            the contents MUST be wrapped in a CDATA section, and the content
             must be written verbatim WITHOUT any modifications or escaping,
             such as spaces, tabs, indents, newlines, quotes, etc.
             """
@@ -137,7 +158,7 @@ class XMLToolMessage(ToolMessage):
 
             Make sure to replace the placeholders with actual values 
             when using the tool.                
-            {code_alert}            
+            {verbatim_alert}            
             {examples_str}
             """.lstrip()
 
@@ -156,7 +177,9 @@ class XMLToolMessage(ToolMessage):
         for name, value in self.dict().items():
             if name not in exclude_fields:
                 elem = etree.SubElement(root, name)
-                if name == "code":
+                field_info = self.__class__.__fields__[name]
+                is_verbatim = field_info.field_info.extra.get("verbatim", False)
+                if is_verbatim:
                     elem.text = etree.CDATA(str(value))
                 else:
                     elem.text = str(value)
@@ -210,19 +233,3 @@ class XMLToolMessage(ToolMessage):
             start = end + len(closing_tag)
 
         return candidates
-
-    @classmethod
-    def llm_function_schema(
-        cls,
-        request: bool = False,
-        defaults: bool = True,
-    ) -> LLMFunctionSpec:
-        raise NotImplementedError(
-            """
-            XmlToolMessage is not compatible with OpenAI's Tools/functions API,
-            which is exclusively JSON-based.
-            To leverage XmlToolMessage, you should set up your `ChatAgentConfig` with:
-            - `use_functions_api = False`     # disable OpenAI functions/tools API
-            - `use_tools = True`  # enable Langroid's prompt-based Tools mechanism.
-            """
-        )
