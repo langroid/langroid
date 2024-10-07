@@ -11,7 +11,7 @@ class XMLToolMessage(ToolMessage):
     Mainly tested for non-nested tool structures.
 
     When a subclass defines a field with the attribute `verbatim=True`,
-    its value will be:
+    instructions are sent to the LLM to ensure the field's content is:
         - preserved as is, including whitespace, indents, quotes, newlines, etc
             with no escaping, and
         - enclosed in a CDATA section in the XML output.
@@ -19,6 +19,7 @@ class XMLToolMessage(ToolMessage):
     results can be far superior compared to sending code in JSON-formatted tools,
     where code needs to confirm to JSON's strict rules and escaping requirements.
     (see test_xml_tool_message.py for an example).
+
     """
 
     request: str
