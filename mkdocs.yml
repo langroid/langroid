@@ -99,6 +99,11 @@ nav:
     - Agent with Retrieval: quick-start/chat-agent-docs.md
   # defer to gen-files + literate-nav
   - FAQ: FAQ.md
+  - Notes-Updates:
+      - Overview: notes/overview.md
+      - XML-based Tools: notes/xml-tools.md
+      - Async Streaming: notes/async-streaming.md
+
   - Examples:
     - Guide: examples/guide.md
     - Hierarchical Agent Computation: examples/agent-tree.md
@@ -108,7 +113,6 @@ nav:
     - Local LLM Setup: tutorials/local-llm-setup.md
     - Non-OpenAI LLMs: tutorials/non-openai-llms.md
     - SQLChatAgent: tutorials/postgresql-agent.md
-    - XML-based Tools: tutorials/xml-tools.md
   - Code/API Docs: reference/
 #  - API Documentation:
 #    - language_models: api/language_models_base.md

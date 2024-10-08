@@ -135,7 +135,7 @@ teacher_task.run()
 <summary> <b>Click to expand</b></summary>
 
 - **Oct 2024:**
-  - **[0.17.0]** XML-based tools, see [docs](https://langroid.github.io/langroid/tutorials/xml-tools/).
+  - **[0.17.0]** XML-based tools, see [docs](https://langroid.github.io/langroid/notes/xml-tools/).
 - **Sep 2024:**
   - **[0.16.0](https://github.com/langroid/langroid/releases/tag/0.16.0)**  Support for OpenAI `o1-mini` and `o1-preview` models.
   - **[0.15.0](https://github.com/langroid/langroid/releases/tag/0.15.0)** Cerebras API support -- run llama-3.1 models hosted on Cerebras Cloud (very fast inference).

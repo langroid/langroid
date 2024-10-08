@@ -708,7 +708,7 @@ class OpenAIGPT(LanguageModel):
         event_args = ""
         event_fn_name = ""
         event_tool_deltas: Optional[List[Dict[str, Any]]] = None
-
+        silent = is_async and self.config.async_stream_quiet
         # The first two events in the stream of Azure OpenAI is useless.
         # In the 1st: choices list is empty, in the 2nd: the dict delta has null content
         if chat:
@@ -727,42 +727,40 @@ class OpenAIGPT(LanguageModel):
             event_text = choices[0]["text"]
         if event_text:
             completion += event_text
-            if not is_async:
+            if not silent:
                 sys.stdout.write(Colors().GREEN + event_text)
                 sys.stdout.flush()
                 self.config.streamer(event_text)
         if event_fn_name:
             function_name = event_fn_name
             has_function = True
-            if not is_async:
+            if not silent:
                 sys.stdout.write(Colors().GREEN + "FUNC: " + event_fn_name + ": ")
                 sys.stdout.flush()
                 self.config.streamer(event_fn_name)
 
         if event_args:
             function_args += event_args
-            if not is_async:
+            if not silent:
                 sys.stdout.write(Colors().GREEN + event_args)
                 sys.stdout.flush()
                 self.config.streamer(event_args)
 
-        if event_tool_deltas is not None:
-            # print out streaming tool calls
+        if event_tool_deltas is not None and not silent:
+            # print out streaming tool calls, if not async
             for td in event_tool_deltas:
                 if td["function"]["name"] is not None:
                     tool_fn_name = td["function"]["name"]
-                    if not is_async:
-                        sys.stdout.write(
-                            Colors().GREEN + "OAI-TOOL: " + tool_fn_name + ": "
-                        )
-                        sys.stdout.flush()
-                        self.config.streamer(tool_fn_name)
+                    sys.stdout.write(
+                        Colors().GREEN + "OAI-TOOL: " + tool_fn_name + ": "
+                    )
+                    sys.stdout.flush()
+                    self.config.streamer(tool_fn_name)
                 if td["function"]["arguments"] != "":
                     tool_fn_args = td["function"]["arguments"]
-                    if not is_async:
-                        sys.stdout.write(Colors().GREEN + tool_fn_args)
-                        sys.stdout.flush()
-                        self.config.streamer(tool_fn_args)
+                    sys.stdout.write(Colors().GREEN + tool_fn_args)
+                    sys.stdout.flush()
+                    self.config.streamer(tool_fn_args)
 
         # show this delta in the stream
         if choices[0].get("finish_reason", "") in [
@@ -872,6 +870,7 @@ class OpenAIGPT(LanguageModel):
                     completion=completion,
                     function_args=function_args,
                     function_name=function_name,
+                    is_async=True,
                 )
                 if is_break:
                     break
