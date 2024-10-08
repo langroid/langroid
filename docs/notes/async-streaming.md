@@ -1,6 +1,6 @@
 # Suppressing output in async, streaming mode
 
-Available since version 0.17.2
+Available since version 0.18.0
 
 When using an LLM API in streaming + async mode, you may want to suppress output,
 especially when concurrently running multiple instances of the API.
