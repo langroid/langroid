@@ -248,12 +248,6 @@ class DocChatAgent(ChatAgent):
     def ingest(self) -> None:
         """
         Chunk + embed + store docs specified by self.config.doc_paths
-
-        Returns:
-            dict with keys:
-                n_splits: number of splits
-                urls: list of urls
-                paths: list of file paths
         """
         if len(self.config.doc_paths) == 0:
             # we must be using a previously defined collection
@@ -1112,9 +1106,8 @@ class DocChatAgent(ChatAgent):
         """
 
         if (
-            self.config.vecdb is None
-            or self.vecdb is None
-            or self.config.vecdb.collection_name
+            self.vecdb is None
+            or self.vecdb.config.collection_name
             not in self.vecdb.list_collections(empty=False)
         ):
             return []
@@ -1284,8 +1277,10 @@ class DocChatAgent(ChatAgent):
             List[Document]: list of relevant extracts
 
         """
-        if self.config.vecdb.collection_name not in self.vecdb.list_collections(
-            empty=False
+        if (
+            self.vecdb is None
+            or self.vecdb.config.collection_name
+            not in self.vecdb.list_collections(empty=False)
         ):
             return query, []
 
