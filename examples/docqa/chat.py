@@ -76,7 +76,7 @@ def main(
             # strengths and weaknesses. Try one that works for your use case.
             pdf=PdfParsingConfig(
                 # alternatives: "unstructured", "pdfplumber", "fitz"
-                library="pdfplumber",
+                library="fitz",
             ),
         ),
     )

@@ -248,12 +248,6 @@ class DocChatAgent(ChatAgent):
     def ingest(self) -> None:
         """
         Chunk + embed + store docs specified by self.config.doc_paths
-
-        Returns:
-            dict with keys:
-                n_splits: number of splits
-                urls: list of urls
-                paths: list of file paths
         """
         if len(self.config.doc_paths) == 0:
             # we must be using a previously defined collection
@@ -1110,6 +1104,14 @@ class DocChatAgent(ChatAgent):
         Returns:
 
         """
+
+        if (
+            self.vecdb is None
+            or self.vecdb.config.collection_name
+            not in self.vecdb.list_collections(empty=False)
+        ):
+            return []
+
         # if we are using cross-encoder reranking or reciprocal rank fusion (RRF),
         # we can retrieve more docs during retrieval, and leave it to the cross-encoder
         # or RRF reranking to whittle down to self.config.parsing.n_similar_docs
@@ -1275,6 +1277,13 @@ class DocChatAgent(ChatAgent):
             List[Document]: list of relevant extracts
 
         """
+        if (
+            self.vecdb is None
+            or self.vecdb.config.collection_name
+            not in self.vecdb.list_collections(empty=False)
+        ):
+            return query, []
+
         if len(self.dialog) > 0 and not self.config.assistant_mode:
             # Regardless of whether we are in conversation mode or not,
             # for relevant doc/chunk extraction, we must convert the query

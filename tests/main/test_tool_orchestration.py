@@ -264,6 +264,116 @@ def test_orch_tools(
     assert result == 3
 
 
+@pytest.mark.asyncio
+@pytest.mark.parametrize("use_functions_api", [True, False])
+@pytest.mark.parametrize("use_tools_api", [True, False])
+async def test_orch_tools_async(
+    test_settings: Settings,
+    use_functions_api: bool,
+    use_tools_api: bool,
+):
+    """
+    Test multiple orchestration tools in a 3-agent setting:
+    PassTool use by agent,
+    ForwardTool use by agent, LLM,
+    DoneTool use by agent, LLM
+    """
+
+    set_global(test_settings)
+    # these orch tools are enabled for HANDLING by default in any ChatAgent,
+    # via the ChatAgentConfig.enable_orchestration_tool_handling = True flag.
+    # But if we need to enable the LLM to generate these, we need to explicitly
+    # enable these, as we see for some of the tools below.
+
+    DoneTool = lr.agent.tools.orchestration.DoneTool
+    ForwardTool = lr.agent.tools.orchestration.ForwardTool
+    PassTool = lr.agent.tools.orchestration.PassTool
+
+    done_tool_name = DoneTool.default_value("request")
+    forward_tool_name = ForwardTool.default_value("request")
+
+    class ReduceTool(lr.ToolMessage):
+        purpose = "to remove last zero from a number ending in 0"
+        request = "reduce_tool"
+        number: int
+
+        def handle(self) -> int:
+            return int(self.number / 10)
+
+    reduce_tool_name = ReduceTool.default_value("request")
+
+    class TestAgent(lr.ChatAgent):
+        def reduce_tool(self, msg: ReduceTool) -> PassTool:
+            # validate and pass on
+            return PassTool()
+
+    agent = TestAgent(
+        lr.ChatAgentConfig(
+            name="Test",
+            use_functions_api=use_functions_api,
+            use_tools_api=use_tools_api,
+            use_tools=not use_functions_api,
+            system_message=f"""
+            Whenever you receive a number, process it like this:
+            - if the number ENDS in 0, use the TOOL: {reduce_tool_name} 
+                to reduce it, and the Reducer will return the result to you,
+                and you must CONTINUE processing it using these same rules.
+            - else if number is EVEN, FORWARD it to the "EvenHandler" agent,
+                    using the `{forward_tool_name}` TOOL; the EvenHandler will 
+                    return the result of this TOOL, and you CONTINUE processing
+                    it using these same rules.
+            - else if number is ODD, use the {done_tool_name} to indicate you are 
+            finished,
+                along with the number as is in the `content` field.
+            """,
+        )
+    )
+    # test DoneTool in llm_response
+    agent.enable_message(DoneTool, use=True, handle=True)
+    agent.enable_message(ForwardTool, use=True, handle=True)
+    agent.enable_message(ReduceTool, use=True, handle=True)
+    task = lr.Task(agent, interactive=False)
+
+    even_agent = lr.ChatAgent(
+        lr.ChatAgentConfig(
+            name="EvenHandler",
+            llm=MockLMConfig(response_fn=lambda x: str(int(round(float(x))) / 2)),
+        )
+    )
+    even_task = lr.Task(even_agent, single_round=True, interactive=False)
+
+    # distracting agent that should not handle any msgs
+    class TriplerAgent(lr.ChatAgent):
+        def reduce_tool(self, msg: ReduceTool) -> None:
+            # validate and forward to Reducer
+            return ForwardTool(agent="Reducer")
+
+    triple_agent = TriplerAgent(
+        lr.ChatAgentConfig(
+            name="Tripler",
+            llm=MockLMConfig(response_fn=lambda x: str(int(round(float(x))) * 3)),
+        )
+    )
+    triple_agent.enable_message(ReduceTool, use=False, handle=True)
+    triple_task = lr.Task(triple_agent, single_round=True, interactive=False)
+
+    class ReducerAgent(lr.ChatAgent):
+        def reduce_tool(self, msg: ReduceTool) -> DoneTool:
+            return DoneTool(content=str(msg.handle()))
+
+    reducer_agent = ReducerAgent(lr.ChatAgentConfig(name="Reducer"))
+    reducer_agent.enable_message(ReduceTool, use=False, handle=True)
+
+    reducer_task = lr.Task(reducer_agent, single_round=False, interactive=False)
+
+    task.add_sub_task([triple_task, reducer_task, even_task])
+
+    # 1200 -> 120 -> 12 -> 6 -> 3 -> done
+    result = await task[float].run_async(1200, turns=60)
+
+    assert result == 3
+
+
 @pytest.mark.parametrize("use_functions_api", [True, False])
 @pytest.mark.parametrize("use_tools_api", [True, False])
 def test_send_tools(
