@@ -1316,7 +1316,7 @@ class Agent(ABC):
         """
         Convert result of a responder (agent_response or llm_response, or task.run()),
         or tool handler, or handle_message_fallback,
-        to a ChatDocument, to enabling handling by other
+        to a ChatDocument, to enable handling by other
         responders/tasks in a task loop possibly involving multiple agents.
 
         Args:

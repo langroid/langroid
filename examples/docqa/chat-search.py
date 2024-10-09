@@ -1,6 +1,7 @@
 """
-Single-agent question-answering system that has access to DuckDuckGo (DDG) Search when needed,
-and in case a DDG Search is used, ingests contents into a vector-db,
+This is a single-agent question-answering system that has access to a Web-Search
+Tool when needed,
+and in case a web search is used, ingests scraped link contents into a vector-db,
 and uses Retrieval Augmentation to answer the question.
 
 Run like this:
@@ -31,7 +32,7 @@ from langroid.agent.special.doc_chat_agent import (
     DocChatAgent,
     DocChatAgentConfig,
 )
-from langroid.parsing.web_search import duckduckgo_search
+from langroid.parsing.web_search import metaphor_search
 from langroid.agent.task import Task
 from langroid.utils.constants import NO_ANSWER
 from langroid.utils.configuration import set_global, Settings
@@ -78,7 +79,7 @@ class RelevantSearchExtractsTool(ToolMessage):
         """
 
 
-class DDGSearchDocChatAgent(DocChatAgent):
+class SearchDocChatAgent(DocChatAgent):
     tried_vecdb: bool = False
 
     def llm_response(
@@ -106,7 +107,7 @@ class DDGSearchDocChatAgent(DocChatAgent):
         self.tried_vecdb = False
         query = msg.query
         num_results = msg.num_results
-        results = duckduckgo_search(query, num_results)
+        results = metaphor_search(query, num_results)
         links = [r.link for r in results]
         self.config.doc_paths = links
         self.ingest()
@@ -191,7 +192,7 @@ def main(
         """,
     )
 
-    agent = DDGSearchDocChatAgent(config)
+    agent = SearchDocChatAgent(config)
     agent.enable_message(RelevantExtractsTool)
     agent.enable_message(RelevantSearchExtractsTool)
     collection_name = Prompt.ask(

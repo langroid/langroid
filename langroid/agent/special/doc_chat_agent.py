@@ -1110,6 +1110,15 @@ class DocChatAgent(ChatAgent):
         Returns:
 
         """
+
+        if (
+            self.config.vecdb is None
+            or self.vecdb is None
+            or self.config.vecdb.collection_name
+            not in self.vecdb.list_collections(empty=False)
+        ):
+            return []
+
         # if we are using cross-encoder reranking or reciprocal rank fusion (RRF),
         # we can retrieve more docs during retrieval, and leave it to the cross-encoder
         # or RRF reranking to whittle down to self.config.parsing.n_similar_docs
@@ -1275,6 +1284,11 @@ class DocChatAgent(ChatAgent):
             List[Document]: list of relevant extracts
 
         """
+        if self.config.vecdb.collection_name not in self.vecdb.list_collections(
+            empty=False
+        ):
+            return query, []
+
         if len(self.dialog) > 0 and not self.config.assistant_mode:
             # Regardless of whether we are in conversation mode or not,
             # for relevant doc/chunk extraction, we must convert the query
