@@ -244,8 +244,11 @@ class ChainlitAgentCallbacks:
         agent.callbacks.show_error_message = self.show_error_message
         agent.callbacks.show_start_response = self.show_start_response
         self.config = config
-
         self.agent: lr.Agent = agent
+        if self.agent.llm is not None:
+            # We don't want to suppress LLM output in async + streaming,
+            # since we often use chainlit async callbacks to display LLM output
+            self.agent.llm.config.async_stream_quiet = False
         if msg is not None:
             self.show_first_user_message(msg)
 

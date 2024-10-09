@@ -15,7 +15,7 @@ import chainlit as cl
 
 @cl.on_chat_start
 async def on_chat_start():
-    lm_config = lm.OpenAIGPTConfig(chat_model="ollama/mistral")
+    lm_config = lm.OpenAIGPTConfig()
     agent = lr.ChatAgent(lr.ChatAgentConfig(llm=lm_config))
     task = lr.Task(agent, interactive=True)
 
