@@ -281,7 +281,6 @@ def my_write_file_tool(temp_dir):
     return MyWriteFileTool
 
 
-
 def test_my_write_file_tool(
     test_settings: Settings, temp_dir, my_write_file_tool, agent
 ):
