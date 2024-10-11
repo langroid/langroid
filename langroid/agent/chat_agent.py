@@ -971,7 +971,7 @@ class ChatAgent(Agent):
 
         streamer = noop_fn
         if self.llm.get_stream():
-            streamer = self.callbacks.start_llm_stream()
+            streamer = self.callbacks.start_llm_stream_async()
         self.llm.config.streamer = streamer
 
         response = await self.llm.achat(
@@ -1171,3 +1171,4 @@ class ChatAgent(Agent):
             return str(self.message_history[i])
         else:
             return "\n".join([str(m) for m in self.message_history[i:]])
+

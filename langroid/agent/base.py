@@ -152,6 +152,7 @@ class Agent(ABC):
 
         self.callbacks = SimpleNamespace(
             start_llm_stream=lambda: noop_fn,
+            start_llm_stream_async=noop_fn,
             cancel_llm_stream=noop_fn,
             finish_llm_stream=noop_fn,
             show_llm_response=noop_fn,
@@ -1609,3 +1610,4 @@ class Agent(ABC):
         if answer != no_answer:
             return (f"{agent_type} says: " + str(answer)).strip()
         return None
+
