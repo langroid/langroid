@@ -129,7 +129,7 @@ to use specific features (as noted below).
   `GOOGLE_API_KEY` and `GOOGLE_CSE_ID` in your `.env` file.
   Full documentation on using this (and other such "stateless" tools) is coming soon, but
   in the meantime take a peek at the test
-  [`tests/main/test_google_search_tool.py`](https://github.com/langroid/langroid/blob/main/tests/main/test_google_search_tool.py) to see how to use it.
+  [`tests/main/test_web_search_tools.py`](https://github.com/langroid/langroid/blob/main/tests/main/test_web_search_tools.py) to see how to use it.
 
 
 If you add all of these optional variables, your `.env` file should look like this:
