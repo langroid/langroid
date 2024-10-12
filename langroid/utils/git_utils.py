@@ -127,8 +127,9 @@ def git_commit_file(repo: git.Repo, filepath: str, msg: str) -> None:
     """
     try:
         repo.index.add([filepath])
-        repo.index.commit(f"{msg}; Updated {filepath}")
-        logger.info(f"Successfully committed {filepath}")
+        commit_msg = msg or f"Updated {filepath}"
+        repo.index.commit(commit_msg)
+        logger.info(f"Successfully committed {filepath}: {commit_msg}")
     except git.GitCommandError as e:
         logger.error(f"An error occurred while committing: {e}")
 
