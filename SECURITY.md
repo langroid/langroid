@@ -4,8 +4,29 @@
 
 Security updates are supported on Langroid version >= 0.18.x
 
+
 ## Reporting a Vulnerability
 
-Please file an [issue](https://github.com/langroid/langroid/discussions), and we will look into it.
+If you discover a security vulnerability in this repository, **please report it privately**. Security issues should **not** be reported using GitHub Issues or any other public forum.
+
+### How to Report Privately
+
+To report a security vulnerability privately:
+
+1. Go to the repository's **[Security tab](https://github.com/langroid/langroid/security/advisories)**.
+2. Click on **"Report a vulnerability"** under the **Security Advisories** section.
+3. Provide the necessary details about the vulnerability.
+
+Your report will remain confidential, and we will respond as quickly as possible (usually within 48 hours) to evaluate the issue and work on a fix. We greatly appreciate your responsible disclosure.
+
+Please **do not** report vulnerabilities through GitHub Issues, discussions, or other public channels as this could expose the issue to a wider audience before it is resolved.
+
+### Security Fix Timeline
+
+Once a security vulnerability is reported, we will work to:
+- Acknowledge the report within 48 hours.
+- Investigate and confirm the issue.
+- Develop a patch or mitigation strategy.
+- Publish the fix and disclose the advisory publicly after the resolution.
 
 
