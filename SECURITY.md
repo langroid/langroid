@@ -13,8 +13,8 @@ If you discover a security vulnerability in this repository, **please report it 
 
 To report a security vulnerability privately:
 
-1. Go to the repository's **[Security tab](https://github.com/langroid/langroid/security/advisories)**.
-2. Click on **"Report a vulnerability"** under the **Security Advisories** section.
+1. Go to the repository's **[Security Advisories](https://github.com/langroid/langroid/security/advisories)** section.
+2. Click on **"Report a vulnerability"**.
 3. Provide the necessary details about the vulnerability.
 
 Your report will remain confidential, and we will respond as quickly as possible (usually within 48 hours) to evaluate the issue and work on a fix. We greatly appreciate your responsible disclosure.
