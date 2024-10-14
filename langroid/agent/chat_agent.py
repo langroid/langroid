@@ -9,7 +9,7 @@ from rich import print
 from rich.console import Console
 from rich.markup import escape
 
-from langroid.agent.base import Agent, AgentConfig, noop_fn
+from langroid.agent.base import Agent, AgentConfig, async_noop_fn, noop_fn
 from langroid.agent.chat_document import ChatDocument
 from langroid.agent.tool_message import ToolMessage
 from langroid.agent.xml_tool_message import XMLToolMessage
@@ -969,10 +969,10 @@ class ChatAgent(Agent):
         functions, fun_call, tools, force_tool = self._function_args()
         assert self.llm is not None
 
-        streamer = noop_fn
+        streamer_async = async_noop_fn
         if self.llm.get_stream():
-            streamer = self.callbacks.start_llm_stream_async()
-        self.llm.config.streamer = streamer
+            streamer_async = await self.callbacks.start_llm_stream_async()
+        self.llm.config.streamer_async = streamer_async
 
         response = await self.llm.achat(
             messages,
@@ -989,7 +989,7 @@ class ChatAgent(Agent):
                     ChatDocument.from_LLMResponse(response, displayed=True),
                 ),
             )
-        self.llm.config.streamer = noop_fn
+        self.llm.config.streamer_async = async_noop_fn
         if response.cached:
             self.callbacks.cancel_llm_stream()
         self._render_llm_response(response)
@@ -1171,4 +1171,3 @@ class ChatAgent(Agent):
             return str(self.message_history[i])
         else:
             return "\n".join([str(m) for m in self.message_history[i:]])
-

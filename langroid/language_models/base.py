@@ -6,6 +6,7 @@ from datetime import datetime
 from enum import Enum
 from typing import (
     Any,
+    Awaitable,
     Callable,
     Dict,
     List,
@@ -33,6 +34,10 @@ def noop_fn(*args: List[Any], **kwargs: Dict[str, Any]) -> None:
     pass
 
 
+async def async_noop_fn(*args: List[Any], **kwargs: Dict[str, Any]) -> None:
+    pass
+
+
 FunctionCallTypes = Literal["none", "auto"]
 ToolChoiceTypes = Literal["none", "auto", "required"]
 ToolTypes = Literal["function"]
@@ -45,6 +50,7 @@ class LLMConfig(BaseSettings):
 
     type: str = "openai"
     streamer: Optional[Callable[[Any], None]] = noop_fn
+    streamer_async: Optional[Callable[..., Awaitable[None]]] = async_noop_fn
     api_base: str | None = None
     formatter: None | str = None
     timeout: int = 20  # timeout for API requests

@@ -305,7 +305,7 @@ class ChainlitAgentCallbacks:
 
         return stream_token
 
-    def start_llm_stream_async(self) -> Callable[[str], None]:
+    async def start_llm_stream_async(self) -> Callable[[str], None]:
         """Returns a streaming fn that can be passed to the LLM class"""
         self.stream = cl.Step(
             id=self.curr_step.id if self.curr_step is not None else None,
@@ -322,7 +322,7 @@ class ChainlitAgentCallbacks:
             under parent {self._get_parent_id()}
         """
         )
-        run_sync(self.stream.send())  # type: ignore
+        await self.stream.send()  # type: ignore
 
         async def stream_token(t: str) -> None:
             if self.stream is None:
@@ -668,4 +668,3 @@ class ChainlitTaskCallbacks(ChainlitAgentCallbacks):
         step.output = content or NO_ANSWER
         self.last_step = step
         run_sync(step.send())
-

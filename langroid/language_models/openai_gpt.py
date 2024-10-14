@@ -820,41 +820,37 @@ class OpenAIGPT(LanguageModel):
             if not silent:
                 sys.stdout.write(Colors().GREEN + event_text)
                 sys.stdout.flush()
-            await self.config.streamer(event_text)
+                await self.config.streamer_async(event_text)
         if event_fn_name:
             function_name = event_fn_name
             has_function = True
             if not silent:
                 sys.stdout.write(Colors().GREEN + "FUNC: " + event_fn_name + ": ")
                 sys.stdout.flush()
-
-            await self.config.streamer(event_fn_name)
+                await self.config.streamer_async(event_fn_name)
 
         if event_args:
             function_args += event_args
             if not silent:
                 sys.stdout.write(Colors().GREEN + event_args)
                 sys.stdout.flush()
-
-            await self.config.streamer(event_args)
+                await self.config.streamer_async(event_args)
 
         if event_tool_deltas is not None:
             # print out streaming tool calls, if not async
             for td in event_tool_deltas:
-                if td["function"]["name"] is not None:
+                if td["function"]["name"] is not None and not silent:
                     tool_fn_name = td["function"]["name"]
-                    if not silent:
-                        sys.stdout.write(
-                            Colors().GREEN + "OAI-TOOL: " + tool_fn_name + ": "
-                        )
-                        sys.stdout.flush()
-                    await self.config.streamer(tool_fn_name)
+                    sys.stdout.write(
+                        Colors().GREEN + "OAI-TOOL: " + tool_fn_name + ": "
+                    )
+                    sys.stdout.flush()
+                    await self.config.streamer_async(tool_fn_name)
                 if td["function"]["arguments"] != "":
                     tool_fn_args = td["function"]["arguments"]
-                    if not silent:
-                        sys.stdout.write(Colors().GREEN + tool_fn_args)
-                        sys.stdout.flush()
-                    await self.config.streamer(tool_fn_args)
+                    sys.stdout.write(Colors().GREEN + tool_fn_args)
+                    sys.stdout.flush()
+                    await self.config.streamer_async(tool_fn_args)
 
         # show this delta in the stream
         if choices[0].get("finish_reason", "") in [
@@ -1779,4 +1775,3 @@ class OpenAIGPT(LanguageModel):
         else:
             response_dict = response.model_dump()
         return self._process_chat_completion_response(cached, response_dict)
-
