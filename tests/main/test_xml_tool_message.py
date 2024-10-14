@@ -248,6 +248,8 @@ def test_llm_xml_tool_message(
 
 
 class Address(BaseModel):
+    # declare street as verbatim, to test that the formatting encloses
+    # the value in a CDATA block
     street: str = Field(..., description="The street address", verbatim=True)
     city: str
     country: str
@@ -412,6 +414,32 @@ def test_roundtrip_complex_nested():
     assert original.hobbies == parsed.hobbies
     assert original.phones == parsed.phones
 
+def test_roundtrip_complex_nested_tolerant():
+    original = ComplexNestedXMLTool(
+        person=Person(
+            name="Jane Doe",
+            age=28,
+            address=Address(street="456 Elm St", city="Somewhere", country="Canada"),
+        ),
+        hobbies=["painting", "hiking"],
+        phones={"mobile": 5551234567, "work": 5559876543},
+    )
+    formatted = original.format_example()
+
+    # Insert harmless whitespace
+    formatted_with_whitespace = (
+        formatted.replace("<", " \n <")
+        .replace(">", "> \n ")
+        .replace("</", " \n </")
+    )
+
+    parsed = ComplexNestedXMLTool.parse(formatted_with_whitespace)
+
+    assert original.dict() == parsed.dict()
+    assert original.person.dict() == parsed.person.dict()
+    assert original.person.address.dict() == parsed.person.address.dict()
+    assert original.hobbies == parsed.hobbies
+    assert original.phones == parsed.phones
 
 def test_llm_complex_xml_tool_message(
     test_settings: Settings,
