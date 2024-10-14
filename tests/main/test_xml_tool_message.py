@@ -413,5 +413,44 @@ def test_roundtrip_complex_nested():
     assert original.phones == parsed.phones
 
 
+def test_llm_complex_xml_tool_message(
+    test_settings: Settings,
+):
+    set_global(test_settings)
+    complex_tool_name = ComplexNestedXMLTool.default_value("request")
+
+    agent = lr.ChatAgent(
+        lr.ChatAgentConfig(
+            name="TestAgent",
+            use_functions_api=False,
+            use_tools=True,
+            system_message=f"""
+            When asked to provide information about a person,
+            you must use the TOOL `{complex_tool_name}` to complete this task.
+            """,
+        )
+    )
+    agent.enable_message(ComplexNestedXMLTool)
+    task = lr.Task(agent, interactive=False)[ResultTool]
+    result = task.run(
+        """
+        Provide information about a person named Alice Johnson, aged 35,
+        living at 789 Oak Ave, Springfield, USA, with hobbies of
+        gardening and cooking, and phone numbers: 
+        home (5551112222) and mobile (5553334444)
+        """
+    )
+    assert isinstance(result, ResultTool)
+    assert isinstance(result.person, Person)
+    assert result.person.name == "Alice Johnson"
+    assert result.person.age == 35
+    assert isinstance(result.person.address, Address)
+    assert result.person.address.street == "789 Oak Ave"
+    assert result.person.address.city == "Springfield"
+    assert result.person.address.country == "USA"
+    assert set(result.hobbies) == {"gardening", "cooking"}
+    assert result.phones == {"home": 5551112222, "mobile": 5553334444}
+
+
 if __name__ == "__main__":
     pytest.main([__file__])
