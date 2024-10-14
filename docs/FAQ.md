@@ -108,3 +108,19 @@ No; Langroid currently only supports parameters accepted by OpenAI's API, and `t
 - [Langroid example](https://github.com/langroid/langroid/blob/main/examples/basic/fn-call-local-numerical.py) showing how you can set other OpenAI API parameters, using the `OpenAICallParams` object.
 
 
+## Can I persist agent state across multiple runs?
+
+For example, you may want to stop the current python script, and 
+run it again later, resuming your previous conversation.
+Currently there is no built-in Langroid mechanism for this, but you can 
+achieve a basic type of persistence by saving the agent's `message_history`:
+
+-  if you used `Task.run()` in your script, make sure the task is 
+set up with `restart=False` -- this prevents the agent state from being reset when 
+the task is run again.
+- using python's pickle module, you can save the `agent.message_history` to a file,
+and load it (if it exists) at the start of your script.
+
+See the example script [`chat-persist.py`](https://github.com/langroid/langroid/blob/main/examples/basic/chat-persist.py)
+
+
