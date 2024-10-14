@@ -10,7 +10,7 @@ import socket
 import traceback
 import uuid
 from pathlib import Path
-from typing import Any
+from typing import Any, Literal
 
 logger = logging.getLogger(__name__)
 
@@ -186,24 +186,48 @@ def generate_unique_id() -> str:
     return str(uuid.uuid4())
 
 
-def create_file(filepath: str | Path, content: str = "") -> None:
+def create_file(
+    filepath: str | Path,
+    content: str = "",
+    if_exists: Literal["overwrite", "skip", "error", "append"] = "overwrite",
+) -> None:
     """
-    Create a file with the given content in the specified directory.
+    Create, overwrite or append to a file, with the given content
+    at the specified filepath.
     If content is empty, it will simply touch to create an empty file.
 
     Args:
         filepath (str|Path): The relative path of the file to be created
         content (str): The content to be written to the file
+        if_exists (Literal["overwrite", "skip", "error", "append"]):
+            Action to take if file exists
     """
-    Path(filepath).parent.mkdir(parents=True, exist_ok=True)
-    if content == "":
-        Path(filepath).touch()
+    filepath = Path(filepath)
+    filepath.parent.mkdir(parents=True, exist_ok=True)
+
+    if filepath.exists():
+        if if_exists == "skip":
+            logger.warning(f"File already exists, skipping: {filepath}")
+            return
+        elif if_exists == "error":
+            raise FileExistsError(f"File already exists: {filepath}")
+        elif if_exists == "append":
+            mode = "a"
+        else:  # overwrite
+            mode = "w"
+    else:
+        mode = "w"
+
+    if content == "" and mode in ["a", "w"]:
+        filepath.touch()
+        logger.warning(f"Empty file created: {filepath}")
     else:
         # the newline = '\n` argument is used to ensure that
         # newlines in the content are written as actual line breaks
-        with open(filepath, "w", newline="\n") as f:
+        with open(filepath, mode, newline="\n") as f:
             f.write(content)
-    logger.warning(f"File created/updated: {filepath}")
+        action = "appended to" if mode == "a" else "created/updated in"
+        logger.warning(f"Content {action}: {filepath}")
 
 
 def read_file(path: str, line_numbers: bool = False) -> str:
