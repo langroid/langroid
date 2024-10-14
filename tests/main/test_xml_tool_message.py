@@ -1,11 +1,11 @@
-from typing import List, Tuple
+from typing import Dict, List, Tuple
 
 import pytest
 
 import langroid as lr
 from langroid.agent.tools.orchestration import ResultTool
 from langroid.agent.xml_tool_message import XMLToolMessage
-from langroid.pydantic_v1 import Field
+from langroid.pydantic_v1 import BaseModel, Field
 from langroid.utils.configuration import Settings, set_global
 
 
@@ -245,6 +245,149 @@ def test_llm_xml_tool_message(
     assert result.filepath == "src/fib.rs"
     assert result.version == 3
     assert all(word in result.code.lower() for word in ["fn", "fibonacci", "test"])
+
+
+class Address(BaseModel):
+    street: str
+    city: str
+    country: str
+
+
+class Person(BaseModel):
+    name: str
+    age: int
+    address: Address
+
+
+class ComplexNestedXMLTool(XMLToolMessage):
+    request: str = "complex_nested_tool"
+    purpose: str = "To present a complex nested structure"
+
+    person: Person
+    hobbies: List[str]
+    phones: Dict[str, int]
+
+    @classmethod
+    def examples(cls) -> List[XMLToolMessage | Tuple[str, XMLToolMessage]]:
+        return [
+            (
+                "I want to present a person named John Doe, aged 30, "
+                "living at 123 Main St, Anytown, USA, with hobbies of "
+                "reading and cycling, "
+                "and phone numbers: home (1234567890) and work (9876543210)",
+                cls(
+                    person=Person(
+                        name="John Doe",
+                        age=30,
+                        address=Address(
+                            street="123 Main St", city="Anytown", country="USA"
+                        ),
+                    ),
+                    hobbies=["reading", "cycling"],
+                    phones={"home": 1234567890, "work": 9876543210},
+                ),
+            )
+        ]
+
+    def handle(self) -> ResultTool:
+        return ResultTool(person=self.person, hobbies=self.hobbies, phones=self.phones)
+
+
+def test_complex_nested_format():
+    complex_tool = ComplexNestedXMLTool(
+        person=Person(
+            name="John Doe",
+            age=30,
+            address=Address(street="123 Main St", city="Anytown", country="USA"),
+        ),
+        hobbies=["reading", "cycling"],
+        phones={"home": 1234567890, "work": 9876543210},
+    )
+    formatted = complex_tool.format_example()
+    print(formatted)  # For debugging
+    assert "<person>" in formatted
+    assert "<name>John Doe</name>" in formatted
+    assert "<age>30</age>" in formatted
+    assert "<address>" in formatted
+    assert "<street>123 Main St</street>" in formatted
+    assert "<city>Anytown</city>" in formatted
+    assert "<country>USA</country>" in formatted
+    assert "<hobbies>" in formatted
+    assert "<item>reading</item>" in formatted
+    assert "<item>cycling</item>" in formatted
+    assert "<phones>" in formatted
+    assert "<home>1234567890</home>" in formatted
+    assert "<work>9876543210</work>" in formatted
+
+
+def test_complex_nested_parse():
+    xml_string = """
+    <tool>
+        <request>complex_nested_tool</request>
+        <person>
+            <name>John Doe</name>
+            <age>30</age>
+            <address>
+                <street>123 Main St</street>
+                <city>Anytown</city>
+                <country>USA</country>
+            </address>
+        </person>
+        <hobbies>
+            <item>reading</item>
+            <item>cycling</item>
+        </hobbies>
+        <phones>
+            <home>1234567890</home>
+            <work>9876543210</work>
+        </phones>
+    </tool>
+    """
+    parsed = ComplexNestedXMLTool.parse(xml_string)
+    assert isinstance(parsed, ComplexNestedXMLTool)
+    assert parsed.request == "complex_nested_tool"
+    assert isinstance(parsed.person, Person)
+    assert parsed.person.name == "John Doe"
+    assert parsed.person.age == 30
+    assert isinstance(parsed.person.address, Address)
+    assert parsed.person.address.street == "123 Main St"
+    assert parsed.person.address.city == "Anytown"
+    assert parsed.person.address.country == "USA"
+    assert parsed.hobbies == ["reading", "cycling"]
+    assert parsed.phones == {"home": 1234567890, "work": 9876543210}
+
+
+def test_complex_nested_instructions():
+    instructions = ComplexNestedXMLTool.format_instructions()
+    root_tag = ComplexNestedXMLTool.Config.root_element
+
+    assert "Placeholders:" in instructions
+    assert "REQUEST = [value for request]" in instructions
+    assert "PERSON = [nested structure for person]" in instructions
+    assert "NAME = [value for name]" in instructions
+    assert "AGE = [value for age]" in instructions
+    assert "ADDRESS = [nested structure for address]" in instructions
+    assert "STREET = [value for street]" in instructions
+    assert "CITY = [value for city]" in instructions
+    assert "COUNTRY = [value for country]" in instructions
+    assert "HOBBIES = [value for hobbies]" in instructions
+    assert "PHONES = [value for phones]" in instructions
+
+    assert "Formatting example:" in instructions
+    assert f"<{root_tag}>" in instructions
+    assert f"</{root_tag}>" in instructions
+    assert "<request>{REQUEST}</request>" in instructions
+    assert "<person>" in instructions
+    assert "<name>{NAME}</name>" in instructions
+    assert "<age>{AGE}</age>" in instructions
+    assert "<address>" in instructions
+    assert "<street>{STREET}</street>" in instructions
+    assert "<city>{CITY}</city>" in instructions
+    assert "<country>{COUNTRY}</country>" in instructions
+    assert "</address>" in instructions
+    assert "</person>" in instructions
+    assert "<hobbies>{HOBBIES}</hobbies>" in instructions
+    assert "<phones>{PHONES}</phones>" in instructions
 
 
 if __name__ == "__main__":
