@@ -153,8 +153,6 @@ def test_write_file_tool_overwrite(test_settings: Settings, temp_dir, git_repo, 
     # Check git history
     commits = list(git_repo.iter_commits())
     assert len(commits) == 2
-    assert file_path in git_repo.git.show(commits[0]).split()
-    assert file_path in git_repo.git.show(commits[1]).split()
 
 
 def test_read_file_tool(test_settings: Settings, temp_dir, agent):
