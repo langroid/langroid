@@ -248,7 +248,7 @@ def test_llm_xml_tool_message(
 
 
 class Address(BaseModel):
-    street: str
+    street: str = Field(..., description="The street address", verbatim=True)
     city: str
     country: str
 
@@ -293,7 +293,7 @@ class ComplexNestedXMLTool(XMLToolMessage):
         return ResultTool(person=self.person, hobbies=self.hobbies, phones=self.phones)
 
 
-def test_complex_nested_format():
+def test_format_complex_nested():
     complex_tool = ComplexNestedXMLTool(
         person=Person(
             name="John Doe",
@@ -309,7 +309,8 @@ def test_complex_nested_format():
     assert "<name>John Doe</name>" in formatted
     assert "<age>30</age>" in formatted
     assert "<address>" in formatted
-    assert "<street>123 Main St</street>" in formatted
+    # NOTE: street was declared as verbatim, so it should be in a CDATA section
+    assert "<street><![CDATA[123 Main St]]></street>" in formatted
     assert "<city>Anytown</city>" in formatted
     assert "<country>USA</country>" in formatted
     assert "<hobbies>" in formatted
@@ -320,7 +321,7 @@ def test_complex_nested_format():
     assert "<work>9876543210</work>" in formatted
 
 
-def test_complex_nested_parse():
+def test_parse_complex_nested():
     xml_string = """
     <tool>
         <request>complex_nested_tool</request>
@@ -357,7 +358,7 @@ def test_complex_nested_parse():
     assert parsed.phones == {"home": 1234567890, "work": 9876543210}
 
 
-def test_complex_nested_instructions():
+def test_instructions_complex_nested():
     instructions = ComplexNestedXMLTool.format_instructions()
     root_tag = ComplexNestedXMLTool.Config.root_element
 
@@ -381,13 +382,35 @@ def test_complex_nested_instructions():
     assert "<name>{NAME}</name>" in instructions
     assert "<age>{AGE}</age>" in instructions
     assert "<address>" in instructions
-    assert "<street>{STREET}</street>" in instructions
+    # NOTE: street was declared as verbatim, so it should be in a CDATA section
+    assert "<street><![CDATA[{STREET}]]></street>" in instructions
     assert "<city>{CITY}</city>" in instructions
     assert "<country>{COUNTRY}</country>" in instructions
     assert "</address>" in instructions
     assert "</person>" in instructions
     assert "<hobbies>{HOBBIES}</hobbies>" in instructions
     assert "<phones>{PHONES}</phones>" in instructions
+
+
+def test_roundtrip_complex_nested():
+    original = ComplexNestedXMLTool(
+        person=Person(
+            name="Jane Doe",
+            age=28,
+            address=Address(street="456 Elm St", city="Somewhere", country="Canada"),
+        ),
+        hobbies=["painting", "hiking"],
+        phones={"mobile": 5551234567, "work": 5559876543},
+    )
+    formatted = original.format_example()
+    parsed = ComplexNestedXMLTool.parse(formatted)
+    assert original.dict() == parsed.dict()
+
+    # Additional checks for nested structures
+    assert original.person.dict() == parsed.person.dict()
+    assert original.person.address.dict() == parsed.person.address.dict()
+    assert original.hobbies == parsed.hobbies
+    assert original.phones == parsed.phones
 
 
 if __name__ == "__main__":
