@@ -836,10 +836,10 @@ class OpenAIGPT(LanguageModel):
                 sys.stdout.flush()
                 await self.config.streamer_async(event_args)
 
-        if event_tool_deltas is not None:
+        if event_tool_deltas is not None and not silent:
             # print out streaming tool calls, if not async
             for td in event_tool_deltas:
-                if td["function"]["name"] is not None and not silent:
+                if td["function"]["name"] is not None:
                     tool_fn_name = td["function"]["name"]
                     sys.stdout.write(
                         Colors().GREEN + "OAI-TOOL: " + tool_fn_name + ": "
