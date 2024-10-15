@@ -137,6 +137,13 @@ jobs:
 #          tests/main tests/extras/test_hf_embeddings.py tests/extras/test_fastembed_embeddings.py
       continue-on-error: true
 
+    - name: Debug coverage files
+        run: |
+          ls -la
+          ls -la .coverage*
+          echo "Content of .coveragerc (if exists):"
+          cat .coveragerc || echo ".coveragerc not found"
+
     - name: Combine parallel coverage data
       run: poetry run coverage combine .coverage*
 
