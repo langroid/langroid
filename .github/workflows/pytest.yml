@@ -126,8 +126,8 @@ jobs:
       env:
         PYTEST_ADDOPTS: "-p no:logging"
       run: |
-        poetry run coverage run  --parallel-mode --concurrency=multiprocessing \
-          -m pytest -rf -vv --log-cli-level=INFO --show-capture=no \
+        poetry run pytest --cov langroid \
+          -rf -vv --log-cli-level=INFO --show-capture=no \
           -n auto --timeout=300 \
           --first-test-file=tests/main/test_llm.py \
           --first-test-file=tests/main/test_task.py \
@@ -153,8 +153,8 @@ jobs:
       env:
         PYTEST_ADDOPTS: "-p no:logging"
       run: |
-        poetry run coverage run  --append \
-          -m pytest --m gpt-4 -rf --show-capture=no --timeout=300 \
+        poetry run pytest --cov-append langroid \
+          --m gpt-4 -rf --show-capture=no --timeout=300 \
           --first-test-file=tests/main/test_llm.py \
           --first-test-file=tests/main/test_llm_async.py \
           --first-test-file=tests/main/test_task_inf_loop.py \
