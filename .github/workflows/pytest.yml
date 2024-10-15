@@ -144,8 +144,8 @@ jobs:
       env:
         PYTEST_ADDOPTS: "-p no:logging"
       run: |
-        poetry run coverage run --source=langroid --parallel-mode \
-          -m pytest --m gpt-4 -rf --show-capture=no -n auto --timeout=300 \
+        poetry run coverage run --source=langroid  \
+          -m pytest --m gpt-4 -rf --show-capture=no  --timeout=300 \
           --first-test-file=tests/main/test_llm.py \
           --first-test-file=tests/main/test_llm_async.py \
           --first-test-file=tests/main/test_task_inf_loop.py \
