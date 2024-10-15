@@ -26,8 +26,13 @@ jobs:
         with:
           python-version: 3.11  # Replace with your desired Python version
 
-      - name: Install Poetry
-        uses: Gr1N/setup-poetry@v8
+      - name: Install and configure Poetry
+        uses: snok/install-poetry@v1
+        with:
+          virtualenvs-create: true
+          virtualenvs-in-project: true
+          virtualenvs-path: ~/my-custom-path
+          installer-parallel: true
 
       - name: Install Poetry dependencies
         run: |
@@ -35,7 +40,7 @@ jobs:
           echo "$HOME/.local/bin" >> $GITHUB_PATH
           python -m pip install --upgrade pip
           
-          poetry install --only docs
+          poetry install --only docs --no-root --sync
 
       - name: Build MkDocs documentation
         # change this to -b gh-pages when ready to make docs public
