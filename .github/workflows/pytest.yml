@@ -133,7 +133,7 @@ jobs:
           --first-test-file=tests/main/test_task_inf_loop.py \
           --first-test-file=tests/main/test_task.py \
           --first-test-file=tests/main/test_lance_doc_chat_agent.py \
-          tests/main/test_chat_agent.py
+          tests/main/test_task_inf_loop.py
 # tests/main tests/extras/test_hf_embeddings.py tests/extras/test_fastembed_embeddings.py
       continue-on-error: true
 
@@ -152,7 +152,7 @@ jobs:
           --first-test-file=tests/main/test_task.py \
           --first-test-file=tests/main/test_lance_doc_chat_agent.py \
           --lf --last-failed-no-failures none \
-          tests/main/test_chat_agent.py
+          tests/main/test_task_inf_loop.py
   # tests/main tests/extras/test_hf_embeddings.py tests/extras/test_fastembed_embeddings.py
 
     - name: Combine coverage data
