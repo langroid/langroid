@@ -126,7 +126,7 @@ jobs:
       env:
         PYTEST_ADDOPTS: "-p no:logging"
       run: |
-        poetry run coverage run  --parallel-mode \
+        poetry run coverage run  --parallel-mode --concurrency=multiprocessing \
           -m pytest -rf -vv --log-cli-level=INFO --show-capture=no \
           -n auto --timeout=300 \
           --first-test-file=tests/main/test_llm.py \
