@@ -1,6 +1,7 @@
 [run]
 source = langroid
-
+parallel = True
+concurrency = multiprocessing
 omit =
     langroid/prompts/*
     langroid/language_models/utils.py
