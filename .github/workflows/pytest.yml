@@ -105,7 +105,7 @@ jobs:
         echo "$HOME/.local/bin" >> $GITHUB_PATH
         python -m pip install --upgrade pip
         
-        poetry install \
+        poetry install --no-root --sync \
           -E "lancedb momento meilisearch chromadb hf-embeddings unstructured pdf-parsers docx sql fastembed" \
           --with dev
 
