@@ -77,10 +77,29 @@ jobs:
         sudo apt-get install -y libmagic1
         sudo apt-get install -y poppler-utils tesseract-ocr
 
-    - name: Install Poetry
-      uses: Gr1N/setup-poetry@v8
+    - name: Load cached Poetry installation
+        uses: actions/cache@v4
+        with:
+          path: ~/.local
+          key: poetry-${{ runner.os }}-${{ hashFiles('**/poetry.lock') }}
 
-    - name: Install Poetry dependencies
+    - name: Install and configure Poetry
+      uses: snok/install-poetry@v1
+      with:
+        virtualenvs-create: true
+        virtualenvs-in-project: true
+        virtualenvs-path: ~/my-custom-path
+        installer-parallel: true
+
+    - name: Load cached venv
+      id: cached-poetry-dependencies
+      uses: actions/cache@v4
+      with:
+        path: .venv
+        key: venv-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('**/poetry.lock') }}
+
+    - name: Install Poetry dependencies if not found in cache
+      if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
       run: |
         poetry --version
         echo "$HOME/.local/bin" >> $GITHUB_PATH
@@ -109,7 +128,7 @@ jobs:
         PYTEST_ADDOPTS: "-p no:logging"
       run: |
         poetry run coverage run --source=langroid --parallel-mode \
-          -m pytest -rf --show-capture=no -n auto --timeout=300 \
+          -m pytest -rf -vv --log-cli-level=INFO --show-capture=no -n auto --timeout=300 \
           --first-test-file=tests/main/test_llm.py \
           --first-test-file=tests/main/test_llm_async.py \
           --first-test-file=tests/main/test_task_inf_loop.py \
