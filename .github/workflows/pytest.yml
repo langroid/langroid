@@ -126,8 +126,9 @@ jobs:
       env:
         PYTEST_ADDOPTS: "-p no:logging"
       run: |
-        poetry run coverage run  \
-          -m pytest -rf -vv --log-cli-level=INFO --show-capture=no -n auto --timeout=300 \
+        poetry run coverage run  --parallel-mode \
+          -m pytest -rf -vv --log-cli-level=INFO --show-capture=no \
+          -n auto --timeout=300 \
           --first-test-file=tests/main/test_llm.py \
           tests/main/test_task.py
 #          --first-test-file=tests/main/test_task.py
@@ -140,7 +141,7 @@ jobs:
     - name: Debug coverage files
       run: |
         ls -la
-        ls -la .coverage*
+        ls -la .coverage.*
         echo "Content of .coveragerc (if exists):"
         cat .coveragerc || echo ".coveragerc not found"
 
