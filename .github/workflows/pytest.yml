@@ -129,13 +129,11 @@ jobs:
         poetry run coverage run  \
           -m pytest -rf -vv --log-cli-level=INFO --show-capture=no --timeout=300 \
           --first-test-file=tests/main/test_llm.py  \
-          tests/main/test_task.py
-#          --first-test-file=tests/main/test_llm_async.py \
-#          --first-test-file=tests/main/test_task_inf_loop.py \
-#          --first-test-file=tests/main/test_task.py \
-#          --first-test-file=tests/main/test_lance_doc_chat_agent.py \
-
-# tests/main tests/extras/test_hf_embeddings.py tests/extras/test_fastembed_embeddings.py
+          --first-test-file=tests/main/test_llm_async.py \
+          --first-test-file=tests/main/test_task_inf_loop.py \
+          --first-test-file=tests/main/test_task.py \
+          --first-test-file=tests/main/test_lance_doc_chat_agent.py \
+          tests/main tests/extras/test_hf_embeddings.py tests/extras/test_fastembed_embeddings.py
       continue-on-error: true
 
 
@@ -148,18 +146,12 @@ jobs:
         poetry run coverage run  --append \
           -m pytest --m gpt-4 -rf --show-capture=no --timeout=300 \
           --first-test-file=tests/main/test_llm.py \
+          --first-test-file=tests/main/test_llm_async.py \
+          --first-test-file=tests/main/test_task_inf_loop.py \
+          --first-test-file=tests/main/test_task.py \
+          --first-test-file=tests/main/test_lance_doc_chat_agent.py \
           --lf --last-failed-no-failures none \
-          tests/main/test_task.py
-#          --first-test-file=tests/main/test_llm_async.py \
-#          --first-test-file=tests/main/test_task_inf_loop.py \
-#          --first-test-file=tests/main/test_task.py \
-#          --first-test-file=tests/main/test_lance_doc_chat_agent.py \
-#
-#          tests/main/test_task.py
-  # tests/main tests/extras/test_hf_embeddings.py tests/extras/test_fastembed_embeddings.py
-
-    - name: Combine coverage data
-      run: poetry run coverage combine
+          tests/main tests/extras/test_hf_embeddings.py tests/extras/test_fastembed_embeddings.py
 
     - name: Generate final coverage report from all runs
       run: poetry run coverage report

@@ -6,9 +6,5 @@ omit =
 	langroid/parsing/para_sentence_split.py
 
 
-[report]
-show_missing = True
-
 [html]
-
 directory = coverage_html_report
