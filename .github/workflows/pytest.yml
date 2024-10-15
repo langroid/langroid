@@ -158,8 +158,8 @@ jobs:
 #          tests/main/test_task.py
   # tests/main tests/extras/test_hf_embeddings.py tests/extras/test_fastembed_embeddings.py
 
-    - name: Combine coverage data
-      run: poetry run coverage combine
+#    - name: Combine coverage data
+#      run: poetry run coverage combine
 
     - name: Generate final coverage report from all runs
       run: poetry run coverage report
