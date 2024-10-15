@@ -127,7 +127,7 @@ jobs:
         PYTEST_ADDOPTS: "-p no:logging"
       run: |
         poetry run coverage run  \
-          -m pytest -rf -vv --log-cli-level=INFO --show-capture=no --timeout=300 \
+          -m pytest -rf -vv --log-cli-level=INFO --show-capture=no -n auto --timeout=300 \
           --first-test-file=tests/main/test_llm.py  \
           tests/main/test_task.py
 #          --first-test-file=tests/main/test_llm_async.py \
@@ -146,7 +146,7 @@ jobs:
         PYTEST_ADDOPTS: "-p no:logging"
       run: |
         poetry run coverage run  --append \
-          -m pytest --m gpt-4 -rf --show-capture=no --timeout=300 \
+          -m pytest --m gpt-4 -rf --show-capture=no -n auto --timeout=300 \
           --first-test-file=tests/main/test_llm.py \
           --lf --last-failed-no-failures none \
           tests/main/test_task.py
