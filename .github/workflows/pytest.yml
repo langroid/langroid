@@ -126,8 +126,8 @@ jobs:
       env:
         PYTEST_ADDOPTS: "-p no:logging"
       run: |
-        poetry run coverage run --source=langroid  \
-          -m pytest -rf -vv --log-cli-level=INFO --show-capture=no --timeout=300 \
+        poetry run coverage run --source=langroid  --parallel-mode \
+          -m pytest -rf -vv --log-cli-level=INFO --show-capture=no -n auto --timeout=300 \
           --first-test-file=tests/main/test_llm.py \
           --first-test-file=tests/main/test_llm_async.py \
           --first-test-file=tests/main/test_task_inf_loop.py \
@@ -143,8 +143,8 @@ jobs:
       env:
         PYTEST_ADDOPTS: "-p no:logging"
       run: |
-        poetry run coverage run --source=langroid   \
-          -m pytest --m gpt-4 -rf --show-capture=no  --timeout=300 \
+        poetry run coverage run --source=langroid  --parallel-mode \
+          -m pytest --m gpt-4 -rf --show-capture=no  -n auto --timeout=300 \
           --first-test-file=tests/main/test_llm.py \
           --first-test-file=tests/main/test_llm_async.py \
           --first-test-file=tests/main/test_task_inf_loop.py \
@@ -153,6 +153,9 @@ jobs:
           --lf --last-failed-no-failures none \
           tests/main tests/extras/test_hf_embeddings.py tests/extras/test_fastembed_embeddings.py
 
+    - name: Combine coverage data
+      run: poetry run coverage combine
+      
     - name: Generate final coverage report from all runs
       run: poetry run coverage report
 
