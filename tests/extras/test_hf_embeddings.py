@@ -27,7 +27,9 @@ def test_embeddings():
 
 
 # skip this if CI is true in env
-@pytest.mark.skipif(os.getenv("CI"), reason="Fine locally but fails in GH CI")
+@pytest.mark.skipif(
+    os.environ.get("CI") == "true", reason="Fine locally but fails in GH CI"
+)
 def test_remote_embeddings():
     sentence_cfg = RemoteEmbeddingsConfig(
         model_type="sentence-transformer",
