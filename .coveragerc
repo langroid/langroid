@@ -1,9 +1,17 @@
 [run]
 source = langroid
 parallel = True
+concurrency = multiprocessing
+
 omit =
     langroid/prompts/*
     langroid/language_models/utils.py
 	langroid/parsing/para_sentence_split.py
 
 
+[report]
+show_missing = True
+
+[html]
+
+directory = coverage_html_report
