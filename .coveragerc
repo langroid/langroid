@@ -1,5 +1,6 @@
 [run]
 source = langroid
+parallel = True
 omit =
     langroid/prompts/*
     langroid/language_models/utils.py
