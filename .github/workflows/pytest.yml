@@ -153,7 +153,7 @@ jobs:
       env:
         PYTEST_ADDOPTS: "-p no:logging"
       run: |
-        poetry run pytest --cov-append langroid \
+        poetry run pytest --cov --cov-append langroid \
           --m gpt-4 -rf --show-capture=no --timeout=300 \
           --first-test-file=tests/main/test_llm.py \
           --first-test-file=tests/main/test_llm_async.py \
