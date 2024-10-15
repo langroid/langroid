@@ -146,7 +146,7 @@ jobs:
         cat .coveragerc || echo ".coveragerc not found"
 
     - name: Combine parallel coverage data
-      run: poetry run coverage combine .coverage*
+      run: poetry run coverage combine
 
     - name: Retry FAILED tests ONLY with gpt-4 instead of gpt-4o
       id: second_test
