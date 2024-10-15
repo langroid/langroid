@@ -23,7 +23,6 @@ jobs:
         with:
           virtualenvs-create: true
           virtualenvs-in-project: true
-          virtualenvs-path: ~/my-custom-path
           installer-parallel: true
 
       - name: Install Poetry dependencies
@@ -32,7 +31,7 @@ jobs:
           echo "$HOME/.local/bin" >> $GITHUB_PATH
           python -m pip install --upgrade pip
           
-          poetry install --no-root --sync
+          poetry install --no-root --sync --with dev
 
       - name: Run black
         run: |
