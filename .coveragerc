@@ -1,4 +1,5 @@
 [run]
+source = langroid
 omit =
     langroid/prompts/*
     langroid/language_models/utils.py
