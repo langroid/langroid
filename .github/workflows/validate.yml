@@ -18,8 +18,8 @@ jobs:
         with:
           python-version: 3.11  # Replace with your desired Python version
 
-      - name: Install and configure Poetry
-        uses: snok/install-poetry@v1
+      - name: Install Poetry
+        uses: Gr1N/setup-poetry@v8
 
       - name: Install Poetry dependencies
         run: |
@@ -27,7 +27,7 @@ jobs:
           echo "$HOME/.local/bin" >> $GITHUB_PATH
           python -m pip install --upgrade pip
           
-          poetry install --no-root --sync --with dev
+          poetry install
 
       - name: Run black
         run: |
