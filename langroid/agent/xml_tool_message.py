@@ -9,7 +9,6 @@ from langroid.pydantic_v1 import BaseModel
 class XMLToolMessage(ToolMessage):
     """
     Abstract class for tools formatted using XML instead of JSON.
-    Mainly tested for non-nested tool structures.
 
     When a subclass defines a field with the attribute `verbatim=True`,
     instructions are sent to the LLM to ensure the field's content is:
