@@ -84,7 +84,6 @@ __all__ = [
     "LangroidImportError",
 ]
 
-
 try:
     from .agent.callbacks.chainlit import (
         ChainlitAgentCallbacks,

@@ -240,4 +240,3 @@ lint.extend-ignore = ["F821"]
 
 [tool.pytest.ini_options]
 filterwarnings = ["ignore::DeprecationWarning"]
-
