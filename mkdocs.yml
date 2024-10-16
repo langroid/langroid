@@ -99,6 +99,11 @@ nav:
     - Agent with Retrieval: quick-start/chat-agent-docs.md
   # defer to gen-files + literate-nav
   - FAQ: FAQ.md
+  - Notes-Updates:
+      - Overview: notes/overview.md
+      - XML-based Tools: notes/xml-tools.md
+      - Async Streaming: notes/async-streaming.md
+
   - Examples:
     - Guide: examples/guide.md
     - Hierarchical Agent Computation: examples/agent-tree.md

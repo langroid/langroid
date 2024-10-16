@@ -1,12 +1,11 @@
 [tool.poetry]
 name = "langroid"
-version = "0.11.0"
+version = "0.18.3"
 description = "Harness LLMs with Multi-Agent Programming"
 authors = ["Prasad Chalasani <pchalasani@gmail.com>"]
 readme = "README.md"
 license = "MIT"
-include = ["pyproject.toml"]
-
+include = ["pyproject.toml", "langroid/py.typed"]
 
 # =============== MAIN DEPS ==============
 [tool.poetry.dependencies]
@@ -54,7 +53,7 @@ trafilatura = "^1.5.0"
 halo = "^0.0.31"
 typer = "^0.9.0"
 colorlog = "^6.7.0"
-openai = "^1.14.0"
+openai = "^1.45.0"
 tiktoken = "^0.7.0"
 pygithub = "^1.58.1"
 pygments = "^2.15.1"
@@ -88,7 +87,9 @@ nest-asyncio = "^1.6.0"
 async-generator = "^1.10"
 
 python-magic = "^0.4.27"
-json-repair = "^0.27.0"
+json-repair = "^0.29.9"
+cerebras-cloud-sdk = "^1.1.0"
+gitpython = "^3.1.43"
 
 
 [tool.poetry.extras]
@@ -162,6 +163,9 @@ pytest-asyncio = "^0.21.1"
 pytest-postgresql = "^5.0.0"
 pytest-mysql = "^2.4.2"
 coverage = "^7.2.5"
+pytest-xdist = "^3.6.1"
+pytest-timeout = "^2.3.1"
+pytest-cov = "^5.0.0"
 
 [tool.poetry.group.docs]
 optional = true

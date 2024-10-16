@@ -90,12 +90,15 @@ When a script supports it, you can also pass in the model name via
 `-m ollama/dolphin-mixtral-gguf`
 
 ## "Local" LLMs hosted on Groq
-In this scenario, an open-source LLM (e.g. `llama3-8b-8192`) is hosted on a Groq server
+In this scenario, an open-source LLM (e.g. `llama3.1-8b-instant`) is hosted on a Groq server
 which provides an OpenAI-compatible API. Using this with langroid is exactly analogous
 to the Ollama scenario above: you can set the `chat_model` in the `OpenAIGPTConfig` to
-`groq/<model_name>`, e.g. `groq/llama3-8b-8192`. 
+`groq/<model_name>`, e.g. `groq/llama3.1-8b-instant`. 
 For this to work, ensure you have a `GROQ_API_KEY` environment variable set in your
 `.env` file. See [groq docs](https://console.groq.com/docs/quickstart).
+
+## "Local" LLMs hosted on Cerebras
+This works exactly like with Groq, except you set up a `CEREBRAS_API_KEY` environment variable, and specify the `chat_model` as `cerebras/<model_name>`, e.g. `cerebras/llama3.1-8b`. See the Cerebras [docs](https://inference-docs.cerebras.ai/introduction) for details on which LLMs are supported.
 
 ## Other non-Ollama LLMs supported by LiteLLM
 

@@ -39,6 +39,10 @@ ToolTypes = Literal["function"]
 
 
 class LLMConfig(BaseSettings):
+    """
+    Common configuration for all language models.
+    """
+
     type: str = "openai"
     streamer: Optional[Callable[[Any], None]] = noop_fn
     api_base: str | None = None
@@ -48,6 +52,7 @@ class LLMConfig(BaseSettings):
     completion_model: str = ""
     temperature: float = 0.0
     chat_context_length: int = 8000
+    async_stream_quiet: bool = True  # suppress streaming output in async mode?
     completion_context_length: int = 8000
     max_output_tokens: int = 1024  # generate at most this many tokens
     # if input length + max_output_tokens > context length of model,
@@ -169,6 +174,10 @@ class OpenAIJsonSchemaSpec(BaseModel):
 
 
 class LLMTokenUsage(BaseModel):
+    """
+    Usage of tokens by an LLM.
+    """
+
     prompt_tokens: int = 0
     completion_tokens: int = 0
     cost: float = 0.0
@@ -193,6 +202,10 @@ class LLMTokenUsage(BaseModel):
 
 
 class Role(str, Enum):
+    """
+    Possible roles for a message in a chat.
+    """
+
     USER = "user"
     SYSTEM = "system"
     ASSISTANT = "assistant"
@@ -221,16 +234,26 @@ class LLMMessage(BaseModel):
     # link to corresponding chat document, for provenance/rewind purposes
     chat_document_id: str = ""
 
-    def api_dict(self) -> Dict[str, Any]:
+    def api_dict(self, has_system_role: bool = True) -> Dict[str, Any]:
         """
         Convert to dictionary for API request, keeping ONLY
         the fields that are expected in an API call!
         E.g., DROP the tool_id, since it is only for use in the Assistant API,
             not the completion API.
+
+        Args:
+            has_system_role: whether the message has a system role (if not,
+                set to "user" role)
         Returns:
             dict: dictionary representation of LLM message
         """
         d = self.dict()
+        # if there is a key k = "role" with value "system", change to "user"
+        # in case has_system_role is False
+        if not has_system_role and "role" in d and d["role"] == "system":
+            d["role"] = "user"
+            if "content" in d:
+                d["content"] = "[ADDITIONAL SYSTEM MESSAGE:]\n\n" + d["content"]
         # drop None values since API doesn't accept them
         dict_no_none = {k: v for k, v in d.items() if v is not None}
         if "name" in dict_no_none and dict_no_none["name"] == "":

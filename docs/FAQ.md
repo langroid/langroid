@@ -72,7 +72,7 @@ ensures that tool generation errors are sent back to the LLM so it retries the g
 ## OpenAI Tools and Function-calling support
 
 Langroid supports OpenAI tool-calls API as well as OpenAI function-calls API.
-Read more here: https://github.com/langroid/langroid/releases/tag/0.7.0
+Read more [here](https://github.com/langroid/langroid/releases/tag/0.7.0).
 
 Langroid has always had its own native tool-calling support as well, 
 which works with **any** LLM -- you can define a subclass of `ToolMessage` (pydantic based) 
@@ -80,4 +80,47 @@ and it is transpiled into system prompt instructions for the tool.
 In practice, we don't see much difference between using this vs OpenAI fn-calling. 
 Example [here](https://github.com/langroid/langroid/blob/main/examples/basic/fn-call-local-simple.py).
 Or search for `ToolMessage` in any of the `tests/` or `examples/` folders.
+
+## Some example scripts appear to return to user input immediately without handling a tool.
+
+This is because the `task` has been set up with `interactive=True` 
+(which is the default). With this setting, the task loop waits for user input after
+either the `llm_response` or `agent_response` (typically a tool-handling response) 
+returns a valid response. If you want to progress through the task, you can simply 
+hit return, unless the prompt indicates that the user needs to enter a response.
+
+Alternatively, the `task` can be set up with `interactive=False` -- with this setting,
+the task loop will _only_ wait for user input when an entity response (`llm_response` 
+or `agent_response`) _explicitly_ addresses the user. Explicit user addressing can
+be done using either:
+
+- an orchestration tool, e.g. `SendTool` (see details in
+the release notes for [0.9.0](https://github.com/langroid/langroid/releases/tag/0.9.0)), an example script is the [multi-agent-triage.py](https://github.com/langroid/langroid/blob/main/examples/basic/multi-agent-triage.py), or 
+- a special addressing prefix, see the example script [1-agent-3-tools-address-user.py](https://github.com/langroid/langroid/blob/main/examples/basic/1-agent-3-tools-address-user.py)
+
+
+## Can I specify top_k in OpenAIGPTConfig (for LLM API calls)?
+
+No; Langroid currently only supports parameters accepted by OpenAI's API, and `top_k` is _not_ one of them. See:
+
+- [OpenAI API Reference](https://platform.openai.com/docs/api-reference/chat/create)
+- [Discussion on top_k, top_p, temperature](https://community.openai.com/t/temperature-top-p-and-top-k-for-chatbot-responses/295542/5)
+- [Langroid example](https://github.com/langroid/langroid/blob/main/examples/basic/fn-call-local-numerical.py) showing how you can set other OpenAI API parameters, using the `OpenAICallParams` object.
+
+
+## Can I persist agent state across multiple runs?
+
+For example, you may want to stop the current python script, and 
+run it again later, resuming your previous conversation.
+Currently there is no built-in Langroid mechanism for this, but you can 
+achieve a basic type of persistence by saving the agent's `message_history`:
+
+-  if you used `Task.run()` in your script, make sure the task is 
+set up with `restart=False` -- this prevents the agent state from being reset when 
+the task is run again.
+- using python's pickle module, you can save the `agent.message_history` to a file,
+and load it (if it exists) at the start of your script.
+
+See the example script [`chat-persist.py`](https://github.com/langroid/langroid/blob/main/examples/basic/chat-persist.py)
+
 

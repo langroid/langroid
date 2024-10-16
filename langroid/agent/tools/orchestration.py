@@ -200,12 +200,13 @@ class DonePassTool(PassTool):
 
 
 class ForwardTool(PassTool):
-    """Tool for forwarding the received msg (ChatDocument) to another agent.
+    """Tool for forwarding the received msg (ChatDocument) to another agent or entity.
     Similar to PassTool, but with a specified recipient agent.
     """
 
     purpose: str = """
-    To forward the current message to an <agent>.
+    To forward the current message to an <agent>, where <agent> 
+    could be the name of an agent, or an entity such as "user", "llm".
     """
     request: str = "forward_tool"
     agent: str

@@ -586,7 +586,9 @@ def test_llm_tool_task(
     """
 
     set_global(test_settings)
+    llm_config = OpenAIGPTConfig(max_output_tokens=3_000, timeout=120)
     cfg = ChatAgentConfig(
+        llm=llm_config,
         use_tools=not use_functions_api,
         use_functions_api=use_functions_api,
         use_tools_api=use_tools_api,
@@ -594,6 +596,7 @@ def test_llm_tool_task(
         You will be asked to compute a certain transform of two numbers,
         using a tool/function-call that you have access to.
         When you receive the answer from the tool, say {DONE} and show the answer.
+        DO NOT SAY {DONE} until you receive a specific result from the tool.
         """,
     )
     agent = ChatAgent(cfg)

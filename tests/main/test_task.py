@@ -10,7 +10,7 @@ import pytest
 import langroid as lr
 from langroid.agent import ChatDocument
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
-from langroid.agent.task import Task
+from langroid.agent.task import Task, TaskConfig
 from langroid.agent.tool_message import ToolMessage
 from langroid.agent.tools.orchestration import (
     AgentDoneTool,
@@ -347,13 +347,15 @@ def test_task_tool_agent_response(
 @pytest.mark.parametrize("use_fn_api", [False, True])
 @pytest.mark.parametrize("use_tools_api", [True, False])
 @pytest.mark.parametrize("agent_response_done", [False, True])
-@pytest.mark.parametrize("use_orch_tools", [True, False])
+@pytest.mark.parametrize("use_orch_tools", [False, True])
+@pytest.mark.parametrize("string_signals", [False, True])
 def test_task_tool_num(
     test_settings: Settings,
     use_fn_api: bool,
     use_tools_api: bool,
     agent_response_done: bool,
     use_orch_tools: bool,
+    string_signals: bool,
 ):
     """
     Test loop within single agent, where this cycle repeats:
@@ -404,15 +406,26 @@ def test_task_tool_num(
         )
     )
     agent.enable_message(AugmentTool)
-    agent.enable_message(DonePassTool)
+    if use_orch_tools:
+        agent.enable_message(DonePassTool)
+    else:
+        agent.disable_message_use(DonePassTool)
+    task_config = TaskConfig(recognize_string_signals=string_signals)
     task = Task(
         agent,
         interactive=False,
         done_if_no_response=[Entity.LLM],
+        config=task_config,
     )
 
-    response = task.run("100")
-    assert "101" in response.content
+    response = task.run("100", turns=10)
+    if use_orch_tools or string_signals:
+        assert "101" in response.content
+        assert len(agent.message_history) <= 5
+    else:
+        # no orch tool, and string signals ignored, so task doesn't terminate,
+        # and is limited by "turns" parameter
+        assert len(agent.message_history) > 7
 
 
 @pytest.mark.parametrize("use_fn_api", [True, False])

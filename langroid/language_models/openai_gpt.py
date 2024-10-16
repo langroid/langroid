@@ -21,6 +21,7 @@ from typing import (
 )
 
 import openai
+from cerebras.cloud.sdk import AsyncCerebras, Cerebras
 from groq import AsyncGroq, Groq
 from httpx import Timeout
 from openai import AsyncOpenAI, OpenAI
@@ -91,6 +92,8 @@ class OpenAIChatModel(str, Enum):
     GPT4_TURBO = "gpt-4-turbo"
     GPT4o = "gpt-4o-2024-08-06"
     GPT4o_MINI = "gpt-4o-mini"
+    O1_PREVIEW = "o1-preview"
+    O1_MINI = "o1-mini"
 
 
 class OpenAICompletionModel(str, Enum):
@@ -108,6 +111,8 @@ _context_length: Dict[str, int] = {
     OpenAIChatModel.GPT4_TURBO: 128_000,
     OpenAIChatModel.GPT4o: 128_000,
     OpenAIChatModel.GPT4o_MINI: 128_000,
+    OpenAIChatModel.O1_PREVIEW: 128_000,
+    OpenAIChatModel.O1_MINI: 128_000,
     OpenAICompletionModel.TEXT_DA_VINCI_003: 4096,
     AnthropicModel.CLAUDE_3_5_SONNET: 200_000,
     AnthropicModel.CLAUDE_3_OPUS: 200_000,
@@ -123,6 +128,8 @@ _cost_per_1k_tokens: Dict[str, Tuple[float, float]] = {
     OpenAIChatModel.GPT4_TURBO: (0.01, 0.03),  # 128K context
     OpenAIChatModel.GPT4o: (0.0025, 0.010),  # 128K context
     OpenAIChatModel.GPT4o_MINI: (0.00015, 0.0006),  # 128K context
+    OpenAIChatModel.O1_PREVIEW: (0.015, 0.060),  # 128K context
+    OpenAIChatModel.O1_MINI: (0.003, 0.012),  # 128K context
     AnthropicModel.CLAUDE_3_5_SONNET: (0.003, 0.015),
     AnthropicModel.CLAUDE_3_OPUS: (0.015, 0.075),
     AnthropicModel.CLAUDE_3_SONNET: (0.003, 0.015),
@@ -135,6 +142,8 @@ openAIChatModelPreferenceList = [
     OpenAIChatModel.GPT4_TURBO,
     OpenAIChatModel.GPT4,
     OpenAIChatModel.GPT4o_MINI,
+    OpenAIChatModel.O1_MINI,
+    OpenAIChatModel.O1_PREVIEW,
     OpenAIChatModel.GPT3_5_TURBO,
 ]
 
@@ -146,6 +155,16 @@ openAICompletionModelPreferenceList = [
 openAIStructuredOutputList = [
     OpenAIChatModel.GPT4o_MINI,
     OpenAIChatModel.GPT4o,
+]
+
+NON_STREAMING_MODELS = [
+    OpenAIChatModel.O1_MINI,
+    OpenAIChatModel.O1_PREVIEW,
+]
+
+NON_SYSTEM_MESSAGE_MODELS = [
+    OpenAIChatModel.O1_MINI,
+    OpenAIChatModel.O1_PREVIEW,
 ]
 
 if "OPENAI_API_KEY" in os.environ:
@@ -229,6 +248,8 @@ class OpenAICallParams(BaseModel):
     Various params that can be sent to an OpenAI API chat-completion call.
     When specified, any param here overrides the one with same name in the
     OpenAIGPTConfig.
+    See OpenAI API Reference for details on the params:
+    https://platform.openai.com/docs/api-reference/chat
     """
 
     max_tokens: int = 1024
@@ -238,7 +259,7 @@ class OpenAICallParams(BaseModel):
     response_format: Dict[str, str] | None = None
     logit_bias: Dict[int, float] | None = None  # token_id -> bias
     logprobs: bool = False
-    top_p: int | None = 1
+    top_p: float | None = 1.0
     top_logprobs: int | None = None  # if int, requires logprobs=True
     n: int = 1  # how many completions to generate (n > 1 is NOT handled now)
     stop: str | List[str] | None = None  # (list of) stop sequence(s)
@@ -327,6 +348,9 @@ class OpenAIGPTConfig(LLMConfig):
             raise LangroidImportError("litellm", "litellm")
         litellm.telemetry = False
         litellm.drop_params = True  # drop un-supported params without crashing
+        # modify params to fit the model expectations, and avoid crashing
+        # (e.g. anthropic doesn't like first msg to be system msg)
+        litellm.modify_params = True
         self.seed = None  # some local mdls don't support seed
         keys_dict = litellm.utils.validate_environment(self.chat_model)
         missing_keys = keys_dict.get("missing_keys", [])
@@ -389,8 +413,8 @@ class OpenAIGPT(LanguageModel):
     Class for OpenAI LLMs
     """
 
-    client: OpenAI | Groq
-    async_client: AsyncOpenAI | AsyncGroq
+    client: OpenAI | Groq | Cerebras
+    async_client: AsyncOpenAI | AsyncGroq | AsyncCerebras
 
     def __init__(self, config: OpenAIGPTConfig = OpenAIGPTConfig()):
         """
@@ -517,6 +541,7 @@ class OpenAIGPT(LanguageModel):
             self.api_key = DUMMY_API_KEY
 
         self.is_groq = self.config.chat_model.startswith("groq/")
+        self.is_cerebras = self.config.chat_model.startswith("cerebras/")
 
         if self.is_groq:
             self.config.chat_model = self.config.chat_model.replace("groq/", "")
@@ -525,6 +550,16 @@ class OpenAIGPT(LanguageModel):
                 api_key=self.api_key,
             )
             self.async_client = AsyncGroq(
+                api_key=self.api_key,
+            )
+        elif self.is_cerebras:
+            self.config.chat_model = self.config.chat_model.replace("cerebras/", "")
+            self.api_key = os.getenv("CEREBRAS_API_KEY", DUMMY_API_KEY)
+            self.client = Cerebras(
+                api_key=self.api_key,
+            )
+            # TODO there is not async client, so should we do anything here?
+            self.async_client = AsyncCerebras(
                 api_key=self.api_key,
             )
         else:
@@ -601,9 +636,36 @@ class OpenAIGPT(LanguageModel):
         openai_chat_models = [e.value for e in OpenAIChatModel]
         return self.config.chat_model in openai_chat_models
 
+    def supports_functions_or_tools(self) -> bool:
+        return self.is_openai_chat_model() and self.config.chat_model not in [
+            OpenAIChatModel.O1_MINI,
+            OpenAIChatModel.O1_PREVIEW,
+        ]
+
     def is_openai_completion_model(self) -> bool:
         openai_completion_models = [e.value for e in OpenAICompletionModel]
         return self.config.completion_model in openai_completion_models
+
+    def unsupported_params(self) -> List[str]:
+        """
+        List of params that are not supported by the current model
+        """
+        match self.config.chat_model:
+            case OpenAIChatModel.O1_MINI | OpenAIChatModel.O1_PREVIEW:
+                return ["temperature", "stream"]
+            case _:
+                return []
+
+    def rename_params(self) -> Dict[str, str]:
+        """
+        Map of param name -> new name for specific models.
+        Currently main troublemaker is o1* series.
+        """
+        match self.config.chat_model:
+            case OpenAIChatModel.O1_MINI | OpenAIChatModel.O1_PREVIEW:
+                return {"max_tokens": "max_completion_tokens"}
+            case _:
+                return {}
 
     def chat_context_length(self) -> int:
         """
@@ -649,7 +711,11 @@ class OpenAIGPT(LanguageModel):
 
     def get_stream(self) -> bool:
         """Get streaming status"""
-        return self.config.stream and settings.stream
+        return (
+            self.config.stream
+            and settings.stream
+            and self.config.chat_model not in NON_STREAMING_MODELS
+        )
 
     @no_type_check
     def _process_stream_event(
@@ -681,7 +747,7 @@ class OpenAIGPT(LanguageModel):
         event_args = ""
         event_fn_name = ""
         event_tool_deltas: Optional[List[Dict[str, Any]]] = None
-
+        silent = is_async and self.config.async_stream_quiet
         # The first two events in the stream of Azure OpenAI is useless.
         # In the 1st: choices list is empty, in the 2nd: the dict delta has null content
         if chat:
@@ -700,42 +766,40 @@ class OpenAIGPT(LanguageModel):
             event_text = choices[0]["text"]
         if event_text:
             completion += event_text
-            if not is_async:
+            if not silent:
                 sys.stdout.write(Colors().GREEN + event_text)
                 sys.stdout.flush()
                 self.config.streamer(event_text)
         if event_fn_name:
             function_name = event_fn_name
             has_function = True
-            if not is_async:
+            if not silent:
                 sys.stdout.write(Colors().GREEN + "FUNC: " + event_fn_name + ": ")
                 sys.stdout.flush()
                 self.config.streamer(event_fn_name)
 
         if event_args:
             function_args += event_args
-            if not is_async:
+            if not silent:
                 sys.stdout.write(Colors().GREEN + event_args)
                 sys.stdout.flush()
                 self.config.streamer(event_args)
 
-        if event_tool_deltas is not None:
-            # print out streaming tool calls
+        if event_tool_deltas is not None and not silent:
+            # print out streaming tool calls, if not async
             for td in event_tool_deltas:
                 if td["function"]["name"] is not None:
                     tool_fn_name = td["function"]["name"]
-                    if not is_async:
-                        sys.stdout.write(
-                            Colors().GREEN + "OAI-TOOL: " + tool_fn_name + ": "
-                        )
-                        sys.stdout.flush()
-                        self.config.streamer(tool_fn_name)
+                    sys.stdout.write(
+                        Colors().GREEN + "OAI-TOOL: " + tool_fn_name + ": "
+                    )
+                    sys.stdout.flush()
+                    self.config.streamer(tool_fn_name)
                 if td["function"]["arguments"] != "":
                     tool_fn_args = td["function"]["arguments"]
-                    if not is_async:
-                        sys.stdout.write(Colors().GREEN + tool_fn_args)
-                        sys.stdout.flush()
-                        self.config.streamer(tool_fn_args)
+                    sys.stdout.write(Colors().GREEN + tool_fn_args)
+                    sys.stdout.flush()
+                    self.config.streamer(tool_fn_args)
 
         # show this delta in the stream
         if choices[0].get("finish_reason", "") in [
@@ -845,6 +909,7 @@ class OpenAIGPT(LanguageModel):
                     completion=completion,
                     function_args=function_args,
                     function_name=function_name,
+                    is_async=True,
                 )
                 if is_break:
                     break
@@ -1101,8 +1166,13 @@ class OpenAIGPT(LanguageModel):
     ) -> LLMTokenUsage:
         """
         Extracts token usage from ``response`` and computes cost, only when NOT
-        in streaming mode, since the LLM API (OpenAI currently) does not populate the
-        usage fields in streaming mode. In streaming mode, these are set to zero for
+        in streaming mode, since the LLM API (OpenAI currently) was not
+        populating the usage fields in streaming mode (but as of Sep 2024, streaming
+        responses include  usage info as well, so we should update the code
+        to directly use usage information from the streaming response, which is more
+        accurate, esp with "thinking" LLMs like o1 series which consume
+        thinking tokens).
+        In streaming mode, these are set to zero for
         now, and will be updated later by the fn ``update_token_usage``.
         """
         cost = 0.0
@@ -1134,8 +1204,8 @@ class OpenAIGPT(LanguageModel):
         if self.config.use_chat_for_completion:
             return self.chat(messages=prompt, max_tokens=max_tokens)
 
-        if self.is_groq:
-            raise ValueError("Groq does not support pure completions")
+        if self.is_groq or self.is_cerebras:
+            raise ValueError("Groq, Cerebras do not support pure completions")
 
         if settings.debug:
             print(f"[grey37]PROMPT: {escape(prompt)}[/grey37]")
@@ -1212,8 +1282,8 @@ class OpenAIGPT(LanguageModel):
         if self.config.use_chat_for_completion:
             return await self.achat(messages=prompt, max_tokens=max_tokens)
 
-        if self.is_groq:
-            raise ValueError("Groq does not support pure completions")
+        if self.is_groq or self.is_cerebras:
+            raise ValueError("Groq, Cerebras do not support pure completions")
 
         if settings.debug:
             print(f"[grey37]PROMPT: {escape(prompt)}[/grey37]")
@@ -1466,7 +1536,13 @@ class OpenAIGPT(LanguageModel):
 
         args: Dict[str, Any] = dict(
             model=chat_model,
-            messages=[m.api_dict() for m in llm_messages],
+            messages=[
+                m.api_dict(
+                    has_system_role=self.config.chat_model
+                    not in NON_SYSTEM_MESSAGE_MODELS
+                )
+                for m in (llm_messages)
+            ],
             max_tokens=max_tokens,
             stream=self.get_stream(),
         )
@@ -1505,6 +1581,15 @@ class OpenAIGPT(LanguageModel):
         if response_format is not None:
             args["response_format"] = response_format.to_dict()
 
+        for p in self.unsupported_params():
+            # some models e.g. o1-mini (as of sep 2024) don't support some params,
+            # like temperature and stream, so we need to remove them.
+            args.pop(p, None)
+
+        param_rename_map = self.rename_params()
+        for old_param, new_param in param_rename_map.items():
+            if old_param in args:
+                args[new_param] = args.pop(old_param)
         return args
 
     def _process_chat_completion_response(

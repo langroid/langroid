@@ -9,7 +9,7 @@ from langroid.parsing.parser import ParsingConfig, PdfParsingConfig
 @pytest.mark.parametrize("source", ["url", "bytes"])
 @pytest.mark.parametrize("pdflib", ["fitz", "pypdf", "pdfplumber"])
 def test_get_pdf_doc_url(source, pdflib: str):
-    url = "https://arxiv.org/pdf/2104.05490.pdf"
+    url = "https://example-files.online-convert.com/document/pdf/example.pdf"
 
     pdf_parser = DocumentParser.create(
         url,

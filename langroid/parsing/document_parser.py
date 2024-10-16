@@ -81,13 +81,25 @@ def is_plain_text(path_or_bytes: str | bytes) -> bool:
     else:
         content = path_or_bytes[:1024]
     try:
+        # Use magic to detect the MIME type
+        import magic
+
+        mime_type = magic.from_buffer(content, mime=True)
+
+        # Check if the MIME type is not a text type
+        if not mime_type.startswith("text/"):
+            return False
+
         # Attempt to decode the content as UTF-8
         content = content[: find_last_full_char(content)]
 
-        _ = content.decode("utf-8")
-        # Additional checks can go here, e.g., to verify that the content
-        # doesn't contain too many unusual characters for it to be considered text
-        return True
+        try:
+            _ = content.decode("utf-8")
+            # Additional checks can go here, e.g., to verify that the content
+            # doesn't contain too many unusual characters for it to be considered text
+            return True
+        except UnicodeDecodeError:
+            return False
     except UnicodeDecodeError:
         # If decoding fails, it's likely not plain text (or not encoded in UTF-8)
         return False
@@ -123,7 +135,8 @@ class DocumentParser(Parser):
         Returns:
             DocumentParser: An instance of a DocumentParser subclass.
         """
-        if DocumentParser._document_type(source, doc_type) == DocumentType.PDF:
+        inferred_doc_type = DocumentParser._document_type(source, doc_type)
+        if inferred_doc_type == DocumentType.PDF:
             if config.pdf.library == "fitz":
                 return FitzPDFParser(source, config)
             elif config.pdf.library == "pypdf":
@@ -138,7 +151,7 @@ class DocumentParser(Parser):
                 raise ValueError(
                     f"Unsupported PDF library specified: {config.pdf.library}"
                 )
-        elif DocumentParser._document_type(source, doc_type) == DocumentType.DOCX:
+        elif inferred_doc_type == DocumentType.DOCX:
             if config.docx.library == "unstructured":
                 return UnstructuredDocxParser(source, config)
             elif config.docx.library == "python-docx":
@@ -147,7 +160,7 @@ class DocumentParser(Parser):
                 raise ValueError(
                     f"Unsupported DOCX library specified: {config.docx.library}"
                 )
-        elif DocumentParser._document_type(source, doc_type) == DocumentType.DOC:
+        elif inferred_doc_type == DocumentType.DOC:
             return UnstructuredDocParser(source, config)
         else:
             source_name = source if isinstance(source, str) else "bytes"

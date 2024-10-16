@@ -35,7 +35,7 @@
 </h3>
 
 `Langroid` is an intuitive, lightweight, extensible and principled
-Python framework to easily build LLM-powered applications, from ex-CMU and UW-Madison researchers. 
+Python framework to easily build LLM-powered applications, from CMU and UW-Madison researchers. 
 You set up Agents, equip them with optional components (LLM, 
 vector-store and tools/functions), assign them tasks, and have them 
 collaboratively solve a problem by exchanging messages. 
@@ -45,6 +45,8 @@ This Multi-Agent paradigm is inspired by the
 
 `Langroid` is a fresh take on LLM app-development, where considerable thought has gone 
 into simplifying the developer experience; it does not use `Langchain`.
+
+:fire: Read the (WIP) [overview of the langroid architecture](https://langroid.github.io/langroid/blog/2024/08/15/overview-of-langroids-multi-agent-architecture-prelim/)
 
 📢 Companies are using/adapting Langroid in **production**. Here is a quote:
 
@@ -59,7 +61,7 @@ blog post from the LanceDB team
 pharmacovigilance, see [blog post](https://langroid.github.io/langroid/blog/2024/08/12/malade-multi-agent-architecture-for-pharmacovigilance/)
 
 
-We welcome contributions -- See the [contributions](./CONTRIBUTING.md) document
+We welcome contributions: See the [contributions](./CONTRIBUTING.md) document
 for ideas on what to contribute.
 
 Are you building LLM Applications, or want help with Langroid for your company, 
@@ -132,6 +134,15 @@ teacher_task.run()
 <details>
 <summary> <b>Click to expand</b></summary>
 
+- **Oct 2024:**
+  - **[0.18.0]** [LLMConfig.async_stream_quiet](https://langroid.github.io/langroid/notes/async-streaming/) flag to 
+    turn off LLM output in async + stream mode.
+  - **[0.17.0]** XML-based tools, see [docs](https://langroid.github.io/langroid/notes/xml-tools/).
+- **Sep 2024:**
+  - **[0.16.0](https://github.com/langroid/langroid/releases/tag/0.16.0)**  Support for OpenAI `o1-mini` and `o1-preview` models.
+  - **[0.15.0](https://github.com/langroid/langroid/releases/tag/0.15.0)** Cerebras API support -- run llama-3.1 models hosted on Cerebras Cloud (very fast inference).
+  - **[0.14.0](https://github.com/langroid/langroid/releases/tag/0.14.0)** `DocChatAgent` uses Reciprocal Rank Fusion (RRF) to rank chunks retrieved by different methods.
+  - **[0.12.0](https://github.com/langroid/langroid/releases/tag/0.12.0)** `run_batch_task` new option -- `stop_on_first_result` - allows termination of batch as soon as any task returns a result.  
 - **Aug 2024:**
   - **[0.11.0](https://github.com/langroid/langroid/releases/tag/0.11.0)** Polymorphic `Task.run(), Task.run_async`.
   - **[0.10.0](https://github.com/langroid/langroid/releases/tag/0.10.0)** Allow tool handlers to return arbitrary result type, including other tools.

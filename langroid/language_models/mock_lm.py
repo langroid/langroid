@@ -1,6 +1,6 @@
 """Mock Language Model for testing"""
 
-from typing import Callable, Dict, List, Optional, Union
+from typing import Awaitable, Callable, Dict, List, Optional, Union
 
 import langroid.language_models as lm
 from langroid.language_models import LLMResponse
@@ -29,6 +29,7 @@ class MockLMConfig(LLMConfig):
 
     response_dict: Dict[str, str] = {}
     response_fn: Callable[[str], None | str] = none_fn
+    response_fn_async: Optional[Callable[[str], Awaitable[Optional[str]]]] = None
     default_response: str = "Mock response"
 
     type: str = "mock"
@@ -47,6 +48,25 @@ class MockLM(LanguageModel):
         # - default_response
         mapped_response = self.config.response_dict.get(
             msg, self.config.response_fn(msg) or self.config.default_response
+        )
+        return lm.LLMResponse(
+            message=to_string(mapped_response),
+            cached=False,
+        )
+
+    async def _response_async(self, msg: str) -> LLMResponse:
+        # response is based on this fallback order:
+        # - response_dict
+        # - response_fn_async
+        # - response_fn
+        # - default_response
+        if self.config.response_fn_async is not None:
+            response = await self.config.response_fn_async(msg)
+        else:
+            response = self.config.response_fn(msg)
+
+        mapped_response = self.config.response_dict.get(
+            msg, response or self.config.default_response
         )
         return lm.LLMResponse(
             message=to_string(mapped_response),
@@ -83,7 +103,7 @@ class MockLM(LanguageModel):
         Mock chat function for testing
         """
         last_msg = messages[-1].content if isinstance(messages, list) else messages
-        return self._response(last_msg)
+        return await self._response_async(last_msg)
 
     def generate(self, prompt: str, max_tokens: int = 200) -> lm.LLMResponse:
         """
@@ -95,7 +115,7 @@ class MockLM(LanguageModel):
         """
         Mock generate function for testing
         """
-        return self._response(prompt)
+        return await self._response_async(prompt)
 
     def get_stream(self) -> bool:
         return False

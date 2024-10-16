@@ -1,0 +1,1 @@
+This section contains brief notes describing various features and updates.

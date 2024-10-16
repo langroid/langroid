@@ -10,6 +10,14 @@ from langroid.parsing.parse_json import extract_top_level_json, parse_imperfect_
     [
         ("nothing to see here", []),
         (
+            '{\n"key": \n"value \n with unescaped \nnewline"\n}',
+            ['{"key": "value \\n with unescaped \\nnewline"}'],
+        ),
+        (
+            '{\n"key": \n"value \\n with escaped \\nnewline"}',
+            ['{"key": "value \\n with escaped \\nnewline"}'],
+        ),
+        (
             """
             Ok, thank you.
             {
@@ -71,6 +79,16 @@ def test_extract_top_level_json(s, expected):
 @pytest.mark.parametrize(
     "input_json,expected_output",
     [
+        # TODO - this aspect of parse_imperfect_json is NOT used anywhere --
+        # if we do want to use it, how do we rationalize this behavior?
+        (
+            '{"key": "value \n with unescaped \nnewline"}',
+            {"key": "value \n with unescaped \nnewline"},
+        ),
+        (
+            '{"key": "value \\n with escaped \\nnewline"}',
+            {"key": "value \n with escaped \nnewline"},
+        ),
         ('{"key": "value", "number": 42}', {"key": "value", "number": 42}),
         (
             '{"key": "value", "number": 42,}',

@@ -36,6 +36,7 @@ You are welcome to take on un-assigned open [issues](https://github.com/langroid
 - Vector databases, e.g.:
     - [x] Qdrant
     - [x] Chroma
+    - [x] LanceDB
     - [ ] Pinecone 
     - [ ] Milvus 
     - [ ] Marqo 
@@ -65,7 +66,7 @@ You are welcome to take on un-assigned open [issues](https://github.com/langroid
 For instance during a long multi-agent conversation, if we receive a bad response from the LLM,
 when the user gets a chance to respond, they may insert a special code (e.g. `b`) so that 
 the previous step is re-done and the LLM gets another chance to respond.
-- [ ] **Integrate LLM APIs:** There are a couple of libs that simulate OpenAI-like interface for other models: https://github.com/BerriAI/litellm
+- [x] **Integrate LLM APIs:** There are a couple of libs that simulate OpenAI-like interface for other models: https://github.com/BerriAI/litellm
     and https://github.com/philschmid/easyllm. It would be useful to have Langroid work with these APIs.
 - [ ] Implement Agents that communicate via REST APIs: Currently, all agents within 
 the multi-agent system are created in a single script. 
@@ -129,10 +130,19 @@ python3 -m venv .venv
 # activate the virtual env
 . .venv/bin/activate
 
+# specify python version for poetry to use
+poetry env use python3.11
+
 # use poetry to install dependencies (these go into .venv dir)
 poetry install --with dev
-
 ```
+
+Important note about dependencies management:
+> As of version 0.18.3, we are starting to include the `poetry.lock` file as part of 
+> the repo. This ensures that all contributors are using the same versions of 
+> dependencies. If you add a new dependency, you should run `poetry update` to update
+> the `poetry.lock` file. This will also update the `pyproject.toml` file.
+
 To add packages, use `poetry add <package-name>`. This will automatically
 find the latest compatible version of the package and add it to `pyproject.
 toml`. _Do not manually edit `pyproject.toml` to add packages._
@@ -140,14 +150,12 @@ toml`. _Do not manually edit `pyproject.toml` to add packages._
 ## Set up environment variables (API keys, etc)
 
 Copy the `.env-template` file to a new file `.env` and
-insert these secrets:
-- OpenAI API key,
-- GitHub Personal Access Token (needed by  PyGithub to analyze git repos;
+insert secrets such as API keys, etc:
+- OpenAI API key, Anthropic API key, etc.
+- [Optional] GitHub Personal Access Token (needed by  PyGithub to analyze git repos;
   token-based API calls are less rate-limited).
-- Cache Configs
+- [Optional] Cache Configs
   - Redis : Password, Host, Port <br>
-    OR
-  - Momento : Auth_token
 - Qdrant API key for the vector database.
 
 ```bash

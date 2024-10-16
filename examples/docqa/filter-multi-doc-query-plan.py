@@ -30,7 +30,7 @@ from fire import Fire
 
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
-VECDB = "lance"  # or "lance"
+VECDB = "qdrant"  # or "lance"
 
 
 class MusicianMetadata(lr.DocMetaData):
@@ -124,7 +124,6 @@ def main(
             embedding=embed_cfg,
             replace_collection=False,
             document_class=MusicianDocument,
-            flatten=False,
         )
     else:
         vecdb_cfg = QdrantDBConfig(
