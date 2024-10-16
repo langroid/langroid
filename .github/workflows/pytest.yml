@@ -77,16 +77,34 @@ jobs:
         sudo apt-get install -y libmagic1
         sudo apt-get install -y poppler-utils tesseract-ocr
 
-    - name: Install Poetry
-      uses: Gr1N/setup-poetry@v8
+    - name: Load cached Poetry installation
+      uses: actions/cache@v4
+      with:
+        path: ~/.local
+        key: poetry-${{ runner.os }}-${{ hashFiles('**/poetry.lock') }}
 
-    - name: Install Poetry dependencies
+    - name: Install and configure Poetry
+      uses: snok/install-poetry@v1
+      with:
+        virtualenvs-create: true
+        virtualenvs-in-project: true
+        installer-parallel: true
+
+    - name: Load cached venv
+      id: cached-poetry-dependencies
+      uses: actions/cache@v4
+      with:
+        path: .venv
+        key: venv-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('**/poetry.lock') }}
+
+    - name: Install Poetry dependencies, if not found in cache
+      if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
       run: |
         poetry --version
         echo "$HOME/.local/bin" >> $GITHUB_PATH
         python -m pip install --upgrade pip
         
-        poetry install \
+        poetry install --no-root --sync \
           -E "lancedb momento meilisearch chromadb hf-embeddings unstructured pdf-parsers docx sql fastembed" \
           --with dev
 
@@ -108,16 +126,16 @@ jobs:
       env:
         PYTEST_ADDOPTS: "-p no:logging"
       run: |
-        poetry run coverage run --source=langroid \
-          -m pytest -rf --show-capture=no \
+        poetry run pytest --cov langroid --cov-config .coveragerc \
+          -rf -vv --log-cli-level=INFO --show-capture=no \
+          -n auto --timeout=300 \
           --first-test-file=tests/main/test_llm.py \
+          --first-test-file=tests/main/test_task.py \
           --first-test-file=tests/main/test_llm_async.py \
           --first-test-file=tests/main/test_task_inf_loop.py \
-          --first-test-file=tests/main/test_task.py \
           --first-test-file=tests/main/test_lance_doc_chat_agent.py \
           tests/main tests/extras/test_hf_embeddings.py tests/extras/test_fastembed_embeddings.py
       continue-on-error: true
-
 
     - name: Retry FAILED tests ONLY with gpt-4 instead of gpt-4o
       id: second_test
@@ -125,8 +143,8 @@ jobs:
       env:
         PYTEST_ADDOPTS: "-p no:logging"
       run: |
-        poetry run coverage run --append --source=langroid \
-          -m pytest --m gpt-4 -rf --show-capture=no \
+        poetry run pytest --m gpt-4 --cov --cov-append langroid --cov-config .coveragerc \
+          -rf --show-capture=no --timeout=300 \
           --first-test-file=tests/main/test_llm.py \
           --first-test-file=tests/main/test_llm_async.py \
           --first-test-file=tests/main/test_task_inf_loop.py \
@@ -135,13 +153,14 @@ jobs:
           --lf --last-failed-no-failures none \
           tests/main tests/extras/test_hf_embeddings.py tests/extras/test_fastembed_embeddings.py
 
+
     - name: Generate final coverage report from all runs
       run: poetry run coverage report
 
     - name: Generate XML coverage report
       run: poetry run coverage xml
     - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v2
+      uses: codecov/codecov-action@v4
       with:
         file: ./coverage.xml
         flags: unittests
@@ -149,4 +168,5 @@ jobs:
         fail_ci_if_error: false
       env:
         CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
 

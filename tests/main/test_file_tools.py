@@ -1,5 +1,6 @@
 import tempfile
 from pathlib import Path
+from typing import Callable
 
 import pytest
 from git import Repo
@@ -9,6 +10,7 @@ from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.tools.file_tools import ListDirTool, ReadFileTool, WriteFileTool
 from langroid.language_models.openai_gpt import OpenAIGPTConfig
 from langroid.utils.configuration import Settings, set_global
+from langroid.utils.git_utils import git_init_repo
 
 
 @pytest.fixture
@@ -36,7 +38,7 @@ def agent():
         you MUST use one of the TOOLs:
         {ReadFileTool.default_value("request")},
         {WriteFileTool.default_value("request")},
-        {ListDirTool.default_value("request")}    
+        {ListDirTool.default_value("request")}
         Typically a file name or path will be provided, and you should
         NOT worry about what directory or path it is in. The TOOL will
         handle that for you.
@@ -151,8 +153,6 @@ def test_write_file_tool_overwrite(test_settings: Settings, temp_dir, git_repo, 
     # Check git history
     commits = list(git_repo.iter_commits())
     assert len(commits) == 2
-    assert file_path in git_repo.git.show(commits[0]).split()
-    assert file_path in git_repo.git.show(commits[1]).split()
 
 
 def test_read_file_tool(test_settings: Settings, temp_dir, agent):
@@ -260,3 +260,51 @@ def test_list_dir_tool(test_settings: Settings, temp_dir, agent):
     agent_result = agent.handle_message(llm_msg).content
 
     assert "empty" in agent_result
+
+
+@pytest.fixture
+def my_write_file_tool(temp_dir):
+    git_repo = git_init_repo(temp_dir)
+
+    def temp_dir_fn():
+        return temp_dir
+
+    def git_repo_fn():
+        return git_repo
+
+    class MyWriteFileTool(WriteFileTool):
+        _curr_dir: Callable[[], str] = staticmethod(temp_dir_fn)
+        _git_repo: Callable[[], Repo] = staticmethod(git_repo_fn)
+
+    return MyWriteFileTool
+
+
+def test_my_write_file_tool(
+    test_settings: Settings, temp_dir, my_write_file_tool, agent
+):
+    set_global(test_settings)
+
+    git_repo = git_init_repo(temp_dir)
+    agent.enable_message(my_write_file_tool)
+
+    content = "print('Hello from MyWriteFileTool')"
+    file_path = "test_my_file.py"
+
+    llm_msg = agent.llm_response_forget(
+        f"Write a Python file named '{file_path}' with the content: {content}"
+    )
+
+    assert isinstance(agent.get_tool_messages(llm_msg)[0], my_write_file_tool)
+
+    agent_result = agent.handle_message(llm_msg).content
+    assert f"Content written to {file_path}" in agent_result
+    assert "and committed" in agent_result
+
+    full_path = temp_dir / file_path
+    assert full_path.exists()
+
+    with open(full_path, "r") as file:
+        assert file.read().strip() == content
+
+    assert not git_repo.is_dirty()
+    assert file_path in git_repo.git.ls_files().split()

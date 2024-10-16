@@ -91,6 +91,8 @@ class AgentConfig(BaseSettings):
     show_stats: bool = True  # show token usage/cost stats?
     add_to_registry: bool = True  # register agent in ObjectRegistry?
     respond_tools_only: bool = False  # respond only to tool messages (not plain text)?
+    # allow multiple tool messages in a single response?
+    allow_multiple_tools: bool = True
 
     @validator("name")
     def check_name_alphanum(cls, v: str) -> str:
@@ -1125,6 +1127,8 @@ class Agent(ABC):
             # as a response to the tool message even though the tool was not intended
             # for this agent.
             return None
+        if len(tools) > 1 and not self.config.allow_multiple_tools:
+            return self.to_ChatDocument("ERROR: Use ONE tool at a time!")
         if len(tools) == 0:
             fallback_result = self.handle_message_fallback(msg)
             if fallback_result is None:

@@ -61,7 +61,7 @@ blog post from the LanceDB team
 pharmacovigilance, see [blog post](https://langroid.github.io/langroid/blog/2024/08/12/malade-multi-agent-architecture-for-pharmacovigilance/)
 
 
-We welcome contributions -- See the [contributions](./CONTRIBUTING.md) document
+We welcome contributions: See the [contributions](./CONTRIBUTING.md) document
 for ideas on what to contribute.
 
 Are you building LLM Applications, or want help with Langroid for your company, 

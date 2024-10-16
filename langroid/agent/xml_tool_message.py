@@ -3,12 +3,12 @@ from typing import Any, Dict, List, Optional
 from lxml import etree
 
 from langroid.agent.tool_message import ToolMessage
+from langroid.pydantic_v1 import BaseModel
 
 
 class XMLToolMessage(ToolMessage):
     """
     Abstract class for tools formatted using XML instead of JSON.
-    Mainly tested for non-nested tool structures.
 
     When a subclass defines a field with the attribute `verbatim=True`,
     instructions are sent to the LLM to ensure the field's content is:
@@ -50,8 +50,11 @@ class XMLToolMessage(ToolMessage):
         parser = etree.XMLParser(strip_cdata=False)
         root = etree.fromstring(formatted_string.encode("utf-8"), parser=parser)
 
-        def parse_element(element: etree._Element) -> Any | Dict[str, Any] | str:
+        def parse_element(element: etree._Element) -> Any:
             # Skip elements starting with underscore
+            if element.tag.startswith("_"):
+                return {}
+
             field_info = cls.__fields__.get(element.tag)
             is_verbatim = field_info and field_info.field_info.extra.get(
                 "verbatim", False
@@ -72,8 +75,18 @@ class XMLToolMessage(ToolMessage):
                 # For non-code leaf elements, strip whitespace
                 return element.text.strip() if element.text else ""
             else:
-                # For branch elements, recurse
-                return {child.tag: parse_element(child) for child in element}
+                # For branch elements, handle potential lists or nested structures
+                children = [parse_element(child) for child in element]
+                if all(child.tag == element[0].tag for child in element):
+                    # If all children have the same tag, treat as a list
+                    return children
+                else:
+                    # Otherwise, treat as a dictionary
+                    result = {child.tag: parse_element(child) for child in element}
+                    # Check if this corresponds to a nested Pydantic model
+                    if field_info and issubclass(field_info.type_, BaseModel):
+                        return field_info.type_(**result)
+                    return result
 
         result = parse_element(root)
         if not isinstance(result, dict):
@@ -101,6 +114,24 @@ class XMLToolMessage(ToolMessage):
         return cls.parse_obj(parsed_data)
 
     @classmethod
+    def find_verbatim_fields(
+        cls, prefix: str = "", parent_cls: Optional["BaseModel"] = None
+    ) -> List[str]:
+        verbatim_fields = []
+        for field_name, field_info in (parent_cls or cls).__fields__.items():
+            full_name = f"{prefix}.{field_name}" if prefix else field_name
+            if (
+                field_info.field_info.extra.get("verbatim", False)
+                or field_name == "code"
+            ):
+                verbatim_fields.append(full_name)
+            if issubclass(field_info.type_, BaseModel):
+                verbatim_fields.extend(
+                    cls.find_verbatim_fields(full_name, field_info.type_)
+                )
+        return verbatim_fields
+
+    @classmethod
     def format_instructions(cls, tool: bool = False) -> str:
         """
         Instructions to the LLM showing how to use the XML tool.
@@ -123,14 +154,69 @@ class XMLToolMessage(ToolMessage):
         """
 
         preamble = "Placeholders:\n"
-        for field in fields:
-            preamble += f"{field.upper()} = [value for {field}]\n"
+        xml_format = f"Formatting example:\n\n<{cls.Config.root_element}>\n"
 
-        verbatim_fields = [
-            field
-            for field, field_info in cls.__fields__.items()
-            if field_info.field_info.extra.get("verbatim", False)
-        ]
+        def format_field(
+            field_name: str,
+            field_type: type,
+            indent: str = "",
+            path: str = "",
+        ) -> None:
+            nonlocal preamble, xml_format
+            current_path = f"{path}.{field_name}" if path else field_name
+
+            if issubclass(field_type, BaseModel):
+                preamble += (
+                    f"{field_name.upper()} = [nested structure for {field_name}]\n"
+                )
+                xml_format += f"{indent}<{field_name}>\n"
+                for sub_field, sub_field_info in field_type.__fields__.items():
+                    format_field(
+                        sub_field, sub_field_info.type_, indent + "  ", current_path
+                    )
+                xml_format += f"{indent}</{field_name}>\n"
+            elif issubclass(field_type, List):
+                item_type = getattr(field_type, "__args__", [Any])[0]
+                preamble += f"{field_name.upper()} = [list of {item_type.__name__}]\n"
+                xml_format += f"{indent}<{field_name}>\n"
+                xml_format += f"{indent}  <item>[{item_type.__name__} value]</item>\n"
+                xml_format += f"{indent}  ...\n"
+                xml_format += f"{indent}</{field_name}>\n"
+            elif issubclass(field_type, Dict):
+                key_type, value_type = getattr(field_type, "__args__", [Any, Any])
+                preamble += (
+                    f"{field_name.upper()} = "
+                    f"[dictionary with {key_type.__name__} keys and "
+                    f"{value_type.__name__} values]\n"
+                )
+                xml_format += f"{indent}<{field_name}>\n"
+                xml_format += (
+                    f"{indent}  <{key_type.__name__}>"
+                    f"[{value_type.__name__} value]"
+                    f"</{key_type.__name__}>\n"
+                )
+                xml_format += f"{indent}  ...\n"
+                xml_format += f"{indent}</{field_name}>\n"
+            else:
+                preamble += f"{field_name.upper()} = [value for {field_name}]\n"
+                if current_path in verbatim_fields:
+                    xml_format += (
+                        f"{indent}<{field_name}>"
+                        f"<![CDATA[{{{field_name.upper()}}}]]></{field_name}>\n"
+                    )
+                else:
+                    xml_format += (
+                        f"{indent}<{field_name}>"
+                        f"{{{field_name.upper()}}}</{field_name}>\n"
+                    )
+
+        verbatim_fields = cls.find_verbatim_fields()
+
+        for field in fields:
+            field_type = cls.__fields__[field].type_
+            format_field(field, field_type)
+
+        xml_format += f"</{cls.Config.root_element}>"
 
         verbatim_alert = ""
         if len(verbatim_fields) > 0:
@@ -141,13 +227,6 @@ class XMLToolMessage(ToolMessage):
             must be written verbatim WITHOUT any modifications or escaping,
             such as spaces, tabs, indents, newlines, quotes, etc.
             """
-        xml_format = f"Formatting example:\n\n<{cls.Config.root_element}>\n"
-        for field in fields:
-            if field == "code":
-                xml_format += f"  <{field}><![CDATA[{{{field.upper()}}}]]></{field}>\n"
-            else:
-                xml_format += f"  <{field}>{{{field.upper()}}}</{field}>\n"
-        xml_format += f"</{cls.Config.root_element}>"
 
         examples_str = ""
         if cls.examples():
@@ -177,17 +256,35 @@ class XMLToolMessage(ToolMessage):
         Raises:
             ValueError: If the result from etree.tostring is not a string.
         """
+
+        def create_element(
+            parent: etree._Element, name: str, value: Any, path: str = ""
+        ) -> None:
+            elem = etree.SubElement(parent, name)
+            current_path = f"{path}.{name}" if path else name
+
+            if isinstance(value, list):
+                for item in value:
+                    create_element(elem, "item", item, current_path)
+            elif isinstance(value, dict):
+                for k, v in value.items():
+                    create_element(elem, k, v, current_path)
+            elif isinstance(value, BaseModel):
+                # Handle nested Pydantic models
+                for field_name, field_value in value.dict().items():
+                    create_element(elem, field_name, field_value, current_path)
+            else:
+                if current_path in self.__class__.find_verbatim_fields():
+                    elem.text = etree.CDATA(str(value))
+                else:
+                    elem.text = str(value)
+
         root = etree.Element(self.Config.root_element)
         exclude_fields = self.Config.schema_extra.get("exclude", set())
         for name, value in self.dict().items():
             if name not in exclude_fields:
-                elem = etree.SubElement(root, name)
-                field_info = self.__class__.__fields__[name]
-                is_verbatim = field_info.field_info.extra.get("verbatim", False)
-                if is_verbatim:
-                    elem.text = etree.CDATA(str(value))
-                else:
-                    elem.text = str(value)
+                create_element(root, name, value)
+
         result = etree.tostring(root, encoding="unicode", pretty_print=True)
         if not isinstance(result, str):
             raise ValueError("Unexpected non-string result from etree.tostring")

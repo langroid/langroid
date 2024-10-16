@@ -30,6 +30,11 @@ Run like this --
 
 python3 examples/basic/fn-call-local-numerical.py -m groq/llama-3.1-70b-versatile
 
+or
+
+python3 examples/basic/fn-call-local-numerical.py -m ollama/qwen2.5-coder:latest
+
+
 (if the optional -m <model_name> is not provided, it defaults to GPT-4o).
 
 See here for ways to set up a Local/Open LLM to work with Langroid:
