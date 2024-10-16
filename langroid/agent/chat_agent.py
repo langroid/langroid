@@ -251,6 +251,7 @@ class ChatAgent(Agent):
         """Does this agent's LLM support strict tools?"""
         return (
             self.llm is not None
+            and self.llm.config.parallel_tool_calls is False
             and isinstance(self.llm, OpenAIGPT)
             and self.llm.supports_strict_tools
         )
