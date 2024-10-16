@@ -86,6 +86,7 @@ script showing how you can use Langroid multi-agents and tools
 to extract structured information from a document using **only a local LLM**
 (Mistral-7b-instruct-v0.2).
 
+
 ```python
 import langroid as lr
 import langroid.language_models as lm
