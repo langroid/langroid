@@ -44,7 +44,8 @@ This Multi-Agent paradigm is inspired by the
 (but you do not need to know anything about this!). 
 
 `Langroid` is a fresh take on LLM app-development, where considerable thought has gone 
-into simplifying the developer experience; it does not use `Langchain`.
+into simplifying the developer experience; 
+it does not use `Langchain`, or any other LLM framework.
 
 :fire: Read the (WIP) [overview of the langroid architecture](https://langroid.github.io/langroid/blog/2024/08/15/overview-of-langroids-multi-agent-architecture-prelim/)
 
