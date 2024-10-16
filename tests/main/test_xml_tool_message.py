@@ -414,6 +414,7 @@ def test_roundtrip_complex_nested():
     assert original.hobbies == parsed.hobbies
     assert original.phones == parsed.phones
 
+
 def test_roundtrip_complex_nested_tolerant():
     original = ComplexNestedXMLTool(
         person=Person(
@@ -428,9 +429,7 @@ def test_roundtrip_complex_nested_tolerant():
 
     # Insert harmless whitespace
     formatted_with_whitespace = (
-        formatted.replace("<", " \n <")
-        .replace(">", "> \n ")
-        .replace("</", " \n </")
+        formatted.replace("<", " \n <").replace(">", "> \n ").replace("</", " \n </")
     )
 
     parsed = ComplexNestedXMLTool.parse(formatted_with_whitespace)
@@ -440,6 +439,7 @@ def test_roundtrip_complex_nested_tolerant():
     assert original.person.address.dict() == parsed.person.address.dict()
     assert original.hobbies == parsed.hobbies
     assert original.phones == parsed.phones
+
 
 def test_llm_complex_xml_tool_message(
     test_settings: Settings,
