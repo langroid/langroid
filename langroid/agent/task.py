@@ -749,7 +749,7 @@ class Task:
                 )
 
                 if strict_result is not None:
-                    parsed_result: Optional[T] = cast(
+                    return cast(
                         Optional[T],
                         strict_agent.from_ChatDocument(strict_result, return_type),
                     )

@@ -4,7 +4,7 @@ import json
 import logging
 import textwrap
 from contextlib import ExitStack
-from typing import Dict, List, Optional, Self, Set, Tuple, Type, cast
+from typing import Dict, List, Optional, Self, Set, Tuple, Type, Union, cast
 
 from rich import print
 from rich.console import Console
@@ -62,6 +62,7 @@ class ChatAgentConfig(AgentConfig):
     use_tools: bool = False
     use_functions_api: bool = True
     use_tools_api: bool = False
+    strict_recovery: bool = True
     enable_orchestration_tool_handling: bool = True
     output_format: Optional[type[ToolMessage]] = None
     output_format_include_defaults: bool = True
@@ -242,6 +243,22 @@ class ChatAgent(Agent):
             self.llm is not None
             and isinstance(self.llm, OpenAIGPT)
             and self.llm.is_openai_chat_model()
+        )
+
+    def _strict_tools_available(self) -> bool:
+        """Does this agent's LLM support strict tools?"""
+        return (
+            self.llm is not None
+            and isinstance(self.llm, OpenAIGPT)
+            and self.llm.supports_strict_tools
+        )
+
+    def _json_schema_available(self) -> bool:
+        """Does this agent's LLM support strict JSON schema output format?"""
+        return (
+            self.llm is not None
+            and isinstance(self.llm, OpenAIGPT)
+            and self.llm.supports_json_schema
         )
 
     def set_system_message(self, msg: str) -> None:
@@ -590,10 +607,20 @@ class ChatAgent(Agent):
         self.system_tool_instructions = self.tool_instructions()
 
     def __getitem__(self, output_type: type[ToolMessage]) -> Self:
-        """Returns a (shallow) copy of `self` with a forced output type."""
+        """
+        Returns a (shallow) copy of `self` with a forced output type.
+        As native function calls may be generated even with a forced
+        output format, and these may not necessarily belong to the
+        output type, we additionally disable the LLM's native function
+        calling mechanism.
+        """
         clone = copy.copy(self)
         clone.output_format = output_type
         clone.enabled_requests_for_inference = {output_type.default_value("request")}
+        if self.config.use_functions_api:
+            clone.config = copy.copy(self.config)
+            clone.config.use_functions_api = False
+            clone.config.use_tools = True
         return clone
 
     def disable_message_handling(
@@ -652,6 +679,48 @@ class ChatAgent(Agent):
         """
         if self.llm is None:
             return None
+
+        # If enabled and a tool error occurred, we recover by generating the tool in
+        # strict json mode
+        if (
+            self.tool_error
+            and self._strict_tools_available()
+            and self.config.strict_recovery
+        ):
+
+            class AnyTool(ToolMessage):
+                purpose: str = "To call a tool/function."
+                request: str = "tool_or_function"
+                tool: Optional[  # type: ignore
+                    Union[*(self.llm_tools_map[t] for t in self.llm_tools_usable)]
+                ]
+
+                def handle(this) -> None | str | ChatDocument:
+                    if this.tool is None:
+                        return None
+
+                    return self.handle_tool_message(this.tool)
+
+            self.enable_message(AnyTool)
+
+            recovery_message = f"""
+            Your previous attempt to make a tool/function call appears to have failed.
+            If you intended to make such a call, respond with your desired tool/function
+            call in the following format, where `tool` is set to your intended call:
+            {AnyTool.llm_function_schema(defaults=True, request=True).parameters}
+
+            If you did NOT intend to do so, `tool` should be null.
+            """
+
+            if message is None:
+                message = recovery_message
+            elif isinstance(message, str):
+                message = message + recovery_message
+            else:
+                message.content = message.content + recovery_message
+
+            return self[AnyTool].llm_response(message)
+
         hist, output_len = self._prep_llm_messages(message)
         if len(hist) == 0:
             return None
@@ -911,10 +980,19 @@ class ChatAgent(Agent):
                     else self.llm_function_force
                 )
             else:
+
+                def set_default(enable: Optional[bool]) -> Optional[bool]:
+                    if enable is not None:
+                        return enable
+
+                    return self._strict_tools_available()
+
                 tools = [
                     OpenAIToolSpec(
                         type="function",
-                        strict=self.llm_functions_class_map[f].default_value("strict"),
+                        strict=set_default(
+                            self.llm_functions_class_map[f].default_value("strict")
+                        ),
                         function=self.llm_functions_map[f],
                     )
                     for f in self.llm_functions_usable
@@ -928,7 +1006,7 @@ class ChatAgent(Agent):
                     }
                 )
         output_format = None
-        if self.output_format is not None:
+        if self.output_format is not None and self._json_schema_available():
             spec = self.output_format.llm_function_schema(
                 defaults=self.config.output_format_include_defaults,
             )

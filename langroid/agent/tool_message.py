@@ -37,7 +37,7 @@ class ToolMessage(ABC, BaseModel):
         purpose (str): purpose of agent method, expressed in general terms.
             (This is used when auto-generating the tool instruction to the LLM)
         strict (Optional[bool]): If enabled, forces strict adherence to schema
-            Currently only supported by OpenAI LLMs
+            Currently only supported by OpenAI LLMs. When unset, enables if supported.
     """
 
     request: str
@@ -253,6 +253,13 @@ class ToolMessage(ABC, BaseModel):
         )
         if request:
             parameters["required"].append("request")
+
+            # If request is present it must match the default value
+            # Similar to defining request as a literal type
+            parameters["request"] = {
+                "enum": [cls.default_value("request")],
+                "type": "string",
+            }
 
         if "description" not in schema:
             if docstring.short_description:

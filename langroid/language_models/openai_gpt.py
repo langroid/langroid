@@ -69,6 +69,9 @@ else:
 OLLAMA_API_KEY = "ollama"
 DUMMY_API_KEY = "xxx"
 
+VLLM_API_KEY = os.environ.get("VLLM_API_KEY", DUMMY_API_KEY)
+LLAMACPP_API_KEY = os.environ.get("LLAMA_API_KEY", DUMMY_API_KEY)
+
 
 class AnthropicModel(str, Enum):
     """Enum for Anthropic models"""
@@ -140,6 +143,10 @@ openAICompletionModelPreferenceList = [
     OpenAICompletionModel.TEXT_DA_VINCI_003,
 ]
 
+openAIStructuredOutputList = [
+    OpenAIChatModel.GPT4o_MINI,
+    OpenAIChatModel.GPT4o,
+]
 
 if "OPENAI_API_KEY" in os.environ:
     try:
@@ -432,6 +439,9 @@ class OpenAIGPT(LanguageModel):
                 HFPromptFormatterConfig(model_name=self.config.formatter)
             )
 
+        self.supports_json_schema: bool = False
+        self.supports_strict_tools: bool = False
+
         # if model name starts with "litellm",
         # set the actual model name by stripping the "litellm/" prefix
         # and set the litellm flag to True
@@ -462,8 +472,25 @@ class OpenAIGPT(LanguageModel):
             self.api_base = self.config.api_base or OLLAMA_BASE_URL
             self.api_key = OLLAMA_API_KEY
             self.config.chat_model = self.config.chat_model.replace("ollama/", "")
+        elif self.config.chat_model.startswith("vllm/"):
+            self.supports_json_schema = True
+            self.api_base = self.config.chat_model.split("/", 1)[1]
+            if not self.api_base.startswith("http"):
+                self.api_base = "http://" + self.api_base
+            self.api_key = VLLM_API_KEY
+        elif self.config.chat_model.startswith("llamacpp/"):
+            self.supports_json_schema = True
+            self.api_base = self.config.chat_model.split("/", 1)[1]
+            if not self.api_base.startswith("http"):
+                self.api_base = "http://" + self.api_base
+            self.api_key = LLAMACPP_API_KEY
         else:
             self.api_base = self.config.api_base
+            self.supports_strict_tools = self.api_base is None
+            self.supports_json_schema = (
+                self.api_base is None
+                and self.config.chat_model in openAIStructuredOutputList
+            )
 
         if settings.chat_model != "":
             # if we're overriding chat model globally, set completion model to same

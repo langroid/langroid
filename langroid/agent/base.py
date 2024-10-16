@@ -134,6 +134,7 @@ class Agent(ABC):
         self._indent = ""
         self.llm = LanguageModel.create(config.llm)
         self.vecdb = VectorStore.create(config.vecdb) if config.vecdb else None
+        self.tool_error = False
         if config.parsing is not None and self.config.llm is not None:
             # token_encoding_model is used to obtain the tokenizer,
             # so in case it's an OpenAI model, we ensure that the tokenizer
@@ -979,11 +980,16 @@ class Agent(ABC):
         Returns:
             List[ToolMessage]: list of ToolMessage objects
         """
+        self.tool_error = False
         json_substrings = extract_top_level_json(input_str)
         if len(json_substrings) == 0:
             return []
         results = [self._get_one_tool_message(j) for j in json_substrings]
-        return [r for r in results if r is not None]
+        valid_results = [r for r in results if r is not None]
+        # If any tool is correctly formed we do not set the flag
+        if len(valid_results) > 0:
+            self.tool_error = False
+        return valid_results
 
     def get_function_call_class(self, msg: ChatDocument) -> Optional[ToolMessage]:
         """
@@ -1005,7 +1011,10 @@ class Agent(ABC):
                 or you need to enable this agent to handle this fn-call.
                 """
             )
+            if tool_name not in self.llm_tools_known:
+                self.tool_error = True
             return None
+        self.tool_error = False
         tool_class = self.llm_tools_map[tool_name]
         tool_msg.update(dict(request=tool_name))
         tool = tool_class.parse_obj(tool_msg)
@@ -1020,6 +1029,7 @@ class Agent(ABC):
         if msg.oai_tool_calls is None:
             return []
         tools = []
+        all_errors = True
         for tc in msg.oai_tool_calls:
             if tc.function is None:
                 continue
@@ -1036,12 +1046,17 @@ class Agent(ABC):
                     or you need to enable this agent to handle this fn-call.
                     """
                 )
+                if tool_name not in self.llm_tools_known:
+                    all_errors = True
                 continue
+            all_errors = False
             tool_class = self.llm_tools_map[tool_name]
             tool_msg.update(dict(request=tool_name))
             tool = tool_class.parse_obj(tool_msg)
             tool.id = tc.id or ""
             tools.append(tool)
+        # When no tool is valid, set the recovery flag
+        self.tool_error = all_errors
         return tools
 
     def tool_validation_error(self, ve: ValidationError) -> str:
@@ -1096,6 +1111,7 @@ class Agent(ABC):
             tools = [t for t in tools if self._tool_recipient_match(t)]
         except ValidationError as ve:
             # correct tool name but bad fields
+            self.tool_error = True
             return self.tool_validation_error(ve)
         except ValueError:
             # invalid tool name
@@ -1229,6 +1245,7 @@ class Agent(ABC):
         # }
 
         if not isinstance(json_data, dict):
+            self.tool_error = True
             return None
 
         properties = json_data.get("properties")
@@ -1277,19 +1294,23 @@ class Agent(ABC):
             if len(candidate_tools) == 1:
                 return candidate_tools[0]
             else:
+                self.tool_error = True
                 return None
 
         if not isinstance(request, str) or request not in self.llm_tools_known:
+            self.tool_error = True
             return None
 
         message_class = self.llm_tools_map.get(request)
         if message_class is None:
             logger.warning(f"No message class found for request '{request}'")
+            self.tool_error = True
             return None
 
         try:
             message = message_class.parse_obj(json_data)
         except ValidationError as ve:
+            self.tool_error = True
             raise ve
         return message
 
