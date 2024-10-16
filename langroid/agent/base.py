@@ -108,6 +108,10 @@ def noop_fn(*args: List[Any], **kwargs: Dict[str, Any]) -> None:
     pass
 
 
+async def async_noop_fn(*args: List[Any], **kwargs: Dict[str, Any]) -> None:
+    pass
+
+
 class Agent(ABC):
     """
     An Agent is an abstraction that encapsulates mainly two components:
@@ -154,6 +158,7 @@ class Agent(ABC):
 
         self.callbacks = SimpleNamespace(
             start_llm_stream=lambda: noop_fn,
+            start_llm_stream_async=async_noop_fn,
             cancel_llm_stream=noop_fn,
             finish_llm_stream=noop_fn,
             show_llm_response=noop_fn,
