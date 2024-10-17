@@ -23,40 +23,44 @@ from langroid.utils.pydantic_utils import (
 from langroid.utils.types import is_instance_of
 
 
-def recursive_disable_additionalProperties(d: Any) -> None:
-    """Recursively set additionalProperties to False for OpenAI structured outputs."""
-    if isinstance(d, dict):
-        if "type" in d and d["type"] == "object":
-            d["additionalProperties"] = False
-
-        for v in d.values():
-            recursive_disable_additionalProperties(v)
-    elif isinstance(d, list):
-        for v in d:
-            recursive_disable_additionalProperties(v)
-
-
-def recursive_substitute_oneOf_allOf(d: Any) -> None:
+def format_schema_for_strict(schema: Any) -> None:
     """
-    Recursively replace oneOf and allOf with anyOf, required for
-    OpenAI structured outputs. This may not be equivalent to the
-    original schema.
+    Recursively set additionalProperties to False and replace
+    oneOf and allOf with anyOf, required for OpenAI structured outputs.
+    Additionally, remove all defaults and set all fields to required.
+    This may not be equivalent to the original schema.
     """
-    if isinstance(d, dict):
-        anyOf = d.get("oneOf", []) + d.get("allOf", []) + d.get("anyOf", [])
-        if "allOf" in d or "oneOf" in d or "anyOf" in d:
-            d["anyOf"] = anyOf
+    if isinstance(schema, dict):
+        if "type" in schema and schema["type"] == "object":
+            schema["additionalProperties"] = False
 
-            if "allOf" in d:
-                del d["allOf"]
-            if "oneOf" in d:
-                del d["oneOf"]
+            if "properties" in schema:
+                properties = schema["properties"]
+                all_properties = list(properties.keys())
+                for v in properties.values():
+                    if "default" in v:
+                        del v["default"]
+                schema["required"] = all_properties
+            else:
+                schema["properties"] = {}
+                schema["required"] = []
 
-        for v in d.values():
-            recursive_substitute_oneOf_allOf(v)
-    elif isinstance(d, list):
-        for v in d:
-            recursive_substitute_oneOf_allOf(v)
+        anyOf = (
+            schema.get("oneOf", []) + schema.get("allOf", []) + schema.get("anyOf", [])
+        )
+        if "allOf" in schema or "oneOf" in schema or "anyOf" in schema:
+            schema["anyOf"] = anyOf
+
+        if "allOf" in schema:
+            del schema["allOf"]
+        if "oneOf" in schema:
+            del schema["oneOf"]
+
+        for v in schema.values():
+            format_schema_for_strict(v)
+    elif isinstance(schema, list):
+        for v in schema:
+            format_schema_for_strict(v)
 
 
 class ToolMessage(ABC, BaseModel):

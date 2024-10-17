@@ -172,6 +172,7 @@ def test_llm_strict_json(
     # The model always returns the correct type, even without instructions to do so
     assert valid_typed_response(president_prompt, President)
     assert valid_typed_response(president_prompt, PresidentTool)
+    assert valid_typed_response(president_prompt, PresidentListTool)
     assert valid_typed_response(presidents_prompt, PresidentList)
     assert valid_typed_response(presidents_prompt, PresidentListTool)
     assert valid_typed_response(country_prompt, Country)
@@ -180,5 +181,4 @@ def test_llm_strict_json(
     assert valid_typed_response(country_prompt, President)
     assert valid_typed_response(presidents_prompt, PresidentTool)
     assert valid_typed_response(country_prompt, PresidentList)
-    assert valid_typed_response(president_prompt, PresidentListTool)
     assert valid_typed_response(president_prompt, Country)

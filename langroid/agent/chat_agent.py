@@ -6,6 +6,7 @@ import textwrap
 from contextlib import ExitStack
 from typing import Dict, List, Optional, Self, Set, Tuple, Type, Union, cast
 
+import openai
 from rich import print
 from rich.console import Console
 from rich.markup import escape
@@ -14,8 +15,7 @@ from langroid.agent.base import Agent, AgentConfig, noop_fn
 from langroid.agent.chat_document import ChatDocument
 from langroid.agent.tool_message import (
     ToolMessage,
-    recursive_disable_additionalProperties,
-    recursive_substitute_oneOf_allOf,
+    format_schema_for_strict,
 )
 from langroid.agent.xml_tool_message import XMLToolMessage
 from langroid.language_models.base import (
@@ -57,8 +57,10 @@ class ChatAgentConfig(AgentConfig):
             hence we set this to False by default.
         enable_orchestration_tool_handling: whether to enable handling of orchestration
             tools, e.g. ForwardTool, DoneTool, PassTool, etc.
-        output_format: Currently ONLY works with OpenAI LLMs; ensures that the output
-            is a JSON matching the corresponding schema via grammar-based decoding
+        output_format: When supported by the LLM (certain OpenAI LLMs
+            and local LLMs served by providers such as vLLM), ensures
+            that the output is a JSON matching the corresponding
+            schema via grammar-based decoding
         output_format_include_defaults: Whether to include fields with default arguments
             in the output schema
     """
@@ -70,7 +72,7 @@ class ChatAgentConfig(AgentConfig):
     use_tools_api: bool = False
     strict_recovery: bool = True
     enable_orchestration_tool_handling: bool = True
-    output_format: Optional[type[ToolMessage | BaseModel]] = None
+    output_format: Optional[type] = None
     output_format_include_defaults: bool = True
 
     def _set_fn_or_tools(self, fn_available: bool) -> None:
@@ -164,7 +166,20 @@ class ChatAgent(Agent):
         self.llm_functions_usable: Set[str] = set()
         self.llm_function_force: Optional[Dict[str, str]] = None
 
-        self.output_format = config.output_format
+        self.output_format: Optional[type[ToolMessage | BaseModel]] = None
+
+        if config.output_format is not None:
+            if not any(
+                issubclass(config.output_format, t) for t in [ToolMessage, BaseModel]
+            ):
+
+                class OutputFormat(BaseModel):
+                    value: config.output_format  # type: ignore
+
+                self.output_format = OutputFormat
+            else:
+                self.output_format = config.output_format
+
         # Consider only the required output type for tool call inference
         if self.output_format is not None and isinstance(
             self.output_format, ToolMessage
@@ -172,6 +187,10 @@ class ChatAgent(Agent):
             self.enabled_requests_for_inference = {
                 self.output_format.default_value("request")
             }
+        # OpenAI does not support all strict schemas. We disable for
+        # this agent if an exception is thrown in strict mode
+        self.disable_strict = False
+        self.any_strict = False
 
         if self.config.enable_orchestration_tool_handling:
             # Only enable HANDLING by `agent_response`, NOT LLM generation of these.
@@ -257,7 +276,8 @@ class ChatAgent(Agent):
     def _strict_tools_available(self) -> bool:
         """Does this agent's LLM support strict tools?"""
         return (
-            self.llm is not None
+            not self.disable_strict
+            and self.llm is not None
             and isinstance(self.llm, OpenAIGPT)
             and self.llm.config.parallel_tool_calls is False
             and self.llm.supports_strict_tools
@@ -266,7 +286,8 @@ class ChatAgent(Agent):
     def _json_schema_available(self) -> bool:
         """Does this agent's LLM support strict JSON schema output format?"""
         return (
-            self.llm is not None
+            not self.disable_strict
+            and self.llm is not None
             and isinstance(self.llm, OpenAIGPT)
             and self.llm.supports_json_schema
         )
@@ -623,7 +644,7 @@ class ChatAgent(Agent):
             self.system_tool_format_instructions = self.tool_format_rules()
         self.system_tool_instructions = self.tool_instructions()
 
-    def __getitem__(self, output_type: type[ToolMessage | BaseModel]) -> Self:
+    def __getitem__(self, output_type: type) -> Self:
         """
         Returns a (shallow) copy of `self` with a forced output type.
         As native function calls may be generated even with a forced
@@ -632,6 +653,13 @@ class ChatAgent(Agent):
         calling mechanism.
         """
         clone = copy.copy(self)
+        if not any(issubclass(type, t) for t in [ToolMessage, BaseModel]):
+
+            class OutputFormat(BaseModel):
+                value: output_type  # type: ignore
+
+            output_type = OutputFormat
+
         clone.output_format = output_type
         if issubclass(output_type, ToolMessage):
             clone.enabled_requests_for_inference = {
@@ -704,6 +732,7 @@ class ChatAgent(Agent):
         # strict json mode
         if (
             self.tool_error
+            and self.output_format is None
             and self._strict_tools_available()
             and self.config.strict_recovery
         ):
@@ -739,7 +768,9 @@ class ChatAgent(Agent):
             else:
                 message.content = message.content + recovery_message
 
-            return self[AnyTool].llm_response(message)
+            response = self[AnyTool].llm_response(message)
+            self.disable_message_use(AnyTool)
+            return response
 
         hist, output_len = self._prep_llm_messages(message)
         if len(hist) == 0:
@@ -750,7 +781,21 @@ class ChatAgent(Agent):
             else (message.oai_tool_choice if message is not None else "auto")
         )
         with StreamingIfAllowed(self.llm, self.llm.get_stream()):
-            response = self.llm_response_messages(hist, output_len, tool_choice)
+            try:
+                response = self.llm_response_messages(hist, output_len, tool_choice)
+            except openai.BadRequestError as e:
+                if self.any_strict:
+                    self.disable_strict = True
+                    logging.warning(
+                        f"""
+                        OpenAI BadRequestError raised with strict mode enabled.
+                        Message: {e.message}
+                        Disabling strict mode.
+                        """
+                    )
+                    return self.llm_response(message)
+                else:
+                    raise e
         self.message_history.extend(ChatDocument.to_LLMMessage(response))
         response.metadata.msg_idx = len(self.message_history) - 1
         response.metadata.agent_id = self.id
@@ -989,6 +1034,7 @@ class ChatAgent(Agent):
         fun_call: str | Dict[str, str] = "none"
         tools: Optional[List[OpenAIToolSpec]] = None
         force_tool: Optional[Dict[str, Dict[str, str] | str]] = None
+        self.any_strict = False
         if self.config.use_functions_api and len(self.llm_functions_usable) > 0:
             if not self.config.use_tools_api:
                 functions = [
@@ -1001,22 +1047,29 @@ class ChatAgent(Agent):
                 )
             else:
 
-                def set_default(enable: Optional[bool]) -> Optional[bool]:
-                    if enable is not None:
-                        return enable
+                def to_maybe_strict_spec(function: str) -> OpenAIToolSpec:
+                    spec = self.llm_functions_map[function]
 
-                    return self._strict_tools_available()
-
-                tools = [
-                    OpenAIToolSpec(
-                        type="function",
-                        strict=set_default(
-                            self.llm_functions_class_map[f].default_value("strict")
-                        ),
-                        function=self.llm_functions_map[f],
+                    strict = self.llm_functions_class_map[function].default_value(
+                        "strict"
                     )
-                    for f in self.llm_functions_usable
-                ]
+                    if strict is None:
+                        strict = self._strict_tools_available()
+
+                    if strict:
+                        self.any_strict = True
+                        strict_spec = copy.deepcopy(spec)
+                        format_schema_for_strict(strict_spec.parameters)
+                    else:
+                        strict_spec = spec
+
+                    return OpenAIToolSpec(
+                        type="function",
+                        strict=strict,
+                        function=strict_spec,
+                    )
+
+                tools = [to_maybe_strict_spec(f) for f in self.llm_functions_usable]
                 force_tool = (
                     None
                     if self.llm_function_force is None
@@ -1027,22 +1080,21 @@ class ChatAgent(Agent):
                 )
         output_format = None
         if self.output_format is not None and self._json_schema_available():
+            self.any_strict = True
             if issubclass(self.output_format, ToolMessage):
                 spec = self.output_format.llm_function_schema(
                     defaults=self.config.output_format_include_defaults,
                 )
-                recursive_disable_additionalProperties(spec.parameters)
-                recursive_substitute_oneOf_allOf(spec.parameters)
+                format_schema_for_strict(spec.parameters)
 
                 output_format = OpenAIJsonSchemaSpec(
                     # We always require that outputs strictly match the schema
                     strict=True,
                     function=spec,
                 )
-            else:
+            elif issubclass(self.output_format, BaseModel):
                 param_spec = self.output_format.schema()
-                recursive_disable_additionalProperties(param_spec)
-                recursive_substitute_oneOf_allOf(param_spec)
+                format_schema_for_strict(param_spec)
 
                 output_format = OpenAIJsonSchemaSpec(
                     # We always require that outputs strictly match the schema
