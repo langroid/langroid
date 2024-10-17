@@ -12,7 +12,11 @@ from rich.markup import escape
 
 from langroid.agent.base import Agent, AgentConfig, noop_fn
 from langroid.agent.chat_document import ChatDocument
-from langroid.agent.tool_message import ToolMessage
+from langroid.agent.tool_message import (
+    ToolMessage,
+    recursive_disable_additionalProperties,
+    recursive_substitute_oneOf_allOf,
+)
 from langroid.agent.xml_tool_message import XMLToolMessage
 from langroid.language_models.base import (
     LLMFunctionSpec,
@@ -25,6 +29,7 @@ from langroid.language_models.base import (
     ToolChoiceTypes,
 )
 from langroid.language_models.openai_gpt import OpenAIGPT
+from langroid.pydantic_v1 import BaseModel
 from langroid.utils.configuration import settings
 from langroid.utils.object_registry import ObjectRegistry
 from langroid.utils.output import status
@@ -65,7 +70,7 @@ class ChatAgentConfig(AgentConfig):
     use_tools_api: bool = False
     strict_recovery: bool = True
     enable_orchestration_tool_handling: bool = True
-    output_format: Optional[type[ToolMessage]] = None
+    output_format: Optional[type[ToolMessage | BaseModel]] = None
     output_format_include_defaults: bool = True
 
     def _set_fn_or_tools(self, fn_available: bool) -> None:
@@ -161,7 +166,9 @@ class ChatAgent(Agent):
 
         self.output_format = config.output_format
         # Consider only the required output type for tool call inference
-        if self.output_format is not None:
+        if self.output_format is not None and isinstance(
+            self.output_format, ToolMessage
+        ):
             self.enabled_requests_for_inference = {
                 self.output_format.default_value("request")
             }
@@ -616,7 +623,7 @@ class ChatAgent(Agent):
             self.system_tool_format_instructions = self.tool_format_rules()
         self.system_tool_instructions = self.tool_instructions()
 
-    def __getitem__(self, output_type: type[ToolMessage]) -> Self:
+    def __getitem__(self, output_type: type[ToolMessage | BaseModel]) -> Self:
         """
         Returns a (shallow) copy of `self` with a forced output type.
         As native function calls may be generated even with a forced
@@ -626,7 +633,10 @@ class ChatAgent(Agent):
         """
         clone = copy.copy(self)
         clone.output_format = output_type
-        clone.enabled_requests_for_inference = {output_type.default_value("request")}
+        if issubclass(output_type, ToolMessage):
+            clone.enabled_requests_for_inference = {
+                output_type.default_value("request")
+            }
         if self.config.use_functions_api:
             clone.config = copy.copy(self.config)
             clone.config.use_functions_api = False
@@ -1017,16 +1027,33 @@ class ChatAgent(Agent):
                 )
         output_format = None
         if self.output_format is not None and self._json_schema_available():
-            spec = self.output_format.llm_function_schema(
-                defaults=self.config.output_format_include_defaults,
-            )
-            spec.parameters["additionalProperties"] = False
+            if issubclass(self.output_format, ToolMessage):
+                spec = self.output_format.llm_function_schema(
+                    defaults=self.config.output_format_include_defaults,
+                )
+                recursive_disable_additionalProperties(spec.parameters)
+                recursive_substitute_oneOf_allOf(spec.parameters)
 
-            output_format = OpenAIJsonSchemaSpec(
-                # We always require that outputs strictly match the schema
-                strict=True,
-                function=spec,
-            )
+                output_format = OpenAIJsonSchemaSpec(
+                    # We always require that outputs strictly match the schema
+                    strict=True,
+                    function=spec,
+                )
+            else:
+                param_spec = self.output_format.schema()
+                recursive_disable_additionalProperties(param_spec)
+                recursive_substitute_oneOf_allOf(param_spec)
+
+                output_format = OpenAIJsonSchemaSpec(
+                    # We always require that outputs strictly match the schema
+                    strict=True,
+                    function=LLMFunctionSpec(
+                        name="json_output",
+                        description="Strict Json output format.",
+                        parameters=param_spec,
+                    ),
+                )
+
         return functions, fun_call, tools, force_tool, output_format
 
     def llm_response_messages(

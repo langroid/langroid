@@ -740,6 +740,7 @@ class Task:
             if (
                 parsed_result is None
                 and isinstance(self.agent, ChatAgent)
+                and self.agent._json_schema_available()
                 and issubclass(return_type, ToolMessage)
             ):
                 strict_agent = self.agent[return_type]

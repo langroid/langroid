@@ -23,6 +23,42 @@ from langroid.utils.pydantic_utils import (
 from langroid.utils.types import is_instance_of
 
 
+def recursive_disable_additionalProperties(d: Any) -> None:
+    """Recursively set additionalProperties to False for OpenAI structured outputs."""
+    if isinstance(d, dict):
+        if "type" in d and d["type"] == "object":
+            d["additionalProperties"] = False
+
+        for v in d.values():
+            recursive_disable_additionalProperties(v)
+    elif isinstance(d, list):
+        for v in d:
+            recursive_disable_additionalProperties(v)
+
+
+def recursive_substitute_oneOf_allOf(d: Any) -> None:
+    """
+    Recursively replace oneOf and allOf with anyOf, required for
+    OpenAI structured outputs. This may not be equivalent to the
+    original schema.
+    """
+    if isinstance(d, dict):
+        anyOf = d.get("oneOf", []) + d.get("allOf", []) + d.get("anyOf", [])
+        if "allOf" in d or "oneOf" in d or "anyOf" in d:
+            d["anyOf"] = anyOf
+
+            if "allOf" in d:
+                del d["allOf"]
+            if "oneOf" in d:
+                del d["oneOf"]
+
+        for v in d.values():
+            recursive_substitute_oneOf_allOf(v)
+    elif isinstance(d, list):
+        for v in d:
+            recursive_substitute_oneOf_allOf(v)
+
+
 class ToolMessage(ABC, BaseModel):
     """
     Abstract Class for a class that defines the structure of a "Tool" message from an
