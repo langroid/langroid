@@ -107,12 +107,17 @@ class XMLToolMessage(ToolMessage):
             Optional["XMLToolMessage"]: An instance of the class if parsing succeeds,
                 None otherwise.
         """
-        parsed_data = cls.extract_field_values(formatted_string)
-        if parsed_data is None:
-            return None
+        try:
+            parsed_data = cls.extract_field_values(formatted_string)
+            if parsed_data is None:
+                return None
 
-        # Use Pydantic's parse_obj to create and validate the instance
-        return cls.parse_obj(parsed_data)
+            # Use Pydantic's parse_obj to create and validate the instance
+            return cls.parse_obj(parsed_data)
+        except Exception as e:
+            from langroid.exceptions import XMLException
+
+            raise XMLException(f"Error parsing XML: {str(e)}")
 
     @classmethod
     def find_verbatim_fields(

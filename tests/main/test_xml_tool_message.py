@@ -5,6 +5,7 @@ import pytest
 import langroid as lr
 from langroid.agent.tools.orchestration import ResultTool
 from langroid.agent.xml_tool_message import XMLToolMessage
+from langroid.exceptions import XMLException
 from langroid.pydantic_v1 import BaseModel, Field
 from langroid.utils.configuration import Settings, set_global
 
@@ -119,6 +120,45 @@ print("Hello, World!")
     assert code_tool.filepath == "/path/to/file.py"
     assert code_tool.version == 1
     assert code_tool.code == 'print("Hello, World!")'
+
+
+def test_parse_bad_format():
+    root_tag = CodeTool.Config.root_element
+    # test with missing closing tag
+    bad_xml_string = f"""
+    <{root_tag}>
+        <request>code_tool</request>
+        <filepath>/path/to/file.py</filepath>
+        <version>1</version>
+        <code>
+            print("Hello, World!")
+    </{root_tag}>
+    """
+    with pytest.raises(XMLException):
+        CodeTool.parse(bad_xml_string)
+
+    # Test with missing required field
+    incomplete_xml_string = f"""
+    <{root_tag}>
+        <request>code_tool</request>
+        <filepath>/path/to/file.py</filepath>
+        <version>1</version>
+    </{root_tag}>
+    """
+    with pytest.raises(XMLException):
+        CodeTool.parse(incomplete_xml_string)
+
+    # Test with invalid XML structure
+    invalid_xml_string = f"""
+    <{root_tag}>
+        <request>code_tool</request>
+        <filepath>/path/to/file.py</filepath>
+        <version>1</version>
+        <code><![CDATA[print("Hello, World!")]]></code>
+    </{root_tag}
+    """
+    with pytest.raises(XMLException):
+        CodeTool.parse(invalid_xml_string)
 
 
 def test_format():
