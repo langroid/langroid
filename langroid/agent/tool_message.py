@@ -10,7 +10,7 @@ import json
 import textwrap
 from abc import ABC
 from random import choice
-from typing import Any, Dict, List, Tuple, Type
+from typing import Any, Dict, List, Optional, Tuple, Type
 
 from docstring_parser import parse
 
@@ -21,6 +21,46 @@ from langroid.utils.pydantic_utils import (
     generate_simple_schema,
 )
 from langroid.utils.types import is_instance_of
+
+
+def format_schema_for_strict(schema: Any) -> None:
+    """
+    Recursively set additionalProperties to False and replace
+    oneOf and allOf with anyOf, required for OpenAI structured outputs.
+    Additionally, remove all defaults and set all fields to required.
+    This may not be equivalent to the original schema.
+    """
+    if isinstance(schema, dict):
+        if "type" in schema and schema["type"] == "object":
+            schema["additionalProperties"] = False
+
+            if "properties" in schema:
+                properties = schema["properties"]
+                all_properties = list(properties.keys())
+                for v in properties.values():
+                    if "default" in v:
+                        del v["default"]
+                schema["required"] = all_properties
+            else:
+                schema["properties"] = {}
+                schema["required"] = []
+
+        anyOf = (
+            schema.get("oneOf", []) + schema.get("allOf", []) + schema.get("anyOf", [])
+        )
+        if "allOf" in schema or "oneOf" in schema or "anyOf" in schema:
+            schema["anyOf"] = anyOf
+
+        if "allOf" in schema:
+            del schema["allOf"]
+        if "oneOf" in schema:
+            del schema["oneOf"]
+
+        for v in schema.values():
+            format_schema_for_strict(v)
+    elif isinstance(schema, list):
+        for v in schema:
+            format_schema_for_strict(v)
 
 
 class ToolMessage(ABC, BaseModel):
@@ -36,10 +76,13 @@ class ToolMessage(ABC, BaseModel):
         request (str): name of agent method to map to.
         purpose (str): purpose of agent method, expressed in general terms.
             (This is used when auto-generating the tool instruction to the LLM)
+        strict (Optional[bool]): If enabled, forces strict adherence to schema
+            Currently only supported by OpenAI LLMs. When unset, enables if supported.
     """
 
     request: str
     purpose: str
+    strict: Optional[bool] = None
     id: str = ""  # placeholder for OpenAI-API tool_call_id
 
     _allow_llm_use: bool = True  # allow an LLM to use (i.e. generate) this tool?
@@ -53,7 +96,7 @@ class ToolMessage(ABC, BaseModel):
         validate_assignment = True
         # do not include these fields in the generated schema
         # since we don't require the LLM to specify them
-        schema_extra = {"exclude": {"purpose", "id"}}
+        schema_extra = {"exclude": {"purpose", "id", "strict"}}
 
     @classmethod
     def instructions(cls) -> str:
@@ -250,6 +293,13 @@ class ToolMessage(ABC, BaseModel):
         )
         if request:
             parameters["required"].append("request")
+
+            # If request is present it must match the default value
+            # Similar to defining request as a literal type
+            parameters["request"] = {
+                "enum": [cls.default_value("request")],
+                "type": "string",
+            }
 
         if "description" not in schema:
             if docstring.short_description:

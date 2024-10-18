@@ -1,28 +1,35 @@
 import copy
 import inspect
+import json
 import logging
 import textwrap
 from contextlib import ExitStack
-from typing import Dict, List, Optional, Set, Tuple, Type, cast
+from typing import Dict, List, Optional, Self, Set, Tuple, Type, Union, cast
 
+import openai
 from rich import print
 from rich.console import Console
 from rich.markup import escape
 
 from langroid.agent.base import Agent, AgentConfig, async_noop_fn, noop_fn
 from langroid.agent.chat_document import ChatDocument
-from langroid.agent.tool_message import ToolMessage
+from langroid.agent.tool_message import (
+    ToolMessage,
+    format_schema_for_strict,
+)
 from langroid.agent.xml_tool_message import XMLToolMessage
 from langroid.language_models.base import (
     LLMFunctionSpec,
     LLMMessage,
     LLMResponse,
+    OpenAIJsonSchemaSpec,
     OpenAIToolSpec,
     Role,
     StreamingIfAllowed,
     ToolChoiceTypes,
 )
 from langroid.language_models.openai_gpt import OpenAIGPT
+from langroid.pydantic_v1 import BaseModel
 from langroid.utils.configuration import settings
 from langroid.utils.object_registry import ObjectRegistry
 from langroid.utils.output import status
@@ -50,6 +57,12 @@ class ChatAgentConfig(AgentConfig):
             hence we set this to False by default.
         enable_orchestration_tool_handling: whether to enable handling of orchestration
             tools, e.g. ForwardTool, DoneTool, PassTool, etc.
+        output_format: When supported by the LLM (certain OpenAI LLMs
+            and local LLMs served by providers such as vLLM), ensures
+            that the output is a JSON matching the corresponding
+            schema via grammar-based decoding
+        output_format_include_defaults: Whether to include fields with default arguments
+            in the output schema
     """
 
     system_message: str = "You are a helpful assistant."
@@ -57,7 +70,10 @@ class ChatAgentConfig(AgentConfig):
     use_tools: bool = False
     use_functions_api: bool = True
     use_tools_api: bool = False
+    strict_recovery: bool = True
     enable_orchestration_tool_handling: bool = True
+    output_format: Optional[type] = None
+    output_format_include_defaults: bool = True
 
     def _set_fn_or_tools(self, fn_available: bool) -> None:
         """
@@ -145,9 +161,36 @@ class ChatAgent(Agent):
         self.system_tool_format_instructions: str = ""
 
         self.llm_functions_map: Dict[str, LLMFunctionSpec] = {}
+        self.llm_functions_class_map: Dict[str, type[ToolMessage]] = {}
         self.llm_functions_handled: Set[str] = set()
         self.llm_functions_usable: Set[str] = set()
         self.llm_function_force: Optional[Dict[str, str]] = None
+
+        self.output_format: Optional[type[ToolMessage | BaseModel]] = None
+
+        if config.output_format is not None:
+            if not any(
+                issubclass(config.output_format, t) for t in [ToolMessage, BaseModel]
+            ):
+
+                class OutputFormat(BaseModel):
+                    value: config.output_format  # type: ignore
+
+                self.output_format = OutputFormat
+            else:
+                self.output_format = config.output_format
+
+        # Consider only the required output type for tool call inference
+        if self.output_format is not None and isinstance(
+            self.output_format, ToolMessage
+        ):
+            self.enabled_requests_for_inference = {
+                self.output_format.default_value("request")
+            }
+        # OpenAI does not support all strict schemas. We disable for
+        # this agent if an exception is thrown in strict mode
+        self.disable_strict = False
+        self.any_strict = False
 
         if self.config.enable_orchestration_tool_handling:
             # Only enable HANDLING by `agent_response`, NOT LLM generation of these.
@@ -228,6 +271,25 @@ class ChatAgent(Agent):
             and isinstance(self.llm, OpenAIGPT)
             and self.llm.is_openai_chat_model()
             and self.llm.supports_functions_or_tools()
+        )
+
+    def _strict_tools_available(self) -> bool:
+        """Does this agent's LLM support strict tools?"""
+        return (
+            not self.disable_strict
+            and self.llm is not None
+            and isinstance(self.llm, OpenAIGPT)
+            and self.llm.config.parallel_tool_calls is False
+            and self.llm.supports_strict_tools
+        )
+
+    def _json_schema_available(self) -> bool:
+        """Does this agent's LLM support strict JSON schema output format?"""
+        return (
+            not self.disable_strict
+            and self.llm is not None
+            and isinstance(self.llm, OpenAIGPT)
+            and self.llm.supports_json_schema
         )
 
     def set_system_message(self, msg: str) -> None:
@@ -541,6 +603,7 @@ class ChatAgent(Agent):
                 )
             llm_function = message_class.llm_function_schema(defaults=include_defaults)
             self.llm_functions_map[request] = llm_function
+            self.llm_functions_class_map[request] = message_class
             if force:
                 self.llm_function_force = dict(name=request)
             else:
@@ -580,6 +643,33 @@ class ChatAgent(Agent):
         if self.config.use_tools:
             self.system_tool_format_instructions = self.tool_format_rules()
         self.system_tool_instructions = self.tool_instructions()
+
+    def __getitem__(self, output_type: type) -> Self:
+        """
+        Returns a (shallow) copy of `self` with a forced output type.
+        As native function calls may be generated even with a forced
+        output format, and these may not necessarily belong to the
+        output type, we additionally disable the LLM's native function
+        calling mechanism.
+        """
+        clone = copy.copy(self)
+        if not any(issubclass(type, t) for t in [ToolMessage, BaseModel]):
+
+            class OutputFormat(BaseModel):
+                value: output_type  # type: ignore
+
+            output_type = OutputFormat
+
+        clone.output_format = output_type
+        if issubclass(output_type, ToolMessage):
+            clone.enabled_requests_for_inference = {
+                output_type.default_value("request")
+            }
+        if self.config.use_functions_api:
+            clone.config = copy.copy(self.config)
+            clone.config.use_functions_api = False
+            clone.config.use_tools = True
+        return clone
 
     def disable_message_handling(
         self,
@@ -637,6 +727,51 @@ class ChatAgent(Agent):
         """
         if self.llm is None:
             return None
+
+        # If enabled and a tool error occurred, we recover by generating the tool in
+        # strict json mode
+        if (
+            self.tool_error
+            and self.output_format is None
+            and self._strict_tools_available()
+            and self.config.strict_recovery
+        ):
+
+            class AnyTool(ToolMessage):
+                purpose: str = "To call a tool/function."
+                request: str = "tool_or_function"
+                tool: Optional[  # type: ignore
+                    Union[*(self.llm_tools_map[t] for t in self.llm_tools_usable)]
+                ]
+
+                def handle(this) -> None | str | ChatDocument:
+                    if this.tool is None:
+                        return None
+
+                    return self.handle_tool_message(this.tool)
+
+            self.enable_message(AnyTool)
+
+            recovery_message = f"""
+            Your previous attempt to make a tool/function call appears to have failed.
+            If you intended to make such a call, respond with your desired tool/function
+            call in the following format, where `tool` is set to your intended call:
+            {AnyTool.llm_function_schema(defaults=True, request=True).parameters}
+
+            If you did NOT intend to do so, `tool` should be null.
+            """
+
+            if message is None:
+                message = recovery_message
+            elif isinstance(message, str):
+                message = message + recovery_message
+            else:
+                message.content = message.content + recovery_message
+
+            response = self[AnyTool].llm_response(message)
+            self.disable_message_use(AnyTool)
+            return response
+
         hist, output_len = self._prep_llm_messages(message)
         if len(hist) == 0:
             return None
@@ -646,7 +781,21 @@ class ChatAgent(Agent):
             else (message.oai_tool_choice if message is not None else "auto")
         )
         with StreamingIfAllowed(self.llm, self.llm.get_stream()):
-            response = self.llm_response_messages(hist, output_len, tool_choice)
+            try:
+                response = self.llm_response_messages(hist, output_len, tool_choice)
+            except openai.BadRequestError as e:
+                if self.any_strict:
+                    self.disable_strict = True
+                    logging.warning(
+                        f"""
+                        OpenAI BadRequestError raised with strict mode enabled.
+                        Message: {e.message}
+                        Disabling strict mode.
+                        """
+                    )
+                    return self.llm_response(message)
+                else:
+                    raise e
         self.message_history.extend(ChatDocument.to_LLMMessage(response))
         response.metadata.msg_idx = len(self.message_history) - 1
         response.metadata.agent_id = self.id
@@ -656,6 +805,16 @@ class ChatAgent(Agent):
             if isinstance(message, str)
             else message.metadata.tool_ids if message is not None else []
         )
+
+        # If using strict output format, parse the output JSON
+        if self.output_format is not None:
+            try:
+                response.content_any = self.output_format.parse_obj(
+                    json.loads(response.content)
+                )
+            except Exception:
+                pass
+
         return response
 
     async def llm_response_async(
@@ -687,6 +846,16 @@ class ChatAgent(Agent):
             if isinstance(message, str)
             else message.metadata.tool_ids if message is not None else []
         )
+
+        # If using strict output format, parse the output JSON
+        if self.output_format is not None:
+            try:
+                response.content_any = self.output_format.parse_obj(
+                    json.loads(response.content)
+                )
+            except Exception:
+                pass
+
         return response
 
     def init_message_history(self) -> None:
@@ -855,12 +1024,17 @@ class ChatAgent(Agent):
         str | Dict[str, str],
         Optional[List[OpenAIToolSpec]],
         Optional[Dict[str, Dict[str, str] | str]],
+        Optional[OpenAIJsonSchemaSpec],
     ]:
-        """Get function/tool spec arguments for OpenAI-compatible LLM API call"""
+        """
+        Get function/tool spec/output format arguments for
+        OpenAI-compatible LLM API call
+        """
         functions: Optional[List[LLMFunctionSpec]] = None
         fun_call: str | Dict[str, str] = "none"
         tools: Optional[List[OpenAIToolSpec]] = None
         force_tool: Optional[Dict[str, Dict[str, str] | str]] = None
+        self.any_strict = False
         if self.config.use_functions_api and len(self.llm_functions_usable) > 0:
             if not self.config.use_tools_api:
                 functions = [
@@ -872,10 +1046,30 @@ class ChatAgent(Agent):
                     else self.llm_function_force
                 )
             else:
-                tools = [
-                    OpenAIToolSpec(type="function", function=self.llm_functions_map[f])
-                    for f in self.llm_functions_usable
-                ]
+
+                def to_maybe_strict_spec(function: str) -> OpenAIToolSpec:
+                    spec = self.llm_functions_map[function]
+
+                    strict = self.llm_functions_class_map[function].default_value(
+                        "strict"
+                    )
+                    if strict is None:
+                        strict = self._strict_tools_available()
+
+                    if strict:
+                        self.any_strict = True
+                        strict_spec = copy.deepcopy(spec)
+                        format_schema_for_strict(strict_spec.parameters)
+                    else:
+                        strict_spec = spec
+
+                    return OpenAIToolSpec(
+                        type="function",
+                        strict=strict,
+                        function=strict_spec,
+                    )
+
+                tools = [to_maybe_strict_spec(f) for f in self.llm_functions_usable]
                 force_tool = (
                     None
                     if self.llm_function_force is None
@@ -884,7 +1078,35 @@ class ChatAgent(Agent):
                         "function": {"name": self.llm_function_force["name"]},
                     }
                 )
-        return functions, fun_call, tools, force_tool
+        output_format = None
+        if self.output_format is not None and self._json_schema_available():
+            self.any_strict = True
+            if issubclass(self.output_format, ToolMessage):
+                spec = self.output_format.llm_function_schema(
+                    defaults=self.config.output_format_include_defaults,
+                )
+                format_schema_for_strict(spec.parameters)
+
+                output_format = OpenAIJsonSchemaSpec(
+                    # We always require that outputs strictly match the schema
+                    strict=True,
+                    function=spec,
+                )
+            elif issubclass(self.output_format, BaseModel):
+                param_spec = self.output_format.schema()
+                format_schema_for_strict(param_spec)
+
+                output_format = OpenAIJsonSchemaSpec(
+                    # We always require that outputs strictly match the schema
+                    strict=True,
+                    function=LLMFunctionSpec(
+                        name="json_output",
+                        description="Strict Json output format.",
+                        parameters=param_spec,
+                    ),
+                )
+
+        return functions, fun_call, tools, force_tool, output_format
 
     def llm_response_messages(
         self,
@@ -920,7 +1142,9 @@ class ChatAgent(Agent):
                 stack.enter_context(cm)
             if self.llm.get_stream() and not settings.quiet:
                 console.print(f"[green]{self.indent}", end="")
-            functions, fun_call, tools, force_tool = self._function_args()
+            functions, fun_call, tools, force_tool, output_format = (
+                self._function_args()
+            )
             assert self.llm is not None
             response = self.llm.chat(
                 messages,
@@ -929,6 +1153,7 @@ class ChatAgent(Agent):
                 tool_choice=force_tool or tool_choice,
                 functions=functions,
                 function_call=fun_call,
+                response_format=output_format,
             )
         if self.llm.get_stream():
             self.callbacks.finish_llm_stream(
@@ -953,6 +1178,16 @@ class ChatAgent(Agent):
         self.oai_tool_id2call.update(
             {t.id: t for t in self.oai_tool_calls if t.id is not None}
         )
+
+        # If using strict output format, parse the output JSON
+        if self.output_format is not None:
+            try:
+                chat_doc.content_any = self.output_format.parse_obj(
+                    json.loads(chat_doc.content)
+                )
+            except Exception:
+                pass
+
         return chat_doc
 
     async def llm_response_messages_async(
@@ -966,7 +1201,7 @@ class ChatAgent(Agent):
         """
         assert self.config.llm is not None and self.llm is not None
         output_len = output_len or self.config.llm.max_output_tokens
-        functions, fun_call, tools, force_tool = self._function_args()
+        functions, fun_call, tools, force_tool, output_format = self._function_args()
         assert self.llm is not None
 
         streamer_async = async_noop_fn
@@ -981,6 +1216,7 @@ class ChatAgent(Agent):
             tool_choice=force_tool or tool_choice,
             functions=functions,
             function_call=fun_call,
+            response_format=output_format,
         )
         if self.llm.get_stream():
             self.callbacks.finish_llm_stream(
@@ -1005,6 +1241,16 @@ class ChatAgent(Agent):
         self.oai_tool_id2call.update(
             {t.id: t for t in self.oai_tool_calls if t.id is not None}
         )
+
+        # If using strict output format, parse the output JSON
+        if self.output_format is not None:
+            try:
+                chat_doc.content_any = self.output_format.parse_obj(
+                    json.loads(chat_doc.content)
+                )
+            except Exception:
+                pass
+
         return chat_doc
 
     def _render_llm_response(
@@ -1112,6 +1358,15 @@ class ChatAgent(Agent):
         if len(self.message_history) > n_msgs:
             msg = self.message_history.pop()
             self._drop_msg_update_tool_calls(msg)
+
+        # If using strict output format, parse the output JSON
+        if self.output_format is not None:
+            try:
+                response.content_any = self.output_format.parse_obj(
+                    json.loads(response.content)
+                )
+            except Exception:
+                pass
 
         return response
 
