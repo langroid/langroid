@@ -671,11 +671,12 @@ class OpenAIGPT(LanguageModel):
         return tmp
 
     def get_stream(self) -> bool:
-        """Get streaming status"""
+        """Get streaming status. Note we disable streaming in quiet mode."""
         return (
             self.config.stream
             and settings.stream
             and self.config.chat_model not in NON_STREAMING_MODELS
+            and not settings.quiet
         )
 
     @no_type_check
