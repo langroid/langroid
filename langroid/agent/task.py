@@ -16,6 +16,7 @@ from typing import (
     Dict,
     List,
     Optional,
+    Self,
     Tuple,
     Type,
     TypeVar,
@@ -598,7 +599,7 @@ class Task:
         for t in self.sub_tasks:
             t.reset_all_sub_tasks()
 
-    def __getitem__(self, return_type: type) -> Task:
+    def __getitem__(self, return_type: type) -> Self:
         """Returns a (shallow) copy of `self` with a default return type."""
         clone = copy.copy(self)
         clone.default_return_type = return_type
@@ -732,8 +733,37 @@ class Task:
         if return_type is None:
             return_type = self.default_return_type
 
+        # Take a final strict decoding step
         if return_type is not None and return_type != ChatDocument:
-            return self.agent.from_ChatDocument(final_result, return_type)
+            parsed_result = self.agent.from_ChatDocument(final_result, return_type)
+
+            if (
+                parsed_result is None
+                and isinstance(self.agent, ChatAgent)
+                and self.agent._json_schema_available()
+                and issubclass(return_type, ToolMessage)
+            ):
+                strict_agent = self.agent[return_type]
+                schema = return_type.llm_function_schema(
+                    defaults=strict_agent.config.output_format_include_defaults
+                )
+                strict_result = strict_agent.llm_response(
+                    f"""
+                    A response adhering to the following JSON schema was expected:
+                    {schema}
+
+                    Please resubmit with the correct schema. 
+                    """
+                )
+
+                if strict_result is not None:
+                    return cast(
+                        Optional[T],
+                        strict_agent.from_ChatDocument(strict_result, return_type),
+                    )
+
+            return parsed_result
+
         return final_result
 
     @overload

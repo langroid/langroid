@@ -203,7 +203,7 @@ class OpenAIAssistant(ChatAgent):
             self.set_system_message(sys_msg.content)
         if not self.config.use_functions_api:
             return
-        functions, _, _, _ = self._function_args()
+        functions, _, _, _, _ = self._function_args()
         if functions is None:
             return
         # add the functions to the assistant:
