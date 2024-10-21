@@ -24,6 +24,7 @@ from rich.console import Console
 from rich.prompt import Prompt
 
 import langroid.language_models as lm
+from langroid import TaskConfig
 from langroid.agent.special.neo4j.neo4j_chat_agent import (
     Neo4jSettings,
     Neo4jChatAgent,
@@ -87,16 +88,16 @@ def main(
     neo4j_config = Neo4jChatAgentConfig(
         neo4j_settings=neo4j_settings,
         llm=llm_config,
-        addressing_prefix=SEND_TO,
     )
 
     neo4j_agent = Neo4jChatAgent(neo4j_config)
-
+    task_config = TaskConfig(addressing_prefix=SEND_TO)
     neo4j_task = Task(
         neo4j_agent,
         name="Neo4j",
         # user not awaited, UNLESS LLM explicitly addresses user via recipient_tool
         interactive=False,
+        config=task_config,
     )
 
     neo4j_task.run()

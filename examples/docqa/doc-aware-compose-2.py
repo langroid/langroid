@@ -8,6 +8,13 @@ adhering to some requirements, which are specified in external docs.
 
 The DocAgent has access to the "requirement" docs.
 
+To make this meaningful, ensure that the document(s) you upload
+pertain to some type of "requirements" that a final generated document must adhere to.
+E.g., try this document that specifies what a residential lease agreement should contain:
+https://www.apartments.com/rental-manager/resources/leases/how-write-lease-agreement
+And in the ensuing dialog, when prompted, say:
+"I want to write an informal residential lease agreement."
+
 ComposerAgent composes a document, via a multi-step
 conversation, where it could either address:
 - DocAgent (who has access to requirement docs) for info on requirements, or
@@ -137,16 +144,17 @@ def main(
             name="Composer",
             llm=llm_config,
             vecdb=None,
-            addressing_prefix=AT,
         )
     )
     # MyRecipientTool = RecipientTool.create(
     #     recipients=["DocAgent", "User"], default="User"
     # )
     # guide_agent.enable_message(MyRecipientTool)
+    task_config = lr.TaskConfig(addressing_prefix=AT)
     composer_task = Task(
         composer,
         interactive=False,
+        config=task_config,
         system_message=f"""
         You are a SKILLFUL WRITER, who can adhere to specified REQUIREMENTS
         and GUIDELINES to generate specific types of documents. Your TASK

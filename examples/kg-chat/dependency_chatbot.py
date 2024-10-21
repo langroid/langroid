@@ -36,7 +36,7 @@ from pyvis.network import Network
 import webbrowser
 from pathlib import Path
 
-
+from langroid import TaskConfig
 from langroid.agent.special.neo4j.neo4j_chat_agent import (
     Neo4jChatAgent,
     Neo4jChatAgentConfig,
@@ -239,7 +239,6 @@ def main(
             llm=OpenAIGPTConfig(
                 chat_model=model or OpenAIChatModel.GPT4o,
             ),
-            addressing_prefix=SEND_TO,
         ),
     )
 
@@ -272,6 +271,7 @@ def main(
     3. Use the `web_search` tool/function to get information if needed.
     To display the dependency graph use this tool `visualize_dependency_graph`.
     """
+    task_config = TaskConfig(addressing_prefix=SEND_TO)
     task = Task(
         dependency_agent,
         name="DependencyAgent",
@@ -279,6 +279,7 @@ def main(
         # non-interactive but await user ONLY if addressed or LLM sends a non-tool msg,
         # (see the handle_message_fallback method in the agent)
         interactive=False,
+        config=task_config,
     )
 
     dependency_agent.enable_message(DepGraphTool)
