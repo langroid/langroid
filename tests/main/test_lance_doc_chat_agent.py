@@ -44,7 +44,7 @@ movie_docs = [
             year=1999,
             director="Jomes Winkowski",
             genre="Science Fiction",
-            rating=8.7,
+            rating=8.3,
         ),
     ),
     MovieDoc(
@@ -59,7 +59,7 @@ movie_docs = [
             year=1968,
             director="Stanley Hendrick",
             genre="Science Fiction",
-            rating=8.9,
+            rating=7.5,
         ),
     ),
     MovieDoc(
