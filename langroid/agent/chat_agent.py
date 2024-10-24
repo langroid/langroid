@@ -733,7 +733,7 @@ class ChatAgent(Agent):
         if (
             self.tool_error
             and self.output_format is None
-            and self._strict_tools_available()
+            and self._json_schema_available()
             and self.config.strict_recovery
         ):
 
@@ -748,7 +748,15 @@ class ChatAgent(Agent):
                     if this.tool is None:
                         return None
 
-                    return self.handle_tool_message(this.tool)
+                    # As the ToolMessage schema accespts invalid
+                    # `tool.request` values, reparse with the
+                    # corresponding tool
+                    request = this.tool.request
+                    if request not in self.llm_tools_map:
+                        return None
+                    tool = self.llm_tools_map[request].parse_raw(this.tool.to_json())
+
+                    return self.handle_tool_message(tool)
 
             self.enable_message(AnyTool)
 
@@ -757,6 +765,11 @@ class ChatAgent(Agent):
             If you intended to make such a call, respond with your desired tool/function
             call in the following format, where `tool` is set to your intended call:
             {AnyTool.llm_function_schema(defaults=True, request=True).parameters}
+
+            If you do so, be sure that your corrected call matches your intention
+            in your previous request. For any field with a default value which
+            you did not intend to override in your previous attempt, be sure
+            to set that field to its default value.
 
             If you did NOT intend to do so, `tool` should be null.
             """

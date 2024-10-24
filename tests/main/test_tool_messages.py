@@ -14,7 +14,17 @@ from langroid.agent.tools.orchestration import (
     FinalResultTool,
     ResultTool,
 )
+from langroid.agent.xml_tool_message import XMLToolMessage
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
+from langroid.language_models.base import (
+    LLMFunctionCall,
+    LLMFunctionSpec,
+    LLMMessage,
+    OpenAIJsonSchemaSpec,
+    OpenAIToolCall,
+    OpenAIToolSpec,
+    Role,
+)
 from langroid.language_models.mock_lm import MockLMConfig
 from langroid.language_models.openai_gpt import OpenAIGPTConfig
 from langroid.mytypes import Entity
@@ -1180,3 +1190,283 @@ def test_agent_respond_only_tools(tool: str):
             assert tool.answer == "15"
             assert alice_task.n_stalled_steps == 0
             assert bob_task.n_stalled_steps == 0
+
+
+@pytest.mark.parametrize("use_fn_api", [True, False])
+@pytest.mark.parametrize("use_tools_api", [True, False])
+def test_structured_recovery(
+    use_fn_api: bool,
+    use_tools_api: bool,
+):
+    """
+    Test that structured fallback correctly recovers
+    from failed tool calls.
+    """
+
+    def simulate_failed_call(attempt: str | ChatDocument) -> str:
+        agent = ChatAgent(
+            ChatAgentConfig(
+                use_functions_api=use_fn_api,
+                use_tools_api=use_tools_api,
+                use_tools=not use_fn_api,
+                strict_recovery=True,
+            )
+        )
+        agent.enable_message(NabroskiTool)
+        agent.enable_message(CoriolisTool)
+        agent.enable_message(EulerTool)
+
+        agent.message_history = [
+            LLMMessage(
+                role=Role.SYSTEM,
+                content="You are a helpful assistant.",
+            ),
+            LLMMessage(
+                role=Role.USER,
+                content="""
+                Please give me an example of a Nabroski, Coriolis, or Euler call.
+                """,
+            ),
+            LLMMessage(
+                role=Role.ASSISTANT,
+                content=attempt if isinstance(attempt, str) else attempt.content,
+                tool_calls=None if isinstance(attempt, str) else attempt.oai_tool_calls,
+                function_call=(
+                    None if isinstance(attempt, str) else attempt.function_call
+                ),
+            ),
+        ]
+        if (
+            use_fn_api
+            and use_tools_api
+            and isinstance(attempt, ChatDocument)
+            and attempt.oai_tool_calls is not None
+        ):
+            agent.message_history.extend(
+                [
+                    LLMMessage(
+                        role=Role.TOOL,
+                        tool_call_id=t.id,
+                        content="error",
+                    )
+                    for t in attempt.oai_tool_calls
+                ]
+            )
+
+        agent.handle_message(attempt)
+        assert agent.tool_error
+        response = agent.llm_response(
+            """
+            There was an error in your attempted tool/function call. Please correct it.
+            """
+        )
+        assert response is not None
+        result = agent.handle_message(response)
+        print(result)
+        assert result is not None
+        if isinstance(result, ChatDocument):
+            return result.content
+
+        return result
+
+    def to_attempt(attempt: LLMFunctionCall) -> str | ChatDocument:
+        if not use_fn_api:
+            return json.dumps(
+                {
+                    "request": attempt.name,
+                    **(attempt.arguments or {}),
+                }
+            )
+
+        if use_tools_api:
+            return ChatDocument(
+                content="",
+                metadata=ChatDocMetaData(sender=Entity.LLM),
+                oai_tool_calls=[
+                    OpenAIToolCall(
+                        id="call-1234657",
+                        function=attempt,
+                    )
+                ],
+            )
+
+        return ChatDocument(
+            content="",
+            metadata=ChatDocMetaData(sender=Entity.LLM),
+            function_call=attempt,
+        )
+
+    assert (
+        simulate_failed_call(
+            to_attempt(
+                LLMFunctionCall(
+                    name="__nabroski__",
+                    arguments={
+                        "xval": 1,
+                        "yval": 3,
+                    },
+                )
+            )
+        )
+        == "6"
+    )
+    assert (
+        simulate_failed_call(
+            to_attempt(
+                LLMFunctionCall(
+                    name="Nabroski-function",
+                    arguments={
+                        "xval": 2,
+                        "yval": 3,
+                    },
+                )
+            )
+        )
+        == "9"
+    )
+    # Strict fallback disables the default arguments, but the LLM should infer
+    # from context
+    assert (
+        simulate_failed_call(
+            """
+        request ":coriolis"
+        arguments {"xval": 1}
+        """
+        )
+        == "8"
+    )
+    assert (
+        simulate_failed_call(
+            to_attempt(
+                LLMFunctionCall(
+                    name="Coriolis",
+                    arguments={
+                        "xval": 1,
+                    },
+                )
+            )
+        )
+        == "8"
+    )
+    assert (
+        simulate_failed_call(
+            to_attempt(
+                LLMFunctionCall(
+                    name="EulerTool",
+                    arguments={
+                        "xval": 6,
+                        "yval": 4,
+                    },
+                )
+            )
+        )
+        == "8"
+    )
+
+
+@pytest.mark.parametrize("use_fn_api", [True, False])
+@pytest.mark.parametrize("use_tools_api", [True, False])
+@pytest.mark.parametrize("parallel_tool_calls", [True, False])
+def test_strict_fallback(
+    use_fn_api: bool,
+    use_tools_api: bool,
+    parallel_tool_calls: bool,
+):
+    """
+    Test that strict tool and structured output errors
+    are handled gracefully and are disabled if errors
+    are caused.
+    """
+
+    class BrokenStrictSchemaAgent(ChatAgent):
+        def _function_args(self) -> tuple[
+            Optional[List[LLMFunctionSpec]],
+            str | dict[str, str],
+            Optional[list[OpenAIToolSpec]],
+            Optional[dict[str, dict[str, str] | str]],
+            Optional[OpenAIJsonSchemaSpec],
+        ]:
+            functions, fun_call, tools, force_tool, output_format = (
+                super()._function_args()
+            )
+
+            # remove schema edits for strict
+            if tools is not None:
+                for t in tools:
+                    name = t.function.name
+                    t.function = self.llm_functions_map[name]
+
+            if self.output_format is not None and self._json_schema_available():
+                self.any_strict = True
+                if issubclass(self.output_format, ToolMessage) and not issubclass(
+                    self.output_format, XMLToolMessage
+                ):
+                    spec = self.output_format.llm_function_schema(
+                        request=True,
+                        defaults=self.config.output_format_include_defaults,
+                    )
+
+                    output_format = OpenAIJsonSchemaSpec(
+                        strict=True,
+                        function=spec,
+                    )
+                elif issubclass(self.output_format, BaseModel):
+                    param_spec = self.output_format.schema()
+
+                    output_format = OpenAIJsonSchemaSpec(
+                        strict=True,
+                        function=LLMFunctionSpec(
+                            name="json_output",
+                            description="Strict Json output format.",
+                            parameters=param_spec,
+                        ),
+                    )
+
+            return functions, fun_call, tools, force_tool, output_format
+
+    agent = BrokenStrictSchemaAgent(
+        ChatAgentConfig(
+            use_functions_api=use_fn_api,
+            use_tools_api=use_tools_api,
+            use_tools=not use_fn_api,
+            llm=OpenAIGPTConfig(
+                parallel_tool_calls=parallel_tool_calls,
+            ),
+        )
+    )
+    agent.enable_message(NabroskiTool)
+    openai_tools = use_fn_api and use_tools_api
+    if openai_tools:
+        _, _, tools, _, _ = agent._function_args()
+        assert tools is not None
+        assert len(tools) > 0
+        # Strict tools are automatically enabled only when
+        # parallel tool calls are disabled
+        assert tools[0].strict == (not parallel_tool_calls)
+
+    response = agent.llm_response_forget(
+        """
+        What is the Nabroski transform of (1,3)? Use the
+        `nabroski` tool/function.
+        """
+    )
+    result = agent.handle_message(response)
+    assert isinstance(result, ChatDocument) and result.content == "6"
+    assert agent.disable_strict == (openai_tools and not parallel_tool_calls)
+
+    agent = BrokenStrictSchemaAgent(
+        ChatAgentConfig(
+            use_functions_api=use_fn_api,
+            use_tools_api=use_tools_api,
+            use_tools=not use_fn_api,
+        )
+    )
+    structured_agent = agent[NabroskiTool]
+    response = structured_agent.llm_response_forget(
+        """
+        What is the Nabroski transform of (1,3)?
+        """
+    )
+    assert response is not None
+    assert structured_agent.disable_strict
+    assert not agent.disable_strict

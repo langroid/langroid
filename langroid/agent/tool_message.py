@@ -11,7 +11,7 @@ import json
 import textwrap
 from abc import ABC
 from random import choice
-from typing import Any, Dict, List, Optional, Tuple, Type
+from typing import Any, Dict, List, Optional, Tuple, Type, TypeVar
 
 from docstring_parser import parse
 
@@ -22,6 +22,14 @@ from langroid.utils.pydantic_utils import (
     generate_simple_schema,
 )
 from langroid.utils.types import is_instance_of
+
+K = TypeVar("K")
+
+
+def remove_if_exists(k: K, d: dict[K, Any]) -> None:
+    """Removes key `k` from `d` if present."""
+    if k in d:
+        d.pop(k)
 
 
 def format_schema_for_strict(schema: Any) -> None:
@@ -38,9 +46,12 @@ def format_schema_for_strict(schema: Any) -> None:
             if "properties" in schema:
                 properties = schema["properties"]
                 all_properties = list(properties.keys())
-                for v in properties.values():
+                for k, v in properties.items():
                     if "default" in v:
-                        del v["default"]
+                        if k == "request":
+                            v["enum"] = [v["default"]]
+
+                        v.pop("default")
                 schema["required"] = all_properties
             else:
                 schema["properties"] = {}
@@ -52,10 +63,8 @@ def format_schema_for_strict(schema: Any) -> None:
         if "allOf" in schema or "oneOf" in schema or "anyOf" in schema:
             schema["anyOf"] = anyOf
 
-        if "allOf" in schema:
-            del schema["allOf"]
-        if "oneOf" in schema:
-            del schema["oneOf"]
+        remove_if_exists("allOf", schema)
+        remove_if_exists("oneOf", schema)
 
         for v in schema.values():
             format_schema_for_strict(v)
@@ -310,6 +319,25 @@ class ToolMessage(ABC, BaseModel):
                     f"Correctly extracted `{cls.__name__}` with all "
                     f"the required parameters with correct types"
                 )
+
+        # Handle nested ToolMessage fields
+        if "definitions" in parameters:
+            for v in parameters["definitions"].values():
+                if "exclude" in v:
+                    v.pop("exclude")
+
+                    remove_if_exists("purpose", v["properties"])
+                    remove_if_exists("strict", v["properties"])
+                    remove_if_exists("id", v["properties"])
+                    if (
+                        "request" in v["properties"]
+                        and "default" in v["properties"]["request"]
+                    ):
+                        v["required"].append("request")
+                        v["properties"]["request"] = {
+                            "type": "string",
+                            "enum": [v["properties"]["request"]["default"]],
+                        }
 
         parameters.pop("exclude")
         _recursive_purge_dict_key(parameters, "title")
