@@ -589,3 +589,14 @@ def extend_document_class(d: Document) -> Type[Document]:
     )
 
     return NewDocumentClass
+
+
+class PydanticWrapper(BaseModel):
+    value: Any
+
+
+def get_pydantic_wrapper(value_type: type) -> type[PydanticWrapper]:
+    class WrappedValue(PydanticWrapper):
+        value: value_type  # type: ignore
+
+    return WrappedValue

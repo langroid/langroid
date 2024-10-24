@@ -7,6 +7,7 @@ from langroid.language_models import LLMResponse
 from langroid.language_models.base import (
     LanguageModel,
     LLMConfig,
+    OpenAIJsonSchemaSpec,
     OpenAIToolSpec,
     ToolChoiceTypes,
 )
@@ -80,6 +81,7 @@ class MockLM(LanguageModel):
         tool_choice: ToolChoiceTypes | Dict[str, str | Dict[str, str]] = "auto",
         functions: Optional[List[lm.LLMFunctionSpec]] = None,
         function_call: str | Dict[str, str] = "auto",
+        response_format: Optional[OpenAIJsonSchemaSpec] = None,
     ) -> lm.LLMResponse:
         """
         Mock chat function for testing
@@ -95,6 +97,7 @@ class MockLM(LanguageModel):
         tool_choice: ToolChoiceTypes | Dict[str, str | Dict[str, str]] = "auto",
         functions: Optional[List[lm.LLMFunctionSpec]] = None,
         function_call: str | Dict[str, str] = "auto",
+        response_format: Optional[OpenAIJsonSchemaSpec] = None,
     ) -> lm.LLMResponse:
         """
         Mock chat function for testing
