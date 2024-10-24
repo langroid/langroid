@@ -4,6 +4,7 @@ import json
 import logging
 import textwrap
 from contextlib import ExitStack
+from inspect import isclass
 from typing import Dict, List, Optional, Self, Set, Tuple, Type, Union, cast
 
 import openai
@@ -33,6 +34,7 @@ from langroid.pydantic_v1 import BaseModel
 from langroid.utils.configuration import settings
 from langroid.utils.object_registry import ObjectRegistry
 from langroid.utils.output import status
+from langroid.utils.pydantic_utils import PydanticWrapper, get_pydantic_wrapper
 
 console = Console()
 
@@ -170,13 +172,10 @@ class ChatAgent(Agent):
 
         if config.output_format is not None:
             if not any(
-                issubclass(config.output_format, t) for t in [ToolMessage, BaseModel]
+                (isclass(config.output_format) and issubclass(config.output_format, t))
+                for t in [ToolMessage, BaseModel]
             ):
-
-                class OutputFormat(BaseModel):
-                    value: config.output_format  # type: ignore
-
-                self.output_format = OutputFormat
+                self.output_format = get_pydantic_wrapper(config.output_format)
             else:
                 self.output_format = config.output_format
 
@@ -653,12 +652,11 @@ class ChatAgent(Agent):
         calling mechanism.
         """
         clone = copy.copy(self)
-        if not any(issubclass(output_type, t) for t in [ToolMessage, BaseModel]):
-
-            class OutputFormat(BaseModel):
-                value: output_type  # type: ignore
-
-            output_type = OutputFormat
+        if not any(
+            (isclass(output_type) and issubclass(output_type, t))
+            for t in [ToolMessage, BaseModel]
+        ):
+            output_type = get_pydantic_wrapper(output_type)
 
         clone.output_format = output_type
         if issubclass(output_type, ToolMessage):
@@ -712,6 +710,22 @@ class ChatAgent(Agent):
         for r in to_remove:
             self.llm_tools_usable.discard(r)
             self.llm_functions_usable.discard(r)
+
+    def _load_output_format(self, message: ChatDocument) -> None:
+        """
+        If set, attempts to parse a value of type `self.output_format` from the message
+        contents and assigns it to `content_any`.
+        """
+        if self.output_format is not None:
+            try:
+                content_any = self.output_format.parse_obj(json.loads(message.content))
+
+                if issubclass(self.output_format, PydanticWrapper):
+                    message.content_any = content_any.value  # type: ignore
+                else:
+                    message.content_any = content_any
+            except Exception:
+                pass
 
     def llm_response(
         self, message: Optional[str | ChatDocument] = None
@@ -820,13 +834,7 @@ class ChatAgent(Agent):
         )
 
         # If using strict output format, parse the output JSON
-        if self.output_format is not None:
-            try:
-                response.content_any = self.output_format.parse_obj(
-                    json.loads(response.content)
-                )
-            except Exception:
-                pass
+        self._load_output_format(response)
 
         return response
 
@@ -861,13 +869,7 @@ class ChatAgent(Agent):
         )
 
         # If using strict output format, parse the output JSON
-        if self.output_format is not None:
-            try:
-                response.content_any = self.output_format.parse_obj(
-                    json.loads(response.content)
-                )
-            except Exception:
-                pass
+        self._load_output_format(response)
 
         return response
 
@@ -1196,13 +1198,7 @@ class ChatAgent(Agent):
         )
 
         # If using strict output format, parse the output JSON
-        if self.output_format is not None:
-            try:
-                chat_doc.content_any = self.output_format.parse_obj(
-                    json.loads(chat_doc.content)
-                )
-            except Exception:
-                pass
+        self._load_output_format(chat_doc)
 
         return chat_doc
 
@@ -1259,13 +1255,7 @@ class ChatAgent(Agent):
         )
 
         # If using strict output format, parse the output JSON
-        if self.output_format is not None:
-            try:
-                chat_doc.content_any = self.output_format.parse_obj(
-                    json.loads(chat_doc.content)
-                )
-            except Exception:
-                pass
+        self._load_output_format(chat_doc)
 
         return chat_doc
 
@@ -1376,13 +1366,7 @@ class ChatAgent(Agent):
             self._drop_msg_update_tool_calls(msg)
 
         # If using strict output format, parse the output JSON
-        if self.output_format is not None:
-            try:
-                response.content_any = self.output_format.parse_obj(
-                    json.loads(response.content)
-                )
-            except Exception:
-                pass
+        self._load_output_format(response)
 
         return response
 

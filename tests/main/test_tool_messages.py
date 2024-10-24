@@ -1262,7 +1262,6 @@ def test_structured_recovery(
         )
         assert response is not None
         result = agent.handle_message(response)
-        print(result)
         assert result is not None
         if isinstance(result, ChatDocument):
             return result.content

@@ -1,4 +1,4 @@
-from typing import List, Optional
+from typing import Any, List
 
 import pytest
 
@@ -154,16 +154,17 @@ def test_llm_strict_json(
 
     def typed_llm_response(
         prompt: str,
-        type: type[BaseModel | ToolMessage],
-    ) -> Optional[BaseModel | ToolMessage]:
-        response = agent[type].llm_response_forget(prompt)
-        return agent.from_ChatDocument(response, type)
+        output_type: type,
+    ) -> Any:
+        response = agent[output_type].llm_response_forget(prompt)
+        return agent.from_ChatDocument(response, output_type)
 
     def valid_typed_response(
         prompt: str,
-        type: type[BaseModel | ToolMessage],
+        output_type: type,
     ) -> bool:
-        return isinstance(typed_llm_response(prompt, type), type)
+        response = typed_llm_response(prompt, output_type)
+        return isinstance(response, output_type)
 
     president_prompt = "Show me an example of a President of France"
     presidents_prompt = "Show me an example of two Presidents"
@@ -182,3 +183,9 @@ def test_llm_strict_json(
     assert valid_typed_response(presidents_prompt, PresidentTool)
     assert valid_typed_response(country_prompt, PresidentList)
     assert valid_typed_response(president_prompt, Country)
+
+    # Structured output handles simple Python types
+    assert typed_llm_response("What is 2+2?", int) == 4
+    assert typed_llm_response("Is 2+2 equal to 4?", bool)
+    assert abs(typed_llm_response("What is the value of pi?", float) - 3.14) < 0.01
+    assert valid_typed_response(president_prompt, str)
