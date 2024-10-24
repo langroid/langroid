@@ -9,7 +9,7 @@ from langroid.language_models.openai_gpt import (
 )
 
 azureStructuredOutputList = [
-    (OpenAIChatModel.GPT4o, "2024-08-06"),
+    "2024-08-06",
 ]
 
 azureStructuredOutputAPIMin = "2024-08-01-preview"
@@ -104,8 +104,7 @@ class AzureGPT(OpenAIGPT):
 
         self.supports_json_schema = (
             self.config.api_version >= azureStructuredOutputAPIMin
-            and (self.config.chat_model, self.config.model_version)
-            in azureStructuredOutputList
+            and self.config.model_version in azureStructuredOutputList
         )
 
         self.client = AzureOpenAI(

@@ -97,7 +97,7 @@ class ResultTool(ToolMessage):
         validate_assignment = True
         # do not include these fields in the generated schema
         # since we don't require the LLM to specify them
-        schema_extra = {"exclude": {"purpose", "id"}}
+        schema_extra = {"exclude": {"purpose", "id", "strict"}}
 
     def handle(self) -> AgentDoneTool:
         return AgentDoneTool(tools=[self])
@@ -134,7 +134,7 @@ class FinalResultTool(ToolMessage):
         validate_assignment = True
         # do not include these fields in the generated schema
         # since we don't require the LLM to specify them
-        schema_extra = {"exclude": {"purpose", "id"}}
+        schema_extra = {"exclude": {"purpose", "id", "strict"}}
 
 
 class PassTool(ToolMessage):

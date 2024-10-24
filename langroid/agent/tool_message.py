@@ -6,6 +6,7 @@ an agent. The messages could represent, for example:
 - request to run a method of the agent
 """
 
+import copy
 import json
 import textwrap
 from abc import ABC
@@ -265,7 +266,7 @@ class ToolMessage(ABC, BaseModel):
             LLMFunctionSpec: the schema as an LLMFunctionSpec
 
         """
-        schema = cls.schema()
+        schema = copy.deepcopy(cls.schema())
         docstring = parse(cls.__doc__ or "")
         parameters = {
             k: v for k, v in schema.items() if k not in ("title", "description")

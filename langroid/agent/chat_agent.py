@@ -653,7 +653,7 @@ class ChatAgent(Agent):
         calling mechanism.
         """
         clone = copy.copy(self)
-        if not any(issubclass(type, t) for t in [ToolMessage, BaseModel]):
+        if not any(issubclass(output_type, t) for t in [ToolMessage, BaseModel]):
 
             class OutputFormat(BaseModel):
                 value: output_type  # type: ignore
@@ -1081,8 +1081,11 @@ class ChatAgent(Agent):
         output_format = None
         if self.output_format is not None and self._json_schema_available():
             self.any_strict = True
-            if issubclass(self.output_format, ToolMessage):
+            if issubclass(self.output_format, ToolMessage) and not issubclass(
+                self.output_format, XMLToolMessage
+            ):
                 spec = self.output_format.llm_function_schema(
+                    request=True,
                     defaults=self.config.output_format_include_defaults,
                 )
                 format_schema_for_strict(spec.parameters)
