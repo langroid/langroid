@@ -73,7 +73,7 @@ DUMMY_API_KEY = "xxx"
 class AnthropicModel(str, Enum):
     """Enum for Anthropic models"""
 
-    CLAUDE_3_5_SONNET = "claude-3-5-sonnet-20240620"
+    CLAUDE_3_5_SONNET = "claude-3-5-sonnet-latest"
     CLAUDE_3_OPUS = "claude-3-opus-20240229"
     CLAUDE_3_SONNET = "claude-3-sonnet-20240229"
     CLAUDE_3_HAIKU = "claude-3-turbo-20240307"
