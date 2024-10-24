@@ -5,6 +5,7 @@ import pytest
 import langroid as lr
 from langroid.agent.tools.orchestration import ResultTool
 from langroid.agent.xml_tool_message import XMLToolMessage
+from langroid.exceptions import XMLException
 from langroid.pydantic_v1 import BaseModel, Field
 from langroid.utils.configuration import Settings, set_global
 
@@ -119,6 +120,45 @@ print("Hello, World!")
     assert code_tool.filepath == "/path/to/file.py"
     assert code_tool.version == 1
     assert code_tool.code == 'print("Hello, World!")'
+
+
+def test_parse_bad_format():
+    root_tag = CodeTool.Config.root_element
+    # test with missing closing tag
+    bad_xml_string = f"""
+    <{root_tag}>
+        <request>code_tool</request>
+        <filepath>/path/to/file.py</filepath>
+        <version>1</version>
+        <code>
+            print("Hello, World!")
+    </{root_tag}>
+    """
+    with pytest.raises(XMLException):
+        CodeTool.parse(bad_xml_string)
+
+    # Test with missing required field
+    incomplete_xml_string = f"""
+    <{root_tag}>
+        <request>code_tool</request>
+        <filepath>/path/to/file.py</filepath>
+        <version>1</version>
+    </{root_tag}>
+    """
+    with pytest.raises(XMLException):
+        CodeTool.parse(incomplete_xml_string)
+
+    # Test with invalid XML structure
+    invalid_xml_string = f"""
+    <{root_tag}>
+        <request>code_tool</request>
+        <filepath>/path/to/file.py</filepath>
+        <version>1</version>
+        <code><![CDATA[print("Hello, World!")]]></code>
+    </{root_tag}
+    """
+    with pytest.raises(XMLException):
+        CodeTool.parse(invalid_xml_string)
 
 
 def test_format():
@@ -268,6 +308,7 @@ class ComplexNestedXMLTool(XMLToolMessage):
     person: Person
     hobbies: List[str]
     phones: Dict[str, int]
+    friends: List[Person] | None = None
 
     @classmethod
     def examples(cls) -> List[XMLToolMessage | Tuple[str, XMLToolMessage]]:
@@ -276,7 +317,10 @@ class ComplexNestedXMLTool(XMLToolMessage):
                 "I want to present a person named John Doe, aged 30, "
                 "living at 123 Main St, Anytown, USA, with hobbies of "
                 "reading and cycling, "
-                "and phone numbers: home (1234567890) and work (9876543210)",
+                " phone numbers: home (1234567890) and work (9876543210)"
+                " and two friends: "
+                "   Jane Doe, aged 28, living at 456 Elm St, Somewhere, Canada, "
+                "   Jack Doe, aged 32, living at 789 Oak St, Anywhere, UK",
                 cls(
                     person=Person(
                         name="John Doe",
@@ -287,40 +331,99 @@ class ComplexNestedXMLTool(XMLToolMessage):
                     ),
                     hobbies=["reading", "cycling"],
                     phones={"home": 1234567890, "work": 9876543210},
+                    friends=[
+                        Person(
+                            name="Jane Doe",
+                            age=28,
+                            address=Address(
+                                street="456 Elm St", city="Somewhere", country="Canada"
+                            ),
+                        ),
+                        Person(
+                            name="Jack Doe",
+                            age=32,
+                            address=Address(
+                                street="789 Oak St", city="Anywhere", country="UK"
+                            ),
+                        ),
+                    ],
                 ),
             )
         ]
 
     def handle(self) -> ResultTool:
-        return ResultTool(person=self.person, hobbies=self.hobbies, phones=self.phones)
+        return ResultTool(
+            person=self.person,
+            hobbies=self.hobbies,
+            phones=self.phones,
+            friends=self.friends,
+        )
 
 
-def test_format_complex_nested():
-    complex_tool = ComplexNestedXMLTool(
+@pytest.fixture
+def complex_nested_xml_tool():
+    return ComplexNestedXMLTool(
         person=Person(
-            name="John Doe",
-            age=30,
-            address=Address(street="123 Main St", city="Anytown", country="USA"),
+            name="Jane Doe",
+            age=28,
+            address=Address(street="456 Elm St", city="Somewhere", country="Canada"),
         ),
-        hobbies=["reading", "cycling"],
-        phones={"home": 1234567890, "work": 9876543210},
+        hobbies=["painting", "hiking"],
+        phones={"mobile": 5551234567, "work": 5559876543},
+        friends=[
+            Person(
+                name="John Doe",
+                age=30,
+                address=Address(street="123 Main St", city="Anytown", country="USA"),
+            ),
+            Person(
+                name="Jack Doe",
+                age=32,
+                address=Address(street="789 Oak St", city="Anywhere", country="UK"),
+            ),
+        ],
     )
+
+
+def test_format_complex_nested(complex_nested_xml_tool: ComplexNestedXMLTool):
+    complex_tool = complex_nested_xml_tool
     formatted = complex_tool.format_example()
     print(formatted)  # For debugging
     assert "<person>" in formatted
-    assert "<name>John Doe</name>" in formatted
-    assert "<age>30</age>" in formatted
+    assert "<name>Jane Doe</name>" in formatted
+    assert "<age>28</age>" in formatted
     assert "<address>" in formatted
     # NOTE: street was declared as verbatim, so it should be in a CDATA section
-    assert "<street><![CDATA[123 Main St]]></street>" in formatted
-    assert "<city>Anytown</city>" in formatted
-    assert "<country>USA</country>" in formatted
+    assert "<street><![CDATA[456 Elm St]]></street>" in formatted
+    assert "<city>Somewhere</city>" in formatted
+    assert "<country>Canada</country>" in formatted
     assert "<hobbies>" in formatted
-    assert "<item>reading</item>" in formatted
-    assert "<item>cycling</item>" in formatted
+    assert "<item>painting</item>" in formatted
+    assert "<item>hiking</item>" in formatted
     assert "<phones>" in formatted
-    assert "<home>1234567890</home>" in formatted
-    assert "<work>9876543210</work>" in formatted
+    assert "<mobile>5551234567</mobile>" in formatted
+    assert "<work>5559876543</work>" in formatted
+    assert "<friends>" in formatted
+    assert "<person>" in formatted
+    assert "<name>John Doe</name>" in formatted
+    assert "<age>30</age>" in formatted
+    assert "<name>Jack Doe</name>" in formatted
+    assert "<age>32</age>" in formatted
+
+    # Test case for absent friends field
+    complex_tool_no_friends = ComplexNestedXMLTool(
+        person=Person(
+            name="Alice Smith",
+            age=25,
+            address=Address(street="789 Pine St", city="Nowhere", country="USA"),
+        ),
+        hobbies=["reading", "swimming"],
+        phones={"home": 1234567890},
+        friends=None,
+    )
+    formatted_no_friends = complex_tool_no_friends.format_example()
+    print(formatted_no_friends)  # For debugging
+    assert "<friends>" not in formatted_no_friends
 
 
 def test_parse_complex_nested():
@@ -373,8 +476,9 @@ def test_instructions_complex_nested():
     assert "STREET = [value for street]" in instructions
     assert "CITY = [value for city]" in instructions
     assert "COUNTRY = [value for country]" in instructions
-    assert "HOBBIES = [value for hobbies]" in instructions
-    assert "PHONES = [value for phones]" in instructions
+    assert "HOBBIES = [list of str for hobbies]" in instructions
+    assert "PHONES = [dictionary with str keys and int values]" in instructions
+    assert "FRIENDS = [list of nested structures for friends]" in instructions
 
     assert "Formatting example:" in instructions
     assert f"<{root_tag}>" in instructions
@@ -390,20 +494,20 @@ def test_instructions_complex_nested():
     assert "<country>{COUNTRY}</country>" in instructions
     assert "</address>" in instructions
     assert "</person>" in instructions
-    assert "<hobbies>{HOBBIES}</hobbies>" in instructions
-    assert "<phones>{PHONES}</phones>" in instructions
+    assert "<hobbies>" in instructions
+    assert "<item>[str value]</item>" in instructions
+    assert "</hobbies>" in instructions
+    assert "<phones>" in instructions
+    assert "<str>[int value]</str>" in instructions
+    assert "</phones>" in instructions
+    assert "<friends>" in instructions
+    assert "<item>[Person value]</item>" in instructions
+    assert "</friends>" in instructions
 
 
-def test_roundtrip_complex_nested():
-    original = ComplexNestedXMLTool(
-        person=Person(
-            name="Jane Doe",
-            age=28,
-            address=Address(street="456 Elm St", city="Somewhere", country="Canada"),
-        ),
-        hobbies=["painting", "hiking"],
-        phones={"mobile": 5551234567, "work": 5559876543},
-    )
+def test_roundtrip_complex_nested(complex_nested_xml_tool):
+    original = complex_nested_xml_tool
+
     formatted = original.format_example()
     parsed = ComplexNestedXMLTool.parse(formatted)
     assert original.dict() == parsed.dict()
@@ -416,6 +520,8 @@ def test_roundtrip_complex_nested():
 
 
 def test_roundtrip_complex_nested_tolerant():
+    # note there is no `friends` field, so this is a good test
+    # to check that the formatting is not including this field in the XML.
     original = ComplexNestedXMLTool(
         person=Person(
             name="Jane Doe",
@@ -465,7 +571,10 @@ def test_llm_complex_xml_tool_message(
         Provide information about a person named Alice Johnson, aged 35,
         living at 789 Oak Ave, Springfield, USA, with hobbies of
         gardening and cooking, and phone numbers: 
-        home (5551112222) and mobile (5553334444)
+        home (5551112222) and mobile (5553334444).
+        Also include information about her two friends:
+        1. Bob Smith, aged 40, living at 123 Maple St, Riverside, USA
+        2. Carol White, aged 38, living at 456 Pine Rd, Hillside, USA
         """
     )
     assert isinstance(result, ResultTool)
@@ -478,6 +587,18 @@ def test_llm_complex_xml_tool_message(
     assert result.person.address.country == "USA"
     assert set(result.hobbies) == {"gardening", "cooking"}
     assert result.phones == {"home": 5551112222, "mobile": 5553334444}
+    assert isinstance(result.friends, list)
+    assert len(result.friends) == 2
+    assert result.friends[0].name == "Bob Smith"
+    assert result.friends[0].age == 40
+    assert result.friends[0].address.street == "123 Maple St"
+    assert result.friends[0].address.city == "Riverside"
+    assert result.friends[0].address.country == "USA"
+    assert result.friends[1].name == "Carol White"
+    assert result.friends[1].age == 38
+    assert result.friends[1].address.street == "456 Pine Rd"
+    assert result.friends[1].address.city == "Hillside"
+    assert result.friends[1].address.country == "USA"
 
 
 if __name__ == "__main__":

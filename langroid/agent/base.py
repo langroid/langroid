@@ -33,6 +33,7 @@ from rich.prompt import Prompt
 from langroid.agent.chat_document import ChatDocMetaData, ChatDocument
 from langroid.agent.tool_message import ToolMessage
 from langroid.agent.xml_tool_message import XMLToolMessage
+from langroid.exceptions import XMLException
 from langroid.language_models.base import (
     LanguageModel,
     LLMConfig,
@@ -108,6 +109,10 @@ def noop_fn(*args: List[Any], **kwargs: Dict[str, Any]) -> None:
     pass
 
 
+async def async_noop_fn(*args: List[Any], **kwargs: Dict[str, Any]) -> None:
+    pass
+
+
 class Agent(ABC):
     """
     An Agent is an abstraction that encapsulates mainly two components:
@@ -158,6 +163,7 @@ class Agent(ABC):
 
         self.callbacks = SimpleNamespace(
             start_llm_stream=lambda: noop_fn,
+            start_llm_stream_async=async_noop_fn,
             cancel_llm_stream=noop_fn,
             finish_llm_stream=noop_fn,
             show_llm_response=noop_fn,
@@ -1134,6 +1140,8 @@ class Agent(ABC):
             # correct tool name but bad fields
             self.tool_error = True
             return self.tool_validation_error(ve)
+        except XMLException as xe:  # from XMLToolMessage parsing
+            return str(xe)
         except ValueError:
             # invalid tool name
             # We return None since returning "invalid tool name" would
@@ -1256,7 +1264,14 @@ class Agent(ABC):
         if is_json:
             maybe_tool_dict = json.loads(tool_candidate_str)
         else:
-            maybe_tool_dict = XMLToolMessage.extract_field_values(tool_candidate_str)
+            try:
+                maybe_tool_dict = XMLToolMessage.extract_field_values(
+                    tool_candidate_str
+                )
+            except Exception as e:
+                from langroid.exceptions import XMLException
+
+                raise XMLException(f"Error extracting XML fields:\n {str(e)}")
         # check if the maybe_tool_dict contains a "properties" field
         # which further contains the actual tool-call
         # (some weak LLMs do this). E.g. gpt-4o sometimes generates this:

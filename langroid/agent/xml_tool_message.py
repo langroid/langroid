@@ -1,4 +1,5 @@
-from typing import Any, Dict, List, Optional
+from collections.abc import Mapping
+from typing import Any, Dict, List, Optional, get_args, get_origin
 
 from lxml import etree
 
@@ -106,12 +107,17 @@ class XMLToolMessage(ToolMessage):
             Optional["XMLToolMessage"]: An instance of the class if parsing succeeds,
                 None otherwise.
         """
-        parsed_data = cls.extract_field_values(formatted_string)
-        if parsed_data is None:
-            return None
+        try:
+            parsed_data = cls.extract_field_values(formatted_string)
+            if parsed_data is None:
+                return None
 
-        # Use Pydantic's parse_obj to create and validate the instance
-        return cls.parse_obj(parsed_data)
+            # Use Pydantic's parse_obj to create and validate the instance
+            return cls.parse_obj(parsed_data)
+        except Exception as e:
+            from langroid.exceptions import XMLException
+
+            raise XMLException(f"Error parsing XML: {str(e)}")
 
     @classmethod
     def find_verbatim_fields(
@@ -133,15 +139,6 @@ class XMLToolMessage(ToolMessage):
 
     @classmethod
     def format_instructions(cls, tool: bool = False) -> str:
-        """
-        Instructions to the LLM showing how to use the XML tool.
-
-        Args:
-            tool: Not used in this implementation, kept for compatibility.
-
-        Returns:
-            str: instructions on how to use the XML message
-        """
         fields = [
             f
             for f in cls.__fields__.keys()
@@ -165,35 +162,62 @@ class XMLToolMessage(ToolMessage):
             nonlocal preamble, xml_format
             current_path = f"{path}.{field_name}" if path else field_name
 
-            if issubclass(field_type, BaseModel):
+            origin = get_origin(field_type)
+            args = get_args(field_type)
+
+            if (
+                origin is None
+                and isinstance(field_type, type)
+                and issubclass(field_type, BaseModel)
+            ):
                 preamble += (
                     f"{field_name.upper()} = [nested structure for {field_name}]\n"
                 )
                 xml_format += f"{indent}<{field_name}>\n"
                 for sub_field, sub_field_info in field_type.__fields__.items():
                     format_field(
-                        sub_field, sub_field_info.type_, indent + "  ", current_path
+                        sub_field,
+                        sub_field_info.outer_type_,
+                        indent + "  ",
+                        current_path,
                     )
                 xml_format += f"{indent}</{field_name}>\n"
-            elif issubclass(field_type, List):
-                item_type = getattr(field_type, "__args__", [Any])[0]
-                preamble += f"{field_name.upper()} = [list of {item_type.__name__}]\n"
+            elif origin in (list, List) or (field_type is list):
+                item_type = args[0] if args else Any
+                if isinstance(item_type, type) and issubclass(item_type, BaseModel):
+                    preamble += (
+                        f"{field_name.upper()} = "
+                        f"[list of nested structures for {field_name}]\n"
+                    )
+                else:
+                    preamble += (
+                        f"{field_name.upper()} = "
+                        f"[list of {getattr(item_type, '__name__', str(item_type))} "
+                        f"for {field_name}]\n"
+                    )
                 xml_format += f"{indent}<{field_name}>\n"
-                xml_format += f"{indent}  <item>[{item_type.__name__} value]</item>\n"
+                xml_format += (
+                    f"{indent}  <item>"
+                    f"[{getattr(item_type, '__name__', str(item_type))} value]"
+                    f"</item>\n"
+                )
                 xml_format += f"{indent}  ...\n"
                 xml_format += f"{indent}</{field_name}>\n"
-            elif issubclass(field_type, Dict):
-                key_type, value_type = getattr(field_type, "__args__", [Any, Any])
+            elif origin in (dict, Dict) or (
+                isinstance(field_type, type) and issubclass(field_type, Mapping)
+            ):
+                key_type, value_type = args if len(args) == 2 else (Any, Any)
                 preamble += (
                     f"{field_name.upper()} = "
-                    f"[dictionary with {key_type.__name__} keys and "
-                    f"{value_type.__name__} values]\n"
+                    f"[dictionary with "
+                    f"{getattr(key_type, '__name__', str(key_type))} keys and "
+                    f"{getattr(value_type, '__name__', str(value_type))} values]\n"
                 )
                 xml_format += f"{indent}<{field_name}>\n"
                 xml_format += (
-                    f"{indent}  <{key_type.__name__}>"
-                    f"[{value_type.__name__} value]"
-                    f"</{key_type.__name__}>\n"
+                    f"{indent}  <{getattr(key_type, '__name__', str(key_type))}>"
+                    f"[{getattr(value_type, '__name__', str(value_type))} value]"
+                    f"</{getattr(key_type, '__name__', str(key_type))}>\n"
                 )
                 xml_format += f"{indent}  ...\n"
                 xml_format += f"{indent}</{field_name}>\n"
@@ -213,7 +237,10 @@ class XMLToolMessage(ToolMessage):
         verbatim_fields = cls.find_verbatim_fields()
 
         for field in fields:
-            field_type = cls.__fields__[field].type_
+            field_info = cls.__fields__[field]
+            field_type = (
+                field_info.outer_type_
+            )  # Use outer_type_ to get the actual type including List, etc.
             format_field(field, field_type)
 
         xml_format += f"</{cls.Config.root_element}>"
@@ -260,6 +287,9 @@ class XMLToolMessage(ToolMessage):
         def create_element(
             parent: etree._Element, name: str, value: Any, path: str = ""
         ) -> None:
+            if value is None:
+                return
+
             elem = etree.SubElement(parent, name)
             current_path = f"{path}.{name}" if path else name
 

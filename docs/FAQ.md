@@ -124,3 +124,8 @@ and load it (if it exists) at the start of your script.
 See the example script [`chat-persist.py`](https://github.com/langroid/langroid/blob/main/examples/basic/chat-persist.py)
 
 
+## How can I suppress LLM output?
+
+You can use the `quiet_mode` context manager for this, see 
+[here](https://langroid.github.io/langroid/notes/quiet-mode/)
+

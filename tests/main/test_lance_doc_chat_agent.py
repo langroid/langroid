@@ -44,7 +44,7 @@ movie_docs = [
             year=1999,
             director="Jomes Winkowski",
             genre="Science Fiction",
-            rating=8.7,
+            rating=8.3,
         ),
     ),
     MovieDoc(
@@ -59,7 +59,7 @@ movie_docs = [
             year=1968,
             director="Stanley Hendrick",
             genre="Science Fiction",
-            rating=8.9,
+            rating=7.5,
         ),
     ),
     MovieDoc(
@@ -131,14 +131,15 @@ def test_lance_doc_chat_agent(
     # internal dialog history of the agent.
     set_global(test_settings)
 
-    ldb_dir = ".lancedb/data/test-2"
+    ldb_dir = ".lancedb/data/test-x"
     rmdir(ldb_dir)
     ldb_cfg = LanceDBConfig(
         cloud=False,
-        collection_name="test-lance-2",
+        collection_name="test-lance-x",
         storage_path=ldb_dir,
         embedding=embed_cfg,
         document_class=MovieDoc,
+        replace_collection=True,
     )
 
     cfg = DocChatAgentConfig(
@@ -216,7 +217,7 @@ def test_lance_doc_chat_agent_df_query_plan(test_settings: Settings):
 
     set_global(test_settings)
 
-    ldb_dir = ".lancedb/data/test-2"
+    ldb_dir = ".lancedb/data/test-y"
     rmdir(ldb_dir)
     ldb_cfg = LanceDBConfig(
         cloud=False,
@@ -289,7 +290,7 @@ def test_lance_doc_chat_agent_df(
 ):
     set_global(test_settings)
 
-    ldb_dir = ".lancedb/data/test-2"
+    ldb_dir = ".lancedb/data/test-z"
     rmdir(ldb_dir)
     ldb_cfg = LanceDBConfig(
         cloud=False,

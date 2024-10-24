@@ -30,7 +30,7 @@ class _TestChatAgentConfig(ChatAgentConfig):
 EXPONENTIALS = "3**4 8**3"
 
 
-@pytest.mark.parametrize("fn_api", [True, False])
+@pytest.mark.parametrize("fn_api", [False, True])
 @pytest.mark.parametrize("tools_api", [True, False])
 @pytest.mark.parametrize("use_done_tool", [True, False])
 @pytest.mark.parametrize("constrain_recipients", [True, False])
@@ -104,10 +104,12 @@ def test_agents_with_recipient(
                 "Multiplier" who can compute multiplications. So to calculate the
                 exponential you receive from "Master", you have to ask a sequence of
                 multiplication questions to "Multiplier", to figure out the 
-                exponential.
+                exponential, remember to use the the TOOL/Function `recipient_message` 
+                to ADDRESS the Multipler.
                 
                 When you have your final answer, report your answer
-                back to "Master" using the same `recipient_message` tool/function-call.
+                back to "Master", ADDRESSING them using the TOOL/Function 
+                `recipient_message`.
                 
                 When asking the Multiplier, remember to only present your 
                 request in arithmetic notation, e.g. "3*5"; do not add 

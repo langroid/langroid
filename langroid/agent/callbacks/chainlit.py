@@ -234,6 +234,7 @@ class ChainlitAgentCallbacks:
         so we can alter the display of the first user message.
         """
         agent.callbacks.start_llm_stream = self.start_llm_stream
+        agent.callbacks.start_llm_stream_async = self.start_llm_stream_async
         agent.callbacks.cancel_llm_stream = self.cancel_llm_stream
         agent.callbacks.finish_llm_stream = self.finish_llm_stream
         agent.callbacks.show_llm_response = self.show_llm_response
@@ -301,6 +302,32 @@ class ChainlitAgentCallbacks:
             if self.stream is None:
                 raise ValueError("Stream not initialized")
             run_sync(self.stream.stream_token(t))
+
+        return stream_token
+
+    async def start_llm_stream_async(self) -> Callable[[str], None]:
+        """Returns a streaming fn that can be passed to the LLM class"""
+        self.stream = cl.Step(
+            id=self.curr_step.id if self.curr_step is not None else None,
+            name=self._entity_name("llm"),
+            type="llm",
+            parent_id=self._get_parent_id(),
+        )
+        self.last_step = self.stream
+        self.curr_step = None
+        logger.info(
+            f"""
+            Starting LLM stream for {self.agent.config.name}
+            id = {self.stream.id} 
+            under parent {self._get_parent_id()}
+        """
+        )
+        await self.stream.send()  # type: ignore
+
+        async def stream_token(t: str) -> None:
+            if self.stream is None:
+                raise ValueError("Stream not initialized")
+            await self.stream.stream_token(t)
 
         return stream_token
 
