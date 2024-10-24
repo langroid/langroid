@@ -139,6 +139,7 @@ def test_lance_doc_chat_agent(
         storage_path=ldb_dir,
         embedding=embed_cfg,
         document_class=MovieDoc,
+        replace_collection=True,
     )
 
     cfg = DocChatAgentConfig(
