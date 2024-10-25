@@ -58,6 +58,6 @@ LLM to write content (code or text) to a file.
 If you are using an existing Langroid `ToolMessage`, e.g. `SendTool`, you can
 define your own subclass of `SendTool`, say `XMLSendTool`, 
 inheriting from both `SendTool` and `XMLToolMessage`; see this
-[example](https://github.com/langroid/langroid/blob/main/examples/basic/xml-tool.py)
+[example](https://github.com/langroid/langroid/blob/main/examples/basic/xml_tool.py)
 
 
