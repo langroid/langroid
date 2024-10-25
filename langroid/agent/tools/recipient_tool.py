@@ -6,6 +6,15 @@ the method `_get_tool_list()`).
 
 See usage examples in `tests/main/test_multi_agent_complex.py` and
 `tests/main/test_recipient_tool.py`.
+
+A simpler alternative to this tool is `SendTool`, see here:
+https://github.com/langroid/langroid/blob/main/langroid/agent/tools/orchestration.py
+
+You can also define your own XML-based variant of this tool:
+https://github.com/langroid/langroid/blob/main/examples/basic/xml-tool.py
+which uses XML rather than JSON, and can be more reliable than JSON,
+especially with weaker LLMs.
+
 """
 
 from typing import List, Type
