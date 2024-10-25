@@ -7,13 +7,18 @@ so in the `ChatAgentConfig` , you have to set the following to ensure
 that Langroid's built-in XML Tool calls are activated:
 - `use_functions_api = False`
 - `use_tools = True`
+
+Run like this (--model is optional, defaults to GPT4o):
+
+python3 examples/basic/xml_tool.py --model groq/llama-3.1-8b-instant
 """
 
 import langroid as lr
+import langroid.language_models as lm
 from langroid.pydantic_v1 import Field
-from langroid.agent.tools.orchestration import SendTool, DoneTool
+from langroid.agent.tools.orchestration import SendTool
 from langroid.agent.xml_tool_message import XMLToolMessage
-
+import fire
 
 class XMLSendTool(SendTool, XMLToolMessage):
     """
@@ -34,43 +39,49 @@ class XMLSendTool(SendTool, XMLToolMessage):
 
 
 xml_send_tool_name = XMLSendTool.default_value("request")
-done_tool_name = DoneTool.default_value("request")
 
-alice = lr.ChatAgent(
-    lr.ChatAgentConfig(
-        name="Alice",
-        use_functions_api=False,
-        use_tools=True,
-        system_message=f"""
-        Whatever number you receive, send it to Bob using the 
-        `{xml_send_tool_name}` tool. 
-        When you receive a number back from Bob, 
-        indicate you're done using the `{done_tool_name}` tool,
-        with the `content` field containing the number you got from Bob.
-        """,
+def main(model:str=""):
+    llm_config = lm.OpenAIGPTConfig(
+        chat_model=model or lm.OpenAIChatModel.GPT4o,
     )
-)
-
-bob = lr.ChatAgent(
-    lr.ChatAgentConfig(
-        name="Bob",
-        use_functions_api=False,
-        use_tools=True,
-        system_message=f"""
-        Whatever number you receive, add 1 to it and send it back to Alice
-        using the `{xml_send_tool_name}` tool.
-        """,
+    alice = lr.ChatAgent(
+        lr.ChatAgentConfig(
+            name="Alice",
+            llm=llm_config,
+            use_functions_api=False,
+            use_tools=True,
+            system_message=f"""
+            Whatever number you receive, send it to Bob using the  
+            `{xml_send_tool_name}` tool.
+            """,
+        )
     )
-)
 
-alice.enable_message([DoneTool, XMLSendTool])
-bob.enable_message(XMLSendTool)
+    bob = lr.ChatAgent(
+        lr.ChatAgentConfig(
+            name="Bob",
+            llm=llm_config,
+            use_functions_api=False,
+            use_tools=True,
+            system_message=f"""
+            Whatever number you receive, add 1 to it and send 
+            the result back to Alice
+            using the `{xml_send_tool_name}` tool.
+            """,
+        )
+    )
 
-# specialize alice_task to return an int
-alice_task = lr.Task(alice, interactive=False)[int]
-bob_task = lr.Task(bob, interactive=False)
+    alice.enable_message(XMLSendTool)
+    bob.enable_message(XMLSendTool)
 
-alice_task.add_sub_task(bob_task)
+    # specialize alice_task to return an int
+    alice_task = lr.Task(alice, interactive=False)[int]
+    bob_task = lr.Task(bob, interactive=False)
 
-result = alice_task.run("5")
-assert result == 6
+    alice_task.add_sub_task(bob_task)
+
+    result = alice_task.run("5", turns=6)
+    assert result == 7
+
+if __name__ == "__main__":
+    fire.Fire(main)

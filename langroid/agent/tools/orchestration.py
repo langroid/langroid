@@ -115,7 +115,7 @@ class FinalResultTool(ToolMessage):
     Note:
         - when defining a tool handler or agent_response, you can directly return
             FinalResultTool(field1 = val1, ...),
-            where the values can be aribitrary data structures, including nested
+            where the values can be arbitrary data structures, including nested
             Pydantic objs, or you can define a subclass of FinalResultTool with the
             fields you want to return.
         - This is a special ToolMessage that is NOT meant to be used or handled
