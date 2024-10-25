@@ -206,19 +206,17 @@ class OpenAIAssistant(ChatAgent):
         functions, _, _, _ = self._function_args()
         if functions is None:
             return
-        # add the functions to the assistant:
+        # add the function to the assistant:
         if self.assistant is None:
             raise ValueError("Assistant is None")
-        tools = self.assistant.tools
-        tools.extend(
-            [
-                {
-                    "type": "function",  # type: ignore
-                    "function": f.dict(),
-                }
-                for f in functions
-            ]
-        )
+        tools = [
+            {
+                "type": "function",  # type: ignore
+                "function": f.dict(),
+            }
+            for f in functions
+        ]
+        # OpenAI assistants API fail if existing function is in update.
         self.assistant = self.assistants.update(
             self.assistant.id,
             tools=tools,  # type: ignore
