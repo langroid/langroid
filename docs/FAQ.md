@@ -129,3 +129,24 @@ See the example script [`chat-persist.py`](https://github.com/langroid/langroid/
 You can use the `quiet_mode` context manager for this, see 
 [here](https://langroid.github.io/langroid/notes/quiet-mode/)
 
+## How can I deal with LLMs (especially weak ones) generating bad JSON in tools?
+
+Langroid already attempts to repair bad JSON (e.g. unescaped newlines, missing quotes, etc)  
+using the [json-repair](https://github.com/mangiucugna/json_repair) library and other
+custom methods, before attempting to parse it into a `ToolMessage` object.
+However this type of repair may not be able to handle all edge cases of bad JSON 
+from weak LLMs. There are two existing ways to deal with this, and one coming soon:
+
+- If you are defining your own `ToolMessage` subclass, considering deriving it instead
+  from `XMLToolMessage` instead, see the [XML-based Tools](https://langroid.github.io/langroid/notes/xml-tools/)
+- If you are using an existing Langroid `ToolMessage`, e.g. `SendTool`, you can 
+  define your own subclass of `SendTool`, say `XMLSendTool`,
+  inheriting from both `SendTool` and `XMLToolMessage`; see this 
+  [example](https://github.com/langroid/langroid/blob/main/examples/basic/xml-tool.py)
+- Coming soon: strict decoding to leverage the Structured JSON outputs supported by OpenAI
+  and open LLM providers such as `llama.cpp` and `vllm`.
+
+The first two methods instruct the LLM to generate XML instead of JSON,
+and any field that is designated with a `verbatim=True` will be enclosed 
+within an XML `CDATA` tag, which does *not* require any escaping, and can
+be far more reliable for tool-use than JSON, especially with weak LLMs.
