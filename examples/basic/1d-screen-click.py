@@ -52,8 +52,6 @@ https://langroid.github.io/langroid/tutorials/non-openai-llms/
 
 from typing import List, Tuple
 
-from mypy.dmypy.client import show_stats
-
 import langroid as lr
 import langroid.language_models as lm
 from langroid.agent.tools.orchestration import AgentDoneTool
@@ -160,8 +158,8 @@ def main(model: str = ""):
         lr.ChatAgentConfig(
             name="Clicker",
             llm=llm_config,
-            use_functions_api=False,
-            use_tools=True,
+            use_functions_api=False,  # suppress OpenAI functions/tools
+            use_tools=True,  # enable langroid-native tools: works with any LLM
             show_stats=False,
             system_message=f"""
             You are an expert at COMPUTER USE.
