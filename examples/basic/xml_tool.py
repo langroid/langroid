@@ -20,6 +20,7 @@ from langroid.agent.tools.orchestration import SendTool
 from langroid.agent.xml_tool_message import XMLToolMessage
 import fire
 
+
 class XMLSendTool(SendTool, XMLToolMessage):
     """
     Variant of SendTool, using XML rather than JSON.
@@ -40,7 +41,8 @@ class XMLSendTool(SendTool, XMLToolMessage):
 
 xml_send_tool_name = XMLSendTool.default_value("request")
 
-def main(model:str=""):
+
+def main(model: str = ""):
     llm_config = lm.OpenAIGPTConfig(
         chat_model=model or lm.OpenAIChatModel.GPT4o,
     )
@@ -82,6 +84,7 @@ def main(model:str=""):
 
     result = alice_task.run("5", turns=6)
     assert result == 7
+
 
 if __name__ == "__main__":
     fire.Fire(main)
