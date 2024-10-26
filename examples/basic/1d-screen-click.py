@@ -37,6 +37,17 @@ The main observation is that when you run it with claude-3.5-sonnet,
 the accuracy of the Agent's clicks is far superior to other LLMs like GPT-4o
 and even GPT-4.
 
+To try with other LLMs, you can set the --model param to, for example:
+- gpt-4 (set OPENAI_API_KEY in your env or .env file)
+- gpt-4o (ditto, set OPENAI_API_KEY)
+- groq/llama-3.1-70b-versatile (set GROQ_API_KEY in your env or .env file)
+- cerebras/llama3.1-70b (set CEREBRAS_API_KEY in your env or .env file)
+- ollama/qwen2.5-coder:latest
+
+See here for a full guide on local/open LLM setup with Langroid:
+https://langroid.github.io/langroid/tutorials/local-llm-setup/
+And here for how to use with other non-OpenAPI LLMs:
+https://langroid.github.io/langroid/tutorials/non-openai-llms/
 """
 
 from typing import List, Tuple
