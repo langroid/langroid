@@ -40,6 +40,9 @@ and even GPT-4.
 """
 
 from typing import List, Tuple
+
+from mypy.dmypy.client import show_stats
+
 import langroid as lr
 import langroid.language_models as lm
 from langroid.agent.tools.orchestration import AgentDoneTool
@@ -148,15 +151,17 @@ def main(model: str = ""):
             llm=llm_config,
             use_functions_api=False,
             use_tools=True,
+            show_stats=False,
             system_message=f"""
             You are an expert at COMPUTER USE.
             In this task you only have to be able to understand a 1-dimensional 
             screen presented to you as a string of bits (0s and 1s).
             You will play a 1-dimensional BIT-shooter game!
             
-            Your eventual GOAL is to turn all the 1s into 0s, one by one.
-            AFTER each click, you will be shown the new state of the screen,
-            and you then try to click on another 1, and so on, until all 1s are gone. 
+            Your task is to CLICK ON THE LEFTMOST 1 in the bit-string, 
+            to flip it to a 0.
+            
+            Always try to click on the LEFTMOST 1 in the bit-sequence. 
             
             To CLICK on the screen you 
             must use the TOOL `{click_tool_name}` where the  
@@ -166,11 +171,11 @@ def main(model: str = ""):
             But if you click on a 0, it will turn into a 1, 
             taking you further from your goal.
             
-            So you MUST ACCURATELY specify the position to click,
+            So you MUST ACCURATELY specify the position of the LEFTMOST 1 to click,
             making SURE there is a 1 at that position.
             In other words, it is critical that you are able to ACCURATELY COUNT 
-            the positions so that you are able to correctly identify the position 
-            of each 1 bit in the "screen" given to you as a string of bits.
+            the bit positions so that you are able to correctly identify the position 
+            of the LEFTMOST 1 bit in the "screen" given to you as a string of bits.
             """,
         )
     )
@@ -188,4 +193,5 @@ if __name__ == "__main__":
     ones = Prompt.ask("Indices of 1s (SPACE-separated)").split(" ")
     ones = [int(x) for x in ones]
     ScreenState.set_state(ones, size)
+    print("SCREEN STATE = ", get_state().screen)
     fire.Fire(main)
