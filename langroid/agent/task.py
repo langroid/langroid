@@ -1226,7 +1226,6 @@ class Task:
             # reset stuck counter since we made progress
             self.n_stalled_steps = 0
 
-
         if self.pending_message is not None:
             if (
                 self._is_done_response(result, r)
