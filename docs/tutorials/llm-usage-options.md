@@ -132,10 +132,8 @@ Like the other proprietary offerings, Copilot can:
 
 ### Google Gemini
 
-You can login to [gemini.google.com](https://gemini.google.com) with your andrew id and 
-password. This gives you free access to Google's Gemini LLM, and there is a data protection guarantee. When you start using it, you can see this message:
+Accessible at [gemini.google.com](https://gemini.google.com).
 
-> You now have added data protection, so your data isn’t used to train or improve any generative AI models.
 
 ## AI-powered productivity tools
 
