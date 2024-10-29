@@ -83,6 +83,11 @@ purpose and share with others (all of this is non-programmatic).
 
 E.g. [here](https://chatgpt.com/share/67153a4f-ea2c-8003-a6d3-cbc2412d78e5) is a "Knowledge Graph Builder" GPT
 
+!!! note "Private GPTs requires an OpenAI Team Account"
+    To share a custom GPT within a private group, you need an OpenAI Team account,
+    see pricing [here](https://openai.com/chatgpt/pricing). Without a Team account,
+    any shared GPT is public and can be accessed by anyone.
+
 
 ### Anthropic/Claude
 
