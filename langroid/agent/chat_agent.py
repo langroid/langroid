@@ -30,7 +30,7 @@ from langroid.language_models.base import (
     ToolChoiceTypes,
 )
 from langroid.language_models.openai_gpt import OpenAIGPT
-from langroid.pydantic_v1 import BaseModel
+from langroid.pydantic_v1 import BaseModel, ValidationError
 from langroid.utils.configuration import settings
 from langroid.utils.object_registry import ObjectRegistry
 from langroid.utils.output import status
@@ -190,6 +190,7 @@ class ChatAgent(Agent):
         # this agent if an exception is thrown in strict mode
         self.disable_strict = False
         self.any_strict = False
+        self.disable_strict_tools_set: set[str] = set()
 
         if self.config.enable_orchestration_tool_handling:
             # Only enable HANDLING by `agent_response`, NOT LLM generation of these.
@@ -262,6 +263,21 @@ class ChatAgent(Agent):
         if self.config.add_to_registry:
             ObjectRegistry.register_object(new_agent)
         return new_agent
+
+    def _strict_mode_for_tool(self, tool: str | type[ToolMessage]) -> bool:
+        """Should we enable strict mode for a given tool?"""
+        if isinstance(tool, str):
+            tool_class = self.llm_functions_class_map[tool]
+        else:
+            tool_class = tool
+        name = tool_class.default_value("request")
+        if name in self.disable_strict_tools_set or self.disable_strict:
+            return False
+        strict: Optional[bool] = tool_class.default_value("strict")
+        if strict is None:
+            strict = self._strict_tools_available()
+
+        return strict
 
     def _fn_call_available(self) -> bool:
         """Does this agent's LLM support function calling?"""
@@ -724,8 +740,50 @@ class ChatAgent(Agent):
                     message.content_any = content_any.value  # type: ignore
                 else:
                     message.content_any = content_any
-            except Exception:
-                pass
+            except ValidationError:
+                self.disable_strict = True
+                logging.warning(
+                    """
+                    Validation error occured with strict output format enabled.
+                    Disabling strict mode.
+                    """
+                )
+
+    def get_tool_messages(
+        self,
+        msg: str | ChatDocument | None,
+        all_tools: bool = False,
+    ) -> List[ToolMessage]:
+        """
+        Extracts messages and tracks whether any errors occured. If strict mode
+        was enabled, disables it for the tool, else triggers strict recovery.
+        """
+        self.tool_error = False
+        try:
+            tools = super().get_tool_messages(msg, all_tools)
+        except ValidationError as ve:
+            tool_class = ve.model
+            if issubclass(tool_class, ToolMessage):
+                was_strict = (
+                    self.config.use_functions_api
+                    and self.config.use_tools_api
+                    and self._strict_mode_for_tool(tool_class)
+                )
+                if was_strict:
+                    name = tool_class.default_value("request")
+                    self.disable_strict_tools_set.add(name)
+                    logging.warning(
+                        f"""
+                        Validation error occured with strict tool format.
+                        Disabling strict mode for the {name} tool.
+                        """
+                    )
+                else:
+                    self.tool_error = True
+
+            raise ve
+
+        return tools
 
     def llm_response(
         self, message: Optional[str | ChatDocument] = None
@@ -755,14 +813,20 @@ class ChatAgent(Agent):
                 purpose: str = "To call a tool/function."
                 request: str = "tool_or_function"
                 tool: Optional[  # type: ignore
-                    Union[*(self.llm_tools_map[t] for t in self.llm_tools_usable)]
+                    Union[
+                        *(
+                            self.llm_tools_map[t]
+                            for t in self.llm_tools_usable
+                            if t not in self.disable_strict_tools_set
+                        )
+                    ]
                 ]
 
                 def handle(this) -> None | str | ChatDocument:
                     if this.tool is None:
                         return None
 
-                    # As the ToolMessage schema accespts invalid
+                    # As the ToolMessage schema accepts invalid
                     # `tool.request` values, reparse with the
                     # corresponding tool
                     request = this.tool.request
@@ -1064,13 +1128,7 @@ class ChatAgent(Agent):
 
                 def to_maybe_strict_spec(function: str) -> OpenAIToolSpec:
                     spec = self.llm_functions_map[function]
-
-                    strict = self.llm_functions_class_map[function].default_value(
-                        "strict"
-                    )
-                    if strict is None:
-                        strict = self._strict_tools_available()
-
+                    strict = self._strict_mode_for_tool(function)
                     if strict:
                         self.any_strict = True
                         strict_spec = copy.deepcopy(spec)

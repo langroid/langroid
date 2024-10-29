@@ -1138,7 +1138,6 @@ class Agent(ABC):
             tools = [t for t in tools if self._tool_recipient_match(t)]
         except ValidationError as ve:
             # correct tool name but bad fields
-            self.tool_error = True
             return self.tool_validation_error(ve)
         except XMLException as xe:  # from XMLToolMessage parsing
             return str(xe)
@@ -1433,7 +1432,10 @@ class Agent(ABC):
         if content_any is not None and isinstance(content_any, output_type):
             return cast(T, content_any)
 
-        tools = self.get_tool_messages(msg, all_tools=True)
+        try:
+            tools = self.get_tool_messages(msg, all_tools=True)
+        except ValidationError:
+            tools = []
 
         if get_origin(output_type) is list:
             list_element_type = get_args(output_type)[0]

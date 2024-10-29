@@ -1469,3 +1469,112 @@ def test_strict_fallback(
     assert response is not None
     assert structured_agent.disable_strict
     assert not agent.disable_strict
+
+
+@pytest.mark.parametrize("use_fn_api", [True, False])
+@pytest.mark.parametrize("use_tools_api", [True, False])
+@pytest.mark.parametrize("parallel_tool_calls", [True, False])
+def test_strict_schema_mismatch(
+    use_fn_api: bool,
+    use_tools_api: bool,
+    parallel_tool_calls: bool,
+):
+    """
+    Test that validation errors triggered in strict result in disabled strict ouput.
+    """
+
+    def int_schema(request: str) -> dict[str, Any]:
+        return {
+            "type": "object",
+            "additionalProperties": False,
+            "properties": {
+                "x": {"type": "integer"},
+                "request": {"type": "string", "enum": [request]},
+            },
+            "required": ["x", "request"],
+        }
+
+    class WrongSchemaAgent(ChatAgent):
+        def _function_args(self) -> tuple[
+            Optional[List[LLMFunctionSpec]],
+            str | dict[str, str],
+            Optional[list[OpenAIToolSpec]],
+            Optional[dict[str, dict[str, str] | str]],
+            Optional[OpenAIJsonSchemaSpec],
+        ]:
+            functions, fun_call, tools, force_tool, output_format = (
+                super()._function_args()
+            )
+
+            # remove schema edits for strict
+            if tools is not None:
+                for t in tools:
+                    name = t.function.name
+                    t.function.parameters = int_schema(name)
+
+            if self.output_format is not None and self._json_schema_available():
+                output_format = OpenAIJsonSchemaSpec(
+                    strict=True,
+                    function=LLMFunctionSpec(
+                        name="json_output",
+                        description="Strict Json output format.",
+                        parameters=int_schema("json_output"),
+                    ),
+                )
+
+            return functions, fun_call, tools, force_tool, output_format
+
+    agent = WrongSchemaAgent(
+        ChatAgentConfig(
+            use_functions_api=use_fn_api,
+            use_tools_api=use_tools_api,
+            use_tools=not use_fn_api,
+            llm=OpenAIGPTConfig(
+                parallel_tool_calls=parallel_tool_calls,
+            ),
+        )
+    )
+
+    class IntTool(ToolMessage):
+        request: str = "int_tool"
+        purpose: str = "To return an integer value"
+        x: int
+
+        def handle(self):
+            return self.x
+
+    class StrTool(ToolMessage):
+        request: str = "str_tool"
+        purpose: str = "To return an string value"
+        text: str
+
+        def handle(self):
+            return self.text
+
+    agent.enable_message(IntTool)
+    agent.enable_message(StrTool)
+    strict_openai_tools = use_fn_api and use_tools_api and not parallel_tool_calls
+    response = agent.llm_response_forget(
+        """
+        What is the smallest integer greater than pi? Use the
+        `int_tool` tool/function.
+        """
+    )
+    agent.handle_message(response)
+    assert "int_tool" not in agent.disable_strict_tools_set
+
+    response = agent.llm_response_forget(
+        """
+        Who is the president of France? Use the `str_tool` tool/function.
+        """
+    )
+    print(agent.handle_message(response))
+    assert ("str_tool" in agent.disable_strict_tools_set) == strict_openai_tools
+
+    strict_agent = agent[IntTool]
+    strict_agent.llm_response_forget("What is the smallest integer greater than pi?")
+    assert not strict_agent.disable_strict
+
+    strict_agent = agent[StrTool]
+    response = strict_agent.llm_response_forget("Who is the president of France?")
+    assert strict_agent.disable_strict

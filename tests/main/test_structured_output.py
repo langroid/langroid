@@ -1,4 +1,4 @@
-from typing import Any, List
+from typing import Any, Callable, List
 
 import pytest
 
@@ -162,9 +162,10 @@ def test_llm_strict_json(
     def valid_typed_response(
         prompt: str,
         output_type: type,
+        test: Callable[[Any], bool] = lambda _: True,
     ) -> bool:
         response = typed_llm_response(prompt, output_type)
-        return isinstance(response, output_type)
+        return isinstance(response, output_type) and test(response)
 
     president_prompt = "Show me an example of a President of France"
     presidents_prompt = "Show me an example of two Presidents"
@@ -173,9 +174,21 @@ def test_llm_strict_json(
     # The model always returns the correct type, even without instructions to do so
     assert valid_typed_response(president_prompt, President)
     assert valid_typed_response(president_prompt, PresidentTool)
-    assert valid_typed_response(president_prompt, PresidentListTool)
-    assert valid_typed_response(presidents_prompt, PresidentList)
-    assert valid_typed_response(presidents_prompt, PresidentListTool)
+    assert valid_typed_response(
+        president_prompt,
+        PresidentListTool,
+        lambda output: len(output.my_presidents.presidents) == 1,
+    )
+    assert valid_typed_response(
+        presidents_prompt,
+        PresidentList,
+        lambda output: len(output.presidents) == 2,
+    )
+    assert valid_typed_response(
+        presidents_prompt,
+        PresidentListTool,
+        lambda output: len(output.my_presidents.presidents) == 2,
+    )
     assert valid_typed_response(country_prompt, Country)
 
     # The model returns the correct type, even when the request is mismatched
