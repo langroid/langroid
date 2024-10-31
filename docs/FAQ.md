@@ -123,6 +123,10 @@ and load it (if it exists) at the start of your script.
 
 See the example script [`chat-persist.py`](https://github.com/langroid/langroid/blob/main/examples/basic/chat-persist.py)
 
+For more complex persistence, you can take advantage of the `GlobalState`,
+where you can store message histories of multiple agents indexed by their name.
+Simple examples of `GlobalState` are in the [`chat-tree.py`](https://github.com/langroid/langroid/blob/main/examples/basic/chat-tree.py) example, 
+and the [`test_global_state.py`](https://github.com/langroid/langroid/blob/main/tests/main/test_global_state.py) test.
 
 ## How can I suppress LLM output?
 
