@@ -1,7 +1,7 @@
 import atexit
 import os
 from functools import cached_property
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Union
 
 import tiktoken
 from dotenv import load_dotenv
@@ -30,13 +30,13 @@ class AzureOpenAIEmbeddingsConfig(EmbeddingModelsConfig):
     model_name: str = "text-embedding-ada-002"
     api_key: str = ""
     azure_endpoint: str = ""
-    azure_deployment: Optional[str] = (None,)
+    azure_deployment: Optional[str] = None
     # api_version defaulted to 2024-06-01 as per https://learn.microsoft.com/en-us/azure/ai-services/openai/how-to/embeddings?tabs=python-new
     # change this to required  supported version
     api_version: Optional[str] = "2024-06-01"
     # TODO: Add auth support for Azure OpenAI via AzureADTokenProvider
-    azure_ad_token: Optional[str] = (None,)
-    azure_ad_token_provider: Optional[AzureADTokenProvider] = (None,)
+    azure_ad_token: Optional[str] = None
+    azure_ad_token_provider: Optional[AzureADTokenProvider] = None
     dims: int = 1536
     context_length: int = 8192
 
@@ -83,13 +83,15 @@ class EmbeddingFunctionCallable:
     """
 
     def __init__(
-        self, model: "OpenAIEmbeddings" | "AzureOpenAIEmbeddings", batch_size: int = 512
+        self,
+        model: Union["OpenAIEmbeddings", "AzureOpenAIEmbeddings"],
+        batch_size: int = 512,
     ):
         """
         Initialize the EmbeddingFunctionCallable with a specific model.
 
         Args:
-            model ( OpenAIEmbeddings | AzureOpenAIEmbeddings): An instance of
+            model ( OpenAIEmbeddings or AzureOpenAIEmbeddings): An instance of
                             OpenAIEmbeddings or AzureOpenAIEmbeddings to use for
                             generating embeddings.
             batch_size (int): Batch size
