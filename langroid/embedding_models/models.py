@@ -5,12 +5,14 @@ from typing import Any, Callable, Dict, List, Optional
 
 import tiktoken
 from dotenv import load_dotenv
-from openai import OpenAI
+from openai import AzureOpenAI, OpenAI
 
 from langroid.embedding_models.base import EmbeddingModel, EmbeddingModelsConfig
 from langroid.exceptions import LangroidImportError
 from langroid.mytypes import Embeddings
 from langroid.parsing.utils import batched
+
+AzureADTokenProvider = Callable[[], str]
 
 
 class OpenAIEmbeddingsConfig(EmbeddingModelsConfig):
@@ -19,6 +21,22 @@ class OpenAIEmbeddingsConfig(EmbeddingModelsConfig):
     api_key: str = ""
     api_base: Optional[str] = None
     organization: str = ""
+    dims: int = 1536
+    context_length: int = 8192
+
+
+class AzureOpenAIEmbeddingsConfig(EmbeddingModelsConfig):
+    model_type: str = "azure-openai"
+    model_name: str = "text-embedding-ada-002"
+    api_key: str = ""
+    azure_endpoint: str = ""
+    azure_deployment: Optional[str] = (None,)
+    # api_version defaulted to 2024-06-01 as per https://learn.microsoft.com/en-us/azure/ai-services/openai/how-to/embeddings?tabs=python-new
+    # change this to required  supported version
+    api_version: Optional[str] = "2024-06-01"
+    # TODO: Add auth support for Azure OpenAI via AzureADTokenProvider
+    azure_ad_token: Optional[str] = (None,)
+    azure_ad_token_provider: Optional[AzureADTokenProvider] = (None,)
     dims: int = 1536
     context_length: int = 8192
 
@@ -51,10 +69,12 @@ class FastEmbedEmbeddingsConfig(EmbeddingModelsConfig):
 class EmbeddingFunctionCallable:
     """
     A callable class designed to generate embeddings for a list of texts using
-    the OpenAI API, with automatic retries on failure.
+    the OpenAI or Azure OpenAI API, with automatic retries on failure.
 
     Attributes:
-        model (OpenAIEmbeddings): An instance of OpenAIEmbeddings that provides
+        model (OpenAIEmbeddings | AzureOpenAIEmbeddings):
+                                An instance of OpenAIEmbeddings
+                                or AzureOpenAIEmbeddings that provides
                                 configuration and utilities for generating embeddings.
 
     Methods:
@@ -62,13 +82,16 @@ class EmbeddingFunctionCallable:
                                 a list of input texts.
     """
 
-    def __init__(self, model: "OpenAIEmbeddings", batch_size: int = 512):
+    def __init__(
+        self, model: "OpenAIEmbeddings" | "AzureOpenAIEmbeddings", batch_size: int = 512
+    ):
         """
         Initialize the EmbeddingFunctionCallable with a specific model.
 
         Args:
-            model (OpenAIEmbeddings): An instance of OpenAIEmbeddings to use for
-            generating embeddings.
+            model ( OpenAIEmbeddings | AzureOpenAIEmbeddings): An instance of
+                            OpenAIEmbeddings or AzureOpenAIEmbeddings to use for
+                            generating embeddings.
             batch_size (int): Batch size
         """
         self.model = model
@@ -94,9 +117,14 @@ class EmbeddingFunctionCallable:
         tokenized_texts = self.model.truncate_texts(input)
         embeds = []
         for batch in batched(tokenized_texts, self.batch_size):
-            result = self.model.client.embeddings.create(
-                input=batch, model=self.model.config.model_name
-            )
+            if isinstance(self.model, AzureOpenAIEmbeddings or OpenAIEmbeddings):
+                result = self.model.client.embeddings.create(
+                    input=batch, model=self.model.config.model_name
+                )
+            else:
+                raise ValueError(
+                    "Unsupported model type. Got: {}".format(type(self.model))
+                )
             batch_embeds = [d.embedding for d in result.data]
             embeds.extend(batch_embeds)
         return embeds
@@ -132,6 +160,68 @@ class OpenAIEmbeddings(EmbeddingModel):
         ]
 
     def embedding_fn(self) -> Callable[[List[str]], Embeddings]:
+        return EmbeddingFunctionCallable(self, self.config.batch_size)
+
+    @property
+    def embedding_dims(self) -> int:
+        return self.config.dims
+
+
+class AzureOpenAIEmbeddings(EmbeddingModel):
+    """
+    Azure OpenAI embeddings model implementation.
+    """
+
+    def __init__(
+        self, config: AzureOpenAIEmbeddingsConfig = AzureOpenAIEmbeddingsConfig()
+    ):
+        """
+        Initializes Azure OpenAI embeddings model.
+
+        Args:
+            config: Configuration for Azure OpenAI embeddings model.
+        Raises:
+            ValueError: If required Azure config values are not set.
+        """
+        super().__init__()
+        self.config = config
+        load_dotenv()
+
+        self.config.api_key = os.getenv("AZURE_OPENAI_API_KEY", "")
+        if self.config.api_key == "":
+            raise ValueError("""AZURE_OPENAI_API_KEY env variable must be set to use 
+            AzureOpenAIEmbeddings. Please set the AZURE_OPENAI_API_KEY value 
+            in your .env file.""")
+        self.config.azure_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT", "")
+        if self.config.azure_endpoint == "":
+            raise ValueError("""AZURE_OPENAI_ENDPOINT env variable must be set to use 
+            AzureOpenAIEmbeddings. Please set the AZURE_OPENAI_ENDPOINT value 
+            in your .env file.""")
+        self.client = AzureOpenAI(
+            api_key=self.config.api_key,
+            api_version=self.config.api_version,
+            azure_endpoint=self.config.azure_endpoint,
+        )
+        self.tokenizer = tiktoken.encoding_for_model(self.config.model_name)
+
+    def truncate_texts(self, texts: List[str]) -> List[List[int]]:
+        """
+        Truncate texts to the embedding model's context length.
+        TODO: Maybe we should show warning, and consider doing T5 summarization?
+        """
+        return [
+            self.tokenizer.encode(text, disallowed_special=())[
+                : self.config.context_length
+            ]
+            for text in texts
+        ]
+
+    def embedding_fn(self) -> Callable[[List[str]], Embeddings]:
+        """Get the embedding function for Azure OpenAI.
+
+        Returns:
+            Callable that generates embeddings for input texts.
+        """
         return EmbeddingFunctionCallable(self, self.config.batch_size)
 
     @property
@@ -243,12 +333,15 @@ class FastEmbedEmbeddings(EmbeddingModel):
 def embedding_model(embedding_fn_type: str = "openai") -> EmbeddingModel:
     """
     Args:
-        embedding_fn_type: "openai" or "sentencetransformer" # others soon
+        embedding_fn_type: Type of embedding model to use. Options are "openai",
+        "azure-openai", "sentencetransformer", or "fastembed". # more to be added soon
     Returns:
-        EmbeddingModel
+        EmbeddingModel: The corresponding embedding model class.
     """
     if embedding_fn_type == "openai":
         return OpenAIEmbeddings  # type: ignore
+    elif embedding_fn_type == "azure-openai":
+        return AzureOpenAIEmbeddings  # type: ignore
     elif embedding_fn_type == "fastembed":
         return FastEmbedEmbeddings  # type: ignore
     else:  # default sentence transformer
