@@ -148,7 +148,7 @@ fastembed = ["fastembed"]
 black = {extras = ["jupyter"], version = "^24.3.0"}
 flake8 = "^6.0.0"
 mypy = "^1.11.2"
-ruff = "^0.2.2"
+ruff = "^0.7.2"
 pre-commit = "^3.3.2"
 autopep8 = "^2.0.2"
 
