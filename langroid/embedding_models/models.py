@@ -119,7 +119,9 @@ class EmbeddingFunctionCallable:
         tokenized_texts = self.model.truncate_texts(input)
         embeds = []
         for batch in batched(tokenized_texts, self.batch_size):
-            if isinstance(self.model, AzureOpenAIEmbeddings or OpenAIEmbeddings):
+            if isinstance(self.model, AzureOpenAIEmbeddings) or isinstance(
+                self.model, OpenAIEmbeddings
+            ):
                 result = self.model.client.embeddings.create(
                     input=batch, model=self.model.config.model_name
                 )
