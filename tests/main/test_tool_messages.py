@@ -1563,12 +1563,11 @@ def test_strict_schema_mismatch(
     agent.handle_message(response)
     assert "int_tool" not in agent.disable_strict_tools_set
 
-    response = agent.llm_response_forget(
+    agent.llm_response_forget(
         """
         Who is the president of France? Use the `str_tool` tool/function.
         """
     )
-    print(agent.handle_message(response))
     assert ("str_tool" in agent.disable_strict_tools_set) == strict_openai_tools
 
     strict_agent = agent[IntTool]
@@ -1576,5 +1575,5 @@ def test_strict_schema_mismatch(
     assert not strict_agent.disable_strict
 
     strict_agent = agent[StrTool]
-    response = strict_agent.llm_response_forget("Who is the president of France?")
+    strict_agent.llm_response_forget("Who is the president of France?")
     assert strict_agent.disable_strict

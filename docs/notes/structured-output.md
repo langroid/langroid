@@ -4,14 +4,14 @@ Available in Langroid since v0.20.0.
 
 On supported LLMs, including recent OpenAI LLMs (GPT-4o and GPT-4o mini) and local LLMs served by compatible inference servers,
 in particular, [vLLM](https://github.com/vllm-project/vllm) and [llama.cpp](https://github.com/ggerganov/llama.cpp), the decoding process can be constrained to ensure that the model's output adheres to a provided schema, 
-improving the reliability of tool call generation and, in general, ensures that the output can be reliably parsed and processed by downstream applications.
+improving the reliability of tool call generation and, in general, ensuring that the output can be reliably parsed and processed by downstream applications.
 
 Given a `ChatAgent` `agent` and a type `type`, we can define a strict copy of the agent as follows:
 ```python
 strict_agent = agent[type]
 ```
 
-We can use this to allow reliable extraction of typed values from an LLM with minimal prompting.
+We can use this to allow reliable extraction of typed values from an LLM with minimal prompting. For example, to generate typed values given `agent`'s current context, we can define the following:
 
 ```python
 def typed_llm_response(
@@ -22,7 +22,7 @@ def typed_llm_response(
     return agent.from_ChatDocument(response, output_type)
 ```
 
-For example, [test_structured_output.py](https://github.com/langroid/langroid/blob/main/tests/main/test_structured_output.py), we define types which describe
+We apply this in [test_structured_output.py](https://github.com/langroid/langroid/blob/main/tests/main/test_structured_output.py), in which we define types which describe
 countries and their presidents:
 ```python
 class Country(BaseModel):
