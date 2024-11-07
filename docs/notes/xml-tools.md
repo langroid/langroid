@@ -55,6 +55,9 @@ See also the [`WriteFileTool`][langroid.agent.tools.file_tools.WriteFileTool] fo
 concrete example of a tool derived from `XMLToolMessage`. This tool enables an 
 LLM to write content (code or text) to a file.
 
-
+If you are using an existing Langroid `ToolMessage`, e.g. `SendTool`, you can
+define your own subclass of `SendTool`, say `XMLSendTool`, 
+inheriting from both `SendTool` and `XMLToolMessage`; see this
+[example](https://github.com/langroid/langroid/blob/main/examples/basic/xml_tool.py)
 
 

@@ -1285,8 +1285,22 @@ class Task:
             # reset stuck counter since we made progress
             self.n_stalled_steps = 0
 
-        # update counters for infinite loop detection
         if self.pending_message is not None:
+            if (
+                self._is_done_response(result, r)
+                and self._level == 0
+                and self.only_user_quits_root
+                and self._user_can_respond()
+            ):
+                # We're ignoring the DoneTools (if any) in this case,
+                # so remove them from the pending msg, to ensure
+                # they don't affect the next step.
+                self.pending_message.tool_messages = [
+                    t
+                    for t in self.pending_message.tool_messages
+                    if not isinstance(t, (DoneTool, AgentDoneTool))
+                ]
+            # update counters for infinite loop detection
             hashed_msg = hash(str(self.pending_message))
             self.message_counter.update([hashed_msg])
             self.history.append(hashed_msg)
@@ -1579,6 +1593,7 @@ class Task:
                 content = to_string(t.content)
                 content_any = t.content
                 if isinstance(t, AgentDoneTool):
+                    # AgentDoneTool may have tools, unlike DoneTool
                     tool_messages = t.tools
                 break
         # drop the "Done" tools since they should not be part of the task result,

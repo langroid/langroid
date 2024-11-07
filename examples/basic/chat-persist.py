@@ -1,5 +1,5 @@
 """
-Variant of chat.py, showing how you can save conversation state, end the script
+Variant of chat.py, showing how you can save conversation state, end the script, and
 resume the conversation later by re-running the script.
 
 The most basic chatbot example, using the default settings.
