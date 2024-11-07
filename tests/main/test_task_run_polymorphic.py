@@ -187,9 +187,12 @@ def test_task_in_out_types(
         result = task[int].run(msg)
         assert result == 6
 
-        # check handling of invalid return type: receive None
+        # check handling of invalid return type:
+        # receive None when strict recovery is disabled
+        agent.disable_strict = True
         result = task[Pair].run(msg)
         assert result is None
+        agent.disable_strict = False
 
         # check we can return a Pydantic model
         result = task[DetailedAnswer].run(msg)
