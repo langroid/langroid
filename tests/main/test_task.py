@@ -792,7 +792,8 @@ def test_task_output_format_sequence(
 ):
     """
     Test that `Task`s correctly execute a sequence of steps
-    controlled by the agent's `output_format`.
+    controlled by the agent's `output_format`, and that `output_format`
+    is handled by default without `enable_message`.
     """
 
     set_global(test_settings)
@@ -817,9 +818,6 @@ def test_task_output_format_sequence(
     class CompositionAgent(ChatAgent):
         def __init__(self, config: ChatAgentConfig = ChatAgentConfig()):
             super().__init__(config)
-            self.enable_message(MultiplyTool)
-            self.enable_message(IncrementTool)
-            self.enable_message(PowerTool)
             self.set_output_format(MultiplyTool)
 
         def multiply(self, message: MultiplyTool) -> str:
@@ -879,7 +877,8 @@ async def test_task_output_format_sequence_async(
 ):
     """
     Test that async `Task`s correctly execute a sequence of steps
-    controlled by the agent's `output_format`.
+    controlled by the agent's `output_format`, and that `output_format`
+    is handled by default without `enable_message`.
     """
 
     set_global(test_settings)
@@ -904,9 +903,6 @@ async def test_task_output_format_sequence_async(
     class CompositionAgent(ChatAgent):
         def __init__(self, config: ChatAgentConfig = ChatAgentConfig()):
             super().__init__(config)
-            self.enable_message(MultiplyTool)
-            self.enable_message(IncrementTool)
-            self.enable_message(PowerTool)
             self.set_output_format(MultiplyTool)
 
         def multiply(self, message: MultiplyTool) -> str:
