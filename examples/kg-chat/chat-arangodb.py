@@ -69,15 +69,15 @@ def main(
 
     url = Prompt.ask(
         "ArangoDB URL",
-        default="",
+        default="https://db.catalog.igvf.org",
     )
     username = Prompt.ask(
         "ArangoDB username ",
-        default="root",
+        default="guest",
     )
     db = Prompt.ask(
         "ArangoDB database ",
-        default="test_db",
+        default="igvf",
     )
     pw = Prompt.ask(
         "ArangoDB password ",
