@@ -21,7 +21,7 @@ def setup_arango():
         ],
         check=True,
     )
-    time.sleep(10)  # Wait for ArangoDB to start
+    time.sleep(10)
     yield
     # Cleanup
     subprocess.run(

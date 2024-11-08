@@ -15,20 +15,17 @@ from langroid.agent.special.neo4j.tools import GraphSchemaTool
 
 
 def wait_for_neo4j(max_attempts=30, delay=1):
-    """Try to connect to Neo4j until it's ready"""
     driver = None
     for attempt in range(max_attempts):
         try:
             driver = GraphDatabase.driver(
                 "neo4j://localhost:7687", auth=("neo4j", "password")
             )
-            # Verify connection works
             with driver.session() as session:
                 session.run("RETURN 1")
             print(f"Neo4j ready after {attempt + 1} attempts")
             return True
         except Exception:
-            print(f"Waiting for Neo4j... ({attempt + 1}/{max_attempts})")
             time.sleep(delay)
         finally:
             if driver:

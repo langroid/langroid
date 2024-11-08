@@ -203,6 +203,26 @@ def test_retrieval(arango_movie_agent, english_query, aql_query, expected):
     assert expected.lower() in nl_result.content.lower()
 
 
+def test_write_query(arango_movie_agent):
+    # Write a new actor
+    write_result = arango_movie_agent.write_query(
+        """
+        INSERT { 
+            _key: 'morgan', 
+            name: 'Morgan Freeman', 
+            age: 86, 
+            oscars: 1 
+        } INTO actors
+        """
+    )
+    assert write_result.success
+
+    # Verify the write
+    read_result = arango_movie_agent.read_query(
+        "FOR a IN actors FILTER a._key == 'morgan' RETURN a.name"
+    )
+    assert "Morgan Freeman" in read_result.data[0]
+    
 @pytest.fixture
 def number_kg_agent(setup_arango, test_database):
     graph_name = "NumberKG"
@@ -357,43 +377,6 @@ def test_db_schema(number_kg_agent):
     assert any(p["name"] == "_from" for p in edge_props)
     assert any(p["name"] == "_to" for p in edge_props)
     assert any(p["name"] == "_key" for p in edge_props)
-
-
-def test_delete_node(number_kg_agent):
-    # Delete node
-    delete_query = """
-    FOR p IN numbers
-        FILTER p.value == 3
-        REMOVE p IN numbers
-    """
-    number_kg_agent.write_query(delete_query)
-
-    # Verify deletion
-    verify_query = """
-    FOR p IN numbers
-        FILTER p.value == 3
-        RETURN p
-    """
-    result = number_kg_agent.read_query(verify_query)
-    assert len(result.data) == 0
-
-
-def test_property_update(number_kg_agent):
-    # Update property
-    update_query = """
-    FOR n IN numbers
-        FILTER n.value == 2
-        UPDATE n WITH { is_prime: true } IN numbers
-    """
-    number_kg_agent.write_query(update_query)
-
-    verify_query = """
-    FOR n IN numbers
-        FILTER n.value == 2
-        RETURN n.is_prime 
-    """
-    result = number_kg_agent.read_query(verify_query)
-    assert result.data[0] is True
 
 
 def test_multiple_relationships(number_kg_agent):

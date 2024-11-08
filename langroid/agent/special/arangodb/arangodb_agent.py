@@ -26,7 +26,6 @@ from langroid.agent.special.arangodb.tools import (
     aql_retrieval_tool_name,
     arango_schema_tool_name,
 )
-from langroid.agent.special.arangodb.utils import with_retry
 from langroid.agent.tools.orchestration import DoneTool, ForwardTool
 from langroid.exceptions import LangroidImportError
 from langroid.mytypes import Entity
@@ -266,7 +265,7 @@ class ArangoChatAgent(ChatAgent):
                 return QueryResult(success=False, data=error_message)
 
         try:
-            return with_retry(execute_write)  # type: ignore
+            return self.with_retry(execute_write)  # type: ignore
         except Exception as e:
             return QueryResult(
                 success=False, data=f"Failed after max retries: {str(e)}"
