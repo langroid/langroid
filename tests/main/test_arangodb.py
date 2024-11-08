@@ -5,34 +5,44 @@ import time
 import pytest
 from arango import ArangoClient
 
+COMPOSE_FILE = os.path.join(os.path.dirname(__file__), "docker-compose-arango.yml")
 
-@pytest.fixture(scope="session", autouse=True)
-def setup_arango():
-    test_dir = os.path.dirname(os.path.abspath(__file__))
-    compose_file = os.path.join(test_dir, "docker-compose-arango.yml")
+
+def docker_setup_arango():
     # Start container using docker-compose
     subprocess.run(
         [
             "docker-compose",
             "-f",
-            compose_file,
+            COMPOSE_FILE,
             "up",
             "-d",
         ],
         check=True,
     )
-    time.sleep(10)
-    yield
+
+
+def docker_teardown_arango():
     # Cleanup
     subprocess.run(
         [
             "docker-compose",
             "-f",
-            compose_file,
+            COMPOSE_FILE,
             "down",
         ],
         check=True,
     )
+
+
+@pytest.fixture(scope="session", autouse=True)
+def setup_arango():
+    if not os.getenv("CI"):
+        docker_setup_arango()
+    time.sleep(10)
+    yield
+    if not os.getenv("CI"):
+        docker_teardown_arango()
 
 
 @pytest.fixture

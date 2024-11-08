@@ -33,26 +33,35 @@ def wait_for_arango(max_attempts=30, delay=1):
     raise TimeoutError("ArangoDB failed to start")
 
 
+COMPOSE_FILE = os.path.join(os.path.dirname(__file__), "docker-compose-arango.yml")
+
+
+def docker_setup_arango():
+    subprocess.run(
+        ["docker-compose", "-f", COMPOSE_FILE, "down", "--remove-orphans"],
+        check=True,
+    )
+    subprocess.run(
+        ["docker-compose", "-f", COMPOSE_FILE, "up", "-d"],
+        check=True,
+    )
+
+
+def docker_teardown_arango():
+    subprocess.run(
+        ["docker-compose", "-f", COMPOSE_FILE, "down"],
+        check=True,
+    )
+
+
 @pytest.fixture(scope="session", autouse=True)
 def setup_arango():
-    test_dir = os.path.dirname(os.path.abspath(__file__))
-    compose_file = os.path.join(test_dir, "docker-compose-arango.yml")
-    subprocess.run(
-        ["docker-compose", "-f", compose_file, "down", "--remove-orphans"],
-        check=True,
-    )
-    subprocess.run(
-        ["docker-compose", "-f", compose_file, "up", "-d"],
-        check=True,
-    )
-
+    if not os.getenv("CI"):
+        docker_setup_arango()
     wait_for_arango()
-
     yield
-    subprocess.run(
-        ["docker-compose", "-f", compose_file, "down"],
-        check=True,
-    )
+    if not os.getenv("CI"):
+        docker_teardown_arango()
 
 
 @pytest.fixture

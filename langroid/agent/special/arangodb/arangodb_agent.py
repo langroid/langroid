@@ -446,6 +446,11 @@ class ArangoChatAgent(ChatAgent):
         done_tool_name = DoneTool.default_value("request")
         forward_tool_name = ForwardTool.default_value("request")
         aql_retrieval_tool_instructions = AQLRetrievalTool.instructions()
+        tools_instruction = f"""
+          For example you may want to use the TOOL
+          `{aql_retrieval_tool_name}`  according to these instructions:
+           {aql_retrieval_tool_instructions}
+        """
         if isinstance(msg, ChatDocument) and msg.metadata.sender == Entity.LLM:
             if self.interactive:
                 return ForwardTool(agent="User")
@@ -460,9 +465,7 @@ class ArangoChatAgent(ChatAgent):
                     - OR, you FORGOT to use an Appropriate TOOL,
                       in which case you should use the available tools to
                       make progress on the user's query/request.
-                      For example you may want to use the TOOL
-                      `{aql_retrieval_tool_name}`  according to these instructions:
-                        {aql_retrieval_tool_instructions}
+                      {tools_instruction}
                     """
                 return f"""
                 The intent of your response is not clear:
@@ -471,6 +474,7 @@ class ArangoChatAgent(ChatAgent):
                     with the `content` set to the answer or result.
                 - otherwise, use one of the available tools to make progress 
                     to arrive at the final answer.
+                    {tools_instruction}
                 """
         return None
 

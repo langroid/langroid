@@ -33,11 +33,10 @@ def wait_for_neo4j(max_attempts=30, delay=1):
     raise TimeoutError("Neo4j failed to start")
 
 
-@pytest.fixture(scope="session", autouse=True)
-def setup_neo4j():
-    test_dir = os.path.dirname(os.path.abspath(__file__))
-    compose_file = os.path.join(test_dir, "docker-compose-neo4j.yml")
+COMPOSE_FILE = os.path.join(os.path.dirname(__file__), "docker-compose-neo4j.yml")
 
+
+def docker_setup_neo4j():
     # More aggressive cleanup
     try:
         # Stop and remove any existing neo4j container
@@ -55,7 +54,7 @@ def setup_neo4j():
             [
                 "docker-compose",
                 "-f",
-                compose_file,
+                COMPOSE_FILE,
                 "down",
                 "--volumes",
                 "--remove-orphans",
@@ -67,21 +66,19 @@ def setup_neo4j():
 
     # Start fresh container
     subprocess.run(
-        ["docker-compose", "-f", compose_file, "up", "-d"],
+        ["docker-compose", "-f", COMPOSE_FILE, "up", "-d"],
         check=True,
     )
 
-    wait_for_neo4j()
 
-    yield
-
+def docker_teardown_neo4j():
     # Cleanup after tests
     try:
         subprocess.run(
             [
                 "docker-compose",
                 "-f",
-                compose_file,
+                COMPOSE_FILE,
                 "down",
                 "--volumes",
                 "--remove-orphans",
@@ -93,6 +90,16 @@ def setup_neo4j():
         )
     except Exception as e:
         print(f"Cleanup error (non-fatal): {e}")
+
+
+@pytest.fixture(scope="session", autouse=True)
+def setup_neo4j():
+    if not os.getenv("CI"):
+        docker_setup_neo4j()
+    wait_for_neo4j()
+    yield
+    if not os.getenv("CI"):
+        docker_teardown_neo4j()
 
 
 @pytest.fixture
