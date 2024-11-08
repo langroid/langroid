@@ -90,8 +90,8 @@ python-magic = "^0.4.27"
 json-repair = "^0.29.9"
 cerebras-cloud-sdk = "^1.1.0"
 gitpython = "^3.1.43"
-python-arango = "^8.1.2"
-arango-datasets = "^1.2.2"
+python-arango = {version="^8.1.2", optional=true}
+arango-datasets = {version="^1.2.2", optional=true}
 adb-cloud-connector = "^1.0.2"
 
 
@@ -116,6 +116,7 @@ all = [
 #    "lancedb", "tantivy", "pyarrow",
     "chromadb",
     "metaphor-python", "neo4j",
+    "python-arango", "arango-datasets",
     "litellm",
     "chainlit", "python-socketio",
     "fastembed"

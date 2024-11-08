@@ -187,7 +187,7 @@ files = [
 name = "arango-datasets"
 version = "1.2.2"
 description = "Package for fetching and loading datasets for ArangoDB deployments."
-optional = false
+optional = true
 python-versions = ">=3.8"
 files = [
     {file = "arango_datasets-1.2.2-py3-none-any.whl", hash = "sha256:e52b2e520f6b9b24288d5a693c39b17b942eb89a77f30815ea0a13761bccc7ae"},
@@ -2635,7 +2635,7 @@ files = [
 name = "importlib-metadata"
 version = "7.1.0"
 description = "Read metadata from Python packages"
-optional = false
+optional = true
 python-versions = ">=3.8"
 files = [
     {file = "importlib_metadata-7.1.0-py3-none-any.whl", hash = "sha256:30962b96c0c223483ed6cc7280e7f0199feb01a0e40cfae4d4450fc6fab1f570"},
@@ -6673,7 +6673,7 @@ testing = ["filelock"]
 name = "python-arango"
 version = "8.1.2"
 description = "Python Driver for ArangoDB"
-optional = false
+optional = true
 python-versions = ">=3.8"
 files = [
     {file = "python_arango-8.1.2-py3-none-any.whl", hash = "sha256:2b9f604b0f4eaf5209893cdb7a2f96448aa27d540300939b0a854ded75c031cb"},
@@ -7388,7 +7388,7 @@ rsa = ["oauthlib[signedtoken] (>=3.0.0)"]
 name = "requests-toolbelt"
 version = "1.0.0"
 description = "A utility belt for advanced users of python-requests"
-optional = false
+optional = true
 python-versions = ">=2.7, !=3.0.*, !=3.1.*, !=3.2.*, !=3.3.*"
 files = [
     {file = "requests-toolbelt-1.0.0.tar.gz", hash = "sha256:7681a0a3d047012b5bdc0ee37d7f8f07ebe76ab08caeccfc3921ce23c88d5bc6"},
@@ -9797,7 +9797,7 @@ multidict = ">=4.0"
 name = "zipp"
 version = "3.19.2"
 description = "Backport of pathlib-compatible object wrapper for zip files"
-optional = false
+optional = true
 python-versions = ">=3.8"
 files = [
     {file = "zipp-3.19.2-py3-none-any.whl", hash = "sha256:f091755f667055f2d02b32c53771a7a6c8b47e1fdbc4b72a8b9072b3eef8015c"},
@@ -9862,7 +9862,7 @@ test = ["coverage (>=5.0.3)", "zope.event", "zope.testing"]
 testing = ["coverage (>=5.0.3)", "zope.event", "zope.testing"]
 
 [extras]
-all = ["chainlit", "chromadb", "fastembed", "huggingface-hub", "litellm", "metaphor-python", "neo4j", "pdf2image", "pdfplumber", "psycopg2", "pymupdf", "pymysql", "pypdf", "pytesseract", "python-docx", "python-socketio", "sentence-transformers", "sqlalchemy", "torch", "transformers", "unstructured"]
+all = ["arango-datasets", "chainlit", "chromadb", "fastembed", "huggingface-hub", "litellm", "metaphor-python", "neo4j", "pdf2image", "pdfplumber", "psycopg2", "pymupdf", "pymysql", "pypdf", "pytesseract", "python-arango", "python-docx", "python-socketio", "sentence-transformers", "sqlalchemy", "torch", "transformers", "unstructured"]
 arango = ["arango-datasets", "python-arango"]
 chainlit = ["chainlit", "python-socketio"]
 chromadb = ["chromadb"]
@@ -9891,4 +9891,4 @@ vecdbs = ["chromadb", "lancedb", "pyarrow", "tantivy"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.10,<3.13"
-content-hash = "b0699e4dbf8beca558945d3a3bf169ac3f3a48dab15ff0419ea84cc40790e974"
+content-hash = "1876c5ba468e20477a40b8a8fdff0b24a069835a24708d81e95c8169946f1a86"
