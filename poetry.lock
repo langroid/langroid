@@ -9863,7 +9863,7 @@ testing = ["coverage (>=5.0.3)", "zope.event", "zope.testing"]
 
 [extras]
 all = ["chainlit", "chromadb", "fastembed", "huggingface-hub", "litellm", "metaphor-python", "neo4j", "pdf2image", "pdfplumber", "psycopg2", "pymupdf", "pymysql", "pypdf", "pytesseract", "python-docx", "python-socketio", "sentence-transformers", "sqlalchemy", "torch", "transformers", "unstructured"]
-arango = ["python-arango"]
+arango = ["arango-datasets", "python-arango"]
 chainlit = ["chainlit", "python-socketio"]
 chromadb = ["chromadb"]
 db = ["psycopg2", "pymysql", "sqlalchemy"]
@@ -9891,4 +9891,4 @@ vecdbs = ["chromadb", "lancedb", "pyarrow", "tantivy"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.10,<3.13"
-content-hash = "7420e4d1e14d4f6485a48375f3777fce6e74eb0ecdf06c9fe0189d4364e72e41"
+content-hash = "b0699e4dbf8beca558945d3a3bf169ac3f3a48dab15ff0419ea84cc40790e974"
