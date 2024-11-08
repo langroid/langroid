@@ -32,13 +32,6 @@ jobs:
         ports:
           - 7700:7700
         options: --env MEILI_MASTER_KEY=masterKey
-      neo4j:
-        image: neo4j:latest
-        ports:
-          - 7474:7474 # HTTP
-          - 7687:7687 # Bolt
-        env:
-          options: --env NEO4J_AUTH=neo4j/password
     env:
       CI: true # allows conditional skipping of tests based on this env var
       OPENAI_API_KEY: ${{ secrets.OPENAI_KEY }}

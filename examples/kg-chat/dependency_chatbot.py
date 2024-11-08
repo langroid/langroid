@@ -232,6 +232,7 @@ def main(
 
     dependency_agent = DependencyGraphAgent(
         config=Neo4jChatAgentConfig(
+            chat_mode=True,
             neo4j_settings=neo4j_settings,
             show_stats=False,
             use_tools=tools,

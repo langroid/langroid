@@ -191,6 +191,7 @@ def main(
             show_stats=False,
             context_descriptions=context_descriptions,  # Add context descriptions to the config
             use_schema_tools=schema_tools,
+            addressing_prefix=SEND_TO,
             llm=OpenAIGPTConfig(
                 chat_model=OpenAIChatModel.GPT4,
             ),
