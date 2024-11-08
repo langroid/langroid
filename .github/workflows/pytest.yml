@@ -32,6 +32,20 @@ jobs:
         ports:
           - 7700:7700
         options: --env MEILI_MASTER_KEY=masterKey
+      arangodb:
+        image: arangodb:latest
+        ports:
+          - 8529:8529
+        env:
+          ARANGO_ROOT_PASSWORD: rootpassword
+      neo4j:
+        image: neo4j:latest
+        ports:
+          - 7687:7687
+          - 7474:7474
+        env:
+          NEO4J_AUTH: neo4j/password
+
     env:
       CI: true # allows conditional skipping of tests based on this env var
       OPENAI_API_KEY: ${{ secrets.OPENAI_KEY }}
