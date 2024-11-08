@@ -1,4 +1,5 @@
 import datetime
+import json
 import logging
 import time
 from typing import Any, Callable, Dict, List, Optional, TypeVar, Union
@@ -354,9 +355,16 @@ class ArangoChatAgent(ChatAgent):
                 properties = []
                 example_doc = None
 
+                def simplify_doc(doc: Any) -> Any:
+                    if isinstance(doc, list) and len(doc) > 0:
+                        return [simplify_doc(doc[0])]
+                    if isinstance(doc, dict):
+                        return {k: simplify_doc(v) for k, v in doc.items()}
+                    return doc
+
                 for doc in self.db.aql.execute(sample_query):  # type: ignore
                     if example_doc is None:
-                        example_doc = doc
+                        example_doc = simplify_doc(doc)
                     for key, value in doc.items():
                         prop = {"name": key, "type": type(value).__name__}
                         if prop not in properties:
@@ -375,8 +383,11 @@ class ArangoChatAgent(ChatAgent):
                 "Graph Schema": graph_schema,
                 "Collection Schema": collection_schema,
             }
-
-            logger.warning(f"Schema retrieved: {schema}")
+            schema_str = json.dumps(schema, indent=2)
+            logger.warning(f"Schema retrieved:\n{schema_str}")
+            # save schema to file "logs/arangoo-schema.json"
+            with open("logs/arango-schema.json", "w") as f:
+                f.write(schema_str)
             self.config.kg_schema = schema  # type: ignore
             return schema
 
@@ -409,10 +420,11 @@ class ArangoChatAgent(ChatAgent):
                 ArangoSchemaTool,
                 AQLRetrievalTool,
                 AQLCreationTool,
-                DoneTool,
                 ForwardTool,
             ]
         )
+        if not self.config.chat_mode:
+            self.enable_message(DoneTool)
 
     def _format_message(self) -> str:
         if self.db is None:
@@ -433,6 +445,7 @@ class ArangoChatAgent(ChatAgent):
         """
         done_tool_name = DoneTool.default_value("request")
         forward_tool_name = ForwardTool.default_value("request")
+        aql_retrieval_tool_instructions = AQLRetrievalTool.instructions()
         if isinstance(msg, ChatDocument) and msg.metadata.sender == Entity.LLM:
             if self.interactive:
                 return ForwardTool(agent="User")
@@ -447,10 +460,13 @@ class ArangoChatAgent(ChatAgent):
                     - OR, you FORGOT to use an Appropriate TOOL,
                       in which case you should use the available tools to
                       make progress on the user's query/request.
+                      For example you may want to use the TOOL
+                      `{aql_retrieval_tool_name}`  according to these instructions:
+                        {aql_retrieval_tool_instructions}
                     """
                 return f"""
                 The intent of your response is not clear:
-                - if you intended this to be the final answer to the user's query,
+                - if you intended this to be the FINAL answer to the user's query,
                     then use the `{done_tool_name}` to indicate so,
                     with the `content` set to the answer or result.
                 - otherwise, use one of the available tools to make progress 

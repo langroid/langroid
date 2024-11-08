@@ -56,6 +56,14 @@ so you should try your best to answer based on existing collections and attribut
 DO NOT assume any collections or graphs other than those above.
 """
 
+tool_result_instruction = """
+REMEMBER:
+[1]  DO NOT FORGET TO USE ONE OF THE AVAILABLE TOOLS TO ANSWER THE USER'S QUERY!!
+[2] When using a TOOL/FUNCTION, you MUST WAIT for the tool result before continuing
+    with your response. DO NOT MAKE UP RESULTS FROM A TOOL!
+[3] YOU MUST NOT ANSWER queries from your OWN KNOWLEDGE; ALWAYS RELY ON 
+    the result of a TOOL/FUNCTION to compose your response.
+"""
 # sys msg to use when schema already provided initially,
 # so agent should not use schema tool
 SCHEMA_PROVIDED_SYS_MSG = f"""You are a data scientist and expert in Graph Databases, 
@@ -81,6 +89,7 @@ but you may use it if you need to remind yourself about the schema:
 
 - {arango_schema_tool_description}
 
+{tool_result_instruction}
 """
 
 # sys msg to use when schema is not initially provided,
@@ -97,6 +106,7 @@ You have access to the following tools:
 
 - {aql_creation_tool_description}
 
+{tool_result_instruction}
 """
 
 DEFAULT_ARANGO_CHAT_SYSTEM_MESSAGE = f"""
@@ -122,7 +132,8 @@ If you receive a null or other unexpected result,
     or try using CASE-INSENSITIVE MATCHES.
     
 Start by asking what the user needs help with.
-DO NOT FORGET TO USE ONE OF THE AVAILABLE TOOLS TO ANSWER THE USER'S QUERY!!
+
+{tool_result_instruction}
 """
 
 ADDRESSING_INSTRUCTION = """
@@ -132,9 +143,15 @@ user using {prefix}User. You MUST use the EXACT syntax {prefix} !!!
 In other words, you ALWAYS EITHER:
  - write an AQL query using one of the tools, 
  - OR address the user using {prefix}User.
+ 
+YOU CANNOT ADDRESS THE USER WHEN USING A TOOL!!
 """
 
 DONE_INSTRUCTION = f"""
-When you finally have the answer to a user's query or request, 
+When you are SURE you have the CORRECT answer to a user's query or request, 
 use the `{done_tool_name}` with `content` set to the answer or result.
+If you DO NOT think you have the answer to the user's query or request,
+you SHOULD NOT use the `{done_tool_name}` tool.
+Instead, you must CONTINUE to improve your queries (tools) to get the correct answer,
+and finally use the `{done_tool_name}` tool to send the correct answer to the user.
 """

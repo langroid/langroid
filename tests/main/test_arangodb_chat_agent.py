@@ -222,7 +222,8 @@ def test_write_query(arango_movie_agent):
         "FOR a IN actors FILTER a._key == 'morgan' RETURN a.name"
     )
     assert "Morgan Freeman" in read_result.data[0]
-    
+
+
 @pytest.fixture
 def number_kg_agent(setup_arango, test_database):
     graph_name = "NumberKG"
