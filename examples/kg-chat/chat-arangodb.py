@@ -45,6 +45,7 @@ logger = logging.getLogger(__name__)
 console = Console()
 app = typer.Typer()
 
+
 class MyArangoChatAgent(ArangoChatAgent):
     def user_response(
         self,
@@ -53,7 +54,7 @@ class MyArangoChatAgent(ArangoChatAgent):
         response = super().user_response(msg)
         if response.content == "r":
 
-            self.clear_history(1) # remove all msgs after system msg
+            self.clear_history(1)  # remove all msgs after system msg
             n_msgs = len(self.message_history)
             assert n_msgs == 1
             logger.warning("Reset Agent history, only system msg remains")
@@ -61,7 +62,6 @@ class MyArangoChatAgent(ArangoChatAgent):
             return super().user_response(msg)
 
         return response
-
 
 
 @app.command()
@@ -149,10 +149,10 @@ def main(
                 chat_model=model or lm.OpenAIChatModel.GPT4o,
                 chat_context_length=128_000,
             ),
-            human_prompt = (
+            human_prompt=(
                 "Human (respond, or x/q to quit, r to reset history, "
                 "or hit enter to continue)"
-            )
+            ),
         )
     )
 

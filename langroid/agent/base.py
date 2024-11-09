@@ -94,8 +94,10 @@ class AgentConfig(BaseSettings):
     respond_tools_only: bool = False  # respond only to tool messages (not plain text)?
     # allow multiple tool messages in a single response?
     allow_multiple_tools: bool = True
-    human_prompt: str = ("Human (respond or q, x to exit current level, "
-                         "or hit enter to continue)")
+    human_prompt: str = (
+        "Human (respond or q, x to exit current level, " "or hit enter to continue)"
+    )
+
     @validator("name")
     def check_name_alphanum(cls, v: str) -> str:
         if not re.match(r"^[a-zA-Z0-9_-]+$", v):
@@ -659,9 +661,9 @@ class Agent(ABC):
                 user_msg = self.callbacks.get_user_response(prompt="")
             else:
                 user_msg = Prompt.ask(
-                    f"[blue]{self.indent}" +
-                    self.config.human_prompt +
-                    f"\n{self.indent}"
+                    f"[blue]{self.indent}"
+                    + self.config.human_prompt
+                    + f"\n{self.indent}"
                 ).strip()
 
         tool_ids = []
