@@ -92,7 +92,7 @@ class ArangoChatAgentConfig(ChatAgentConfig):
     database_created: bool = False
     use_schema_tools: bool = True
     use_functions_api: bool = True
-    max_result_tokens: int = 500 # truncate long results to this many tokens
+    max_result_tokens: int = 1000  # truncate long results to this many tokens
     use_tools: bool = False
     schema_sample_pct: float = 0
     # whether the agent is used in a continuous chat with user,
@@ -310,10 +310,13 @@ class ArangoChatAgent(ChatAgent):
                 please retry with a more focused query.
                 """
             )
-            result = self.parser.truncate_tokens(
-                result,
-                self.config.max_result_tokens,
-            )
+            if self.parser is not None:
+                result = self.parser.truncate_tokens(
+                    result,
+                    self.config.max_result_tokens,
+                )
+            else:
+                result = result[: self.config.max_result_tokens * 4]  # truncate roughly
         return result
 
     def aql_creation_tool(self, msg: AQLCreationTool) -> str:
@@ -464,7 +467,7 @@ class ArangoChatAgent(ChatAgent):
         done_tool_name = DoneTool.default_value("request")
         forward_tool_name = ForwardTool.default_value("request")
         aql_retrieval_tool_instructions = AQLRetrievalTool.instructions()
-        #TODO the aql_retrieval_tool_instructions may be empty/minimal
+        # TODO the aql_retrieval_tool_instructions may be empty/minimal
         # when using self.config.use_functions_api = True.
         tools_instruction = f"""
           For example you may want to use the TOOL

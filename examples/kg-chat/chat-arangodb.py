@@ -11,6 +11,7 @@ python3 examples/kg-chat/chat-arangodb.py --model litellm/claude-3-5-sonnet-2024
 
 import typer
 import os
+from typing import Optional
 from dotenv import load_dotenv
 from rich import print
 from rich.console import Console
@@ -24,6 +25,7 @@ from langroid.agent.special.arangodb.arangodb_agent import (
     ArangoSettings,
 )
 from langroid.utils.constants import SEND_TO
+from langroid.agent.chat_document import ChatDocument
 from langroid.agent.task import Task
 from langroid.utils.configuration import Settings, set_global
 from adb_cloud_connector import get_temp_credentials
@@ -38,10 +40,28 @@ logging.basicConfig(
 )
 root_logger = logging.getLogger()
 root_logger.setLevel(logging.INFO)  # Add this
-
+logger = logging.getLogger(__name__)
 
 console = Console()
 app = typer.Typer()
+
+class MyArangoChatAgent(ArangoChatAgent):
+    def user_response(
+        self,
+        msg: Optional[str | ChatDocument] = None,
+    ) -> Optional[ChatDocument]:
+        response = super().user_response(msg)
+        if response.content == "r":
+
+            self.clear_history(1) # remove all msgs after system msg
+            n_msgs = len(self.message_history)
+            assert n_msgs == 1
+            logger.warning("Reset Agent history, only system msg remains")
+            # prompt user again
+            return super().user_response(msg)
+
+        return response
+
 
 
 @app.command()
@@ -117,7 +137,7 @@ def main(
             password=pw,
         )
 
-    arango_agent = ArangoChatAgent(
+    arango_agent = MyArangoChatAgent(
         ArangoChatAgentConfig(
             chat_mode=True,
             arango_settings=arango_settings,
@@ -129,6 +149,10 @@ def main(
                 chat_model=model or lm.OpenAIChatModel.GPT4o,
                 chat_context_length=128_000,
             ),
+            human_prompt = (
+                "Human (respond, or x/q to quit, r to reset history, "
+                "or hit enter to continue)"
+            )
         )
     )
 
