@@ -41,11 +41,11 @@ class DoneTool(ToolMessage):
     """Tool for Agent Entity (i.e. agent_response) or LLM entity (i.e. llm_response) to
     signal the current task is done, with some content as the result."""
 
-    purpose = """
+    purpose: str = """
     To signal the current task is done, along with an optional message <content>
     of arbitrary type (default None).
     """
-    request = "done_tool"
+    request: str = "done_tool"
     content: str = ""
 
     def response(self, agent: ChatAgent) -> ChatDocument:

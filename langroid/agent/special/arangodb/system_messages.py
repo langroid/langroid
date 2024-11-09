@@ -9,7 +9,7 @@ done_tool_name = DoneTool.default_value("request")
 
 arango_schema_tool_description = f"""
 `{arango_schema_tool_name}` tool/function-call to find the schema
-of the graph database, i.e. get all the collections
+of the graph database, or for some SPECIFIC collections, i.e. get information on 
 (document and edge), their attributes, and graph definitions available in your
 ArangoDB database. You MUST use this tool BEFORE attempting to use the
 `{aql_retrieval_tool_name}` tool/function-call, to ensure that you are using the
@@ -18,7 +18,8 @@ correct collection names and attributes in your `{aql_retrieval_tool_name}` tool
 
 aql_retrieval_tool_description = f"""
 `{aql_retrieval_tool_name}` tool/function-call to retrieve information from 
-  the database using AQL (ArangoDB Query Language) queries.
+  the database using AQL (ArangoDB Query Language) queries, to answer
+  the user's questions, OR for you to learn more about the SCHEMA of the database.
 """
 
 aql_creation_tool_description = f"""
@@ -63,6 +64,7 @@ REMEMBER:
     with your response. DO NOT MAKE UP RESULTS FROM A TOOL!
 [3] YOU MUST NOT ANSWER queries from your OWN KNOWLEDGE; ALWAYS RELY ON 
     the result of a TOOL/FUNCTION to compose your response.
+[4] Use ONLY ONE TOOL/FUNCTION at a TIME!
 """
 # sys msg to use when schema already provided initially,
 # so agent should not use schema tool
@@ -77,6 +79,7 @@ and their attribute keys available in your ArangoDB database.
 {{schema}}
 === END SCHEMA ===
 
+
 To help with the user's question or database update/creation request, 
 you have access to these tools:
 
@@ -84,10 +87,6 @@ you have access to these tools:
 
 - {aql_creation_tool_description}
 
-Since the schema has been provided, you may not need to use the tool below,
-but you may use it if you need to remind yourself about the schema:
-
-- {arango_schema_tool_description}
 
 {tool_result_instruction}
 """
@@ -113,7 +112,9 @@ DEFAULT_ARANGO_CHAT_SYSTEM_MESSAGE = f"""
 {{mode}}
 
 You do not need to be able to answer a question with just one query. 
-You could make a sequence of AQL queries to find the answer to the question.
+You can make a query, WAIT for the result, 
+THEN make ANOTHER query, WAIT for result,
+THEN make ANOTHER query, and so on, until you have the answer.
 
 {aql_query_instructions}
 
