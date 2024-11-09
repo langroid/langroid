@@ -139,6 +139,7 @@ def main(
 
     arango_agent = MyArangoChatAgent(
         ArangoChatAgentConfig(
+            name="Arango",
             chat_mode=True,
             arango_settings=arango_settings,
             use_schema_tools=False,
@@ -159,13 +160,32 @@ def main(
     task_config = TaskConfig(addressing_prefix=SEND_TO)
     arango_task = Task(
         arango_agent,
-        name="Arango",
         # user not awaited, UNLESS LLM explicitly addresses user via recipient_tool
         interactive=False,
         config=task_config,
     )
 
     arango_task.run()
+
+    # The above runs the app in a continuous chat.
+    # Alternatively, to set up a task to answer a single query and quit when done:
+
+    # set up arango_agent above with chat_mode=False, set up arango_task as above,
+    # then run the task with a single query, e.g.:
+
+    # result = arango_task.run("What is the location of the gene BRCA1?")
+
+    # You can have this in a loop with the user, like so:
+
+    # while True:
+    #     query = Prompt.ask("Enter your query")
+    #     if query in ["x", "q"]:
+    #         break
+    #     result = arango_task.run(query)
+    #     print(result.content)
+
+
+
 
 
 if __name__ == "__main__":
