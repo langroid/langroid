@@ -88,7 +88,7 @@ def main(
     load_dotenv()
 
     url = Prompt.ask(
-        "ArangoDB URL",
+        "ArangoDB URL (enter 'got' for Game of Thrones dataset) ",
         default="https://db.catalog.igvf.org",
     )
     username = Prompt.ask(
@@ -104,7 +104,7 @@ def main(
         default="",
     )
     pw = pw or os.getenv("ARANGODB_PASSWORD")
-    if url == "":
+    if url == "got":
         print(
             """
             No URL supplied, using Game of Thrones dataset from cloud, see here:
@@ -183,9 +183,6 @@ def main(
     #         break
     #     result = arango_task.run(query)
     #     print(result.content)
-
-
-
 
 
 if __name__ == "__main__":
