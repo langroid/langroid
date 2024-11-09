@@ -66,6 +66,12 @@ class Parser:
         tokens = self.tokenizer.encode(text)
         return len(tokens)
 
+    def truncate_tokens(self, text: str, max_tokens: int) -> str:
+        tokens = self.tokenizer.encode(text)
+        if len(tokens) <= max_tokens:
+            return text
+        return self.tokenizer.decode(tokens[:max_tokens])
+
     def add_window_ids(self, chunks: List[Document]) -> None:
         """Chunks may belong to multiple docs, but for each doc,
         they appear consecutively. Add window_ids in metadata"""

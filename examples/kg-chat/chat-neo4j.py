@@ -4,7 +4,10 @@ or locally.
 If you have an existing Neo4j db on Aura (or possibly elsewhere, e.g. locally), you can
 chat with it by specifying its URI, username, password, and database name in the dialog.
 
-If you don't have an existing Neo4j db, and want to try this script, you can populate
+You can chose the defaults in the dialog, in which case it will use the
+freely available Movies database.
+
+Or,  you can populate
 an empty Neo4j db with the cypher queries in the file `movies.cypher` in this folder.
 
 See info on getting setup with Neo4j here:
@@ -64,19 +67,19 @@ def main(
 
     uri = Prompt.ask(
         "Neo4j URI ",
-        default="neo4j+s://8d105d28.databases.neo4j.io",
+        default="neo4j+s://demo.neo4jlabs.com",
     )
     username = Prompt.ask(
         "No4j username ",
-        default="neo4j",
+        default="movies",
     )
     db = Prompt.ask(
         "Neo4j database ",
-        default="neo4j",
+        default="movies",
     )
     pw = Prompt.ask(
         "Neo4j password ",
-        default="",
+        default="movies",
     )
     pw = pw or os.getenv("NEO4J_PASSWORD")
     neo4j_settings = Neo4jSettings(uri=uri, username=username, database=db, password=pw)
@@ -88,6 +91,7 @@ def main(
     neo4j_config = Neo4jChatAgentConfig(
         neo4j_settings=neo4j_settings,
         llm=llm_config,
+        chat_mode=True,
     )
 
     neo4j_agent = Neo4jChatAgent(neo4j_config)

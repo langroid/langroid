@@ -94,6 +94,9 @@ class AgentConfig(BaseSettings):
     respond_tools_only: bool = False  # respond only to tool messages (not plain text)?
     # allow multiple tool messages in a single response?
     allow_multiple_tools: bool = True
+    human_prompt: str = (
+        "Human (respond or q, x to exit current level, " "or hit enter to continue)"
+    )
 
     @validator("name")
     def check_name_alphanum(cls, v: str) -> str:
@@ -411,16 +414,13 @@ class Agent(ABC):
         results = self.handle_message(msg)
         if results is None:
             return None
-        if isinstance(results, ChatDocument):
-            # Preserve trail of tool_ids for OpenAI Assistant fn-calls
-            results.metadata.tool_ids = (
-                [] if isinstance(msg, str) else msg.metadata.tool_ids
-            )
-            return results
         if not settings.quiet:
-            results_str = (
-                results if isinstance(results, str) else json.dumps(results, indent=2)
-            )
+            if isinstance(results, str):
+                results_str = results
+            elif isinstance(results, ChatDocument):
+                results_str = results.content
+            elif isinstance(results, dict):
+                results_str = json.dumps(results, indent=2)
             console.print(f"[red]{self.indent}", end="")
             print(f"[red]Agent: {escape(results_str)}")
             maybe_json = len(extract_top_level_json(results_str)) > 0
@@ -428,6 +428,12 @@ class Agent(ABC):
                 content=results_str,
                 language="json" if maybe_json else "text",
             )
+        if isinstance(results, ChatDocument):
+            # Preserve trail of tool_ids for OpenAI Assistant fn-calls
+            results.metadata.tool_ids = (
+                [] if isinstance(msg, str) else msg.metadata.tool_ids
+            )
+            return results
         sender_name = self.config.name
         if isinstance(msg, ChatDocument) and msg.function_call is not None:
             # if result was from handling an LLM `function_call`,
@@ -655,9 +661,9 @@ class Agent(ABC):
                 user_msg = self.callbacks.get_user_response(prompt="")
             else:
                 user_msg = Prompt.ask(
-                    f"[blue]{self.indent}Human "
-                    "(respond or q, x to exit current level, "
-                    f"or hit enter to continue)\n{self.indent}",
+                    f"[blue]{self.indent}"
+                    + self.config.human_prompt
+                    + f"\n{self.indent}"
                 ).strip()
 
         tool_ids = []
@@ -668,7 +674,7 @@ class Agent(ABC):
             return None
         else:
             if user_msg.startswith("SYSTEM"):
-                user_msg = user_msg[6:].strip()
+                user_msg = user_msg.replace("SYSTEM", "").strip()
                 source = Entity.SYSTEM
                 sender = Entity.SYSTEM
             else:

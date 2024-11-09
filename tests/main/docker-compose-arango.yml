@@ -1,0 +1,9 @@
+version: '3'
+services:
+  arangodb:
+    image: arangodb:latest
+    container_name: arango-test
+    environment:
+      - ARANGO_ROOT_PASSWORD=rootpassword      
+    ports:
+      - "8529:8529"

@@ -333,8 +333,9 @@ def test_openai_assistant_multi(test_settings: Settings):
         interactive=False,
         system_message="""
         Send a number. Your student will respond EVEN or ODD. 
-        You say RIGHT or WRONG, then send another number, and so on.
-        After getting 2 answers, say DONE. Start by sending a number.
+        You say RIGHT DONE or WRONG DONE.
+        
+        Start by sending a number.
         """,
     )
 
@@ -351,5 +352,5 @@ def test_openai_assistant_multi(test_settings: Settings):
         system_message="When you get a number, say EVEN if it is even, else say ODD",
     )
     task.add_sub_task(student_task)
-    result = task.run(turns=6)
+    result = task.run()
     assert "RIGHT" in result.content

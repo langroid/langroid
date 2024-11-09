@@ -14,7 +14,7 @@ from rich import print
 from rich.console import Console
 
 from langroid.exceptions import LangroidImportError
-from langroid.utils.constants import DONE
+from langroid.utils.constants import DONE, SEND_TO
 
 try:
     from sqlalchemy import MetaData, Row, create_engine, inspect, text
@@ -96,7 +96,7 @@ class SQLChatAgentConfig(ChatAgentConfig):
     context_descriptions: Dict[str, Dict[str, Union[str, Dict[str, str]]]] = {}
     use_schema_tools: bool = False
     multi_schema: bool = False
-    addressing_prefix: str = ""
+    addressing_prefix: str = SEND_TO
 
     """
     Optional, but strongly recommended, context descriptions for tables, columns, 
@@ -257,6 +257,7 @@ class SQLChatAgent(ChatAgent):
         self, message: Optional[str | ChatDocument] = None
     ) -> Optional[ChatDocument]:
         self.llm_responded = True
+        self.used_run_query = False
         return super().llm_response(message)
 
     def user_response(
@@ -270,7 +271,11 @@ class SQLChatAgent(ChatAgent):
     def handle_message_fallback(
         self, msg: str | ChatDocument
     ) -> str | ChatDocument | None:
-
+        """
+        Handle the scenario where current msg is not a tool.
+        Special handling is only needed if the message was from the LLM
+        (as indicated by self.llm_responded).
+        """
         if not self.llm_responded:
             return None
         if self.used_run_query:

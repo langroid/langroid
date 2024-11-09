@@ -1905,6 +1905,7 @@ class Task:
             # user, then wait for user response
             self.pending_message is not None
             and self.pending_message.metadata.recipient == Entity.USER
+            and not self.agent.has_tool_message_attempt(self.pending_message)
         )
 
     def _can_respond(self, e: Responder) -> bool:
