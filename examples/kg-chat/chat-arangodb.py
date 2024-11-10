@@ -142,7 +142,7 @@ def main(
             name="Arango",
             chat_mode=True,
             arango_settings=arango_settings,
-            use_schema_tools=False,
+            prepopulate_schema=True,
             use_functions_api=False,
             use_tools=True,
             database_created=True,

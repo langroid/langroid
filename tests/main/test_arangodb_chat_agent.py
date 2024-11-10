@@ -159,7 +159,7 @@ def arango_movie_agent(setup_arango, test_database):
                 password=ARANGO_PASSWORD,
                 database="test_db",
             ),
-            use_schema_tools=False,
+            prepopulate_schema=True,
             use_functions_api=False,
             use_tools=True,
             database_created=True,
@@ -283,7 +283,7 @@ def number_kg_agent(setup_arango, test_database):
             ),
             use_tools=True,
             use_functions_api=False,
-            use_schema_tools=True,  # force agent to use schema tool
+            prepopulate_schema=False,
             database_created=True,
         )
     )
@@ -465,7 +465,7 @@ def arango_agent_from_db():
                 db=db,
                 client=client,
             ),
-            use_schema_tools=False,
+            prepopulate_schema=True,
             use_functions_api=True,
             use_tools=False,
             database_created=True,
@@ -484,7 +484,7 @@ def arango_agent_from_db():
         ("Who are Bran Stark's grandparents?", "Rickard, Lyarra"),
         ("What is the age difference between Rickard Stark and Arya Stark?", "49"),
         ("What is the average age of all Stark characters?", "31"),
-        ("Does Bran Stark have a dead parent?", "yes"),
+        ("Does Bran Stark have a dead parent? Say yes or no", "yes"),
         ("How are Bran Stark and Rickard Stark related?", "grand"),
     ],
 )

@@ -27,6 +27,7 @@ from langroid.agent.special.arangodb.tools import (
     aql_retrieval_tool_name,
     arango_schema_tool_name,
 )
+from langroid.agent.special.arangodb.utils import count_fields, trim_schema
 from langroid.agent.tools.orchestration import DoneTool, ForwardTool
 from langroid.exceptions import LangroidImportError
 from langroid.mytypes import Entity
@@ -88,11 +89,14 @@ class QueryResult(BaseModel):
 class ArangoChatAgentConfig(ChatAgentConfig):
     arango_settings: ArangoSettings = ArangoSettings()
     system_message: str = DEFAULT_ARANGO_CHAT_SYSTEM_MESSAGE
-    kg_schema: Optional[Dict[str, List[Dict[str, Any]]]] = None
+    kg_schema: str | Dict[str, List[Dict[str, Any]]] | None = None
     database_created: bool = False
-    use_schema_tools: bool = True
+    prepopulate_schema: bool = True
     use_functions_api: bool = True
+    max_num_results: int = 10  # how many results to return from AQL query
     max_result_tokens: int = 1000  # truncate long results to this many tokens
+    max_schema_fields: int = 500  # max fields to show in schema
+    max_tries: int = 10  # how many attempts to answer user question
     use_tools: bool = False
     schema_sample_pct: float = 0
     # whether the agent is used in a continuous chat with user,
@@ -103,16 +107,65 @@ class ArangoChatAgentConfig(ChatAgentConfig):
 
 class ArangoChatAgent(ChatAgent):
     def __init__(self, config: ArangoChatAgentConfig):
+        super().__init__(config)
         self.config: ArangoChatAgentConfig = config
+        self.init_state()
         self._validate_config()
         self._import_arango()
         self._initialize_db()
         self._init_tools_sys_message()
-        self.init_state()
 
     def init_state(self) -> None:
         super().init_state()
         self.current_retrieval_aql_query: str = ""
+        self.num_tries = 0  # how many attempts to answer user question
+
+    def user_response(
+        self,
+        msg: Optional[str | ChatDocument] = None,
+    ) -> Optional[ChatDocument]:
+        response = super().user_response(msg)
+        response_str = response.content if response is not None else ""
+        if response_str != "":
+            self.num_tries = 0  # reset number of tries if user responds
+        return response
+
+    def llm_response(
+        self, message: Optional[str | ChatDocument] = None
+    ) -> Optional[ChatDocument]:
+        if self.num_tries > self.config.max_tries:
+            if self.config.chat_mode:
+                return self.create_llm_response(
+                    content=f"""
+                    {self.config.addressing_prefix}User
+                    I give up, since I have exceeded the 
+                    maximum number of tries ({self.config.max_tries}).
+                    Feel free to give me some hints!
+                    """
+                )
+            else:
+                return self.create_llm_response(
+                    tool_messages=[
+                        DoneTool(
+                            content=f"""
+                            Exceeded maximum number of tries ({self.config.max_tries}).
+                            """
+                        )
+                    ]
+                )
+
+        if isinstance(message, ChatDocument) and message.metadata.sender == Entity.USER:
+            message.content = (
+                message.content
+                + "\n"
+                + """
+                (REMEMBER, Do NOT use more than ONE TOOL/FUNCTION at a time!
+                you must WAIT for a helper to send you the RESULT(S) before
+                making another TOOL/FUNCTION call)
+                """
+            )
+
+        return super().llm_response(message)
 
     def _validate_config(self) -> None:
         assert isinstance(self.config, ArangoChatAgentConfig)
@@ -230,6 +283,7 @@ class ArangoChatAgent(ChatAgent):
             try:
                 cursor = self.db.aql.execute(query, bind_vars=bind_vars)
                 records = [doc for doc in cursor]  # type: ignore
+                records = records[: self.config.max_num_results]
                 logger.warning(f"Records retrieved: {records}")
                 return QueryResult(success=True, data=records if records else [])
             except Exception as e:
@@ -273,32 +327,8 @@ class ArangoChatAgent(ChatAgent):
                 success=False, data=f"Failed after max retries: {str(e)}"
             )
 
-    def aql_retrieval_tool(self, msg: AQLRetrievalTool) -> str:
-        """Handle AQL query for data retrieval"""
-        if not self.tried_schema:
-            return f"""
-            You need to use `{arango_schema_tool_name}` first to get the 
-            database schema before using `{aql_retrieval_tool_name}`. This ensures
-            you know the correct collection names and edge definitions.
-            """
-        elif not self.config.database_created:
-            return """
-            You need to create the database first using `{aql_creation_tool_name}`.
-            """
-        query = msg.aql_query
-        self.current_retrieval_aql_query = query
-        logger.info(f"Executing AQL query: {query}")
-        response = self.read_query(query)
-
-        if isinstance(response.data, list) and len(response.data) == 0:
-            return """
-            No results found. Check if your collection names are correct - 
-            they are case-sensitive. Use exact names from the schema.
-            Try modifying your query based on the RETRY-SUGGESTIONS 
-            in your instructions.
-            """
-        # truncate long results
-        result = str(response.data)
+    def _limit_tokens(self, text: str) -> str:
+        result = text
         n_toks = self.num_tokens(result)
         if n_toks > self.config.max_result_tokens:
             logger.warning(
@@ -319,8 +349,38 @@ class ArangoChatAgent(ChatAgent):
                 result = result[: self.config.max_result_tokens * 4]  # truncate roughly
         return result
 
+    def aql_retrieval_tool(self, msg: AQLRetrievalTool) -> str:
+        """Handle AQL query for data retrieval"""
+        if not self.tried_schema:
+            return f"""
+            You need to use `{arango_schema_tool_name}` first to get the 
+            database schema before using `{aql_retrieval_tool_name}`. This ensures
+            you know the correct collection names and edge definitions.
+            """
+        elif not self.config.database_created:
+            return """
+            You need to create the database first using `{aql_creation_tool_name}`.
+            """
+        self.num_tries += 1
+        query = msg.aql_query
+        self.current_retrieval_aql_query = query
+        logger.info(f"Executing AQL query: {query}")
+        response = self.read_query(query)
+
+        if isinstance(response.data, list) and len(response.data) == 0:
+            return """
+            No results found. Check if your collection names are correct - 
+            they are case-sensitive. Use exact names from the schema.
+            Try modifying your query based on the RETRY-SUGGESTIONS 
+            in your instructions.
+            """
+        # truncate long results
+        result = str(response.data)
+        return self._limit_tokens(result)
+
     def aql_creation_tool(self, msg: AQLCreationTool) -> str:
         """Handle AQL query for creating data"""
+        self.num_tries += 1
         query = msg.aql_query
         logger.info(f"Executing AQL query: {query}")
         response = self.write_query(query)
@@ -334,12 +394,34 @@ class ArangoChatAgent(ChatAgent):
         self,
         msg: ArangoSchemaTool | None,
     ) -> Dict[str, List[Dict[str, Any]]] | str:
-        """Get database schema including collections, properties, and relationships"""
+        """Get database schema. If collections=None, include all collections.
+        If properties=False, show only connection info,
+        else show all properties and example-docs.
+        """
+
+        if msg is not None:
+            collections = msg.collections
+            properties = msg.properties
+        else:
+            collections = None
+            properties = True
         self.tried_schema = True
-        if self.config.kg_schema is not None and len(self.config.kg_schema) > 0:
+        if (
+            self.config.kg_schema is not None
+            and len(self.config.kg_schema) > 0
+            and msg is None
+        ):
+            # we are trying to pre-populate full schema before the agent runs,
+            # so get it if it's already available
+            # (Note of course that this "full schema" may actually be incomplete)
             return self.config.kg_schema
+
+        # increment tries only if the LLM is asking for the schema,
+        # in which case msg will not be None
+        self.num_tries += msg is not None
+
         try:
-            # Get graph schemas
+            # Get graph schemas (keeping full graph info)
             graph_schema = [
                 {"graph_name": g["name"], "edge_definitions": g["edge_definitions"]}
                 for g in self.db.graphs()  # type: ignore
@@ -348,57 +430,78 @@ class ArangoChatAgent(ChatAgent):
             # Get collection schemas
             collection_schema = []
             for collection in self.db.collections():  # type: ignore
-                if collection["name"].startswith("_"):  # Skip system collections
+                if collection["name"].startswith("_"):
                     continue
 
                 col_name = collection["name"]
+                if collections and col_name not in collections:
+                    continue
+
                 col_type = collection["type"]
                 col_size = self.db.collection(col_name).count()
 
-                if col_size == 0:  # Skip empty collections
+                if col_size == 0:
                     continue
 
-                # Calculate sample size
-                limit_amount = (
-                    ceil(
-                        self.config.schema_sample_pct * col_size / 100.0  # type: ignore
+                if properties:
+                    # Full property collection with sampling
+                    lim = self.config.schema_sample_pct * col_size  # type: ignore
+                    limit_amount = ceil(lim / 100.0) or 1
+                    sample_query = f"""
+                        FOR doc in {col_name}
+                        LIMIT {limit_amount}
+                        RETURN doc
+                    """
+
+                    properties_list = []
+                    example_doc = None
+
+                    def simplify_doc(doc: Any) -> Any:
+                        if isinstance(doc, list) and len(doc) > 0:
+                            return [simplify_doc(doc[0])]
+                        if isinstance(doc, dict):
+                            return {k: simplify_doc(v) for k, v in doc.items()}
+                        return doc
+
+                    for doc in self.db.aql.execute(sample_query):  # type: ignore
+                        if example_doc is None:
+                            example_doc = simplify_doc(doc)
+                        for key, value in doc.items():
+                            prop = {"name": key, "type": type(value).__name__}
+                            if prop not in properties_list:
+                                properties_list.append(prop)
+
+                    collection_schema.append(
+                        {
+                            "collection_name": col_name,
+                            "collection_type": col_type,
+                            f"{col_type}_properties": properties_list,
+                            f"example_{col_type}": example_doc,
+                        }
                     )
-                    or 1
-                )
-
-                # Query to get sample documents and their properties
-                sample_query = f"""
-                    FOR doc in {col_name}
-                    LIMIT {limit_amount}
-                    RETURN doc
-                """
-
-                properties = []
-                example_doc = None
-
-                def simplify_doc(doc: Any) -> Any:
-                    if isinstance(doc, list) and len(doc) > 0:
-                        return [simplify_doc(doc[0])]
-                    if isinstance(doc, dict):
-                        return {k: simplify_doc(v) for k, v in doc.items()}
-                    return doc
-
-                for doc in self.db.aql.execute(sample_query):  # type: ignore
-                    if example_doc is None:
-                        example_doc = simplify_doc(doc)
-                    for key, value in doc.items():
-                        prop = {"name": key, "type": type(value).__name__}
-                        if prop not in properties:
-                            properties.append(prop)
-
-                collection_schema.append(
-                    {
+                else:
+                    # Basic info + from/to for edges only
+                    collection_info = {
                         "collection_name": col_name,
                         "collection_type": col_type,
-                        f"{col_type}_properties": properties,
-                        f"example_{col_type}": example_doc,
                     }
-                )
+                    if col_type == "edge":
+                        # Get a sample edge to extract from/to fields
+                        sample_edge = next(
+                            self.db.aql.execute(  # type: ignore
+                                f"FOR e IN {col_name} LIMIT 1 RETURN e"
+                            ),
+                            None,
+                        )
+                        if sample_edge:
+                            collection_info["from_collection"] = sample_edge[
+                                "_from"
+                            ].split("/")[0]
+                            collection_info["to_collection"] = sample_edge["_to"].split(
+                                "/"
+                            )[0]
+
+                    collection_schema.append(collection_info)
 
             schema = {
                 "Graph Schema": graph_schema,
@@ -406,10 +509,41 @@ class ArangoChatAgent(ChatAgent):
             }
             schema_str = json.dumps(schema, indent=2)
             logger.warning(f"Schema retrieved:\n{schema_str}")
-            # save schema to file "logs/arangoo-schema.json"
             with open("logs/arango-schema.json", "w") as f:
                 f.write(schema_str)
-            self.config.kg_schema = schema  # type: ignore
+            if (n_fields := count_fields(schema)) > self.config.max_schema_fields:
+                logger.warning(
+                    f"""
+                    Schema has {n_fields} fields, which exceeds the maximum of
+                    {self.config.max_schema_fields}. Showing a trimmed version
+                    that only includes edge info and no other properties.
+                    """
+                )
+                schema = trim_schema(schema)
+                n_fields = count_fields(schema)
+                logger.warning(f"Schema trimmed down to {n_fields} fields.")
+                schema_str = (
+                    json.dumps(schema)
+                    + "\n"
+                    + f"""
+                    
+                    CAUTION: The requested schema was too large, so 
+                    the schema has been trimmed down to show only all collection names,
+                    their types, 
+                    and edge relationships (from/to collections) without any properties.
+                    To find out more about the schema, you can EITHER:
+                    - Use the `{arango_schema_tool_name}` tool again with the 
+                      `properties` arg set to True, and `collections` arg set to
+                        specific collections you want to know more about, OR
+                    - Use the `{aql_retrieval_tool_name}` tool to learn more about
+                      the schema by querying the database.
+                      
+                    """
+                )
+                if msg is None:
+                    self.config.kg_schema = schema_str
+                return schema_str
+            self.config.kg_schema = schema
             return schema
 
         except Exception as e:
@@ -432,9 +566,10 @@ class ArangoChatAgent(ChatAgent):
 
         super().__init__(self.config)
         # Note we are enabling GraphSchemaTool regardless of whether
-        # self.config.use_schema_tools is True or False, because
+        # self.config.prepopulate_schema is True or False, because
         # even when schema provided, the agent may later want to get the schema,
-        # e.g. if the db evolves, or if it needs to bring in the schema
+        # e.g. if the db evolves, or schema was trimmed due to size, or
+        # if it needs to bring in the schema into recent context.
 
         self.enable_message(
             [
@@ -454,7 +589,7 @@ class ArangoChatAgent(ChatAgent):
         assert isinstance(self.config, ArangoChatAgentConfig)
         return (
             SCHEMA_TOOLS_SYS_MSG
-            if self.config.use_schema_tools
+            if not self.config.prepopulate_schema
             else SCHEMA_PROVIDED_SYS_MSG.format(schema=self.arango_schema_tool(None))
         )
 

@@ -1330,6 +1330,9 @@ class Task:
                     max_cost=self.max_cost,
                     max_tokens=self.max_tokens,
                 )
+                # update result.tool_messages if any
+                if isinstance(result, ChatDocument):
+                    self.agent.get_tool_messages(result)
                 if result is not None:
                     content, id2result, oai_tool_id = self.agent.process_tool_results(
                         result.content,
@@ -1358,6 +1361,9 @@ class Task:
         else:
             response_fn = self._entity_responder_map[cast(Entity, e)]
             result = response_fn(self.pending_message)
+            # update result.tool_messages if any
+            if isinstance(result, ChatDocument):
+                self.agent.get_tool_messages(result)
 
         result_chat_doc = self.agent.to_ChatDocument(
             result,
@@ -1388,7 +1394,7 @@ class Task:
             # ignore all string-based signaling/routing
             return result
         # parse various routing/addressing strings in result
-        is_pass, recipient, content = parse_routing(
+        is_pass, recipient, content = self._parse_routing(
             result,
             addressing_prefix=self.config.addressing_prefix,
         )
@@ -1521,7 +1527,7 @@ class Task:
         oai_tool_id2result = result_msg.oai_tool_id2result if result_msg else None
         fun_call = result_msg.function_call if result_msg else None
         tool_messages = result_msg.tool_messages if result_msg else []
-        # if there is an LLMDoneTool or AgentDoneTool among these,
+        # if there is an DoneTool or AgentDoneTool among these,
         # we extract content and tools from here, and ignore all others
         for t in tool_messages:
             if isinstance(t, FinalResultTool):
@@ -1533,6 +1539,8 @@ class Task:
                 # there shouldn't be multiple tools like this; just take the first
                 content = to_string(t.content)
                 content_any = t.content
+                fun_call = None
+                oai_tool_calls = None
                 if isinstance(t, AgentDoneTool):
                     # AgentDoneTool may have tools, unlike DoneTool
                     tool_messages = t.tools
@@ -1940,58 +1948,72 @@ class Task:
         """
         self.color_log = enable
 
+    def _parse_routing(
+        self,
+        msg: ChatDocument | str,
+        addressing_prefix: str = "",
+    ) -> Tuple[bool | None, str | None, str | None]:
+        """
+        Parse routing instruction if any, of the form:
+        PASS:<recipient>  (pass current pending msg to recipient)
+        SEND:<recipient> <content> (send content to recipient)
+        @<recipient> <content> (send content to recipient)
+        Args:
+            msg (ChatDocument|str|None): message to parse
+            addressing_prefix (str): prefix to address other agents or entities,
+                 (e.g. "@". See documentation of `TaskConfig` for details).
+        Returns:
+            Tuple[bool|None, str|None, str|None]:
+                bool: true=PASS, false=SEND, or None if neither
+                str: recipient, or None
+                str: content to send, or None
+        """
+        # handle routing instruction-strings in result if any,
+        # such as PASS, PASS_TO, or SEND
 
-def parse_routing(
-    msg: ChatDocument | str,
-    addressing_prefix: str = "",
-) -> Tuple[bool | None, str | None, str | None]:
-    """
-    Parse routing instruction if any, of the form:
-    PASS:<recipient>  (pass current pending msg to recipient)
-    SEND:<recipient> <content> (send content to recipient)
-    @<recipient> <content> (send content to recipient)
-    Args:
-        msg (ChatDocument|str|None): message to parse
-        addressing_prefix (str): prefix to address other agents or entities,
-             (e.g. "@". See documentation of `TaskConfig` for details).
-    Returns:
-        Tuple[bool|None, str|None, str|None]:
-            bool: true=PASS, false=SEND, or None if neither
-            str: recipient, or None
-            str: content to send, or None
-    """
-    # handle routing instruction in result if any,
-    # of the form PASS=<recipient>
-    content = msg.content if isinstance(msg, ChatDocument) else msg
-    content = content.strip()
-    if PASS in content and PASS_TO not in content:
-        return True, None, None
-    if PASS_TO in content and content.split(":")[1] != "":
-        return True, content.split(":")[1], None
-    if (
-        SEND_TO in content
-        and (addressee_content := parse_addressed_message(content, SEND_TO))[0]
-        is not None
-    ):
-        (addressee, content_to_send) = addressee_content
-        # if no content then treat same as PASS_TO
-        if content_to_send == "":
-            return True, addressee, None
-        else:
-            return False, addressee, content_to_send
-    if (
-        addressing_prefix != ""
-        and addressing_prefix in content
-        and (addressee_content := parse_addressed_message(content, addressing_prefix))[
-            0
-        ]
-        is not None
-    ):
-        (addressee, content_to_send) = addressee_content
-        # if no content then treat same as PASS_TO
-        if content_to_send == "":
-            return True, addressee, None
-        else:
-            return False, addressee, content_to_send
+        msg_str = msg.content if isinstance(msg, ChatDocument) else msg
+        if (
+            self.agent.has_tool_message_attempt(msg)
+            and not msg_str.startswith(PASS)
+            and not msg_str.startswith(PASS_TO)
+            and not msg_str.startswith(SEND_TO)
+        ):
+            # if there's an attempted tool-call, we ignore any routing strings,
+            # unless they are at the start of the msg
+            return None, None, None
 
-    return None, None, None
+        content = msg.content if isinstance(msg, ChatDocument) else msg
+        content = content.strip()
+        if PASS in content and PASS_TO not in content:
+            return True, None, None
+        if PASS_TO in content and content.split(":")[1] != "":
+            return True, content.split(":")[1], None
+        if (
+            SEND_TO in content
+            and (addressee_content := parse_addressed_message(content, SEND_TO))[0]
+            is not None
+        ):
+            # Note this will discard any portion of content BEFORE SEND_TO.
+            # TODO maybe make this configurable.
+            (addressee, content_to_send) = addressee_content
+            # if no content then treat same as PASS_TO
+            if content_to_send == "":
+                return True, addressee, None
+            else:
+                return False, addressee, content_to_send
+        if (
+            addressing_prefix != ""
+            and addressing_prefix in content
+            and (
+                addressee_content := parse_addressed_message(content, addressing_prefix)
+            )[0]
+            is not None
+        ):
+            (addressee, content_to_send) = addressee_content
+            # if no content then treat same as PASS_TO
+            if content_to_send == "":
+                return True, addressee, None
+            else:
+                return False, addressee, content_to_send
+
+        return None, None, None

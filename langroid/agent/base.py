@@ -880,7 +880,13 @@ class Agent(ABC):
         return cdoc
 
     def has_tool_message_attempt(self, msg: str | ChatDocument | None) -> bool:
-        """Check whether msg contains a Tool/fn-call attempt (by the LLM)"""
+        """
+        Check whether msg contains a Tool/fn-call attempt (by the LLM).
+
+        CAUTION: This uses self.get_tool_messages(msg) which as a side-effect
+        may update msg.tool_messages when msg is a ChatDocument, if there are
+        any tools in msg.
+        """
         if msg is None:
             return False
         try:
@@ -921,6 +927,9 @@ class Agent(ABC):
     ) -> List[ToolMessage]:
         """
         Get ToolMessages recognized in msg, handle-able by this agent.
+        NOTE: as a side-effect, this will update msg.tool_messages
+        when msg is a ChatDocument and msg contains tool messages.
+
         If all_tools is True:
         - return all tools, i.e. any tool in self.llm_tools_known,
             whether it is handled by this agent or not;
