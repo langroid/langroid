@@ -51,6 +51,44 @@ A similar process works for the `Gemini 1.5 Pro` LLM:
 
 For other gemini models supported by litellm, see [their docs](https://litellm.vercel.app/docs/providers/gemini)
 
+## Gemini LLMs via OpenAI client, without LiteLLM
+
+This is now the recommended way to use Gemini LLMs with Langroid,
+where you don't need to use LiteLLM. As of 11/20/2024, these models
+are [available via the OpenAI client](https://developers.googleblog.com/en/gemini-is-now-accessible-from-the-openai-library/).
+
+To use langroid with Gemini LLMs, all you have to do is:
+
+- set the `GEMINI_API_KEY` environment variable in your `.env` file or shell
+- set `chat_model="gemini/<model_name>"` in the `OpenAIGPTConfig` object,  
+  where <model_name> is one of "gemini-1.5-flash", "gemini-1.5-flash-8b", or "gemini-1.5-pro"
+
+See [here](https://ai.google.dev/gemini-api/docs/models/gemini) for details on Gemini models.
+
+For example, you can use this `llm_config`:
+
+```python
+llm_config = lm.OpenAIGPTConfig(
+    chat_model="gemini/" + lm.OpenAIChatModel.GEMINI_1_5_FLASH,
+)
+```
+
+In most tests you can switch to a gemini model, e.g. `--m gemini/gemini-1.5-flash`, 
+e.g.:
+
+```bash
+pytest -xvs tests/main/test_llm.py --m gemini/gemini-1.5-flash
+```
+
+Many of the example scripts allow switching the model using `-m` or `--model`, e.g.
+
+```bash
+python3 examples/basic/chat.py -m gemini/gemini-1.5-flash
+```
+
+
+
+```python
 
 ## Working with the created `OpenAIGPTConfig` object
 

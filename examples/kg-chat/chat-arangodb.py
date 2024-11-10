@@ -60,7 +60,7 @@ class MyArangoChatAgent(ArangoChatAgent):
         msg: Optional[str | ChatDocument] = None,
     ) -> Optional[ChatDocument]:
         response = super().user_response(msg)
-        if response.content == "r":
+        if response is not None and response.content == "r":
 
             self.clear_history(1)  # remove all msgs after system msg
             n_msgs = len(self.message_history)
@@ -173,7 +173,10 @@ def main(
         config=task_config,
     )
 
-    arango_task.run()
+    arango_task.run(
+        "Can you help with some queries? "
+        "Be concise and ask me for clarifications when you're not sure what I mean."
+    )
 
     # The above runs the app in a continuous chat.
     # Alternatively, to set up a task to answer a single query and quit when done:

@@ -118,6 +118,7 @@ class ArangoChatAgent(ChatAgent):
     def init_state(self) -> None:
         super().init_state()
         self.current_retrieval_aql_query: str = ""
+        self.current_schema_params: ArangoSchemaTool = ArangoSchemaTool()
         self.num_tries = 0  # how many attempts to answer user question
 
     def user_response(
@@ -125,6 +126,8 @@ class ArangoChatAgent(ChatAgent):
         msg: Optional[str | ChatDocument] = None,
     ) -> Optional[ChatDocument]:
         response = super().user_response(msg)
+        if response is None:
+            return None
         response_str = response.content if response is not None else ""
         if response_str != "":
             self.num_tries = 0  # reset number of tries if user responds
@@ -165,7 +168,20 @@ class ArangoChatAgent(ChatAgent):
                 """
             )
 
-        return super().llm_response(message)
+        response = super().llm_response(message)
+        if (
+            response is not None
+            and self.config.chat_mode
+            and self.config.addressing_prefix in response.content
+            and self.has_tool_message_attempt(response)
+        ):
+            # response contains both a user-addressing and a tool, which
+            # is not allowed, so remove the user-addressing prefix
+            response.content = response.content.replace(
+                self.config.addressing_prefix, ""
+            )
+
+        return response
 
     def _validate_config(self) -> None:
         assert isinstance(self.config, ArangoChatAgentConfig)
@@ -363,6 +379,11 @@ class ArangoChatAgent(ChatAgent):
             """
         self.num_tries += 1
         query = msg.aql_query
+        if query == self.current_retrieval_aql_query:
+            return """
+            You have already tried this query, so you will get the same results again!
+            If you need to retry, please MODIFY the query to get different results.
+            """
         self.current_retrieval_aql_query = query
         logger.info(f"Executing AQL query: {query}")
         response = self.read_query(query)
@@ -398,6 +419,17 @@ class ArangoChatAgent(ChatAgent):
         If properties=False, show only connection info,
         else show all properties and example-docs.
         """
+
+        if (
+            msg is not None
+            and msg.collections == self.current_schema_params.collections
+            and msg.properties == self.current_schema_params.properties
+        ):
+            return """
+            You have already tried this schema TOOL, so you will get the same results 
+            again! Please MODIFY the tool params `collections` or `properties` to get
+            different results.
+            """
 
         if msg is not None:
             collections = msg.collections

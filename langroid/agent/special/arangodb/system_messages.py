@@ -144,14 +144,17 @@ THEN make ANOTHER query, and so on, until you have the answer.
 RETRY-SUGGESTIONS:
 If you receive a null or other unexpected result,
 (a) make sure you use the available TOOLs correctly,
-(b) USE `{arango_schema_tool_name}` tool/function-call to get all collections, 
-    their attributes and graph definitions available in your ArangoDB database.
+(b) learn more about the schema using EITHER:
+ - `{arango_schema_tool_name}` tool/function-call to find properties of specific
+    collections or other parts of the schema, OR
+ - `{aql_retrieval_tool_name}` tool/function-call to use AQL queries to 
+    find specific parts of the schema.
 (c) Collection names are CASE-SENSITIVE -- make sure you adhere to the exact 
     collection name you found in the schema.
 (d) see if you have made an assumption in your AQL query, and try another way, 
     or use `{aql_retrieval_tool_name}` to explore the database contents before 
     submitting your final query. 
-(f) Try APPROXIMATE or PARTIAL MATCHES to strings in the user's query, 
+(e) Try APPROXIMATE or PARTIAL MATCHES to strings in the user's query, 
     e.g. user may ask about "Godfather" instead of "The Godfather",
     or try using CASE-INSENSITIVE MATCHES.
     
