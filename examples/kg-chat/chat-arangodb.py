@@ -7,6 +7,14 @@ chat with it by specifying its URL, username, password, and database name in the
 Run like this (--model is optional, defaults to GPT4o):
 
 python3 examples/kg-chat/chat-arangodb.py --model litellm/claude-3-5-sonnet-20241022
+
+If using litellm, remember to install langroid with the litellm extra, e.g.
+pip install "langroid[litellm]"
+
+See these guides for info on setting up langroid to use Open/Local LLMs
+and other non-OpenAI LLMs:
+- https://langroid.github.io/langroid/tutorials/local-llm-setup/
+- https://langroid.github.io/langroid/tutorials/non-openai-llms/
 """
 
 import typer

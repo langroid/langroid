@@ -154,3 +154,8 @@ The first two methods instruct the LLM to generate XML instead of JSON,
 and any field that is designated with a `verbatim=True` will be enclosed 
 within an XML `CDATA` tag, which does *not* require any escaping, and can
 be far more reliable for tool-use than JSON, especially with weak LLMs.
+
+## Can I use Langroid to converse with a Knowledge Graph (KG)?
+
+Yes, you can use Langroid to "chat with" either a Neo4j or ArangoDB KG, 
+see docs [here](https://langroid.github.io/langroid/notes/knowledge-graphs/)

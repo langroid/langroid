@@ -135,6 +135,9 @@ teacher_task.run()
 <details>
 <summary> <b>Click to expand</b></summary>
 
+- **Nov 2024:**
+  - **[0.20.0](https://github.com/langroid/langroid/releases/tag/0.20.0)** Support for 
+    ArangoDB Knowledge Graphs.
 - **Oct 2024:**
   - **[0.18.0]** [LLMConfig.async_stream_quiet](https://langroid.github.io/langroid/notes/async-streaming/) flag to 
     turn off LLM output in async + stream mode.

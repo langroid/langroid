@@ -103,6 +103,7 @@ nav:
       - Overview: notes/overview.md
       - XML-based Tools: notes/xml-tools.md
       - Async Streaming: notes/async-streaming.md
+      - Knowledge Graphs: notes/knowledge-graphs.md
 
   - Examples:
     - Guide: examples/guide.md
