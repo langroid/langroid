@@ -17,6 +17,7 @@ from .base import (
 from .openai_gpt import (
     OpenAIChatModel,
     AnthropicModel,
+    GeminiModel,
     OpenAICompletionModel,
     OpenAIGPTConfig,
     OpenAIGPT,
@@ -41,6 +42,7 @@ __all__ = [
     "LLMResponse",
     "OpenAIChatModel",
     "AnthropicModel",
+    "GeminiModel",
     "OpenAICompletionModel",
     "OpenAIGPTConfig",
     "OpenAIGPT",

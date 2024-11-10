@@ -173,7 +173,10 @@ def main(
         config=task_config,
     )
 
-    arango_task.run()
+    arango_task.run(
+        "Can you help with some queries? "
+        "Be concise and ask me for clarifications when you're not sure what I mean."
+    )
 
     # The above runs the app in a continuous chat.
     # Alternatively, to set up a task to answer a single query and quit when done:

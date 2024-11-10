@@ -41,7 +41,6 @@ def main(
     model: str = typer.Option("", "--model", "-m", help="model name"),
     no_stream: bool = typer.Option(False, "--nostream", "-ns", help="no streaming"),
     nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
-    query: str = typer.Option("", "--query", "-q", help="initial user query or msg"),
     sys_msg: str = typer.Option(
         "You are a helpful assistant. Be concise in your answers.",
         "--sysmsg",
@@ -83,14 +82,7 @@ def main(
     )
     agent = ChatAgent(config)
     task = Task(agent)
-    # OpenAI models are ok with just a system msg,
-    # but in some scenarios, other (e.g. llama) models
-    # seem to do better when kicked off with a sys msg and a user msg.
-    # In those cases we may want to do task.run("hello") instead.
-    if query:
-        task.run(query)
-    else:
-        task.run()
+    task.run("hello")
 
 
 if __name__ == "__main__":
