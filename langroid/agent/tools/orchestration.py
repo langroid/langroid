@@ -143,10 +143,10 @@ class PassTool(ToolMessage):
     Similar to ForwardTool, but without specifying the recipient agent.
     """
 
-    purpose = """
+    purpose: str = """
     To pass the current message so that other agents can handle it.
     """
-    request = "pass_tool"
+    request: str = "pass_tool"
 
     def response(self, agent: ChatAgent, chat_doc: ChatDocument) -> ChatDocument:
         """When this tool is enabled for an Agent, this will result in a method
@@ -178,10 +178,10 @@ class DonePassTool(PassTool):
     Similar to PassTool, except we append a DoneTool to the result tool_messages.
     """
 
-    purpose = """
+    purpose: str = """
     To signal the current task is done, with results set to the current/incoming msg.
     """
-    request = "done_pass_tool"
+    request: str = "done_pass_tool"
 
     def response(self, agent: ChatAgent, chat_doc: ChatDocument) -> ChatDocument:
         # use PassTool to get the right ChatDocument to pass...

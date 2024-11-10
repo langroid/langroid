@@ -27,6 +27,29 @@ aql_creation_tool_description = f"""
 documents/edges in the database.
 """
 
+aql_retrieval_query_example = """
+EXAMPLE:
+Suppose you are asked this question "Does Bob have a father?".
+Then you will go through the following steps, where YOU indicates
+the message YOU will be sending, and RESULTS indicates the RESULTS
+you will receive from the helper executing the query:
+
+1. YOU:
+    {{ "request": "aql_retrieval_tool",
+      "aql_query": "FOR v, e, p in ... [query truncated for brevity]..."}}
+
+    2. RESULTS:
+    [.. results from the query...]
+    3. YOU: [ since results were not satisfactory, you try ANOTHER query]
+    {{ "request": "aql_retrieval_tool",
+    "aql_query": "blah blah ... [query truncated for brevity]..."}}
+    }}
+    4. RESULTS:
+    [.. results from the query...]
+    5. YOU: [ now you have the answer, you can generate your response ]
+    The answer is YES, Bob has a father, and his name is John.
+"""
+
 aql_query_instructions = """
 When writing AQL queries:
 1. Use the exact property names shown in the schema
@@ -135,6 +158,8 @@ If you receive a null or other unexpected result,
 Start by asking what the user needs help with.
 
 {tool_result_instruction}
+
+{aql_retrieval_query_example}
 """
 
 ADDRESSING_INSTRUCTION = """

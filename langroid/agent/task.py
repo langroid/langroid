@@ -1330,6 +1330,8 @@ class Task:
                     max_cost=self.max_cost,
                     max_tokens=self.max_tokens,
                 )
+                # update result.tool_messages if any
+                self.agent.get_tool_messages(result)
                 if result is not None:
                     content, id2result, oai_tool_id = self.agent.process_tool_results(
                         result.content,
@@ -1358,6 +1360,8 @@ class Task:
         else:
             response_fn = self._entity_responder_map[cast(Entity, e)]
             result = response_fn(self.pending_message)
+            # update result.tool_messages if any
+            self.agent.get_tool_messages(result)
 
         result_chat_doc = self.agent.to_ChatDocument(
             result,

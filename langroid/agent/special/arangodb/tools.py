@@ -44,7 +44,7 @@ class AQLRetrievalTool(ToolMessage):
         return """
         When using this TOOL/Function-call, you must WAIT to receive the RESULTS 
         of the AQL query, before continuing your response!
-        DO NOT ASSUME YOU KNOW THE RESULTs BEFORE RECEIVING THEM.
+        DO NOT ASSUME YOU KNOW THE RESULTs BEFORE RECEIVING THEM.        
         """
 
 

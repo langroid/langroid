@@ -921,6 +921,9 @@ class Agent(ABC):
     ) -> List[ToolMessage]:
         """
         Get ToolMessages recognized in msg, handle-able by this agent.
+        NOTE: as a side-effect, this will update msg.tool_messages
+        when msg is a ChatDocument and msg contains tool messages.
+
         If all_tools is True:
         - return all tools, i.e. any tool in self.llm_tools_known,
             whether it is handled by this agent or not;

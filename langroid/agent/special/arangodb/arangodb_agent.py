@@ -133,7 +133,7 @@ class ArangoChatAgent(ChatAgent):
     def llm_response(
         self, message: Optional[str | ChatDocument] = None
     ) -> Optional[ChatDocument]:
-        if self.num_tries >= self.config.max_tries:
+        if self.num_tries > self.config.max_tries:
             if self.config.chat_mode:
                 return self.create_llm_response(
                     content=f"""
@@ -153,6 +153,17 @@ class ArangoChatAgent(ChatAgent):
                         )
                     ]
                 )
+
+        if isinstance(message, ChatDocument) and message.metadata.sender == Entity.USER:
+            message.content = (
+                message.content
+                + "\n"
+                + """
+                (REMEMBER, Do NOT use more than ONE TOOL/FUNCTION at a time!
+                you must WAIT for a helper to send you the RESULT(S) before
+                making another TOOL/FUNCTION call)
+                """
+            )
 
         return super().llm_response(message)
 

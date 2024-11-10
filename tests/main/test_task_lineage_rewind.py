@@ -42,12 +42,13 @@ class MockAgent(ChatAgent):
 def test_lineage_1_task():
     agent = MockAgent(
         ChatAgentConfig(
+            name="Mock",
             llm=MockLMConfig(
                 response_dict={
                     "1": "2",
                     "3": DoneTool(content="100").to_json(),
                 },
-            )
+            ),
         )
     )
     task = lr.Task(agent, interactive=True, only_user_quits_root=False)
@@ -94,8 +95,8 @@ def test_lineage_1_task():
 
     assert cd_a2.parent is cd_u2
     assert cd_a2.child is cd_ag
-    assert cd_ag.child is result
-    assert result.parent is cd_ag
+    assert cd_ag.parent is cd_a2
+    assert cd_ag is result
     assert cd_a2.metadata.agent_id == agent.id
     assert cd_a2.metadata.msg_idx == 4
 
