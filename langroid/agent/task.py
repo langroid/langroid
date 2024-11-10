@@ -1331,7 +1331,8 @@ class Task:
                     max_tokens=self.max_tokens,
                 )
                 # update result.tool_messages if any
-                self.agent.get_tool_messages(result)
+                if isinstance(result, ChatDocument):
+                    self.agent.get_tool_messages(result)
                 if result is not None:
                     content, id2result, oai_tool_id = self.agent.process_tool_results(
                         result.content,
@@ -1361,7 +1362,8 @@ class Task:
             response_fn = self._entity_responder_map[cast(Entity, e)]
             result = response_fn(self.pending_message)
             # update result.tool_messages if any
-            self.agent.get_tool_messages(result)
+            if isinstance(result, ChatDocument):
+                self.agent.get_tool_messages(result)
 
         result_chat_doc = self.agent.to_ChatDocument(
             result,
@@ -1525,7 +1527,7 @@ class Task:
         oai_tool_id2result = result_msg.oai_tool_id2result if result_msg else None
         fun_call = result_msg.function_call if result_msg else None
         tool_messages = result_msg.tool_messages if result_msg else []
-        # if there is an LLMDoneTool or AgentDoneTool among these,
+        # if there is an DoneTool or AgentDoneTool among these,
         # we extract content and tools from here, and ignore all others
         for t in tool_messages:
             if isinstance(t, FinalResultTool):
