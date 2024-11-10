@@ -60,7 +60,7 @@ class MyArangoChatAgent(ArangoChatAgent):
         msg: Optional[str | ChatDocument] = None,
     ) -> Optional[ChatDocument]:
         response = super().user_response(msg)
-        if response.content == "r":
+        if response is not None and response.content == "r":
 
             self.clear_history(1)  # remove all msgs after system msg
             n_msgs = len(self.message_history)

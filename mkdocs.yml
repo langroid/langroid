@@ -104,6 +104,7 @@ nav:
       - XML-based Tools: notes/xml-tools.md
       - Async Streaming: notes/async-streaming.md
       - Knowledge Graphs: notes/knowledge-graphs.md
+      - Gemini LLMs: notes/gemini.md
 
   - Examples:
     - Guide: examples/guide.md

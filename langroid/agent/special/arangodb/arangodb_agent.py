@@ -126,6 +126,8 @@ class ArangoChatAgent(ChatAgent):
         msg: Optional[str | ChatDocument] = None,
     ) -> Optional[ChatDocument]:
         response = super().user_response(msg)
+        if response is None:
+            return None
         response_str = response.content if response is not None else ""
         if response_str != "":
             self.num_tries = 0  # reset number of tries if user responds
