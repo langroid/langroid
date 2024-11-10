@@ -1533,6 +1533,8 @@ class Task:
                 # there shouldn't be multiple tools like this; just take the first
                 content = to_string(t.content)
                 content_any = t.content
+                fun_call = None
+                oai_tool_calls = None
                 if isinstance(t, AgentDoneTool):
                     # AgentDoneTool may have tools, unlike DoneTool
                     tool_messages = t.tools
