@@ -43,8 +43,12 @@ class ToolMessage(ABC, BaseModel):
     id: str = ""  # placeholder for OpenAI-API tool_call_id
 
     _allow_llm_use: bool = True  # allow an LLM to use (i.e. generate) this tool?
-
-    # model_config = ConfigDict(extra=Extra.allow)
+    # should we retain full raw result of the tool in the message_history?
+    # Some tools can have large results that we may not want to retain,
+    # e.g. result of a db query, which the LLM later reduces to a summary, so
+    # in subsequent dialog we may only want to retain the summary,
+    # and replace this raw result with a placeholder string.
+    _retain_raw_result: bool = True
 
     class Config:
         extra = Extra.allow

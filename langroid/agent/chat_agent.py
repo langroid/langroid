@@ -623,6 +623,25 @@ class ChatAgent(Agent):
             self.llm_tools_usable.discard(r)
             self.llm_functions_usable.discard(r)
 
+    def _reduce_raw_tool_results(self, message: ChatDocument) -> None:
+        """
+        If message is the result of a ToolMessage that had the
+        flag `_retain_raw_results = False`, then we replace contents
+        with a placeholder message.
+        """
+        parent_message: ChatDocument | None = message.parent
+        tools = [] if parent_message is None else parent_message.tool_messages
+        non_retain_tools = [t for t in tools if not t._retain_raw_result]
+        if non_retain_tools:
+            tool_name = non_retain_tools[0].default_value("request")
+            content = f"""
+                The result of the {tool_name} tool were too large, 
+                and this is just a placeholder.
+                To obtain the full result, the tool needs to be re-used.
+            """
+            llm_msg = self.message_history[message.metadata.msg_idx]
+            llm_msg.content = content
+
     def llm_response(
         self, message: Optional[str | ChatDocument] = None
     ) -> Optional[ChatDocument]:
@@ -650,6 +669,8 @@ class ChatAgent(Agent):
         self.message_history.extend(ChatDocument.to_LLMMessage(response))
         response.metadata.msg_idx = len(self.message_history) - 1
         response.metadata.agent_id = self.id
+        if isinstance(message, ChatDocument):
+            self._reduce_raw_tool_results(message)
         # Preserve trail of tool_ids for OpenAI Assistant fn-calls
         response.metadata.tool_ids = (
             []
@@ -681,6 +702,8 @@ class ChatAgent(Agent):
         self.message_history.extend(ChatDocument.to_LLMMessage(response))
         response.metadata.msg_idx = len(self.message_history) - 1
         response.metadata.agent_id = self.id
+        if isinstance(message, ChatDocument):
+            self._reduce_raw_tool_results(message)
         # Preserve trail of tool_ids for OpenAI Assistant fn-calls
         response.metadata.tool_ids = (
             []

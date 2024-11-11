@@ -9,6 +9,7 @@ from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.chat_document import ChatDocMetaData, ChatDocument
 from langroid.agent.task import Task
 from langroid.agent.tool_message import ToolMessage
+from langroid.agent.tools import DoneTool
 from langroid.agent.tools.orchestration import (
     AgentDoneTool,
     FinalResultTool,
@@ -1180,3 +1181,62 @@ def test_agent_respond_only_tools(tool: str):
             assert tool.answer == "15"
             assert alice_task.n_stalled_steps == 0
             assert bob_task.n_stalled_steps == 0
+
+
+def test_reduce_raw_tool_result():
+    class MyTool(ToolMessage):
+        request: str = "my_tool"
+        purpose: str = "to present a number <num>"
+        num: int
+        _retain_raw_result = False
+
+        def handle(self) -> int:
+            return self.num * 1000
+
+    class MyAgent(ChatAgent):
+        def user_response(
+            self,
+            msg: Optional[str | ChatDocument] = None,
+        ) -> Optional[ChatDocument]:
+            """
+            Mock user_response method for testing
+            """
+            txt = msg if isinstance(msg, str) else msg.content
+            map = dict([("5", "50"), ("3", "5")])
+            response = map.get(txt)
+            # return the increment of input number
+            return self.create_user_response(response)
+
+    agent = MyAgent(
+        ChatAgentConfig(
+            name="Test",
+            # no need for a real LLM, use a mock
+            llm=MockLMConfig(
+                response_dict={
+                    "1": MyTool(num=1).to_json(),
+                    "1000": "5",
+                    "50": DoneTool(content="Finished").to_json(),
+                }
+            ),
+        )
+    )
+
+    agent.enable_message(MyTool)
+    task = Task(agent, interactive=True, only_user_quits_root=False)
+
+    result = task.run("1")
+    """
+    msg history:
+    
+    sys_msg
+    user: 1 -> 
+    LLM: MyTool(1) ->
+    agent: 1000 -> "Large" result that is NOT retained
+    LLM: 5 ->
+    user: 50 -> 
+    LLM: Done (Finished)
+    """
+    assert result.content == "Finished"
+    assert len(agent.message_history) == 7
+    assert agent.message_history[3].content != "1000"
+    assert "my_tool" in agent.message_history[3].content
