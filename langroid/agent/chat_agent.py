@@ -631,16 +631,24 @@ class ChatAgent(Agent):
         """
         parent_message: ChatDocument | None = message.parent
         tools = [] if parent_message is None else parent_message.tool_messages
-        non_retain_tools = [t for t in tools if not t._retain_raw_result]
-        if non_retain_tools:
-            tool_name = non_retain_tools[0].default_value("request")
-            content = f"""
+        truncate_tools = [t for t in tools if t._max_retained_tokens is not None]
+        limiting_tool = truncate_tools[0] if len(truncate_tools) > 0 else None
+        if limiting_tool is not None and limiting_tool._max_retained_tokens is not None:
+            tool_name = limiting_tool.default_value("request")
+            max_tokens: int = limiting_tool._max_retained_tokens
+            truncation_warning = f"""
                 The result of the {tool_name} tool were too large, 
-                and this is just a placeholder.
+                and has been truncated to {max_tokens} tokens.
                 To obtain the full result, the tool needs to be re-used.
             """
             llm_msg = self.message_history[message.metadata.msg_idx]
-            llm_msg.content = content
+            orig_content = llm_msg.content
+            new_content = (
+                self.parser.truncate_tokens(orig_content, max_tokens)
+                if self.parser is not None
+                else orig_content[: max_tokens * 4]  # approx truncation
+            )
+            llm_msg.content = new_content + "\n\n" + truncation_warning
 
     def llm_response(
         self, message: Optional[str | ChatDocument] = None

@@ -1184,14 +1184,17 @@ def test_agent_respond_only_tools(tool: str):
 
 
 def test_reduce_raw_tool_result():
+    BIG_RESULT = "hello " * 50
+
     class MyTool(ToolMessage):
         request: str = "my_tool"
         purpose: str = "to present a number <num>"
         num: int
-        _retain_raw_result = False
+        _max_result_tokens = 10
+        _max_retained_tokens = 2
 
-        def handle(self) -> int:
-            return self.num * 1000
+        def handle(self) -> str:
+            return BIG_RESULT
 
     class MyAgent(ChatAgent):
         def user_response(
@@ -1202,11 +1205,16 @@ def test_reduce_raw_tool_result():
             Mock user_response method for testing
             """
             txt = msg if isinstance(msg, str) else msg.content
-            map = dict([("5", "50"), ("3", "5")])
+            map = dict([("hello", "50"), ("3", "5")])
             response = map.get(txt)
             # return the increment of input number
             return self.create_user_response(response)
 
+    # create dummy agent first, just to get small_result with truncation
+    agent = MyAgent(ChatAgentConfig())
+    small_result = agent._maybe_truncate_result(BIG_RESULT, MyTool._max_result_tokens)
+
+    # now create the actual agent
     agent = MyAgent(
         ChatAgentConfig(
             name="Test",
@@ -1214,7 +1222,7 @@ def test_reduce_raw_tool_result():
             llm=MockLMConfig(
                 response_dict={
                     "1": MyTool(num=1).to_json(),
-                    "1000": "5",
+                    small_result: "hello",
                     "50": DoneTool(content="Finished").to_json(),
                 }
             ),
@@ -1231,12 +1239,12 @@ def test_reduce_raw_tool_result():
     sys_msg
     user: 1 -> 
     LLM: MyTool(1) ->
-    agent: 1000 -> "Large" result that is NOT retained
-    LLM: 5 ->
+    agent: BIG_RESULT -> truncated to 10 tokens, as `small_result`
+    LLM: hello ->
     user: 50 -> 
     LLM: Done (Finished)
     """
     assert result.content == "Finished"
     assert len(agent.message_history) == 7
-    assert agent.message_history[3].content != "1000"
-    assert "my_tool" in agent.message_history[3].content
+    tool_result = agent.message_history[3].content
+    assert "my_tool" in tool_result and str(MyTool._max_retained_tokens) in tool_result

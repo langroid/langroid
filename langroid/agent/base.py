@@ -1450,6 +1450,40 @@ class Agent(ABC):
 
         return None
 
+    def _maybe_truncate_result(
+        self, result: str | ChatDocument | None, max_tokens: int | None
+    ) -> str | ChatDocument | None:
+        """
+        Truncate the result string to `max_tokens` tokens.
+        """
+        if result is None or max_tokens is None:
+            return None
+        result_str = result.content if isinstance(result, ChatDocument) else result
+        num_tokens = (
+            self.parser.num_tokens(result_str)
+            if self.parser is not None
+            else len(result_str) / 4.0
+        )
+        if num_tokens <= max_tokens:
+            return result
+        truncate_warning = f"""
+        The TOOL result was large, so it was truncated to {max_tokens} tokens.
+        To get the full result, the TOOL must be called again.
+        """
+        if isinstance(result, str):
+            return (
+                self.parser.truncate_tokens(result, max_tokens)
+                if self.parser is not None
+                else result[: max_tokens * 4]  # approx truncate
+            ) + truncate_warning
+        elif isinstance(result, ChatDocument):
+            result.content = (
+                self.parser.truncate_tokens(result.content, max_tokens)
+                if self.parser is not None
+                else result.content[: max_tokens * 4]  # approx truncate
+            ) + truncate_warning
+            return result
+
     def handle_tool_message(
         self,
         tool: ToolMessage,
@@ -1485,7 +1519,9 @@ class Agent(ABC):
             # not a pydantic validation error,
             # which we check in `handle_message`
             raise e
-        return result  # type: ignore
+        return self._maybe_truncate_result(
+            result, tool._max_result_tokens
+        )  # type: ignore
 
     def num_tokens(self, prompt: str | List[LLMMessage]) -> int:
         if self.parser is None:

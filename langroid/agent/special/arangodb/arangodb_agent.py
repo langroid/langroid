@@ -94,7 +94,6 @@ class ArangoChatAgentConfig(ChatAgentConfig):
     prepopulate_schema: bool = True
     use_functions_api: bool = True
     max_num_results: int = 10  # how many results to return from AQL query
-    max_result_tokens: int = 1000  # truncate long results to this many tokens
     max_schema_fields: int = 500  # max fields to show in schema
     max_tries: int = 10  # how many attempts to answer user question
     use_tools: bool = False
@@ -343,28 +342,6 @@ class ArangoChatAgent(ChatAgent):
                 success=False, data=f"Failed after max retries: {str(e)}"
             )
 
-    def _limit_tokens(self, text: str) -> str:
-        result = text
-        n_toks = self.num_tokens(result)
-        if n_toks > self.config.max_result_tokens:
-            logger.warning(
-                f"""
-                Your query resulted in a large result of  
-                {n_toks} tokens,
-                which will be truncated to {self.config.max_result_tokens} tokens.
-                If this does not give satisfactory results,
-                please retry with a more focused query.
-                """
-            )
-            if self.parser is not None:
-                result = self.parser.truncate_tokens(
-                    result,
-                    self.config.max_result_tokens,
-                )
-            else:
-                result = result[: self.config.max_result_tokens * 4]  # truncate roughly
-        return result
-
     def aql_retrieval_tool(self, msg: AQLRetrievalTool) -> str:
         """Handle AQL query for data retrieval"""
         if not self.tried_schema:
@@ -395,9 +372,7 @@ class ArangoChatAgent(ChatAgent):
             Try modifying your query based on the RETRY-SUGGESTIONS 
             in your instructions.
             """
-        # truncate long results
-        result = str(response.data)
-        return self._limit_tokens(result)
+        return str(response.data)
 
     def aql_creation_tool(self, msg: AQLCreationTool) -> str:
         """Handle AQL query for creating data"""
