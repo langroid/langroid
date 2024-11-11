@@ -1,12 +1,11 @@
 """
-Single-agent to use to chat with an existing ArangoDB knowledge-graph (KG) on cloud,
-or locally.
-If you have an existing ArangoDB instance, you can
-chat with it by specifying its URL, username, password, and database name in the dialog.
+Single-agent to use to chat with the IGVF ArangoDB knowledge-graph (KG) on cloud.
+
+Make sure to set the ARANGODB_PASSWORD in your environment variables.
 
 Run like this (--model is optional, defaults to GPT4o):
 
-python3 examples/kg-chat/chat-arangodb.py --model litellm/claude-3-5-sonnet-20241022
+python3 examples/kg-chat/chat-arangodb-igvf.py --model litellm/claude-3-5-sonnet-20241022
 
 If using litellm, remember to install langroid with the litellm extra, e.g.
 pip install "langroid[litellm]"
@@ -17,13 +16,12 @@ and other non-OpenAI LLMs:
 - https://langroid.github.io/langroid/tutorials/non-openai-llms/
 """
 
-import typer
 import os
 from typing import Optional
 from dotenv import load_dotenv
 from rich import print
-from rich.console import Console
-from rich.prompt import Prompt
+
+from fire import Fire
 
 import langroid.language_models as lm
 from langroid import TaskConfig
@@ -36,9 +34,6 @@ from langroid.utils.constants import SEND_TO
 from langroid.agent.chat_document import ChatDocument
 from langroid.agent.task import Task
 from langroid.utils.configuration import Settings, set_global
-from adb_cloud_connector import get_temp_credentials
-from arango.client import ArangoClient
-from arango_datasets import Datasets
 import logging
 
 logging.basicConfig(
@@ -49,9 +44,6 @@ logging.basicConfig(
 root_logger = logging.getLogger()
 root_logger.setLevel(logging.ERROR)
 logger = logging.getLogger(__name__)
-
-console = Console()
-app = typer.Typer()
 
 
 class MyArangoChatAgent(ArangoChatAgent):
@@ -72,12 +64,11 @@ class MyArangoChatAgent(ArangoChatAgent):
         return response
 
 
-@app.command()
 def main(
-    debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
-    model: str = typer.Option("", "--model", "-m", help="model name"),
-    no_stream: bool = typer.Option(False, "--nostream", "-ns", help="no streaming"),
-    nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
+    debug: bool = False,
+    model: str = "",
+    no_stream: bool = False,
+    nocache: bool = False,
 ) -> None:
     set_global(
         Settings(
@@ -95,55 +86,16 @@ def main(
 
     load_dotenv()
 
-    url = Prompt.ask(
-        "ArangoDB URL (enter 'got' for Game of Thrones dataset) ",
-        default="https://db.catalog.igvf.org",
+    url = "https://db.catalog.igvf.org"
+    username = "guest"
+    db = "igvf"
+    pw = os.getenv("ARANGODB_PASSWORD")
+    arango_settings = ArangoSettings(
+        url=url,
+        username=username,
+        database=db,
+        password=pw,
     )
-    username = Prompt.ask(
-        "ArangoDB username ",
-        default="guest",
-    )
-    db = Prompt.ask(
-        "ArangoDB database ",
-        default="igvf",
-    )
-    pw = Prompt.ask(
-        "ArangoDB password ",
-        default="",
-    )
-    pw = pw or os.getenv("ARANGODB_PASSWORD")
-    if url == "got":
-        print(
-            """
-            No URL supplied, using Game of Thrones dataset from cloud, see here:
-            https://docs.arangodb.com/3.11/components/tools/arango-datasets/
-            """
-        )
-        connection = get_temp_credentials(tutorialName="langroid")
-        client = ArangoClient(hosts=connection["url"])
-
-        db = client.db(
-            connection["dbName"],
-            connection["username"],
-            connection["password"],
-            verify=True,
-        )
-        datasets = Datasets(db)
-        ArangoChatAgent.cleanup_graph_db(db)
-        assert len(datasets.list_datasets()) > 0, "No datasets found"
-
-        DATASET = "GAME_OF_THRONES"  # a small dataset
-        info = datasets.dataset_info(DATASET)
-        assert info["label"] == DATASET
-        datasets.load(DATASET, batch_size=100, preserve_existing=False)
-        arango_settings = ArangoSettings(db=db, client=client)
-    else:
-        arango_settings = ArangoSettings(
-            url=url,
-            username=username,
-            database=db,
-            password=pw,
-        )
 
     arango_agent = MyArangoChatAgent(
         ArangoChatAgentConfig(
@@ -197,4 +149,4 @@ def main(
 
 
 if __name__ == "__main__":
-    app()
+    Fire(main)
