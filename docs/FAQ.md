@@ -47,6 +47,12 @@ use `ChatAgent._llm_response_temp_context`, which is used by default in the `Doc
 Another way to keep chat history tokens from growing too much is to use the `llm_response_forget` method, which 
 erases both the query and response, if that makes sense in your scenario.
 
+## How can I handle large results from Tools?
+
+As of version 0.22.0, Langroid allows you to control the size of tool results
+by setting [optional parameters](https://langroid.github.io/langroid/notes/large-tool-results/) 
+in a `ToolMessage` definition.
+
 ## Can I handle a tool without running a task?
 
 Yes, if you've enabled an agent to both _use_ (i.e. generate) and _handle_ a tool. 
