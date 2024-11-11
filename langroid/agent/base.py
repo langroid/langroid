@@ -1457,7 +1457,7 @@ class Agent(ABC):
         Truncate the result string to `max_tokens` tokens.
         """
         if result is None or max_tokens is None:
-            return None
+            return result
         result_str = result.content if isinstance(result, ChatDocument) else result
         num_tokens = (
             self.parser.num_tokens(result_str)
