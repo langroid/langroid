@@ -105,6 +105,7 @@ nav:
       - Async Streaming: notes/async-streaming.md
       - Knowledge Graphs: notes/knowledge-graphs.md
       - Gemini LLMs: notes/gemini.md
+      - Large Tool Results: notes/large-tool-results.md
 
   - Examples:
     - Guide: examples/guide.md

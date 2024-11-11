@@ -44,7 +44,19 @@ class ToolMessage(ABC, BaseModel):
 
     _allow_llm_use: bool = True  # allow an LLM to use (i.e. generate) this tool?
 
-    # model_config = ConfigDict(extra=Extra.allow)
+    # Optional param to limit number of result tokens to retain in msg history.
+    # Some tools can have large results that we may not want to fully retain,
+    # e.g. result of a db query, which the LLM later reduces to a summary, so
+    # in subsequent dialog we may only want to retain the summary,
+    # and replace this raw result truncated to _max_result_tokens.
+    # Important to note: unlike _max_result_tokens, this param is used
+    # NOT used to immediately truncate the result;
+    # it is only used to truncate what is retained in msg history AFTER the
+    # response to this result.
+    _max_retained_tokens: int | None = None
+
+    # Optional param to limit number of tokens in the result of the tool.
+    _max_result_tokens: int | None = None
 
     class Config:
         extra = Extra.allow

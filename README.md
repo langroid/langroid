@@ -136,6 +136,8 @@ teacher_task.run()
 <summary> <b>Click to expand</b></summary>
 
 - **Nov 2024:**
+  - **[0.22.0](https://langroid.github.io/langroid/notes/large-tool-results/)**: 
+     Optional parameters to truncate large tool results.
   - **[0.21.0](https://langroid.github.io/langroid/notes/gemini/)** Direct support for Gemini models via OpenAI client instead of using LiteLLM.
   - **[0.20.0](https://github.com/langroid/langroid/releases/tag/0.20.0)** Support for 
     ArangoDB Knowledge Graphs.
