@@ -36,13 +36,14 @@ from pyvis.network import Network
 import webbrowser
 from pathlib import Path
 
+import langroid.language_models as lm
 from langroid import TaskConfig
 from langroid.agent.special.neo4j.neo4j_chat_agent import (
     Neo4jChatAgent,
     Neo4jChatAgentConfig,
     Neo4jSettings,
 )
-from langroid.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
+# from langroid.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
 from langroid.utils.constants import NO_ANSWER, SEND_TO
 from langroid.utils.configuration import set_global, Settings
 from langroid.agent.tool_message import ToolMessage
@@ -237,8 +238,8 @@ def main(
             show_stats=False,
             use_tools=tools,
             use_functions_api=not tools,
-            llm=OpenAIGPTConfig(
-                chat_model=model or OpenAIChatModel.GPT4o,
+            llm=lm.OpenAIGPTConfig(
+                chat_model=model or lm.OpenAIChatModel.GPT4o,
             ),
         ),
     )
@@ -246,14 +247,7 @@ def main(
     system_message = f"""You are an expert in Dependency graphs and analyzing them using
     Neo4j. 
     
-    FIRST, I'll give you the name of the package that I want to analyze.
-    
-    THEN, you can also use the `web_search` tool/function to find out information about a package,
-      such as version number and package type (PyPi or not). 
-    
-    If unable to get this info, you can ask me and I can tell you.
-    
-    DON'T forget to include the package name in your questions. 
+    The User will provide package information.
       
     After receiving this information, make sure the package version is a number and the
     package type is PyPi.
@@ -286,8 +280,19 @@ def main(
     dependency_agent.enable_message(DepGraphTool)
     dependency_agent.enable_message(GoogleSearchTool)
     dependency_agent.enable_message(VisualizeGraph)
-
-    task.run()
+    package_name = Prompt.ask(
+        "Name of package to be analyze: ",
+        default="chainlit",
+    )
+    package_version = Prompt.ask(
+        "Package version",
+        default="1.1.200",
+    )
+    package_ecosystem = Prompt.ask(
+        "Package ecosystem",
+        default="pypi",
+    )
+    task.run(f"Package info: {package_name} {package_version} {package_ecosystem}")
 
     # check if the user wants to delete the database
     if dependency_agent.config.database_created:
