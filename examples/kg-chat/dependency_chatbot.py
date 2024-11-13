@@ -44,7 +44,6 @@ from langroid.agent.special.neo4j.neo4j_chat_agent import (
     Neo4jSettings,
 )
 
-# from langroid.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
 from langroid.utils.constants import NO_ANSWER, SEND_TO
 from langroid.utils.configuration import set_global, Settings
 from langroid.agent.tool_message import ToolMessage
