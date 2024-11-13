@@ -43,7 +43,10 @@ from langroid.agent.special.neo4j.neo4j_chat_agent import (
     Neo4jChatAgentConfig,
     Neo4jSettings,
 )
-
+from langroid.agent.special.neo4j.tools import (
+    cypher_retrieval_tool_name,
+    graph_schema_tool_name,
+)
 from langroid.utils.constants import NO_ANSWER, SEND_TO
 from langroid.utils.configuration import set_global, Settings
 from langroid.agent.tool_message import ToolMessage
@@ -53,6 +56,8 @@ from langroid.agent.task import Task
 from cypher_message import CONSTRUCT_DEPENDENCY_GRAPH
 
 app = typer.Typer()
+
+web_search_name = GoogleSearchTool.default_value("request")
 
 
 class DepGraphTool(ToolMessage):
@@ -69,6 +74,9 @@ class DepGraphTool(ToolMessage):
     package_name: str
 
 
+construct_dependency_graph_name = DepGraphTool.default_value("request")
+
+
 class VisualizeGraph(ToolMessage):
     request = "visualize_dependency_graph"
     purpose = """
@@ -78,6 +86,9 @@ class VisualizeGraph(ToolMessage):
     package_type: str
     package_name: str
     query: str
+
+
+visualize_dependency_graph_name = VisualizeGraph.default_value("request")
 
 
 class DependencyGraphAgent(Neo4jChatAgent):
@@ -252,19 +263,22 @@ def main(
     After receiving this information, make sure the package version is a number and the
     package type is PyPi.
     THEN ask the user if they want to construct the dependency graph,
-    and if so, use the tool/function `construct_dependency_graph` to construct
+    and if so, use the tool/function `{construct_dependency_graph_name}` to construct
       the dependency graph. Otherwise, say `Couldn't retrieve package type or version`
       and {NO_ANSWER}.
     After constructing the dependency graph successfully, you will have access to Neo4j 
     graph database, which contains dependency graph.
-    You will try your best to answer my questions. Note that:
-    1. You can use the tool `get_schema` to get node label and relationships in the
-    dependency graph. 
-    2. You can use the tool `retrieval_query` to get relevant information from the
-      graph database. I will execute this query and send you back the result.
+    **IMPORTANT**: Address the user using `{SEND_TO}User` to have a conversation with
+    the User.
+    Note that:
+    1. You can use the tool `{graph_schema_tool_name}` to get node label and
+     relationships in the dependency graph. 
+    2. You can use the tool `{cypher_retrieval_tool_name}` to get relevant information
+     from the graph database. I will execute this query and send you back the result.
       Make sure your queries comply with the database schema.
-    3. Use the `web_search` tool/function to get information if needed.
-    To display the dependency graph use this tool `visualize_dependency_graph`.
+    3. Use the `{web_search_name}` tool/function to get information if needed.
+    To display the dependency graph use this tool `{visualize_dependency_graph_name}`.
+    You will try your best to answer User's questions. 
     """
     task_config = TaskConfig(addressing_prefix=SEND_TO)
     task = Task(
