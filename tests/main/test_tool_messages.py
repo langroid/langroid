@@ -118,6 +118,10 @@ agent.enable_message(FileExistsMessage)
 agent.enable_message(PythonVersionMessage)
 
 
+def test_tool_message_name():
+    assert FileExistsMessage.default_value("request") == FileExistsMessage.name()
+
+
 @pytest.mark.parametrize("msg_class", [None, FileExistsMessage, PythonVersionMessage])
 @pytest.mark.parametrize("use", [True, False])
 @pytest.mark.parametrize("handle", [True, False])
