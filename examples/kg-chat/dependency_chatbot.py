@@ -269,7 +269,9 @@ def main(
             use_tools=tools,
             use_functions_api=not tools,
             addressing_prefix=SEND_TO,
-            llm=lm.azure_openai.AzureConfig(),
+            llm=lm.OpenAIGPTConfig(
+                chat_model=model or lm.OpenAIChatModel.GPT4o,
+            ),
         ),
     )
 
