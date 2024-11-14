@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "langroid"
-version = "0.19.5"
+version = "0.22.1"
 description = "Harness LLMs with Multi-Agent Programming"
 authors = ["Prasad Chalasani <pchalasani@gmail.com>"]
 readme = "README.md"
@@ -90,6 +90,9 @@ python-magic = "^0.4.27"
 json-repair = "^0.29.9"
 cerebras-cloud-sdk = "^1.1.0"
 gitpython = "^3.1.43"
+python-arango = {version="^8.1.2", optional=true}
+arango-datasets = {version="^1.2.2", optional=true}
+adb-cloud-connector = "^1.0.2"
 
 
 [tool.poetry.extras]
@@ -113,6 +116,7 @@ all = [
 #    "lancedb", "tantivy", "pyarrow",
     "chromadb",
     "metaphor-python", "neo4j",
+    "python-arango", "arango-datasets",
     "litellm",
     "chainlit", "python-socketio",
     "fastembed"
@@ -130,6 +134,7 @@ mysql = ["pymysql"]
 sql = ["sqlalchemy", "pymysql",  "psycopg2"]
 litellm = ["litellm"]
 neo4j = ["neo4j"]
+arango = ["python-arango", "arango-datasets"]
 metaphor = ["metaphor-python"]
 chainlit = ["chainlit", "python-socketio"]
 chromadb = ["chromadb"]
@@ -166,6 +171,7 @@ coverage = "^7.2.5"
 pytest-xdist = "^3.6.1"
 pytest-timeout = "^2.3.1"
 pytest-cov = "^5.0.0"
+docker = "^7.1.0"
 
 [tool.poetry.group.docs]
 optional = true
