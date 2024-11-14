@@ -1,11 +1,9 @@
-import json
 import logging
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Union
 
 from rich import print
 from rich.console import Console
 
-from langroid.agent import ToolMessage
 from langroid.pydantic_v1 import BaseModel, BaseSettings
 
 if TYPE_CHECKING:
@@ -13,13 +11,25 @@ if TYPE_CHECKING:
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.chat_document import ChatDocument
-from langroid.agent.special.neo4j.utils.system_message import (
+from langroid.agent.special.neo4j.system_messages import (
     ADDRESSING_INSTRUCTION,
     DEFAULT_NEO4J_CHAT_SYSTEM_MESSAGE,
-    DEFAULT_SYS_MSG,
+    DONE_INSTRUCTION,
+    SCHEMA_PROVIDED_SYS_MSG,
     SCHEMA_TOOLS_SYS_MSG,
 )
+from langroid.agent.special.neo4j.tools import (
+    CypherCreationTool,
+    CypherRetrievalTool,
+    GraphSchemaTool,
+    cypher_creation_tool_name,
+    cypher_retrieval_tool_name,
+    graph_schema_tool_name,
+)
+from langroid.agent.tools.orchestration import DoneTool, ForwardTool
+from langroid.exceptions import LangroidImportError
 from langroid.mytypes import Entity
+from langroid.utils.constants import SEND_TO
 
 logger = logging.getLogger(__name__)
 
@@ -29,25 +39,6 @@ NEO4J_ERROR_MSG = "There was an error in your Cypher Query"
 
 
 # TOOLS to be used by the agent
-
-
-class CypherRetrievalTool(ToolMessage):
-    request: str = "retrieval_query"
-    purpose: str = """Use this tool to send the Cypher query to retreive data from the 
-    graph database based provided text description and schema."""
-    cypher_query: str
-
-
-class CypherCreationTool(ToolMessage):
-    request: str = "create_query"
-    purpose: str = """Use this tool to send the Cypher query to create 
-    entities/relationships in the graph database."""
-    cypher_query: str
-
-
-class GraphSchemaTool(ToolMessage):
-    request: str = "get_schema"
-    purpose: str = """To get the schema of the graph database."""
 
 
 class Neo4jSettings(BaseSettings):
@@ -65,17 +56,22 @@ class Neo4jSettings(BaseSettings):
 
 class QueryResult(BaseModel):
     success: bool
-    data: Optional[Union[str, List[Dict[Any, Any]]]] = None
+    data: List[Dict[Any, Any]] | str | None = None
 
 
 class Neo4jChatAgentConfig(ChatAgentConfig):
     neo4j_settings: Neo4jSettings = Neo4jSettings()
     system_message: str = DEFAULT_NEO4J_CHAT_SYSTEM_MESSAGE
-    kg_schema: Optional[List[Dict[str, Any]]]
+    kg_schema: Optional[List[Dict[str, Any]]] = None
     database_created: bool = False
+    # whether agent MUST use schema_tools to get schema, i.e.
+    # schema is NOT initially provided
     use_schema_tools: bool = True
     use_functions_api: bool = True
     use_tools: bool = False
+    # whether the agent is used in a continuous chat with user,
+    # as opposed to returning a result from the task.run()
+    chat_mode: bool = False
     addressing_prefix: str = ""
 
 
@@ -89,21 +85,48 @@ class Neo4jChatAgent(ChatAgent):
         self.config: Neo4jChatAgentConfig = config
         self._validate_config()
         self._import_neo4j()
-        self._initialize_connection()
-        self._init_tool_messages()
+        self._initialize_db()
+        self._init_tools_sys_message()
         self.init_state()
 
     def init_state(self) -> None:
         super().init_state()
         self.current_retrieval_cypher_query: str = ""
+        self.tried_schema: bool = False
 
     def handle_message_fallback(
         self, msg: str | ChatDocument
-    ) -> str | ChatDocument | None:
-        """When LLM sends a no-tool msg, assume user is the intended recipient."""
+    ) -> str | ForwardTool | None:
+        """
+        When LLM sends a no-tool msg, assume user is the intended recipient,
+        and if in interactive mode, forward the msg to the user.
+        """
+
+        done_tool_name = DoneTool.default_value("request")
+        forward_tool_name = ForwardTool.default_value("request")
         if isinstance(msg, ChatDocument) and msg.metadata.sender == Entity.LLM:
-            msg.metadata.recipient = Entity.USER
-            return msg
+            if self.interactive:
+                return ForwardTool(agent="User")
+            else:
+                if self.config.chat_mode:
+                    return f"""
+                    Since you did not explicitly address the User, it is not clear
+                    whether:
+                    - you intend this to be the final response to the 
+                      user's query/request, in which case you must use the 
+                      `{forward_tool_name}` to indicate this.
+                    - OR, you FORGOT to use an Appropriate TOOL,
+                      in which case you should use the available tools to
+                      make progress on the user's query/request.
+                    """
+                return f"""
+                The intent of your response is not clear:
+                - if you intended this to be the final answer to the user's query,
+                    then use the `{done_tool_name}` to indicate so,
+                    with the `content` set to the answer or result.
+                - otherwise, use one of the available tools to make progress 
+                    to arrive at the final answer.
+                """
         return None
 
     def _validate_config(self) -> None:
@@ -122,16 +145,9 @@ class Neo4jChatAgent(ChatAgent):
         try:
             import neo4j
         except ImportError:
-            raise ImportError(
-                """
-                neo4j not installed. Please install it via:
-                pip install neo4j.
-                Or when installing langroid, install it with the `neo4j` extra:
-                pip install langroid[neo4j]
-                """
-            )
+            raise LangroidImportError("neo4j", "neo4j")
 
-    def _initialize_connection(self) -> None:
+    def _initialize_db(self) -> None:
         """
         Initializes a connection to the Neo4j database using the configuration settings.
         """
@@ -144,6 +160,16 @@ class Neo4jChatAgent(ChatAgent):
                     self.config.neo4j_settings.password,
                 ),
             )
+            with self.driver.session() as session:
+                result = session.run("MATCH (n) RETURN count(n) as count")
+                count = result.single()["count"]  # type: ignore
+                self.config.database_created = count > 0
+
+            # If database has data, get schema
+            if self.config.database_created:
+                # this updates self.config.kg_schema
+                self.graph_schema_tool(None)
+
         except Exception as e:
             raise ConnectionError(f"Failed to initialize Neo4j connection: {e}")
 
@@ -226,6 +252,21 @@ class Neo4jChatAgent(ChatAgent):
             QueryResult: An object representing the outcome of the query execution.
                          It contains a success flag and an optional error message.
         """
+        # Check if query contains database/collection creation patterns
+        query_upper = query.upper()
+        is_creation_query = any(
+            [
+                "CREATE" in query_upper,
+                "MERGE" in query_upper,
+                "CREATE CONSTRAINT" in query_upper,
+                "CREATE INDEX" in query_upper,
+            ]
+        )
+
+        if is_creation_query:
+            self.config.database_created = True
+            logger.info("Detected database/collection creation query")
+
         if not self.driver:
             return QueryResult(
                 success=False, data="No database connection is established."
@@ -260,7 +301,7 @@ class Neo4jChatAgent(ChatAgent):
         else:
             print("[red]Database is not deleted!")
 
-    def retrieval_query(self, msg: CypherRetrievalTool) -> str:
+    def cypher_retrieval_tool(self, msg: CypherRetrievalTool) -> str:
         """ "
         Handle a CypherRetrievalTool message by executing a Cypher query and
         returning the result.
@@ -271,12 +312,19 @@ class Neo4jChatAgent(ChatAgent):
             str: The result of executing the cypher_query.
         """
         if not self.tried_schema:
-            return """
-            You did not yet use the `get_schema` tool to get the schema 
+            return f"""
+            You did not yet use the `{graph_schema_tool_name}` tool to get the schema 
             of the neo4j knowledge-graph db. Use that tool first before using 
-            the `retrieval_query` tool, to ensure you know all the correct
+            the `{cypher_retrieval_tool_name}` tool, to ensure you know all the correct
             node labels, relationship types, and property keys available in
             the database.
+            """
+        elif not self.config.database_created:
+            return f"""
+            You have not yet created the Neo4j database. 
+            Use the `{cypher_creation_tool_name}`
+            tool to create the database first before using the 
+            `{cypher_retrieval_tool_name}` tool.
             """
         query = msg.cypher_query
         self.current_retrieval_cypher_query = query
@@ -291,7 +339,7 @@ class Neo4jChatAgent(ChatAgent):
             """
         return str(response.data)
 
-    def create_query(self, msg: CypherCreationTool) -> str:
+    def cypher_creation_tool(self, msg: CypherCreationTool) -> str:
         """ "
         Handle a CypherCreationTool message by executing a Cypher query and
         returning the result.
@@ -306,6 +354,7 @@ class Neo4jChatAgent(ChatAgent):
         logger.info(f"Executing Cypher query: {query}")
         response = self.write_query(query)
         if response.success:
+            self.config.database_created = True
             return "Cypher query executed successfully"
         else:
             return str(response.data)
@@ -316,7 +365,9 @@ class Neo4jChatAgent(ChatAgent):
     # The current query works well. But we could use the queries here:
     # https://github.com/neo4j/NaLLM/blob/1af09cd117ba0777d81075c597a5081583568f9f/api/
     # src/driver/neo4j.py#L30
-    def get_schema(self, msg: GraphSchemaTool | None) -> str:
+    def graph_schema_tool(
+        self, msg: GraphSchemaTool | None
+    ) -> str | Optional[Union[str, List[Dict[Any, Any]]]]:
         """
         Retrieves the schema of a Neo4j graph database.
 
@@ -334,27 +385,42 @@ class Neo4jChatAgent(ChatAgent):
              to database connectivity or query execution.
         """
         self.tried_schema = True
+        if self.config.kg_schema is not None and len(self.config.kg_schema) > 0:
+            return self.config.kg_schema
         schema_result = self.read_query("CALL db.schema.visualization()")
         if schema_result.success:
-            # ther is a possibility that the schema is empty, which is a valid response
+            # there is a possibility that the schema is empty, which is a valid response
             # the schema.data will be: [{"nodes": [], "relationships": []}]
-            return json.dumps(schema_result.data)
+            self.config.kg_schema = schema_result.data  # type: ignore
+            return schema_result.data
         else:
             return f"Failed to retrieve schema: {schema_result.data}"
 
-    def _init_tool_messages(self) -> None:
+    def _init_tools_sys_message(self) -> None:
         """Initialize message tools used for chatting."""
         self.tried_schema = False
         message = self._format_message()
         self.config.system_message = self.config.system_message.format(mode=message)
-        if self.config.addressing_prefix != "":
+        if self.config.chat_mode:
+            self.config.addressing_prefix = self.config.addressing_prefix or SEND_TO
             self.config.system_message += ADDRESSING_INSTRUCTION.format(
                 prefix=self.config.addressing_prefix
             )
+        else:
+            self.config.system_message += DONE_INSTRUCTION
         super().__init__(self.config)
-        self.enable_message(CypherRetrievalTool)
-        self.enable_message(CypherCreationTool)
-        self.enable_message(GraphSchemaTool)
+        # Note we are enabling GraphSchemaTool regardless of whether
+        # self.config.use_schema_tools is True or False, because
+        # even when schema provided, the agent may later want to get the schema,
+        # e.g. if the db evolves, or if it needs to bring in the schema
+        self.enable_message(
+            [
+                GraphSchemaTool,
+                CypherRetrievalTool,
+                CypherCreationTool,
+                DoneTool,
+            ]
+        )
 
     def _format_message(self) -> str:
         if self.driver is None:
@@ -363,5 +429,5 @@ class Neo4jChatAgent(ChatAgent):
         return (
             SCHEMA_TOOLS_SYS_MSG
             if self.config.use_schema_tools
-            else DEFAULT_SYS_MSG.format(schema=self.get_schema(None))
+            else SCHEMA_PROVIDED_SYS_MSG.format(schema=self.graph_schema_tool(None))
         )

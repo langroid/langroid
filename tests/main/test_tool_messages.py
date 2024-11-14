@@ -9,6 +9,7 @@ from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.chat_document import ChatDocMetaData, ChatDocument
 from langroid.agent.task import Task
 from langroid.agent.tool_message import ToolMessage
+from langroid.agent.tools import DoneTool
 from langroid.agent.tools.orchestration import (
     AgentDoneTool,
     FinalResultTool,
@@ -115,6 +116,10 @@ cartesian_product = list(
 
 agent.enable_message(FileExistsMessage)
 agent.enable_message(PythonVersionMessage)
+
+
+def test_tool_message_name():
+    assert FileExistsMessage.default_value("request") == FileExistsMessage.name()
 
 
 @pytest.mark.parametrize("msg_class", [None, FileExistsMessage, PythonVersionMessage])
@@ -1180,3 +1185,70 @@ def test_agent_respond_only_tools(tool: str):
             assert tool.answer == "15"
             assert alice_task.n_stalled_steps == 0
             assert bob_task.n_stalled_steps == 0
+
+
+def test_reduce_raw_tool_result():
+    BIG_RESULT = "hello " * 50
+
+    class MyTool(ToolMessage):
+        request: str = "my_tool"
+        purpose: str = "to present a number <num>"
+        num: int
+        _max_result_tokens = 10
+        _max_retained_tokens = 2
+
+        def handle(self) -> str:
+            return BIG_RESULT
+
+    class MyAgent(ChatAgent):
+        def user_response(
+            self,
+            msg: Optional[str | ChatDocument] = None,
+        ) -> Optional[ChatDocument]:
+            """
+            Mock user_response method for testing
+            """
+            txt = msg if isinstance(msg, str) else msg.content
+            map = dict([("hello", "50"), ("3", "5")])
+            response = map.get(txt)
+            # return the increment of input number
+            return self.create_user_response(response)
+
+    # create dummy agent first, just to get small_result with truncation
+    agent = MyAgent(ChatAgentConfig())
+    small_result = agent._maybe_truncate_result(BIG_RESULT, MyTool._max_result_tokens)
+
+    # now create the actual agent
+    agent = MyAgent(
+        ChatAgentConfig(
+            name="Test",
+            # no need for a real LLM, use a mock
+            llm=MockLMConfig(
+                response_dict={
+                    "1": MyTool(num=1).to_json(),
+                    small_result: "hello",
+                    "50": DoneTool(content="Finished").to_json(),
+                }
+            ),
+        )
+    )
+
+    agent.enable_message(MyTool)
+    task = Task(agent, interactive=True, only_user_quits_root=False)
+
+    result = task.run("1")
+    """
+    msg history:
+    
+    sys_msg
+    user: 1 -> 
+    LLM: MyTool(1) ->
+    agent: BIG_RESULT -> truncated to 10 tokens, as `small_result`
+    LLM: hello ->
+    user: 50 -> 
+    LLM: Done (Finished)
+    """
+    assert result.content == "Finished"
+    assert len(agent.message_history) == 7
+    tool_result = agent.message_history[3].content
+    assert "my_tool" in tool_result and str(MyTool._max_retained_tokens) in tool_result

@@ -94,6 +94,9 @@ class AgentConfig(BaseSettings):
     respond_tools_only: bool = False  # respond only to tool messages (not plain text)?
     # allow multiple tool messages in a single response?
     allow_multiple_tools: bool = True
+    human_prompt: str = (
+        "Human (respond or q, x to exit current level, " "or hit enter to continue)"
+    )
 
     @validator("name")
     def check_name_alphanum(cls, v: str) -> str:
@@ -411,16 +414,13 @@ class Agent(ABC):
         results = self.handle_message(msg)
         if results is None:
             return None
-        if isinstance(results, ChatDocument):
-            # Preserve trail of tool_ids for OpenAI Assistant fn-calls
-            results.metadata.tool_ids = (
-                [] if isinstance(msg, str) else msg.metadata.tool_ids
-            )
-            return results
         if not settings.quiet:
-            results_str = (
-                results if isinstance(results, str) else json.dumps(results, indent=2)
-            )
+            if isinstance(results, str):
+                results_str = results
+            elif isinstance(results, ChatDocument):
+                results_str = results.content
+            elif isinstance(results, dict):
+                results_str = json.dumps(results, indent=2)
             console.print(f"[red]{self.indent}", end="")
             print(f"[red]Agent: {escape(results_str)}")
             maybe_json = len(extract_top_level_json(results_str)) > 0
@@ -428,6 +428,12 @@ class Agent(ABC):
                 content=results_str,
                 language="json" if maybe_json else "text",
             )
+        if isinstance(results, ChatDocument):
+            # Preserve trail of tool_ids for OpenAI Assistant fn-calls
+            results.metadata.tool_ids = (
+                [] if isinstance(msg, str) else msg.metadata.tool_ids
+            )
+            return results
         sender_name = self.config.name
         if isinstance(msg, ChatDocument) and msg.function_call is not None:
             # if result was from handling an LLM `function_call`,
@@ -655,9 +661,9 @@ class Agent(ABC):
                 user_msg = self.callbacks.get_user_response(prompt="")
             else:
                 user_msg = Prompt.ask(
-                    f"[blue]{self.indent}Human "
-                    "(respond or q, x to exit current level, "
-                    f"or hit enter to continue)\n{self.indent}",
+                    f"[blue]{self.indent}"
+                    + self.config.human_prompt
+                    + f"\n{self.indent}"
                 ).strip()
 
         tool_ids = []
@@ -668,7 +674,7 @@ class Agent(ABC):
             return None
         else:
             if user_msg.startswith("SYSTEM"):
-                user_msg = user_msg[6:].strip()
+                user_msg = user_msg.replace("SYSTEM", "").strip()
                 source = Entity.SYSTEM
                 sender = Entity.SYSTEM
             else:
@@ -874,7 +880,13 @@ class Agent(ABC):
         return cdoc
 
     def has_tool_message_attempt(self, msg: str | ChatDocument | None) -> bool:
-        """Check whether msg contains a Tool/fn-call attempt (by the LLM)"""
+        """
+        Check whether msg contains a Tool/fn-call attempt (by the LLM).
+
+        CAUTION: This uses self.get_tool_messages(msg) which as a side-effect
+        may update msg.tool_messages when msg is a ChatDocument, if there are
+        any tools in msg.
+        """
         if msg is None:
             return False
         try:
@@ -915,6 +927,9 @@ class Agent(ABC):
     ) -> List[ToolMessage]:
         """
         Get ToolMessages recognized in msg, handle-able by this agent.
+        NOTE: as a side-effect, this will update msg.tool_messages
+        when msg is a ChatDocument and msg contains tool messages.
+
         If all_tools is True:
         - return all tools, i.e. any tool in self.llm_tools_known,
             whether it is handled by this agent or not;
@@ -1435,6 +1450,40 @@ class Agent(ABC):
 
         return None
 
+    def _maybe_truncate_result(
+        self, result: str | ChatDocument | None, max_tokens: int | None
+    ) -> str | ChatDocument | None:
+        """
+        Truncate the result string to `max_tokens` tokens.
+        """
+        if result is None or max_tokens is None:
+            return result
+        result_str = result.content if isinstance(result, ChatDocument) else result
+        num_tokens = (
+            self.parser.num_tokens(result_str)
+            if self.parser is not None
+            else len(result_str) / 4.0
+        )
+        if num_tokens <= max_tokens:
+            return result
+        truncate_warning = f"""
+        The TOOL result was large, so it was truncated to {max_tokens} tokens.
+        To get the full result, the TOOL must be called again.
+        """
+        if isinstance(result, str):
+            return (
+                self.parser.truncate_tokens(result, max_tokens)
+                if self.parser is not None
+                else result[: max_tokens * 4]  # approx truncate
+            ) + truncate_warning
+        elif isinstance(result, ChatDocument):
+            result.content = (
+                self.parser.truncate_tokens(result.content, max_tokens)
+                if self.parser is not None
+                else result.content[: max_tokens * 4]  # approx truncate
+            ) + truncate_warning
+            return result
+
     def handle_tool_message(
         self,
         tool: ToolMessage,
@@ -1470,7 +1519,9 @@ class Agent(ABC):
             # not a pydantic validation error,
             # which we check in `handle_message`
             raise e
-        return result  # type: ignore
+        return self._maybe_truncate_result(
+            result, tool._max_result_tokens
+        )  # type: ignore
 
     def num_tokens(self, prompt: str | List[LLMMessage]) -> int:
         if self.parser is None:

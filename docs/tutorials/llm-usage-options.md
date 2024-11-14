@@ -204,16 +204,21 @@ Using an LLM API involves these steps:
 
 ## Web-interfaces to Open LLMs
 
-These are LLMs that have been publicly released, i.e. their parameters ("weights") 
-are publicly available -- we refer to these as *open-weight* LLMs. If in addition, the
-training datasets, and data-preprocessing and training code are also available, we would
-call these *open-source* LLMs. But lately there is a looser usage of the term "open-source", referring to just the weights being available. For our purposes we will just refer all of these models as **Open LLMs**.
+!!! note  "Open LLMs"
+    These are LLMs that have been publicly released, i.e. their parameters ("weights") 
+    are publicly available -- we refer to these as *open-weight* LLMs. If in addition, the
+    training datasets, and data-preprocessing and training code are also available, we would
+    call these *open-source* LLMs. But lately there is a looser usage of the term "open-source",referring to just the weights being available. For our purposes we will just refer all of these models as **Open LLMs**.
 
-There are many options here, but two popular ones are:
+There are many options here, but some popular ones are below. Note that some of these
+are front-ends that allow you to interact with not only Open LLMs but also 
+proprietary LLM APIs.
 
 - [LMStudio](https://lmstudio.ai/)
 - [OpenWebUI](https://github.com/open-webui/open-webui)
-
+- [Msty](https://msty.app/)
+- [AnythingLLM](https://anythingllm.com/)
+- [LibreChat](https://www.librechat.ai/)
 
 
 ## API Access to Open LLMs

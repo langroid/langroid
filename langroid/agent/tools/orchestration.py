@@ -41,11 +41,11 @@ class DoneTool(ToolMessage):
     """Tool for Agent Entity (i.e. agent_response) or LLM entity (i.e. llm_response) to
     signal the current task is done, with some content as the result."""
 
-    purpose = """
+    purpose: str = """
     To signal the current task is done, along with an optional message <content>
     of arbitrary type (default None).
     """
-    request = "done_tool"
+    request: str = "done_tool"
     content: str = ""
 
     def response(self, agent: ChatAgent) -> ChatDocument:
@@ -77,7 +77,7 @@ class ResultTool(ToolMessage):
     Note:
         - when defining a tool handler or agent_response, you can directly return
             ResultTool(field1 = val1, ...),
-            where the values can be aribitrary data structures, including nested
+            where the values can be arbitrary data structures, including nested
             Pydantic objs, or you can define a subclass of ResultTool with the
             fields you want to return.
         - This is a special ToolMessage that is NOT meant to be used or handled
@@ -143,10 +143,10 @@ class PassTool(ToolMessage):
     Similar to ForwardTool, but without specifying the recipient agent.
     """
 
-    purpose = """
+    purpose: str = """
     To pass the current message so that other agents can handle it.
     """
-    request = "pass_tool"
+    request: str = "pass_tool"
 
     def response(self, agent: ChatAgent, chat_doc: ChatDocument) -> ChatDocument:
         """When this tool is enabled for an Agent, this will result in a method
@@ -178,10 +178,10 @@ class DonePassTool(PassTool):
     Similar to PassTool, except we append a DoneTool to the result tool_messages.
     """
 
-    purpose = """
+    purpose: str = """
     To signal the current task is done, with results set to the current/incoming msg.
     """
-    request = "done_pass_tool"
+    request: str = "done_pass_tool"
 
     def response(self, agent: ChatAgent, chat_doc: ChatDocument) -> ChatDocument:
         # use PassTool to get the right ChatDocument to pass...

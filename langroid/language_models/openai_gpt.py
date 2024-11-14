@@ -66,6 +66,7 @@ if "OLLAMA_HOST" in os.environ:
 else:
     OLLAMA_BASE_URL = "http://localhost:11434/v1"
 
+GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/"
 OLLAMA_API_KEY = "ollama"
 DUMMY_API_KEY = "xxx"
 
@@ -90,6 +91,14 @@ class OpenAIChatModel(str, Enum):
     GPT4o_MINI = "gpt-4o-mini"
     O1_PREVIEW = "o1-preview"
     O1_MINI = "o1-mini"
+
+
+class GeminiModel(str, Enum):
+    """Enum for Gemini models"""
+
+    GEMINI_1_5_FLASH = "gemini-1.5-flash"
+    GEMINI_1_5_FLASH_8B = "gemini-1.5-flash-8b"
+    GEMINI_1_5_PRO = "gemini-1.5-pro"
 
 
 class OpenAICompletionModel(str, Enum):
@@ -503,6 +512,7 @@ class OpenAIGPT(LanguageModel):
 
         self.is_groq = self.config.chat_model.startswith("groq/")
         self.is_cerebras = self.config.chat_model.startswith("cerebras/")
+        self.is_gemini = self.config.chat_model.startswith("gemini/")
 
         if self.is_groq:
             self.config.chat_model = self.config.chat_model.replace("groq/", "")
@@ -524,6 +534,11 @@ class OpenAIGPT(LanguageModel):
                 api_key=self.api_key,
             )
         else:
+            if self.is_gemini:
+                self.config.chat_model = self.config.chat_model.replace("gemini/", "")
+                self.api_key = os.getenv("GEMINI_API_KEY", DUMMY_API_KEY)
+                self.api_base = GEMINI_BASE_URL
+
             self.client = OpenAI(
                 api_key=self.api_key,
                 base_url=self.api_base,
@@ -623,7 +638,13 @@ class OpenAIGPT(LanguageModel):
         Currently main troublemaker is o1* series.
         """
         match self.config.chat_model:
-            case OpenAIChatModel.O1_MINI | OpenAIChatModel.O1_PREVIEW:
+            case (
+                OpenAIChatModel.O1_MINI
+                | OpenAIChatModel.O1_PREVIEW
+                | GeminiModel.GEMINI_1_5_FLASH
+                | GeminiModel.GEMINI_1_5_FLASH_8B
+                | GeminiModel.GEMINI_1_5_PRO
+            ):
                 return {"max_tokens": "max_completion_tokens"}
             case _:
                 return {}
@@ -1229,13 +1250,10 @@ class OpenAIGPT(LanguageModel):
         cost = 0.0
         prompt_tokens = 0
         completion_tokens = 0
-        if not cached and not self.get_stream():
+        if not cached and not self.get_stream() and response["usage"] is not None:
             prompt_tokens = response["usage"]["prompt_tokens"]
             completion_tokens = response["usage"]["completion_tokens"]
-            cost = self._cost_chat_model(
-                response["usage"]["prompt_tokens"],
-                response["usage"]["completion_tokens"],
-            )
+            cost = self._cost_chat_model(prompt_tokens, completion_tokens)
 
         return LLMTokenUsage(
             prompt_tokens=prompt_tokens, completion_tokens=completion_tokens, cost=cost

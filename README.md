@@ -94,7 +94,7 @@ import langroid.language_models as lm
 # set up LLM
 llm_cfg = lm.OpenAIGPTConfig( # or OpenAIAssistant to use Assistant API 
   # any model served via an OpenAI-compatible API
-  chat_model=lm.OpenAIChatModel.GPT4_TURBO, # or, e.g., "ollama/mistral"
+  chat_model=lm.OpenAIChatModel.GPT4o, # or, e.g., "ollama/mistral"
 )
 # use LLM directly
 mdl = lm.OpenAIGPT(llm_cfg)
@@ -135,6 +135,12 @@ teacher_task.run()
 <details>
 <summary> <b>Click to expand</b></summary>
 
+- **Nov 2024:**
+  - **[0.22.0](https://langroid.github.io/langroid/notes/large-tool-results/)**: 
+     Optional parameters to truncate large tool results.
+  - **[0.21.0](https://langroid.github.io/langroid/notes/gemini/)** Direct support for Gemini models via OpenAI client instead of using LiteLLM.
+  - **[0.20.0](https://github.com/langroid/langroid/releases/tag/0.20.0)** Support for 
+    ArangoDB Knowledge Graphs.
 - **Oct 2024:**
   - **[0.18.0]** [LLMConfig.async_stream_quiet](https://langroid.github.io/langroid/notes/async-streaming/) flag to 
     turn off LLM output in async + stream mode.
@@ -248,7 +254,7 @@ teacher_task.run()
       decides a filter and rephrase query to send to a RAG agent.
   - **[0.1.141](https://github.com/langroid/langroid/releases/tag/0.1.141):**
     API Simplifications to reduce boilerplate:
-    auto-select an available OpenAI model (preferring gpt-4-turbo), simplifies defaults.
+    auto-select an available OpenAI model (preferring gpt-4o), simplifies defaults.
     Simpler `Task` initialization with default `ChatAgent`.
 - **Nov 2023:**
   - **[0.1.126](https://github.com/langroid/langroid/releases/tag/0.1.126):**
@@ -532,7 +538,7 @@ provides more information, and you can set each environment variable as follows:
 - `AZURE_OPENAI_API_BASE` from the value of `ENDPOINT`, typically looks like `https://your.domain.azure.com`.
 - For `AZURE_OPENAI_API_VERSION`, you can use the default value in `.env-template`, and latest version can be found [here](https://learn.microsoft.com/en-us/azure/ai-services/openai/whats-new#azure-openai-chat-completion-general-availability-ga)
 - `AZURE_OPENAI_DEPLOYMENT_NAME` is the name of the deployed model, which is defined by the user during the model setup 
-- `AZURE_OPENAI_MODEL_NAME` Azure OpenAI allows specific model names when you select the model for your deployment. You need to put precisly the exact model name that was selected. For example, GPT-3.5 (should be `gpt-35-turbo-16k` or `gpt-35-turbo`) or GPT-4 (should be `gpt-4-32k` or `gpt-4`).
+- `AZURE_OPENAI_MODEL_NAME` Azure OpenAI allows specific model names when you select the model for your deployment. You need to put precisly the exact model name that was selected. For example, GPT-4 (should be `gpt-4-32k` or `gpt-4`).
 - `AZURE_OPENAI_MODEL_VERSION` is required if `AZURE_OPENAI_MODEL_NAME = gpt=4`, which will assist Langroid to determine the cost of the model  
 </details>
 
