@@ -151,7 +151,7 @@ class Neo4jChatAgent(ChatAgent):
         """
         Initializes a connection to the Neo4j database using the configuration settings.
         """
-        self.tried_schema: bool = False
+        self.tried_schema = False
         try:
             assert isinstance(self.config, Neo4jChatAgentConfig)
             self.driver = neo4j.GraphDatabase.driver(
