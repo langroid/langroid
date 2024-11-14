@@ -306,6 +306,8 @@ class OpenAIGPTConfig(LLMConfig):
     completion_model: str = defaultOpenAICompletionModel
     run_on_first_use: Callable[[], None] = noop
     parallel_tool_calls: Optional[bool] = None
+    supports_json_schema: Optional[bool] = None
+    supports_strict_tools: Optional[bool] = None
     # a string that roughly matches a HuggingFace chat_template,
     # e.g. "mistral-instruct-v0.2 (a fuzzy search is done to find the closest match)
     formatter: str | None = None
@@ -472,8 +474,8 @@ class OpenAIGPT(LanguageModel):
                 HFPromptFormatterConfig(model_name=self.config.formatter)
             )
 
-        self.supports_json_schema: bool = False
-        self.supports_strict_tools: bool = False
+        self.supports_json_schema: bool = self.config.supports_json_schema or False
+        self.supports_strict_tools: bool = self.config.supports_strict_tools or False
 
         # if model name starts with "litellm",
         # set the actual model name by stripping the "litellm/" prefix

@@ -17,6 +17,16 @@ cfg = ChatAgentConfig(
         cache_config=RedisCacheConfig(fake=False),
     ),
 )
+strict_cfg = ChatAgentConfig(
+    name="test-langroid",
+    vecdb=None,
+    llm=OpenAIGPTConfig(
+        type="openai",
+        cache_config=RedisCacheConfig(fake=False),
+        supports_json_schema=True,
+        supports_strict_tools=True,
+    ),
+)
 
 
 class Country(BaseModel):
@@ -151,7 +161,7 @@ def test_llm_strict_json(
 ):
     """Tests structured output generation in strict JSON mode."""
     set_global(test_settings)
-    agent = ChatAgent(cfg)
+    agent = ChatAgent(strict_cfg)
 
     def typed_llm_response(
         prompt: str,
@@ -211,7 +221,7 @@ async def test_llm_strict_json_async(
 ):
     """Tests asynchronous structured output generation in strict JSON mode."""
     set_global(test_settings)
-    agent = ChatAgent(cfg)
+    agent = ChatAgent(strict_cfg)
 
     async def typed_llm_response(
         prompt: str,

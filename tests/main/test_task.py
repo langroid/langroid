@@ -21,6 +21,7 @@ from langroid.agent.tools.orchestration import (
 )
 from langroid.language_models.base import LLMMessage
 from langroid.language_models.mock_lm import MockLMConfig
+from langroid.language_models.openai_gpt import OpenAIGPTConfig
 from langroid.mytypes import Entity
 from langroid.utils.configuration import (
     Settings,
@@ -839,13 +840,23 @@ def test_task_output_format_sequence(
         return tool.parse_obj(json.loads(message.content))
 
     def test_sequence(x: int) -> None:
-        agent = CompositionAgent()
+        agent = CompositionAgent(
+            ChatAgentConfig(
+                llm=OpenAIGPTConfig(
+                    supports_json_schema=True,
+                    supports_strict_tools=True,
+                ),
+            )
+        )
         task = lr.Task(
             agent,
             system_message="""
             You will be provided with a number `x` and will compute (3 * x + 1) ** 4.
             You will do so by computing 3 * x first, then incrementing
             the result by one, then taking the fourth power of the result.
+            The result of the previous step will be provided directly, do NOT attempt to
+            recompute prior steps using the provided value. Instead, the provided result
+            should be forwarded as an argument to the next step.
             """,
             interactive=False,
             default_return_type=int,
@@ -924,13 +935,23 @@ async def test_task_output_format_sequence_async(
         return tool.parse_obj(json.loads(message.content))
 
     async def test_sequence(x: int) -> None:
-        agent = CompositionAgent()
+        agent = CompositionAgent(
+            ChatAgentConfig(
+                llm=OpenAIGPTConfig(
+                    supports_json_schema=True,
+                    supports_strict_tools=True,
+                ),
+            )
+        )
         task = lr.Task(
             agent,
             system_message="""
             You will be provided with a number `x` and will compute (3 * x + 1) ** 4.
             You will do so by computing 3 * x first, then incrementing
             the result by one, then taking the fourth power of the result.
+            The result of the previous step will be provided directly, do NOT attempt to
+            recompute prior steps using the provided value. Instead, the provided result
+            should be forwarded as an argument to the next step.
             """,
             interactive=False,
             default_return_type=int,

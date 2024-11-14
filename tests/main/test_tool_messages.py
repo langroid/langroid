@@ -309,7 +309,7 @@ def test_llm_tool_message(
         prompt: the prompt to use to induce the LLM to use the tool
         result: the expected result from agent handling the tool-message
     """
-    set_global(test_settings)
+    set_global(test_setting)
     cfg.llm.stream = stream
     agent = MessageHandlingAgent(cfg)
     agent.config.use_functions_api = use_functions_api
@@ -1200,6 +1200,7 @@ def test_agent_respond_only_tools(tool: str):
 @pytest.mark.parametrize("use_fn_api", [True, False])
 @pytest.mark.parametrize("use_tools_api", [True, False])
 def test_structured_recovery(
+    test_settings: Settings,
     use_fn_api: bool,
     use_tools_api: bool,
 ):
@@ -1207,6 +1208,7 @@ def test_structured_recovery(
     Test that structured fallback correctly recovers
     from failed tool calls.
     """
+    set_global(test_settings)
 
     def simulate_failed_call(attempt: str | ChatDocument) -> str:
         agent = ChatAgent(
@@ -1215,6 +1217,10 @@ def test_structured_recovery(
                 use_tools_api=use_tools_api,
                 use_tools=not use_fn_api,
                 strict_recovery=True,
+                llm=OpenAIGPTConfig(
+                    supports_json_schema=True,
+                    supports_strict_tools=True,
+                ),
             )
         )
         agent.enable_message(NabroskiTool)
@@ -1372,6 +1378,7 @@ def test_structured_recovery(
 @pytest.mark.parametrize("use_tools_api", [True, False])
 @pytest.mark.parametrize("parallel_tool_calls", [True, False])
 def test_strict_fallback(
+    test_settings: Settings,
     use_fn_api: bool,
     use_tools_api: bool,
     parallel_tool_calls: bool,
@@ -1381,6 +1388,7 @@ def test_strict_fallback(
     are handled gracefully and are disabled if errors
     are caused.
     """
+    set_global(test_settings)
 
     class BrokenStrictSchemaAgent(ChatAgent):
         def _function_args(self) -> tuple[
@@ -1435,6 +1443,8 @@ def test_strict_fallback(
             use_tools=not use_fn_api,
             llm=OpenAIGPTConfig(
                 parallel_tool_calls=parallel_tool_calls,
+                supports_json_schema=True,
+                supports_strict_tools=True,
             ),
         )
     )
@@ -1463,6 +1473,11 @@ def test_strict_fallback(
             use_functions_api=use_fn_api,
             use_tools_api=use_tools_api,
             use_tools=not use_fn_api,
+            llm=OpenAIGPTConfig(
+                parallel_tool_calls=parallel_tool_calls,
+                supports_json_schema=True,
+                supports_strict_tools=True,
+            ),
         )
     )
     structured_agent = agent[NabroskiTool]
@@ -1536,6 +1551,8 @@ def test_strict_schema_mismatch(
             use_tools=not use_fn_api,
             llm=OpenAIGPTConfig(
                 parallel_tool_calls=parallel_tool_calls,
+                supports_json_schema=True,
+                supports_strict_tools=True,
             ),
         )
     )

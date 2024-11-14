@@ -267,6 +267,7 @@ class EulerTool(ToolMessage):
 @pytest.mark.parametrize("use_fn_api", [True, False])
 @pytest.mark.parametrize("use_tools_api", [True, False])
 async def test_structured_recovery_async(
+    test_settings: Settings,
     use_fn_api: bool,
     use_tools_api: bool,
 ):
@@ -274,6 +275,7 @@ async def test_structured_recovery_async(
     Test that structured fallback correctly recovers
     from failed tool calls.
     """
+    set_global(test_settings)
 
     async def simulate_failed_call(attempt: str | ChatDocument) -> str:
         agent = ChatAgent(
@@ -440,6 +442,7 @@ async def test_structured_recovery_async(
 @pytest.mark.parametrize("use_tools_api", [True, False])
 @pytest.mark.parametrize("parallel_tool_calls", [True, False])
 async def test_strict_fallback_async(
+    test_settings: Settings,
     use_fn_api: bool,
     use_tools_api: bool,
     parallel_tool_calls: bool,
@@ -449,6 +452,7 @@ async def test_strict_fallback_async(
     are handled gracefully and are disabled if errors
     are caused.
     """
+    set_global(test_settings)
 
     class BrokenStrictSchemaAgent(ChatAgent):
         def _function_args(self) -> tuple[
@@ -503,6 +507,8 @@ async def test_strict_fallback_async(
             use_tools=not use_fn_api,
             llm=OpenAIGPTConfig(
                 parallel_tool_calls=parallel_tool_calls,
+                supports_json_schema=True,
+                supports_strict_tools=True,
             ),
         )
     )
@@ -531,6 +537,11 @@ async def test_strict_fallback_async(
             use_functions_api=use_fn_api,
             use_tools_api=use_tools_api,
             use_tools=not use_fn_api,
+            llm=OpenAIGPTConfig(
+                parallel_tool_calls=parallel_tool_calls,
+                supports_json_schema=True,
+                supports_strict_tools=True,
+            ),
         )
     )
     structured_agent = agent[NabroskiTool]
@@ -549,6 +560,7 @@ async def test_strict_fallback_async(
 @pytest.mark.parametrize("use_tools_api", [True, False])
 @pytest.mark.parametrize("parallel_tool_calls", [True, False])
 async def test_strict_schema_mismatch_async(
+    test_settings: Settings,
     use_fn_api: bool,
     use_tools_api: bool,
     parallel_tool_calls: bool,
@@ -556,6 +568,7 @@ async def test_strict_schema_mismatch_async(
     """
     Test that validation errors triggered in strict result in disabled strict ouput.
     """
+    set_global(test_settings)
 
     def int_schema(request: str) -> dict[str, Any]:
         return {
@@ -605,6 +618,8 @@ async def test_strict_schema_mismatch_async(
             use_tools=not use_fn_api,
             llm=OpenAIGPTConfig(
                 parallel_tool_calls=parallel_tool_calls,
+                supports_json_schema=True,
+                supports_strict_tools=True,
             ),
         )
     )
