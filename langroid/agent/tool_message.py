@@ -68,6 +68,10 @@ class ToolMessage(ABC, BaseModel):
         schema_extra = {"exclude": {"purpose", "id"}}
 
     @classmethod
+    def name(cls) -> str:
+        return str(cls.default_value("request"))  # redundant str() to appease mypy
+
+    @classmethod
     def instructions(cls) -> str:
         return """
         IMPORTANT: When using this or any other tool/function, you MUST include a 
