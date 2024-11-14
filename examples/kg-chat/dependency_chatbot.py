@@ -1,4 +1,4 @@
-"""
+r"""
 Single-agent to use to chat with a Neo4j knowledge-graph (KG)
 that models a dependency graph of Python packages.
 
@@ -10,16 +10,19 @@ User specifies package name
 -> Query results returned to LLM
 -> LLM translates to natural language response
 
-This example relies on neo4j. The easiest way to get access to neo4j is by
-creating a cloud account at `https://neo4j.com/cloud/platform/aura-graph-database/`
-
-Upon creating the account successfully, neo4j will create a text file that contains
+If you want to use Neo4j cloud version: 
+  - create an account at `https://neo4j.com/cloud/platform/aura-graph-database/`
+  - Upon creating the account successfully, neo4j will create a text file that contains
 account settings, please provide the following information (uri, username, password) as
-described here
-`https://github.com/langroid/langroid/tree/main/examples/kg-chat#requirements`
 
-The rest of requirements are described in
- `https://github.com/langroid/langroid/blob/main/examples/kg-chat/README.md`
+If you want to use Neo4j Docker image, run the following command:
+
+docker run \
+   -e NEO4J_AUTH=neo4j/password \
+   -p 7474:7474 -p 7687:7687 \
+   -e NEO4J_PLUGINS=\[\"apoc\"\] \
+   -d neo4j:5.6.0
+Then, use the default (uri, username, password) provided in this script. 
 
 Run like this:
 ```
@@ -240,7 +243,23 @@ def main(
 
     load_dotenv()
 
-    neo4j_settings = Neo4jSettings()
+    uri = Prompt.ask(
+        "Neo4j URI ",
+        default="bolt://localhost:7687",
+    )
+    username = Prompt.ask(
+        "No4j username ",
+        default="neo4j",
+    )
+    db = Prompt.ask(
+        "Neo4j database ",
+        default="neo4j",
+    )
+    pw = Prompt.ask(
+        "Neo4j password ",
+        default="password",
+    )
+    neo4j_settings = Neo4jSettings(uri=uri, username=username, database=db, password=pw)
 
     dependency_agent = DependencyGraphAgent(
         config=Neo4jChatAgentConfig(
@@ -249,9 +268,8 @@ def main(
             show_stats=False,
             use_tools=tools,
             use_functions_api=not tools,
-            llm=lm.OpenAIGPTConfig(
-                chat_model=model or lm.OpenAIChatModel.GPT4o,
-            ),
+            addressing_prefix=SEND_TO,
+            llm=lm.azure_openai.AzureConfig(),
         ),
     )
 
