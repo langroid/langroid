@@ -23,8 +23,8 @@ class AzureConfig(OpenAIGPTConfig):
         model_name (str): can be set in the ``.env`` file as ``AZURE_GPT_MODEL_NAME``
             and should be based on the model name chosen during setup.
         model_version (str): can be set in the ``.env`` file as
-          ``AZURE_OPENAI_MODEL_VERSION`` and should be based on the model name
-          chosen during setup.
+            ``AZURE_OPENAI_MODEL_VERSION`` and should be based on the model name
+            chosen during setup.
     """
 
     api_key: str = ""  # CAUTION: set this ONLY via env var AZURE_OPENAI_API_KEY
