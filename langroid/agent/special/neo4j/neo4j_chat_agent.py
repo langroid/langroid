@@ -92,7 +92,7 @@ class Neo4jChatAgent(ChatAgent):
     def init_state(self) -> None:
         super().init_state()
         self.current_retrieval_cypher_query: str = ""
-        self.tried_schema = self.tried_schema or False
+        self.tried_schema: bool = self.tried_schema or False
 
     def handle_message_fallback(
         self, msg: str | ChatDocument
