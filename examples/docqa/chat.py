@@ -5,6 +5,17 @@ Repeat: User asks question -> LLM answers.
 Run like this:
 python3 examples/docqa/chat.py
 
+To change the model, use the --model flag, e.g.:
+
+python3 examples/docqa/chat.py --model ollama/mistral:7b-instruct-v0.2-q8_0
+
+To change the embedding model, use the --embed flag, e.g.:
+
+python3 examples/docqa/chat.py --embed BAAI/bge-large-en-v1.5
+
+See here for how to set up a Local LLM to work with Langroid:
+https://langroid.github.io/langroid/tutorials/local-llm-setup/
+
 """
 
 import typer
