@@ -317,7 +317,7 @@ class OpenAIGPTConfig(LLMConfig):
         local_model = "api_base" in kwargs and kwargs["api_base"] is not None
 
         chat_model = kwargs.get("chat_model", "")
-        local_prefixes = ["local/", "litellm/", "ollama/"]
+        local_prefixes = ["local/", "litellm/", "ollama/", "vllm/", "llamacpp/"]
         if any(chat_model.startswith(prefix) for prefix in local_prefixes):
             local_model = True
 
@@ -509,10 +509,13 @@ class OpenAIGPT(LanguageModel):
             self.config.chat_model = self.config.chat_model.replace("ollama/", "")
         elif self.config.chat_model.startswith("vllm/"):
             self.supports_json_schema = True
-            self.api_base = self.config.chat_model.split("/", 1)[1]
+            self.config.chat_model = self.config.chat_model.replace("vllm/", "")
+            self.api_key = VLLM_API_KEY
+            self.api_base = self.config.api_base or "http://localhost:8000/v1"
             if not self.api_base.startswith("http"):
                 self.api_base = "http://" + self.api_base
-            self.api_key = VLLM_API_KEY
+            if not self.api_base.endswith("/v1"):
+                self.api_base = self.api_base + "/v1"
         elif self.config.chat_model.startswith("llamacpp/"):
             self.supports_json_schema = True
             self.api_base = self.config.chat_model.split("/", 1)[1]

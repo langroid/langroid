@@ -1,10 +1,12 @@
 # Structured Output
 
-Available in Langroid since v0.20.0.
+Available in Langroid since v0.23.0.
 
 On supported LLMs, including recent OpenAI LLMs (GPT-4o and GPT-4o mini) and local LLMs served by compatible inference servers,
 in particular, [vLLM](https://github.com/vllm-project/vllm) and [llama.cpp](https://github.com/ggerganov/llama.cpp), the decoding process can be constrained to ensure that the model's output adheres to a provided schema, 
 improving the reliability of tool call generation and, in general, ensuring that the output can be reliably parsed and processed by downstream applications.
+
+See [here](../tutorials/local-llm-setup.md/#setup-llamacpp-with-a-gguf-model-from-huggingface) for instructions for usage with `llama.cpp` and [here](../tutorials/local-llm-setup.md/#setup-vllm-with-a-model-from-huggingface) for `vLLM`.
 
 Given a `ChatAgent` `agent` and a type `type`, we can define a strict copy of the agent as follows:
 ```python

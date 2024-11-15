@@ -820,6 +820,14 @@ class ChatAgent(Agent):
                     Disabling strict mode.
                     """
                 )
+            except json.JSONDecodeError:
+                self.disable_strict = True
+                logging.warning(
+                    """
+                    JSON decode error occured with strict output format enabled.
+                    Disabling strict mode.
+                    """
+                )
 
     def get_tool_messages(
         self,

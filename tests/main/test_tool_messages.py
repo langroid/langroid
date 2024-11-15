@@ -309,7 +309,7 @@ def test_llm_tool_message(
         prompt: the prompt to use to induce the LLM to use the tool
         result: the expected result from agent handling the tool-message
     """
-    set_global(test_setting)
+    set_global(test_settings)
     cfg.llm.stream = stream
     agent = MessageHandlingAgent(cfg)
     agent.config.use_functions_api = use_functions_api
@@ -1599,6 +1599,7 @@ def test_strict_schema_mismatch(
     strict_agent = agent[StrTool]
     strict_agent.llm_response_forget("Who is the president of France?")
     assert strict_agent.disable_strict
+
 
 def test_reduce_raw_tool_result():
     BIG_RESULT = "hello " * 50
