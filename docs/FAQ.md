@@ -169,9 +169,8 @@ see docs [here](https://langroid.github.io/langroid/notes/knowledge-graphs/)
 ## How can I improve `DocChatAgent` (RAG) latency?
 
 The behavior of `DocChatAgent` can be controlled by a number of settings in 
-the [`DocChatAgentConfig`][langroid.agent.special.doc_chat_agent.DocChatAgentConfig] class.
-
-The top-level method in `DocChatAgent` is `llm_response`, which use the 
+the `DocChatAgentConfig` class.
+The top-level query-answering method in `DocChatAgent` is `llm_response`, which use the 
 `answer_from_docs` method. At a high level, the response to an input message involves
 the following steps:
 
@@ -184,18 +183,17 @@ the following steps:
 - **Relevance Extraction:** LLM is used to retrieve verbatim relevant portions from
   the retrieved chunks. This is typically the biggest latency step. You can turn it off
   by setting the `relevance_extractor_config` to None in `DocChatAgentConfig`.
-- **Answer Generation:** LLM generates answer based on final best 
+- **Answer Generation:** LLM generates answer based on retrieved passages.
 
 
 See the [`doc-aware-chat.py`](https://github.com/langroid/langroid/blob/main/examples/docqa/doc-aware-chat.py)
-which illustrates some of these settings.
+example script, which illustrates some of these settings.
 
 In some scenarios you want to *only* use the **retrieval** step of a `DocChatAgent`.
-For this you can use the [`RetrievalTool`][langroid.agent.tools.retrieval_tool.RetrievalTool] tool.
-
-An example of using `RetrievalTool` can be found in `test_retrieval_tool` in the
+For this you can use the [`RetrievalTool`][langroid.agent.tools.retrieval_tool.RetrievalTool].
+See the `test_retrieval_tool` in 
 [`test_doc_chat_agent.py`](https://github.com/langroid/langroid/blob/main/tests/main/test_doc_chat_agent.py).
-The above example uses `RetrievalTool` as well.
+to learn how to use it. The above example script uses `RetrievalTool` as well.
 
 
 
