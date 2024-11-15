@@ -169,7 +169,7 @@ see docs [here](https://langroid.github.io/langroid/notes/knowledge-graphs/)
 ## How can I improve `DocChatAgent` (RAG) latency?
 
 The behavior of `DocChatAgent` can be controlled by a number of settings in 
-the [`DocChatAgentConfig`][langroid.agent.doc_chat_agent.DocChatAgentConfig] class.
+the [`DocChatAgentConfig`][langroid.agent.special.doc_chat_agent.DocChatAgentConfig] class.
 
 The top-level method in `DocChatAgent` is `llm_response`, which use the 
 `answer_from_docs` method. At a high level, the response to an input message involves
@@ -191,7 +191,7 @@ See the [`doc-aware-chat.py`](https://github.com/langroid/langroid/blob/main/exa
 which illustrates some of these settings.
 
 In some scenarios you want to *only* use the **retrieval** step of a `DocChatAgent`.
-For this you can use the [`RetrievalTool`][langroid.agent.tools.RetrievalTool] tool.
+For this you can use the [`RetrievalTool`][langroid.agent.tools.retrieval_tool.RetrievalTool] tool.
 
 An example of using `RetrievalTool` can be found in `test_retrieval_tool` in the
 [`test_doc_chat_agent.py`](https://github.com/langroid/langroid/blob/main/tests/main/test_doc_chat_agent.py).
