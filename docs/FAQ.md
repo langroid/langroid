@@ -165,3 +165,35 @@ be far more reliable for tool-use than JSON, especially with weak LLMs.
 
 Yes, you can use Langroid to "chat with" either a Neo4j or ArangoDB KG, 
 see docs [here](https://langroid.github.io/langroid/notes/knowledge-graphs/)
+
+## How can I improve `DocChatAgent` (RAG) latency?
+
+The behavior of `DocChatAgent` can be controlled by a number of settings in 
+the [`DocChatAgentConfig`][langroid.agent.doc_chat_agent.DocChatAgentConfig] class.
+
+The top-level method in `DocChatAgent` is `llm_response`, which use the 
+`answer_from_docs` method. At a high level, the response to an input message involves
+the following steps:
+
+- **Query to StandAlone:** LLM rephrases the query as a stand-alone query. 
+   This can incur some latency. You can 
+    turn it off by setting `assistant_mode=True` in the `DocChatAgentConfig`.
+- **Retrieval:** Relevant passages (chunks) are retrieved using a collection of semantic/lexical 
+      similarity searches. There are various knobs in `DocChatAgentConfig` to control
+      this retrieval.
+- **Relevance Extraction:** LLM is used to retrieve verbatim relevant portions from
+  the retrieved chunks. This is typically the biggest latency step. You can turn it off
+  by setting the `relevance_extractor_config` to None in `DocChatAgentConfig`.
+
+See the [`doc-aware-chat.py`](https://github.com/langroid/langroid/blob/main/examples/docqa/doc-aware-chat.py)
+which illustrates some of these settings.
+
+In some scenarios you want to *only* use the **retrieval** step of a `DocChatAgent`.
+For this you can use the [`RetrievalTool`][langroid.agent.tools.RetrievalTool] tool.
+
+An example of using `RetrievalTool` can be found in `test_retrieval_tool` in the
+[`test_doc_chat_agent.py`](https://github.com/langroid/langroid/blob/main/tests/main/test_doc_chat_agent.py).
+The above example uses `RetrievalTool` as well.
+
+
+

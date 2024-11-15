@@ -4,7 +4,10 @@ from langroid.agent.tool_message import ToolMessage
 
 
 class RetrievalTool(ToolMessage):
-    """Retrieval tool, only to be used by a DocChatAgent."""
+    """
+    Retrieval tool, only to be used by a DocChatAgent.
+    The handler method is defined in DocChatAgent.retrieval_tool
+    """
 
     request: str = "retrieval_tool"
     purpose: str = """
