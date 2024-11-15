@@ -623,10 +623,27 @@ class ChatAgent(Agent):
             self.llm_tools_usable.discard(r)
             self.llm_functions_usable.discard(r)
 
+    def truncate_message(
+        self,
+        idx: int,
+        tokens: int = 5,
+        warning: str = "...[Contents truncated!]",
+    ) -> LLMMessage:
+        """Truncate message at idx in msg history to `tokens` tokens"""
+        llm_msg = self.message_history[idx]
+        orig_content = llm_msg.content
+        new_content = (
+            self.parser.truncate_tokens(orig_content, tokens)
+            if self.parser is not None
+            else orig_content[: tokens * 4]  # approx truncation
+        )
+        llm_msg.content = new_content + "\n" + warning
+        return llm_msg
+
     def _reduce_raw_tool_results(self, message: ChatDocument) -> None:
         """
-        If message is the result of a ToolMessage that had the
-        flag `_retain_raw_results = False`, then we replace contents
+        If message is the result of a ToolMessage that had
+        a `_max_retained_tokens` set to a non-None value, then we replace contents
         with a placeholder message.
         """
         parent_message: ChatDocument | None = message.parent
@@ -641,14 +658,9 @@ class ChatAgent(Agent):
                 and has been truncated to {max_tokens} tokens.
                 To obtain the full result, the tool needs to be re-used.
             """
-            llm_msg = self.message_history[message.metadata.msg_idx]
-            orig_content = llm_msg.content
-            new_content = (
-                self.parser.truncate_tokens(orig_content, max_tokens)
-                if self.parser is not None
-                else orig_content[: max_tokens * 4]  # approx truncation
+            self.truncate_message(
+                message.metadata.msg_idx, max_tokens, truncation_warning
             )
-            llm_msg.content = new_content + "\n\n" + truncation_warning
 
     def llm_response(
         self, message: Optional[str | ChatDocument] = None
