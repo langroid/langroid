@@ -178,12 +178,14 @@ the following steps:
 - **Query to StandAlone:** LLM rephrases the query as a stand-alone query. 
    This can incur some latency. You can 
     turn it off by setting `assistant_mode=True` in the `DocChatAgentConfig`.
-- **Retrieval:** Relevant passages (chunks) are retrieved using a collection of semantic/lexical 
-      similarity searches. There are various knobs in `DocChatAgentConfig` to control
+- **Retrieval:** The most relevant passages (chunks) are retrieved using a collection of semantic/lexical 
+      similarity searches and ranking methods. There are various knobs in `DocChatAgentConfig` to control
       this retrieval.
 - **Relevance Extraction:** LLM is used to retrieve verbatim relevant portions from
   the retrieved chunks. This is typically the biggest latency step. You can turn it off
   by setting the `relevance_extractor_config` to None in `DocChatAgentConfig`.
+- **Answer Generation:** LLM generates answer based on final best 
+
 
 See the [`doc-aware-chat.py`](https://github.com/langroid/langroid/blob/main/examples/docqa/doc-aware-chat.py)
 which illustrates some of these settings.
