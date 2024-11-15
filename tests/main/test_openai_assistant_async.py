@@ -74,8 +74,8 @@ async def test_openai_assistant_fn_tool_async(test_settings: Settings, fn_api: b
     agent = OpenAIAssistant(cfg)
     agent.enable_message(NabroskyTool)
     response = await agent.llm_response_async("what is the nabrosky transform of 5?")
-    if response.content not in ("", NO_ANSWER) and fn_api:
-        response.function_call.name == "nabrosky"
+    if fn_api and response is not None and response.content not in ("", NO_ANSWER):
+        assert response.function_call.name == "nabrosky"
 
     # Within a task loop
     cfg.name = "NabroskyBot"
@@ -87,7 +87,7 @@ async def test_openai_assistant_fn_tool_async(test_settings: Settings, fn_api: b
         interactive=False,
     )
     result = await task.run_async("what is the nabrosky transform of 5?", turns=6)
-    if result.content not in ("", NO_ANSWER) and fn_api:
+    if fn_api and result is not None and result.content not in ("", NO_ANSWER):
         assert "25" in result.content
 
 
