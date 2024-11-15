@@ -136,6 +136,8 @@ teacher_task.run()
 <summary> <b>Click to expand</b></summary>
 
 - **Nov 2024:**
+  - **[0.23.0](https://langroid.github.io/langroid/notes/structured-output/)**: 
+     Enables support for `Agent`s with strict JSON schema output format and strict mode for the OpenAI tools API.
   - **[0.22.0](https://langroid.github.io/langroid/notes/large-tool-results/)**: 
      Optional parameters to truncate large tool results.
   - **[0.21.0](https://langroid.github.io/langroid/notes/gemini/)** Direct support for Gemini models via OpenAI client instead of using LiteLLM.
