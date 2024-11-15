@@ -201,11 +201,14 @@ Yes, see the `run_batch_tasks` and related functions in
 [batch.py](https://github.com/langroid/langroid/blob/main/langroid/agent/batch.py).
 
 See also:
+
 - tests: [test_batch.py](https://github.com/langroid/langroid/blob/main/tests/main/test_batch.py),
    [test_relevance_extractor.py](https://github.com/langroid/langroid/blob/main/tests/main/test_relevance_extractor.py),
 - example: [multi-agent-round-table.py](https://github.com/langroid/langroid/blob/main/examples/basic/multi-agent-round-table.py)
 
-Another example is within `DocChatAgent`, which uses batch tasks for relevance extraction,
+Another example is within 
+[`DocChatAgent`](https://github.com/langroid/langroid/blob/main/langroid/agent/special/doc_chat_agent.py), 
+which uses batch tasks for relevance extraction,
 see the `get_verbatim_extracts` method -- when there are k relevant passages,
 this runs k tasks concurrently, 
 each of which uses an LLM-agent to extract relevant verbatim text from a passage.
