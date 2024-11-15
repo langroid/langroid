@@ -195,5 +195,17 @@ See the `test_retrieval_tool` in
 [`test_doc_chat_agent.py`](https://github.com/langroid/langroid/blob/main/tests/main/test_doc_chat_agent.py).
 to learn how to use it. The above example script uses `RetrievalTool` as well.
 
+## Is there support to run multiple tasks concurrently?
 
+Yes, see the `run_batch_tasks` and related functions in 
+[batch.py](https://github.com/langroid/langroid/blob/main/langroid/agent/batch.py).
 
+See also:
+- tests: [test_batch.py](https://github.com/langroid/langroid/blob/main/tests/main/test_batch.py),
+   [test_relevance_extractor.py](https://github.com/langroid/langroid/blob/main/tests/main/test_relevance_extractor.py),
+- example: [multi-agent-round-table.py](https://github.com/langroid/langroid/blob/main/examples/basic/multi-agent-round-table.py)
+
+Another example is within `DocChatAgent`, which uses batch tasks for relevance extraction,
+see the `get_verbatim_extracts` method -- when there are k relevant passages,
+this runs k tasks concurrently, 
+each of which uses an LLM-agent to extract relevant verbatim text from a passage.
