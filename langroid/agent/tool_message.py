@@ -349,6 +349,8 @@ class ToolMessage(ABC, BaseModel):
                         "request" in v["properties"]
                         and "default" in v["properties"]["request"]
                     ):
+                        if "required" not in v:
+                            v["required"] = []
                         v["required"].append("request")
                         v["properties"]["request"] = {
                             "type": "string",
