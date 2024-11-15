@@ -143,6 +143,7 @@ def _test_sql_chat_agent(
             use_tools_api=tools_api,
             use_schema_tools=use_schema_tools,
             addressing_prefix=addressing_prefix,
+            chat_mode=False,
         )
     )
 
