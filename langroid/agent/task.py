@@ -1373,7 +1373,7 @@ class Task:
             actual_turns = e.turns if e.turns > 0 else turns
             e.agent.callbacks.set_parent_agent(self.agent)
             # e.callbacks.set_parent_agent(self.agent)
-            pending_tools = self.agent.get_tool_messages(self.pending_message)
+            pending_tools = self.agent.try_get_tool_messages(self.pending_message)
             # TODO disable this
             if (
                 len(pending_tools) > 1
@@ -1391,7 +1391,7 @@ class Task:
                 )
                 # update result.tool_messages if any
                 if isinstance(result, ChatDocument):
-                    self.agent.get_tool_messages(result)
+                    self.agent.try_get_tool_messages(result)
                 if result is not None:
                     content, id2result, oai_tool_id = self.agent.process_tool_results(
                         result.content,
@@ -1422,7 +1422,7 @@ class Task:
             result = response_fn(self.pending_message)
             # update result.tool_messages if any
             if isinstance(result, ChatDocument):
-                self.agent.get_tool_messages(result)
+                self.agent.try_get_tool_messages(result)
 
         result_chat_doc = self.agent.to_ChatDocument(
             result,
@@ -1505,7 +1505,7 @@ class Task:
         if isinstance(e, Task):
             actual_turns = e.turns if e.turns > 0 else turns
             e.agent.callbacks.set_parent_agent(self.agent)
-            pending_tools = self.agent.get_tool_messages(self.pending_message)
+            pending_tools = self.agent.try_get_tool_messages(self.pending_message)
             # TODO disable this
             if (
                 len(pending_tools) > 1

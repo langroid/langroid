@@ -707,7 +707,7 @@ class Agent(ABC):
         if self.llm is None:
             return False
 
-        if message is not None and len(self.get_tool_messages(message)) > 0:
+        if message is not None and len(self.try_get_tool_messages(message)) > 0:
             # if there is a valid "tool" message (either JSON or via `function_call`)
             # then LLM cannot respond to it
             return False
@@ -721,7 +721,7 @@ class Agent(ABC):
         Args:
             message (str|ChatDocument): message or ChatDocument object to respond to.
         """
-        tools = self.get_tool_messages(message)
+        tools = self.try_get_tool_messages(message)
         if len(tools) == 0 and self.config.respond_tools_only:
             return False
         if message is not None and self.has_only_unhandled_tools(message):
@@ -919,10 +919,20 @@ class Agent(ABC):
         """
         if msg is None:
             return False
-        tools = self.get_tool_messages(msg, all_tools=True)
+        tools = self.try_get_tool_messages(msg, all_tools=True)
         if len(tools) == 0:
             return False
         return all(not self._tool_recipient_match(t) for t in tools)
+
+    def try_get_tool_messages(
+        self,
+        msg: str | ChatDocument | None,
+        all_tools: bool = False,
+    ) -> List[ToolMessage]:
+        try:
+            return self.get_tool_messages(msg, all_tools)
+        except ValidationError:
+            return []
 
     def get_tool_messages(
         self,
@@ -1457,10 +1467,7 @@ class Agent(ABC):
         if content_any is not None and isinstance(content_any, output_type):
             return cast(T, content_any)
 
-        try:
-            tools = self.get_tool_messages(msg, all_tools=True)
-        except ValidationError:
-            tools = []
+        tools = self.try_get_tool_messages(msg, all_tools=True)
 
         if get_origin(output_type) is list:
             list_element_type = get_args(output_type)[0]
