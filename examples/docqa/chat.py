@@ -59,6 +59,7 @@ def main(
         chat_context_length=16_000,  # adjust as needed
         temperature=0.2,
         max_output_tokens=300,
+        timeout=60,
     )
 
     config = DocChatAgentConfig(
