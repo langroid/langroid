@@ -35,15 +35,15 @@ Hiearchical Agent Computations at https://langroid.github.io/langroid/examples/a
 For more details on structured outputs, see the notes at
 https://langroid.github.io/langroid/notes/structured-output/.
 """
-import langroid as lr
+
 import typer
 from typing import Literal
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
 from langroid.agent.tool_message import ToolMessage
 from rich.prompt import Prompt
-from langroid.agent.tools.orchestration import AgentDoneTool, AgentSendTool
-from langroid.utils.constants import DONE, PASS
+from langroid.agent.tools.orchestration import AgentDoneTool
+from langroid.utils.constants import DONE
 from langroid.utils.logging import setup_colored_logging
 from langroid.utils.configuration import set_global, Settings
 from langroid.utils.globals import GlobalState
@@ -52,6 +52,7 @@ from langroid.pydantic_v1 import BaseModel
 app = typer.Typer()
 
 setup_colored_logging()
+
 
 class MyGlobalState(GlobalState):
     number: int | None = None
@@ -72,6 +73,7 @@ class AskNumTool(ToolMessage):
         MyGlobalState.set_values(number=num)
         return str(num)
 
+
 class AddNumTool(ToolMessage):
     request = "add_num"
     purpose = "Add <number> to the original number, return the result"
@@ -88,26 +90,32 @@ class AddNumTool(ToolMessage):
             tools=[ResultTool(result=total)],
         )
 
+
 class MatchTool(ToolMessage):
     request: str = "match"
     purpose: str = "To express whether the input number matches your condition."
     matches: bool
 
+
 class ResultTool(ToolMessage):
     request: str = "result"
-    purpose: str = "To express the result of your transformation applied to the input number."
+    purpose: str = (
+        "To express the result of your transformation applied to the input number."
+    )
     result: int
+
 
 class ConditionalAgentConfig(ChatAgentConfig):
     forward_only: bool = False
     top_level: bool = False
 
+
 class ConditionalAgent(ChatAgent):
     def __init__(self, config: ConditionalAgentConfig = ConditionalAgentConfig()):
         super().__init__(config)
-        self.config: ConditionalAgentConfig = config # type: ignore
+        self.config: ConditionalAgentConfig = config  # type: ignore
         # Should the next request be treated as self-generated?
-        self.generated_request: bool = False 
+        self.generated_request: bool = False
 
         if self.config.top_level:
             self.set_output_format(AskNumTool)
@@ -130,7 +138,7 @@ class ConditionalAgent(ChatAgent):
         self.generated_request = True
         if self.config.forward_only:
             return "Now, repeat the number provided."
-        
+
         return "Now, return the input number, after applying your transformation."
 
     def result(self, msg: ResultTool) -> str | AgentDoneTool:
@@ -140,8 +148,9 @@ class ConditionalAgent(ChatAgent):
             return f"{DONE} {msg.result}"
         elif self.generated_request:
             self.generated_request = False
+
             class Repeat(BaseModel):
-                value: Literal[str(msg.result)] # type: ignore
+                value: Literal[str(msg.result)]  # type: ignore
 
             self.set_output_format(Repeat)
             # Forward the result if we are mid-computation
@@ -153,6 +162,7 @@ class ConditionalAgent(ChatAgent):
         return AgentDoneTool(
             tools=[msg],
         )
+
 
 def chat() -> None:
     main_task = Task(
@@ -181,14 +191,16 @@ def chat() -> None:
         """
 
     even_task = Task(
-        ConditionalAgent(ConditionalAgentConfig(
-            forward_only=True,
-        )),
+        ConditionalAgent(
+            ConditionalAgentConfig(
+                forward_only=True,
+            )
+        ),
         interactive=False,
         name="Even",
         system_message=prompt_format.format(
             condition="The number is even.",
-            transformation="Nothing, return the number you were provided."
+            transformation="Nothing, return the number you were provided.",
         ),
     )
     evenz_task = Task(
@@ -197,7 +209,7 @@ def chat() -> None:
         name="EvenZ",
         system_message=prompt_format.format(
             condition="The number is divisible by 10.",
-            transformation="Return n/10 where n is the provided number."
+            transformation="Return n/10 where n is the provided number.",
         ),
     )
     even_nz_task = Task(
@@ -206,7 +218,7 @@ def chat() -> None:
         name="EvenNZ",
         system_message=prompt_format.format(
             condition="The number is not divisible by 10.",
-            transformation="Return n/2 where n is the provided number."
+            transformation="Return n/2 where n is the provided number.",
         ),
     )
     odd_task = Task(
@@ -232,7 +244,7 @@ def chat() -> None:
         `add_num` tool/function for this. 
         """,
     )
-      
+
     # set up tasks and subtasks
     main_task.add_sub_task([even_task, odd_task])
     even_task.add_sub_task([evenz_task, even_nz_task])
@@ -244,7 +256,7 @@ def chat() -> None:
 
     # start the chat
     main_task.run()
-        
+
 
 @app.command()
 def main(
@@ -260,6 +272,7 @@ def main(
         )
     )
     chat()
+
 
 if __name__ == "__main__":
     app()
