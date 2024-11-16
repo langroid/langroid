@@ -142,7 +142,7 @@ class Agent(ABC):
         self.llm_tools_handled: Set[str] = set()
         self.llm_tools_usable: Set[str] = set()
         self.llm_tools_known: Set[str] = set()  # all known tools, handled/used or not
-        self.interactive: bool | None = None
+        self.interactive: bool = True  # may be modified by Task wrapper
         self.token_stats_str = ""
         self.default_human_response: Optional[str] = None
         self._indent = ""
@@ -645,10 +645,11 @@ class Agent(ABC):
         need_human_response = (
             isinstance(msg, ChatDocument) and msg.metadata.recipient == Entity.USER
         )
+        default_user_msg = (
+            (self.default_human_response or "null") if need_human_response else ""
+        )
 
-        interactive = self.interactive or settings.interactive
-
-        if not interactive and not need_human_response:
+        if not self.interactive and not need_human_response:
             return None
         elif self.default_human_response is not None:
             user_msg = self.default_human_response
@@ -669,6 +670,8 @@ class Agent(ABC):
         tool_ids = []
         if msg is not None and isinstance(msg, ChatDocument):
             tool_ids = msg.metadata.tool_ids
+
+        user_msg = user_msg.strip() or default_user_msg.strip()
         # only return non-None result if user_msg not empty
         if not user_msg:
             return None
