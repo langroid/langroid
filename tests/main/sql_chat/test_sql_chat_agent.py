@@ -128,7 +128,7 @@ def _test_sql_chat_agent(
     prompt: str,
     answer: str,
     use_schema_tools: bool = False,
-    turns: int = 2,
+    turns: int = 15,
     addressing_prefix: str = "",
 ) -> None:
     """
@@ -154,10 +154,11 @@ def _test_sql_chat_agent(
         only_user_quits_root=False,
     )
 
-    # run for 3 turns:
+    # run for enough turns to handle LLM deviations
     # 0: user question
     # 1: LLM response via fun-call/tool
     # 2: agent response, handling the fun-call/tool
+    # ... so on
     result = task.run(prompt, turns=turns)
 
     # TODO very occasionally gives NO_ANSWER
@@ -196,7 +197,6 @@ def test_sql_chat_agent_query(
         context=mock_context,
         prompt=query,
         answer=answer,
-        turns=15,
     )
 
     # without context descriptions:
@@ -207,7 +207,6 @@ def test_sql_chat_agent_query(
         context={},
         prompt=query,
         answer=answer,
-        turns=15,
     )
 
 
@@ -229,7 +228,6 @@ def test_sql_chat_db_update(
         context=mock_context,
         prompt="Update Bob's sale amount to 900",
         answer="900",
-        turns=10,
     )
 
     _test_sql_chat_agent(
@@ -239,7 +237,6 @@ def test_sql_chat_db_update(
         context=mock_context,
         prompt="How much did Bob sell?",
         answer="900",
-        turns=10,
     )
 
     # without context descriptions:
@@ -250,7 +247,6 @@ def test_sql_chat_db_update(
         context={},
         prompt="Update Bob's sale amount to 9100",
         answer="9100",
-        turns=10,
     )
 
     _test_sql_chat_agent(
@@ -260,7 +256,6 @@ def test_sql_chat_db_update(
         context={},
         prompt="How much did Bob sell?",
         answer="9100",
-        turns=10,
     )
 
 
@@ -291,5 +286,4 @@ def test_sql_schema_tools(
         prompt=query,
         answer=answer,
         use_schema_tools=True,
-        turns=6,
     )
