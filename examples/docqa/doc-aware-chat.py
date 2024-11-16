@@ -67,10 +67,10 @@ class DocAwareChatAgent(DocChatAgent):
 
     def llm_response(
         self,
-        query: None | str | ChatDocument = None,
+        message: None | str | ChatDocument = None,
     ) -> Optional[ChatDocument]:
         # override DocChatAgent's default llm_response
-        return ChatAgent.llm_response(self, query)
+        return ChatAgent.llm_response(self, message)
 
     def handle_message_fallback(self, msg: str | ChatDocument) -> Any:
         # we are here if there is no tool in the msg

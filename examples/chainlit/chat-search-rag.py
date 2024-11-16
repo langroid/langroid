@@ -95,9 +95,9 @@ class DDGSearchDocChatAgent(DocChatAgent):
 
     def llm_response_async(
         self,
-        query: None | str | ChatDocument = None,
+        message: None | str | ChatDocument = None,
     ) -> Optional[ChatDocument]:
-        return ChatAgent.llm_response_async(self, query)
+        return ChatAgent.llm_response_async(self, message)
 
     def relevant_extracts(self, msg: RelevantExtractsTool) -> str:
         """Get docs/extracts relevant to the query, from vecdb"""
