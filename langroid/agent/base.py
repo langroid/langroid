@@ -142,7 +142,7 @@ class Agent(ABC):
         self.llm_tools_handled: Set[str] = set()
         self.llm_tools_usable: Set[str] = set()
         self.llm_tools_known: Set[str] = set()  # all known tools, handled/used or not
-        self.interactive: bool | None = None
+        self.interactive: bool = True  # may be modified by Task wrapper
         self.token_stats_str = ""
         self.default_human_response: Optional[str] = None
         self._indent = ""
