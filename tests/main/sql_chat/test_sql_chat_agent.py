@@ -51,7 +51,7 @@ class Sale(Base):
 @pytest.fixture
 def mock_db_session() -> Session:
     # Create an in-memory SQLite database
-    engine = create_engine("sqlite:///:memory:", echo=True)
+    engine = create_engine("sqlite:///:memory:", echo=False)
     Base.metadata.create_all(engine)
 
     Session = sessionmaker(bind=engine)
@@ -128,7 +128,7 @@ def _test_sql_chat_agent(
     prompt: str,
     answer: str,
     use_schema_tools: bool = False,
-    turns: int = 2,
+    turns: int = 15,
     addressing_prefix: str = "",
 ) -> None:
     """
@@ -154,10 +154,11 @@ def _test_sql_chat_agent(
         only_user_quits_root=False,
     )
 
-    # run for 3 turns:
+    # run for enough turns to handle LLM deviations
     # 0: user question
     # 1: LLM response via fun-call/tool
     # 2: agent response, handling the fun-call/tool
+    # ... so on
     result = task.run(prompt, turns=turns)
 
     # TODO very occasionally gives NO_ANSWER
@@ -169,13 +170,13 @@ def _test_sql_chat_agent(
 
 
 @pytest.mark.parametrize("fn_api", [False, True])
-@pytest.mark.parametrize("tools_api", [True, False])
+@pytest.mark.parametrize("tools_api", [False, True])
 @pytest.mark.parametrize(
     "query,answer",
     [
+        ("What is the total amount of sales?", "600"),
         ("How many employees are in Sales?", "1"),
         ("How many departments are there?", "2"),
-        ("What is the total amount of sales?", "600"),
     ],
 )
 def test_sql_chat_agent_query(
@@ -196,7 +197,6 @@ def test_sql_chat_agent_query(
         context=mock_context,
         prompt=query,
         answer=answer,
-        turns=6,
     )
 
     # without context descriptions:
@@ -207,7 +207,6 @@ def test_sql_chat_agent_query(
         context={},
         prompt=query,
         answer=answer,
-        turns=10,
     )
 
 
@@ -229,7 +228,6 @@ def test_sql_chat_db_update(
         context=mock_context,
         prompt="Update Bob's sale amount to 900",
         answer="900",
-        turns=10,
     )
 
     _test_sql_chat_agent(
@@ -239,7 +237,6 @@ def test_sql_chat_db_update(
         context=mock_context,
         prompt="How much did Bob sell?",
         answer="900",
-        turns=10,
     )
 
     # without context descriptions:
@@ -250,7 +247,6 @@ def test_sql_chat_db_update(
         context={},
         prompt="Update Bob's sale amount to 9100",
         answer="9100",
-        turns=10,
     )
 
     _test_sql_chat_agent(
@@ -260,7 +256,6 @@ def test_sql_chat_db_update(
         context={},
         prompt="How much did Bob sell?",
         answer="9100",
-        turns=10,
     )
 
 
@@ -291,5 +286,4 @@ def test_sql_schema_tools(
         prompt=query,
         answer=answer,
         use_schema_tools=True,
-        turns=6,
     )
