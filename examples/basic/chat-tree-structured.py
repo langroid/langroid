@@ -106,7 +106,6 @@ class ResultTool(ToolMessage):
 
 
 class ConditionalAgentConfig(ChatAgentConfig):
-    forward_only: bool = False
     top_level: bool = False
 
 
@@ -138,9 +137,6 @@ class ConditionalAgent(ChatAgent):
         # The agent must next return the transformed number
         self.set_output_format(ResultTool)
         self.generated_request = True
-        if self.config.forward_only:
-            return "Now, repeat the number provided."
-
         return "Now, return the input number, after applying your transformation."
 
     def result(self, msg: ResultTool) -> str | AgentDoneTool:
@@ -193,11 +189,7 @@ def chat() -> None:
         """
 
     even_task = Task(
-        ConditionalAgent(
-            ConditionalAgentConfig(
-                forward_only=True,
-            )
-        ),
+        ConditionalAgent(),
         interactive=False,
         name="Even",
         system_message=prompt_format.format(
