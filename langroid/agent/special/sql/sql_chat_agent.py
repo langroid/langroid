@@ -362,6 +362,17 @@ class SQLChatAgent(ChatAgent):
 
         return error_message_template
 
+    def _available_tool_names(self) -> str:
+        return ",".join(
+            tool.name()  # type: ignore
+            for tool in [
+                RunQueryTool,
+                GetTableNamesTool,
+                GetTableSchemaTool,
+                GetColumnDescriptionsTool,
+            ]
+        )
+
     def run_query(self, msg: RunQueryTool) -> str:
         """
         Handle a RunQueryTool message by executing a SQL query and returning the result.
@@ -399,7 +410,20 @@ class SQLChatAgent(ChatAgent):
         finally:
             session.close()
 
-        return response_message
+        final_message = f"""
+        Below is the result from your use of the TOOL `{RunQueryTool.name()}`:
+        ==== result ====
+        {response_message}
+        ================
+        
+        If you are READY to ANSWER the ORIGINAL QUERY:
+             use the `{DoneTool.name()}` tool to send the result to the user,
+             with the `content` set to the answer or result
+        OTHERWISE:
+             continue using one of your available TOOLs:
+             {self._available_tool_names()}
+        """
+        return final_message
 
     def _format_rows(self, rows: Sequence[Row[Any]]) -> str:
         """
