@@ -168,6 +168,7 @@ class Agent(ABC):
             show_llm_response=noop_fn,
             show_agent_response=noop_fn,
             get_user_response=None,
+            get_user_response_async=None,
             get_last_step=noop_fn,
             set_parent_agent=noop_fn,
             show_error_message=noop_fn,
@@ -386,32 +387,14 @@ class Agent(ABC):
             recipient=recipient,
         )
 
-    async def agent_response_async(
+    def _agent_response_final(
         self,
-        msg: Optional[str | ChatDocument] = None,
-    ) -> Optional[ChatDocument]:
-        return self.agent_response(msg)
-
-    def agent_response(
-        self,
-        msg: Optional[str | ChatDocument] = None,
+        msg: Optional[str | ChatDocument],
+        results: Optional[str | OrderedDict[str, str] | ChatDocument],
     ) -> Optional[ChatDocument]:
         """
-        Response from the "agent itself", typically (but not only)
-        used to handle LLM's "tool message" or `function_call`
-        (e.g. OpenAI `function_call`).
-        Args:
-            msg (str|ChatDocument): the input to respond to: if msg is a string,
-                and it contains a valid JSON-structured "tool message", or
-                if msg is a ChatDocument, and it contains a `function_call`.
-        Returns:
-            Optional[ChatDocument]: the response, packaged as a ChatDocument
-
+        Convert results to final response.
         """
-        if msg is None:
-            return None
-
-        results = self.handle_message(msg)
         if results is None:
             return None
         if not settings.quiet:
@@ -457,6 +440,43 @@ class Agent(ABC):
                 tool_ids=[] if isinstance(msg, str) else msg.metadata.tool_ids,
             ),
         )
+
+    async def agent_response_async(
+        self,
+        msg: Optional[str | ChatDocument] = None,
+    ) -> Optional[ChatDocument]:
+        """
+        Asynch version of `agent_response`. See there for details.
+        """
+        if msg is None:
+            return None
+
+        results = await self.handle_message_async(msg)
+
+        return self._agent_response_final(msg, results)
+
+    def agent_response(
+        self,
+        msg: Optional[str | ChatDocument] = None,
+    ) -> Optional[ChatDocument]:
+        """
+        Response from the "agent itself", typically (but not only)
+        used to handle LLM's "tool message" or `function_call`
+        (e.g. OpenAI `function_call`).
+        Args:
+            msg (str|ChatDocument): the input to respond to: if msg is a string,
+                and it contains a valid JSON-structured "tool message", or
+                if msg is a ChatDocument, and it contains a `function_call`.
+        Returns:
+            Optional[ChatDocument]: the response, packaged as a ChatDocument
+
+        """
+        if msg is None:
+            return None
+
+        results = self.handle_message(msg)
+
+        return self._agent_response_final(msg, results)
 
     def process_tool_results(
         self,
@@ -618,28 +638,16 @@ class Agent(ABC):
             recipient=recipient,
         )
 
-    async def user_response_async(
-        self,
-        msg: Optional[str | ChatDocument] = None,
-    ) -> Optional[ChatDocument]:
-        return self.user_response(msg)
-
-    def user_response(
-        self,
-        msg: Optional[str | ChatDocument] = None,
-    ) -> Optional[ChatDocument]:
+    def user_can_respond(self, msg: Optional[str | ChatDocument] = None) -> bool:
         """
-        Get user response to current message. Could allow (human) user to intervene
-        with an actual answer, or quit using "q" or "x"
+        Whether the user can respond to a message.
 
         Args:
             msg (str|ChatDocument): the string to respond to.
 
         Returns:
-            (str) User response, packaged as a ChatDocument
 
         """
-
         # When msg explicitly addressed to user, this means an actual human response
         # is being sought.
         need_human_response = (
@@ -649,23 +657,16 @@ class Agent(ABC):
         interactive = self.interactive or settings.interactive
 
         if not interactive and not need_human_response:
-            return None
-        elif self.default_human_response is not None:
-            user_msg = self.default_human_response
-        else:
-            if self.callbacks.get_user_response is not None:
-                # ask user with empty prompt: no need for prompt
-                # since user has seen the conversation so far.
-                # But non-empty prompt can be useful when Agent
-                # uses a tool that requires user input, or in other scenarios.
-                user_msg = self.callbacks.get_user_response(prompt="")
-            else:
-                user_msg = Prompt.ask(
-                    f"[blue]{self.indent}"
-                    + self.config.human_prompt
-                    + f"\n{self.indent}"
-                ).strip()
+            return False
 
+        return True
+
+    def _user_response_final(
+        self, msg: Optional[str | ChatDocument], user_msg: str
+    ) -> Optional[ChatDocument]:
+        """
+        Convert user_msg to final response.
+        """
         tool_ids = []
         if msg is not None and isinstance(msg, ChatDocument):
             tool_ids = msg.metadata.tool_ids
@@ -689,6 +690,60 @@ class Agent(ABC):
                     tool_ids=tool_ids,
                 ),
             )
+
+    async def user_response_async(
+        self,
+        msg: Optional[str | ChatDocument] = None,
+    ) -> Optional[ChatDocument]:
+        """
+        Asynch version of `user_response`. See there for details.
+        """
+        if not self.user_can_respond(msg):
+            return None
+
+        if self.callbacks.get_user_response_async is not None:
+            user_msg = await self.callbacks.get_user_response_async(prompt="")
+        else:
+            user_msg = await self.callbacks.get_user_response(prompt="")
+
+        return self._user_response_final(msg, user_msg)
+
+    def user_response(
+        self,
+        msg: Optional[str | ChatDocument] = None,
+    ) -> Optional[ChatDocument]:
+        """
+        Get user response to current message. Could allow (human) user to intervene
+        with an actual answer, or quit using "q" or "x"
+
+        Args:
+            msg (str|ChatDocument): the string to respond to.
+
+        Returns:
+            (str) User response, packaged as a ChatDocument
+
+        """
+
+        if not self.user_can_respond(msg):
+            return None
+
+        if self.default_human_response is not None:
+            user_msg = self.default_human_response
+        else:
+            if self.callbacks.get_user_response is not None:
+                # ask user with empty prompt: no need for prompt
+                # since user has seen the conversation so far.
+                # But non-empty prompt can be useful when Agent
+                # uses a tool that requires user input, or in other scenarios.
+                user_msg = self.callbacks.get_user_response(prompt="")
+            else:
+                user_msg = Prompt.ask(
+                    f"[blue]{self.indent}"
+                    + self.config.human_prompt
+                    + f"\n{self.indent}"
+                ).strip()
+
+        return self._user_response_final(msg, user_msg)
 
     @no_type_check
     def llm_can_respond(self, message: Optional[str | ChatDocument] = None) -> bool:
@@ -781,7 +836,7 @@ class Agent(ABC):
                     f"""
                 Requested output length has been shortened to {output_len}
                 so that the total length of Prompt + Output is less than
-                the completion context length of the LLM. 
+                the completion context length of the LLM.
                 """
                 )
 
@@ -853,7 +908,7 @@ class Agent(ABC):
                         f"""
                     Requested output length has been shortened to {output_len}
                     so that the total length of Prompt + Output is less than
-                    the completion context length of the LLM. 
+                    the completion context length of the LLM.
                     """
                     )
             if self.llm.get_stream() and not settings.quiet:
@@ -1046,7 +1101,7 @@ class Agent(ABC):
         if tool_name not in self.llm_tools_handled:
             logger.warning(
                 f"""
-                The function_call '{tool_name}' is not handled 
+                The function_call '{tool_name}' is not handled
                 by the agent named '{self.config.name}'!
                 If you intended this agent to handle this function_call,
                 either the fn-call name is incorrectly generated by the LLM,
@@ -1077,7 +1132,7 @@ class Agent(ABC):
             if tool_name not in self.llm_tools_handled:
                 logger.warning(
                     f"""
-                    The tool_call '{tool_name}' is not handled 
+                    The tool_call '{tool_name}' is not handled
                     by the agent named '{self.config.name}'!
                     If you intended this agent to handle this function_call,
                     either the fn-call name is incorrectly generated by the LLM,
@@ -1109,11 +1164,137 @@ class Agent(ABC):
             [f"{e['loc']}: {e['msg']}" for e in ve.errors() if "loc" in e]
         )
         return f"""
-        There were one or more errors in your attempt to use the 
-        TOOL or function_call named '{tool_name}': 
+        There were one or more errors in your attempt to use the
+        TOOL or function_call named '{tool_name}':
         {bad_field_errors}
         Please write your message again, correcting the errors.
         """
+
+    def _check_multiple_orch_tools(
+        self, tools: List[ToolMessage]
+    ) -> List[str | ChatDocument | None]:
+        """
+        Check whether the message contains multiple orchestration tools
+        """
+        # check whether there are multiple orchestration-tools (e.g. DoneTool etc),
+        # in which case set result to error-string since we don't yet support
+        # multi-tools with one or more orch tools.
+        from langroid.agent.tools.orchestration import (
+            AgentDoneTool,
+            AgentSendTool,
+            DonePassTool,
+            DoneTool,
+            ForwardTool,
+            PassTool,
+            SendTool,
+        )
+        from langroid.agent.tools.recipient_tool import RecipientTool
+
+        ORCHESTRATION_TOOLS = (
+            AgentDoneTool,
+            DoneTool,
+            PassTool,
+            DonePassTool,
+            ForwardTool,
+            RecipientTool,
+            SendTool,
+            AgentSendTool,
+        )
+
+        has_orch = any(isinstance(t, ORCHESTRATION_TOOLS) for t in tools)
+        if has_orch and len(tools) > 1:
+            err_str = "ERROR: Use ONE tool at a time!"
+            return [err_str for _ in tools]
+
+        return []
+
+    def _handle_message_final(
+        self, tools: List[ToolMessage], results: List[str | ChatDocument | None]
+    ) -> None | str | OrderedDict[str, str] | ChatDocument:
+        """
+        Convert results to final response
+        """
+        # extract content from ChatDocument results so we have all str|None
+        results = [r.content if isinstance(r, ChatDocument) else r for r in results]
+
+        tool_names = [t.default_value("request") for t in tools]
+
+        has_ids = all([t.id != "" for t in tools])
+        if has_ids:
+            id2result = OrderedDict(
+                (t.id, r)
+                for t, r in zip(tools, results)
+                if r is not None and isinstance(r, str)
+            )
+            result_values = list(id2result.values())
+            if len(id2result) > 1 and any(
+                orch_str in r
+                for r in result_values
+                for orch_str in ORCHESTRATION_STRINGS
+            ):
+                # Cannot support multi-tool results containing orchestration strings!
+                # Replace results with err string to force LLM to retry
+                err_str = "ERROR: Please use ONE tool at a time!"
+                id2result = OrderedDict((id, err_str) for id in id2result.keys())
+
+        name_results_list = [
+            (name, r) for name, r in zip(tool_names, results) if r is not None
+        ]
+        if len(name_results_list) == 0:
+            return None
+
+        # there was a non-None result
+
+        if has_ids and len(id2result) > 1:
+            # if there are multiple OpenAI Tool results, return them as a dict
+            return id2result
+
+        # multi-results: prepend the tool name to each result
+        str_results = [f"Result from {name}: {r}" for name, r in name_results_list]
+        final = "\n\n".join(str_results)
+        return final
+
+    async def handle_message_async(
+        self, msg: str | ChatDocument
+    ) -> None | str | OrderedDict[str, str] | ChatDocument:
+        """
+        Asynch version of `handle_message`. See there for details.
+        """
+        try:
+            tools = self.get_tool_messages(msg)
+            tools = [t for t in tools if self._tool_recipient_match(t)]
+        except ValidationError as ve:
+            # correct tool name but bad fields
+            return self.tool_validation_error(ve)
+        except XMLException as xe:  # from XMLToolMessage parsing
+            return str(xe)
+        except ValueError:
+            # invalid tool name
+            # We return None since returning "invalid tool name" would
+            # be considered a valid result in task loop, and would be treated
+            # as a response to the tool message even though the tool was not intended
+            # for this agent.
+            return None
+        if len(tools) > 1 and not self.config.allow_multiple_tools:
+            return self.to_ChatDocument("ERROR: Use ONE tool at a time!")
+        if len(tools) == 0:
+            fallback_result = self.handle_message_fallback(msg)
+            if fallback_result is None:
+                return None
+            return self.to_ChatDocument(
+                fallback_result,
+                chat_doc=msg if isinstance(msg, ChatDocument) else None,
+            )
+        chat_doc = msg if isinstance(msg, ChatDocument) else None
+
+        results = self._check_multiple_orch_tools(tools)
+        if not results:
+            results = [
+                await self.handle_tool_message_async(t, chat_doc=chat_doc)
+                for t in tools
+            ]
+
+        return self._handle_message_final(tools, results)
 
     def handle_message(
         self, msg: str | ChatDocument
@@ -1165,82 +1346,13 @@ class Agent(ABC):
                 fallback_result,
                 chat_doc=msg if isinstance(msg, ChatDocument) else None,
             )
-        has_ids = all([t.id != "" for t in tools])
         chat_doc = msg if isinstance(msg, ChatDocument) else None
 
-        # check whether there are multiple orchestration-tools (e.g. DoneTool etc),
-        # in which case set result to error-string since we don't yet support
-        # multi-tools with one or more orch tools.
-        from langroid.agent.tools.orchestration import (
-            AgentDoneTool,
-            AgentSendTool,
-            DonePassTool,
-            DoneTool,
-            ForwardTool,
-            PassTool,
-            SendTool,
-        )
-        from langroid.agent.tools.recipient_tool import RecipientTool
-
-        ORCHESTRATION_TOOLS = (
-            AgentDoneTool,
-            DoneTool,
-            PassTool,
-            DonePassTool,
-            ForwardTool,
-            RecipientTool,
-            SendTool,
-            AgentSendTool,
-        )
-
-        has_orch = any(isinstance(t, ORCHESTRATION_TOOLS) for t in tools)
-        results: List[str | ChatDocument | None]
-        if has_orch and len(tools) > 1:
-            err_str = "ERROR: Use ONE tool at a time!"
-            results = [err_str for _ in tools]
-        else:
+        results = self._check_multiple_orch_tools(tools)
+        if not results:
             results = [self.handle_tool_message(t, chat_doc=chat_doc) for t in tools]
-            # if there's a solitary ChatDocument|str result, return it as is
-            if len(results) == 1 and isinstance(results[0], (str, ChatDocument)):
-                return results[0]
-            # extract content from ChatDocument results so we have all str|None
-            results = [r.content if isinstance(r, ChatDocument) else r for r in results]
 
-        # now all results are str|None
-        tool_names = [t.default_value("request") for t in tools]
-        if has_ids:
-            id2result = OrderedDict(
-                (t.id, r)
-                for t, r in zip(tools, results)
-                if r is not None and isinstance(r, str)
-            )
-            result_values = list(id2result.values())
-            if len(id2result) > 1 and any(
-                orch_str in r
-                for r in result_values
-                for orch_str in ORCHESTRATION_STRINGS
-            ):
-                # Cannot support multi-tool results containing orchestration strings!
-                # Replace results with err string to force LLM to retry
-                err_str = "ERROR: Please use ONE tool at a time!"
-                id2result = OrderedDict((id, err_str) for id in id2result.keys())
-
-        name_results_list = [
-            (name, r) for name, r in zip(tool_names, results) if r is not None
-        ]
-        if len(name_results_list) == 0:
-            return None
-
-        # there was a non-None result
-
-        if has_ids and len(id2result) > 1:
-            # if there are multiple OpenAI Tool results, return them as a dict
-            return id2result
-
-        # multi-results: prepend the tool name to each result
-        str_results = [f"Result from {name}: {r}" for name, r in name_results_list]
-        final = "\n\n".join(str_results)
-        return final
+        return self._handle_message_final(tools, results)
 
     def handle_message_fallback(self, msg: str | ChatDocument) -> Any:
         """
@@ -1493,6 +1605,37 @@ class Agent(ABC):
                 else result.content[: max_tokens * 4]  # approx truncate
             ) + truncate_warning
             return result
+
+    async def handle_tool_message_async(
+        self,
+        tool: ToolMessage,
+        chat_doc: Optional[ChatDocument] = None,
+    ) -> None | str | ChatDocument:
+        """
+        Asynch version of `handle_tool_message`. See there for details.
+        """
+        tool_name = tool.default_value("request")
+        handler_method = getattr(self, tool_name + "_async", None)
+        if handler_method is None:
+            return self.handle_tool_message(tool, chat_doc=chat_doc)
+        has_chat_doc_arg = (
+            chat_doc is not None
+            and "chat_doc" in inspect.signature(handler_method).parameters
+        )
+        try:
+            if has_chat_doc_arg:
+                maybe_result = await handler_method(tool, chat_doc=chat_doc)
+            else:
+                maybe_result = await handler_method(tool)
+            result = self.to_ChatDocument(maybe_result, tool_name, chat_doc)
+        except Exception as e:
+            # raise the error here since we are sure it's
+            # not a pydantic validation error,
+            # which we check in `handle_message`
+            raise e
+        return self._maybe_truncate_result(
+            result, tool._max_result_tokens
+        )  # type: ignore
 
     def handle_tool_message(
         self,
