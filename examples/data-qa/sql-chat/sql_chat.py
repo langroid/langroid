@@ -189,6 +189,7 @@ def main(
             use_tools=tools,
             use_functions_api=not tools,
             show_stats=False,
+            chat_mode=True,
             context_descriptions=context_descriptions,  # Add context descriptions to the config
             use_schema_tools=schema_tools,
             addressing_prefix=SEND_TO,
@@ -201,8 +202,8 @@ def main(
     task = Task(
         agent,
         interactive=False,
-        only_user_quits_root=True,
         config=task_config,
+        only_user_quits_root=False,
     )
     task.run()
 
