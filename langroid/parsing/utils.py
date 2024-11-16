@@ -31,6 +31,10 @@ def download_nltk_resource(resource: str) -> None:
         nltk.download(resource, quiet=True)
 
 
+# Download punkt_tab resource at module import
+download_nltk_resource("punkt_tab")
+download_nltk_resource("gutenberg")
+
 T = TypeVar("T")
 
 
@@ -46,7 +50,6 @@ def batched(iterable: Iterable[T], n: int) -> Iterable[Sequence[T]]:
 
 def generate_random_sentences(k: int) -> str:
     # Load the sample text
-    download_nltk_resource("gutenberg")
 
     from nltk.corpus import gutenberg
 
