@@ -1293,6 +1293,9 @@ class Agent(ABC):
                 await self.handle_tool_message_async(t, chat_doc=chat_doc)
                 for t in tools
             ]
+            # if there's a solitary ChatDocument|str result, return it as is
+            if len(results) == 1 and isinstance(results[0], (str, ChatDocument)):
+                return results[0]
 
         return self._handle_message_final(tools, results)
 
@@ -1351,6 +1354,9 @@ class Agent(ABC):
         results = self._check_multiple_orch_tools(tools)
         if not results:
             results = [self.handle_tool_message(t, chat_doc=chat_doc) for t in tools]
+            # if there's a solitary ChatDocument|str result, return it as is
+            if len(results) == 1 and isinstance(results[0], (str, ChatDocument)):
+                return results[0]
 
         return self._handle_message_final(tools, results)
 
