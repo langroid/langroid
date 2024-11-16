@@ -1082,9 +1082,11 @@ class Task:
         found_response = False
         # (responder, result) from a responder who explicitly said NO_ANSWER
         no_answer_response: None | Tuple[Responder, ChatDocument] = None
+        n_non_responders = 0
         for r in responders:
             self.is_pass_thru = False
             if not self._can_respond(r):
+                n_non_responders += 1
                 # create dummy msg for logging
                 log_doc = ChatDocument(
                     content="[CANNOT RESPOND]",
@@ -1097,6 +1099,9 @@ class Task:
                 # no need to register this dummy msg in ObjectRegistry
                 ChatDocument.delete_id(log_doc.id())
                 self.log_message(r, log_doc)
+                if n_non_responders == len(responders):
+                    # don't stay in this "non-response" loop forever
+                    break
                 continue
             self.human_tried = r == Entity.USER
             result = self.response(r, turns)

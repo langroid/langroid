@@ -156,6 +156,7 @@ def test_lance_doc_chat_agent(
     )
 
     agent = LanceDocChatAgent(cfg)
+    agent.vecdb.delete_collection(agent.vecdb.config.collection_name)
     agent.ingest_docs(movie_docs, split=split)
     task = LanceRAGTaskCreator.new(agent, interactive=False)
 

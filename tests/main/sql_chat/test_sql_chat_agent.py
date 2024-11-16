@@ -143,6 +143,7 @@ def _test_sql_chat_agent(
             use_tools_api=tools_api,
             use_schema_tools=use_schema_tools,
             addressing_prefix=addressing_prefix,
+            chat_mode=False,
         )
     )
 
@@ -226,12 +227,9 @@ def test_sql_chat_db_update(
         tools_api=tools_api,
         db_session=mock_db_session,
         context=mock_context,
-        prompt=f"""
-        Update Bob's sale amount to 900.
-        Respond with {DONE} when you have finished.
-        """,
+        prompt="Update Bob's sale amount to 900",
         answer="900",
-        turns=20,
+        turns=10,
     )
 
     _test_sql_chat_agent(
@@ -239,12 +237,9 @@ def test_sql_chat_db_update(
         tools_api=tools_api,
         db_session=mock_db_session,
         context=mock_context,
-        prompt=f"""
-        How much did Bob sell?
-        Respond with {DONE} when you have finished.
-        """,
+        prompt="How much did Bob sell?",
         answer="900",
-        turns=20,
+        turns=10,
     )
 
     # without context descriptions:
@@ -253,12 +248,9 @@ def test_sql_chat_db_update(
         tools_api=tools_api,
         db_session=mock_db_session,
         context={},
-        prompt=f"""
-        Update Bob's sale amount to 9100.
-        Respond with {DONE} when you have finished.
-        """,
+        prompt="Update Bob's sale amount to 9100",
         answer="9100",
-        turns=20,
+        turns=10,
     )
 
     _test_sql_chat_agent(
@@ -266,9 +258,9 @@ def test_sql_chat_db_update(
         tools_api=tools_api,
         db_session=mock_db_session,
         context={},
-        prompt=f"How much did Bob sell? Respond with {DONE} when you have finished.",
+        prompt="How much did Bob sell?",
         answer="9100",
-        turns=20,
+        turns=10,
     )
 
 

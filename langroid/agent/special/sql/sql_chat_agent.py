@@ -10,11 +10,10 @@ Functionality includes:
 import logging
 from typing import Any, Dict, List, Optional, Sequence, Union
 
-from rich import print
 from rich.console import Console
 
 from langroid.exceptions import LangroidImportError
-from langroid.utils.constants import DONE, SEND_TO
+from langroid.utils.constants import SEND_TO
 
 try:
     from sqlalchemy import MetaData, Row, create_engine, inspect, text
@@ -25,7 +24,7 @@ except ImportError as e:
     raise LangroidImportError(extra="sql", error=str(e))
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
-from langroid.agent.chat_document import ChatDocMetaData, ChatDocument
+from langroid.agent.chat_document import ChatDocument
 from langroid.agent.special.sql.utils.description_extractors import (
     extract_schema_descriptions,
 )
@@ -43,15 +42,15 @@ from langroid.agent.special.sql.utils.tools import (
     GetTableSchemaTool,
     RunQueryTool,
 )
-from langroid.mytypes import Entity
+from langroid.agent.tools.orchestration import DoneTool, ForwardTool
 from langroid.vector_store.base import VectorStoreConfig
 
 logger = logging.getLogger(__name__)
 
 console = Console()
 
-DEFAULT_SQL_CHAT_SYSTEM_MESSAGE = f"""
-{{mode}}
+DEFAULT_SQL_CHAT_SYSTEM_MESSAGE = """
+{mode}
 
 You do not need to attempt answering a question with just one query. 
 You could make a sequence of SQL queries to help you write the final query.
@@ -65,19 +64,24 @@ are "Male" and "Female".
 
 Start by asking what I would like to know about the data.
 
-When you have FINISHED the given query or database update task, 
-say {DONE} and show your answer.
-
 """
 
-ADDRESSING_INSTRUCTION = f"""
+ADDRESSING_INSTRUCTION = """
 IMPORTANT - Whenever you are NOT writing a SQL query, make sure you address the user
-using {{prefix}}User. You MUST use the EXACT syntax {{prefix}} !!!
+using {prefix}User. You MUST use the EXACT syntax {prefix} !!!
 
 In other words, you ALWAYS write EITHER:
  - a SQL query using the `run_query` tool, 
- - OR address the user using {{prefix}}User, and include {DONE} to indicate your 
-     task is FINISHED. 
+ - OR address the user using {prefix}User
+"""
+
+DONE_INSTRUCTION = f"""
+When you are SURE you have the CORRECT answer to a user's query or request, 
+use the `{DoneTool.name()}` with `content` set to the answer or result.
+If you DO NOT think you have the answer to the user's query or request,
+you SHOULD NOT use the `{DoneTool.name()}` tool.
+Instead, you must CONTINUE to improve your queries (tools) to get the correct answer,
+and finally use the `{DoneTool.name()}` tool to send the correct answer to the user.
 """
 
 
@@ -96,7 +100,10 @@ class SQLChatAgentConfig(ChatAgentConfig):
     context_descriptions: Dict[str, Dict[str, Union[str, Dict[str, str]]]] = {}
     use_schema_tools: bool = False
     multi_schema: bool = False
-    addressing_prefix: str = SEND_TO
+    # whether the agent is used in a continuous chat with user,
+    # as opposed to returning a result from the task.run()
+    chat_mode: bool = False
+    addressing_prefix: str = ""
 
     """
     Optional, but strongly recommended, context descriptions for tables, columns, 
@@ -225,14 +232,21 @@ class SQLChatAgent(ChatAgent):
         """Initialize message tools used for chatting."""
         message = self._format_message()
         self.config.system_message = self.config.system_message.format(mode=message)
-        if self.config.addressing_prefix != "":
+
+        if self.config.chat_mode:
+            self.config.addressing_prefix = self.config.addressing_prefix or SEND_TO
             self.config.system_message += ADDRESSING_INSTRUCTION.format(
                 prefix=self.config.addressing_prefix
             )
+        else:
+            self.config.system_message += DONE_INSTRUCTION
+
         super().__init__(self.config)
-        self.enable_message(RunQueryTool)
+        self.enable_message([RunQueryTool, ForwardTool])
         if self.config.use_schema_tools:
             self._enable_schema_tools()
+        if not self.config.chat_mode:
+            self.enable_message(DoneTool)
 
     def _format_message(self) -> str:
         if self.engine is None:
@@ -270,7 +284,7 @@ class SQLChatAgent(ChatAgent):
 
     def handle_message_fallback(
         self, msg: str | ChatDocument
-    ) -> str | ChatDocument | None:
+    ) -> str | ForwardTool | None:
         """
         Handle the scenario where current msg is not a tool.
         Special handling is only needed if the message was from the LLM
@@ -278,60 +292,40 @@ class SQLChatAgent(ChatAgent):
         """
         if not self.llm_responded:
             return None
-        if self.used_run_query:
-            prefix = (
-                self.config.addressing_prefix + "User"
-                if self.config.addressing_prefix
-                else ""
-            )
-            return (
-                DONE + prefix + (msg.content if isinstance(msg, ChatDocument) else msg)
-            )
+        if self.interactive:
+            return ForwardTool(agent="User")
 
-        else:
-            reminder = """
-            You may have forgotten to use the `run_query` tool to execute an SQL query
-            for the user's question/request            
+        tools_instruction = f"""
+          For example you may want to use the TOOL
+          `{RunQueryTool.name()}` to further explore the database contents
+        """
+        if self.config.use_schema_tools:
+            tools_instruction += """
+            OR you may want to use one of the schema tools to 
+            explore the database schema
             """
-            if self.config.addressing_prefix != "":
-                reminder += f"""
-                OR you may have forgotten to address the user using the prefix
-                {self.config.addressing_prefix} 
-                """
-            return reminder
+        if self.config.chat_mode:
+            return f"""
+            Since you did not explicitly address the User, it is not clear
+            whether:
+            - you intend this to be the final response to the 
+              user's query/request, in which case you must use the 
+              `{ForwardTool.name()}` to indicate this.
+            - OR, you FORGOT to use an Appropriate TOOL,
+              in which case you should use the available tools to
+              make progress on the user's query/request.
+              {tools_instruction}            
+            """
 
-    def _agent_response(
-        self,
-        msg: Optional[str | ChatDocument] = None,
-    ) -> Optional[ChatDocument]:
-        # Your override code here
-        if msg is None:
-            return None
-
-        results = self.handle_message(msg)
-        if results is None:
-            return None
-
-        output = results
-        if SQL_ERROR_MSG in output:
-            output = "There was an error in the SQL Query. Press enter to retry."
-
-        console.print(f"[red]{self.indent}", end="")
-        print(f"[red]Agent: {output}")
-        sender_name = self.config.name
-        if isinstance(msg, ChatDocument) and msg.function_call is not None:
-            sender_name = msg.function_call.name
-
-        content = results.content if isinstance(results, ChatDocument) else results
-
-        return ChatDocument(
-            content=content,
-            metadata=ChatDocMetaData(
-                source=Entity.AGENT,
-                sender=Entity.AGENT,
-                sender_name=sender_name,
-            ),
-        )
+        return f"""
+            The intent of your response is not clear:
+            - if you intended this to be the FINAL answer to the user's query,
+                then use the `{DoneTool.name()}` to indicate so,
+                with the `content` set to the answer or result.
+            - otherwise, use one of the available tools to make progress 
+                to arrive at the final answer.
+                {tools_instruction}
+            """
 
     def retry_query(self, e: Exception, query: str) -> str:
         """
