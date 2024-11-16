@@ -118,11 +118,13 @@ class ConditionalAgent(ChatAgent):
         self.generated_request: bool = False
 
         if self.config.top_level:
+            # We always begin by requesting a number from the user
             self.set_output_format(AskNumTool)
             self.enable_message(AskNumTool)
             self.enable_message(ResultTool, handle=True, use=False)
         else:
             self.enable_message([MatchTool, ResultTool])
+            # We always begin by checking whether the number matches the agent's condiditon
             self.set_output_format(MatchTool)
 
     def ask_num(self, msg: AskNumTool) -> str:
@@ -234,6 +236,8 @@ def chat() -> None:
     adder_agent = ChatAgent()
     adder_agent.enable_message(AddNumTool)
     adder_task = Task(
+        # ensure that the agent calls the tool:
+        # agent[T] is a copy of agent which always outputs values of type T
         adder_agent[AddNumTool],
         name="Adder",
         interactive=False,
