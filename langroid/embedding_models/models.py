@@ -119,9 +119,7 @@ class EmbeddingFunctionCallable:
         tokenized_texts = self.model.truncate_texts(input)
         embeds = []
         for batch in batched(tokenized_texts, self.batch_size):
-            if isinstance(self.model, AzureOpenAIEmbeddings) or isinstance(
-                self.model, OpenAIEmbeddings
-            ):
+            if isinstance(self.model, (AzureOpenAIEmbeddings, OpenAIEmbeddings)):
                 result = self.model.client.embeddings.create(
                     input=batch, model=self.model.config.model_name
                 )
@@ -191,20 +189,23 @@ class AzureOpenAIEmbeddings(EmbeddingModel):
         self.config = config
         load_dotenv()
 
-        if not self.config.api_key:
-            self.config.api_key = os.getenv("AZURE_OPENAI_API_KEY", "")
+        self.config.api_key = self.config.api_key or os.getenv(
+            "AZURE_OPENAI_API_KEY", ""
+        )
         if self.config.api_key == "":
             raise ValueError(
                 """AZURE_OPENAI_API_KEY env variable must be set to use 
             AzureOpenAIEmbeddings. Please set the AZURE_OPENAI_API_KEY value 
             in your .env file."""
             )
-        if not self.config.azure_endpoint:
-            self.config.azure_endpoint = os.getenv("AZURE_OPENAI_ENDPOINT", "")
+
+        self.config.azure_endpoint = self.config.azure_endpoint or os.getenv(
+            "AZURE_OPENAI_API_BASE", ""
+        )
         if self.config.azure_endpoint == "":
             raise ValueError(
-                """AZURE_OPENAI_ENDPOINT env variable must be set to use 
-            AzureOpenAIEmbeddings. Please set the AZURE_OPENAI_ENDPOINT value 
+                """AZURE_OPENAI_API_BASE env variable must be set to use 
+            AzureOpenAIEmbeddings. Please set the AZURE_OPENAI_API_BASE value 
             in your .env file."""
             )
         self.client = AzureOpenAI(
