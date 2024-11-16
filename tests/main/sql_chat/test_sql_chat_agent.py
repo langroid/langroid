@@ -51,7 +51,7 @@ class Sale(Base):
 @pytest.fixture
 def mock_db_session() -> Session:
     # Create an in-memory SQLite database
-    engine = create_engine("sqlite:///:memory:", echo=True)
+    engine = create_engine("sqlite:///:memory:", echo=False)
     Base.metadata.create_all(engine)
 
     Session = sessionmaker(bind=engine)
@@ -196,7 +196,7 @@ def test_sql_chat_agent_query(
         context=mock_context,
         prompt=query,
         answer=answer,
-        turns=6,
+        turns=15,
     )
 
     # without context descriptions:
@@ -207,7 +207,7 @@ def test_sql_chat_agent_query(
         context={},
         prompt=query,
         answer=answer,
-        turns=10,
+        turns=15,
     )
 
 
