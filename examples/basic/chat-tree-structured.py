@@ -256,8 +256,6 @@ def chat() -> None:
     even_nz_task.add_sub_task(adder_task)
     odd_task.add_sub_task(adder_task)
 
-    # set up the tools
-
     # start the chat
     main_task.run()
 
