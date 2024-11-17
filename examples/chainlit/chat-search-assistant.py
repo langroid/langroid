@@ -85,9 +85,9 @@ async def main(
         case "google":
             search_tool_class = GoogleSearchTool
         case "metaphor":
-            from langroid.agent.tools.metaphor_search_tool import MetaphorSearchTool
+            from langroid.agent.tools.exa_search_tool import ExaSearchTool
 
-            search_tool_class = MetaphorSearchTool
+            search_tool_class = ExaSearchTool
         case "ddg":
             search_tool_class = DuckduckgoSearchTool
         case _:
