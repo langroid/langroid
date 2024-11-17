@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Tuple
 
 from langroid.agent.tool_message import ToolMessage
 
@@ -10,6 +10,20 @@ class RunQueryTool(ToolMessage):
             return the results to answer a question.
             """
     query: str
+
+    @classmethod
+    def examples(cls) -> List["ToolMessage" | Tuple[str, "ToolMessage"]]:
+        return [
+            cls(
+                query="SELECT * FROM movies WHERE genre = 'comedy'",
+            ),
+            (
+                "Find all movies with a rating of 5",
+                cls(
+                    query="SELECT * FROM movies WHERE rating = 5",
+                ),
+            ),
+        ]
 
 
 class GetTableNamesTool(ToolMessage):
