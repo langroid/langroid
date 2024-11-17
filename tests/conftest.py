@@ -5,7 +5,7 @@ import pytest
 
 from langroid.cachedb.redis_cachedb import RedisCache, RedisCacheConfig
 from langroid.language_models import OpenAIChatModel
-from langroid.utils.configuration import Settings
+from langroid.utils.configuration import Settings, set_global
 
 
 def pytest_sessionfinish(session, exitstatus):
@@ -83,6 +83,14 @@ def test_settings(request) -> Settings:
         chat_model=chat_model,
         max_turns=max_turns,
     )
+
+
+# Auto-inject this into every test, so we don't need to explicitly
+# have `test_settings` as a parameter in every test function!
+@pytest.fixture(autouse=True)
+def auto_set_global_settings(test_settings):
+    set_global(test_settings)
+    yield
 
 
 @pytest.fixture(scope="session")

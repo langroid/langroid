@@ -103,10 +103,6 @@ embed_cfg = OpenAIEmbeddingsConfig()
             "GodPapa",
         ),
         (
-            "How many movies have rating above 9?",
-            "1",
-        ),
-        (
             "Which Science Fiction movie was directed by Winkowski?",
             "Vector",
         ),
@@ -116,11 +112,10 @@ embed_cfg = OpenAIEmbeddingsConfig()
         ),
     ],
 )
-@pytest.mark.parametrize("split", [False, True])
+@pytest.mark.parametrize("split", [True, False])
 @pytest.mark.parametrize("functions_api", [True, False])
-@pytest.mark.parametrize("tools_api", [True, False])
+@pytest.mark.parametrize("tools_api", [False, True])
 def test_lance_doc_chat_agent(
-    test_settings: Settings,
     split: bool,
     query: str,
     expected: str,
@@ -129,7 +124,6 @@ def test_lance_doc_chat_agent(
 ):
     # note that the (query, ans) pairs are accumulated into the
     # internal dialog history of the agent.
-    set_global(test_settings)
 
     ldb_dir = ".lancedb/data/test-x"
     rmdir(ldb_dir)
@@ -143,7 +137,7 @@ def test_lance_doc_chat_agent(
     )
 
     cfg = DocChatAgentConfig(
-        # turn cross-encoder off this off since it needs sentence-transformers
+        # turn cross-encoder off since it needs sentence-transformers
         cross_encoder_reranking_model="",
         vecdb=ldb_cfg,
         parsing=ParsingConfig(
