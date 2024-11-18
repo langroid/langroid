@@ -161,6 +161,78 @@ and any field that is designated with a `verbatim=True` will be enclosed
 within an XML `CDATA` tag, which does *not* require any escaping, and can
 be far more reliable for tool-use than JSON, especially with weak LLMs.
 
+## How can I handle an LLM "forgetting" to generate a `ToolMessage`? 
+
+Sometimes the LLM (especially a weak one) forgets to generate a 
+[`ToolMessage`][langroid.agent.tool_message.ToolMessage]
+(either via OpenAI's tools/functions API, or via Langroid's JSON/XML Tool mechanism),
+despite being instructed to do so. There are a few remedies Langroid offers for this:
+
+**Improve the instructions in the `ToolMessage` definition:**
+
+- Improve instructions in the `purpose` field of the `ToolMessage`.
+- Add an `instructions` class-method to the `ToolMessage`, as in the
+  [`chat-search.py`](https://github.com/langroid/langroid/blob/main/examples/docqa/chat-search.py) script:
+
+```python
+@classmethod
+def instructions(cls) -> str:
+    return """
+        IMPORTANT: You must include an ACTUAL query in the `query` field,
+        """
+```
+  These instructions are meant to be general instructions on how to use the tool
+  (e.g. how to set the field values), not to specifically about the formatting.
+
+- Add a `format_instructions` class-method, e.g. like the one in the 
+  [`chat-multi-extract-3.py`](https://github.com/langroid/langroid/blob/main/examples/docqa/chat-multi-extract-3.py) 
+  example script.
+
+```python
+@classmethod
+def format_instructions(cls, tool: bool = True) -> str:
+    instr = super().format_instructions(tool)
+    instr += """
+    ------------------------------
+    ASK ME QUESTIONS ONE BY ONE, to FILL IN THE FIELDS 
+    of the `lease_info` function/tool.
+    First ask me for the start date of the lease.
+    DO NOT ASK ANYTHING ELSE UNTIL YOU RECEIVE MY ANSWER.
+    """
+    return instr
+```
+
+**Override the `handle_message_fallback` method in the agent:**
+
+This method is called when the Agent's `agent_response` method receives a non-tool
+message as input. The default behavior of this method is to return None, but it
+is very useful to override the method to handle cases where the LLM has forgotten
+to use a tool. You can define this method to return a "nudge" to the LLM
+telling it that it forgot to do a tool-call, e.g. see how it's done in the 
+example script [`chat-multi-extract-local.py`](https://github.com/langroid/langroid/blob/main/examples/docqa/chat-multi-extract-local.py):
+
+```python
+class LeasePresenterAgent(ChatAgent):
+    def handle_message_fallback(
+        self, msg: str | ChatDocument
+    ) -> str | ChatDocument | None:
+        """Handle scenario where Agent failed to present the Lease JSON"""
+        if isinstance(msg, ChatDocument) and msg.metadata.sender == Entity.LLM:
+            return """
+            You either forgot to present the information in the JSON format
+            required in `lease_info` JSON specification,
+            or you may have used the wrong name of the tool or fields.
+            Try again.
+            """
+        return None
+```
+
+Note that despite doing all of these, the LLM may still fail to generate a `ToolMessage`.
+In such cases, you may want to consider using a better LLM, or an up-coming Langroid
+feature that leverages **strict decoding** abilities of specific LLM providers
+(e.g. OpenAI, llama.cpp, vllm) that are able to use grammar-constrained decoding
+to force the output to conform to the specified structure.
+
 ## Can I use Langroid to converse with a Knowledge Graph (KG)?
 
 Yes, you can use Langroid to "chat with" either a Neo4j or ArangoDB KG, 
