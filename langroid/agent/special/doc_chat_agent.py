@@ -126,6 +126,20 @@ class DocChatAgentConfig(ChatAgentConfig):
     # https://arxiv.org/pdf/2212.10496.pdf
     # It is False by default; its benefits depends on the context.
     hypothetical_answer: bool = False
+    # Flag to enable Hypothetical Question Indexing,
+    # which uses a language model to generate questions for each data chunk,
+    # this might help in finding relevant chunks for a given question.
+    hypothetical_questions: bool = False
+    hypothetical_questions_nr: int = 3
+    hypothetical_questions_default_prompt: str = f"""
+    Given the following text passage, generate up to {hypothetical_questions_nr} 
+    different questions that this passage would help answer. 
+    Make the questions specific and diverse.
+    
+    PASSAGE:
+    %(passage)s
+    """
+
     n_query_rephrases: int = 0
     n_neighbor_chunks: int = 0  # how many neighbors on either side of match to retrieve
     n_fuzzy_neighbor_words: int = 100  # num neighbor words to retrieve for fuzzy match
@@ -404,6 +418,10 @@ class DocChatAgent(ChatAgent):
                 d.metadata.is_chunk = True
         if self.vecdb is None:
             raise ValueError("VecDB not set")
+
+        if self.config.hypothetical_questions:
+            question_docs = [self.llm_hypothetical_question(doc) for doc in docs]
+            docs.extend(question_docs)
 
         # If any additional fields need to be added to content,
         # add them as key=value pairs for all docs, before batching.
@@ -859,6 +877,26 @@ class DocChatAgent(ChatAgent):
                     """
                 ).content
         return answer
+
+    def llm_hypothetical_question(self, chunk: Document) -> Document:
+        """Generate potential questions this chunk would answer"""
+        if self.llm is None:
+            raise ValueError("LLM not set")
+
+        with status("[cyan]LLM generating hypothetical questions..."):
+            with StreamingIfAllowed(self.llm, False):
+                prompt = self.config.hypothetical_questions_default_prompt % {
+                    "passage": chunk.content
+                }
+            questions = self.llm_response_forget(prompt).content
+        return Document(
+            content=questions,
+            metadata=DocMetaData(
+                type="hypothetical_question",
+                parent_chunk_id=chunk.id(),
+                original_content=chunk.content,
+            ),
+        )
 
     def llm_rephrase_query(self, query: str) -> List[str]:
         if self.llm is None:
