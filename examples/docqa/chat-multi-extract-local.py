@@ -127,7 +127,7 @@ class QuestionGeneratorAgent(ChatAgent):
 class MyDocChatAgent(DocChatAgent):
     def llm_response(
         self,
-        query: None | str | ChatDocument = None,
+        message: None | str | ChatDocument = None,
     ) -> Optional[ChatDocument]:
         """
         Override the default LLM response to return the full document,
@@ -137,7 +137,7 @@ class MyDocChatAgent(DocChatAgent):
         since we are extracting separate pieces of info from docs)
         """
         n_msgs = len(self.message_history)
-        response = super().llm_response(query)
+        response = super().llm_response(message)
         # If there is a response, then we will have two additional
         # messages in the message history, i.e. the user message and the
         # assistant response. We want to (carefully) remove these two messages.

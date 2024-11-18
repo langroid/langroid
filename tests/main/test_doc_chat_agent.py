@@ -265,12 +265,12 @@ def test_doc_chat_agent_task(test_settings: Settings, agent):
 class RetrievalAgent(DocChatAgent):
     def llm_response(
         self,
-        query: None | str | ChatDocument = None,
+        message: None | str | ChatDocument = None,
     ) -> Optional[ChatDocument]:
         # override the DocChatAgent's LLM response,
         # to just use ChatAgent's LLM response - this ensures that the system msg
         # is respected, and it uses the `retrieval_tool` as instructed.
-        return ChatAgent.llm_response(self, query)
+        return ChatAgent.llm_response(self, message)
 
 
 @pytest.fixture(scope="function")

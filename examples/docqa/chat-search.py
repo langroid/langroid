@@ -88,9 +88,9 @@ class SearchDocChatAgent(DocChatAgent):
 
     def llm_response(
         self,
-        query: None | str | ChatDocument = None,
+        message: None | str | ChatDocument = None,
     ) -> ChatDocument | None:
-        return ChatAgent.llm_response(self, query)
+        return ChatAgent.llm_response(self, message)
 
     def handle_message_fallback(self, msg: str | ChatDocument) -> Any:
         if isinstance(msg, ChatDocument) and msg.metadata.sender == lr.Entity.LLM:

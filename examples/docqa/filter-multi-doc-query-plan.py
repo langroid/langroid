@@ -60,11 +60,11 @@ class QueryPlanTool(lr.ToolMessage):
 class FilterDocAgent(lr.agent.special.DocChatAgent):
     def llm_response(
         self,
-        query: None | str | ChatDocument = None,
+        message: None | str | ChatDocument = None,
     ) -> Optional[ChatDocument]:
         """Override DocChatAgent's default method,
         to call ChatAgent's llm_response, so it emits the QueryPlanTool"""
-        return lr.ChatAgent.llm_response(self, query)
+        return lr.ChatAgent.llm_response(self, message)
 
     def query_plan(self, msg: QueryPlanTool) -> str:
         """Handle query plan tool"""
