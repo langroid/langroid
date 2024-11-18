@@ -163,7 +163,7 @@ be far more reliable for tool-use than JSON, especially with weak LLMs.
 
 ## How can I handle an LLM "forgetting" to generate a `ToolMessage`? 
 
-Sometimes the LLM (especially weak ones) forgets to generate a 
+Sometimes the LLM (especially a weak one) forgets to generate a 
 [`ToolMessage`][langroid.agent.tool_message.ToolMessage]
 (either via OpenAI's tools/functions API, or via Langroid's JSON/XML Tool mechanism),
 despite being instructed to do so. There are a few remedies Langroid offers for this:
