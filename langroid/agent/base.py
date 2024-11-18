@@ -946,11 +946,20 @@ class Agent(ABC):
         Get ToolMessages recognized in msg, handle-able by this agent.
         NOTE: as a side-effect, this will update msg.tool_messages
         when msg is a ChatDocument and msg contains tool messages.
+        The intent here is that update=True should be set ONLY within agent_response()
+        or agent_response_async() methods. In other words, we want to persist the
+        msg.tool_messages only AFTER the agent has had a chance to handle the tools.
 
-        If all_tools is True:
-        - return all tools, i.e. any tool in self.llm_tools_known,
-            whether it is handled by this agent or not;
-        - otherwise, return only the tools handled by this agent.
+        Args:
+            msg (str|ChatDocument): the message to extract tools from.
+            all_tools (bool):
+                - if True, return all tools,
+                    i.e. any recognized tool in self.llm_tools_known,
+                    whether it is handled by this agent or not;
+                - otherwise, return only the tools handled by this agent.
+
+        Returns:
+            List[ToolMessage]: list of ToolMessage objects
         """
 
         if msg is None:
@@ -987,6 +996,7 @@ class Agent(ABC):
 
             tools = self.get_formatted_tool_messages(msg.content)
             msg.all_tool_messages = tools
+            # filter for actually handle-able tools, and recipient is this agent
             my_tools = [t for t in tools if self._tool_recipient_match(t)]
             msg.tool_messages = my_tools
 

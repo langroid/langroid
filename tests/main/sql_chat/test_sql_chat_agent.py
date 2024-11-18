@@ -9,10 +9,11 @@ try:
 except ImportError as e:
     raise LangroidImportError(extra="sql", error=str(e))
 
-from langroid.agent.special.sql.sql_chat_agent import SQLChatAgent, SQLChatAgentConfig
-from langroid.agent.task import Task
+from langroid.agent.special.sql.sql_chat_agent import (
+    SQLChatAgentConfig,
+    make_sql_chat_task,
+)
 from langroid.utils.configuration import Settings, set_global
-from langroid.utils.constants import DONE, NO_ANSWER
 
 Base = declarative_base()
 
@@ -134,25 +135,18 @@ def _test_sql_chat_agent(
     """
     Test the SQLChatAgent with a uri as data source
     """
-    agent = SQLChatAgent(
-        config=SQLChatAgentConfig(
-            database_session=db_session,
-            context_descriptions=context,
-            use_tools=not fn_api,
-            use_functions_api=fn_api,
-            use_tools_api=tools_api,
-            use_schema_tools=use_schema_tools,
-            addressing_prefix=addressing_prefix,
-            chat_mode=False,
-        )
-    )
-
-    task = Task(
-        agent,
+    agent_config = SQLChatAgentConfig(
         name="SQLChatAgent",
-        interactive=False,
-        only_user_quits_root=False,
+        database_session=db_session,
+        context_descriptions=context,
+        use_tools=not fn_api,
+        use_functions_api=fn_api,
+        use_tools_api=tools_api,
+        use_schema_tools=use_schema_tools,
+        addressing_prefix=addressing_prefix,
+        chat_mode=False,
     )
+    task = make_sql_chat_task(agent_config, interactive=False, use_helper=True)
 
     # run for enough turns to handle LLM deviations
     # 0: user question
@@ -161,12 +155,7 @@ def _test_sql_chat_agent(
     # ... so on
     result = task.run(prompt, turns=turns)
 
-    # TODO very occasionally gives NO_ANSWER
-    assert (
-        (result.content == NO_ANSWER)
-        or (answer.lower() in result.content.lower())
-        or (DONE in result.content or result.content == "")
-    )
+    assert answer.lower() in result.content.lower()
 
 
 @pytest.mark.parametrize("fn_api", [False, True])
