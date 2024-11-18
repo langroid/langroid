@@ -543,7 +543,7 @@ class OpenAIGPT(LanguageModel):
             elif self.is_glhf:
                 self.config.chat_model = self.config.chat_model.replace("glhf/", "")
                 self.api_key = os.getenv("GLHF_API_KEY", DUMMY_API_KEY)
-                self.api_base = GLHF_BASE_URL
+                self.api_base = GLHF_BASE_URL 
 
             self.client = OpenAI(
                 api_key=self.api_key,
