@@ -183,6 +183,7 @@ def instructions(cls) -> str:
 ```
   These instructions are meant to be general instructions on how to use the tool
   (e.g. how to set the field values), not to specifically about the formatting.
+
 - Add a `format_instructions` class-method, e.g. like the one in the 
   [`chat-multi-extract-3.py`](https://github.com/langroid/langroid/blob/main/examples/docqa/chat-multi-extract-3.py) 
   example script.
@@ -228,7 +229,7 @@ class LeasePresenterAgent(ChatAgent):
 
 Note that despite doing all of these, the LLM may still fail to generate a `ToolMessage`.
 In such cases, you may want to consider using a better LLM, or an up-coming Langroid
-feature that leverages **strict decoding** abilities of LLM providers
+feature that leverages **strict decoding** abilities of specific LLM providers
 (e.g. OpenAI, llama.cpp, vllm) that are able to use grammar-constrained decoding
 to force the output to conform to the specified structure.
 
