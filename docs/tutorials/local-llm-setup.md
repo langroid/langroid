@@ -107,7 +107,7 @@ See [glhf.chat](https://glhf.chat/chat/create) for a list of available models.
 To run with one of these models, set the `chat_model` in the `OpenAIGPTConfig` to
 `"glhf/<model_name>"`, where `model_name` is `hf:` followed by the HuggingFace repo 
 path, e.g. `Qwen/Qwen2.5-Coder-32B-Instruct`, so the full `chat_model` would be
-`"glhf/hf:Qwen/Qwen2.5-Coder-32B-Instruct"`.
+`"glhf/hf:Qwen/Qwen2.5-Coder-32B-Instruct"`. 
 
 ## Other non-OpenAI LLMs supported by LiteLLM
 
