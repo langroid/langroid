@@ -29,10 +29,9 @@ from prettytable import PrettyTable
 
 from utils import get_database_uri, fix_uri
 from langroid.agent.special.sql.sql_chat_agent import (
-    SQLChatAgent,
     SQLChatAgentConfig,
+    make_sql_chat_task,
 )
-from langroid.agent.task import Task, TaskConfig
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
 from langroid.utils.configuration import set_global, Settings
 from langroid.utils.constants import SEND_TO
@@ -182,29 +181,22 @@ def main(
 
         print(table)
 
-    agent = SQLChatAgent(
-        config=SQLChatAgentConfig(
-            name="sql",
-            database_uri=database_uri,
-            use_tools=tools,
-            use_functions_api=not tools,
-            show_stats=False,
-            chat_mode=True,
-            context_descriptions=context_descriptions,  # Add context descriptions to the config
-            use_schema_tools=schema_tools,
-            addressing_prefix=SEND_TO,
-            llm=OpenAIGPTConfig(
-                chat_model=OpenAIChatModel.GPT4,
-            ),
-        )
+    agent_config = SQLChatAgentConfig(
+        name="sql",
+        database_uri=database_uri,
+        use_tools=tools,
+        use_functions_api=not tools,
+        show_stats=False,
+        chat_mode=True,
+        context_descriptions=context_descriptions,  # Add context descriptions to the config
+        use_schema_tools=schema_tools,
+        addressing_prefix=SEND_TO,
+        llm=OpenAIGPTConfig(
+            chat_model=OpenAIChatModel.GPT4,
+        ),
     )
-    task_config = TaskConfig(addressing_prefix=SEND_TO)
-    task = Task(
-        agent,
-        interactive=False,
-        config=task_config,
-        only_user_quits_root=False,
-    )
+
+    task = make_sql_chat_task(agent_config, interactive=True, use_helper=True)
     task.run()
 
 
