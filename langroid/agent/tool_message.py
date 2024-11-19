@@ -224,7 +224,8 @@ class ToolMessage(ABC, BaseModel):
 
         Args:
             tool: instructions for Langroid-native tool use? (e.g. for non-OpenAI LLM)
-                (or else it would be for OpenAI Function calls)
+                (or else it would be for OpenAI Function calls).
+                Ignored in the default implementation, but can be used in subclasses.
         Returns:
             str: instructions on how to use the message
         """

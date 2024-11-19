@@ -135,6 +135,15 @@ For this to work, ensure you have a `GROQ_API_KEY` environment variable set in y
 ## "Local" LLMs hosted on Cerebras
 This works exactly like with Groq, except you set up a `CEREBRAS_API_KEY` environment variable, and specify the `chat_model` as `cerebras/<model_name>`, e.g. `cerebras/llama3.1-8b`. See the Cerebras [docs](https://inference-docs.cerebras.ai/introduction) for details on which LLMs are supported.
 
+## "Local" LLMs hosted on GLHF.chat
+
+See [glhf.chat](https://glhf.chat/chat/create) for a list of available models.
+
+To run with one of these models, set the `chat_model` in the `OpenAIGPTConfig` to
+`"glhf/<model_name>"`, where `model_name` is `hf:` followed by the HuggingFace repo 
+path, e.g. `Qwen/Qwen2.5-Coder-32B-Instruct`, so the full `chat_model` would be
+`"glhf/hf:Qwen/Qwen2.5-Coder-32B-Instruct"`. 
+
 ## Other non-OpenAI LLMs supported by LiteLLM
 
 For other scenarios of running local/remote LLMs, it is possible that the `LiteLLM` library

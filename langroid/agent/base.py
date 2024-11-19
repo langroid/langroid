@@ -760,18 +760,18 @@ class Agent(ABC):
     @no_type_check
     async def llm_response_async(
         self,
-        msg: Optional[str | ChatDocument] = None,
+        message: Optional[str | ChatDocument] = None,
     ) -> Optional[ChatDocument]:
         """
         Asynch version of `llm_response`. See there for details.
         """
-        if msg is None or not self.llm_can_respond(msg):
+        if message is None or not self.llm_can_respond(message):
             return None
 
-        if isinstance(msg, ChatDocument):
-            prompt = msg.content
+        if isinstance(message, ChatDocument):
+            prompt = message.content
         else:
-            prompt = msg
+            prompt = message
 
         output_len = self.config.llm.max_output_tokens
         if self.num_tokens(prompt) + output_len > self.llm.completion_context_length():
@@ -811,29 +811,31 @@ class Agent(ABC):
             )
         cdoc = ChatDocument.from_LLMResponse(response, displayed=True)
         # Preserve trail of tool_ids for OpenAI Assistant fn-calls
-        cdoc.metadata.tool_ids = [] if isinstance(msg, str) else msg.metadata.tool_ids
+        cdoc.metadata.tool_ids = (
+            [] if isinstance(message, str) else message.metadata.tool_ids
+        )
         return cdoc
 
     @no_type_check
     def llm_response(
         self,
-        msg: Optional[str | ChatDocument] = None,
+        message: Optional[str | ChatDocument] = None,
     ) -> Optional[ChatDocument]:
         """
         LLM response to a prompt.
         Args:
-            msg (str|ChatDocument): prompt string, or ChatDocument object
+            message (str|ChatDocument): prompt string, or ChatDocument object
 
         Returns:
             Response from LLM, packaged as a ChatDocument
         """
-        if msg is None or not self.llm_can_respond(msg):
+        if message is None or not self.llm_can_respond(message):
             return None
 
-        if isinstance(msg, ChatDocument):
-            prompt = msg.content
+        if isinstance(message, ChatDocument):
+            prompt = message.content
         else:
-            prompt = msg
+            prompt = message
 
         with ExitStack() as stack:  # for conditionally using rich spinner
             if not self.llm.get_stream():
@@ -883,7 +885,9 @@ class Agent(ABC):
         )
         cdoc = ChatDocument.from_LLMResponse(response, displayed=True)
         # Preserve trail of tool_ids for OpenAI Assistant fn-calls
-        cdoc.metadata.tool_ids = [] if isinstance(msg, str) else msg.metadata.tool_ids
+        cdoc.metadata.tool_ids = (
+            [] if isinstance(message, str) else message.metadata.tool_ids
+        )
         return cdoc
 
     def has_tool_message_attempt(self, msg: str | ChatDocument | None) -> bool:
@@ -946,11 +950,20 @@ class Agent(ABC):
         Get ToolMessages recognized in msg, handle-able by this agent.
         NOTE: as a side-effect, this will update msg.tool_messages
         when msg is a ChatDocument and msg contains tool messages.
+        The intent here is that update=True should be set ONLY within agent_response()
+        or agent_response_async() methods. In other words, we want to persist the
+        msg.tool_messages only AFTER the agent has had a chance to handle the tools.
 
-        If all_tools is True:
-        - return all tools, i.e. any tool in self.llm_tools_known,
-            whether it is handled by this agent or not;
-        - otherwise, return only the tools handled by this agent.
+        Args:
+            msg (str|ChatDocument): the message to extract tools from.
+            all_tools (bool):
+                - if True, return all tools,
+                    i.e. any recognized tool in self.llm_tools_known,
+                    whether it is handled by this agent or not;
+                - otherwise, return only the tools handled by this agent.
+
+        Returns:
+            List[ToolMessage]: list of ToolMessage objects
         """
 
         if msg is None:
@@ -987,6 +1000,7 @@ class Agent(ABC):
 
             tools = self.get_formatted_tool_messages(msg.content)
             msg.all_tool_messages = tools
+            # filter for actually handle-able tools, and recipient is this agent
             my_tools = [t for t in tools if self._tool_recipient_match(t)]
             msg.tool_messages = my_tools
 

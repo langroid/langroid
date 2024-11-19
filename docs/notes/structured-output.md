@@ -1,6 +1,6 @@
 # Structured Output
 
-Available in Langroid since v0.23.0.
+Available in Langroid since v0.24.0.
 
 On supported LLMs, including recent OpenAI LLMs (GPT-4o and GPT-4o mini) and local LLMs served by compatible inference servers,
 in particular, [vLLM](https://github.com/vllm-project/vllm) and [llama.cpp](https://github.com/ggerganov/llama.cpp), the decoding process can be constrained to ensure that the model's output adheres to a provided schema, 

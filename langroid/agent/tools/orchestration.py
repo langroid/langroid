@@ -154,12 +154,14 @@ class PassTool(ToolMessage):
         `forward_tool(self, tool: PassTool, chat_doc: ChatDocument) -> ChatDocument:`
         """
         # if PassTool is in chat_doc, pass its parent, else pass chat_doc itself
-        tools = agent.get_tool_messages(chat_doc)
-        doc = (
-            chat_doc.parent
-            if any(isinstance(t, type(self)) for t in tools)
-            else chat_doc
-        )
+        doc = chat_doc
+        while True:
+            tools = agent.get_tool_messages(doc)
+            if not any(isinstance(t, type(self)) for t in tools):
+                break
+            if doc.parent is None:
+                break
+            doc = doc.parent
         assert doc is not None, "PassTool: parent of chat_doc must not be None"
         new_doc = ChatDocument.deepcopy(doc)
         new_doc.metadata.sender = Entity.AGENT

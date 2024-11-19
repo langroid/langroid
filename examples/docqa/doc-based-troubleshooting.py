@@ -40,10 +40,10 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 class DocAgent(DocChatAgent):
     def llm_response(
         self,
-        query: None | str | ChatDocument = None,
+        message: None | str | ChatDocument = None,
     ) -> Optional[ChatDocument]:
         # Augment the response
-        results = super().llm_response(query).content
+        results = super().llm_response(message).content
         return self.create_llm_response(
             f"""
             Summary answer FROM DocAgent:
