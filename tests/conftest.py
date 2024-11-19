@@ -5,7 +5,7 @@ import pytest
 
 from langroid.cachedb.redis_cachedb import RedisCache, RedisCacheConfig
 from langroid.language_models import OpenAIChatModel
-from langroid.utils.configuration import Settings
+from langroid.utils.configuration import Settings, set_global
 
 
 def pytest_sessionfinish(session, exitstatus):
@@ -33,7 +33,6 @@ def pytest_addoption(parser) -> None:
         help="show intermediate details, e.g. for debug mode",
     )
     parser.addoption("--nc", action="store_true", default=False, help="don't use cache")
-    parser.addoption("--3", action="store_true", default=False, help="use GPT-3.5")
     parser.addoption("--ns", action="store_true", default=False, help="no streaming")
     parser.addoption("--ct", default="redis", help="redis, fakeredis or momento")
     parser.addoption(
@@ -75,18 +74,23 @@ def pytest_addoption(parser) -> None:
 def test_settings(request) -> Settings:
     chat_model = request.config.getoption("--m")
     max_turns = request.config.getoption("--turns")
-    if request.config.getoption("--3"):
-        chat_model = OpenAIChatModel.GPT3_5_TURBO
 
     return Settings(
         debug=request.config.getoption("--show"),
         cache=not request.config.getoption("--nc"),
         cache_type=request.config.getoption("--ct"),
-        gpt3_5=request.config.getoption("--3"),
         stream=not request.config.getoption("--ns"),
         chat_model=chat_model,
         max_turns=max_turns,
     )
+
+
+# Auto-inject this into every test, so we don't need to explicitly
+# have `test_settings` as a parameter in every test function!
+@pytest.fixture(autouse=True)
+def auto_set_global_settings(test_settings):
+    set_global(test_settings)
+    yield
 
 
 @pytest.fixture(scope="session")

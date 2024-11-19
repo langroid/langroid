@@ -142,7 +142,7 @@ class Agent(ABC):
         self.llm_tools_handled: Set[str] = set()
         self.llm_tools_usable: Set[str] = set()
         self.llm_tools_known: Set[str] = set()  # all known tools, handled/used or not
-        self.interactive: bool | None = None
+        self.interactive: bool = True  # may be modified by Task wrapper
         self.token_stats_str = ""
         self.default_human_response: Optional[str] = None
         self._indent = ""
@@ -653,13 +653,28 @@ class Agent(ABC):
         need_human_response = (
             isinstance(msg, ChatDocument) and msg.metadata.recipient == Entity.USER
         )
+        default_user_msg = (
+            (self.default_human_response or "null") if need_human_response else ""
+        )
 
-        interactive = self.interactive or settings.interactive
+        if not self.interactive and not need_human_response:
+            return None
+        elif self.default_human_response is not None:
+            user_msg = self.default_human_response
+        else:
+            if self.callbacks.get_user_response is not None:
+                # ask user with empty prompt: no need for prompt
+                # since user has seen the conversation so far.
+                # But non-empty prompt can be useful when Agent
+                # uses a tool that requires user input, or in other scenarios.
+                user_msg = self.callbacks.get_user_response(prompt="")
+            else:
+                user_msg = Prompt.ask(
+                    f"[blue]{self.indent}"
+                    + self.config.human_prompt
+                    + f"\n{self.indent}"
+                ).strip()
 
-        if not interactive and not need_human_response:
-            return False
-
-        return True
 
     def _user_response_final(
         self, msg: Optional[str | ChatDocument], user_msg: str
@@ -670,6 +685,8 @@ class Agent(ABC):
         tool_ids = []
         if msg is not None and isinstance(msg, ChatDocument):
             tool_ids = msg.metadata.tool_ids
+
+        user_msg = user_msg.strip() or default_user_msg.strip()
         # only return non-None result if user_msg not empty
         if not user_msg:
             return None
@@ -808,18 +825,18 @@ class Agent(ABC):
     @no_type_check
     async def llm_response_async(
         self,
-        msg: Optional[str | ChatDocument] = None,
+        message: Optional[str | ChatDocument] = None,
     ) -> Optional[ChatDocument]:
         """
         Asynch version of `llm_response`. See there for details.
         """
-        if msg is None or not self.llm_can_respond(msg):
+        if message is None or not self.llm_can_respond(message):
             return None
 
-        if isinstance(msg, ChatDocument):
-            prompt = msg.content
+        if isinstance(message, ChatDocument):
+            prompt = message.content
         else:
-            prompt = msg
+            prompt = message
 
         output_len = self.config.llm.max_output_tokens
         if self.num_tokens(prompt) + output_len > self.llm.completion_context_length():
@@ -859,29 +876,31 @@ class Agent(ABC):
             )
         cdoc = ChatDocument.from_LLMResponse(response, displayed=True)
         # Preserve trail of tool_ids for OpenAI Assistant fn-calls
-        cdoc.metadata.tool_ids = [] if isinstance(msg, str) else msg.metadata.tool_ids
+        cdoc.metadata.tool_ids = (
+            [] if isinstance(message, str) else message.metadata.tool_ids
+        )
         return cdoc
 
     @no_type_check
     def llm_response(
         self,
-        msg: Optional[str | ChatDocument] = None,
+        message: Optional[str | ChatDocument] = None,
     ) -> Optional[ChatDocument]:
         """
         LLM response to a prompt.
         Args:
-            msg (str|ChatDocument): prompt string, or ChatDocument object
+            message (str|ChatDocument): prompt string, or ChatDocument object
 
         Returns:
             Response from LLM, packaged as a ChatDocument
         """
-        if msg is None or not self.llm_can_respond(msg):
+        if message is None or not self.llm_can_respond(message):
             return None
 
-        if isinstance(msg, ChatDocument):
-            prompt = msg.content
+        if isinstance(message, ChatDocument):
+            prompt = message.content
         else:
-            prompt = msg
+            prompt = message
 
         with ExitStack() as stack:  # for conditionally using rich spinner
             if not self.llm.get_stream():
@@ -931,7 +950,9 @@ class Agent(ABC):
         )
         cdoc = ChatDocument.from_LLMResponse(response, displayed=True)
         # Preserve trail of tool_ids for OpenAI Assistant fn-calls
-        cdoc.metadata.tool_ids = [] if isinstance(msg, str) else msg.metadata.tool_ids
+        cdoc.metadata.tool_ids = (
+            [] if isinstance(message, str) else message.metadata.tool_ids
+        )
         return cdoc
 
     def has_tool_message_attempt(self, msg: str | ChatDocument | None) -> bool:
@@ -994,11 +1015,20 @@ class Agent(ABC):
         Get ToolMessages recognized in msg, handle-able by this agent.
         NOTE: as a side-effect, this will update msg.tool_messages
         when msg is a ChatDocument and msg contains tool messages.
+        The intent here is that update=True should be set ONLY within agent_response()
+        or agent_response_async() methods. In other words, we want to persist the
+        msg.tool_messages only AFTER the agent has had a chance to handle the tools.
 
-        If all_tools is True:
-        - return all tools, i.e. any tool in self.llm_tools_known,
-            whether it is handled by this agent or not;
-        - otherwise, return only the tools handled by this agent.
+        Args:
+            msg (str|ChatDocument): the message to extract tools from.
+            all_tools (bool):
+                - if True, return all tools,
+                    i.e. any recognized tool in self.llm_tools_known,
+                    whether it is handled by this agent or not;
+                - otherwise, return only the tools handled by this agent.
+
+        Returns:
+            List[ToolMessage]: list of ToolMessage objects
         """
 
         if msg is None:
@@ -1035,6 +1065,7 @@ class Agent(ABC):
 
             tools = self.get_formatted_tool_messages(msg.content)
             msg.all_tool_messages = tools
+            # filter for actually handle-able tools, and recipient is this agent
             my_tools = [t for t in tools if self._tool_recipient_match(t)]
             msg.tool_messages = my_tools
 

@@ -6,16 +6,18 @@ and uses Retrieval Augmentation to answer the question.
 
 Run like this:
 
-    python3 examples/docqa/chat-search.py
+    python3 examples/docqa/chat-search.py -m groq/llama-3.1-70b-versatile
+
+The -m arg is optional, defaults to GPT4o
 
 Optional args:
     -nc : turn off caching (i.e. don't retrieve cached LLM responses)
     -d: debug mode, to show all intermediate results
     -f: use OpenAI functions api instead of tools
-    -m <model_name>:  (e.g. -m ollama/mistral:7b-instruct-v0.2-q4_K_M)
+    -m <model_name>:  run with a specific LLM
     (defaults to GPT4-Turbo if blank)
 
-(See here for guide to using local LLMs with Langroid:)
+See here for guide to using local LLMs with Langroid:
 https://langroid.github.io/langroid/tutorials/local-llm-setup/
 """
 
@@ -86,9 +88,9 @@ class SearchDocChatAgent(DocChatAgent):
 
     def llm_response(
         self,
-        query: None | str | ChatDocument = None,
+        message: None | str | ChatDocument = None,
     ) -> ChatDocument | None:
-        return ChatAgent.llm_response(self, query)
+        return ChatAgent.llm_response(self, message)
 
     def handle_message_fallback(self, msg: str | ChatDocument) -> Any:
         if isinstance(msg, ChatDocument) and msg.metadata.sender == lr.Entity.LLM:
