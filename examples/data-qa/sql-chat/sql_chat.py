@@ -28,9 +28,10 @@ except ImportError as e:
 from prettytable import PrettyTable
 
 from utils import get_database_uri, fix_uri
+from langroid.agent.task import Task
 from langroid.agent.special.sql.sql_chat_agent import (
     SQLChatAgentConfig,
-    make_sql_chat_task,
+    SQLChatAgent,
 )
 from langroid.language_models.openai_gpt import OpenAIChatModel, OpenAIGPTConfig
 from langroid.utils.configuration import set_global, Settings
@@ -188,6 +189,7 @@ def main(
         use_functions_api=not tools,
         show_stats=False,
         chat_mode=True,
+        use_helper=True,
         context_descriptions=context_descriptions,  # Add context descriptions to the config
         use_schema_tools=schema_tools,
         addressing_prefix=SEND_TO,
@@ -195,8 +197,10 @@ def main(
             chat_model=OpenAIChatModel.GPT4,
         ),
     )
-
-    task = make_sql_chat_task(agent_config, interactive=True, use_helper=True)
+    agent = SQLChatAgent(agent_config)
+    # Set interactive = False, but we user gets chance to respond
+    # when explicitly addressed by LLM
+    task = Task(agent, interactive=False)
     task.run()
 
 
