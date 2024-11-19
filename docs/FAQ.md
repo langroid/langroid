@@ -9,6 +9,16 @@ See these two guides:
 - [Using Langroid with local/open LLMs](https://langroid.github.io/langroid/tutorials/local-llm-setup/)
 - [Using Langroid with non-OpenAI proprietary LLMs](https://langroid.github.io/langroid/tutorials/non-openai-llms/)
 
+## Where can I find out about Langroid's architecture?
+
+There are a few documents that can help:
+
+- A work-in-progress [architecture description](https://langroid.github.io/langroid/blog/2024/08/15/overview-of-langroids-multi-agent-architecture-prelim/)
+  on the Langroid blog.
+- The Langroid [Getting Started](https://langroid.github.io/langroid/quick-start/) guide walks you 
+  step-by-step through Langroid's features and architecture.
+- An article by LanceDB on [Multi-Agent Programming with Langroid](https://lancedb.substack.com/p/langoid-multi-agent-programming-framework)
+
 ## How langroid handles long chat histories
 
 You may encounter an error like this:
