@@ -1,5 +1,14 @@
 # Frequently Asked Questions
 
+## Does Langroid work with non-OpenAI LLMs?
+
+Yes! Langroid works with practically any LLM, local or remote, closed or open.
+
+See these two guides:
+
+- [Using Langroid with local/open LLMs](https://langroid.github.io/langroid/tutorials/local-llm-setup/)
+- [Using Langroid with non-OpenAI proprietary LLMs](https://langroid.github.io/langroid/tutorials/non-openai-llms/)
+
 ## How langroid handles long chat histories
 
 You may encounter an error like this:
