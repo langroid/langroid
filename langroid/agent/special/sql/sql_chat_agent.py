@@ -12,6 +12,8 @@ from typing import Any, Dict, List, Optional, Sequence, Union
 
 from rich.console import Console
 
+from langroid import Entity
+from langroid.agent.tools import DonePassTool
 from langroid.exceptions import LangroidImportError
 from langroid.utils.constants import SEND_TO
 
@@ -42,7 +44,12 @@ from langroid.agent.special.sql.utils.tools import (
     GetTableSchemaTool,
     RunQueryTool,
 )
-from langroid.agent.tools.orchestration import DoneTool, ForwardTool
+from langroid.agent.task import Task, TaskConfig
+from langroid.agent.tools.orchestration import (
+    DoneTool,
+    ForwardTool,
+    PassTool,
+)
 from langroid.vector_store.base import VectorStoreConfig
 
 logger = logging.getLogger(__name__)
@@ -93,6 +100,7 @@ class SQLChatAgentConfig(ChatAgentConfig):
     user_message: None | str = None
     cache: bool = True  # cache results
     debug: bool = False
+    is_helper: bool = False
     stream: bool = True  # allow streaming where needed
     database_uri: str = ""  # Database URI
     database_session: None | Session = None  # Database session
@@ -160,6 +168,7 @@ class SQLChatAgent(ChatAgent):
         self._init_database()
         self._init_metadata()
         self._init_table_metadata()
+
         self._init_message_tools()
 
     def _validate_config(self, config: "SQLChatAgentConfig") -> None:
@@ -230,16 +239,17 @@ class SQLChatAgent(ChatAgent):
 
     def _init_message_tools(self) -> None:
         """Initialize message tools used for chatting."""
-        message = self._format_message()
-        self.config.system_message = self.config.system_message.format(mode=message)
+        if not self.config.is_helper:
+            message = self._format_message()
+            self.config.system_message = self.config.system_message.format(mode=message)
 
-        if self.config.chat_mode:
-            self.config.addressing_prefix = self.config.addressing_prefix or SEND_TO
-            self.config.system_message += ADDRESSING_INSTRUCTION.format(
-                prefix=self.config.addressing_prefix
-            )
-        else:
-            self.config.system_message += DONE_INSTRUCTION
+            if self.config.chat_mode:
+                self.config.addressing_prefix = self.config.addressing_prefix or SEND_TO
+                self.config.system_message += ADDRESSING_INSTRUCTION.format(
+                    prefix=self.config.addressing_prefix
+                )
+            else:
+                self.config.system_message += DONE_INSTRUCTION
 
         super().__init__(self.config)
         self.enable_message([RunQueryTool, ForwardTool])
@@ -282,19 +292,24 @@ class SQLChatAgent(ChatAgent):
         self.used_run_query = False
         return super().user_response(msg)
 
-    def handle_message_fallback(
-        self, msg: str | ChatDocument
-    ) -> str | ForwardTool | None:
-        """
-        Handle the scenario where current msg is not a tool.
-        Special handling is only needed if the message was from the LLM
-        (as indicated by self.llm_responded).
-        """
-        if not self.llm_responded:
-            return None
-        if self.interactive:
-            return ForwardTool(agent="User")
+    def _answer_instruction(self, helper: bool = False) -> str:
+        if self.config.chat_mode:
+            return f"""
+                you must use the `{ForwardTool.name()}` with the `agent` 
+                parameter set to "User"
+                """
+        elif helper:
+            return f"""
+                you must use the `{DonePassTool.name()}` to pass the answer intact,
+                REMEMBER to set the `request` parameter to "{DonePassTool.name()}"
+                """
+        else:
+            return f"""
+                you must use the `{DoneTool.name()}` with the `content` 
+                set to the answer or result
+                """
 
+    def _clarifying_message(self) -> str:
         tools_instruction = f"""
           For example you may want to use the TOOL
           `{RunQueryTool.name()}` to further explore the database contents
@@ -309,8 +324,8 @@ class SQLChatAgent(ChatAgent):
             Since you did not explicitly address the User, it is not clear
             whether:
             - you intend this to be the final response to the 
-              user's query/request, in which case you must use the 
-              `{ForwardTool.name()}` to indicate this.
+              user's query/request, in which case 
+              {self._answer_instruction()} 
             - OR, you FORGOT to use an Appropriate TOOL,
               in which case you should use the available tools to
               make progress on the user's query/request.
@@ -320,12 +335,26 @@ class SQLChatAgent(ChatAgent):
         return f"""
             The intent of your response is not clear:
             - if you intended this to be the FINAL answer to the user's query,
-                then use the `{DoneTool.name()}` to indicate so,
-                with the `content` set to the answer or result.
+                {self._answer_instruction()}
             - otherwise, use one of the available tools to make progress 
                 to arrive at the final answer.
                 {tools_instruction}
             """
+
+    def handle_message_fallback(
+        self, msg: str | ChatDocument
+    ) -> str | ForwardTool | ChatDocument | None:
+        """
+        Handle the scenario where current msg is not a tool.
+        Special handling is only needed if the message was from the LLM
+        (as indicated by self.llm_responded).
+        """
+        if not self.llm_responded:
+            return None
+        if self.interactive:
+            return ForwardTool(agent="User")
+
+        return self._clarifying_message()
 
     def retry_query(self, e: Exception, query: str) -> str:
         """
@@ -490,3 +519,139 @@ class SQLChatAgent(ChatAgent):
         for col in columns:
             result += f"\n{col} => {descriptions['columns'][col]}"  # type: ignore
         return result
+
+
+class SQLHelperAgent(SQLChatAgent):
+
+    final_instructions: str = ""
+
+    def llm_response(
+        self, message: Optional[str | ChatDocument] = None
+    ) -> Optional[ChatDocument]:
+        if message is None:
+            return None
+        message_str = message if isinstance(message, str) else message.content
+        instruc_msg = f"""
+        Below is the MESSAGE from the SQL Agent. 
+        Remember you instructions on how to respond based on your understanding
+        of the INTENT of this message:        
+        {self.final_instructions}
+        
+        === AGENT MESSAGE =========
+        {message_str}
+        === END OF AGENT MESSAGE ===
+        """
+        return super().llm_response(instruc_msg)
+
+    def handle_message_fallback(
+        self, msg: str | ChatDocument
+    ) -> str | ForwardTool | ChatDocument | None:
+        # Helper is disabled from handling any tools, so we always come here.
+        if isinstance(msg, str) or msg.metadata.sender != Entity.LLM:
+            return None
+        # force it to populate msg.tool_messages,
+        # since helper is disabling from handling tools.
+        # We use all_tools to have it return all tools recognized
+        # in the msg and _known_ to the helper (i.e. enabled with use=F, handle=F)
+        # and populate msg.tool_messages with these.
+        tools = self.try_get_tool_messages(msg, all_tools=True)
+        msg.tool_messages = tools
+        if any(isinstance(tool, DonePassTool) for tool in tools):
+            return msg
+        elif any(isinstance(tool, PassTool) for tool in tools):
+            # PassTool is just a dummy tool to indicate
+            # that the helper wasn't able to figure  out intent,
+            # so send the basic clarifying msg, so main agent retries
+            return self._clarifying_message()
+        elif len(tools) > 0 or DonePassTool.name() in msg.content:
+            # either there are some sql tools, or there was an attempt to use
+            # DonePassTool, so send a proper DonePassTool
+            return DonePassTool().response(self, msg)
+        else:
+            return self._clarifying_message()
+
+
+def make_sql_chat_task(
+    config: SQLChatAgentConfig,
+    interactive: bool = True,
+    use_helper: bool = False,
+) -> Task:
+
+    task_config = TaskConfig()
+
+    if interactive:
+        config.chat_mode = True
+        config.addressing_prefix = SEND_TO
+        task_config.addressing_prefix = SEND_TO
+
+    sql_agent = SQLChatAgent(config)
+    sql_task = Task(
+        sql_agent,
+        interactive=False,
+        config=task_config,
+        only_user_quits_root=interactive,
+    )
+
+    if use_helper:
+        setattr(sql_agent, "handle_message_fallback", lambda msg: None)
+        helper_config = config.copy()
+        helper_config.name = "Helper"
+        helper_config.is_helper = True
+        helper_config.system_message = f"""
+        You role is to help INTERPRET the INTENT of an AI agent in a conversation.
+        Given this Agent's message, you must generate the appropriate TOOL 
+        based on your understanding of the agent's INTENT. Below are the instructions 
+        that were given to this Agent. 
+        ===== AGENT INSTRUCTIONS =====
+        {sql_agent.config.system_message}
+        ===== END OF AGENT INSTRUCTIONS =====
+        """
+
+        helper_agent = SQLHelperAgent(helper_config)
+
+        helper_agent.disable_message_use(DoneTool)
+
+        # disable handling of all tools, including orchestration tools,
+        # so they are passed to parent task to be handled
+
+        helper_agent.disable_message_handling()
+
+        helper_agent.enable_message([PassTool, DonePassTool], use=True, handle=False)
+
+        helper_agent.final_instructions = f"""        
+        You must take note especially of the TOOLs that are
+        available to the agent. Your reasoning process should be as follows:
+        
+        - If the Agent's message appears to be an ANSWER to the original query,
+          {sql_agent._answer_instruction(helper=True)}.
+          CAUTION - You must be absolutely sure that the Agent's message is 
+          an ACTUAL ANSWER to the user's query, and not a failed attempt to use 
+          a TOOL without JSON, e.g. something like "run_query" or "done_tool"
+          without any actual JSON formatting.
+           
+        - Else, if you think the Agent intended to use some type of SQL
+          query tool to READ or UPDATE the table(s), 
+          AND it is clear WHICH TOOL is intended as well as the 
+          TOOL PARAMETERS, then you must generate the JSON-Formatted
+          TOOL with the parameters set based on your understanding.
+          Note that the `{RunQueryTool.name()}` is not ONLY for querying the tables,
+          but also for UPDATING the tables.
+           
+        - Else, use the `{PassTool.name()}` to pass the message unchanged.
+            CAUTION - ONLY use `{PassTool.name()}` if you think the Agent's response
+            is NEITHER an ANSWER, nor an intended SQL QUERY.
+        """
+
+        helper_agent.system_tool_format_instructions += helper_agent.final_instructions
+
+        # ensure helper-task always resets history - improves latency, cost, accuracy
+        helper_task_config = TaskConfig(restart_as_subtask=True)
+        helper_task = Task(
+            helper_agent,
+            interactive=False,
+            done_if_response=[Entity.AGENT],
+            config=helper_task_config,
+        )
+        sql_task.add_sub_task((helper_task, helper_task_config))
+
+    return sql_task
