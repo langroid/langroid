@@ -11,7 +11,6 @@ from duckduckgo_search.exceptions import DuckDuckGoSearchException
 import langroid as lr
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.tools.duckduckgo_search_tool import DuckduckgoSearchTool
-from langroid.agent.tools.exa_search_tool import ExaSearchTool
 from langroid.agent.tools.google_search_tool import GoogleSearchTool
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
 from langroid.language_models.openai_gpt import OpenAIGPTConfig
@@ -34,7 +33,7 @@ cfg = ChatAgentConfig(
 agent = ChatAgent(cfg)
 
 # Define the range of values each variable can have
-search_tools = [GoogleSearchTool, DuckduckgoSearchTool, ExaSearchTool]
+search_tools = [GoogleSearchTool, DuckduckgoSearchTool]
 
 
 @pytest.mark.parametrize("search_tool_cls", search_tools)

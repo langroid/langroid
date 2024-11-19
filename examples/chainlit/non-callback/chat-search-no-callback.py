@@ -5,7 +5,7 @@ DEPCRECATED: Script kept only for reference. The better way is shown in
 chat-search.py, which uses ChainlitTaskCallbacks.
 
 - User asks a question
-- LLM either responds directly or generates an Exa web search Tool/function-call
+- LLM either responds directly or generates a Metaphor web search Tool/function-call
     - if Tool used:
          - Agent handler recognizes this tool and returns search results
          - LLM sees search results and composes a response.
@@ -20,26 +20,26 @@ chainlit run examples/chainlit/chat-search-no-callback.py
 
 import chainlit as cl
 import langroid as lr
-from langroid.agent.tools.exa_search_tool import ExaSearchTool
+from langroid.agent.tools.metaphor_search_tool import MetaphorSearchTool
 
 
 @cl.step(name="LLM Response")
-async def llm_response(message: str) -> lr.ChatDocument:
+async def llm_response(msg: str) -> lr.ChatDocument:
     agent: lr.ChatAgent = cl.user_session.get("agent")
-    response = await agent.llm_response_async(message)
+    response = await agent.llm_response_async(msg)
     return response
 
 
 @cl.step(name="Agent Tool Handler")
-async def agent_response(message: lr.ChatDocument) -> lr.ChatDocument:
+async def agent_response(msg: lr.ChatDocument) -> lr.ChatDocument:
     agent: lr.ChatAgent = cl.user_session.get("agent")
-    response = await agent.agent_response_async(message)
+    response = await agent.agent_response_async(msg)
     return response
 
 
 @cl.on_chat_start
 async def on_chat_start():
-    tool_name = ExaSearchTool.default_value("request")
+    tool_name = MetaphorSearchTool.default_value("request")
     sys_msg = f"""
         You are an astute, self-aware AI assistant, and you are adept at 
         responding to a user's question in one of two ways:
@@ -53,7 +53,7 @@ async def on_chat_start():
         system_message=sys_msg,
     )
     agent = lr.ChatAgent(config)
-    agent.enable_message(ExaSearchTool)
+    agent.enable_message(MetaphorSearchTool)
     cl.user_session.set("agent", agent)
 
 

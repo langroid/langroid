@@ -20,7 +20,7 @@ from typing import Optional
 import chainlit as cl
 import langroid as lr
 from langroid import ChatDocument
-from langroid.agent.tools.exa_search_tool import ExaSearchTool
+from langroid.agent.tools.metaphor_search_tool import MetaphorSearchTool
 from langroid.agent.tools.duckduckgo_search_tool import DuckduckgoSearchTool
 from langroid.agent.callbacks.chainlit import (
     add_instructions,
@@ -56,16 +56,16 @@ class SearchAgent(lr.ChatAgent):
         if response is None:
             return None
         content = response.content
-        search_tool = ExaSearchTool
+        search_tool = MetaphorSearchTool
         if content.startswith("/"):
             match content[1]:
                 case "d":
                     search_tool = DuckduckgoSearchTool
                     self.enable_message(DuckduckgoSearchTool)
-                    self.enable_message(ExaSearchTool, use=False, handle=False)
+                    self.enable_message(MetaphorSearchTool, use=False, handle=False)
                 case "m":
-                    search_tool = ExaSearchTool
-                    self.enable_message(ExaSearchTool)
+                    search_tool = MetaphorSearchTool
+                    self.enable_message(MetaphorSearchTool)
                     self.enable_message(DuckduckgoSearchTool, use=False, handle=False)
 
             self.clear_history(0)
@@ -98,7 +98,7 @@ async def setup_agent_task(search_tool: lr.ToolMessage):
 @cl.on_settings_update
 async def on_update(settings):
     await update_llm(settings)
-    await setup_agent_task(ExaSearchTool)
+    await setup_agent_task(MetaphorSearchTool)
 
 
 @cl.on_chat_start
@@ -127,7 +127,7 @@ async def on_chat_start():
     )
 
     await make_llm_settings_widgets()
-    await setup_agent_task(ExaSearchTool)
+    await setup_agent_task(MetaphorSearchTool)
 
 
 @cl.on_message

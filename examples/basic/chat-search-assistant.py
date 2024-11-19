@@ -28,9 +28,9 @@ NOTE:
 environment variables in your `.env` file, as explained in the
 [README](https://github.com/langroid/langroid#gear-installation-and-setup).
 
-(b) If using ExaSearchTool, you need to:
-* set the EXA_API_KEY environment variables in
-your `.env` file, e.g. `EXA_API_KEY=your_api_key_here`
+(b) If using MetaphorSearchTool, you need to:
+* set the METAPHOR_API_KEY environment variables in
+your `.env` file, e.g. `METAPHOR_API_KEY=your_api_key_here`
 * install langroid with the `metaphor` extra, e.g.
 `pip install langroid[metaphor]` or `poetry add langroid[metaphor]`
 (it installs the `metaphor-python` package from pypi).
@@ -108,9 +108,9 @@ def main(
         case "google":
             search_tool_class = GoogleSearchTool
         case "metaphor":
-            from langroid.agent.tools.exa_search_tool import ExaSearchTool
+            from langroid.agent.tools.metaphor_search_tool import MetaphorSearchTool
 
-            search_tool_class = ExaSearchTool
+            search_tool_class = MetaphorSearchTool
         case "ddg":
             search_tool_class = DuckduckgoSearchTool
         case _:

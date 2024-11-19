@@ -29,7 +29,7 @@ from langroid import ChatDocument
 from langroid.utils.configuration import Settings, set_global
 
 from langroid.agent.tools.duckduckgo_search_tool import DuckduckgoSearchTool
-from langroid.agent.tools.exa_search_tool import ExaSearchTool
+from langroid.agent.tools.metaphor_search_tool import MetaphorSearchTool
 
 app = typer.Typer()
 
@@ -47,7 +47,7 @@ class SearcherAgent(lr.ChatAgent):
     def __init__(self, config: lr.ChatAgentConfig):
         super().__init__(config)
         self.config = config
-        self.enable_message(ExaSearchTool)  # DuckduckgoSearchTool
+        self.enable_message(MetaphorSearchTool)  # DuckduckgoSearchTool
         self.enable_message(QuestionTool, use=False, handle=True)
         # agent is producing AnswerTool, so LLM should not be allowed to "use" it
         self.enable_message(AnswerTool, use=False, handle=True)
@@ -58,7 +58,7 @@ class SearcherAgent(lr.ChatAgent):
         self.expecting_search_tool = False
         return msg.handle()
 
-    def metaphor_search(self, msg: ExaSearchTool) -> str:
+    def metaphor_search(self, msg: MetaphorSearchTool) -> str:
         """Override the Metaphor handler to update state"""
         self.expecting_search_results = True
         self.expecting_search_tool = False
@@ -72,7 +72,7 @@ class SearcherAgent(lr.ChatAgent):
             # did not receive a question tool, so short-circuit and return None
             return None
         if self.expecting_search_tool:
-            search_tool_name = ExaSearchTool.default_value("request")
+            search_tool_name = MetaphorSearchTool.default_value("request")
             return f"""
             You forgot to use the web search tool`{search_tool_name}`  
             to answer the user's question : {self.curr_query}!!
@@ -87,7 +87,7 @@ class SearcherAgent(lr.ChatAgent):
     def question_tool(self, msg: QuestionTool) -> str:
         self.curr_query = msg.question
         self.expecting_search_tool = True
-        search_tool_name = ExaSearchTool.default_value("request")
+        search_tool_name = MetaphorSearchTool.default_value("request")
         return f"""
         User asked this question: {msg.question}.
         Perform a web search using the `{search_tool_name}` tool
@@ -139,7 +139,7 @@ def make_search_task(model: str):
         timeout=45,
     )
 
-    search_tool_handler_method = ExaSearchTool.default_value("request")
+    search_tool_handler_method = MetaphorSearchTool.default_value("request")
 
     search_agent_config = lr.ChatAgentConfig(
         llm=llm_config,
