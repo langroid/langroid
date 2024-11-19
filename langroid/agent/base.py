@@ -316,6 +316,52 @@ class Agent(ABC):
                 lambda msg: message_class.handle_message_fallback(self, msg),
             )
 
+        async_tool_name = f"{tool}_async"
+        if (
+            hasattr(message_class, "handle_async")
+            and inspect.isfunction(message_class.handle_async)
+            and not hasattr(self, async_tool_name)
+        ):
+            has_chat_doc_arg = (
+                len(inspect.signature(message_class.handle_async).parameters) > 2
+            )
+
+            if has_chat_doc_arg:
+
+                @no_type_check
+                async def handler(obj, chat_doc):
+                    return await obj.handle_async(chat_doc)
+
+            else:
+
+                @no_type_check
+                async def handler(obj):
+                    return await obj.handle_async()
+
+            setattr(self, async_tool_name, handler)
+        elif (
+            hasattr(message_class, "response_async")
+            and inspect.isfunction(message_class.response_async)
+            and not hasattr(self, async_tool_name)
+        ):
+            has_chat_doc_arg = (
+                len(inspect.signature(message_class.response_async).parameters) > 2
+            )
+
+            if has_chat_doc_arg:
+
+                @no_type_check
+                async def handler(obj, chat_doc):
+                    return await obj.response_async(self, chat_doc)
+
+            else:
+
+                @no_type_check
+                async def handler(obj):
+                    return await obj.response_async(self)
+
+            setattr(self, async_tool_name, handler)
+
         return [tool]
 
     def enable_message_handling(
