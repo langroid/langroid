@@ -1115,8 +1115,6 @@ class Agent(ABC):
                     or you need to enable this agent to handle this fn-call.
                     """
                 )
-                if tool_name not in self.all_llm_tools_known:
-                    all_errors = True
                 continue
             all_errors = False
             tool_class = self.llm_tools_map[tool_name]
