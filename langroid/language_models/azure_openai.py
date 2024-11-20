@@ -115,16 +115,28 @@ class AzureGPT(OpenAIGPT):
         Sets the chat model configuration based on the model name specified in the
         ``.env``. This function checks the `model_name` in the configuration and sets
         the appropriate chat model in the `config.chat_model`. It supports handling for
-        '35-turbo' and 'gpt-4' models. For 'gpt-4', it further delegates the handling
-        to `handle_gpt4_model` method. If the model name does not match any predefined
-        models, it defaults to `OpenAIChatModel.GPT4`.
+        'gpt-35-turbo', 'gpt4-turbo', 'gpt-4o' and 'gpt-4o-mini' models. For
+        'gpt-4', it further delegates the handling to `handle_gpt4_model` method.
+        If the model name does not match any predefined models, it defaults to
+        `OpenAIChatModel.GPT4`.
         """
-        MODEL_35_TURBO = "35-turbo"
-        MODEL_GPT4 = "gpt-4"
+        MODEL_35_TURBO_NAMES = ("gpt-35-turbo", "35-turbo")
+        MODEL_GPT4_TURBO_NAME = "gpt-4-turbo"
+        MODEL_GPT4o_NAME = "gpt-4o"
+        MODEL_GPT4o_MINI_NAME = "gpt-4o-mini"
+        MODEL_GPT4_PREFIX = "gpt-4"
 
-        if self.config.model_name == MODEL_35_TURBO:
+        if self.config.model_name in MODEL_35_TURBO_NAMES:
             self.config.chat_model = OpenAIChatModel.GPT3_5_TURBO
-        elif self.config.model_name == MODEL_GPT4:
+        elif self.config.model_name == MODEL_GPT4o_NAME:
+            self.config.chat_model = OpenAIChatModel.GPT4o
+        elif self.config.model_name == MODEL_GPT4o_MINI_NAME:
+            self.config.chat_model = OpenAIChatModel.GPT4o_MINI
+        elif self.config.model_name == MODEL_GPT4_TURBO_NAME:
+            self.config.chat_model = OpenAIChatModel.GPT4_TURBO
+        elif isinstance(
+            self.config.model_name, str
+        ) and self.config.model_name.startswith(MODEL_GPT4_PREFIX):
             self.handle_gpt4_model()
         else:
             self.config.chat_model = OpenAIChatModel.GPT4
@@ -140,8 +152,8 @@ class AzureGPT(OpenAIGPT):
         '1106-Preview', otherwise, it defaults to setting
         `OpenAIChatModel.GPT4`.
         """
-        VERSION_1106_PREVIEW = "1106-Preview"
-        VERSION_GPT4o = "2024-05-13"
+        VERSIONS_GPT4_TURBO = ("1106-Preview", "2024-04-09")
+        VERSIONS_GPT4o = ("2024-05-13", "2024-08-06")
 
         if self.config.model_version == "":
             raise ValueError(
@@ -149,9 +161,9 @@ class AzureGPT(OpenAIGPT):
                 "Please set it to the chat model version used in your deployment."
             )
 
-        if self.config.model_version == VERSION_GPT4o:
+        if self.config.model_version in VERSIONS_GPT4o:
             self.config.chat_model = OpenAIChatModel.GPT4o
-        elif self.config.model_version == VERSION_1106_PREVIEW:
+        elif self.config.model_version in VERSIONS_GPT4_TURBO:
             self.config.chat_model = OpenAIChatModel.GPT4_TURBO
         else:
             self.config.chat_model = OpenAIChatModel.GPT4
