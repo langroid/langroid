@@ -3,8 +3,13 @@
 This is a quick tour of some Langroid features. For a more detailed guide,
 see the [Getting Started guide](https://langroid.github.io/langroid/quick-start/).
 There are many more features besides the ones shown here. To explore langroid more,
-see the sections of the main [docs](https://langroid.github.io/langroid/).
+see the sections of the main [docs](https://langroid.github.io/langroid/),
+and a 
+[Colab notebook](https://colab.research.google.com/github/langroid/langroid/blob/main/examples/Langroid_quick_start.ipynb) 
+you can try yourself.  
 
+
+## Chat directly with LLM
 
 Imports:
 
@@ -23,8 +28,8 @@ llm_config = lm.OpenAIGPTConfig( chat_model="glhf/hf:Qwen/Qwen2.5-Coder-32B-Inst
 llm = lm.OpenAIGPT(llm_config)
 ```
 
-Chat with bare LLM -- no chat accumulation, i.e. follow-up requests will *not*
-use prior conversation history.
+Chat with bare LLM -- no chat accumulation, i.e. follow-up responses will *not*
+be aware of prior conversation history (you need an Agent for that, see below).
 
 ```python
 llm.chat("1 2 4 7 11 ?")
