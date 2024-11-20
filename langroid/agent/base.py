@@ -699,28 +699,11 @@ class Agent(ABC):
         need_human_response = (
             isinstance(msg, ChatDocument) and msg.metadata.recipient == Entity.USER
         )
-        default_user_msg = (
-            (self.default_human_response or "null") if need_human_response else ""
-        )
 
         if not self.interactive and not need_human_response:
-            return None
-        elif self.default_human_response is not None:
-            user_msg = self.default_human_response
-        else:
-            if self.callbacks.get_user_response is not None:
-                # ask user with empty prompt: no need for prompt
-                # since user has seen the conversation so far.
-                # But non-empty prompt can be useful when Agent
-                # uses a tool that requires user input, or in other scenarios.
-                user_msg = self.callbacks.get_user_response(prompt="")
-            else:
-                user_msg = Prompt.ask(
-                    f"[blue]{self.indent}"
-                    + self.config.human_prompt
-                    + f"\n{self.indent}"
-                ).strip()
+            return False
 
+        return True
 
     def _user_response_final(
         self, msg: Optional[str | ChatDocument], user_msg: str
@@ -728,11 +711,19 @@ class Agent(ABC):
         """
         Convert user_msg to final response.
         """
+        if not user_msg:
+            need_human_response = (
+                isinstance(msg, ChatDocument) and msg.metadata.recipient == Entity.USER
+            )
+            user_msg = (
+                (self.default_human_response or "null") if need_human_response else ""
+            )
+        user_msg = user_msg.strip()
+
         tool_ids = []
         if msg is not None and isinstance(msg, ChatDocument):
             tool_ids = msg.metadata.tool_ids
 
-        user_msg = user_msg.strip() or default_user_msg.strip()
         # only return non-None result if user_msg not empty
         if not user_msg:
             return None
@@ -764,10 +755,19 @@ class Agent(ABC):
         if not self.user_can_respond(msg):
             return None
 
-        if self.callbacks.get_user_response_async is not None:
-            user_msg = await self.callbacks.get_user_response_async(prompt="")
+        if self.default_human_response is not None:
+            user_msg = self.default_human_response
         else:
-            user_msg = await self.callbacks.get_user_response(prompt="")
+            if self.callbacks.get_user_response_async is not None:
+                user_msg = await self.callbacks.get_user_response_async(prompt="")
+            elif self.callbacks.get_user_response is not None:
+                user_msg = self.callbacks.get_user_response(prompt="")
+            else:
+                user_msg = Prompt.ask(
+                    f"[blue]{self.indent}"
+                    + self.config.human_prompt
+                    + f"\n{self.indent}"
+                )
 
         return self._user_response_final(msg, user_msg)
 
@@ -804,7 +804,7 @@ class Agent(ABC):
                     f"[blue]{self.indent}"
                     + self.config.human_prompt
                     + f"\n{self.indent}"
-                ).strip()
+                )
 
         return self._user_response_final(msg, user_msg)
 
@@ -1247,11 +1247,11 @@ class Agent(ABC):
         Please write your message again, correcting the errors.
         """
 
-    def _check_multiple_orch_tools(
+    def _get_multiple_orch_tool_errs(
         self, tools: List[ToolMessage]
     ) -> List[str | ChatDocument | None]:
         """
-        Check whether the message contains multiple orchestration tools
+        Return error document if the message contains multiple orchestration tools
         """
         # check whether there are multiple orchestration-tools (e.g. DoneTool etc),
         # in which case set result to error-string since we don't yet support
@@ -1364,7 +1364,7 @@ class Agent(ABC):
             )
         chat_doc = msg if isinstance(msg, ChatDocument) else None
 
-        results = self._check_multiple_orch_tools(tools)
+        results = self._get_multiple_orch_tool_errs(tools)
         if not results:
             results = [
                 await self.handle_tool_message_async(t, chat_doc=chat_doc)
@@ -1428,7 +1428,7 @@ class Agent(ABC):
             )
         chat_doc = msg if isinstance(msg, ChatDocument) else None
 
-        results = self._check_multiple_orch_tools(tools)
+        results = self._get_multiple_orch_tool_errs(tools)
         if not results:
             results = [self.handle_tool_message(t, chat_doc=chat_doc) for t in tools]
             # if there's a solitary ChatDocument|str result, return it as is
