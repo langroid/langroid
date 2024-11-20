@@ -67,6 +67,7 @@ else:
     OLLAMA_BASE_URL = "http://localhost:11434/v1"
 
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/"
+GLHF_BASE_URL = "https://glhf.chat/api/openai/v1"
 OLLAMA_API_KEY = "ollama"
 DUMMY_API_KEY = "xxx"
 
@@ -513,6 +514,7 @@ class OpenAIGPT(LanguageModel):
         self.is_groq = self.config.chat_model.startswith("groq/")
         self.is_cerebras = self.config.chat_model.startswith("cerebras/")
         self.is_gemini = self.config.chat_model.startswith("gemini/")
+        self.is_glhf = self.config.chat_model.startswith("glhf/")
 
         if self.is_groq:
             self.config.chat_model = self.config.chat_model.replace("groq/", "")
@@ -538,6 +540,10 @@ class OpenAIGPT(LanguageModel):
                 self.config.chat_model = self.config.chat_model.replace("gemini/", "")
                 self.api_key = os.getenv("GEMINI_API_KEY", DUMMY_API_KEY)
                 self.api_base = GEMINI_BASE_URL
+            elif self.is_glhf:
+                self.config.chat_model = self.config.chat_model.replace("glhf/", "")
+                self.api_key = os.getenv("GLHF_API_KEY", DUMMY_API_KEY)
+                self.api_base = GLHF_BASE_URL
 
             self.client = OpenAI(
                 api_key=self.api_key,

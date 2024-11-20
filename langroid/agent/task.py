@@ -78,7 +78,7 @@ class TaskConfig(BaseModel):
         inf_loop_cycle_len (int): max exact-loop cycle length: 0 => no inf loop test
         inf_loop_dominance_factor (float): dominance factor for exact-loop detection
         inf_loop_wait_factor (int): wait this * cycle_len msgs before loop-check
-        restart_subtask_run (bool): whether to restart *every* run of this task
+        restart_as_subtask (bool): whether to restart *every* run of this task
             when run as a subtask.
         addressing_prefix (str): "@"-like prefix an agent can use to address other
             agents, or entities of the agent. E.g., if this is "@", the addressing
@@ -1468,6 +1468,9 @@ class Task:
                     max_cost=self.max_cost,
                     max_tokens=self.max_tokens,
                 )
+                # update result.tool_messages if any
+                if isinstance(result, ChatDocument):
+                    self.agent.try_get_tool_messages(result)
                 if result is not None:
                     content, id2result, oai_tool_id = self.agent.process_tool_results(
                         result.content,
@@ -1496,6 +1499,9 @@ class Task:
         else:
             response_fn = self._entity_responder_async_map[cast(Entity, e)]
             result = await response_fn(self.pending_message)
+            # update result.tool_messages if any
+            if isinstance(result, ChatDocument):
+                self.agent.try_get_tool_messages(result)
 
         result_chat_doc = self.agent.to_ChatDocument(
             result,
@@ -1532,7 +1538,7 @@ class Task:
         oai_tool_id2result = result_msg.oai_tool_id2result if result_msg else None
         fun_call = result_msg.function_call if result_msg else None
         tool_messages = result_msg.tool_messages if result_msg else []
-        # if there is an DoneTool or AgentDoneTool among these,
+        # if there is a DoneTool or AgentDoneTool among these,
         # we extract content and tools from here, and ignore all others
         for t in tool_messages:
             if isinstance(t, FinalResultTool):
@@ -1621,9 +1627,13 @@ class Task:
                 isinstance(result, ChatDocument)
                 and (
                     (DONE in result.content and allow_done_string)
-                    or any(
-                        isinstance(t, (DoneTool, AgentDoneTool, FinalResultTool))
-                        for t in result.tool_messages
+                    or (
+                        any(
+                            isinstance(t, (DoneTool, AgentDoneTool, FinalResultTool))
+                            for t in result.tool_messages
+                            # this condition ensures agent had chance to handle tools
+                        )
+                        and responder == Entity.AGENT
                     )
                 )
             )
