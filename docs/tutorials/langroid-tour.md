@@ -55,7 +55,7 @@ task.run()
 
 ## Tools/Functions/Structured outputs:
 
-Define a [`ToolMessage`][langroid.agent.tools.tool_message.ToolMessage] 
+Define a [`ToolMessage`][langroid.agent.tool_message.ToolMessage] 
 using Pydantic (v1) -- this gets transpiled into system-message instructions
 to the LLM, so you never have to deal with writing a JSON schema.
 (Besides JSON-based tools, Langroid also supports 
