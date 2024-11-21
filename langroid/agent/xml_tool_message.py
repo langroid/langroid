@@ -1,3 +1,4 @@
+import re
 from collections.abc import Mapping
 from typing import Any, Dict, List, Optional, get_args, get_origin
 
@@ -323,45 +324,59 @@ class XMLToolMessage(ToolMessage):
     @classmethod
     def find_candidates(cls, text: str) -> List[str]:
         """
-        Find and extract all potential XML tool messages from the given text.
-
-        This method searches for XML-like structures in the input text that match
-        the expected format of the tool message. It looks for opening and closing
-        tags that correspond to the root element defined in the XMLToolMessage class,
-        which is by default <tool>.
+        Finds XML-like tool message candidates in text, with relaxed opening tag rules.
 
         Args:
-            text (str): The input text to search for XML tool messages.
+            text: Input text to search for XML structures.
 
         Returns:
-            List[str]: A list of strings, each representing a potential XML tool
-                       message.
-                       These candidates include both the opening and
-                       closing tags, so that they are individually parseable.
+            List of XML strings. For fragments missing the root opening tag but having
+            valid XML structure and root closing tag, prepends the root opening tag.
 
-        Note:
-            This method ensures that all candidates are valid and parseable by
-            inserting a closing tag if it's missing for the last candidate.
+        Example:
+            With root_tag="tool", given:
+            "Hello <field1>data</field1> </tool>"
+            Returns: ["<tool><field1>data</field1></tool>"]
         """
+
         root_tag = cls.Config.root_element
         opening_tag = f"<{root_tag}>"
         closing_tag = f"</{root_tag}>"
 
         candidates = []
-        start = 0
+        pos = 0
         while True:
-            start = text.find(opening_tag, start)
-            if start == -1:
+            # Look for either proper opening tag or closing tag
+            start_normal = text.find(opening_tag, pos)
+            end = text.find(closing_tag, pos)
+
+            if start_normal == -1 and end == -1:
                 break
-            end = text.find(closing_tag, start)
-            if end == -1:
-                # For the last candidate, insert the closing tag if it's missing
-                candidate = text[start:]
-                if not candidate.strip().endswith(closing_tag):
-                    candidate += closing_tag
-                candidates.append(candidate)
-                break
-            candidates.append(text[start : end + len(closing_tag)])
-            start = end + len(closing_tag)
+
+            if start_normal != -1:
+                # Handle normal case (has opening tag)
+                end = text.find(closing_tag, start_normal)
+                if end != -1:
+                    candidates.append(text[start_normal : end + len(closing_tag)])
+                    pos = max(end + len(closing_tag), start_normal + 1)
+                    continue
+                elif start_normal == text.rfind(opening_tag):
+                    # last fragment - ok to miss closing tag
+                    candidates.append(text[start_normal:] + closing_tag)
+                    return candidates
+                else:
+                    pos = start_normal + 1
+                    continue
+
+            if end != -1:
+                # Look backwards for first XML tag
+                text_before = text[pos:end]
+                first_tag_match = re.search(r"<\w+>", text_before)
+                if first_tag_match:
+                    start = pos + first_tag_match.start()
+                    candidates.append(
+                        opening_tag + text[start : end + len(closing_tag)]
+                    )
+                pos = end + len(closing_tag)
 
         return candidates
