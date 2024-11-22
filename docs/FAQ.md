@@ -306,4 +306,4 @@ each of which uses an LLM-agent to extract relevant verbatim text from a passage
 
 ## Can I use Langroid in a FastAPI server?
 
-Yes, see this example repo: https://github.com/langroid/fastapi-server 
+Yes, see the [langroid/fastapi-server](https://github.com/langroid/fastapi-server) repo. 
