@@ -899,7 +899,7 @@ class Agent(ABC):
         try:
             tools = self.get_tool_messages(msg)
             return len(tools) > 0
-        except ValidationError:
+        except (ValidationError, XMLException):
             # there is a tool/fn-call attempt but had a validation error,
             # so we still consider this a tool message "attempt"
             return True
@@ -934,7 +934,7 @@ class Agent(ABC):
     ) -> List[ToolMessage]:
         try:
             return self.get_tool_messages(msg, all_tools)
-        except ValidationError:
+        except (ValidationError, XMLException):
             return []
 
     def get_tool_messages(

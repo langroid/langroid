@@ -303,3 +303,7 @@ which uses batch tasks for relevance extraction,
 see the `get_verbatim_extracts` method -- when there are k relevant passages,
 this runs k tasks concurrently, 
 each of which uses an LLM-agent to extract relevant verbatim text from a passage.
+
+## Can I use Langroid in a FastAPI server?
+
+Yes, see the [langroid/fastapi-server](https://github.com/langroid/fastapi-server) repo. 
