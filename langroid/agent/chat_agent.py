@@ -892,22 +892,22 @@ class ChatAgent(Agent):
             request: str = "tool_or_function"
             tool: maybe_optional_type  # type: ignore
 
-            def handle(this) -> None | str | ChatDocument:
+            def response(self, agent: ChatAgent) -> None | str | ChatDocument:
                 # One-time use
-                self.set_output_format(None)
+                agent.set_output_format(None)
 
-                if this.tool is None:
+                if self.tool is None:
                     return None
 
                 # As the ToolMessage schema accepts invalid
                 # `tool.request` values, reparse with the
                 # corresponding tool
-                request = this.tool.request
-                if request not in self.llm_tools_map:
+                request = self.tool.request
+                if request not in agent.llm_tools_map:
                     return None
-                tool = self.llm_tools_map[request].parse_raw(this.tool.to_json())
+                tool = agent.llm_tools_map[request].parse_raw(self.tool.to_json())
 
-                return self.handle_tool_message(tool)
+                return agent.handle_tool_message(tool)
 
         return AnyTool
 

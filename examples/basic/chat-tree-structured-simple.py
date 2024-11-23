@@ -1,3 +1,35 @@
+"""
+Simple example showing tree-structured computation, 
+a variation of `examples/basic/chat-tree.py` which uses strict output formatting
+to reliably wrap calls to agents in standard Python functions, allowing
+explicit control over control flow.
+
+The task consists of performing this calculation for a given input number n:
+
+def Main(n):
+    if n is odd:
+        return (3*n+1) + n
+    else:
+        If n is divisible by 10:
+            return n/10 + n
+        else:
+            return n/2 + n
+
+Each step is performed by an LLM call, and strict output formatting ensures that
+a valid typed response is returned (rather than a string which requires another
+LLM call to interpret).
+
+We evaluate the conditions by a `condition_agent` which is given an integer and
+a condition and return a Boolean and evaluate the transformations of `n` with
+a `transformation_agent` which is given an integer and a transformation rule
+and returns the transformed integer.
+
+Finally, we add the result with the original `n` using an `adder_agent` which
+illustrates strict output usage in `Task`s.
+
+For more details on structured outputs, see the notes at
+https://langroid.github.io/langroid/notes/structured-output/.
+"""
 import typer
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
@@ -16,25 +48,25 @@ def chat() -> int:
     condition_agent = ChatAgent(
         ChatAgentConfig(
             system_message="""
-        You will be provided with a condition and a
-        number; your goal is to determine whether
-        that number satisfies the condition.
+            You will be provided with a condition and a
+            number; your goal is to determine whether
+            that number satisfies the condition.
 
-        Respond in JSON format, with `value` set
-        to the result.
-        """,
+            Respond in JSON format, with `value` set
+            to the result.
+            """,
             output_format=bool,
         )
     )
     transformation_agent = ChatAgent(
         ChatAgentConfig(
             system_message="""
-        You will be provided with a number and an
-        transformation of the number to perform.
-        
-        Respond in JSON format, with `value` set
-        to the result.
-        """,
+            You will be provided with a number and an
+            transformation of the number to perform.
+
+            Respond in JSON format, with `value` set
+            to the result.
+            """,
             output_format=int,
         )
     )
@@ -84,18 +116,18 @@ def chat() -> int:
     adder_agent = ChatAgent(
         ChatAgentConfig(
             system_message="""
-        You will be given a number n.
-        You have to add it to the original number and return the result.
-        You do not know the original number, so you must use the 
-        `add_num` tool/function for this. 
-        """,
+            You will be given a number n.
+            You have to add it to the original number and return the result.
+            You do not know the original number, so you must use the 
+            `add_num` tool/function for this. 
+            """,
             output_format=AddNumTool,
         )
     )
     adder_agent.enable_message(AddNumTool)
     adder_task = Task(adder_agent, interactive=False, name="Adder")
 
-    # set up tasks and subtasks
+    # compute the final output value
     return adder_task[int].run(str(to_adder))  # type: ignore
 
 

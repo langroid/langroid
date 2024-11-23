@@ -39,6 +39,7 @@ https://langroid.github.io/langroid/notes/structured-output/.
 import typer
 from typing import Literal
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
+from langroid.agent.chat_document import ChatDocument
 from langroid.agent.task import Task
 from langroid.agent.tool_message import ToolMessage
 from rich.prompt import Prompt
@@ -139,20 +140,16 @@ class ConditionalAgent(ChatAgent):
         self.generated_request = True
         return "Now, return the input number, after applying your transformation."
 
-    def result(self, msg: ResultTool) -> str | AgentDoneTool:
+    def result(self, msg: ResultTool) -> str | ChatDocument | AgentDoneTool:
         if self.config.top_level:
             self.set_output_format(AskNumTool)
             # Return the answer if we are the top-level task
             return f"{DONE} {msg.result}"
         elif self.generated_request:
             self.generated_request = False
-
-            class Repeat(BaseModel):
-                value: Literal[str(msg.result)]  # type: ignore
-
-            self.set_output_format(Repeat)
-            # Forward the result if we are mid-computation
-            return "Now, repeat the number."
+            return self.create_llm_response(
+                content=str(msg.result),
+            )
         else:
             self.set_output_format(MatchTool)
 
