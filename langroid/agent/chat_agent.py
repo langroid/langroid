@@ -172,7 +172,6 @@ class ChatAgent(Agent):
         self.system_tool_format_instructions: str = ""
 
         self.llm_functions_map: Dict[str, LLMFunctionSpec] = {}
-        self.llm_functions_class_map: Dict[str, type[ToolMessage]] = {}
         self.llm_functions_handled: Set[str] = set()
         self.llm_functions_usable: Set[str] = set()
         self.llm_function_force: Optional[Dict[str, str]] = None
@@ -182,10 +181,13 @@ class ChatAgent(Agent):
         self.saved_requests_and_tool_setings = self._requests_and_tool_settings()
         if config.output_format is not None:
             self.set_output_format(config.output_format)
-        # OpenAI does not support all strict schemas. We disable for
-        # this agent if an exception is thrown in strict mode
+        # controls whether to disable strict schemas for this agent if
+        # strict mode causes exception
         self.disable_strict = False
+        # Tracks whether any strict tool is enabled; used to determine whether to set
+        # `self.disable_strict` on an exception
         self.any_strict = False
+        # Tracks the set of tools on which we force-disable strict decoding
         self.disable_strict_tools_set: set[str] = set()
 
         if self.config.enable_orchestration_tool_handling:
@@ -263,7 +265,7 @@ class ChatAgent(Agent):
     def _strict_mode_for_tool(self, tool: str | type[ToolMessage]) -> bool:
         """Should we enable strict mode for a given tool?"""
         if isinstance(tool, str):
-            tool_class = self.llm_functions_class_map[tool]
+            tool_class = self.llm_tools_map[tool]
         else:
             tool_class = tool
         name = tool_class.default_value("request")
@@ -614,7 +616,6 @@ class ChatAgent(Agent):
                 )
             llm_function = message_class.llm_function_schema(defaults=include_defaults)
             self.llm_functions_map[request] = llm_function
-            self.llm_functions_class_map[request] = message_class
             if force:
                 self.llm_function_force = dict(name=request)
             else:
@@ -849,6 +850,11 @@ class ChatAgent(Agent):
                     and self.config.use_tools_api
                     and self._strict_mode_for_tool(tool_class)
                 )
+                # If the result of strict output for a tool using the
+                # OpenAI tools API fails to parse, we infer that the
+                # schema edits necessary for compatibility prevented
+                # adherence to the underlying `ToolMessage` schema and
+                # disable strict output for the tool
                 if was_strict:
                     name = tool_class.default_value("request")
                     self.disable_strict_tools_set.add(name)
@@ -859,6 +865,8 @@ class ChatAgent(Agent):
                         """
                     )
                 else:
+                    # We will trigger the strict recovery mechanism to force
+                    # the LLM to correct its output, allowing us to parse
                     self.tool_error = True
 
             raise ve
@@ -1027,7 +1035,7 @@ class ChatAgent(Agent):
                         f"""
                         OpenAI BadRequestError raised with strict mode enabled.
                         Message: {e.message}
-                        Disabling strict mode.
+                        Disabling strict mode and retrying.
                         """
                     )
                     return self.llm_response(message)
@@ -1044,9 +1052,6 @@ class ChatAgent(Agent):
             if isinstance(message, str)
             else message.metadata.tool_ids if message is not None else []
         )
-
-        # If using strict output format, parse the output JSON
-        self._load_output_format(response)
 
         return response
 
@@ -1102,7 +1107,7 @@ class ChatAgent(Agent):
                         f"""
                         OpenAI BadRequestError raised with strict mode enabled.
                         Message: {e.message}
-                        Disabling strict mode.
+                        Disabling strict mode and retrying.
                         """
                     )
                     return await self.llm_response_async(message)
@@ -1119,9 +1124,6 @@ class ChatAgent(Agent):
             if isinstance(message, str)
             else message.metadata.tool_ids if message is not None else []
         )
-
-        # If using strict output format, parse the output JSON
-        self._load_output_format(response)
 
         return response
 

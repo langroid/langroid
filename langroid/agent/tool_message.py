@@ -86,15 +86,15 @@ class ToolMessage(ABC, BaseModel):
         request (str): name of agent method to map to.
         purpose (str): purpose of agent method, expressed in general terms.
             (This is used when auto-generating the tool instruction to the LLM)
-        strict (Optional[bool]): If enabled, forces strict adherence to schema
-            Currently only supported by OpenAI LLMs. When unset, enables if supported.
     """
 
     request: str
     purpose: str
-    strict: Optional[bool] = None
     id: str = ""  # placeholder for OpenAI-API tool_call_id
 
+    # If enabled, forces strict adherence to schema.
+    # Currently only supported by OpenAI LLMs. When unset, enables if supported.
+    _strict: Optional[bool] = None
     _allow_llm_use: bool = True  # allow an LLM to use (i.e. generate) this tool?
 
     # Optional param to limit number of result tokens to retain in msg history.
@@ -118,7 +118,7 @@ class ToolMessage(ABC, BaseModel):
         validate_assignment = True
         # do not include these fields in the generated schema
         # since we don't require the LLM to specify them
-        schema_extra = {"exclude": {"purpose", "id", "strict"}}
+        schema_extra = {"exclude": {"purpose", "id"}}
 
     @classmethod
     def name(cls) -> str:
@@ -344,7 +344,6 @@ class ToolMessage(ABC, BaseModel):
                     v.pop("exclude")
 
                     remove_if_exists("purpose", v["properties"])
-                    remove_if_exists("strict", v["properties"])
                     remove_if_exists("id", v["properties"])
                     if (
                         "request" in v["properties"]

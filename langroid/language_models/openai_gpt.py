@@ -307,7 +307,12 @@ class OpenAIGPTConfig(LLMConfig):
     completion_model: str = defaultOpenAICompletionModel
     run_on_first_use: Callable[[], None] = noop
     parallel_tool_calls: Optional[bool] = None
+    # Supports constrained decoding which enforces that the output of the LLM
+    # adheres to a JSON schema
     supports_json_schema: Optional[bool] = None
+    # Supports strict decoding for the generation of tool calls with
+    # the OpenAI Tools API; this ensures that the generated tools
+    # adhere to the provided schema.
     supports_strict_tools: Optional[bool] = None
     # a string that roughly matches a HuggingFace chat_template,
     # e.g. "mistral-instruct-v0.2 (a fuzzy search is done to find the closest match)
@@ -525,6 +530,8 @@ class OpenAIGPT(LanguageModel):
             self.api_key = LLAMACPP_API_KEY
         else:
             self.api_base = self.config.api_base
+            # If api_base is unset we use OpenAI's endpoint, which supports
+            # these features (with JSON schema restricted to a limited set of models)
             self.supports_strict_tools = self.api_base is None
             self.supports_json_schema = (
                 self.api_base is None

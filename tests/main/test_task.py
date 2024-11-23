@@ -832,8 +832,6 @@ def test_task_output_format_sequence(
             return str(message.x + 1)
 
         def power(self, message: PowerTool) -> str:
-            self.set_output_format(MultiplyTool)
-
             return f"{DONE} {message.x ** message.y}"
 
     def to_tool(message: LLMMessage, tool: type[ToolMessage]) -> ToolMessage:

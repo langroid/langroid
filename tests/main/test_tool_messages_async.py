@@ -316,6 +316,9 @@ async def test_structured_recovery_async(
             and isinstance(attempt, ChatDocument)
             and attempt.oai_tool_calls is not None
         ):
+            # Inserting this since OpenAI API strictly requires a
+            # Role.TOOL msg immediately after an Assistant Tool call,
+            # before the next Assistant msg.
             agent.message_history.extend(
                 [
                     LLMMessage(
@@ -327,6 +330,7 @@ async def test_structured_recovery_async(
                 ]
             )
 
+        # Simulates bad tool attempt by the LLM
         agent.handle_message(attempt)
         assert agent.tool_error
         response = await agent.llm_response_async(
@@ -369,6 +373,8 @@ async def test_structured_recovery_async(
             function_call=attempt,
         )
 
+    # The name of the function is incorrect:
+    # The LLM should correct the request to "nabroski" in recovery
     assert (
         await simulate_failed_call(
             to_attempt(
@@ -383,6 +389,7 @@ async def test_structured_recovery_async(
         )
         == "6"
     )
+    # The LLM should correct the request to "nabroski" in recovery
     assert (
         await simulate_failed_call(
             to_attempt(
@@ -397,8 +404,10 @@ async def test_structured_recovery_async(
         )
         == "9"
     )
-    # Strict fallback disables the default arguments, but the LLM should infer
-    # from context
+    # Strict fallback disables the default arguments, but the LLM
+    # should infer from context. In addition, the name of the
+    # function is incorrect (the LLM should infer "coriolis" in
+    # recovery) and the JSON output is malformed
     assert (
         await simulate_failed_call(
             """
@@ -408,6 +417,8 @@ async def test_structured_recovery_async(
         )
         == "8"
     )
+    # The LLM should correct the request to "coriolis" in recovery
+    # The LLM should infer the default argument from context
     assert (
         await simulate_failed_call(
             to_attempt(
@@ -421,6 +432,7 @@ async def test_structured_recovery_async(
         )
         == "8"
     )
+    # The LLM should correct the request to "euler" in recovery
     assert (
         await simulate_failed_call(
             to_attempt(
@@ -462,6 +474,15 @@ async def test_strict_fallback_async(
             Optional[dict[str, dict[str, str] | str]],
             Optional[OpenAIJsonSchemaSpec],
         ]:
+            """
+            Implements a broken version of the correct _function_args()
+            that ensures that the generated schemas are incompatible
+            with OpenAI's strict decoding implementation.
+
+            Specifically, removes the schema edits performed by
+            `format_schema_for_strict()` (e.g. setting "additionalProperties"
+            to False on all objects in the JSON schema).
+            """
             functions, fun_call, tools, force_tool, output_format = (
                 super()._function_args()
             )
@@ -589,6 +610,12 @@ async def test_strict_schema_mismatch_async(
             Optional[dict[str, dict[str, str] | str]],
             Optional[OpenAIJsonSchemaSpec],
         ]:
+            """
+            Implements a broken version of the correct _function_args()
+            that replaces the output and all tool schemas with an
+            incorrect schema. Simulates mismatched schemas due to
+            schema edits.
+            """
             functions, fun_call, tools, force_tool, output_format = (
                 super()._function_args()
             )

@@ -939,7 +939,7 @@ class Task:
                 output_args = strict_agent._function_args()[-1]
                 if output_args is not None:
                     schema = output_args.function.parameters
-                    strict_result = strict_agent.llm_response(
+                    strict_result = await strict_agent.llm_response_async(
                         f"""
                         A response adhering to the following JSON schema was expected:
                         {schema}
