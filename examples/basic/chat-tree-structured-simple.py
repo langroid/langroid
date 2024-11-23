@@ -19,7 +19,7 @@ Each step is performed by an LLM call, and strict output formatting ensures that
 a valid typed response is returned (rather than a string which requires another
 LLM call to interpret).
 
-We evaluate the conditions by a `condition_agent` which is given an integer and
+We evaluate the conditions with a `condition_agent` which is given an integer and
 a condition and return a Boolean and evaluate the transformations of `n` with
 a `transformation_agent` which is given an integer and a transformation rule
 and returns the transformed integer.

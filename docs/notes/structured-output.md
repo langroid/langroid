@@ -50,3 +50,5 @@ class PresidentList(BaseModel):
 and show that `typed_agent_response("Show me an example of two Presidents", PresidentsList)` correctly returns a list of two presidents with *no* prompting describing the desired output format.
 
 In addition to Pydantic models, `ToolMessage`s, and simple Python types are supported. For instance, `typed_agent_response("What is the value of pi?", float)` correctly returns $\pi$ to several decimal places.
+
+The following two detailed examples show how structured output can be used to improve the reliability of the [chat-tree example](https://github.com/langroid/langroid/blob/main/examples/basic/chat-tree.py): [this](https://github.com/langroid/langroid/blob/main/examples/basic/chat-tree-structured.py) shows how we can use output formats to force the agent to make the correct tool call in each situation and [this](https://github.com/langroid/langroid/blob/main/examples/basic/chat-tree-structured-simple.py) shows how we can simplify by using structured outputs to extract typed intermediate values and expressing the control flow between LLM calls and agents explicitly.
