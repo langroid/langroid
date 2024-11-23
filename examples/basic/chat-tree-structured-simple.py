@@ -30,6 +30,7 @@ illustrates strict output usage in `Task`s.
 For more details on structured outputs, see the notes at
 https://langroid.github.io/langroid/notes/structured-output/.
 """
+
 import typer
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task

@@ -37,7 +37,6 @@ https://langroid.github.io/langroid/notes/structured-output/.
 """
 
 import typer
-from typing import Literal
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.chat_document import ChatDocument
 from langroid.agent.task import Task
@@ -48,7 +47,6 @@ from langroid.utils.constants import DONE
 from langroid.utils.logging import setup_colored_logging
 from langroid.utils.configuration import set_global, Settings
 from langroid.utils.globals import GlobalState
-from langroid.pydantic_v1 import BaseModel
 
 app = typer.Typer()
 
