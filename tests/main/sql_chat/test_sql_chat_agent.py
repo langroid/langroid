@@ -1,5 +1,6 @@
 import pytest
 
+from langroid.agent.task import Task
 from langroid.exceptions import LangroidImportError
 
 try:
@@ -10,8 +11,8 @@ except ImportError as e:
     raise LangroidImportError(extra="sql", error=str(e))
 
 from langroid.agent.special.sql.sql_chat_agent import (
+    SQLChatAgent,
     SQLChatAgentConfig,
-    make_sql_chat_task,
 )
 from langroid.utils.configuration import Settings, set_global
 
@@ -145,8 +146,10 @@ def _test_sql_chat_agent(
         use_schema_tools=use_schema_tools,
         addressing_prefix=addressing_prefix,
         chat_mode=False,
+        use_helper=True,
     )
-    task = make_sql_chat_task(agent_config, interactive=False, use_helper=True)
+    agent = SQLChatAgent(agent_config)
+    task = Task(agent, interactive=False)
 
     # run for enough turns to handle LLM deviations
     # 0: user question
