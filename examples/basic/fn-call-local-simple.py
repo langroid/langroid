@@ -140,7 +140,7 @@ def app(
         YOU: ask me to give you a city name.
         I: will give you a city name.
         YOU: use the "city_tool" to generate information about the city, and present it to me.
-            Make up the values if you don't know them exactly, but make sure
+            Make up the values if you don't know them exactly.
         I: will confirm whether you provided the info in a valid form,
             and if not I will ask you to try again.
         YOU: wait for my confirmation, and then ask for another city name, and so on.
