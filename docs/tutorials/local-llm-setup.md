@@ -89,6 +89,41 @@ as the `chat_model` param in the `OpenAIGPTConfig` as in the previous section.
 When a script supports it, you can also pass in the model name via
 `-m ollama/dolphin-mixtral-gguf`
 
+## Setup llama.cpp with a GGUF model from HuggingFace
+
+See `llama.cpp`'s [GitHub page](https://github.com/ggerganov/llama.cpp/tree/master) for build and installation instructions.
+
+After installation, begin as above with downloading a GGUF model from HuggingFace; for example, the quantized `Qwen2.5-Coder-7B` from [here](https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct-GGUF); specifically, [this file](https://huggingface.co/Qwen/Qwen2.5-Coder-7B-Instruct-GGUF/blob/main/qwen2.5-coder-7b-instruct-q2_k.gguf).
+
+Now, the server can be started with `llama-server -m qwen2.5-coder-7b-instruct-q2_k.gguf`.
+
+In addition, your `llama.cpp` may be built with support for simplified management of HuggingFace models (specifically, `libcurl` support is required); in this case, `llama.cpp` will download HuggingFace models to a cache directory, and the server may be run with:
+```bash
+llama-server \
+      --hf-repo Qwen/Qwen2.5-Coder-7B-Instruct-GGUF \
+      --hf-file qwen2.5-coder-7b-instruct-q2_k.gguf
+```
+
+To use the model with Langroid, specify `llamacpp/localhost:{port}` as the `chat_model`; the default port is 8080.
+
+## Setup vLLM with a model from HuggingFace
+
+See [the vLLM docs](https://docs.vllm.ai/en/stable/getting_started/installation.html) for installation and configuration options. To run a HuggingFace model with vLLM, use `vllm serve`, which provides an OpenAI-compatible server. 
+
+For example, to run `Qwen2.5-Coder-32B`, run `vllm serve Qwen/Qwen2.5-Coder-32B`.
+
+If the model is not publicly available, set the environment varaible `HF_TOKEN` to your HuggingFace token with read access to the model repo.
+
+To use the model with Langroid, specify `vllm/Qwen/Qwen2.5-Coder-32B` as the `chat_model` and, if a port other than the default 8000 was used, set `api_base` to `localhost:{port}`.
+
+## Setup vLLM with a GGUF model from HuggingFace
+
+`vLLM` supports running quantized models from GGUF files; however, this is currently an experimental feature. To run a quantized `Qwen2.5-Coder-32B`, download the model from [the repo](https://huggingface.co/Qwen/Qwen2.5-Coder-32B-Instruct-GGUF), specifically [this file](https://huggingface.co/Qwen/Qwen2.5-Coder-32B-Instruct-GGUF/blob/main/qwen2.5-coder-32b-instruct-q4_0.gguf). 
+
+The model can now be run with `vllm serve qwen2.5-coder-32b-instruct-q4_0.gguf --tokenizer Qwen/Qwen2.5-Coder-32B` (the tokenizer of the base model rather than the quantized model should be used).
+
+To use the model with Langroid, specify `vllm/qwen2.5-coder-32b-instruct-q4_0.gguf` as the `chat_model` and, if a port other than the default 8000 was used, set `api_base` to `localhost:{port}`.
+
 ## "Local" LLMs hosted on Groq
 In this scenario, an open-source LLM (e.g. `llama3.1-8b-instant`) is hosted on a Groq server
 which provides an OpenAI-compatible API. Using this with langroid is exactly analogous

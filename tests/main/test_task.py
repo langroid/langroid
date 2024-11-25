@@ -3,6 +3,7 @@ Other tests for Task are in test_chat_agent.py
 """
 
 import asyncio
+import json
 from typing import List, Optional
 
 import pytest
@@ -18,7 +19,9 @@ from langroid.agent.tools.orchestration import (
     DoneTool,
     PassTool,
 )
+from langroid.language_models.base import LLMMessage
 from langroid.language_models.mock_lm import MockLMConfig
+from langroid.language_models.openai_gpt import OpenAIGPTConfig
 from langroid.mytypes import Entity
 from langroid.utils.configuration import (
     Settings,
@@ -673,9 +676,13 @@ def test_task_2_agent_2_tool(
     assert all(s in response.content for s in strings)
 
 
-def test_task_tool_responses():
+def test_task_tool_responses(
+    test_settings: Settings,
+):
     """Test that returning ToolMessage from an entity-responder or a Task.run() are
     handled correctly"""
+
+    set_global(test_settings)
 
     class IncrementTool(ToolMessage):
         request = "increment"
@@ -779,3 +786,190 @@ def test_task_tool_responses():
 
     result = processor_task[int].run(10)
     assert result == 11
+
+
+def test_task_output_format_sequence(
+    test_settings: Settings,
+):
+    """
+    Test that `Task`s correctly execute a sequence of steps
+    controlled by the agent's `output_format`, and that `output_format`
+    is handled by default without `enable_message`.
+    """
+
+    set_global(test_settings)
+
+    class MultiplyTool(ToolMessage):
+        request: str = "multiply"
+        purpose: str = "To multiply two integers."
+        a: int
+        b: int
+
+    class IncrementTool(ToolMessage):
+        request: str = "increment"
+        purpose: str = "To increment an integer."
+        x: int
+
+    class PowerTool(ToolMessage):
+        request: str = "power"
+        purpose: str = "To compute `x` ** `y`."
+        x: int
+        y: int
+
+    class CompositionAgent(ChatAgent):
+        def __init__(self, config: ChatAgentConfig = ChatAgentConfig()):
+            super().__init__(config)
+            self.set_output_format(MultiplyTool)
+
+        def multiply(self, message: MultiplyTool) -> str:
+            self.set_output_format(IncrementTool)
+
+            return str(message.a * message.b)
+
+        def increment(self, message: IncrementTool) -> str:
+            self.set_output_format(PowerTool)
+
+            return str(message.x + 1)
+
+        def power(self, message: PowerTool) -> str:
+            return f"{DONE} {message.x ** message.y}"
+
+    def to_tool(message: LLMMessage, tool: type[ToolMessage]) -> ToolMessage:
+        return tool.parse_obj(json.loads(message.content))
+
+    def test_sequence(x: int) -> None:
+        agent = CompositionAgent(
+            ChatAgentConfig(
+                llm=OpenAIGPTConfig(
+                    supports_json_schema=True,
+                    supports_strict_tools=True,
+                ),
+            )
+        )
+        task = lr.Task(
+            agent,
+            system_message="""
+            You will be provided with a number `x` and will compute (3 * x + 1) ** 4.
+            You will do so by computing 3 * x first, then incrementing
+            the result by one, then taking the fourth power of the result.
+            The result of the previous step will be provided directly, do NOT attempt to
+            recompute prior steps using the provided value. Instead, the provided result
+            should be forwarded as an argument to the next step.
+            """,
+            interactive=False,
+            default_return_type=int,
+        )
+        output = task.run(x)
+        assert isinstance(output, int)
+        assert output == (3 * x + 1) ** 4
+
+        # check steps
+        messages = agent.message_history
+        assert len(messages) >= 7
+
+        multiply_message: MultiplyTool = to_tool(messages[2], MultiplyTool)  # type: ignore
+        assert {multiply_message.a, multiply_message.b} == {3, x}
+
+        increment_message: IncrementTool = to_tool(messages[4], IncrementTool)  # type: ignore
+        assert increment_message.x == 3 * x
+
+        power_message: PowerTool = to_tool(messages[6], PowerTool)  # type: ignore
+        assert (power_message.x, power_message.y) == (3 * x + 1, 4)
+
+    for x in range(5):
+        test_sequence(x)
+
+
+@pytest.mark.asyncio
+async def test_task_output_format_sequence_async(
+    test_settings: Settings,
+):
+    """
+    Test that async `Task`s correctly execute a sequence of steps
+    controlled by the agent's `output_format`, and that `output_format`
+    is handled by default without `enable_message`.
+    """
+
+    set_global(test_settings)
+
+    class MultiplyTool(ToolMessage):
+        request: str = "multiply"
+        purpose: str = "To multiply two integers."
+        a: int
+        b: int
+
+    class IncrementTool(ToolMessage):
+        request: str = "increment"
+        purpose: str = "To increment an integer."
+        x: int
+
+    class PowerTool(ToolMessage):
+        request: str = "power"
+        purpose: str = "To compute `x` ** `y`."
+        x: int
+        y: int
+
+    class CompositionAgent(ChatAgent):
+        def __init__(self, config: ChatAgentConfig = ChatAgentConfig()):
+            super().__init__(config)
+            self.set_output_format(MultiplyTool)
+
+        def multiply(self, message: MultiplyTool) -> str:
+            self.set_output_format(IncrementTool)
+
+            return str(message.a * message.b)
+
+        def increment(self, message: IncrementTool) -> str:
+            self.set_output_format(PowerTool)
+
+            return str(message.x + 1)
+
+        def power(self, message: PowerTool) -> str:
+            self.set_output_format(MultiplyTool)
+
+            return f"{DONE} {message.x ** message.y}"
+
+    def to_tool(message: LLMMessage, tool: type[ToolMessage]) -> ToolMessage:
+        return tool.parse_obj(json.loads(message.content))
+
+    async def test_sequence(x: int) -> None:
+        agent = CompositionAgent(
+            ChatAgentConfig(
+                llm=OpenAIGPTConfig(
+                    supports_json_schema=True,
+                    supports_strict_tools=True,
+                ),
+            )
+        )
+        task = lr.Task(
+            agent,
+            system_message="""
+            You will be provided with a number `x` and will compute (3 * x + 1) ** 4.
+            You will do so by computing 3 * x first, then incrementing
+            the result by one, then taking the fourth power of the result.
+            The result of the previous step will be provided directly, do NOT attempt to
+            recompute prior steps using the provided value. Instead, the provided result
+            should be forwarded as an argument to the next step.
+            """,
+            interactive=False,
+            default_return_type=int,
+        )
+        output = await task.run_async(x)
+        assert isinstance(output, int)
+        assert output == (3 * x + 1) ** 4
+
+        # check steps
+        messages = agent.message_history
+        assert len(messages) >= 7
+
+        multiply_message: MultiplyTool = to_tool(messages[2], MultiplyTool)  # type: ignore
+        assert {multiply_message.a, multiply_message.b} == {3, x}
+
+        increment_message: IncrementTool = to_tool(messages[4], IncrementTool)  # type: ignore
+        assert increment_message.x == 3 * x
+
+        power_message: PowerTool = to_tool(messages[6], PowerTool)  # type: ignore
+        assert (power_message.x, power_message.y) == (3 * x + 1, 4)
+
+    for x in range(5):
+        await test_sequence(x)
