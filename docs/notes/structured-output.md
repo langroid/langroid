@@ -16,7 +16,7 @@ strict_agent = agent[type]
 We can use this to allow reliable extraction of typed values from an LLM with minimal prompting. For example, to generate typed values given `agent`'s current context, we can define the following:
 
 ```python
-def typed_llm_response(
+def typed_agent_response(
     prompt: str,
     output_type: type,
 ) -> Any:
