@@ -1,3 +1,4 @@
+import copy
 from typing import Any, Callable, List
 
 import pytest
@@ -275,3 +276,78 @@ async def test_llm_strict_json_async(
         abs(await typed_llm_response("What is the value of pi?", float) - 3.14) < 0.01
     )
     assert await valid_typed_response(president_prompt, str)
+
+
+@pytest.mark.parametrize("use", [True, False])
+@pytest.mark.parametrize("handle", [True, False])
+def test_output_format_tools(use: bool, handle: bool):
+    cfg = copy.deepcopy(strict_cfg)
+    cfg.handle_output_format = handle
+    cfg.use_output_format = use
+    agent = ChatAgent(cfg)
+
+    agent.set_output_format(PresidentListTool)
+
+    # Based on configuration, we automatically handle and enable the tool
+    assert ("president_list" in agent.llm_tools_handled) == handle
+    assert ("president_list" in agent.llm_tools_usable) == use
+
+    response = agent.llm_response_forget("Give me a list of presidents")
+    assert (agent.handle_message(response) is not None) == handle
+
+    agent.set_output_format(PresidentTool, handle=True, use=True)
+    assert "show_president" in agent.llm_tools_handled
+    assert "show_president" in agent.llm_tools_usable
+
+    response = agent.llm_response_forget("Give me a president")
+    assert agent.handle_message(response) is not None
+
+    # We do not retain the PresidentListTool as it was not explicitly enabled
+    assert "president_list" not in agent.llm_tools_handled
+    assert "president_list" not in agent.llm_tools_usable
+
+    # Explicitly enable PresidentTool
+    agent.enable_message(PresidentTool)
+    agent.set_output_format(PresidentListTool)
+
+    # We do retain the PresidentTool in the sets of enabled and handled tools
+    # as it was explicitly enabled
+    assert "show_president" in agent.llm_tools_handled
+    assert "show_president" in agent.llm_tools_usable
+
+
+@pytest.mark.parametrize("instructions", [True, False])
+@pytest.mark.parametrize("use", [True, False])
+def test_output_format_instructions(instructions: bool, use: bool):
+    cfg = copy.deepcopy(strict_cfg)
+    cfg.instructions_output_format = instructions
+    cfg.use_output_format = use
+    agent = ChatAgent(cfg)
+
+    agent.set_output_format(PresidentListTool)
+    # We do add schema information to the instructions if the tool is enabled for use
+    assert ("my_presidents" in agent.output_format_instructions) == (
+        not use and instructions
+    )
+    # If we enable the tool for use, we only specify that the tool should be used
+    assert ("`president_list`" in agent.output_format_instructions) == (
+        use and instructions
+    )
+    # If the tool is enabled for use or instructions are generated, schema
+    # information is added to the system message
+    assert ("my_presidents" in agent._create_system_and_tools_message().content) == (
+        use or instructions
+    )
+
+    agent.enable_message(PresidentTool)
+    agent.set_output_format(PresidentTool)
+    # The tool is already enabled and we do not add the schema to the
+    # instructions
+    assert ("`show_president`" in agent.output_format_instructions) == instructions
+    assert "country" not in agent.output_format_instructions
+
+    agent.set_output_format(Country)
+    assert ("capital" in agent.output_format_instructions) == instructions
+
+    agent.set_output_format(PresidentList, instructions=True)
+    assert "presidents" in agent.output_format_instructions

@@ -364,8 +364,9 @@ class SQLChatAgent(ChatAgent):
             self.set_output_format(
                 AnyTool,
                 force_tools=True,
-                enable=True,
+                use=True,
                 handle=True,
+                instructions=True,
             )
             recovery_message = self._strict_recovery_instructions(optional=False)
             return self.llm_response(recovery_message)
