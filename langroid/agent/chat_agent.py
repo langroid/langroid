@@ -65,6 +65,11 @@ class ChatAgentConfig(AgentConfig):
             schema via grammar-based decoding
         enable_output_format_handling: Controls whether `output_format` is always
             handled when it is a subclass of `ToolMessage`
+        enable_message_output_format: Controls whether we automatically enable
+            `output_format` and update the system message with instructions
+            when it is a subclass of `ToolMessage`
+        instructions_output_format: Controls whether we generate instructions for
+            `output_format` in the system message.
         use_tools_on_output_format: Controls whether to automatically switch
             to the Langroid-native tools mechanism when `output_format` is set.
             Note that LLMs may generate tool calls which do not belong to
@@ -83,6 +88,8 @@ class ChatAgentConfig(AgentConfig):
     enable_orchestration_tool_handling: bool = True
     output_format: Optional[type] = None
     enable_output_format_handling: bool = True
+    enable_message_output_format: bool = True
+    instructions_output_format: bool = True
     output_format_include_defaults: bool = True
     use_tools_on_output_format: bool = True
 
@@ -179,8 +186,16 @@ class ChatAgent(Agent):
         self.output_format: Optional[type[ToolMessage | BaseModel]] = None
 
         self.saved_requests_and_tool_setings = self._requests_and_tool_settings()
+        # Tracks if we have called enable_message on an output format
+        # We disable use when the output format is changed for any such tool
+        # where `enable_message` was not called explicitly
+        self.enabled_output_format: Optional[type[ToolMessage]] = None
+        # As above but used to disable handling
+        self.enabled_handling_output_format: Optional[type[ToolMessage]] = None
         if config.output_format is not None:
             self.set_output_format(config.output_format)
+        self.output_format_instructions = ""
+
         # controls whether to disable strict schemas for this agent if
         # strict mode causes exception
         self.disable_strict = False
@@ -535,8 +550,9 @@ class ChatAgent(Agent):
             {self.system_tool_instructions}
             
             {self.system_tool_format_instructions}
-            
-            """.lstrip()
+
+            {self.output_format_instructions}
+            """
         )
         # remove leading and trailing newlines and other whitespace
         return LLMMessage(role=Role.SYSTEM, content=content.strip())
@@ -621,6 +637,18 @@ class ChatAgent(Agent):
             else:
                 self.llm_function_force = None
 
+            # Track whether `output_format` was explicitly enabled and should not
+            # be disabled when `output_format` changes
+            if self.enabled_output_format is not None and use:
+                if self.enabled_output_format.default_value("request") == request:
+                    self.enabled_output_format = None
+            if self.enabled_handling_output_format is not None and handle:
+                if (
+                    self.enabled_handling_output_format.default_value("request")
+                    == request
+                ):
+                    self.enabled_handling_output_format = None
+
         for t in tools:
             self.llm_tools_known.add(t)
 
@@ -668,24 +696,6 @@ class ChatAgent(Agent):
         )
 
     @property
-    def all_llm_tools_handled(self) -> set[str]:
-        """
-        All handled tools; if `output_format` is a `ToolMessage` and
-        the `enable_output_format_handling` config option is enabled,
-        adds `output_format`.
-        """
-        handled = self.llm_tools_handled
-
-        if (
-            self.output_format is not None
-            and issubclass(self.output_format, ToolMessage)
-            and self.config.enable_output_format_handling
-        ):
-            return handled.union({self.output_format.default_value("request")})
-
-        return handled
-
-    @property
     def all_llm_tools_known(self) -> set[str]:
         """All known tools; we include `output_format` if it is a `ToolMessage`."""
         known = self.llm_tools_known
@@ -698,7 +708,13 @@ class ChatAgent(Agent):
         return known
 
     def set_output_format(
-        self, output_type: Optional[type], force_tools: Optional[bool] = None
+        self,
+        output_type: Optional[type],
+        force_tools: Optional[bool] = None,
+        enable: Optional[bool] = None,
+        handle: Optional[bool] = None,
+        instructions: Optional[bool] = None,
+        is_copy: bool = False,
     ) -> None:
         """
         Sets `output_format` to `output_type` and, if `force_tools` is enabled,
@@ -708,7 +724,36 @@ class ChatAgent(Agent):
 
         If `output_type` is None, restores to the state prior to setting
         `output_format`.
+
+        If `enable`, we call `enable_message` on `output_type` when it is
+        a subclass of `ToolMesage`. Defaults to the `enable_message_output_format`
+        parameter in the config. We always enable use, handling is controlled by
+        `handle`, which defaults to the `enable_output_format_handling` parameter
+        in the config.
+
+        `instructions` controls whether we generate instructions specifying
+        the output format schema. Defaults to the `instructions_output_format`
+        parameter in the config.
+
+        `is_copy` is set when called via `__getitem__`. In that case, we must
+        copy certain fields to ensure that we do not overwrite the main agent's
+        setings.
         """
+        # Disable usage of an output format which was not specifically enabled
+        # by `enable_message`
+        if self.enabled_output_format is not None:
+            self.disable_message_use(self.enabled_output_format)
+            self.enabled_output_format = None
+
+        # Disable usage of an output format which did not specifically have
+        # handling enabled via `enable_message`
+        if self.enabled_handling_output_format is not None:
+            self.disable_message_handling(self.enabled_handling_output_format)
+            self.enabled_handling_output_format = None
+
+        # Reset any previous instructions
+        self.output_format_instructions = ""
+
         if output_type is None:
             self.output_format = None
             (
@@ -737,8 +782,59 @@ class ChatAgent(Agent):
 
             self.output_format = output_type
             if issubclass(output_type, ToolMessage):
-                # Set up the handler, and add to self.llm_tools_map
-                self._get_tool_list(output_type)
+                name = output_type.default_value("request")
+                if enable is None:
+                    enable = self.config.enable_message_output_format
+
+                if handle is None:
+                    handle = self.config.enable_output_format_handling
+
+                if enable:
+                    is_enabled = name in self.llm_tools_usable
+                    is_handled = name in self.llm_tools_handled
+
+                    if is_copy:
+                        # We must copy `llm_tools_usable` so the base agent
+                        # is unmodified
+                        self.llm_tools_usable = copy.copy(self.llm_tools_usable)
+                        if handle:
+                            # If handling the tool, do the same for `llm_tools_handled`
+                            self.llm_tools_handled = copy.copy(self.llm_tools_handled)
+
+                    # Enable `output_type`
+                    self.enable_message(output_type, use=True, handle=handle)
+
+                    # If `output_type` was not already enabled, record that
+                    # it should be disabled when `output_format` is changed
+                    if not is_enabled:
+                        self.enabled_output_format = output_type
+
+                    # If `output_type` was not already handled, record that
+                    # it should be disabled when `output_format` is changed
+                    if not is_handled:
+                        self.enabled_handling_output_format = output_type
+
+            if instructions is None:
+                instructions = self.config.instructions_output_format
+            if issubclass(output_type, BaseModel) and instructions:
+                if issubclass(output_type, ToolMessage):
+                    output_format_schema = output_type.llm_function_schema(
+                        request=True,
+                        defaults=self.config.output_format_include_defaults,
+                    ).parameters
+                else:
+                    output_format_schema = output_type.schema()
+
+                format_schema_for_strict(output_format_schema)
+
+                self.output_format_instructions = textwrap.dedent(
+                    f"""
+                    === OUTPUT FORMAT INSTRUCTIONS ===
+                    Please provide output as JSON with the following schema:
+
+                    {output_format_schema}
+                    """
+                )
 
             if force_tools:
                 if issubclass(output_type, ToolMessage):
@@ -746,7 +842,9 @@ class ChatAgent(Agent):
                         output_type.default_value("request")
                     }
                 if self.config.use_functions_api:
-                    self.config = copy.copy(self.config)
+                    if is_copy:
+                        # We must copy the config so the base agent is unmodifed
+                        self.config = copy.copy(self.config)
                     self.config.use_functions_api = False
                     self.config.use_tools = True
 
@@ -755,7 +853,7 @@ class ChatAgent(Agent):
         Returns a (shallow) copy of `self` with a forced output type.
         """
         clone = copy.copy(self)
-        clone.set_output_format(output_type)
+        clone.set_output_format(output_type, is_copy=True)
         return clone
 
     def disable_message_handling(
@@ -911,9 +1009,7 @@ class ChatAgent(Agent):
 
         return AnyTool
 
-    def _strict_recovery_instructions(
-        self, tool_type: type[ToolMessage], optional: bool = True
-    ) -> str:
+    def _strict_recovery_instructions(self, optional: bool = True) -> str:
         """Returns instructions for strict recovery."""
         optional_instructions = (
             (
@@ -928,17 +1024,18 @@ class ChatAgent(Agent):
         response_prefix = "If you intended to make such a call, r" if optional else "R"
         instruction_prefix = "If you do so, b" if optional else "B"
 
-        return f"""
+        return textwrap.dedent(
+            f"""
         Your previous attempt to make a tool/function call appears to have failed.
-        {response_prefix}espond with your desired tool/function
-        call in the following format, where `tool` is set to your intended call:
-        {tool_type.llm_function_schema(defaults=True, request=True).parameters}
+        {response_prefix}espond with your desired tool/function. Do so with the
+        `tool_or_function` tool/function where `tool` is set to your intended call.
 
         {instruction_prefix}e sure that your corrected call matches your intention
         in your previous request. For any field with a default value which
         you did not intend to override in your previous attempt, be sure
         to set that field to its default value.{optional_instructions}
         """
+        )
 
     def truncate_message(
         self,
@@ -1003,9 +1100,13 @@ class ChatAgent(Agent):
             and self.config.strict_recovery
         ):
             AnyTool = self._get_any_tool_message()
-            self.set_output_format(AnyTool)
-
-            recovery_message = self._strict_recovery_instructions(AnyTool)
+            self.set_output_format(
+                AnyTool,
+                force_tools=True,
+                enable=True,
+                handle=True,
+            )
+            recovery_message = self._strict_recovery_instructions()
 
             if message is None:
                 message = recovery_message
@@ -1073,9 +1174,13 @@ class ChatAgent(Agent):
             and self.config.strict_recovery
         ):
             AnyTool = self._get_any_tool_message()
-            self.set_output_format(AnyTool)
-
-            recovery_message = self._strict_recovery_instructions(AnyTool)
+            self.set_output_format(
+                AnyTool,
+                force_tools=True,
+                enable=True,
+                handle=True,
+            )
+            recovery_message = self._strict_recovery_instructions()
 
             if message is None:
                 message = recovery_message
