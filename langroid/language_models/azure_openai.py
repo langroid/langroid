@@ -9,7 +9,8 @@ from langroid.language_models.openai_gpt import (
 )
 
 azureStructuredOutputList = [
-    "2024-08-06", "2024-11-20",
+    "2024-08-06",
+    "2024-11-20",
 ]
 
 azureStructuredOutputAPIMin = "2024-08-01-preview"
