@@ -1025,7 +1025,7 @@ class ChatAgent(Agent):
         instruction_prefix = "If you do so, b" if optional else "B"
 
         return textwrap.dedent(
-        f"""
+            f"""
         Your previous attempt to make a tool/function call appears to have failed.
         {response_prefix}espond with your desired tool/function. Do so with the
         `tool_or_function` tool/function where `tool` is set to your intended call.

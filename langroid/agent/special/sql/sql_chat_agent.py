@@ -359,13 +359,24 @@ class SQLChatAgent(ChatAgent):
         # This is likelier to succeed since this agent has no "baggage" of
         # prior conversation, other than the system msg, and special
         # "Intent-interpretation" instructions.
-        response = self.helper_agent.llm_response(message)
-        tools = self.try_get_tool_messages(response)
-        if tools:
-            return response
+        if self._json_schema_available():
+            AnyTool = self._get_any_tool_message(optional=False)
+            self.set_output_format(
+                AnyTool,
+                force_tools=True,
+                enable=True,
+                handle=True,
+            )
+            recovery_message = self._strict_recovery_instructions(optional=False)
+            return self.llm_response(recovery_message)
         else:
-            # fall back on the clarification message
-            return self._clarifying_message()
+            response = self.helper_agent.llm_response(message)
+            tools = self.try_get_tool_messages(response)
+            if tools:
+                return response
+            else:
+                # fall back on the clarification message
+                return self._clarifying_message()
 
     def retry_query(self, e: Exception, query: str) -> str:
         """
