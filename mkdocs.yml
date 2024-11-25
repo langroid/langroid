@@ -115,6 +115,7 @@ nav:
     - Demos:
       - Audience Targeting: demos/targeting/audience-targeting.md
   - Tutorials:
+    - Langroid Tour: tutorials/langroid-tour.md
     - Local LLM Setup: tutorials/local-llm-setup.md
     - Non-OpenAI LLMs: tutorials/non-openai-llms.md
     - SQLChatAgent: tutorials/postgresql-agent.md

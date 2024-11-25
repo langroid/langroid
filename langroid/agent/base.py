@@ -906,7 +906,7 @@ class Agent(ABC):
         try:
             tools = self.get_tool_messages(msg)
             return len(tools) > 0
-        except ValidationError:
+        except (ValidationError, XMLException):
             # there is a tool/fn-call attempt but had a validation error,
             # so we still consider this a tool message "attempt"
             return True
@@ -916,7 +916,7 @@ class Agent(ABC):
         """Is tool is handled by this agent
         and an explicit `recipient` field doesn't preclude this agent from handling it?
         """
-        if tool.default_value("request") not in self.llm_tools_handled:
+        if tool.default_value("request") not in self.all_llm_tools_handled:
             return False
         if hasattr(tool, "recipient") and isinstance(tool.recipient, str):
             return tool.recipient == "" or tool.recipient == self.config.name
@@ -941,7 +941,7 @@ class Agent(ABC):
     ) -> List[ToolMessage]:
         try:
             return self.get_tool_messages(msg, all_tools)
-        except ValidationError:
+        except (ValidationError, XMLException):
             return []
 
     def get_tool_messages(
@@ -1072,7 +1072,7 @@ class Agent(ABC):
             return None
         tool_name = msg.function_call.name
         tool_msg = msg.function_call.arguments or {}
-        if tool_name not in self.llm_tools_handled:
+        if tool_name not in self.all_llm_tools_handled:
             logger.warning(
                 f"""
                 The function_call '{tool_name}' is not handled 
@@ -1107,7 +1107,7 @@ class Agent(ABC):
                 continue
             tool_name = tc.function.name
             tool_msg = tc.function.arguments or {}
-            if tool_name not in self.llm_tools_handled:
+            if tool_name not in self.all_llm_tools_handled:
                 logger.warning(
                     f"""
                     The tool_call '{tool_name}' is not handled 
@@ -1306,7 +1306,7 @@ class Agent(ABC):
         The exception to this is below where we try our best to infer the tool
         when the LLM has "forgotten" to include the "request" field in the tool str ---
         in this case we ONLY look at the possible set of HANDLED tools, i.e.
-        self.llm_tools_handled.
+        self.all_llm_tools_handled.
         """
         if is_json:
             maybe_tool_dict = json.loads(tool_candidate_str)
@@ -1436,7 +1436,7 @@ class Agent(ABC):
             result_tool_name = msg.default_value("request")
             if (
                 is_agent_author
-                and result_tool_name in self.llm_tools_handled
+                and result_tool_name in self.all_llm_tools_handled
                 and (orig_tool_name is None or orig_tool_name != result_tool_name)
             ):
                 # TODO: do we need to remove the tool message from the chat_doc?

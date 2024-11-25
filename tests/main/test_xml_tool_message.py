@@ -100,6 +100,35 @@ def test_find_candidates_missing_closing_tag():
         assert isinstance(CodeTool.parse(candidate), CodeTool)
 
 
+@pytest.mark.parametrize(
+    "input_text,expected",
+    [
+        ("<tool><field1>data</field1></tool>", ["<tool><field1>data</field1></tool>"]),
+        (  # missing open tag
+            "Hello <field1>data</field1></tool>",
+            ["<tool><field1>data</field1></tool>"],
+        ),
+        (  # proper open/close tags
+            "<tool>a</tool> stuff <tool>b</tool>",
+            ["<tool>a</tool>", "<tool>b</tool>"],
+        ),
+        ("just plain text", []),
+        (
+            # allow missing closing tag for last element
+            "<tool><field1>data</field1>",
+            ["<tool><field1>data</field1></tool>"],
+        ),
+    ],
+)
+def test_find_candidates_tolerant(input_text, expected):
+    # check that missing opening tag is tolerated, and other cases
+    class TestXMLTool(XMLToolMessage):
+        field1: str
+        field2: str
+
+    assert TestXMLTool.find_candidates(input_text) == expected
+
+
 def test_parse():
     root_tag = CodeTool.Config.root_element
     xml_string = f"""

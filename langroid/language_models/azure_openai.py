@@ -9,7 +9,7 @@ from langroid.language_models.openai_gpt import (
 )
 
 azureStructuredOutputList = [
-    "2024-08-06",
+    "2024-08-06", "2024-11-20",
 ]
 
 azureStructuredOutputAPIMin = "2024-08-01-preview"
@@ -147,12 +147,13 @@ class AzureGPT(OpenAIGPT):
         If the version is not set, it raises a ValueError indicating
         that the model version needs to be specified in the ``.env``
         file.  It sets `OpenAIChatMode.GPT4o` if the version is
-        '2024-08-06' or '2024-05-13', `OpenAIChatModel.GPT4_TURBO` if
+        one of those listed below, and
+        `OpenAIChatModel.GPT4_TURBO` if
         the version is '1106-Preview', otherwise, it defaults to
         setting `OpenAIChatModel.GPT4`.
         """
         VERSION_1106_PREVIEW = "1106-Preview"
-        VERSIONS_GPT4o = ["2024-05-13", "2024-08-06"]
+        VERSIONS_GPT4o = ["2024-05-13", "2024-08-06", "2024-11-20"]
 
         if self.config.model_version == "":
             raise ValueError(
