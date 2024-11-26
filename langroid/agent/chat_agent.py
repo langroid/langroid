@@ -1041,7 +1041,11 @@ class ChatAgent(Agent):
 
         return AnyTool
 
-    def _strict_recovery_instructions(self, optional: bool = True) -> str:
+    def _strict_recovery_instructions(
+        self,
+        tool_type: Optional[type[ToolMessage]] = None,
+        optional: bool = True,
+    ) -> str:
         """Returns instructions for strict recovery."""
         optional_instructions = (
             (
@@ -1056,16 +1060,26 @@ class ChatAgent(Agent):
         response_prefix = "If you intended to make such a call, r" if optional else "R"
         instruction_prefix = "If you do so, b" if optional else "B"
 
+        schema_instructions = (
+            f"""
+        The schema for `tool_or_function` is as follows:
+        {tool_type.llm_function_schema(defaults=True, request=True).parameters}
+        """
+            if tool_type
+            else ""
+        )
+
         return textwrap.dedent(
             f"""
         Your previous attempt to make a tool/function call appears to have failed.
         {response_prefix}espond with your desired tool/function. Do so with the
         `tool_or_function` tool/function where `tool` is set to your intended call.
+        {schema_instructions}
 
         {instruction_prefix}e sure that your corrected call matches your intention
         in your previous request. For any field with a default value which
         you did not intend to override in your previous attempt, be sure
-        to set that field to its default value.{optional_instructions}
+        to set that field to its default value. {optional_instructions}
         """
         )
 
@@ -1139,7 +1153,7 @@ class ChatAgent(Agent):
                 handle=True,
                 instructions=True,
             )
-            recovery_message = self._strict_recovery_instructions()
+            recovery_message = self._strict_recovery_instructions(AnyTool)
 
             if message is None:
                 message = recovery_message
@@ -1214,7 +1228,7 @@ class ChatAgent(Agent):
                 handle=True,
                 instructions=True,
             )
-            recovery_message = self._strict_recovery_instructions()
+            recovery_message = self._strict_recovery_instructions(AnyTool)
 
             if message is None:
                 message = recovery_message

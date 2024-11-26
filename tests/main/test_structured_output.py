@@ -286,6 +286,17 @@ def test_output_format_tools(use: bool, handle: bool):
     cfg.use_output_format = use
     agent = ChatAgent(cfg)
 
+    agent_1 = agent[PresidentTool]
+    agent_2 = agent[PresidentListTool]
+
+    # The strict copies do not interfere
+    for a in [agent, agent_1]:
+        assert "president_list" not in a.llm_tools_usable
+        assert "president_list" not in a.llm_tools_handled
+    for a in [agent, agent_2]:
+        assert "show_president" not in a.llm_tools_usable
+        assert "show_president" not in a.llm_tools_handled
+
     agent.set_output_format(PresidentListTool)
 
     # Based on configuration, we automatically handle and enable the tool
@@ -295,16 +306,17 @@ def test_output_format_tools(use: bool, handle: bool):
     response = agent.llm_response_forget("Give me a list of presidents")
     assert (agent.handle_message(response) is not None) == handle
 
+    agent.set_output_format(None)
+    # We do not retain the PresidentListTool as it was not explicitly enabled
+    assert "president_list" not in agent.llm_tools_handled
+    assert "president_list" not in agent.llm_tools_usable
+
     agent.set_output_format(PresidentTool, handle=True, use=True)
     assert "show_president" in agent.llm_tools_handled
     assert "show_president" in agent.llm_tools_usable
 
     response = agent.llm_response_forget("Give me a president")
     assert agent.handle_message(response) is not None
-
-    # We do not retain the PresidentListTool as it was not explicitly enabled
-    assert "president_list" not in agent.llm_tools_handled
-    assert "president_list" not in agent.llm_tools_usable
 
     # Explicitly enable PresidentTool
     agent.enable_message(PresidentTool)
@@ -323,6 +335,14 @@ def test_output_format_instructions(instructions: bool, use: bool):
     cfg.instructions_output_format = instructions
     cfg.use_output_format = use
     agent = ChatAgent(cfg)
+
+    agent_1 = agent[PresidentTool]
+    agent_2 = agent[PresidentListTool]
+    # The strict copies do not interfere
+    for a in [agent, agent_1]:
+        assert "president_list" not in a.output_format_instructions
+    for a in [agent, agent_2]:
+        assert "show_president" not in a.output_format_instructions
 
     agent.set_output_format(PresidentListTool)
     # We do add schema information to the instructions if the tool is enabled for use
@@ -351,3 +371,6 @@ def test_output_format_instructions(instructions: bool, use: bool):
 
     agent.set_output_format(PresidentList, instructions=True)
     assert "presidents" in agent.output_format_instructions
+
+    agent.set_output_format(None)
+    assert agent.output_format_instructions == ""

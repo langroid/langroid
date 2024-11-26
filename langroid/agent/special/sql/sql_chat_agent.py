@@ -368,7 +368,9 @@ class SQLChatAgent(ChatAgent):
                 handle=True,
                 instructions=True,
             )
-            recovery_message = self._strict_recovery_instructions(optional=False)
+            recovery_message = self._strict_recovery_instructions(
+                AnyTool, optional=False
+            )
             return self.llm_response(recovery_message)
         else:
             response = self.helper_agent.llm_response(message)
