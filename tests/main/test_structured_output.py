@@ -158,10 +158,18 @@ def test_llm_structured_output_nested(
 
 
 @pytest.mark.parametrize("instructions", [True, False])
-def test_llm_strict_json(instructions: bool):
+@pytest.mark.parametrize("use", [True, False])
+@pytest.mark.parametrize("handle", [True, False])
+def test_llm_strict_json(
+    instructions: bool,
+    use: bool,
+    handle: bool,
+):
     """Tests structured output generation in strict JSON mode."""
     cfg = copy.deepcopy(strict_cfg)
     cfg.instructions_output_format = instructions
+    cfg.handle_output_format = handle
+    cfg.use_output_format = use
     agent = ChatAgent(cfg)
 
     def typed_llm_response(
@@ -217,11 +225,19 @@ def test_llm_strict_json(instructions: bool):
 
 
 @pytest.mark.parametrize("instructions", [True, False])
+@pytest.mark.parametrize("use", [True, False])
+@pytest.mark.parametrize("handle", [True, False])
 @pytest.mark.asyncio
-async def test_llm_strict_json_async(instructions: bool):
+async def test_llm_strict_json_async(
+    instructions: bool,
+    use: bool,
+    handle: bool,
+):
     """Tests asynchronous structured output generation in strict JSON mode."""
     cfg = copy.deepcopy(strict_cfg)
     cfg.instructions_output_format = instructions
+    cfg.handle_output_format = handle
+    cfg.use_output_format = use
     agent = ChatAgent(cfg)
 
     async def typed_llm_response(
