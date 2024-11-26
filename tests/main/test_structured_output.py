@@ -215,6 +215,7 @@ def test_llm_strict_json(instructions: bool):
     assert abs(typed_llm_response("What is the value of pi?", float) - 3.14) < 0.01
     assert valid_typed_response(president_prompt, str)
 
+
 @pytest.mark.parametrize("instructions", [True, False])
 @pytest.mark.asyncio
 async def test_llm_strict_json_async(instructions: bool):
