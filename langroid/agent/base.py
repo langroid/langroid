@@ -414,20 +414,20 @@ class Agent(ABC):
         results = self.handle_message(msg)
         if results is None:
             return None
+        if isinstance(results, str):
+            results_str = results
+        elif isinstance(results, ChatDocument):
+            results_str = results.content
+        elif isinstance(results, dict):
+            results_str = json.dumps(results, indent=2)
         if not settings.quiet:
-            if isinstance(results, str):
-                results_str = results
-            elif isinstance(results, ChatDocument):
-                results_str = results.content
-            elif isinstance(results, dict):
-                results_str = json.dumps(results, indent=2)
             console.print(f"[red]{self.indent}", end="")
             print(f"[red]Agent: {escape(results_str)}")
-            maybe_json = len(extract_top_level_json(results_str)) > 0
-            self.callbacks.show_agent_response(
-                content=results_str,
-                language="json" if maybe_json else "text",
-            )
+        maybe_json = len(extract_top_level_json(results_str)) > 0
+        self.callbacks.show_agent_response(
+            content=results_str,
+            language="json" if maybe_json else "text",
+        )
         if isinstance(results, ChatDocument):
             # Preserve trail of tool_ids for OpenAI Assistant fn-calls
             results.metadata.tool_ids = (
