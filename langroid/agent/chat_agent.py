@@ -1523,30 +1523,33 @@ class ChatAgent(Agent):
             # If we are here, it means the response has not yet been displayed.
             cached = f"[red]{self.indent}(cached)[/red]" if is_cached else ""
             if not settings.quiet:
-                chat_doc = (
-                    response
-                    if isinstance(response, ChatDocument)
-                    else ChatDocument.from_LLMResponse(response, displayed=True)
-                )
+                # only suppress terminal output in quiet mode
                 # TODO: prepend TOOL: or OAI-TOOL: if it's a tool-call
                 print(cached + "[green]" + escape(str(response)))
-                self.callbacks.show_llm_response(
-                    content=str(response),
-                    is_tool=self.has_tool_message_attempt(chat_doc),
-                    cached=is_cached,
-                )
+
+            chat_doc = (
+                response
+                if isinstance(response, ChatDocument)
+                else ChatDocument.from_LLMResponse(response, displayed=True)
+            )
+            self.callbacks.show_llm_response(
+                content=str(response),
+                is_tool=self.has_tool_message_attempt(chat_doc),
+                cached=is_cached,
+            )
         if isinstance(response, LLMResponse):
             # we are in the context immediately after an LLM responded,
             # we won't have citations yet, so we're done
             return
         if response.metadata.has_citation and not settings.quiet:
+            # Only suppress terminal output in quiet mode
             print("[grey37]SOURCES:\n" + escape(response.metadata.source) + "[/grey37]")
-            self.callbacks.show_llm_response(
-                content=str(response.metadata.source),
-                is_tool=False,
-                cached=False,
-                language="text",
-            )
+        self.callbacks.show_llm_response(
+            content=str(response.metadata.source),
+            is_tool=False,
+            cached=False,
+            language="text",
+        )
 
     def _llm_response_temp_context(self, message: str, prompt: str) -> ChatDocument:
         """
