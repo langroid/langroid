@@ -157,12 +157,12 @@ def test_llm_structured_output_nested(
     assert country == agent.agent_response(llm_msg).content
 
 
-def test_llm_strict_json(
-    test_settings: Settings,
-):
+@pytest.mark.parametrize("instructions", [True, False])
+def test_llm_strict_json(instructions: bool):
     """Tests structured output generation in strict JSON mode."""
-    set_global(test_settings)
-    agent = ChatAgent(strict_cfg)
+    cfg = copy.deepcopy(strict_cfg)
+    cfg.instructions_output_format = instructions
+    agent = ChatAgent(cfg)
 
     def typed_llm_response(
         prompt: str,
@@ -215,14 +215,13 @@ def test_llm_strict_json(
     assert abs(typed_llm_response("What is the value of pi?", float) - 3.14) < 0.01
     assert valid_typed_response(president_prompt, str)
 
-
+@pytest.mark.parametrize("instructions", [True, False])
 @pytest.mark.asyncio
-async def test_llm_strict_json_async(
-    test_settings: Settings,
-):
+async def test_llm_strict_json_async(instructions: bool):
     """Tests asynchronous structured output generation in strict JSON mode."""
-    set_global(test_settings)
-    agent = ChatAgent(strict_cfg)
+    cfg = copy.deepcopy(strict_cfg)
+    cfg.instructions_output_format = instructions
+    agent = ChatAgent(cfg)
 
     async def typed_llm_response(
         prompt: str,
