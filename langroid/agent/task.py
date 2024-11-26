@@ -570,7 +570,7 @@ class Task:
 
         if self.caller is not None and self.caller.logger is not None:
             self.logger = self.caller.logger
-        else:
+        elif self.logger is None:
             self.logger = RichFileLogger(
                 str(Path(self.config.logs_dir) / f"{self.name}.log"),
                 color=self.color_log,
@@ -578,7 +578,7 @@ class Task:
 
         if self.caller is not None and self.caller.tsv_logger is not None:
             self.tsv_logger = self.caller.tsv_logger
-        else:
+        elif self.tsv_caller is None:
             self.tsv_logger = setup_file_logger(
                 "tsv_logger",
                 str(Path(self.config.logs_dir) / f"{self.name}.tsv"),
