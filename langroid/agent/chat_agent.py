@@ -934,7 +934,7 @@ class ChatAgent(Agent):
     def _load_output_format(self, message: ChatDocument) -> None:
         """
         If set, attempts to parse a value of type `self.output_format` from the message
-        contents and assigns it to `content_any`.
+        contents or any tool/function call and assigns it to `content_any`.
         """
         if self.output_format is not None:
             any_succeeded = False
