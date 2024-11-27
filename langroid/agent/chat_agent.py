@@ -20,6 +20,7 @@ from langroid.agent.tool_message import (
 )
 from langroid.agent.xml_tool_message import XMLToolMessage
 from langroid.language_models.base import (
+    LLMFunctionCall,
     LLMFunctionSpec,
     LLMMessage,
     LLMResponse,
@@ -936,26 +937,52 @@ class ChatAgent(Agent):
         contents and assigns it to `content_any`.
         """
         if self.output_format is not None:
-            try:
-                content_any = self.output_format.parse_obj(json.loads(message.content))
+            any_succeeded = False
+            attempts: list[str | LLMFunctionCall] = [
+                message.content,
+            ]
 
-                if issubclass(self.output_format, PydanticWrapper):
-                    message.content_any = content_any.value  # type: ignore
-                else:
-                    message.content_any = content_any
-            except ValidationError:
+            if message.function_call is not None:
+                attempts.append(message.function_call)
+
+            if message.oai_tool_calls is not None:
+                attempts.extend(
+                    [
+                        c.function
+                        for c in message.oai_tool_calls
+                        if c.function is not None
+                    ]
+                )
+
+            for attempt in attempts:
+                try:
+                    if isinstance(attempt, str):
+                        content = json.loads(attempt)
+                    else:
+                        if not (
+                            issubclass(self.output_format, ToolMessage)
+                            and attempt.name
+                            == self.output_format.default_value("request")
+                        ):
+                            continue
+
+                        content = attempt.arguments
+
+                    content_any = self.output_format.parse_obj(content)
+
+                    if issubclass(self.output_format, PydanticWrapper):
+                        message.content_any = content_any.value  # type: ignore
+                    else:
+                        message.content_any = content_any
+                    any_succeeded = True
+                except (ValidationError, json.JSONDecodeError):
+                    continue
+
+            if not any_succeeded:
                 self.disable_strict = True
                 logging.warning(
                     """
                     Validation error occured with strict output format enabled.
-                    Disabling strict mode.
-                    """
-                )
-            except json.JSONDecodeError:
-                self.disable_strict = True
-                logging.warning(
-                    """
-                    JSON decode error occured with strict output format enabled.
                     Disabling strict mode.
                     """
                 )
