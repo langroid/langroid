@@ -47,18 +47,6 @@ Options
 - Disable Caching: Avoid using cached responses for LLM interactions.
   python main.py --nocache
 
-Run the Chainlit Application:
-chainlit run main_chainlit.py
-
-Options:
-Option               Description                                                                                      Default Value
--------------------- ------------------------------------------------------------------------------------------------ ----------------
---host <address>     Specifies the host address. Use 0.0.0.0 to make the app accessible from other devices.           127.0.0.1
---port <number>      Specifies the port the app will run on. Use any available port.                                  8000
---debug              Enables debug mode, providing detailed error messages and logs.                                  Disabled
---no-cache           Disables caching of your app, ensuring the latest changes are always loaded.                     Disabled
-
-
 
 Interaction
 1. Select a debate topic.
@@ -82,4 +70,4 @@ The feedback mechanism evaluates debates based on:
 License
 -------
 This project is licensed under the MIT License.
-"""
+

@@ -1,8 +1,14 @@
-from rich.prompt import Prompt, Confirm
+from rich.prompt import Prompt
 import langroid.language_models as lm
 import langroid.utils.configuration
 
-def get_global_settings(debug=False, nocache=False):
+
+# Define the streaming handler function here
+def handle_streaming_output(token: str):
+    print(token, end='', flush=True)
+
+
+def get_global_settings(debug=False, nocache=True):
     """
     Returns global settings for Langroid.
 
@@ -18,9 +24,13 @@ def get_global_settings(debug=False, nocache=False):
         cache=not nocache,
     )
 
-def get_base_llm_config():
+
+def get_base_llm_config(streamer=None):
     """
     Prompts the user to select a base LLM configuration.
+
+    Args:
+        streamer (Callable): Function to handle streaming tokens.
 
     Returns:
         OpenAIGPTConfig: Base configuration for the selected LLM.
@@ -36,35 +46,25 @@ def get_base_llm_config():
     )
 
     model_map = {
-        "1": "GPT4o",
-        "2": "GPT4",
+        "1": "gpt-4o",
+        "2": "gpt-4",
     }
 
     if chat_model_option == "3":
         chat_model = "ollama/mistral:7b-instruct-v0.2-q8_0"
         base_llm_config = lm.OpenAIGPTConfig(
             chat_model=chat_model,
-            chat_context_length=16_000  # Only set for Ollama model
+            chat_context_length=16000,  # Only set for Ollama model
+            max_output_tokens=1500,  # Adjusted to prevent truncation
+            stream=True,  # Enable streaming outputs
+            streamer=streamer,  # Set the streaming handler
         )
     else:
-        chat_model = getattr(lm.OpenAIChatModel, model_map[chat_model_option])
+        chat_model = model_map[chat_model_option]
         base_llm_config = lm.OpenAIGPTConfig(
-            chat_model=chat_model
+            chat_model=chat_model,
+            max_output_tokens=1500,  # Adjusted to prevent truncation
+            stream=True,  # Enable streaming outputs
+            streamer=streamer,  # Set the streaming handler
         )
-
     return base_llm_config
-
-
-def is_llm_delegate():
-    """
-    Prompts the user to decide whether the LLM should autonomously continue the debate.
-
-    Returns:
-        bool: True if the LLM should operate autonomously, False otherwise.
-    """
-    return Confirm.ask(
-        "Would you like the LLM to autonomously continue the debate without waiting for user input?",
-        default=False
-    )
-
-

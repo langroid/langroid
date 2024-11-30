@@ -1,137 +1,207 @@
 import typer
-from rich.prompt import Prompt
-import langroid as lr
-from agents import (
-    create_pro_ai_agent, create_con_ai_agent,
-    create_pro_ip_agent, create_con_ip_agent,
-    create_pro_bias_agent, create_con_bias_agent,
-    create_pro_edu_agent, create_con_edu_agent,
-    create_feedback_agent,
-)
-from tasks import (
-    create_pro_ai_task, create_con_ai_task,
-    create_pro_ip_task, create_con_ip_task,
-    create_pro_bias_task, create_con_bias_task,
-    create_pro_edu_task, create_con_edu_task,
-    create_feedback_task,
-)
-from config import get_global_settings, get_base_llm_config, is_llm_delegate
+from rich.prompt import Prompt, Confirm
+import json
+from agents import create_agent
+from config import get_base_llm_config, get_global_settings, handle_streaming_output
+from models import SystemMessages, Message
 import logging
+import langroid.utils.logging
 
-# Set up the Typer application
+# Initialize typer application
 app = typer.Typer()
 
 # Set up logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
-lr.utils.logging.setup_colored_logging()
 
-# Mappings for dynamic task and agent creation
-DEBATE_TOPICS = {
-    "1": ("AI in Healthcare", "pro_ai", "con_ai"),
-    "2": ("AI and Intellectual Property", "pro_ip", "con_ip"),
-    "3": ("AI and Societal Biases", "pro_bias", "con_bias"),
-    "4": ("AI as an Educator", "pro_edu", "con_edu"),
-}
+# Suppress lower-level logs from langroid and other modules
+logging.getLogger('langroid').setLevel(logging.WARNING)
+logging.getLogger('openai').setLevel(logging.WARNING)
 
 
-def setup_agents_and_tasks(debug=False, nocache=False):
-    """Sets up agents and tasks dynamically."""
-    logger.info("Setting up agents and tasks...")
-    global_settings = get_global_settings(debug, nocache)
-    lr.utils.configuration.set_global(global_settings)
-    base_llm_config = get_base_llm_config()
-
-    agents = {}
-    tasks = {}
-
-    for _, (topic_name, pro_key, con_key) in DEBATE_TOPICS.items():
-        agents[pro_key] = globals()[f"create_{pro_key}_agent"](base_llm_config)
-        agents[con_key] = globals()[f"create_{con_key}_agent"](base_llm_config)
-        tasks[f"{pro_key}_task"] = globals()[f"create_{pro_key}_task"](agents[pro_key])
-        tasks[f"{con_key}_task"] = globals()[f"create_{con_key}_task"](agents[con_key])
-
-        # Reset agent states
-        for agent in [agents[pro_key], agents[con_key]]:
-            agent.init_state()
-
-    # Add feedback agent and task
-    feedback_agent = create_feedback_agent(base_llm_config)
-    tasks["feedback_task"] = create_feedback_task(feedback_agent)
-
-    logger.info("Agents and tasks successfully created.")
-    return tasks
+# Load and validate system messages from a JSON file
+def load_system_messages(file_path: str) -> SystemMessages:
+    try:
+        with open(file_path, "r") as f:
+            data = json.load(f)
+        # Map dictionaries to Message objects
+        messages = {
+            key: Message(**value) for key, value in data.items()
+        }
+        return SystemMessages(messages=messages)
+    except Exception as e:
+        logger.error(f"Error loading system messages: {e}")
+        raise
 
 
+# Prompt user to select a topic
 def select_debate_topic():
-    """Prompts the user to select a debate topic."""
-    topic_choices = "\n".join([f"{key}. {value[0]}" for key, value in DEBATE_TOPICS.items()])
-    topic_key = Prompt.ask(f"Select a debate topic:\n{topic_choices}", choices=DEBATE_TOPICS.keys(), default="1")
-    return DEBATE_TOPICS[topic_key]
+    topics = [
+        ("AI in Healthcare", "pro_ai", "con_ai"),
+        ("AI and Intellectual Property", "pro_ip", "con_ip"),
+        ("AI and Societal Biases", "pro_bias", "con_bias"),
+        ("AI as an Educator", "pro_edu", "con_edu"),
+    ]
+    topic_choices = "\n".join([f"{i + 1}. {topic[0]}" for i, topic in enumerate(topics)])
+    topic_index = int(
+        Prompt.ask(
+            f"Select a debate topic:\n{topic_choices}",
+            choices=[str(i + 1) for i in range(len(topics))],
+            default="1",
+        )
+    ) - 1
+    selected_topic = topics[topic_index]
+    logger.info(f"Selected topic: {selected_topic[0]}")
+    return selected_topic
 
 
-def select_side(topic_name, pro_key, con_key, tasks):
-    """Prompts the user to select a side of the debate."""
+# Prompt user to select their side
+def select_side(topic_name):
     side = Prompt.ask(
         f"Which side would you like to debate on?\n1. Pro-{topic_name}\n2. Con-{topic_name}",
         choices=["1", "2"],
         default="1",
     )
-    return (
-        tasks[f"{pro_key}_task"] if side == "1" else tasks[f"{con_key}_task"],
-        tasks[f"{con_key}_task"] if side == "1" else tasks[f"{pro_key}_task"],
+    return "pro" if side == "1" else "con"
+
+
+# Prompt user to decide on LLM delegation
+def is_llm_delegate():
+    return Confirm.ask(
+        "Would you like the LLM to autonomously continue the debate without waiting for user input?",
+        default=False,
     )
 
 
-def run_debate(tasks):
-    """Runs the debate interaction logic."""
-    llm_delegate = is_llm_delegate()
-    topic_name, pro_key, con_key = select_debate_topic()
-    selected_task, opposing_task = select_side(topic_name, pro_key, con_key, tasks)
+# Main debate function
+def run_debate():
+    try:
+        # Get global settings
+        global_settings = get_global_settings(nocache=True)
+        langroid.utils.configuration.set_global(global_settings)
 
-    logger.info("Starting debate on topic: %s", topic_name)
-    student_arguments = []
-    opposing_arguments = []
-    max_turns = 4
-    is_pro_turn = True
+        # Import the streaming handler
+        from config import handle_streaming_output
 
-    for turn in range(max_turns):
-        if llm_delegate:
-            context = student_arguments[-1] if student_arguments else "Start of debate."
-            current_task = selected_task if is_pro_turn else opposing_task
-            response = current_task.run(context)
+        # Get base LLM configuration with the streaming handler
+        agent_config = get_base_llm_config(streamer=handle_streaming_output)
+        system_messages = load_system_messages("system_messages.json")
+        llm_delegate = is_llm_delegate()
 
-            if response and response.content:
-                argument = response.content.strip()
-                (student_arguments if is_pro_turn else opposing_arguments).append(argument)
-                print(f"\n{'Pro' if is_pro_turn else 'Con'} Agent: {argument}")
-            else:
-                print(f"\n{'Pro' if is_pro_turn else 'Con'} Agent did not respond.")
-            is_pro_turn = not is_pro_turn
+        # Select topic and sides
+        selected_topic_tuple = select_debate_topic()
+        topic_name, pro_key, con_key = selected_topic_tuple
+        side = select_side(topic_name)
+
+        # Create agents
+        pro_agent = create_agent(
+            agent_config, system_messages.messages[pro_key].message
+        )
+        con_agent = create_agent(
+            agent_config, system_messages.messages[con_key].message
+        )
+        feedback_agent = create_agent(
+            agent_config, system_messages.messages["feedback"].message
+        )
+
+        # Determine which agent the user is taking
+        if side == "pro":
+            user_agent = pro_agent
+            ai_agent = con_agent
+            user_side = "Pro"
+            ai_side = "Con"
         else:
-            user_input = Prompt.ask("Your argument (or type 'f' for feedback, 'done' to end):")
-            if user_input.lower() == "f":
-                feedback = tasks["feedback_task"].run("\n".join(student_arguments + opposing_arguments)).content
-                print("\nFeedback:", feedback)
-            elif user_input.lower() == "done":
-                break
-            else:
-                student_arguments.append(user_input)
-                response = opposing_task.run(user_input)
-                if response and response.content:
-                    opposing_arguments.append(response.content.strip())
-                    print("\nCon Agent:", response.content.strip())
+            user_agent = con_agent
+            ai_agent = pro_agent
+            user_side = "Con"
+            ai_side = "Pro"
 
-    final_feedback = tasks["feedback_task"].run("\n".join(student_arguments + opposing_arguments)).content
-    print("\nFinal Feedback:", final_feedback)
+        logger.info(
+            f"Starting debate on topic: {topic_name}, taking the {user_side} side. LLM Delegate: {llm_delegate}"
+        )
+
+        student_arguments = []
+        ai_arguments = []
+        max_turns = 4
+        is_user_turn = True
+
+        for turn in range(max_turns):
+            if llm_delegate:
+                current_agent = user_agent if is_user_turn else ai_agent
+                agent_role = user_side if is_user_turn else ai_side
+
+                # Build the conversation context
+                if is_user_turn:
+                    opponent_arguments = ai_arguments
+                else:
+                    opponent_arguments = student_arguments
+
+                context = "\n".join(opponent_arguments[-1:]) if opponent_arguments else "Start of debate."
+
+                # Prepare the full prompt
+                full_context = f"{current_agent.config.system_message}\n\nOpponent's argument:\n{context}"
+
+                # Call the agent without send_token_fn (handled in LLM config)
+                print(f"\n{agent_role} Agent ({topic_name}):\n", end='', flush=True)
+                response = current_agent.llm_response(full_context)
+
+                if response and response.content:
+                    argument = response.content.strip()
+                    if is_user_turn:
+                        student_arguments.append(argument)
+                    else:
+                        ai_arguments.append(argument)
+                else:
+                    print(f"\n{agent_role} Agent did not respond.")
+                is_user_turn = not is_user_turn
+            else:
+                if is_user_turn:
+                    # User's turn
+                    user_input = Prompt.ask("Your argument (or type 'f' for feedback, 'done' to end):")
+                    if user_input.lower() == "f":
+                        # Provide feedback during the debate
+                        feedback_content = "\n".join(student_arguments + ai_arguments)
+                        print("\nFeedback:\n", end='', flush=True)
+                        final_feedback = feedback_agent.llm_response(
+                            f"Provide feedback on the debate so far.\n{feedback_content}"
+                        )
+                        print()  # Newline after feedback
+                    elif user_input.lower() == "done":
+                        logger.info("Debate ended by user.")
+                        break
+                    else:
+                        student_arguments.append(user_input)
+                        is_user_turn = not is_user_turn  # Switch to AI's turn
+                else:
+                    # AI Agent's turn
+                    context = student_arguments[-1] if student_arguments else "Start of debate."
+                    # Include the AI agent's system message
+                    full_context = f"{ai_agent.config.system_message}\n\nOpponent's argument:\n{context}"
+                    print(f"\n{ai_side} Agent ({topic_name}):\n", end='', flush=True)
+                    response = ai_agent.llm_response(full_context)
+                    if response and response.content:
+                        argument = response.content.strip()
+                        ai_arguments.append(argument)
+                    else:
+                        print(f"\n{ai_side} Agent did not respond.")
+                    is_user_turn = not is_user_turn
+
+        # Final feedback
+        final_feedback_content = "\n".join(student_arguments + ai_arguments)
+        print("\nFinal Feedback:\n", end='', flush=True)
+        final_feedback = feedback_agent.llm_response(
+            f"Summarize the debate and declare a winner.\n{final_feedback_content}"
+        )
+        print()  # Newline after final feedback
+
+    except Exception as e:
+        logger.error(f"Unexpected error during debate: {e}")
+        raise
 
 
 @app.command()
-def main(debug: bool = False, nocache: bool = False):
-    tasks = setup_agents_and_tasks(debug, nocache)
-    run_debate(tasks)
+def main():
+    run_debate()
 
 
 if __name__ == "__main__":
     app()
-
