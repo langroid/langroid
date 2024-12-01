@@ -758,7 +758,8 @@ class Agent(ABC):
         if self.default_human_response is not None:
             user_msg = self.default_human_response
         else:
-            if self.callbacks.get_user_response_async is not None:
+            if self.callbacks.get_user_response_async is not None and \
+               self.callbacks.get_user_response_async is not async_noop_fn:
                 user_msg = await self.callbacks.get_user_response_async(prompt="")
             elif self.callbacks.get_user_response is not None:
                 user_msg = self.callbacks.get_user_response(prompt="")
