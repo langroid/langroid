@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 logging.getLogger('langroid').setLevel(logging.WARNING)
 logging.getLogger('openai').setLevel(logging.WARNING)
 
+
 # Load and validate system messages from a JSON file
 def load_system_messages(file_path: str) -> SystemMessages:
     try:
@@ -30,6 +31,7 @@ def load_system_messages(file_path: str) -> SystemMessages:
     except Exception as e:
         logger.error(f"Error loading system messages: {e}")
         raise
+
 
 # Prompt user to select a topic
 def select_debate_topic():
@@ -51,6 +53,7 @@ def select_debate_topic():
     logger.info(f"Selected topic: {selected_topic[0]}")
     return selected_topic
 
+
 # Prompt user to select their side
 def select_side(topic_name):
     side = Prompt.ask(
@@ -60,6 +63,7 @@ def select_side(topic_name):
     )
     return "pro" if side == "1" else "con"
 
+
 # Prompt user to decide on LLM delegation
 def is_llm_delegate():
     return Confirm.ask(
@@ -67,14 +71,13 @@ def is_llm_delegate():
         default=False,
     )
 
+
 # Main debate function
 def run_debate():
     try:
         # Get global settings
         global_settings = get_global_settings(nocache=True)
         langroid.utils.configuration.set_global(global_settings)
-
-
 
         # Get base LLM configuration with the streaming handler
         agent_config = get_base_llm_config()
@@ -191,10 +194,11 @@ def run_debate():
         logger.error(f"Unexpected error during debate: {e}")
         raise
 
+
 @app.command()
 def main():
     run_debate()
 
+
 if __name__ == "__main__":
     app()
-
