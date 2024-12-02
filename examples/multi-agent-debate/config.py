@@ -2,11 +2,9 @@ from rich.prompt import Prompt
 import langroid.language_models as lm
 import langroid.utils.configuration
 
-
 # Define the streaming handler function here
 def handle_streaming_output(token: str):
     print(token, end='', flush=True)
-
 
 def get_global_settings(debug=False, nocache=True):
     """
@@ -23,7 +21,6 @@ def get_global_settings(debug=False, nocache=True):
         debug=debug,
         cache=not nocache,
     )
-
 
 def get_base_llm_config(streamer=None):
     """
@@ -55,16 +52,17 @@ def get_base_llm_config(streamer=None):
         base_llm_config = lm.OpenAIGPTConfig(
             chat_model=chat_model,
             chat_context_length=16000,  # Only set for Ollama model
-            max_output_tokens=1500,  # Adjusted to prevent truncation
-            stream=True,  # Enable streaming outputs
-            streamer=streamer,  # Set the streaming handler
+            max_output_tokens=1500,     # Adjusted to prevent truncation
+            stream=True,                # Enable streaming outputs
+            streamer=streamer,          # Set the streaming handler
         )
     else:
         chat_model = model_map[chat_model_option]
         base_llm_config = lm.OpenAIGPTConfig(
             chat_model=chat_model,
             max_output_tokens=1500,  # Adjusted to prevent truncation
-            stream=True,  # Enable streaming outputs
-            streamer=streamer,  # Set the streaming handler
+            stream=True,            # Enable streaming outputs
+            streamer=streamer,      # Set the streaming handler
         )
     return base_llm_config
+
