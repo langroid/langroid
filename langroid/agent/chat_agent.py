@@ -64,11 +64,11 @@ class ChatAgentConfig(AgentConfig):
             and local LLMs served by providers such as vLLM), ensures
             that the output is a JSON matching the corresponding
             schema via grammar-based decoding
-        handle_output_format: Controls whether `output_format` is always
-            handled when it is a subclass of `ToolMessage`
-        use_output_format: Controls whether we automatically enable
-            `output_format` and update the system message with instructions
-            when it is a subclass of `ToolMessage`
+        handle_output_format: When `output_format` is a `ToolMessage` T,
+            controls whether T is "enabled for handling".
+        use_output_format: When `output_format` is a `ToolMessage` T,
+            controls whether T is "enabled for use" (by LLM) and
+            instructions on using T are added to the system message.
         instructions_output_format: Controls whether we generate instructions for
             `output_format` in the system message.
         use_tools_on_output_format: Controls whether to automatically switch
@@ -187,14 +187,16 @@ class ChatAgent(Agent):
         self.output_format: Optional[type[ToolMessage | BaseModel]] = None
 
         self.saved_requests_and_tool_setings = self._requests_and_tool_settings()
-        # Tracks if we have enabled use of an output format
-        # We disable use when the output format is changed for any such tool
-        # where `enable_message` was not called explicitly
+        # This variable is not None and equals a `ToolMessage` T, if and only if:
+        # (a) T has been set as the output_format of this agent, AND
+        # (b) T has been "enabled for use" ONLY for enforcing this output format, AND
+        # (c) T has NOT been explicitly "enabled for use" by this Agent.
         self.enabled_use_output_format: Optional[type[ToolMessage]] = None
-        # As above but used to disable handling
+        # As above but deals with "enabled for handling" instead of "enabled for use".
         self.enabled_handling_output_format: Optional[type[ToolMessage]] = None
         if config.output_format is not None:
             self.set_output_format(config.output_format)
+        # instructions specifically related to enforcing `output_format`
         self.output_format_instructions = ""
 
         # controls whether to disable strict schemas for this agent if
@@ -645,15 +647,14 @@ class ChatAgent(Agent):
                 self.llm_tools_handled.add(t)
                 self.llm_functions_handled.add(t)
 
-                # Track whether `output_format` handling was
-                # explicitly enabled and should not be disabled when
-                # `output_format` changes
-                if self.enabled_handling_output_format is not None:
-                    if (
-                        self.enabled_handling_output_format.default_value("request")
-                        == t
-                    ):
-                        self.enabled_handling_output_format = None
+                if (
+                    self.enabled_handling_output_format is not None
+                    and self.enabled_handling_output_format.name() == t
+                ):
+                    # `t` was designated as "enabled for handling" ONLY for
+                    # output_format enforcement, but we are explicitly ]
+                    # enabling it for handling here, so we set the variable to None.
+                    self.enabled_handling_output_format = None
             else:
                 self.llm_tools_handled.discard(t)
                 self.llm_functions_handled.discard(t)
@@ -674,12 +675,14 @@ class ChatAgent(Agent):
                         set `_allow_llm_use=True` when you define the tool.
                         """
                     )
-                # Track whether `output_format` use was explicitly
-                # enabled and should not be disabled when
-                # `output_format` changes
-                if self.enabled_use_output_format is not None:
-                    if self.enabled_use_output_format.default_value("request") == t:
-                        self.enabled_use_output_format = None
+                if (
+                    self.enabled_use_output_format is not None
+                    and self.enabled_use_output_format.default_value("request") == t
+                ):
+                    # `t` was designated as "enabled for use" ONLY for output_format
+                    # enforcement, but we are explicitly enabling it for use here,
+                    # so we set the variable to None.
+                    self.enabled_use_output_format = None
             else:
                 self.llm_tools_usable.discard(t)
                 self.llm_functions_usable.discard(t)
@@ -732,7 +735,7 @@ class ChatAgent(Agent):
 
         If `use`, we enable use of `output_type` when it is a subclass
         of `ToolMesage`. Note that this primarily controls instruction
-        generation: the model will always use `output_type` regardless
+        generation: the model will always generate `output_type` regardless
         of whether `use` is set. Defaults to the `use_output_format`
         parameter in the config. Similarly, handling of `output_type` is
         controlled by `handle`, which defaults to the
@@ -752,7 +755,7 @@ class ChatAgent(Agent):
             self.disable_message_use(self.enabled_use_output_format)
             self.enabled_use_output_format = None
 
-        # Disable usage of an output format which did not specifically have
+        # Disable handling of an output format which did not specifically have
         # handling enabled via `enable_message`
         if self.enabled_handling_output_format is not None:
             self.disable_message_handling(self.enabled_handling_output_format)
@@ -823,13 +826,15 @@ class ChatAgent(Agent):
                         handle=handle or is_handled,
                     )
 
-                    # If `output_type` was not already enabled for use, record that
-                    # it should be disabled when `output_format` is changed
+                    # If the `output_type` ToilMessage was not already enabled for
+                    # use, this means we are ONLY enabling it for use specifically
+                    # for enforcing this output format, so we set the
+                    # `enabled_use_output_forma  to this output_type, to
+                    # record that it should be disabled when `output_format` is changed
                     if not is_usable:
                         self.enabled_use_output_format = output_type
 
-                    # If `output_type` was not already handled, record that
-                    # it should be disabled when `output_format` is changed
+                    # (same reasoning as for use-enabling)
                     if not is_handled:
                         self.enabled_handling_output_format = output_type
 
@@ -843,6 +848,8 @@ class ChatAgent(Agent):
                 instructions = self.config.instructions_output_format
             if issubclass(output_type, BaseModel) and instructions:
                 if generated_tool_instructions:
+                    # Already generated tool instructions as part of "enabling for use",
+                    # so only need to generate a reminder to use this tool.
                     name = cast(ToolMessage, output_type).default_value("request")
                     self.output_format_instructions = textwrap.dedent(
                         f"""

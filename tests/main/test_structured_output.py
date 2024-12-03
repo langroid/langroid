@@ -326,7 +326,7 @@ def test_output_format_tools(use: bool, handle: bool):
     agent_1 = agent[PresidentTool]
     agent_2 = agent[PresidentListTool]
 
-    # The strict copies do not interfere
+    # agent[T] does not have T enabled for use or handling.
     for a in [agent, agent_1]:
         assert "president_list" not in a.llm_tools_usable
         assert "president_list" not in a.llm_tools_handled
@@ -336,15 +336,19 @@ def test_output_format_tools(use: bool, handle: bool):
 
     agent.set_output_format(PresidentListTool)
 
-    # Based on configuration, we automatically handle and enable the tool
+    # setting the output format to T results in enabling use/handling of T
+    # based on the cfg.use_output_format and cfg.handle_output_format
     assert ("president_list" in agent.llm_tools_handled) == handle
     assert ("president_list" in agent.llm_tools_usable) == use
 
     response = agent.llm_response_forget("Give me a list of presidents")
+    # the response is handled only if cfg.handle_output_format is True
     assert (agent.handle_message(response) is not None) == handle
 
     agent.set_output_format(None)
-    # We do not retain the PresidentListTool as it was not explicitly enabled
+    # We do not retain handling/use of
+    # PresidentListTool as it was not explicitly enabled for handling/use
+    # via `enable_message`.
     assert "president_list" not in agent.llm_tools_handled
     assert "president_list" not in agent.llm_tools_usable
 
@@ -359,7 +363,8 @@ def test_output_format_tools(use: bool, handle: bool):
     agent.enable_message(PresidentTool)
     agent.set_output_format(PresidentListTool)
 
-    # We do retain the PresidentTool in the sets of enabled and handled tools
+    # We DO retain the use/handling of PresidentTool
+    # in the sets of enabled and handled tools
     # as it was explicitly enabled
     assert "show_president" in agent.llm_tools_handled
     assert "show_president" in agent.llm_tools_usable
@@ -375,7 +380,7 @@ def test_output_format_instructions(instructions: bool, use: bool):
 
     agent_1 = agent[PresidentTool]
     agent_2 = agent[PresidentListTool]
-    # The strict copies do not interfere
+    # The strict-typed agent[T] will not have format instructions specifically for T
     for a in [agent, agent_1]:
         assert "president_list" not in a.output_format_instructions
     for a in [agent, agent_2]:
