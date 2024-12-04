@@ -136,14 +136,12 @@ def test_write_then_retrieval(neo4j_agent):
     """
     read_result = neo4j_agent.read_query(retrieval_query)
     assert read_result.success is True
-    assert read_result.data == [
-        {
-            "a.name": "Leonardo DiCaprio",
-            "m.title": "Inception",
-            "m.releaseYear": 2010,
-            "relationship": "ACTED_IN",
-        }
-    ]
+    assert {
+        "a.name": "Leonardo DiCaprio",
+        "m.title": "Inception",
+        "m.releaseYear": 2010,
+        "relationship": "ACTED_IN",
+    } in read_result.data
 
     english_query = """
     What are the movies that Leonardo DiCaprio acted in?

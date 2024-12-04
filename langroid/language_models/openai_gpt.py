@@ -92,7 +92,7 @@ class OpenAIChatModel(str, Enum):
     GPT4 = "gpt-4"
     GPT4_32K = "gpt-4-32k"
     GPT4_TURBO = "gpt-4-turbo"
-    GPT4o = "gpt-4o-2024-11-20"
+    GPT4o = "gpt-4o"
     GPT4o_MINI = "gpt-4o-mini"
     O1_PREVIEW = "o1-preview"
     O1_MINI = "o1-mini"

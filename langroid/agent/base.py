@@ -916,7 +916,7 @@ class Agent(ABC):
         """Is tool is handled by this agent
         and an explicit `recipient` field doesn't preclude this agent from handling it?
         """
-        if tool.default_value("request") not in self.all_llm_tools_handled:
+        if tool.default_value("request") not in self.llm_tools_handled:
             return False
         if hasattr(tool, "recipient") and isinstance(tool.recipient, str):
             return tool.recipient == "" or tool.recipient == self.config.name
@@ -1072,7 +1072,7 @@ class Agent(ABC):
             return None
         tool_name = msg.function_call.name
         tool_msg = msg.function_call.arguments or {}
-        if tool_name not in self.all_llm_tools_handled:
+        if tool_name not in self.llm_tools_handled:
             logger.warning(
                 f"""
                 The function_call '{tool_name}' is not handled 
@@ -1107,7 +1107,7 @@ class Agent(ABC):
                 continue
             tool_name = tc.function.name
             tool_msg = tc.function.arguments or {}
-            if tool_name not in self.all_llm_tools_handled:
+            if tool_name not in self.llm_tools_handled:
                 logger.warning(
                     f"""
                     The tool_call '{tool_name}' is not handled 
@@ -1279,11 +1279,6 @@ class Agent(ABC):
         return final
 
     @property
-    def all_llm_tools_handled(self) -> set[str]:
-        """All handled tools; this may extend self.llm_tools_handled."""
-        return self.llm_tools_handled
-
-    @property
     def all_llm_tools_known(self) -> set[str]:
         """All known tools; this may extend self.llm_tools_known."""
         return self.llm_tools_known
@@ -1311,7 +1306,7 @@ class Agent(ABC):
         The exception to this is below where we try our best to infer the tool
         when the LLM has "forgotten" to include the "request" field in the tool str ---
         in this case we ONLY look at the possible set of HANDLED tools, i.e.
-        self.all_llm_tools_handled.
+        self.llm_tools_handled.
         """
         if is_json:
             maybe_tool_dict = json.loads(tool_candidate_str)
@@ -1349,10 +1344,10 @@ class Agent(ABC):
         request = maybe_tool_dict.get("request")
         if request is None:
             if self.enabled_requests_for_inference is None:
-                possible = [self.llm_tools_map[r] for r in self.all_llm_tools_handled]
+                possible = [self.llm_tools_map[r] for r in self.llm_tools_handled]
             else:
                 allowable = self.enabled_requests_for_inference.intersection(
-                    self.all_llm_tools_handled
+                    self.llm_tools_handled
                 )
                 possible = [self.llm_tools_map[r] for r in allowable]
 
@@ -1441,7 +1436,7 @@ class Agent(ABC):
             result_tool_name = msg.default_value("request")
             if (
                 is_agent_author
-                and result_tool_name in self.all_llm_tools_handled
+                and result_tool_name in self.llm_tools_handled
                 and (orig_tool_name is None or orig_tool_name != result_tool_name)
             ):
                 # TODO: do we need to remove the tool message from the chat_doc?
