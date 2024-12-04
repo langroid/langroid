@@ -128,12 +128,22 @@ jobs:
         path: requirements_github.txt
 
 
+    - name: Run structured output tests (GPT-4o mini) 
+      id: structured_tests
+      env:
+        PYTEST_ADDOPTS: "-p no:logging"
+      run: |
+        poetry run pytest --m gpt-4o-mini --cov langroid --cov-config .coveragerc \
+          -rf -vv --log-cli-level=INFO --show-capture=no \
+          -n auto --timeout=300 \
+          tests/main/test_structured_output.py
+
     - name: Run ALL tests with coverage (GPT-4o)
       id: first_test
       env:
         PYTEST_ADDOPTS: "-p no:logging"
       run: |
-        poetry run pytest --cov langroid --cov-config .coveragerc \
+        poetry run pytest --cov --cov-append langroid --cov-config .coveragerc \
           -rf -vv --log-cli-level=INFO --show-capture=no \
           -n auto --timeout=300 \
           --first-test-file=tests/main/test_llm.py \
@@ -141,6 +151,7 @@ jobs:
           --first-test-file=tests/main/test_llm_async.py \
           --first-test-file=tests/main/test_task_inf_loop.py \
           --first-test-file=tests/main/test_lance_doc_chat_agent.py \
+          --ignore=tests/main/test_structured_output.py \
           tests/main tests/extras/test_hf_embeddings.py tests/extras/test_fastembed_embeddings.py
       continue-on-error: true
 
@@ -157,6 +168,7 @@ jobs:
           --first-test-file=tests/main/test_task_inf_loop.py \
           --first-test-file=tests/main/test_task.py \
           --first-test-file=tests/main/test_lance_doc_chat_agent.py \
+          --ignore=tests/main/test_structured_output.py \
           --lf --last-failed-no-failures none \
           tests/main tests/extras/test_hf_embeddings.py tests/extras/test_fastembed_embeddings.py
 

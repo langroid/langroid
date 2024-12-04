@@ -160,14 +160,12 @@ def test_llm_structured_output_nested(
 
 @pytest.mark.parametrize("instructions", [True, False])
 @pytest.mark.parametrize("use", [True, False])
-@pytest.mark.parametrize("handle", [True, False])
 @pytest.mark.parametrize("force_tools", [True, False])
 @pytest.mark.parametrize("use_tools_api", [True, False])
 @pytest.mark.parametrize("use_functions_api", [True, False])
 def test_llm_strict_json(
     instructions: bool,
     use: bool,
-    handle: bool,
     force_tools: bool,
     use_tools_api: bool,
     use_functions_api: bool,
@@ -175,7 +173,6 @@ def test_llm_strict_json(
     """Tests structured output generation in strict JSON mode."""
     cfg = copy.deepcopy(strict_cfg)
     cfg.instructions_output_format = instructions
-    cfg.handle_output_format = handle
     cfg.use_output_format = use
     cfg.use_tools_on_output_format = force_tools
     cfg.use_tools = not use_functions_api
@@ -237,7 +234,6 @@ def test_llm_strict_json(
 
 @pytest.mark.parametrize("instructions", [True, False])
 @pytest.mark.parametrize("use", [True, False])
-@pytest.mark.parametrize("handle", [True, False])
 @pytest.mark.parametrize("force_tools", [True, False])
 @pytest.mark.parametrize("use_tools_api", [True, False])
 @pytest.mark.parametrize("use_functions_api", [True, False])
@@ -245,7 +241,6 @@ def test_llm_strict_json(
 async def test_llm_strict_json_async(
     instructions: bool,
     use: bool,
-    handle: bool,
     force_tools: bool,
     use_tools_api: bool,
     use_functions_api: bool,
@@ -253,7 +248,6 @@ async def test_llm_strict_json_async(
     """Tests asynchronous structured output generation in strict JSON mode."""
     cfg = copy.deepcopy(strict_cfg)
     cfg.instructions_output_format = instructions
-    cfg.handle_output_format = handle
     cfg.use_output_format = use
     cfg.use_tools_on_output_format = force_tools
     cfg.use_tools = not use_functions_api
