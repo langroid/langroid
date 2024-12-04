@@ -134,7 +134,7 @@ jobs:
         PYTEST_ADDOPTS: "-p no:logging"
       run: |
         poetry run pytest --m gpt-4o-mini --cov langroid --cov-config .coveragerc \
-          -rf -vv --log-cli-level=INFO --show-capture=no \
+          -rf --log-cli-level=INFO --show-capture=no \
           -n auto --timeout=300 \
           tests/main/test_structured_output.py
 
@@ -143,7 +143,7 @@ jobs:
       env:
         PYTEST_ADDOPTS: "-p no:logging"
       run: |
-        poetry run pytest --cov --cov-append langroid --cov-config .coveragerc \
+        poetry run pytest --cov langroid --cov-append --cov-config .coveragerc \
           -rf -vv --log-cli-level=INFO --show-capture=no \
           -n auto --timeout=300 \
           --first-test-file=tests/main/test_llm.py \
@@ -162,7 +162,7 @@ jobs:
         PYTEST_ADDOPTS: "-p no:logging"
       run: |
         poetry run pytest --m gpt-4 --cov --cov-append langroid --cov-config .coveragerc \
-          -rf --show-capture=no --timeout=300 \
+          -rf --show-capture=no --timeout=300 -n auto \
           --first-test-file=tests/main/test_llm.py \
           --first-test-file=tests/main/test_llm_async.py \
           --first-test-file=tests/main/test_task_inf_loop.py \
