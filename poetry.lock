@@ -261,17 +261,17 @@ files = [
 
 [[package]]
 name = "asyncer"
-version = "0.0.2"
+version = "0.0.7"
 description = "Asyncer, async and await, focused on developer experience."
 optional = true
-python-versions = ">=3.6.2,<4.0.0"
+python-versions = ">=3.8"
 files = [
-    {file = "asyncer-0.0.2-py3-none-any.whl", hash = "sha256:46e0e1423ce21588350ad425875e81795280b9e1f517e8a389de940b86c348bd"},
-    {file = "asyncer-0.0.2.tar.gz", hash = "sha256:d546c85f3626ebbaf06bb4395db49761c902a61a6ac802b1a74133cab4f7f433"},
+    {file = "asyncer-0.0.7-py3-none-any.whl", hash = "sha256:f0d579d4f67c4ead52ede3a45c854f462cae569058a8a6a68a4ebccac1c335d8"},
+    {file = "asyncer-0.0.7.tar.gz", hash = "sha256:d5e563fb0f56eb87b97257984703658a4f5bbdb52ff851b3e8ed864cc200b1d2"},
 ]
 
 [package.dependencies]
-anyio = ">=3.4.0,<4.0.0"
+anyio = ">=3.4.0,<5.0"
 
 [[package]]
 name = "attrs"
@@ -690,33 +690,34 @@ files = [
 
 [[package]]
 name = "chainlit"
-version = "1.1.202"
+version = "1.3.2"
 description = "Build Conversational AI."
 optional = true
-python-versions = "<4.0.0,>=3.8.1"
+python-versions = "<4.0.0,>=3.9"
 files = [
-    {file = "chainlit-1.1.202-py3-none-any.whl", hash = "sha256:1c8972853e980b43b0272598c080414c3d437a99d74d59ece4e169eac3fe50ba"},
-    {file = "chainlit-1.1.202.tar.gz", hash = "sha256:d8c98d59d0c1335a989950c0df0c6893a7da7378f0d2514095890d17870bc95a"},
+    {file = "chainlit-1.3.2-py3-none-any.whl", hash = "sha256:c0926e8b157a67aede511a8220307889d04e9458ff3f94176e004fe533662d74"},
+    {file = "chainlit-1.3.2.tar.gz", hash = "sha256:5562246ca42c858a42e86efdd5a46c27fd93481706f6fe47416109c47ac41b77"},
 ]
 
 [package.dependencies]
 aiofiles = ">=23.1.0,<24.0.0"
-asyncer = ">=0.0.2,<0.0.3"
+asyncer = ">=0.0.7,<0.0.8"
 click = ">=8.1.3,<9.0.0"
-dataclasses_json = ">=0.5.7,<0.6.0"
-fastapi = ">=0.110.1,<0.111.0"
-fastapi-socketio = ">=0.0.10,<0.0.11"
+dataclasses_json = ">=0.6.7,<0.7.0"
+fastapi = ">=0.115.3,<0.116"
 filetype = ">=1.2.0,<2.0.0"
 httpx = ">=0.23.0"
 lazify = ">=0.4.0,<0.5.0"
-literalai = "0.0.601"
-nest-asyncio = ">=1.5.6,<2.0.0"
+literalai = "0.0.623"
+nest-asyncio = ">=1.6.0,<2.0.0"
+numpy = ">=1.26,<2.0"
 packaging = ">=23.1,<24.0"
 pydantic = ">=1,<3"
 pyjwt = ">=2.8.0,<3.0.0"
 python-dotenv = ">=1.0.0,<2.0.0"
 python-multipart = ">=0.0.9,<0.0.10"
-starlette = ">=0.37.2,<0.38.0"
+python-socketio = ">=5.11.0,<6.0.0"
+starlette = ">=0.41.2,<0.42.0"
 syncer = ">=2.0.3,<3.0.0"
 tomli = ">=2.0.1,<3.0.0"
 uptrace = ">=1.22.0,<2.0.0"
@@ -1276,22 +1277,18 @@ tests = ["pytest", "pytest-cov", "pytest-xdist"]
 
 [[package]]
 name = "dataclasses-json"
-version = "0.5.9"
-description = "Easily serialize dataclasses to and from JSON"
+version = "0.6.7"
+description = "Easily serialize dataclasses to and from JSON."
 optional = true
-python-versions = ">=3.6"
+python-versions = "<4.0,>=3.7"
 files = [
-    {file = "dataclasses-json-0.5.9.tar.gz", hash = "sha256:e9ac87b73edc0141aafbce02b44e93553c3123ad574958f0fe52a534b6707e8e"},
-    {file = "dataclasses_json-0.5.9-py3-none-any.whl", hash = "sha256:1280542631df1c375b7bc92e5b86d39e06c44760d7e3571a537b3b8acabf2f0c"},
+    {file = "dataclasses_json-0.6.7-py3-none-any.whl", hash = "sha256:0dbf33f26c8d5305befd61b39d2b3414e8a407bedc2834dea9b8d642666fb40a"},
+    {file = "dataclasses_json-0.6.7.tar.gz", hash = "sha256:b6b3e528266ea45b9535223bc53ca645f5208833c29229e847b3f26a1cc55fc0"},
 ]
 
 [package.dependencies]
-marshmallow = ">=3.3.0,<4.0.0"
-marshmallow-enum = ">=1.5.1,<2.0.0"
-typing-inspect = ">=0.4.0"
-
-[package.extras]
-dev = ["flake8", "hypothesis", "ipython", "mypy (>=0.710)", "portray", "pytest (>=7.2.0)", "setuptools", "simplejson", "twine", "types-dataclasses", "wheel"]
+marshmallow = ">=3.18.0,<4.0.0"
+typing-inspect = ">=0.4.0,<1"
 
 [[package]]
 name = "dateparser"
@@ -1572,40 +1569,23 @@ probabilistic = ["pyprobables (>=0.6,<0.7)"]
 
 [[package]]
 name = "fastapi"
-version = "0.110.3"
+version = "0.115.6"
 description = "FastAPI framework, high performance, easy to learn, fast to code, ready for production"
 optional = true
 python-versions = ">=3.8"
 files = [
-    {file = "fastapi-0.110.3-py3-none-any.whl", hash = "sha256:fd7600612f755e4050beb74001310b5a7e1796d149c2ee363124abdfa0289d32"},
-    {file = "fastapi-0.110.3.tar.gz", hash = "sha256:555700b0159379e94fdbfc6bb66a0f1c43f4cf7060f25239af3d84b63a656626"},
+    {file = "fastapi-0.115.6-py3-none-any.whl", hash = "sha256:e9240b29e36fa8f4bb7290316988e90c381e5092e0cbe84e7818cc3713bcf305"},
+    {file = "fastapi-0.115.6.tar.gz", hash = "sha256:9ec46f7addc14ea472958a96aae5b5de65f39721a46aaf5705c480d9a8b76654"},
 ]
 
 [package.dependencies]
 pydantic = ">=1.7.4,<1.8 || >1.8,<1.8.1 || >1.8.1,<2.0.0 || >2.0.0,<2.0.1 || >2.0.1,<2.1.0 || >2.1.0,<3.0.0"
-starlette = ">=0.37.2,<0.38.0"
+starlette = ">=0.40.0,<0.42.0"
 typing-extensions = ">=4.8.0"
 
 [package.extras]
-all = ["email_validator (>=2.0.0)", "httpx (>=0.23.0)", "itsdangerous (>=1.1.0)", "jinja2 (>=2.11.2)", "orjson (>=3.2.1)", "pydantic-extra-types (>=2.0.0)", "pydantic-settings (>=2.0.0)", "python-multipart (>=0.0.7)", "pyyaml (>=5.3.1)", "ujson (>=4.0.1,!=4.0.2,!=4.1.0,!=4.2.0,!=4.3.0,!=5.0.0,!=5.1.0)", "uvicorn[standard] (>=0.12.0)"]
-
-[[package]]
-name = "fastapi-socketio"
-version = "0.0.10"
-description = "Easily integrate socket.io with your FastAPI app."
-optional = true
-python-versions = "*"
-files = [
-    {file = "fastapi-socketio-0.0.10.tar.gz", hash = "sha256:202f9b319f010001cbd1114ec92a0d9eb5f5ca9316eae5fd41a6088da0812727"},
-    {file = "fastapi_socketio-0.0.10-py3-none-any.whl", hash = "sha256:11c2bfa3f25d786bd860ed13c892472e86bfeba85e7a0bec4f922ae5e4d8650f"},
-]
-
-[package.dependencies]
-fastapi = ">=0.61.1"
-python-socketio = ">=4.6.0"
-
-[package.extras]
-test = ["pytest"]
+all = ["email-validator (>=2.0.0)", "fastapi-cli[standard] (>=0.0.5)", "httpx (>=0.23.0)", "itsdangerous (>=1.1.0)", "jinja2 (>=2.11.2)", "orjson (>=3.2.1)", "pydantic-extra-types (>=2.0.0)", "pydantic-settings (>=2.0.0)", "python-multipart (>=0.0.7)", "pyyaml (>=5.3.1)", "ujson (>=4.0.1,!=4.0.2,!=4.1.0,!=4.2.0,!=4.3.0,!=5.0.0,!=5.1.0)", "uvicorn[standard] (>=0.12.0)"]
+standard = ["email-validator (>=2.0.0)", "fastapi-cli[standard] (>=0.0.5)", "httpx (>=0.23.0)", "jinja2 (>=2.11.2)", "python-multipart (>=0.0.7)", "uvicorn[standard] (>=0.12.0)"]
 
 [[package]]
 name = "fastembed"
@@ -3335,12 +3315,12 @@ proxy = ["PyJWT (>=2.8.0,<3.0.0)", "apscheduler (>=3.10.4,<4.0.0)", "backoff", "
 
 [[package]]
 name = "literalai"
-version = "0.0.601"
+version = "0.0.623"
 description = "An SDK for observability in Python applications"
 optional = true
 python-versions = "*"
 files = [
-    {file = "literalai-0.0.601.tar.gz", hash = "sha256:f0ff962db5d6ac908f19587bb43ac7989809f6a750af63c9bb7acf2a6f3138d4"},
+    {file = "literalai-0.0.623.tar.gz", hash = "sha256:d65c04dde6b1e99d585e4112a607e5fd574d282b70f600c55a671018340dfb0f"},
 ]
 
 [package.dependencies]
@@ -3615,20 +3595,6 @@ packaging = ">=17.0"
 dev = ["marshmallow[tests]", "pre-commit (>=3.5,<4.0)", "tox"]
 docs = ["alabaster (==0.7.16)", "autodocsumm (==0.2.12)", "sphinx (==7.3.7)", "sphinx-issues (==4.1.0)", "sphinx-version-warning (==1.1.2)"]
 tests = ["pytest", "pytz", "simplejson"]
-
-[[package]]
-name = "marshmallow-enum"
-version = "1.5.1"
-description = "Enum field for Marshmallow"
-optional = true
-python-versions = "*"
-files = [
-    {file = "marshmallow-enum-1.5.1.tar.gz", hash = "sha256:38e697e11f45a8e64b4a1e664000897c659b60aa57bfa18d44e226a9920b6e58"},
-    {file = "marshmallow_enum-1.5.1-py2.py3-none-any.whl", hash = "sha256:57161ab3dbfde4f57adeb12090f39592e992b9c86d206d02f6bd03ebec60f072"},
-]
-
-[package.dependencies]
-marshmallow = ">=2.0.0"
 
 [[package]]
 name = "matplotlib"
@@ -8166,13 +8132,13 @@ tests = ["cython", "littleutils", "pygments", "pytest", "typeguard"]
 
 [[package]]
 name = "starlette"
-version = "0.37.2"
+version = "0.41.3"
 description = "The little ASGI library that shines."
 optional = true
 python-versions = ">=3.8"
 files = [
-    {file = "starlette-0.37.2-py3-none-any.whl", hash = "sha256:6fe59f29268538e5d0d182f2791a479a0c64638e6935d1c6989e63fb2699c6ee"},
-    {file = "starlette-0.37.2.tar.gz", hash = "sha256:9af890290133b79fc3db55474ade20f6220a364a0402e0b556e7cd5e1e093823"},
+    {file = "starlette-0.41.3-py3-none-any.whl", hash = "sha256:44cedb2b7c77a9de33a8b74b2b90e9f50d11fcf25d8270ea525ad71a25374ff7"},
+    {file = "starlette-0.41.3.tar.gz", hash = "sha256:0e4ab3d16522a255be6b28260b938eae2482f98ce5cc934cb08dce8dc3ba5835"},
 ]
 
 [package.dependencies]
@@ -9891,4 +9857,4 @@ vecdbs = ["chromadb", "lancedb", "pyarrow", "tantivy"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.10,<3.13"
-content-hash = "781391e3f1ea15202b6dc962eedf204920f3cf3e19057a47c2ec2f3147ff0bc9"
+content-hash = "a59ff71e8acf8f128ee199add7240f2bd1ed16558f455467cbb65f2709bcc31a"

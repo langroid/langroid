@@ -254,5 +254,5 @@ async def chat() -> None:
 @cl.on_message
 async def on_message(message: cl.Message):
     task = cl.user_session.get("task")
-    lr.ChainlitTaskCallbacks(task, message)
+    lr.ChainlitTaskCallbacks(task)
     await task.run_async(message.content)

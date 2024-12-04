@@ -35,7 +35,7 @@ async def main(
     debug: bool = False,
     # e.g. ollama/mistral or local/localhost:5000/v1 default is GPT4o
     model: str = os.getenv("MODEL", ""),
-    provider: str = "ddg",  # or "google", "metaphor"
+    provider: str = "metaphor",  # or "google", "ddg"
     nocache: bool = False,
 ):
     set_global(
@@ -134,5 +134,5 @@ async def main(
 @cl.on_message
 async def on_message(message: cl.Message):
     assistant_task = cl.user_session.get("assistant_task")
-    lr.ChainlitTaskCallbacks(assistant_task, message)
+    lr.ChainlitTaskCallbacks(assistant_task)
     await assistant_task.run_async(message.content)

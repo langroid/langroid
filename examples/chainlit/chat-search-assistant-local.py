@@ -409,5 +409,5 @@ async def main(
 @cl.on_message
 async def on_message(message: cl.Message):
     assistant_task = cl.user_session.get("assistant_task")
-    lr.ChainlitTaskCallbacks(assistant_task, message)
+    lr.ChainlitTaskCallbacks(assistant_task)
     await assistant_task.run_async(message.content)
