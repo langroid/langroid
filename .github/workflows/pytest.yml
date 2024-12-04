@@ -128,18 +128,25 @@ jobs:
         path: requirements_github.txt
 
 
-    - name: Run structured output tests (GPT-4o mini) 
-      id: structured_tests
+    - name: Run ALL tests with coverage (GPT-4o-mini)
+      id: first_test
       env:
         PYTEST_ADDOPTS: "-p no:logging"
       run: |
         poetry run pytest --m gpt-4o-mini --cov langroid --cov-config .coveragerc \
-          -rf --log-cli-level=INFO --show-capture=no \
+          -rf -vv --log-cli-level=INFO --show-capture=no \
           -n auto --timeout=300 \
-          tests/main/test_structured_output.py
+          --first-test-file=tests/main/test_llm.py \
+          --first-test-file=tests/main/test_task.py \
+          --first-test-file=tests/main/test_llm_async.py \
+          --first-test-file=tests/main/test_task_inf_loop.py \
+          --first-test-file=tests/main/test_lance_doc_chat_agent.py \
+          tests/main tests/extras/test_hf_embeddings.py tests/extras/test_fastembed_embeddings.py
+      continue-on-error: true
 
-    - name: Run ALL tests with coverage (GPT-4o)
-      id: first_test
+    - name: Retry FAILED tests ONLY with GPT-4o instead of GPT-4o-mini
+      id: second_test
+      if: steps.first_test.outcome == 'failure'
       env:
         PYTEST_ADDOPTS: "-p no:logging"
       run: |
@@ -151,27 +158,25 @@ jobs:
           --first-test-file=tests/main/test_llm_async.py \
           --first-test-file=tests/main/test_task_inf_loop.py \
           --first-test-file=tests/main/test_lance_doc_chat_agent.py \
-          --ignore=tests/main/test_structured_output.py \
+          --lf --last-failed-no-failures none \
           tests/main tests/extras/test_hf_embeddings.py tests/extras/test_fastembed_embeddings.py
       continue-on-error: true
 
     - name: Retry FAILED tests ONLY without cache (GPT-4o)
-      id: second_test
-      if: steps.first_test.outcome == 'failure'
+      id: third_test
+      if: steps.second_test.outcome == 'failure'
       env:
         PYTEST_ADDOPTS: "-p no:logging"
       run: |
-        poetry run pytest --nc --cov --cov-append langroid --cov-config .coveragerc \
+        poetry run pytest --nc --cov langroid --cov-append --cov-config .coveragerc \
           -rf --show-capture=no --timeout=300 -n auto \
           --first-test-file=tests/main/test_llm.py \
           --first-test-file=tests/main/test_llm_async.py \
           --first-test-file=tests/main/test_task_inf_loop.py \
           --first-test-file=tests/main/test_task.py \
           --first-test-file=tests/main/test_lance_doc_chat_agent.py \
-          --ignore=tests/main/test_structured_output.py \
           --lf --last-failed-no-failures none \
           tests/main tests/extras/test_hf_embeddings.py tests/extras/test_fastembed_embeddings.py
-
 
     - name: Generate final coverage report from all runs
       run: poetry run coverage report
