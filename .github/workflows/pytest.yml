@@ -155,13 +155,13 @@ jobs:
           tests/main tests/extras/test_hf_embeddings.py tests/extras/test_fastembed_embeddings.py
       continue-on-error: true
 
-    - name: Retry FAILED tests ONLY with gpt-4 instead of gpt-4o
+    - name: Retry FAILED tests ONLY without cache (GPT-4o)
       id: second_test
       if: steps.first_test.outcome == 'failure'
       env:
         PYTEST_ADDOPTS: "-p no:logging"
       run: |
-        poetry run pytest --m gpt-4 --cov --cov-append langroid --cov-config .coveragerc \
+        poetry run pytest --nc --cov --cov-append langroid --cov-config .coveragerc \
           -rf --show-capture=no --timeout=300 -n auto \
           --first-test-file=tests/main/test_llm.py \
           --first-test-file=tests/main/test_llm_async.py \

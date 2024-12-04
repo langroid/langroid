@@ -788,16 +788,12 @@ def test_task_tool_responses(
     assert result == 11
 
 
-def test_task_output_format_sequence(
-    test_settings: Settings,
-):
+def test_task_output_format_sequence():
     """
     Test that `Task`s correctly execute a sequence of steps
     controlled by the agent's `output_format`, and that `output_format`
     is handled by default without `enable_message`.
     """
-
-    set_global(test_settings)
 
     class MultiplyTool(ToolMessage):
         request: str = "multiply"
@@ -849,12 +845,8 @@ def test_task_output_format_sequence(
         task = lr.Task(
             agent,
             system_message="""
-            You will be provided with a number `x` and will compute (3 * x + 1) ** 4.
-            You will do so by computing 3 * x first, then incrementing
-            the result by one, then taking the fourth power of the result.
-            The result of the previous step will be provided directly, do NOT attempt to
-            recompute prior steps using the provided value. Instead, the provided result
-            should be forwarded as an argument to the next step.
+            You will be provided with a number `x` and will compute (3 * x + 1) ** 4,
+            using these ops sequentially: multiplication, increment, and power.
             """,
             interactive=False,
             default_return_type=int,
@@ -881,16 +873,12 @@ def test_task_output_format_sequence(
 
 
 @pytest.mark.asyncio
-async def test_task_output_format_sequence_async(
-    test_settings: Settings,
-):
+async def test_task_output_format_sequence_async():
     """
     Test that async `Task`s correctly execute a sequence of steps
     controlled by the agent's `output_format`, and that `output_format`
     is handled by default without `enable_message`.
     """
-
-    set_global(test_settings)
 
     class MultiplyTool(ToolMessage):
         request: str = "multiply"
@@ -944,12 +932,8 @@ async def test_task_output_format_sequence_async(
         task = lr.Task(
             agent,
             system_message="""
-            You will be provided with a number `x` and will compute (3 * x + 1) ** 4.
-            You will do so by computing 3 * x first, then incrementing
-            the result by one, then taking the fourth power of the result.
-            The result of the previous step will be provided directly, do NOT attempt to
-            recompute prior steps using the provided value. Instead, the provided result
-            should be forwarded as an argument to the next step.
+            You will be provided with a number `x` and will compute (3 * x + 1) ** 4,
+            using these ops sequentially: multiplication, increment, and power.
             """,
             interactive=False,
             default_return_type=int,
