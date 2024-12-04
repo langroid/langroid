@@ -2,6 +2,7 @@ from rich.prompt import Prompt
 import langroid.language_models as lm
 import langroid.utils.configuration
 
+
 def get_global_settings(debug=False, nocache=True):
     """
     Returns global settings for Langroid.
@@ -17,6 +18,7 @@ def get_global_settings(debug=False, nocache=True):
         debug=debug,
         cache=not nocache,
     )
+
 
 def get_base_llm_config():
     """
@@ -36,8 +38,8 @@ def get_base_llm_config():
     )
 
     model_map = {
-        "1": "gpt-4o",
-        "2": "gpt-4",
+        "1": lm.OpenAIChatModel.GPT4o,
+        "2": lm.OpenAIChatModel.GPT4,
     }
 
     if chat_model_option == "3":
