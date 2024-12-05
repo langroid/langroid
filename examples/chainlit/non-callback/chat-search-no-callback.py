@@ -24,16 +24,16 @@ from langroid.agent.tools.metaphor_search_tool import MetaphorSearchTool
 
 
 @cl.step(name="LLM Response")
-async def llm_response(message: str) -> lr.ChatDocument:
+async def llm_response(msg: str) -> lr.ChatDocument:
     agent: lr.ChatAgent = cl.user_session.get("agent")
-    response = await agent.llm_response_async(message)
+    response = await agent.llm_response_async(msg)
     return response
 
 
 @cl.step(name="Agent Tool Handler")
-async def agent_response(message: lr.ChatDocument) -> lr.ChatDocument:
+async def agent_response(msg: lr.ChatDocument) -> lr.ChatDocument:
     agent: lr.ChatAgent = cl.user_session.get("agent")
-    response = await agent.agent_response_async(message)
+    response = await agent.agent_response_async(msg)
     return response
 
 

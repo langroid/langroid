@@ -27,7 +27,7 @@ type-check:
 .PHONE: lint
 lint:
 	black .
-	poetry run ruff . --fix
+	poetry run ruff check . --fix
 
 .PHONY: stubs
 stubs:
