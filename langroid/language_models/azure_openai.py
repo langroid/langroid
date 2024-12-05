@@ -8,6 +8,13 @@ from langroid.language_models.openai_gpt import (
     OpenAIGPTConfig,
 )
 
+azureStructuredOutputList = [
+    "2024-08-06",
+    "2024-11-20",
+]
+
+azureStructuredOutputAPIMin = "2024-08-01-preview"
+
 
 class AzureConfig(OpenAIGPTConfig):
     """
@@ -96,6 +103,11 @@ class AzureGPT(OpenAIGPT):
         # when you deployed a model
         self.set_chat_model()
 
+        self.supports_json_schema = (
+            self.config.api_version >= azureStructuredOutputAPIMin
+            and self.config.model_version in azureStructuredOutputList
+        )
+
         self.client = AzureOpenAI(
             api_key=self.config.api_key,
             azure_endpoint=self.config.api_base,
@@ -136,12 +148,13 @@ class AzureGPT(OpenAIGPT):
         If the version is not set, it raises a ValueError indicating
         that the model version needs to be specified in the ``.env``
         file.  It sets `OpenAIChatMode.GPT4o` if the version is
-        '2024-05-13', `OpenAIChatModel.GPT4_TURBO` if the version is
-        '1106-Preview', otherwise, it defaults to setting
-        `OpenAIChatModel.GPT4`.
+        one of those listed below, and
+        `OpenAIChatModel.GPT4_TURBO` if
+        the version is '1106-Preview', otherwise, it defaults to
+        setting `OpenAIChatModel.GPT4`.
         """
         VERSION_1106_PREVIEW = "1106-Preview"
-        VERSION_GPT4o = "2024-05-13"
+        VERSIONS_GPT4o = ["2024-05-13", "2024-08-06", "2024-11-20"]
 
         if self.config.model_version == "":
             raise ValueError(
@@ -149,7 +162,7 @@ class AzureGPT(OpenAIGPT):
                 "Please set it to the chat model version used in your deployment."
             )
 
-        if self.config.model_version == VERSION_GPT4o:
+        if self.config.model_version in VERSIONS_GPT4o:
             self.config.chat_model = OpenAIChatModel.GPT4o
         elif self.config.model_version == VERSION_1106_PREVIEW:
             self.config.chat_model = OpenAIChatModel.GPT4_TURBO

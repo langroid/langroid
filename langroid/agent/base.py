@@ -142,12 +142,19 @@ class Agent(ABC):
         self.llm_tools_handled: Set[str] = set()
         self.llm_tools_usable: Set[str] = set()
         self.llm_tools_known: Set[str] = set()  # all known tools, handled/used or not
+        # Indicates which tool-names are allowed to be inferred when
+        # the LLM "forgets" to include the request field in its
+        # tool-call.
+        self.enabled_requests_for_inference: Optional[Set[str]] = (
+            None  # If None, we allow all
+        )
         self.interactive: bool = True  # may be modified by Task wrapper
         self.token_stats_str = ""
         self.default_human_response: Optional[str] = None
         self._indent = ""
         self.llm = LanguageModel.create(config.llm)
         self.vecdb = VectorStore.create(config.vecdb) if config.vecdb else None
+        self.tool_error = False
         if config.parsing is not None and self.config.llm is not None:
             # token_encoding_model is used to obtain the tokenizer,
             # so in case it's an OpenAI model, we ensure that the tokenizer
@@ -1015,7 +1022,7 @@ class Agent(ABC):
         try:
             tools = self.get_tool_messages(msg)
             return len(tools) > 0
-        except ValidationError:
+        except (ValidationError, XMLException):
             # there is a tool/fn-call attempt but had a validation error,
             # so we still consider this a tool message "attempt"
             return True
@@ -1050,7 +1057,7 @@ class Agent(ABC):
     ) -> List[ToolMessage]:
         try:
             return self.get_tool_messages(msg, all_tools)
-        except ValidationError:
+        except (ValidationError, XMLException):
             return []
 
     def get_tool_messages(
@@ -1156,6 +1163,7 @@ class Agent(ABC):
         Returns:
             List[ToolMessage]: list of ToolMessage objects
         """
+        self.tool_error = False
         substrings = XMLToolMessage.find_candidates(input_str)
         is_json = False
         if len(substrings) == 0:
@@ -1165,7 +1173,11 @@ class Agent(ABC):
                 return []
 
         results = [self._get_one_tool_message(j, is_json) for j in substrings]
-        return [r for r in results if r is not None]
+        valid_results = [r for r in results if r is not None]
+        # If any tool is correctly formed we do not set the flag
+        if len(valid_results) > 0:
+            self.tool_error = False
+        return valid_results
 
     def get_function_call_class(self, msg: ChatDocument) -> Optional[ToolMessage]:
         """
@@ -1187,7 +1199,10 @@ class Agent(ABC):
                 or you need to enable this agent to handle this fn-call.
                 """
             )
+            if tool_name not in self.all_llm_tools_known:
+                self.tool_error = True
             return None
+        self.tool_error = False
         tool_class = self.llm_tools_map[tool_name]
         tool_msg.update(dict(request=tool_name))
         tool = tool_class.parse_obj(tool_msg)
@@ -1202,6 +1217,7 @@ class Agent(ABC):
         if msg.oai_tool_calls is None:
             return []
         tools = []
+        all_errors = True
         for tc in msg.oai_tool_calls:
             if tc.function is None:
                 continue
@@ -1219,11 +1235,14 @@ class Agent(ABC):
                     """
                 )
                 continue
+            all_errors = False
             tool_class = self.llm_tools_map[tool_name]
             tool_msg.update(dict(request=tool_name))
             tool = tool_class.parse_obj(tool_msg)
             tool.id = tc.id or ""
             tools.append(tool)
+        # When no tool is valid, set the recovery flag
+        self.tool_error = all_errors
         return tools
 
     def tool_validation_error(self, ve: ValidationError) -> str:
@@ -1438,6 +1457,11 @@ class Agent(ABC):
 
         return self._handle_message_final(tools, results)
 
+    @property
+    def all_llm_tools_known(self) -> set[str]:
+        """All known tools; this may extend self.llm_tools_known."""
+        return self.llm_tools_known
+
     def handle_message_fallback(self, msg: str | ChatDocument) -> Any:
         """
         Fallback method for the "no-tools" scenario.
@@ -1457,7 +1481,7 @@ class Agent(ABC):
     ) -> Optional[ToolMessage]:
         """
         Parse the tool_candidate_str into ANY ToolMessage KNOWN to agent --
-        This includes non-used/handled tools, i.e. any tool in self.llm_tools_known.
+        This includes non-used/handled tools, i.e. any tool in self.all_llm_tools_known.
         The exception to this is below where we try our best to infer the tool
         when the LLM has "forgotten" to include the "request" field in the tool str ---
         in this case we ONLY look at the possible set of HANDLED tools, i.e.
@@ -1490,6 +1514,7 @@ class Agent(ABC):
         # }
 
         if not isinstance(maybe_tool_dict, dict):
+            self.tool_error = True
             return None
 
         properties = maybe_tool_dict.get("properties")
@@ -1497,7 +1522,14 @@ class Agent(ABC):
             maybe_tool_dict = properties
         request = maybe_tool_dict.get("request")
         if request is None:
-            possible = [self.llm_tools_map[r] for r in self.llm_tools_handled]
+            if self.enabled_requests_for_inference is None:
+                possible = [self.llm_tools_map[r] for r in self.llm_tools_handled]
+            else:
+                allowable = self.enabled_requests_for_inference.intersection(
+                    self.llm_tools_handled
+                )
+                possible = [self.llm_tools_map[r] for r in allowable]
+
             default_keys = set(ToolMessage.__fields__.keys())
             request_keys = set(maybe_tool_dict.keys())
 
@@ -1530,19 +1562,23 @@ class Agent(ABC):
             if len(candidate_tools) == 1:
                 return candidate_tools[0]
             else:
+                self.tool_error = True
                 return None
 
-        if not isinstance(request, str) or request not in self.llm_tools_known:
+        if not isinstance(request, str) or request not in self.all_llm_tools_known:
+            self.tool_error = True
             return None
 
         message_class = self.llm_tools_map.get(request)
         if message_class is None:
             logger.warning(f"No message class found for request '{request}'")
+            self.tool_error = True
             return None
 
         try:
             message = message_class.parse_obj(maybe_tool_dict)
         except ValidationError as ve:
+            self.tool_error = True
             raise ve
         return message
 
@@ -1653,7 +1689,6 @@ class Agent(ABC):
             value = tool.get_value_of_type(output_type)
             if value is not None:
                 return cast(T, value)
-
         return None
 
     def _maybe_truncate_result(
