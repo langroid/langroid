@@ -11,6 +11,7 @@ on:
   pull_request:
     branches:
       - main  # Replace with your default branch name
+  workflow_dispatch:
 
 jobs:
   cancel:
