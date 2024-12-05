@@ -2,13 +2,17 @@
 Callbacks for Chainlit integration.
 
 CAUTION: Chainlit introduced a number of breaking changes after 1.1.202,
-due to which nesting of sub-agents under parent agent no longer works.
-
+due to which indented display of nested sub-agents under parent agent no longer
+works, and a sub-agent name may appear after its output.
 
 We have ensured that the examples under `examples/chainlit` largely work,
 but there are a few other UI/sequencing quirks that were introduced,
 and have not yet been addressed in Langroid. PRs welcome!
 
+Until these issues are addressed, please consider this module as
+an "alpha" feature. If you are looking for a Frontend/UI for production use
+with Langroid, we recommend exploring alternative python-UI frameworks
+such as Reflex, or building a custom UI with React/next.js/typescript.
 """
 
 import json
