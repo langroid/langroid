@@ -89,7 +89,7 @@ def run_debate():
         topic_name, pro_key, con_key = selected_topic_tuple
         side = select_side(topic_name)
 
-        # Create agents
+        # Create agents for pro, con, and feedback agents.
         pro_agent = create_agent(
             agent_config, system_messages.messages[pro_key].message
         )
@@ -99,7 +99,7 @@ def run_debate():
         feedback_agent = create_agent(
             agent_config, system_messages.messages["feedback"].message
         )
-
+        logger.info("Pro, Con, and feedback agents started")
         # Determine which agent the user is taking
         if side == "pro":
             user_agent = pro_agent
@@ -135,7 +135,8 @@ def run_debate():
                 context = "\n".join(opponent_arguments[-1:]) if opponent_arguments else "Start of debate."
 
                 # Prepare the full prompt
-                full_context = f"{current_agent.config.system_message}\n\nOpponent's argument:\n{context}"
+                full_context = (f"{current_agent.message_history}\n\n"
+                                f"Please ensure the response include rebuttals to all Opponent's argument:\n{context}")
 
                 # Call the agent without send_token_fn (handled in LLM config)
                 print(f"\n{agent_role} Agent ({topic_name}):\n", end='', flush=True)
