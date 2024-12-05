@@ -467,7 +467,7 @@ class Agent(ABC):
         if isinstance(results, ChatDocument):
             # Preserve trail of tool_ids for OpenAI Assistant fn-calls
             results.metadata.tool_ids = (
-                [] if isinstance(msg, str) else msg.metadata.tool_ids
+                [] if msg is None or isinstance(msg, str) else msg.metadata.tool_ids
             )
             return results
         sender_name = self.config.name
@@ -490,7 +490,9 @@ class Agent(ABC):
                 sender_name=sender_name,
                 oai_tool_id=oai_tool_id,
                 # preserve trail of tool_ids for OpenAI Assistant fn-calls
-                tool_ids=[] if isinstance(msg, str) else msg.metadata.tool_ids,
+                tool_ids=(
+                    [] if msg is None or isinstance(msg, str) else msg.metadata.tool_ids
+                ),
             ),
         )
 
@@ -765,8 +767,10 @@ class Agent(ABC):
         if self.default_human_response is not None:
             user_msg = self.default_human_response
         else:
-            if self.callbacks.get_user_response_async is not None and \
-               self.callbacks.get_user_response_async is not async_noop_fn:
+            if (
+                self.callbacks.get_user_response_async is not None
+                and self.callbacks.get_user_response_async is not async_noop_fn
+            ):
                 user_msg = await self.callbacks.get_user_response_async(prompt="")
             elif self.callbacks.get_user_response is not None:
                 user_msg = self.callbacks.get_user_response(prompt="")

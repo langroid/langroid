@@ -1077,6 +1077,25 @@ class ChatAgent(Agent):
 
                 return agent.handle_tool_message(tool)
 
+            async def response_async(
+                self, agent: ChatAgent
+            ) -> None | str | ChatDocument:
+                # One-time use
+                agent.set_output_format(None)
+
+                if self.tool is None:
+                    return None
+
+                # As the ToolMessage schema accepts invalid
+                # `tool.request` values, reparse with the
+                # corresponding tool
+                request = self.tool.request
+                if request not in agent.llm_tools_map:
+                    return None
+                tool = agent.llm_tools_map[request].parse_raw(self.tool.to_json())
+
+                return await agent.handle_tool_message_async(tool)
+
         return AnyTool
 
     def _strict_recovery_instructions(
