@@ -7,8 +7,6 @@ import logging
 import textwrap
 from typing import Any, Callable, Dict, List, Literal, Optional, no_type_check
 
-from tvm.script.ir_builder.relax import output
-
 from langroid.exceptions import LangroidImportError
 from langroid.pydantic_v1 import BaseSettings
 

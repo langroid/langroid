@@ -106,7 +106,6 @@ class SearchDocChatAgent(DocChatAgent):
             # non-tool LLM msg => forward to User
             return ForwardTool(agent="User")
 
-
     def relevant_extracts(self, msg: RelevantExtractsTool) -> str:
         """Get docs/extracts relevant to the query, from vecdb"""
         self.tried_vecdb = True

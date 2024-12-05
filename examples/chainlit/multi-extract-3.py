@@ -125,7 +125,7 @@ class LeaseMessage(ToolMessage):
 @cl.on_chat_start
 async def main(
     debug: bool = False,
-    model: str = "", # or e.g. "ollama/nous-hermes2-mixtral",
+    model: str = "",  # or e.g. "ollama/nous-hermes2-mixtral",
     cache: bool = False,  # disables cache lookup; set to True to use cache
 ) -> None:
     set_global(

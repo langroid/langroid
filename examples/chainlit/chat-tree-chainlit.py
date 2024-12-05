@@ -53,6 +53,7 @@ class MainChatAgent(ChatAgent):
         MyGlobalState.set_values(number=num)
         return str(num)
 
+
 @cl.on_chat_start
 async def on_start():
     await add_instructions(
@@ -80,8 +81,6 @@ async def on_start():
         """
         ),
     )
-
-
 
 
 @cl.on_message
@@ -199,7 +198,7 @@ async def chat(msg: cl.Message) -> None:
     adder_agent = ChatAgent(config)
     # set up the tools
     adder_agent.enable_message(AddNumTool)
-    #main_agent.enable_message(AskNumTool)
+    # main_agent.enable_message(AskNumTool)
 
     adder_task = Task(
         adder_agent,
