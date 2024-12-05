@@ -75,6 +75,14 @@ class SearchAgent(lr.ChatAgent):
             response.content = content[2:]
         return response
 
+    async def agent_response_async(self, message: ChatDocument) -> ChatDocument:
+        response = await super().agent_response_async(message)
+        if response is None:
+            return None
+        # ensure tool result goes to LLM
+        response.metadata.recipient = lr.Entity.LLM
+        return response
+
 
 async def setup_agent_task(search_tool: lr.ToolMessage):
     """Set up Agent and Task from session settings state."""

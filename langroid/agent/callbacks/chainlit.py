@@ -1,24 +1,13 @@
 """
 Callbacks for Chainlit integration.
-
-CAUTION: Chainlit introduced a number of breaking changes after 1.1.202,
-due to which indented display of nested sub-agents under parent agent no longer
-works, and a sub-agent name may appear after its output.
-
-We have ensured that the examples under `examples/chainlit` largely work,
-but there are a few other UI/sequencing quirks that were introduced,
-and have not yet been addressed in Langroid. PRs welcome!
-
-Until these issues are addressed, please consider this module as
-an "alpha" feature. If you are looking for a Frontend/UI for production use
-with Langroid, we recommend exploring alternative python-UI frameworks
-such as Reflex, or building a custom UI with React/next.js/typescript.
 """
 
 import json
 import logging
 import textwrap
 from typing import Any, Callable, Dict, List, Literal, Optional, no_type_check
+
+from tvm.script.ir_builder.relax import output
 
 from langroid.exceptions import LangroidImportError
 from langroid.pydantic_v1 import BaseSettings
@@ -531,11 +520,16 @@ class ChainlitAgentCallbacks:
         Returns:
             str: User response
         """
-
-        res = await cl.AskUserMessage(
+        ask_msg = cl.AskUserMessage(
             content=prompt,
+            author=f"{self.agent.config.name}(Awaiting user input...)",
+            type="assistant_message",
             timeout=timeout,
-        ).send()
+        )
+        res = await ask_msg.send()
+        if prompt == "":
+            # if there was no actual prompt, clear the row from the UI for clarity.
+            await ask_msg.remove()
 
         if res is None:
             run_sync(

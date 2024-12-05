@@ -1,4 +1,6 @@
 """
+TODO: examples does not work due to breaking changes in Chainlit
+
 Two-agent chat with Retrieval-augmented LLM + function-call/tool.
 ExtractorAgent (has no access to docs) is tasked with extracting structured
 information from a commercial lease document, and must present the terms in
