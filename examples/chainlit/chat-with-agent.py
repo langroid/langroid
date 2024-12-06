@@ -12,6 +12,10 @@ chainlit run examples/chainlit/chat-with-agent.py
 import chainlit as cl
 import langroid as lr
 from langroid.agent.callbacks.chainlit import add_instructions
+import logging
+
+# set info logger
+logging.basicConfig(level=logging.INFO)
 
 
 @cl.on_chat_start
@@ -34,5 +38,5 @@ async def on_chat_start():
 async def on_message(message: cl.Message):
     agent: lr.ChatAgent = cl.user_session.get("agent")
     # important: only apply callbacks after getting first msg.
-    lr.ChainlitAgentCallbacks(agent, message)
+    lr.ChainlitAgentCallbacks(agent)
     await agent.llm_response_async(message.content)
