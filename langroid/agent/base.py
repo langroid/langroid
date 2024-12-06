@@ -330,7 +330,7 @@ class Agent(ABC):
             and not hasattr(self, async_tool_name)
         ):
             has_chat_doc_arg = (
-                len(inspect.signature(message_class.handle_async).parameters) > 2
+                len(inspect.signature(message_class.handle_async).parameters) > 1
             )
 
             if has_chat_doc_arg:
