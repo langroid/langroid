@@ -58,6 +58,8 @@ class ChatAgentConfig(AgentConfig):
             the OpenAI tool-call API is used, rather than the older/deprecated
             function-call API. However the tool-call API has some tricky aspects,
             hence we set this to False by default.
+        strict_recovery: whether to enable strict schema recovery when there
+            is a tool-generation error.
         enable_orchestration_tool_handling: whether to enable handling of orchestration
             tools, e.g. ForwardTool, DoneTool, PassTool, etc.
         output_format: When supported by the LLM (certain OpenAI LLMs
