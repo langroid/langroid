@@ -1,3 +1,4 @@
+import asyncio
 import itertools
 import json
 from typing import Any, List, Optional
@@ -78,7 +79,8 @@ class MessageHandlingAgent(ChatAgent):
     def python_version(self, PythonVersionMessage) -> str:
         return DEFAULT_PY_VERSION
 
-    def country_capital(self, message: CountryCapitalMessage) -> str:
+    async def country_capital_async(self, message: CountryCapitalMessage) -> str:
+        await asyncio.sleep(1)
         return (
             "yes" if (message.city == "Paris" and message.country == "France") else "no"
         )
@@ -197,7 +199,7 @@ async def test_llm_tool_message(
     llm_msg = await agent.llm_response_forget_async(prompt)
     assert isinstance(agent.get_tool_messages(llm_msg)[0], message_class)
 
-    agent_result = agent.handle_message(llm_msg).content
+    agent_result = (await agent.handle_message_async(llm_msg)).content
     assert result.lower() in agent_result.lower()
 
 
