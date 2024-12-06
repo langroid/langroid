@@ -82,7 +82,7 @@ grpcio = "^1.62.1"
 duckduckgo-search = "^6.0.0"
 
 google-generativeai = "^0.5.2"
-groq = "^0.5.0"
+groq = "^0.13.0"
 nest-asyncio = "^1.6.0"
 async-generator = "^1.10"
 

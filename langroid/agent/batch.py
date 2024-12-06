@@ -363,3 +363,36 @@ def agent_response_batch(
         sequential=sequential,
         stop_on_first_result=stop_on_first_result,
     )
+
+
+def run_batch_function(
+    function: Callable[[T], U],
+    items: list[T],
+    sequential: bool = True,
+    batch_size: Optional[int] = None,
+) -> List[U]:
+    async def _do_task(item: T) -> U:
+        return function(item)
+
+    async def _do_all(items: Iterable[T]) -> List[U]:
+        if sequential:
+            results = []
+            for item in items:
+                result = await _do_task(item)
+                results.append(result)
+            return results
+
+        return await asyncio.gather(*(_do_task(item) for item in items))
+
+    results: List[U] = []
+
+    if batch_size is None:
+        with status(f"[bold green]Running {len(items)} tasks:"):
+            results = asyncio.run(_do_all(items))
+    else:
+        batches = batched(items, batch_size)
+        for batch in batches:
+            with status(f"[bold green]Running batch of {len(batch)} tasks:"):
+                results.extend(asyncio.run(_do_all(batch)))
+
+    return results
