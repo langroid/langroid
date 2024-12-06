@@ -110,7 +110,7 @@ class FinalResultTool(ToolMessage):
     (b) be returned as the final result of the root task, i.e. this tool would appear
          in the final ChatDocument's `tool_messages` list.
     See test_tool_handlers_and_results in test_tool_messages.py, and
-    examples/basic/tool-extract-short-example.py.
+    examples/basic/chat-tool-function.py.
 
     Note:
         - when defining a tool handler or agent_response, you can directly return
@@ -118,8 +118,13 @@ class FinalResultTool(ToolMessage):
             where the values can be arbitrary data structures, including nested
             Pydantic objs, or you can define a subclass of FinalResultTool with the
             fields you want to return.
-        - This is a special ToolMessage that is NOT meant to be used or handled
-            by an agent.
+        - This is a special ToolMessage that is NOT meant to be used by an agent's
+            llm_response, but only by agent_response or tool handlers.
+        - A subclass of this tool can be defined, with specific fields, and
+          with _allow_llm_use = True, to allow the LLM to generate this tool,
+          and have the effect of terminating the current and all parent tasks,
+          with the tool appearing in the final ChatDocument's `tool_messages` list.
+          See examples/basic/multi-agent-return-result.py.
     """
 
     request: str = ""

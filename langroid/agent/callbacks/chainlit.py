@@ -238,6 +238,7 @@ class ChainlitAgentCallbacks:
         agent.callbacks.show_llm_response = self.show_llm_response
         agent.callbacks.show_agent_response = self.show_agent_response
         agent.callbacks.get_user_response = self.get_user_response
+        agent.callbacks.get_user_response_async = self.get_user_response_async
         agent.callbacks.get_last_step = self.get_last_step
         agent.callbacks.set_parent_agent = self.set_parent_agent
         agent.callbacks.show_error_message = self.show_error_message
@@ -499,6 +500,11 @@ class ChainlitAgentCallbacks:
         """Ask for user response, wait for it, and return it"""
 
         return run_sync(self.ask_user(prompt=prompt, suppress_values=["c"]))
+
+    async def get_user_response_async(self, prompt: str) -> str:
+        """Ask for user response, wait for it, and return it"""
+
+        return await self.ask_user(prompt=prompt, suppress_values=["c"])
 
     async def ask_user(
         self,
