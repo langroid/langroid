@@ -67,6 +67,7 @@ if "OLLAMA_HOST" in os.environ:
 else:
     OLLAMA_BASE_URL = "http://localhost:11434/v1"
 
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/"
 GLHF_BASE_URL = "https://glhf.chat/api/openai/v1"
 OLLAMA_API_KEY = "ollama"
@@ -566,8 +567,10 @@ class OpenAIGPT(LanguageModel):
         self.is_cerebras = self.config.chat_model.startswith("cerebras/")
         self.is_gemini = self.config.chat_model.startswith("gemini/")
         self.is_glhf = self.config.chat_model.startswith("glhf/")
+        self.is_openrouter = self.config.chat_model.startswith("openrouter/")
 
         if self.is_groq:
+            # use groq-specific client
             self.config.chat_model = self.config.chat_model.replace("groq/", "")
             self.api_key = os.getenv("GROQ_API_KEY", DUMMY_API_KEY)
             self.client = Groq(
@@ -577,6 +580,7 @@ class OpenAIGPT(LanguageModel):
                 api_key=self.api_key,
             )
         elif self.is_cerebras:
+            # use cerebras-specific client
             self.config.chat_model = self.config.chat_model.replace("cerebras/", "")
             self.api_key = os.getenv("CEREBRAS_API_KEY", DUMMY_API_KEY)
             self.client = Cerebras(
@@ -587,6 +591,7 @@ class OpenAIGPT(LanguageModel):
                 api_key=self.api_key,
             )
         else:
+            # in these cases, there's no specific client: OpenAI python client suffices
             if self.is_gemini:
                 self.config.chat_model = self.config.chat_model.replace("gemini/", "")
                 self.api_key = os.getenv("GEMINI_API_KEY", DUMMY_API_KEY)
@@ -595,6 +600,12 @@ class OpenAIGPT(LanguageModel):
                 self.config.chat_model = self.config.chat_model.replace("glhf/", "")
                 self.api_key = os.getenv("GLHF_API_KEY", DUMMY_API_KEY)
                 self.api_base = GLHF_BASE_URL
+            elif self.is_openrouter:
+                self.config.chat_model = self.config.chat_model.replace(
+                    "openrouter/", ""
+                )
+                self.api_key = os.getenv("OPENROUTER_API_KEY", DUMMY_API_KEY)
+                self.api_base = OPENROUTER_BASE_URL
 
             self.client = OpenAI(
                 api_key=self.api_key,
