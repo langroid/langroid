@@ -19,12 +19,14 @@ import langroid.language_models as lm
 ```
 
 Set up the LLM; note how you can specify the chat model -- if omitted, defaults
-to OpenAI GPT4o. See the guide to using Langroid with 
+to OpenAI `GPT4o`. See the guide to using Langroid with 
 [local/open LLMs](https://langroid.github.io/langroid/tutorials/local-llm-setup/),
 and with [non-OpenAI LLMs](https://langroid.github.io/langroid/tutorials/non-openai-llms/).
     
 ```python
-llm_config = lm.OpenAIGPTConfig( chat_model="glhf/hf:Qwen/Qwen2.5-Coder-32B-Instruct" )
+llm_config = lm.OpenAIGPTConfig( 
+   chat_model="glhf/hf:Qwen/Qwen2.5-Coder-32B-Instruct" 
+)
 llm = lm.OpenAIGPT(llm_config)
 ```
 
