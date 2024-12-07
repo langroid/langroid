@@ -135,6 +135,23 @@ For this to work, ensure you have a `GROQ_API_KEY` environment variable set in y
 ## "Local" LLMs hosted on Cerebras
 This works exactly like with Groq, except you set up a `CEREBRAS_API_KEY` environment variable, and specify the `chat_model` as `cerebras/<model_name>`, e.g. `cerebras/llama3.1-8b`. See the Cerebras [docs](https://inference-docs.cerebras.ai/introduction) for details on which LLMs are supported.
 
+## Open/Proprietary LLMs via OpenRouter
+
+OpenRouter is a **paid service** that provides an OpenAI-compatible API 
+for practically any LLM, open or proprietary.
+Using this with Langroid is similar to the `groq` scenario above:
+
+- Ensure you have an `OPENROUTER_API_KEY` set up in your environment (or `.env` file), and 
+- Set the `chat_model` in the `OpenAIGPTConfig` to 
+  `openrouter/<model_name>`, where `<model_name>` is the name of the model on the 
+[OpenRouter](https://openrouter.ai/) website, e.g. `qwen/qwen-2.5-7b-instruct`.
+
+This is a good option if you want to use larger open LLMs without having to download
+them locally (especially if your local machine does not have the resources to run them).
+Besides using specific LLMs, OpenRouter also has smart routing/load-balancing.
+OpenRouter is also convenient for using proprietary LLMs (e.g. gemini, amazon) via 
+a single convenient API.
+
 ## "Local" LLMs hosted on GLHF.chat
 
 See [glhf.chat](https://glhf.chat/chat/create) for a list of available models.
