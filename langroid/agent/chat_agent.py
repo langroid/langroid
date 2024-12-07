@@ -1753,8 +1753,11 @@ class ChatAgent(Agent):
             return
         if response.metadata.has_citation:
             if not settings.quiet:
-                print("[grey37]SOURCES:\n" +
-                      escape(response.metadata.source) + "[/grey37]")
+                print(
+                    "[grey37]SOURCES:\n"
+                    + escape(response.metadata.source)
+                    + "[/grey37]"
+                )
             self.callbacks.show_llm_response(
                 content=str(response.metadata.source),
                 is_tool=False,
