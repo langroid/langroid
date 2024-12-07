@@ -1734,25 +1734,27 @@ class ChatAgent(Agent):
             # streaming was enabled, AND we did not find a cached response.
             # If we are here, it means the response has not yet been displayed.
             cached = f"[red]{self.indent}(cached)[/red]" if is_cached else ""
+            chat_doc = (
+                response
+                if isinstance(response, ChatDocument)
+                else ChatDocument.from_LLMResponse(response, displayed=True)
+            )
+            # TODO: prepend TOOL: or OAI-TOOL: if it's a tool-call
             if not settings.quiet:
-                chat_doc = (
-                    response
-                    if isinstance(response, ChatDocument)
-                    else ChatDocument.from_LLMResponse(response, displayed=True)
-                )
-                # TODO: prepend TOOL: or OAI-TOOL: if it's a tool-call
                 print(cached + "[green]" + escape(str(response)))
-                self.callbacks.show_llm_response(
-                    content=str(response),
-                    is_tool=self.has_tool_message_attempt(chat_doc),
-                    cached=is_cached,
-                )
+            self.callbacks.show_llm_response(
+                content=str(response),
+                is_tool=self.has_tool_message_attempt(chat_doc),
+                cached=is_cached,
+            )
         if isinstance(response, LLMResponse):
             # we are in the context immediately after an LLM responded,
             # we won't have citations yet, so we're done
             return
-        if response.metadata.has_citation and not settings.quiet:
-            print("[grey37]SOURCES:\n" + escape(response.metadata.source) + "[/grey37]")
+        if response.metadata.has_citation:
+            if not settings.quiet:
+                print("[grey37]SOURCES:\n" +
+                      escape(response.metadata.source) + "[/grey37]")
             self.callbacks.show_llm_response(
                 content=str(response.metadata.source),
                 is_tool=False,
