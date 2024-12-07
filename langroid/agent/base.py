@@ -278,17 +278,27 @@ class Agent(ABC):
         if not issubclass(message_class, ToolMessage):
             raise ValueError("message_class must be a subclass of ToolMessage")
         tool = message_class.default_value("request")
+
+        """
+        if tool has handler method explicitly defined - use it,
+        otherwise use the tool name as the handler
+        """
+        if hasattr(message_class, "handler"):
+            handler = message_class.default_value("handler")
+        else:
+            handler = tool
+
         self.llm_tools_map[tool] = message_class
         if (
             hasattr(message_class, "handle")
             and inspect.isfunction(message_class.handle)
-            and not hasattr(self, tool)
+            and not hasattr(self, handler)
         ):
             """
             If the message class has a `handle` method,
-            and agent does NOT have a method with the same name as the tool,
+            and agent does NOT have a tool handler method,
             then we create a method for the agent whose name
-            is the value of `tool`, and whose body is the `handle` method.
+            is the value of `handler`, and whose body is the `handle` method.
             This removes a separate step of having to define this method
             for the agent, and also keeps the tool definition AND handling
             in one place, i.e. in the message class.
@@ -298,21 +308,22 @@ class Agent(ABC):
                 len(inspect.signature(message_class.handle).parameters) > 1
             )
             if has_chat_doc_arg:
-                setattr(self, tool, lambda obj, chat_doc: obj.handle(chat_doc))
+                setattr(self, handler, lambda obj, chat_doc: obj.handle(chat_doc))
             else:
-                setattr(self, tool, lambda obj: obj.handle())
+                setattr(self, handler, lambda obj: obj.handle())
         elif (
             hasattr(message_class, "response")
             and inspect.isfunction(message_class.response)
-            and not hasattr(self, tool)
+            and not hasattr(self, handler)
         ):
             has_chat_doc_arg = (
                 len(inspect.signature(message_class.response).parameters) > 2
             )
             if has_chat_doc_arg:
-                setattr(self, tool, lambda obj, chat_doc: obj.response(self, chat_doc))
+                setattr(self, handler, lambda obj,
+                        chat_doc: obj.response(self, chat_doc))
             else:
-                setattr(self, tool, lambda obj: obj.response(self))
+                setattr(self, handler, lambda obj: obj.response(self))
 
         if hasattr(message_class, "handle_message_fallback") and (
             inspect.isfunction(message_class.handle_message_fallback)
@@ -323,11 +334,11 @@ class Agent(ABC):
                 lambda msg: message_class.handle_message_fallback(self, msg),
             )
 
-        async_tool_name = f"{tool}_async"
+        async_handler_name = f"{handler}_async"
         if (
             hasattr(message_class, "handle_async")
             and inspect.isfunction(message_class.handle_async)
-            and not hasattr(self, async_tool_name)
+            and not hasattr(self, async_handler_name)
         ):
             has_chat_doc_arg = (
                 len(inspect.signature(message_class.handle_async).parameters) > 1
@@ -345,11 +356,11 @@ class Agent(ABC):
                 async def handler(obj):
                     return await obj.handle_async()
 
-            setattr(self, async_tool_name, handler)
+            setattr(self, async_handler_name, handler)
         elif (
             hasattr(message_class, "response_async")
             and inspect.isfunction(message_class.response_async)
-            and not hasattr(self, async_tool_name)
+            and not hasattr(self, async_handler_name)
         ):
             has_chat_doc_arg = (
                 len(inspect.signature(message_class.response_async).parameters) > 2
@@ -367,7 +378,7 @@ class Agent(ABC):
                 async def handler(obj):
                     return await obj.response_async(self)
 
-            setattr(self, async_tool_name, handler)
+            setattr(self, async_handler_name, handler)
 
         return [tool]
 
@@ -1738,18 +1749,31 @@ class Agent(ABC):
         Asynch version of `handle_tool_message`. See there for details.
         """
         tool_name = tool.default_value("request")
-        handler_method = getattr(self, tool_name + "_async", None)
+        if hasattr(tool, "handler"):
+            handler_name = tool.default_value("handler")
+        else:
+            handler_name = tool_name
+        handler_method = getattr(self, handler_name + "_async", None)
         if handler_method is None:
             return self.handle_tool_message(tool, chat_doc=chat_doc)
         has_chat_doc_arg = (
             chat_doc is not None
             and "chat_doc" in inspect.signature(handler_method).parameters
         )
+        has_tool_name_arg = ("tool_name" in
+                             inspect.signature(handler_method).parameters)
         try:
-            if has_chat_doc_arg:
-                maybe_result = await handler_method(tool, chat_doc=chat_doc)
+            if has_tool_name_arg:
+                if has_chat_doc_arg:
+                    maybe_result = await handler_method(tool, tool_name=tool_name,
+                                                        chat_doc=chat_doc)
+                else:
+                    maybe_result = await handler_method(tool, tool_name=tool_name)
             else:
-                maybe_result = await handler_method(tool)
+                if has_chat_doc_arg:
+                    maybe_result = await handler_method(tool, chat_doc=chat_doc)
+                else:
+                    maybe_result = await handler_method(tool)
             result = self.to_ChatDocument(maybe_result, tool_name, chat_doc)
         except Exception as e:
             # raise the error here since we are sure it's
@@ -1777,18 +1801,31 @@ class Agent(ABC):
 
         """
         tool_name = tool.default_value("request")
-        handler_method = getattr(self, tool_name, None)
+        if hasattr(tool, "handler"):
+            handler_name = tool.default_value("handler")
+        else:
+            handler_name = tool_name
+        handler_method = getattr(self, handler_name, None)
         if handler_method is None:
             return None
         has_chat_doc_arg = (
             chat_doc is not None
             and "chat_doc" in inspect.signature(handler_method).parameters
         )
+        has_tool_name_arg = ("tool_name" in
+                             inspect.signature(handler_method).parameters)
         try:
-            if has_chat_doc_arg:
-                maybe_result = handler_method(tool, chat_doc=chat_doc)
+            if has_tool_name_arg:
+                if has_chat_doc_arg:
+                    maybe_result = handler_method(tool, tool_name=tool_name,
+                                                  chat_doc=chat_doc)
+                else:
+                    maybe_result = handler_method(tool, tool_name=tool_name)
             else:
-                maybe_result = handler_method(tool)
+                if has_chat_doc_arg:
+                    maybe_result = handler_method(tool, chat_doc=chat_doc)
+                else:
+                    maybe_result = handler_method(tool)
             result = self.to_ChatDocument(maybe_result, tool_name, chat_doc)
         except Exception as e:
             # raise the error here since we are sure it's

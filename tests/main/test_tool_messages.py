@@ -70,6 +70,7 @@ class FileExistsMessage(ToolMessage):
 
 class PythonVersionMessage(ToolMessage):
     request: str = "python_version"
+    handler: str = "tool_handler"
     purpose: str = "To check which version of Python is needed."
 
     @classmethod
@@ -86,8 +87,16 @@ class MessageHandlingAgent(ChatAgent):
     def file_exists(self, message: FileExistsMessage) -> str:
         return "yes" if message.filename == "requirements.txt" else "no"
 
-    def python_version(self, PythonVersionMessage) -> str:
-        return DEFAULT_PY_VERSION
+    def tool_handler(
+        self,
+        message: ToolMessage,
+        tool_name: str,
+        chat_doc: ChatDocument = None
+    ) -> str:
+        if tool_name == "python_version":
+            return DEFAULT_PY_VERSION
+        else:
+            return "invalid tool name"
 
     def country_capital(self, message: CountryCapitalMessage) -> str:
         return (

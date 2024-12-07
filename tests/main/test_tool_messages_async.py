@@ -58,6 +58,7 @@ class FileExistsMessage(ToolMessage):
 
 class PythonVersionMessage(ToolMessage):
     request: str = "python_version"
+    handler: str = "tool_handler"
     purpose: str = "To check which version of Python is needed."
     result: str = "3.9"
 
@@ -76,8 +77,16 @@ class MessageHandlingAgent(ChatAgent):
     def file_exists(self, message: FileExistsMessage) -> str:
         return "yes" if message.filename == "requirements.txt" else "no"
 
-    def python_version(self, PythonVersionMessage) -> str:
-        return DEFAULT_PY_VERSION
+    def tool_handler(
+        self,
+        message: ToolMessage,
+        tool_name: str,
+        chat_doc: ChatDocument = None
+    ) -> str:
+        if tool_name == "python_version":
+            return DEFAULT_PY_VERSION
+        else:
+            return "invalid tool name"
 
     async def country_capital_async(self, message: CountryCapitalMessage) -> str:
         await asyncio.sleep(1)
