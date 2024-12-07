@@ -3,7 +3,6 @@ import logging
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from langroid.embedding_models.base import (
-    EmbeddingModel,
     EmbeddingModelsConfig,
 )
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
@@ -32,8 +31,7 @@ class ChromaDB(VectorStore):
         except ImportError:
             raise LangroidImportError("chromadb", "chromadb")
         self.config = config
-        emb_model = EmbeddingModel.create(config.embedding)
-        self.embedding_fn = emb_model.embedding_fn()
+        self.embedding_fn = self.embedding_model.embedding_fn()
         self.client = chromadb.Client(
             chromadb.config.Settings(
                 # chroma_db_impl="duckdb+parquet",
@@ -64,7 +62,7 @@ class ChromaDB(VectorStore):
             self.client.delete_collection(name=c.name)
         logger.warning(
             f"""
-            Deleted {n_empty_deletes} empty collections and 
+            Deleted {n_empty_deletes} empty collections and
             {n_non_empty_deletes} non-empty collections.
             """
         )
