@@ -147,9 +147,9 @@ def main(model: str = ""):
     class CoursesAgent(lr.agent.special.DocChatAgent):
         def llm_response(
             self,
-            query: None | str | ChatDocument = None,
+            message: None | str | ChatDocument = None,
         ) -> Optional[ChatDocument]:
-            answer = super().llm_response(query)
+            answer = super().llm_response(message)
             if answer is None:
                 return None
             return self.create_llm_response(
@@ -183,9 +183,9 @@ def main(model: str = ""):
     class FinanceAgent(lr.agent.special.DocChatAgent):
         def llm_response(
             self,
-            query: None | str | ChatDocument = None,
+            message: None | str | ChatDocument = None,
         ) -> Optional[ChatDocument]:
-            answer = super().llm_response(query)
+            answer = super().llm_response(message)
             if answer is None:
                 return None
             return self.create_llm_response(

@@ -1,6 +1,7 @@
 """
-Single-agent question-answering system that has access to DuckDuckGo (DDG) Search when needed,
-and in case a DDG Search is used, ingests contents into a vector-db,
+Single-agent question-answering system that has access to
+Metaphor web search when needed,
+and in case a web search is used, ingests contents into a vector-db,
 and uses Retrieval Augmentation to answer the question.
 
 This is a chainlit UI version of examples/docqa/chat-search.py
@@ -14,18 +15,19 @@ Run like this:
 https://langroid.github.io/langroid/tutorials/local-llm-setup/
 """
 
-from typing import List, Optional
+from typing import List, Optional, Any
 
 import typer
 import langroid as lr
 import langroid.language_models as lm
 from langroid.agent.tool_message import ToolMessage
+from langroid.agent.tools.orchestration import ForwardTool
 from langroid.agent.chat_agent import ChatAgent, ChatDocument
 from langroid.agent.special.doc_chat_agent import (
     DocChatAgent,
     DocChatAgentConfig,
 )
-from langroid.parsing.web_search import duckduckgo_search
+from langroid.parsing.web_search import metaphor_search
 from langroid.agent.task import Task
 from langroid.parsing.parser import ParsingConfig, PdfParsingConfig, Splitter
 from langroid.utils.constants import NO_ANSWER
@@ -90,14 +92,19 @@ class RelevantSearchExtractsTool(ToolMessage):
         """
 
 
-class DDGSearchDocChatAgent(DocChatAgent):
+class SearchDocChatAgent(DocChatAgent):
     tried_vecdb: bool = False
 
     def llm_response_async(
         self,
-        query: None | str | ChatDocument = None,
+        message: None | str | ChatDocument = None,
     ) -> Optional[ChatDocument]:
-        return ChatAgent.llm_response_async(self, query)
+        return ChatAgent.llm_response_async(self, message)
+
+    def handle_message_fallback(self, msg: str | ChatDocument) -> Any:
+        if isinstance(msg, ChatDocument) and msg.metadata.sender == lr.Entity.LLM:
+            # non-tool LLM msg => forward to User
+            return ForwardTool(agent="User")
 
     def relevant_extracts(self, msg: RelevantExtractsTool) -> str:
         """Get docs/extracts relevant to the query, from vecdb"""
@@ -117,11 +124,10 @@ class DDGSearchDocChatAgent(DocChatAgent):
         """Get docs/extracts relevant to the query, from a web search"""
         if not self.tried_vecdb and len(self.original_docs) > 0:
             return "Please try the `relevant_extracts` tool, before using this tool"
-        self.tried_vecdb = False
         query = msg.query
         num_results = msg.num_results
         self.callbacks.show_start_response(entity="agent")
-        results = duckduckgo_search(query, num_results)
+        results = metaphor_search(query, num_results)
         links = [r.link for r in results]
         self.config.doc_paths = links
         self.ingest()
@@ -203,14 +209,16 @@ async def setup_agent_task():
         ),
     )
 
-    agent = DDGSearchDocChatAgent(config)
+    agent = SearchDocChatAgent(config)
     agent.enable_message(RelevantExtractsTool)
     agent.enable_message(RelevantSearchExtractsTool)
     collection_name = "chainlit-chat-search-rag"
 
     agent.vecdb.set_collection(collection_name, replace=True)
 
-    task = Task(agent)
+    # set up task with interactive=False, so awaits user ONLY
+    # when LLM sends  non-tool msg (see handle_message_fallback method).
+    task = Task(agent, interactive=False)
     cl.user_session.set("agent", agent)
     cl.user_session.set("task", task)
 
@@ -233,7 +241,7 @@ async def chat() -> None:
         - `relevant_extracts` to try to answer your question using Retrieval Augmented Generation
            from prior search results ingested into a vector-DB (from prior searches in this session),
            and failing this, I will use my second tool:
-        - `relevant_search_extracts` to do a web search (Using DuckDuckGo or DDG)
+        - `relevant_search_extracts` to do a web search (Using Metaphor Search)
         and ingest the results into the vector-DB, and then use 
         Retrieval Augmentation Generation (RAG) to answer the question.
         """
@@ -254,5 +262,5 @@ async def chat() -> None:
 @cl.on_message
 async def on_message(message: cl.Message):
     task = cl.user_session.get("task")
-    lr.ChainlitTaskCallbacks(task, message)
+    lr.ChainlitTaskCallbacks(task)
     await task.run_async(message.content)

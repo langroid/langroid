@@ -663,15 +663,15 @@ class DocChatAgent(ChatAgent):
 
     def llm_response(
         self,
-        query: None | str | ChatDocument = None,
+        message: None | str | ChatDocument = None,
     ) -> Optional[ChatDocument]:
-        if not self.llm_can_respond(query):
+        if not self.llm_can_respond(message):
             return None
         query_str: str | None
-        if isinstance(query, ChatDocument):
-            query_str = query.content
+        if isinstance(message, ChatDocument):
+            query_str = message.content
         else:
-            query_str = query
+            query_str = message
         if query_str is None or query_str.startswith("!"):
             # direct query to LLM
             query_str = query_str[1:] if query_str is not None else None
@@ -714,16 +714,16 @@ class DocChatAgent(ChatAgent):
 
     async def llm_response_async(
         self,
-        query: None | str | ChatDocument = None,
+        message: None | str | ChatDocument = None,
     ) -> Optional[ChatDocument]:
         apply_nest_asyncio()
-        if not self.llm_can_respond(query):
+        if not self.llm_can_respond(message):
             return None
         query_str: str | None
-        if isinstance(query, ChatDocument):
-            query_str = query.content
+        if isinstance(message, ChatDocument):
+            query_str = message.content
         else:
-            query_str = query
+            query_str = message
         if query_str is None or query_str.startswith("!"):
             # direct query to LLM
             query_str = query_str[1:] if query_str is not None else None

@@ -34,7 +34,6 @@ except ImportError:
 
 
 from langroid.embedding_models.base import (
-    EmbeddingModel,
     EmbeddingModelsConfig,
 )
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
@@ -62,9 +61,8 @@ class MomentoVI(VectorStore):
             raise LangroidImportError("momento", "momento")
         self.distance = SimilarityMetric.COSINE_SIMILARITY
         self.config: MomentoVIConfig = config
-        emb_model = EmbeddingModel.create(config.embedding)
-        self.embedding_fn: EmbeddingFunction = emb_model.embedding_fn()
-        self.embedding_dim = emb_model.embedding_dims
+        self.embedding_fn: EmbeddingFunction = self.embedding_model.embedding_fn()
+        self.embedding_dim = self.embedding_model.embedding_dims
         self.host = config.host
         self.port = config.port
         load_dotenv()
@@ -72,8 +70,8 @@ class MomentoVI(VectorStore):
         if config.cloud:
             if api_key is None:
                 raise ValueError(
-                    """MOMENTO_API_KEY env variable must be set to 
-                    MomentoVI hosted service. Please set this in your .env file. 
+                    """MOMENTO_API_KEY env variable must be set to
+                    MomentoVI hosted service. Please set this in your .env file.
                     """
                 )
             self.client = PreviewVectorIndexClient(

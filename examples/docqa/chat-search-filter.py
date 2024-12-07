@@ -148,9 +148,9 @@ class SearchDocChatAgent(DocChatAgent):
 
     def llm_response(
         self,
-        query: None | str | ChatDocument = None,
+        message: None | str | ChatDocument = None,
     ) -> ChatDocument | None:
-        return ChatAgent.llm_response(self, query)
+        return ChatAgent.llm_response(self, message)
 
     def relevant_extracts(self, msg: RelevantExtractsTool) -> str:
         """Get docs/extracts relevant to the query, from vecdb"""

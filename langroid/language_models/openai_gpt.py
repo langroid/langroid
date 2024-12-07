@@ -39,6 +39,7 @@ from langroid.language_models.base import (
     LLMMessage,
     LLMResponse,
     LLMTokenUsage,
+    OpenAIJsonSchemaSpec,
     OpenAIToolCall,
     OpenAIToolSpec,
     Role,
@@ -66,9 +67,14 @@ if "OLLAMA_HOST" in os.environ:
 else:
     OLLAMA_BASE_URL = "http://localhost:11434/v1"
 
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/"
+GLHF_BASE_URL = "https://glhf.chat/api/openai/v1"
 OLLAMA_API_KEY = "ollama"
 DUMMY_API_KEY = "xxx"
+
+VLLM_API_KEY = os.environ.get("VLLM_API_KEY", DUMMY_API_KEY)
+LLAMACPP_API_KEY = os.environ.get("LLAMA_API_KEY", DUMMY_API_KEY)
 
 
 class AnthropicModel(str, Enum):
@@ -87,7 +93,7 @@ class OpenAIChatModel(str, Enum):
     GPT4 = "gpt-4"
     GPT4_32K = "gpt-4-32k"
     GPT4_TURBO = "gpt-4-turbo"
-    GPT4o = "gpt-4o-2024-08-06"
+    GPT4o = "gpt-4o"
     GPT4o_MINI = "gpt-4o-mini"
     O1_PREVIEW = "o1-preview"
     O1_MINI = "o1-mini"
@@ -155,6 +161,11 @@ openAIChatModelPreferenceList = [
 openAICompletionModelPreferenceList = [
     OpenAICompletionModel.GPT3_5_TURBO_INSTRUCT,
     OpenAICompletionModel.TEXT_DA_VINCI_003,
+]
+
+openAIStructuredOutputList = [
+    OpenAIChatModel.GPT4o_MINI,
+    OpenAIChatModel.GPT4o,
 ]
 
 NON_STREAMING_MODELS = [
@@ -229,6 +240,15 @@ def gpt_3_5_warning() -> None:
     )
 
 
+@cache
+def parallel_strict_warning() -> None:
+    logging.warning(
+        "OpenAI tool calling in strict mode is not supported when "
+        "parallel tool calls are made. Disable parallel tool calling "
+        "to ensure correct behavior."
+    )
+
+
 def noop() -> None:
     """Does nothing."""
     return None
@@ -287,6 +307,14 @@ class OpenAIGPTConfig(LLMConfig):
     chat_model: str = defaultOpenAIChatModel
     completion_model: str = defaultOpenAICompletionModel
     run_on_first_use: Callable[[], None] = noop
+    parallel_tool_calls: Optional[bool] = None
+    # Supports constrained decoding which enforces that the output of the LLM
+    # adheres to a JSON schema
+    supports_json_schema: Optional[bool] = None
+    # Supports strict decoding for the generation of tool calls with
+    # the OpenAI Tools API; this ensures that the generated tools
+    # adhere to the provided schema.
+    supports_strict_tools: Optional[bool] = None
     # a string that roughly matches a HuggingFace chat_template,
     # e.g. "mistral-instruct-v0.2 (a fuzzy search is done to find the closest match)
     formatter: str | None = None
@@ -296,7 +324,7 @@ class OpenAIGPTConfig(LLMConfig):
         local_model = "api_base" in kwargs and kwargs["api_base"] is not None
 
         chat_model = kwargs.get("chat_model", "")
-        local_prefixes = ["local/", "litellm/", "ollama/"]
+        local_prefixes = ["local/", "litellm/", "ollama/", "vllm/", "llamacpp/"]
         if any(chat_model.startswith(prefix) for prefix in local_prefixes):
             local_model = True
 
@@ -453,6 +481,9 @@ class OpenAIGPT(LanguageModel):
                 HFPromptFormatterConfig(model_name=self.config.formatter)
             )
 
+        self.supports_json_schema: bool = self.config.supports_json_schema or False
+        self.supports_strict_tools: bool = self.config.supports_strict_tools or False
+
         # if model name starts with "litellm",
         # set the actual model name by stripping the "litellm/" prefix
         # and set the litellm flag to True
@@ -483,8 +514,30 @@ class OpenAIGPT(LanguageModel):
             self.api_base = self.config.api_base or OLLAMA_BASE_URL
             self.api_key = OLLAMA_API_KEY
             self.config.chat_model = self.config.chat_model.replace("ollama/", "")
+        elif self.config.chat_model.startswith("vllm/"):
+            self.supports_json_schema = True
+            self.config.chat_model = self.config.chat_model.replace("vllm/", "")
+            self.api_key = VLLM_API_KEY
+            self.api_base = self.config.api_base or "http://localhost:8000/v1"
+            if not self.api_base.startswith("http"):
+                self.api_base = "http://" + self.api_base
+            if not self.api_base.endswith("/v1"):
+                self.api_base = self.api_base + "/v1"
+        elif self.config.chat_model.startswith("llamacpp/"):
+            self.supports_json_schema = True
+            self.api_base = self.config.chat_model.split("/", 1)[1]
+            if not self.api_base.startswith("http"):
+                self.api_base = "http://" + self.api_base
+            self.api_key = LLAMACPP_API_KEY
         else:
             self.api_base = self.config.api_base
+            # If api_base is unset we use OpenAI's endpoint, which supports
+            # these features (with JSON schema restricted to a limited set of models)
+            self.supports_strict_tools = self.api_base is None
+            self.supports_json_schema = (
+                self.api_base is None
+                and self.config.chat_model in openAIStructuredOutputList
+            )
 
         if settings.chat_model != "":
             # if we're overriding chat model globally, set completion model to same
@@ -513,8 +566,11 @@ class OpenAIGPT(LanguageModel):
         self.is_groq = self.config.chat_model.startswith("groq/")
         self.is_cerebras = self.config.chat_model.startswith("cerebras/")
         self.is_gemini = self.config.chat_model.startswith("gemini/")
+        self.is_glhf = self.config.chat_model.startswith("glhf/")
+        self.is_openrouter = self.config.chat_model.startswith("openrouter/")
 
         if self.is_groq:
+            # use groq-specific client
             self.config.chat_model = self.config.chat_model.replace("groq/", "")
             self.api_key = os.getenv("GROQ_API_KEY", DUMMY_API_KEY)
             self.client = Groq(
@@ -524,6 +580,7 @@ class OpenAIGPT(LanguageModel):
                 api_key=self.api_key,
             )
         elif self.is_cerebras:
+            # use cerebras-specific client
             self.config.chat_model = self.config.chat_model.replace("cerebras/", "")
             self.api_key = os.getenv("CEREBRAS_API_KEY", DUMMY_API_KEY)
             self.client = Cerebras(
@@ -534,10 +591,21 @@ class OpenAIGPT(LanguageModel):
                 api_key=self.api_key,
             )
         else:
+            # in these cases, there's no specific client: OpenAI python client suffices
             if self.is_gemini:
                 self.config.chat_model = self.config.chat_model.replace("gemini/", "")
                 self.api_key = os.getenv("GEMINI_API_KEY", DUMMY_API_KEY)
                 self.api_base = GEMINI_BASE_URL
+            elif self.is_glhf:
+                self.config.chat_model = self.config.chat_model.replace("glhf/", "")
+                self.api_key = os.getenv("GLHF_API_KEY", DUMMY_API_KEY)
+                self.api_base = GLHF_BASE_URL
+            elif self.is_openrouter:
+                self.config.chat_model = self.config.chat_model.replace(
+                    "openrouter/", ""
+                )
+                self.api_key = os.getenv("OPENROUTER_API_KEY", DUMMY_API_KEY)
+                self.api_base = OPENROUTER_BASE_URL
 
             self.client = OpenAI(
                 api_key=self.api_key,
@@ -1414,6 +1482,7 @@ class OpenAIGPT(LanguageModel):
         tool_choice: ToolChoiceTypes | Dict[str, str | Dict[str, str]] = "auto",
         functions: Optional[List[LLMFunctionSpec]] = None,
         function_call: str | Dict[str, str] = "auto",
+        response_format: Optional[OpenAIJsonSchemaSpec] = None,
     ) -> LLMResponse:
         self.run_on_first_use()
 
@@ -1447,7 +1516,13 @@ class OpenAIGPT(LanguageModel):
             return self.generate(prompt=prompt, max_tokens=max_tokens)
         try:
             return self._chat(
-                messages, max_tokens, tools, tool_choice, functions, function_call
+                messages,
+                max_tokens,
+                tools,
+                tool_choice,
+                functions,
+                function_call,
+                response_format,
             )
         except Exception as e:
             # log and re-raise exception
@@ -1462,6 +1537,7 @@ class OpenAIGPT(LanguageModel):
         tool_choice: ToolChoiceTypes | Dict[str, str | Dict[str, str]] = "auto",
         functions: Optional[List[LLMFunctionSpec]] = None,
         function_call: str | Dict[str, str] = "auto",
+        response_format: Optional[OpenAIJsonSchemaSpec] = None,
     ) -> LLMResponse:
         self.run_on_first_use()
 
@@ -1509,6 +1585,7 @@ class OpenAIGPT(LanguageModel):
                 tool_choice,
                 functions,
                 function_call,
+                response_format,
             )
             return result
         except Exception as e:
@@ -1576,6 +1653,7 @@ class OpenAIGPT(LanguageModel):
         tool_choice: ToolChoiceTypes | Dict[str, str | Dict[str, str]] = "auto",
         functions: Optional[List[LLMFunctionSpec]] = None,
         function_call: str | Dict[str, str] = "auto",
+        response_format: Optional[OpenAIJsonSchemaSpec] = None,
     ) -> Dict[str, Any]:
         """Prepare args for LLM chat-completion API call"""
         if isinstance(messages, str):
@@ -1616,18 +1694,30 @@ class OpenAIGPT(LanguageModel):
                 )
             )
         if tools is not None:
+            if self.config.parallel_tool_calls is not None:
+                args["parallel_tool_calls"] = self.config.parallel_tool_calls
+
+            if any(t.strict for t in tools) and (
+                self.config.parallel_tool_calls is None
+                or self.config.parallel_tool_calls
+            ):
+                parallel_strict_warning()
             args.update(
                 dict(
                     tools=[
                         dict(
                             type="function",
-                            function=t.function.dict(),
+                            function=t.function.dict()
+                            | ({"strict": t.strict} if t.strict is not None else {}),
                         )
                         for t in tools
                     ],
                     tool_choice=tool_choice,
                 )
             )
+        if response_format is not None:
+            args["response_format"] = response_format.to_dict()
+
         for p in self.unsupported_params():
             # some models e.g. o1-mini (as of sep 2024) don't support some params,
             # like temperature and stream, so we need to remove them.
@@ -1722,6 +1812,7 @@ class OpenAIGPT(LanguageModel):
         tool_choice: ToolChoiceTypes | Dict[str, str | Dict[str, str]] = "auto",
         functions: Optional[List[LLMFunctionSpec]] = None,
         function_call: str | Dict[str, str] = "auto",
+        response_format: Optional[OpenAIJsonSchemaSpec] = None,
     ) -> LLMResponse:
         """
         ChatCompletion API call to OpenAI.
@@ -1748,6 +1839,7 @@ class OpenAIGPT(LanguageModel):
             tool_choice,
             functions,
             function_call,
+            response_format,
         )
         cached, hashed_key, response = self._chat_completions_with_backoff(**args)
         if self.get_stream() and not cached:
@@ -1768,6 +1860,7 @@ class OpenAIGPT(LanguageModel):
         tool_choice: ToolChoiceTypes | Dict[str, str | Dict[str, str]] = "auto",
         functions: Optional[List[LLMFunctionSpec]] = None,
         function_call: str | Dict[str, str] = "auto",
+        response_format: Optional[OpenAIJsonSchemaSpec] = None,
     ) -> LLMResponse:
         """
         Async version of _chat(). See that function for details.
@@ -1779,6 +1872,7 @@ class OpenAIGPT(LanguageModel):
             tool_choice,
             functions,
             function_call,
+            response_format,
         )
         cached, hashed_key, response = await self._achat_completions_with_backoff(
             **args

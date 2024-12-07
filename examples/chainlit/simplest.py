@@ -13,12 +13,11 @@ import langroid.language_models as lm
 import chainlit as cl
 
 
-@cl.on_chat_start
-async def on_chat_start():
+@cl.on_message
+async def on_message(message: cl.Message):
     lm_config = lm.OpenAIGPTConfig()
     agent = lr.ChatAgent(lr.ChatAgentConfig(llm=lm_config))
     task = lr.Task(agent, interactive=True)
 
-    msg = "Help me with some questions"
     lr.ChainlitTaskCallbacks(task)
-    await task.run_async(msg)
+    await task.run_async(message.content)

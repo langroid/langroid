@@ -16,6 +16,7 @@ from typing import (
     Dict,
     List,
     Optional,
+    Self,
     Tuple,
     Type,
     TypeVar,
@@ -78,7 +79,7 @@ class TaskConfig(BaseModel):
         inf_loop_cycle_len (int): max exact-loop cycle length: 0 => no inf loop test
         inf_loop_dominance_factor (float): dominance factor for exact-loop detection
         inf_loop_wait_factor (int): wait this * cycle_len msgs before loop-check
-        restart_subtask_run (bool): whether to restart *every* run of this task
+        restart_as_subtask (bool): whether to restart *every* run of this task
             when run as a subtask.
         addressing_prefix (str): "@"-like prefix an agent can use to address other
             agents, or entities of the agent. E.g., if this is "@", the addressing
@@ -570,7 +571,7 @@ class Task:
 
         if self.caller is not None and self.caller.logger is not None:
             self.logger = self.caller.logger
-        else:
+        elif self.logger is None:
             self.logger = RichFileLogger(
                 str(Path(self.config.logs_dir) / f"{self.name}.log"),
                 color=self.color_log,
@@ -578,7 +579,7 @@ class Task:
 
         if self.caller is not None and self.caller.tsv_logger is not None:
             self.tsv_logger = self.caller.tsv_logger
-        else:
+        elif self.tsv_caller is None:
             self.tsv_logger = setup_file_logger(
                 "tsv_logger",
                 str(Path(self.config.logs_dir) / f"{self.name}.tsv"),
@@ -598,7 +599,7 @@ class Task:
         for t in self.sub_tasks:
             t.reset_all_sub_tasks()
 
-    def __getitem__(self, return_type: type) -> Task:
+    def __getitem__(self, return_type: type) -> Self:
         """Returns a (shallow) copy of `self` with a default return type."""
         clone = copy.copy(self)
         clone.default_return_type = return_type
@@ -732,8 +733,37 @@ class Task:
         if return_type is None:
             return_type = self.default_return_type
 
+        # If possible, take a final strict decoding step
+        # when the output does not match `return_type`
         if return_type is not None and return_type != ChatDocument:
-            return self.agent.from_ChatDocument(final_result, return_type)
+            parsed_result = self.agent.from_ChatDocument(final_result, return_type)
+
+            if (
+                parsed_result is None
+                and isinstance(self.agent, ChatAgent)
+                and self.agent._json_schema_available()
+            ):
+                strict_agent = self.agent[return_type]
+                output_args = strict_agent._function_args()[-1]
+                if output_args is not None:
+                    schema = output_args.function.parameters
+                    strict_result = strict_agent.llm_response(
+                        f"""
+                        A response adhering to the following JSON schema was expected:
+                        {schema}
+
+                        Please resubmit with the correct schema. 
+                        """
+                    )
+
+                    if strict_result is not None:
+                        return cast(
+                            Optional[T],
+                            strict_agent.from_ChatDocument(strict_result, return_type),
+                        )
+
+            return parsed_result
+
         return final_result
 
     @overload
@@ -895,8 +925,37 @@ class Task:
         if return_type is None:
             return_type = self.default_return_type
 
+        # If possible, take a final strict decoding step
+        # when the output does not match `return_type`
         if return_type is not None and return_type != ChatDocument:
-            return self.agent.from_ChatDocument(final_result, return_type)
+            parsed_result = self.agent.from_ChatDocument(final_result, return_type)
+
+            if (
+                parsed_result is None
+                and isinstance(self.agent, ChatAgent)
+                and self.agent._json_schema_available()
+            ):
+                strict_agent = self.agent[return_type]
+                output_args = strict_agent._function_args()[-1]
+                if output_args is not None:
+                    schema = output_args.function.parameters
+                    strict_result = await strict_agent.llm_response_async(
+                        f"""
+                        A response adhering to the following JSON schema was expected:
+                        {schema}
+
+                        Please resubmit with the correct schema. 
+                        """
+                    )
+
+                    if strict_result is not None:
+                        return cast(
+                            Optional[T],
+                            strict_agent.from_ChatDocument(strict_result, return_type),
+                        )
+
+            return parsed_result
+
         return final_result
 
     def _pre_run_loop(
@@ -1023,9 +1082,11 @@ class Task:
         found_response = False
         # (responder, result) from a responder who explicitly said NO_ANSWER
         no_answer_response: None | Tuple[Responder, ChatDocument] = None
+        n_non_responders = 0
         for r in responders:
             self.is_pass_thru = False
             if not self._can_respond(r):
+                n_non_responders += 1
                 # create dummy msg for logging
                 log_doc = ChatDocument(
                     content="[CANNOT RESPOND]",
@@ -1038,6 +1099,9 @@ class Task:
                 # no need to register this dummy msg in ObjectRegistry
                 ChatDocument.delete_id(log_doc.id())
                 self.log_message(r, log_doc)
+                if n_non_responders == len(responders):
+                    # don't stay in this "non-response" loop forever
+                    break
                 continue
             self.human_tried = r == Entity.USER
             result = self.response(r, turns)
@@ -1463,6 +1527,9 @@ class Task:
                     max_cost=self.max_cost,
                     max_tokens=self.max_tokens,
                 )
+                # update result.tool_messages if any
+                if isinstance(result, ChatDocument):
+                    self.agent.try_get_tool_messages(result)
                 if result is not None:
                     content, id2result, oai_tool_id = self.agent.process_tool_results(
                         result.content,
@@ -1491,6 +1558,9 @@ class Task:
         else:
             response_fn = self._entity_responder_async_map[cast(Entity, e)]
             result = await response_fn(self.pending_message)
+            # update result.tool_messages if any
+            if isinstance(result, ChatDocument):
+                self.agent.try_get_tool_messages(result)
 
         result_chat_doc = self.agent.to_ChatDocument(
             result,
@@ -1527,7 +1597,7 @@ class Task:
         oai_tool_id2result = result_msg.oai_tool_id2result if result_msg else None
         fun_call = result_msg.function_call if result_msg else None
         tool_messages = result_msg.tool_messages if result_msg else []
-        # if there is an DoneTool or AgentDoneTool among these,
+        # if there is a DoneTool or AgentDoneTool among these,
         # we extract content and tools from here, and ignore all others
         for t in tool_messages:
             if isinstance(t, FinalResultTool):
@@ -1616,9 +1686,13 @@ class Task:
                 isinstance(result, ChatDocument)
                 and (
                     (DONE in result.content and allow_done_string)
-                    or any(
-                        isinstance(t, (DoneTool, AgentDoneTool, FinalResultTool))
-                        for t in result.tool_messages
+                    or (
+                        any(
+                            isinstance(t, (DoneTool, AgentDoneTool, FinalResultTool))
+                            for t in result.tool_messages
+                            # this condition ensures agent had chance to handle tools
+                        )
+                        and responder == Entity.AGENT
                     )
                 )
             )

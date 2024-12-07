@@ -13,6 +13,7 @@ from langroid.agent.special.arangodb.arangodb_agent import (
     ArangoChatAgentConfig,
     ArangoSettings,
 )
+from langroid.utils.configuration import Settings, set_global
 
 ARANGO_PASSWORD = "rootpassword"
 
@@ -281,6 +282,7 @@ def number_kg_agent(setup_arango, test_database):
                 password=ARANGO_PASSWORD,
                 database="test_db",
             ),
+            max_tries=20,
             use_tools=True,
             use_functions_api=False,
             prepopulate_schema=False,
@@ -296,20 +298,20 @@ def number_kg_agent(setup_arango, test_database):
     "english_query,aql_query,expected",
     [
         (
-            "What numbers are divided by 2?",
-            """
-        FOR v IN 1..1 OUTBOUND 'numbers/n2' divides
-            RETURN v.value
-        """,
-            [4, 6, 12],
-        ),
-        (
             "What numbers divide 12?",
             """
         FOR v IN 1..1 INBOUND 'numbers/n12' divides
             RETURN v.value
         """,
             [2, 3, 4, 6],
+        ),
+        (
+            "What numbers are divided by 2?",
+            """
+        FOR v IN 1..1 OUTBOUND 'numbers/n2' divides
+            RETURN v.value
+        """,
+            [4, 6, 12],
         ),
         (
             "what is a number that 2 divides and is plus4 from 2?",
@@ -325,7 +327,14 @@ def number_kg_agent(setup_arango, test_database):
         ),
     ],
 )
-def test_number_relationships(number_kg_agent, english_query, aql_query, expected):
+def test_number_relationships(
+    test_settings: Settings,
+    number_kg_agent,
+    english_query,
+    aql_query,
+    expected,
+):
+    set_global(test_settings)
     # Test via direct AQL
     aql_result = number_kg_agent.read_query(aql_query)
     assert sorted(aql_result.data) == sorted(expected)

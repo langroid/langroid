@@ -6,11 +6,12 @@ an agent. The messages could represent, for example:
 - request to run a method of the agent
 """
 
+import copy
 import json
 import textwrap
 from abc import ABC
 from random import choice
-from typing import Any, Dict, List, Tuple, Type
+from typing import Any, Dict, List, Optional, Tuple, Type, TypeVar
 
 from docstring_parser import parse
 
@@ -21,6 +22,55 @@ from langroid.utils.pydantic_utils import (
     generate_simple_schema,
 )
 from langroid.utils.types import is_instance_of
+
+K = TypeVar("K")
+
+
+def remove_if_exists(k: K, d: dict[K, Any]) -> None:
+    """Removes key `k` from `d` if present."""
+    if k in d:
+        d.pop(k)
+
+
+def format_schema_for_strict(schema: Any) -> None:
+    """
+    Recursively set additionalProperties to False and replace
+    oneOf and allOf with anyOf, required for OpenAI structured outputs.
+    Additionally, remove all defaults and set all fields to required.
+    This may not be equivalent to the original schema.
+    """
+    if isinstance(schema, dict):
+        if "type" in schema and schema["type"] == "object":
+            schema["additionalProperties"] = False
+
+            if "properties" in schema:
+                properties = schema["properties"]
+                all_properties = list(properties.keys())
+                for k, v in properties.items():
+                    if "default" in v:
+                        if k == "request":
+                            v["enum"] = [v["default"]]
+
+                        v.pop("default")
+                schema["required"] = all_properties
+            else:
+                schema["properties"] = {}
+                schema["required"] = []
+
+        anyOf = (
+            schema.get("oneOf", []) + schema.get("allOf", []) + schema.get("anyOf", [])
+        )
+        if "allOf" in schema or "oneOf" in schema or "anyOf" in schema:
+            schema["anyOf"] = anyOf
+
+        remove_if_exists("allOf", schema)
+        remove_if_exists("oneOf", schema)
+
+        for v in schema.values():
+            format_schema_for_strict(v)
+    elif isinstance(schema, list):
+        for v in schema:
+            format_schema_for_strict(v)
 
 
 class ToolMessage(ABC, BaseModel):
@@ -42,6 +92,9 @@ class ToolMessage(ABC, BaseModel):
     purpose: str
     id: str = ""  # placeholder for OpenAI-API tool_call_id
 
+    # If enabled, forces strict adherence to schema.
+    # Currently only supported by OpenAI LLMs. When unset, enables if supported.
+    _strict: Optional[bool] = None
     _allow_llm_use: bool = True  # allow an LLM to use (i.e. generate) this tool?
 
     # Optional param to limit number of result tokens to retain in msg history.
@@ -171,7 +224,8 @@ class ToolMessage(ABC, BaseModel):
 
         Args:
             tool: instructions for Langroid-native tool use? (e.g. for non-OpenAI LLM)
-                (or else it would be for OpenAI Function calls)
+                (or else it would be for OpenAI Function calls).
+                Ignored in the default implementation, but can be used in subclasses.
         Returns:
             str: instructions on how to use the message
         """
@@ -238,7 +292,7 @@ class ToolMessage(ABC, BaseModel):
             LLMFunctionSpec: the schema as an LLMFunctionSpec
 
         """
-        schema = cls.schema()
+        schema = copy.deepcopy(cls.schema())
         docstring = parse(cls.__doc__ or "")
         parameters = {
             k: v for k, v in schema.items() if k not in ("title", "description")
@@ -267,6 +321,13 @@ class ToolMessage(ABC, BaseModel):
         if request:
             parameters["required"].append("request")
 
+            # If request is present it must match the default value
+            # Similar to defining request as a literal type
+            parameters["request"] = {
+                "enum": [cls.default_value("request")],
+                "type": "string",
+            }
+
         if "description" not in schema:
             if docstring.short_description:
                 schema["description"] = docstring.short_description
@@ -275,6 +336,26 @@ class ToolMessage(ABC, BaseModel):
                     f"Correctly extracted `{cls.__name__}` with all "
                     f"the required parameters with correct types"
                 )
+
+        # Handle nested ToolMessage fields
+        if "definitions" in parameters:
+            for v in parameters["definitions"].values():
+                if "exclude" in v:
+                    v.pop("exclude")
+
+                    remove_if_exists("purpose", v["properties"])
+                    remove_if_exists("id", v["properties"])
+                    if (
+                        "request" in v["properties"]
+                        and "default" in v["properties"]["request"]
+                    ):
+                        if "required" not in v:
+                            v["required"] = []
+                        v["required"].append("request")
+                        v["properties"]["request"] = {
+                            "type": "string",
+                            "enum": [v["properties"]["request"]["default"]],
+                        }
 
         parameters.pop("exclude")
         _recursive_purge_dict_key(parameters, "title")

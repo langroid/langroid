@@ -97,7 +97,7 @@ class ResultTool(ToolMessage):
         validate_assignment = True
         # do not include these fields in the generated schema
         # since we don't require the LLM to specify them
-        schema_extra = {"exclude": {"purpose", "id"}}
+        schema_extra = {"exclude": {"purpose", "id", "strict"}}
 
     def handle(self) -> AgentDoneTool:
         return AgentDoneTool(tools=[self])
@@ -110,7 +110,7 @@ class FinalResultTool(ToolMessage):
     (b) be returned as the final result of the root task, i.e. this tool would appear
          in the final ChatDocument's `tool_messages` list.
     See test_tool_handlers_and_results in test_tool_messages.py, and
-    examples/basic/tool-extract-short-example.py.
+    examples/basic/chat-tool-function.py.
 
     Note:
         - when defining a tool handler or agent_response, you can directly return
@@ -118,8 +118,13 @@ class FinalResultTool(ToolMessage):
             where the values can be arbitrary data structures, including nested
             Pydantic objs, or you can define a subclass of FinalResultTool with the
             fields you want to return.
-        - This is a special ToolMessage that is NOT meant to be used or handled
-            by an agent.
+        - This is a special ToolMessage that is NOT meant to be used by an agent's
+            llm_response, but only by agent_response or tool handlers.
+        - A subclass of this tool can be defined, with specific fields, and
+          with _allow_llm_use = True, to allow the LLM to generate this tool,
+          and have the effect of terminating the current and all parent tasks,
+          with the tool appearing in the final ChatDocument's `tool_messages` list.
+          See examples/basic/multi-agent-return-result.py.
     """
 
     request: str = ""
@@ -134,7 +139,7 @@ class FinalResultTool(ToolMessage):
         validate_assignment = True
         # do not include these fields in the generated schema
         # since we don't require the LLM to specify them
-        schema_extra = {"exclude": {"purpose", "id"}}
+        schema_extra = {"exclude": {"purpose", "id", "strict"}}
 
 
 class PassTool(ToolMessage):
@@ -154,12 +159,14 @@ class PassTool(ToolMessage):
         `forward_tool(self, tool: PassTool, chat_doc: ChatDocument) -> ChatDocument:`
         """
         # if PassTool is in chat_doc, pass its parent, else pass chat_doc itself
-        tools = agent.get_tool_messages(chat_doc)
-        doc = (
-            chat_doc.parent
-            if any(isinstance(t, type(self)) for t in tools)
-            else chat_doc
-        )
+        doc = chat_doc
+        while True:
+            tools = agent.get_tool_messages(doc)
+            if not any(isinstance(t, type(self)) for t in tools):
+                break
+            if doc.parent is None:
+                break
+            doc = doc.parent
         assert doc is not None, "PassTool: parent of chat_doc must not be None"
         new_doc = ChatDocument.deepcopy(doc)
         new_doc.metadata.sender = Entity.AGENT

@@ -22,7 +22,6 @@ if TYPE_CHECKING:
     from lancedb.query import LanceVectorQueryBuilder
 
 from langroid.embedding_models.base import (
-    EmbeddingModel,
     EmbeddingModelsConfig,
 )
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
@@ -61,9 +60,8 @@ class LanceDB(VectorStore):
             raise LangroidImportError("lancedb", "lancedb")
 
         self.config: LanceDBConfig = config
-        emb_model = EmbeddingModel.create(config.embedding)
-        self.embedding_fn: EmbeddingFunction = emb_model.embedding_fn()
-        self.embedding_dim = emb_model.embedding_dims
+        self.embedding_fn: EmbeddingFunction = self.embedding_model.embedding_fn()
+        self.embedding_dim = self.embedding_model.embedding_dims
         self.host = config.host
         self.port = config.port
         self.is_from_dataframe = False  # were docs ingested from a dataframe?
@@ -123,7 +121,7 @@ class LanceDB(VectorStore):
             self.client.drop_table(name)
         logger.warning(
             f"""
-            Deleted {n_empty_deletes} empty collections and 
+            Deleted {n_empty_deletes} empty collections and
             {n_non_empty_deletes} non-empty collections.
             """
         )
@@ -344,7 +342,7 @@ class LanceDB(VectorStore):
             raise ValueError(
                 f"""
             Error validating LanceDB result: {e}
-            HINT: This could happen when you're re-using an 
+            HINT: This could happen when you're re-using an
             existing LanceDB store with a different schema.
             Try deleting your local lancedb storage at `{self.config.storage_path}`
             re-ingesting your documents and/or replacing the collections.

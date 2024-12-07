@@ -221,4 +221,4 @@ async def on_chat_start():
     lr.ChainlitTaskCallbacks(assistant_task)
     # must use run() instead of run_async() because DocChatAgent
     # does not have an async llm_response method
-    await cl.make_async(assistant_task.run)()
+    await assistant_task.run_async()

@@ -5,7 +5,6 @@ import pytest
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
 from langroid.language_models.base import LLMMessage, Role
 from langroid.language_models.openai_gpt import (
-    OpenAIChatModel,
     OpenAICompletionModel,
     OpenAIGPT,
     OpenAIGPTConfig,
@@ -83,11 +82,6 @@ async def test_llm_async_concurrent(test_settings: Settings):
         type="openai",
         max_output_tokens=100,
         min_output_tokens=10,
-        chat_model=(
-            OpenAIChatModel.GPT3_5_TURBO
-            if test_settings.gpt3_5
-            else OpenAIChatModel.GPT4
-        ),
         completion_model=OpenAICompletionModel.GPT3_5_TURBO_INSTRUCT,
         cache_config=RedisCacheConfig(fake=False),
     )
