@@ -579,7 +579,7 @@ class Task:
 
         if self.caller is not None and self.caller.tsv_logger is not None:
             self.tsv_logger = self.caller.tsv_logger
-        elif self.tsv_caller is None:
+        elif self.tsv_logger is None:
             self.tsv_logger = setup_file_logger(
                 "tsv_logger",
                 str(Path(self.config.logs_dir) / f"{self.name}.tsv"),
