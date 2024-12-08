@@ -87,7 +87,7 @@ class MessageHandlingAgent(ChatAgent):
     def file_exists(self, message: FileExistsMessage) -> str:
         return "yes" if message.filename == "requirements.txt" else "no"
 
-    def tool_handler(self, message: ToolMessage, chat_doc: ChatDocument = None) -> str:
+    def tool_handler(self, message: ToolMessage) -> str:
         if message.request == "python_version":
             return DEFAULT_PY_VERSION
         else:
