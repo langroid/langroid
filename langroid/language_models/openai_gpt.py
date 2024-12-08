@@ -68,7 +68,7 @@ else:
     OLLAMA_BASE_URL = "http://localhost:11434/v1"
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
-GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/"
+GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai"
 GLHF_BASE_URL = "https://glhf.chat/api/openai/v1"
 OLLAMA_API_KEY = "ollama"
 DUMMY_API_KEY = "xxx"
@@ -102,9 +102,9 @@ class OpenAIChatModel(str, Enum):
 class GeminiModel(str, Enum):
     """Enum for Gemini models"""
 
-    GEMINI_1_5_FLASH = "gemini-1.5-flash"
-    GEMINI_1_5_FLASH_8B = "gemini-1.5-flash-8b"
-    GEMINI_1_5_PRO = "gemini-1.5-pro"
+    GEMINI_1_5_FLASH = "gemini/gemini-1.5-flash"
+    GEMINI_1_5_FLASH_8B = "gemini/gemini-1.5-flash-8b"
+    GEMINI_1_5_PRO = "gemini/gemini-1.5-pro"
 
 
 class OpenAICompletionModel(str, Enum):
