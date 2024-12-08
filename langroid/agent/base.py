@@ -1760,20 +1760,11 @@ class Agent(ABC):
             chat_doc is not None
             and "chat_doc" in inspect.signature(handler_method).parameters
         )
-        has_tool_name_arg = ("tool_name" in
-                             inspect.signature(handler_method).parameters)
         try:
-            if has_tool_name_arg:
-                if has_chat_doc_arg:
-                    maybe_result = await handler_method(tool, tool_name=tool_name,
-                                                        chat_doc=chat_doc)
-                else:
-                    maybe_result = await handler_method(tool, tool_name=tool_name)
+            if has_chat_doc_arg:
+                maybe_result = await handler_method(tool, chat_doc=chat_doc)
             else:
-                if has_chat_doc_arg:
-                    maybe_result = await handler_method(tool, chat_doc=chat_doc)
-                else:
-                    maybe_result = await handler_method(tool)
+                maybe_result = await handler_method(tool)
             result = self.to_ChatDocument(maybe_result, tool_name, chat_doc)
         except Exception as e:
             # raise the error here since we are sure it's
@@ -1812,20 +1803,11 @@ class Agent(ABC):
             chat_doc is not None
             and "chat_doc" in inspect.signature(handler_method).parameters
         )
-        has_tool_name_arg = ("tool_name" in
-                             inspect.signature(handler_method).parameters)
         try:
-            if has_tool_name_arg:
-                if has_chat_doc_arg:
-                    maybe_result = handler_method(tool, tool_name=tool_name,
-                                                  chat_doc=chat_doc)
-                else:
-                    maybe_result = handler_method(tool, tool_name=tool_name)
+            if has_chat_doc_arg:
+                maybe_result = handler_method(tool, chat_doc=chat_doc)
             else:
-                if has_chat_doc_arg:
-                    maybe_result = handler_method(tool, chat_doc=chat_doc)
-                else:
-                    maybe_result = handler_method(tool)
+                maybe_result = handler_method(tool)
             result = self.to_ChatDocument(maybe_result, tool_name, chat_doc)
         except Exception as e:
             # raise the error here since we are sure it's
