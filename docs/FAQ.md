@@ -303,3 +303,24 @@ which uses batch tasks for relevance extraction,
 see the `get_verbatim_extracts` method -- when there are k relevant passages,
 this runs k tasks concurrently, 
 each of which uses an LLM-agent to extract relevant verbatim text from a passage.
+
+## Can I use Langroid in a FastAPI server?
+
+Yes, see the [langroid/fastapi-server](https://github.com/langroid/fastapi-server) repo.
+
+## Can a sub-task end all parent tasks and return a result?
+
+Yes, there are two ways to achieve this, using [`FinalResultTool`][langroid.agent.tools.orchestration.final_result_tool.FinalResultTool]:
+
+From a `ChatAgent`'s tool-handler or `agent_response` method: Your code can return a 
+`FinalResultTool` with arbitrary field types; this ends the current and all parent tasks and this  
+`FinalResultTool` will appear as one of tools in the final `ChatDocument.tool_messages`.
+See `test_tool_handlers_and_results` in 
+[test_tool_messages.py](https://github.com/langroid/langroid/blob/main/tests/main/test_tool_messages.py), 
+and [examples/basic/chat-tool-function.py](https://github.com/langroid/langroid/blob/main/examples/basic/chat-tool-function.py)
+
+
+From `ChatAgent`'s `llm_response` method: you can define a subclass of a 
+`FinalResultTool` and enable the agent to use this tool, which means it will become
+available for the LLM to generate. 
+See [examples/basic/multi-agent-return-result.py](https://github.com/langroid/langroid/blob/main/examples/basic/multi-agent-return-result.py).

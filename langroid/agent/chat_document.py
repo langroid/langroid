@@ -217,9 +217,14 @@ class ChatDocument(Document):
         if self.function_call is not None:
             tool_type = "FUNC"
             tool = self.function_call.name
-        elif (json_tools := self.get_tool_names()) != []:
-            tool_type = "TOOL"
-            tool = json_tools[0]
+        else:
+            try:
+                json_tools = self.get_tool_names()
+            except Exception:
+                json_tools = []
+            if json_tools != []:
+                tool_type = "TOOL"
+                tool = json_tools[0]
         recipient = self.metadata.recipient
         content = self.content
         sender_entity = self.metadata.sender

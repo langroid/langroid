@@ -357,6 +357,7 @@ class DocumentParser(Parser):
         docs: List[Document] = []
         # metadata.id to be shared by ALL chunks of this document
         common_id = ObjectRegistry.new_id()
+        n_chunks = 0  # how many chunk so far
         for i, page in self.iterate_pages():
             page_text = self.extract_text_from_page(page)
             split += self.tokenizer.encode(page_text)
@@ -378,9 +379,14 @@ class DocumentParser(Parser):
                         ),
                     )
                 )
+                n_chunks += 1
                 split = split[self.config.chunk_size - self.config.overlap :]
                 pages = [str(i + 1)]
-        if len(split) > self.config.overlap:
+        # there may be a last split remaining:
+        # if it's shorter than the overlap, we shouldn't make a chunk for it
+        # since it's already included in the prior chunk;
+        # the only exception is if there have been no chunks so far.
+        if len(split) > self.config.overlap or n_chunks == 0:
             pg = "-".join([pages[0], pages[-1]])
             text = self.tokenizer.decode(split[: self.config.chunk_size])
             docs.append(

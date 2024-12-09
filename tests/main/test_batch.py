@@ -8,6 +8,7 @@ from langroid import ChatDocument
 from langroid.agent.batch import (
     llm_response_batch,
     run_batch_agent_method,
+    run_batch_function,
     run_batch_task_gen,
     run_batch_tasks,
 )
@@ -344,3 +345,17 @@ def test_task_gen_batch_exceptions(
         assert "disaster" in str(e)
 
     assert error_encountered != handle_exceptions
+
+
+@pytest.mark.parametrize(
+    "func, input_list, batch_size, expected",
+    [
+        (lambda x: x * 2, [1, 2, 3], None, [2, 4, 6]),
+        (lambda x: x + 1, [1, 2, 3, 4], 2, [2, 3, 4, 5]),
+        (lambda x: x * x, [], None, []),
+        (lambda x: x * 3, [1, 2], 1, [3, 6]),
+    ],
+)
+def test_run_batch_function(func, input_list, batch_size, expected):
+    result = run_batch_function(func, input_list, batch_size=batch_size)
+    assert result == expected

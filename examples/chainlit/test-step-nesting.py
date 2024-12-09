@@ -1,5 +1,6 @@
 """
 Test whether the current chainlit version shows nested steps as expected.
+Note that this does NOT show what you'd expect, due to breaking changes in Chainlit.
 
 Two things to look for:
 (1) are all types of steps shown, or only type = "tool"?

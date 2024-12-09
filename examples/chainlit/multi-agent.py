@@ -35,11 +35,9 @@ async def on_chat_start(
             """
         **Teacher Agent** delegates to **Student Agent.**
         - **Teacher** Agent asks a numerical question to **Student** Agent
-        - user (you) hits `c` to continue on to the **Student**
         - **Student** Agent answers the question
-        - user (you) hits `c` to continue on to the **Teacher**
         - **Teacher** Agent gives feedback        
-        - and so on.
+        - and so on until 10 turns are done.
         
         Note how all steps of the (student) sub-task are nested one level below 
         the main (teacher) task.
@@ -51,7 +49,7 @@ async def on_chat_start(
     teacher_task = lr.Task(
         teacher_agent,
         name="Teacher",
-        interactive=True,
+        interactive=False,
         system_message="""
         Ask your student concise numerical questions, and give feedback. 
         Start with a question!
@@ -68,4 +66,4 @@ async def on_chat_start(
 
     teacher_task.add_sub_task(student_task)
     ChainlitTaskCallbacks(teacher_task)
-    await teacher_task.run_async()
+    await teacher_task.run_async(turns=10)

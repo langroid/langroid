@@ -10,6 +10,7 @@ import langroid as lr
 from langroid.agent.tool_message import ToolMessage
 from langroid.agent.tools.orchestration import AgentDoneTool, ResultTool
 from langroid.pydantic_v1 import BaseModel
+from langroid.utils.constants import DONE
 
 
 @pytest.mark.parametrize(
@@ -186,9 +187,12 @@ def test_task_in_out_types(
         result = task[int].run(msg)
         assert result == 6
 
-        # check handling of invalid return type: receive None
+        # check handling of invalid return type:
+        # receive None when strict recovery is disabled
+        agent.disable_strict = True
         result = task[Pair].run(msg)
         assert result is None
+        agent.disable_strict = False
 
         # check we can return a Pydantic model
         result = task[DetailedAnswer].run(msg)
@@ -217,3 +221,116 @@ def test_task_in_out_types(
         result = task.run(msg)
         assert isinstance(result, ResultTool)
         assert result.answer == 6
+
+
+def test_strict_recovery():
+    """Tests strict JSON mode recovery for `Task`s with a `return_type`."""
+
+    def collatz(n: int) -> int:
+        if (n % 2) == 0:
+            return n // 2
+
+        return 3 * n + 1
+
+    def collatz_sequence(n: int) -> list[int]:
+        sequence = [n]
+
+        while n != 1:
+            n = collatz(n)
+            sequence.append(n)
+
+        return sequence
+
+    class CollatzTool(lr.ToolMessage):
+        request: str = "collatz"
+        purpose: str = "To compute the value following `n` in a Collatz sequence."
+        n: int
+
+        def handle(self):
+            return str(collatz(self.n))
+
+    class CollatzSequence(BaseModel):
+        sequence: list[int]
+
+    agent = lr.ChatAgent()
+    agent.enable_message(CollatzTool)
+    task = lr.Task(
+        system_message=f"""
+        You will be provided with an integer (call it `n`);
+        your goal is to compute the Collatz sequence
+        starting at `n`. Do this by calling the `CollatzTool`
+        tool/function on each subsequent value in the sequence,
+        until the result becomes 1.
+
+        Once it does, tell me the sequence of values and say {DONE}.
+        """,
+        interactive=False,
+        erase_substeps=True,
+        default_return_type=CollatzSequence,
+    )
+
+    def is_correct(n: int) -> bool:
+        result = task.run(str(n))
+        return isinstance(
+            result, CollatzSequence
+        ) and result.sequence == collatz_sequence(n)
+
+    for n in range(2, 5):
+        assert is_correct(n)
+
+
+@pytest.mark.asyncio
+async def test_strict_recovery_async():
+    """Tests strict JSON mode recovery for `Task`s with a `return_type`."""
+
+    def collatz(n: int) -> int:
+        if (n % 2) == 0:
+            return n // 2
+
+        return 3 * n + 1
+
+    def collatz_sequence(n: int) -> list[int]:
+        sequence = [n]
+
+        while n != 1:
+            n = collatz(n)
+            sequence.append(n)
+
+        return sequence
+
+    class CollatzTool(lr.ToolMessage):
+        request: str = "collatz"
+        purpose: str = "To compute the value following `n` in a Collatz sequence."
+        n: int
+
+        def handle(self):
+            return str(collatz(self.n))
+
+    class CollatzSequence(BaseModel):
+        sequence: list[int]
+
+    agent = lr.ChatAgent()
+    agent.enable_message(CollatzTool)
+    task = lr.Task(
+        system_message=f"""
+        You will be provided with an integer (call it `n`);
+        your goal is to compute the Collatz sequence
+        starting at `n`. Do this by calling the `CollatzTool`
+        tool/function on each subsequent value in the sequence,
+        until the result becomes 1.
+
+        Once it does, tell me the sequence of values and say {DONE}.
+        """,
+        interactive=False,
+        erase_substeps=True,
+        default_return_type=CollatzSequence,
+    )
+
+    async def is_correct(n: int) -> bool:
+        result = await task.run_async(str(n))
+        return isinstance(
+            result, CollatzSequence
+        ) and result.sequence == collatz_sequence(n)
+
+    for n in range(2, 5):
+        assert await is_correct(n)

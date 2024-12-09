@@ -23,7 +23,6 @@ from qdrant_client.http.models import (
 )
 
 from langroid.embedding_models.base import (
-    EmbeddingModel,
     EmbeddingModelsConfig,
 )
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
@@ -77,16 +76,15 @@ class QdrantDB(VectorStore):
     def __init__(self, config: QdrantDBConfig = QdrantDBConfig()):
         super().__init__(config)
         self.config: QdrantDBConfig = config
-        emb_model = EmbeddingModel.create(config.embedding)
-        self.embedding_fn: EmbeddingFunction = emb_model.embedding_fn()
-        self.embedding_dim = emb_model.embedding_dims
+        self.embedding_fn: EmbeddingFunction = self.embedding_model.embedding_fn()
+        self.embedding_dim = self.embedding_model.embedding_dims
         if self.config.use_sparse_embeddings:
             try:
                 from transformers import AutoModelForMaskedLM, AutoTokenizer
             except ImportError:
                 raise ImportError(
                     """
-                    To use sparse embeddings, 
+                    To use sparse embeddings,
                     you must install langroid with the [transformers] extra, e.g.:
                     pip install "langroid[transformers]"
                     """
@@ -117,10 +115,10 @@ class QdrantDB(VectorStore):
                 config.cloud = True
         elif config.cloud and None in [key, url]:
             logger.warning(
-                f"""QDRANT_API_KEY, QDRANT_API_URL env variable must be set to use 
-                QdrantDB in cloud mode. Please set these values 
-                in your .env file. 
-                Switching to local storage at {config.storage_path} 
+                f"""QDRANT_API_KEY, QDRANT_API_URL env variable must be set to use
+                QdrantDB in cloud mode. Please set these values
+                in your .env file.
+                Switching to local storage at {config.storage_path}
                 """
             )
             config.cloud = False
@@ -189,7 +187,7 @@ class QdrantDB(VectorStore):
             self.client.delete_collection(collection_name=name)
         logger.warning(
             f"""
-            Deleted {n_empty_deletes} empty collections and 
+            Deleted {n_empty_deletes} empty collections and
             {n_non_empty_deletes} non-empty collections.
             """
         )
