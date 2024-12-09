@@ -1,12 +1,20 @@
 import typer
 from rich.prompt import Prompt, Confirm
 import json
-from agents import create_agent
 from config import get_base_llm_config, get_global_settings
 from models import SystemMessages, Message
 from typing import List, Tuple, Optional, Literal, Any
 import logging
+import langroid as lr
 import langroid.utils.logging
+import langroid.agent.tools
+import langroid.agent.tools.google_search_tool
+from langroid.language_models import OpenAIGPTConfig
+from langroid import ChatAgent, ChatAgentConfig
+from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
+from langroid.agent.task import Task
+from langroid.agent.tool_message import ToolMessage
+from langroid.agent.tools.orchestration import DoneTool
 
 # Initialize typer application
 app = typer.Typer()
@@ -158,7 +166,7 @@ def is_llm_delegate() -> bool:
     """
     return Confirm.ask(
         "Would you like the LLM to autonomously continue the debate without "
-        "waiting for user input?",
+        "waiting for user input? or ask for your input first time?",
         default=False,
     )
 
@@ -193,17 +201,36 @@ def run_debate() -> None:
         topic_name, pro_key, con_key = selected_topic_tuple
         side: str = select_side(topic_name)
 
+        # Prompt for the number of debate turns
+        max_turns: int = int(
+            Prompt.ask(
+                "How many turns should the debate continue for?",
+                default="4",
+            )
+        )
         # Create agents for pro, con, and feedback
-        pro_agent: Agent = create_agent(
-            agent_config, system_messages.messages[pro_key].message
+        pro_agent = lr.ChatAgent(
+            lr.ChatAgentConfig(
+                llm=agent_config,
+                system_message=system_messages.messages[pro_key].message
+            )
         )
-        con_agent: Agent = create_agent(
-            agent_config, system_messages.messages[con_key].message
+
+        con_agent = lr.ChatAgent(
+            lr.ChatAgentConfig(
+                llm=agent_config,
+                system_message=system_messages.messages[con_key].message
+            )
         )
-        feedback_agent: Agent = create_agent(
-            agent_config, system_messages.messages["feedback"].message
+
+        feedback_agent = lr.ChatAgent(
+            lr.ChatAgentConfig(
+                llm=agent_config,
+                system_message=system_messages.messages["feedback"].message
+            )
         )
-        logger.info("Pro, Con, and feedback agents started.")
+
+        logger.info("Pro, Con, and feedback agents Created.")
 
         # Determine user's side
         if side == "pro":
@@ -218,97 +245,41 @@ def run_debate() -> None:
             f"LLM Delegate: {llm_delegate}"
         )
 
-        # Prompt for the number of debate turns
-        max_turns: int = int(
-            Prompt.ask(
-                "How many turns should the debate continue for?",
-                default="4",
-            )
-        )
-        student_arguments: List[str] = []
-        ai_arguments: List[str] = []
         is_user_turn: bool = True
 
-        for turn in range(max_turns):
+        if side == "pro":
+            pro_agent.clear_history()
+            logger.info(f"\n{side} Agent ({topic_name}):\n")
             if llm_delegate:
-                # Autonomous LLM debate
-                current_agent = user_agent if is_user_turn else ai_agent
-                agent_role = user_side if is_user_turn else ai_side
-                opponent_arguments = (
-                    ai_arguments if is_user_turn else student_arguments
-                )
-                context = (
-                    "\n".join(opponent_arguments[-1:])
-                    if opponent_arguments
-                    else "Start of debate."
-                )
-
-                # Prepare the full prompt
-                full_context = (
-                    f"{current_agent.system_message}\n\n"
-                    f"Please ensure the response includes rebuttals to all "
-                    f"opponent's arguments:\n{context}"
-                )
-
-                logger.info(f"\n{agent_role} Agent ({topic_name}):\n")
-                print(f"\n{agent_role} Agent ({topic_name}):\n", end="", flush=True)
-                response = current_agent.llm_response(full_context)
-                if response and response.content:
-                    argument = response.content.strip()
-                    if is_user_turn:
-                        student_arguments.append(argument)
-                    else:
-                        ai_arguments.append(argument)
-                else:
-                    print(f"\n{agent_role} Agent did not respond.")
-                is_user_turn = not is_user_turn
+                logger.info("Autonomous Debate Selected")
             else:
-                if is_user_turn:
-                    # User's turn
-                    user_input = Prompt.ask(
-                        "Your argument (or type 'f' for feedback, 'done' to end):"
-                    )
-                    if user_input.lower() == "f":
-                        # Provide feedback during the debate
-                        feedback_content = "\n".join(
-                            student_arguments + ai_arguments
-                        )
-                        print("\nFeedback:\n", end="", flush=True)
-                        final_feedback = feedback_agent.llm_response(
-                            f"Provide feedback on the debate so far.\n{feedback_content}"
-                        )
-                        print()  # Newline after feedback
-                    elif user_input.lower() == "done":
-                        logger.info("Debate ended by user.")
-                        break
-                    else:
-                        student_arguments.append(user_input)
-                        is_user_turn = not is_user_turn  # Switch to AI's turn
-                else:
-                    # AI Agent's turn
-                    context = (
-                        student_arguments[-1]
-                        if student_arguments
-                        else "Start of debate."
-                    )
-                    full_context = (
-                        f"{ai_agent.system_message}\n\n"
-                        f"Opponent's argument:\n{context}"
-                    )
-                    print(f"\n{ai_side} Agent ({topic_name}):\n", end="", flush=True)
-                    response = ai_agent.llm_response(full_context)
-                    if response and response.content:
-                        argument = response.content.strip()
-                        ai_arguments.append(argument)
-                    else:
-                        print(f"\n{ai_side} Agent did not respond.")
-                    is_user_turn = not is_user_turn
+                user_input = Prompt.ask(
+                    "Your argument (or type 'f' for feedback, 'done' to end):"
+                )
+                pro_agent.llm_response(user_input)
+            pro_agent.enable_message(DoneTool)
+            pro_agent_task = lr.Task(pro_agent, interactive=False)
+            con_agent_task = lr.Task(con_agent, interactive=False, single_round=True)
+            pro_agent_task.add_sub_task(con_agent_task)
+            pro_agent_task.run(turns=max_turns)
+        else:
+            con_agent.clear_history()
+            logger.info(f"\n{side} Agent ({topic_name}):\n")
+            if llm_delegate:
+                logger.info("Autonomous Debate Selected")
+            else:
+                user_input = Prompt.ask(
+                    "Your argument (or type 'f' for feedback, 'done' to end):"
+                )
+                pro_agent.llm_response(user_input)
+            con_agent.enable_message(DoneTool)
+            con_agent_task = lr.Task(pro_agent, interactive=False)
+            pro_agent_task = lr.Task(con_agent, interactive=False, single_round=True)
+            con_agent_task.add_sub_task(pro_agent_task)
+            pro_agent_task.run(turns=max_turns)
 
-        # Final feedback
-        final_feedback_content = "\n".join(student_arguments + ai_arguments)
-        print("\nFinal Feedback:\n", end="", flush=True)
-        final_feedback = feedback_agent.llm_response(
-            f"Summarize the debate and declare a winner.\n{final_feedback_content}"
+        feedback_agent.llm_response(
+            f"Summarize the debate and declare a winner.\n{con_agent.message_history}"
         )
 
     except Exception as e:
