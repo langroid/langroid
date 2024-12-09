@@ -25,6 +25,7 @@ import chainlit as cl
 import langroid as lr
 from langroid.agent.callbacks.chainlit import add_instructions
 import langroid.language_models as lm
+from langroid.agent.tools.orchestration import SendTool
 from langroid.agent.tools.google_search_tool import GoogleSearchTool
 from langroid.agent.tools.duckduckgo_search_tool import DuckduckgoSearchTool
 from langroid.utils.configuration import Settings, set_global
@@ -35,7 +36,7 @@ async def main(
     debug: bool = False,
     # e.g. ollama/mistral or local/localhost:5000/v1 default is GPT4o
     model: str = os.getenv("MODEL", ""),
-    provider: str = "ddg",  # or "google", "metaphor"
+    provider: str = "metaphor",  # or "google", "ddg"
     nocache: bool = False,
 ):
     set_global(
@@ -68,18 +69,21 @@ async def main(
     )
 
     assistant_config = lr.ChatAgentConfig(
-        system_message="""
+        system_message=f"""
         You are a resourceful assistant, able to think step by step to answer
         complex questions from the user. You must break down complex questions into
-        simpler questions that can be answered by a web search. You must ask me 
-        (the user) each question ONE BY ONE, and I will do a web search and send you
-        a brief answer. Once you have enough information to answer my original
-        (complex) question, you MUST say DONE and present the answer to me.
+        simpler questions that can be answered by a web search agent. You must ask 
+        each question ONE BY ONE, and the agent will do a web search and send you
+        a brief answer. 
+        Once you have enough information to answer my original
+        (complex) question, you MUST use the TOOL `{SendTool.name()}`
+        with `to` set to "User" to send me the answer. 
         """,
         llm=llm_config,
         vecdb=None,
     )
     assistant_agent = lr.ChatAgent(assistant_config)
+    assistant_agent.enable_message(SendTool)
 
     match provider:
         case "google":
@@ -134,5 +138,5 @@ async def main(
 @cl.on_message
 async def on_message(message: cl.Message):
     assistant_task = cl.user_session.get("assistant_task")
-    lr.ChainlitTaskCallbacks(assistant_task, message)
+    lr.ChainlitTaskCallbacks(assistant_task)
     await assistant_task.run_async(message.content)

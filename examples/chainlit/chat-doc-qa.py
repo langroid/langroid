@@ -121,7 +121,7 @@ async def on_message(message: cl.Message):
 
     if not cl.user_session.get("callbacks_inserted", False):
         # first time user entered a msg, so inject callbacks and display first msg
-        lr.ChainlitAgentCallbacks(agent, message)
+        lr.ChainlitAgentCallbacks(agent)
 
     # Note DocChatAgent has no llm_response_async,
     # so we use llm_response with make_async

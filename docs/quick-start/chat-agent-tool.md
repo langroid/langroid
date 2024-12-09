@@ -189,6 +189,10 @@ But this is done "behind the scenes", either by the OpenAI API
 or by Langroid's native tools mechanism (when we set the `use_tools` flag to `True`).
 
 
+!!! note "Asynchoronous tool handlers"
+      If you run task asynchronously - i.e. via `await task.run_async()` - you may provide
+      asynchronous tool handler by implementing `probe_async` method.
+
 
 See the [`chat-agent-tool.py`](https://github.com/langroid/langroid-examples/blob/main/examples/quick-start/chat-agent-tool.py)
 in the `langroid-examples` repo, for a working example that you can run as follows:

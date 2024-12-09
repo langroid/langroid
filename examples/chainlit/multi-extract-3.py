@@ -1,4 +1,6 @@
 """
+TODO: Fix this example, it fails due to breaking changes in Chainlit
+
 3-Agent system to extract structured information from a document.
 (This is a chainlit version of examples/docqa/chat-multi-extract-3.py)
 
@@ -123,7 +125,7 @@ class LeaseMessage(ToolMessage):
 @cl.on_chat_start
 async def main(
     debug: bool = False,
-    model: str = "ollama/nous-hermes2-mixtral",
+    model: str = "",  # or e.g. "ollama/nous-hermes2-mixtral",
     cache: bool = False,  # disables cache lookup; set to True to use cache
 ) -> None:
     set_global(

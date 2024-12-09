@@ -16,6 +16,7 @@ from typing import (
     Dict,
     List,
     Optional,
+    Self,
     Tuple,
     Type,
     TypeVar,
@@ -570,7 +571,7 @@ class Task:
 
         if self.caller is not None and self.caller.logger is not None:
             self.logger = self.caller.logger
-        else:
+        elif self.logger is None:
             self.logger = RichFileLogger(
                 str(Path(self.config.logs_dir) / f"{self.name}.log"),
                 color=self.color_log,
@@ -578,7 +579,7 @@ class Task:
 
         if self.caller is not None and self.caller.tsv_logger is not None:
             self.tsv_logger = self.caller.tsv_logger
-        else:
+        elif self.tsv_logger is None:
             self.tsv_logger = setup_file_logger(
                 "tsv_logger",
                 str(Path(self.config.logs_dir) / f"{self.name}.tsv"),
@@ -598,7 +599,7 @@ class Task:
         for t in self.sub_tasks:
             t.reset_all_sub_tasks()
 
-    def __getitem__(self, return_type: type) -> Task:
+    def __getitem__(self, return_type: type) -> Self:
         """Returns a (shallow) copy of `self` with a default return type."""
         clone = copy.copy(self)
         clone.default_return_type = return_type
@@ -732,8 +733,37 @@ class Task:
         if return_type is None:
             return_type = self.default_return_type
 
+        # If possible, take a final strict decoding step
+        # when the output does not match `return_type`
         if return_type is not None and return_type != ChatDocument:
-            return self.agent.from_ChatDocument(final_result, return_type)
+            parsed_result = self.agent.from_ChatDocument(final_result, return_type)
+
+            if (
+                parsed_result is None
+                and isinstance(self.agent, ChatAgent)
+                and self.agent._json_schema_available()
+            ):
+                strict_agent = self.agent[return_type]
+                output_args = strict_agent._function_args()[-1]
+                if output_args is not None:
+                    schema = output_args.function.parameters
+                    strict_result = strict_agent.llm_response(
+                        f"""
+                        A response adhering to the following JSON schema was expected:
+                        {schema}
+
+                        Please resubmit with the correct schema. 
+                        """
+                    )
+
+                    if strict_result is not None:
+                        return cast(
+                            Optional[T],
+                            strict_agent.from_ChatDocument(strict_result, return_type),
+                        )
+
+            return parsed_result
+
         return final_result
 
     @overload
@@ -895,8 +925,37 @@ class Task:
         if return_type is None:
             return_type = self.default_return_type
 
+        # If possible, take a final strict decoding step
+        # when the output does not match `return_type`
         if return_type is not None and return_type != ChatDocument:
-            return self.agent.from_ChatDocument(final_result, return_type)
+            parsed_result = self.agent.from_ChatDocument(final_result, return_type)
+
+            if (
+                parsed_result is None
+                and isinstance(self.agent, ChatAgent)
+                and self.agent._json_schema_available()
+            ):
+                strict_agent = self.agent[return_type]
+                output_args = strict_agent._function_args()[-1]
+                if output_args is not None:
+                    schema = output_args.function.parameters
+                    strict_result = await strict_agent.llm_response_async(
+                        f"""
+                        A response adhering to the following JSON schema was expected:
+                        {schema}
+
+                        Please resubmit with the correct schema. 
+                        """
+                    )
+
+                    if strict_result is not None:
+                        return cast(
+                            Optional[T],
+                            strict_agent.from_ChatDocument(strict_result, return_type),
+                        )
+
+            return parsed_result
+
         return final_result
 
     def _pre_run_loop(
