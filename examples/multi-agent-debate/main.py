@@ -135,6 +135,7 @@ def select_debate_topic(system_messages: SystemMessages) -> Optional[tuple]:
     logger.info(f"Selected topic: {selected_topic[0]}")
     return selected_topic
 
+
 def select_side(topic_name: str) -> Literal["pro", "con"]:
     """Prompt the user to select their side in the debate.
 
@@ -248,6 +249,7 @@ def run_debate() -> None:
         is_user_turn: bool = True
 
         if side == "pro":
+            agent_name = pro_agent
             pro_agent.clear_history()
             logger.info(f"\n{side} Agent ({topic_name}):\n")
             if llm_delegate:
@@ -262,7 +264,9 @@ def run_debate() -> None:
             con_agent_task = lr.Task(con_agent, interactive=False, single_round=True)
             pro_agent_task.add_sub_task(con_agent_task)
             pro_agent_task.run(turns=max_turns)
+
         else:
+            agent_name = con_agent
             con_agent.clear_history()
             logger.info(f"\n{side} Agent ({topic_name}):\n")
             if llm_delegate:
@@ -279,7 +283,7 @@ def run_debate() -> None:
             pro_agent_task.run(turns=max_turns)
 
         feedback_agent.llm_response(
-            f"Summarize the debate and declare a winner.\n{con_agent.message_history}"
+            f"Summarize the debate and declare a winner.\n{agent_name.message_history}"
         )
 
     except Exception as e:
