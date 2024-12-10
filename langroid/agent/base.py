@@ -116,7 +116,7 @@ async def async_noop_fn(*args: List[Any], **kwargs: Dict[str, Any]) -> None:
     pass
 
 
-async def async_lambda_noop_fn() -> Callable[..., None]:
+async def async_lambda_noop_fn() -> Callable[..., Coroutine[Any, Any, None]]:
     return async_noop_fn
 
 
