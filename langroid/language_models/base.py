@@ -21,7 +21,7 @@ from typing import (
 from langroid.cachedb.base import CacheDBConfig
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
 from langroid.parsing.agent_chats import parse_message
-from langroid.parsing.parse_json import top_level_json_field
+from langroid.parsing.parse_json import top_level_json_field, parse_imperfect_json
 from langroid.prompts.dialog import collate_chat_history
 from langroid.pydantic_v1 import BaseModel, BaseSettings, Field
 from langroid.utils.configuration import settings
@@ -97,7 +97,17 @@ class LLMFunctionCall(BaseModel):
         # so we try to be safe by removing newlines.
         if fun_args_str is not None:
             fun_args_str = fun_args_str.replace("\n", "").strip()
-            fun_args = ast.literal_eval(fun_args_str)
+            dict_or_list = parse_imperfect_json(fun_args_str)
+
+            if not isinstance(dict_or_list, dict):
+                raise ValueError(
+                    f"""
+                        Invalid function args: {fun_args_str} 
+                        parsed as {dict_or_list},
+                        which is not a valid dict.
+                        """
+                )
+            fun_args = dict_or_list
         else:
             fun_args = None
         fun_call.arguments = fun_args
