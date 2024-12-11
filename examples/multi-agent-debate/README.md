@@ -15,7 +15,17 @@ Features
   - AI as an Educator
 - Agent-Based Interaction:
   - Pro and Con agents for each topic simulate structured debate arguments.
-- Configurable to use different LLMs like GPT-4, GPT-3.5, and Mistral. 
+- Configurable to use different LLMs from OPENAI, Google, & Mistral: 
+  -       1: gpt-4o
+          2: gpt-4
+          3: gpt-4o-mini
+          4: gpt-4-turbo
+          5: gpt-4-32k
+          6: gpt-3.5-turbo-1106 
+          7: Mistral: mistral:7b-instruct-v0.2-q8_0a
+          8: Gemini:gemini-1.5-flash
+          9: Gemini:gemini-1.5-flash-8b
+          10: Gemini:gemini-1.5-pro
 - Feedback Mechanism:
   - Provides structured feedback on debate performance based on key criteria.
 - Interactive or Autonomous Mode:
@@ -24,9 +34,11 @@ Features
 File Structure
 --------------
 - main.py: The entry point of the application. Initializes the system, configures agents, and starts the debate loop.
-- agents.py: Defines functions to create agents for each debate topic, representing the Pro and Con sides.
-- tasks.py: Contains task definitions that encapsulate agent behavior during debates.
 - config.py: Provides functions for configuring global settings and LLM-specific parameters.
+- model.py: json Model
+- system_messages.json: Topic Titles and system_messages for pro and con agents. You can add more topics and their
+respective pro and con system messages here. 
+The system dynamically updates user selection with the topics from this file. 
 
 Getting Started
 ---------------
@@ -46,6 +58,18 @@ Options
   python main.py --debug
 - Disable Caching: Avoid using cached responses for LLM interactions.
   python main.py --nocache
+
+Run the Chainlit Application:
+chainlit run main_chainlit.py
+
+Options:
+Option               Description                                                                                      Default Value
+-------------------- ------------------------------------------------------------------------------------------------ ----------------
+--host <address>     Specifies the host address. Use 0.0.0.0 to make the app accessible from other devices.           127.0.0.1
+--port <number>      Specifies the port the app will run on. Use any available port.                                  8000
+--debug              Enables debug mode, providing detailed error messages and logs.                                  Disabled
+--no-cache           Disables caching of your app, ensuring the latest changes are always loaded.                     Disabled
+
 
 
 Interaction

@@ -36,8 +36,11 @@ def get_base_llm_config():
         "5: gpt-4-32k \n"
         "6: gpt-3.5-turbo-1106 \n"  
         "7: Mistral: mistral:7b-instruct-v0.2-q8_0a\n"
+        "8: Gemini:gemini-1.5-flash \n"
+        "9: Gemini:gemini-1.5-flash-8b \n"
+        "10: Gemini:gemini-1.5-pro \n"
         "Enter 1, 2, 3, 0r 4:",
-        choices=["1", "2", "3", "4", "5", "6", "7"],
+        choices=["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"],
         default="1"
     )
 
@@ -49,6 +52,9 @@ def get_base_llm_config():
         "5": lm.OpenAIChatModel.GPT4_32K,
         "6": lm.OpenAIChatModel.GPT3_5_TURBO,
         "7": "ollama/mistral:7b-instruct-v0.2-q8_0",
+        "8": "gemini/" + lm.GeminiModel.GEMINI_1_5_FLASH,
+        "9": "gemini/" + lm.GeminiModel.GEMINI_1_5_FLASH_8B,
+        "10": "gemini/" + lm.GeminiModel.GEMINI_1_5_PRO
     }
     chat_model = model_map[chat_model_option]
     base_llm_config = lm.OpenAIGPTConfig(
@@ -56,3 +62,5 @@ def get_base_llm_config():
         max_output_tokens=1500,  # Adjusted to prevent truncation
     )
     return base_llm_config
+
+
