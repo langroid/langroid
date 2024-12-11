@@ -2,6 +2,7 @@ from rich.prompt import Prompt
 import langroid.language_models as lm
 import langroid.utils.configuration
 
+
 def get_global_settings(debug=False, nocache=True):
     """
     Returns global settings for Langroid.

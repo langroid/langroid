@@ -269,7 +269,7 @@ def run_debate() -> None:
 
         ),
         )
-    )
+
 
     logger.info("Pro, Con, and feedback agents created.")
 
