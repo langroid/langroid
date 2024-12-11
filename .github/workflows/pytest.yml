@@ -122,7 +122,7 @@ jobs:
       run: pip freeze > requirements_github.txt
 
     - name: Upload dependencies file
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: github-dependencies
         path: requirements_github.txt
