@@ -15,6 +15,7 @@ from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
 from langroid.agent.tool_message import ToolMessage
 from langroid.agent.tools.orchestration import DoneTool
+from langroid.agent.tools.google_search_tool import GoogleSearchTool
 
 # Initialize typer application
 app = typer.Typer()
@@ -33,7 +34,7 @@ formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
 console_handler.setFormatter(formatter)
 
 # Add the handler to the logger
-if not logger.handlers:  # Avoid adding multiple handlers
+if not logger.handlers:
     logger.addHandler(console_handler)
 
 
@@ -170,6 +171,18 @@ def is_llm_delegate() -> bool:
         "waiting for user input? or ask for your input first time?",
         default=False,
     )
+def is_google_api_key_configured() -> bool:
+    """Prompt the user to validate if the Google API key is configured.
+
+    Asks the user whether they have configured the Google API key.
+
+    Returns:
+        bool: True if the user has configured the required env variables, False otherwise.
+    """
+    return Confirm.ask(
+        "Do you have a Google API key and configured? For example, GOOGLE_API_KEY=your-key and GOOGLE_CSE_ID=your-cse-id",
+        default=False,
+    )
 
 
 def run_debate() -> None:
@@ -213,6 +226,7 @@ def run_debate() -> None:
         pro_agent = lr.ChatAgent(
             lr.ChatAgentConfig(
                 llm=agent_config,
+                name="Pro",
                 system_message=system_messages.messages[pro_key].message
             )
         )
@@ -220,6 +234,7 @@ def run_debate() -> None:
         con_agent = lr.ChatAgent(
             lr.ChatAgentConfig(
                 llm=agent_config,
+                name="Con",
                 system_message=system_messages.messages[con_key].message
             )
         )
@@ -227,7 +242,31 @@ def run_debate() -> None:
         feedback_agent = lr.ChatAgent(
             lr.ChatAgentConfig(
                 llm=agent_config,
-                system_message=system_messages.messages["feedback"].message
+                name="feedback",
+                system_message=f"""
+                You are an expert and experienced judge specializing in Lincoln-Douglas style debates.
+                Your goal is to evaluate the debate thoroughly based on the following criteria: 
+                1. Clash of Values: Assess how well each side upholds their stated value 
+                (e.g., justice, morality) and how effectively they compare and prioritize 
+                values against their opponent's. 
+                2. Argumentation: Evaluate the clarity, organization, and logical soundness of 
+                each side's case structure, contentions, and supporting evidence. 
+                3. Cross-Examination: Judge the effectiveness of questioning and answering during 
+                cross-examination, focusing on clarification, exposure of weaknesses, and defense under pressure. 
+                4. Rebuttals: Analyze how well each side refutes their opponent's arguments and whether they 
+                effectively weigh the impacts of their points against the opposing side. 
+                5. Persuasion: Assess the quality of communication, including clarity, tone, and rhetorical 
+                effectiveness, as well as the emotional and ethical appeals made. 
+                6. Technical Execution: Identify whether major arguments were addressed (or dropped) 
+                and check for consistency in the flow of arguments. 
+                7. Adherence to Debate Etiquette: Evaluate the professionalism, respectfulness, 
+                and demeanor of the debaters. 
+                8. Final Focus: Judge the strength of the closing speeches, focusing on how well each debater 
+                summarizes their case, crystallizes key arguments, and justifies why they should win. 
+                Provide constructive feedback for each debater, summarizing their performance in each category, 
+                highlighting areas for improvement, and declaring a winner with justification 
+                based on the stated criteria.
+                """
             )
         )
 
@@ -249,42 +288,77 @@ def run_debate() -> None:
         is_user_turn: bool = True
 
         if side == "pro":
-            agent_name = pro_agent
+
+            agent_name=pro_agent
+            opponent_agent_name=con_agent
             pro_agent.clear_history()
             logger.info(f"\n{side} Agent ({topic_name}):\n")
             if llm_delegate:
                 logger.info("Autonomous Debate Selected")
+                interactive_setting = False
             else:
+                interactive_setting = True
                 user_input = Prompt.ask(
                     "Your argument (or type 'f' for feedback, 'done' to end):"
                 )
                 pro_agent.llm_response(user_input)
             pro_agent.enable_message(DoneTool)
-            pro_agent_task = lr.Task(pro_agent, interactive=False)
+            pro_agent_task = lr.Task(pro_agent, interactive=interactive_setting)
             con_agent_task = lr.Task(con_agent, interactive=False, single_round=True)
             pro_agent_task.add_sub_task(con_agent_task)
             pro_agent_task.run(turns=max_turns)
+            if max_turns % 2 == 0:
+                last_agent = agent_name
+            else:
+                last_agent = opponent_agent_name
 
         else:
             agent_name = con_agent
+            opponent_agent_name = pro_agent
             con_agent.clear_history()
             logger.info(f"\n{side} Agent ({topic_name}):\n")
             if llm_delegate:
+                interactive_setting = False
                 logger.info("Autonomous Debate Selected")
             else:
+                interactive_setting = True
                 user_input = Prompt.ask(
                     "Your argument (or type 'f' for feedback, 'done' to end):"
                 )
                 pro_agent.llm_response(user_input)
             con_agent.enable_message(DoneTool)
-            con_agent_task = lr.Task(pro_agent, interactive=False)
+            con_agent_task = lr.Task(pro_agent, interactive=interactive_setting)
             pro_agent_task = lr.Task(con_agent, interactive=False, single_round=True)
             con_agent_task.add_sub_task(pro_agent_task)
             pro_agent_task.run(turns=max_turns)
+            if max_turns % 2 == 0:
+                last_agent = agent_name
+            else:
+                last_agent = opponent_agent_name
 
+        validation_message = last_agent.message_history
         feedback_agent.llm_response(
-            f"Summarize the debate and declare a winner.\n{agent_name.message_history}"
+            f"Summarize the debate and declare a winner.\n{last_agent.message_history}"
         )
+
+        if is_google_api_key_configured():
+            google_validation_agent = lr.ChatAgent(
+                lr.ChatAgentConfig(
+                    llm=agent_config,
+                    name="validation",
+                    system_message=f"""
+                            You are a helpful assistant. Extract all the links in references and then use the 
+                            GoogleSearchTool to validate the references.
+                            Please show a list of all provided references and then a list of validated ones.
+                            DO NOT MAKE UP YOUR OWN SOURCES; ONLY USE SOURCES YOU FIND FROM A WEB SEARCH.
+                            """
+                )
+            )
+            google_validation_agent.clear_history()
+
+            google_validation_agent.enable_message(GoogleSearchTool)
+            google_validate_task = lr.Task(google_validation_agent, interactive=False)
+            google_validate_task.run(validation_message)
 
     except Exception as e:
         logger.error(f"Unexpected error during debate: {e}")

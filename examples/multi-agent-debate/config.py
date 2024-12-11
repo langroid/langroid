@@ -36,11 +36,8 @@ def get_base_llm_config():
         "5: gpt-4-32k \n"
         "6: gpt-3.5-turbo-1106 \n"  
         "7: Mistral: mistral:7b-instruct-v0.2-q8_0a\n"
-        "8: Gemini:gemini-1.5-flash \n"
-        "9: Gemini:gemini-1.5-flash-8b \n"
-        "10: Gemini:gemini-1.5-pro \n"
         "Enter 1, 2, 3, 0r 4:",
-        choices=["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"],
+        choices=["1", "2", "3", "4", "5", "6", "7"],
         default="1"
     )
 
@@ -52,9 +49,6 @@ def get_base_llm_config():
         "5": lm.OpenAIChatModel.GPT4_32K,
         "6": lm.OpenAIChatModel.GPT3_5_TURBO,
         "7": "ollama/mistral:7b-instruct-v0.2-q8_0",
-        "8": "gemini/gemini-1.5-flash",
-        "9": "gemini/gemini-1.5-flash-8b",
-        "10": "gemini/gemini-1.5-pro",
     }
     chat_model = model_map[chat_model_option]
     base_llm_config = lm.OpenAIGPTConfig(
