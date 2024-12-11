@@ -50,9 +50,7 @@ class FastEmbedEmbeddingsConfig(EmbeddingModelsConfig):
 
 
 class LlamaCppServerEmbeddingsConfig(EmbeddingModelsConfig):
-    api_key: str = ""
     api_base: str = ""
-    dims: int = 1536
     context_length: int = 8192
 
 
