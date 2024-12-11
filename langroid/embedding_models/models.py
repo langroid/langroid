@@ -261,54 +261,54 @@ class LlamaCppServerEmbeddings(EmbeddingModel):
                 """
             )
 
-        self.tokenise_url = self.config.api_base + "/tokenize"
-        self.detokenise_url = self.config.api_base + "/detokenize"
+        self.tokenize_url = self.config.api_base + "/tokenize"
+        self.detokenize_url = self.config.api_base + "/detokenize"
         self.embedding_url = self.config.api_base + "/embeddings"
 
-    def tokenise_string(self, text: str) -> List[int]:
+    def tokenize_string(self, text: str) -> List[int]:
         data = {"content": text, "add_special": False, "with_pieces": False}
-        response = requests.post(self.tokenise_url, json=data)
+        response = requests.post(self.tokenize_url, json=data)
 
         if response.status_code == 200:
             tokens = response.json()["tokens"]
             if type(tokens) is not List[int]:
                 raise ValueError(
-                    """Tokeniser endpoint has not returned the correct format. 
+                    """Tokenizer endpoint has not returned the correct format. 
                    Is the URL correct?
                 """
                 )
             return tokens
         else:
             raise requests.HTTPError(
-                self.tokenise_url,
+                self.tokenize_url,
                 response.status_code,
                 "Failed to connect to tokenisation provider",
             )
 
-    def detokenise_string(self, tokens: List[int]) -> str:
+    def detokenize_string(self, tokens: List[int]) -> str:
         data = {"tokens": tokens}
-        response = requests.post(self.detokenise_url, json=data)
+        response = requests.post(self.detokenize_url, json=data)
 
         if response.status_code == 200:
             text = response.json()["content"]
             if not isinstance(text, str):
                 raise ValueError(
-                    """Deokeniser endpoint has not returned the correct format. 
+                    """Deokenizer endpoint has not returned the correct format. 
                    Is the URL correct?
                 """
                 )
             return text
         else:
             raise requests.HTTPError(
-                self.detokenise_url,
+                self.detokenize_url,
                 response.status_code,
                 "Failed to connect to detokenisation provider",
             )
 
     def truncate_string_to_context_size(self, text: str) -> str:
-        tokens = self.tokenise_string(text)
+        tokens = self.tokenize_string(text)
         tokens = tokens[: self.config.context_length]
-        return self.detokenise_string(tokens)
+        return self.detokenize_string(tokens)
 
     def generate_embedding(self, text: str) -> List[int | float]:
         data = {"content": text}
