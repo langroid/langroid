@@ -2,7 +2,6 @@ from rich.prompt import Prompt
 import langroid.language_models as lm
 import langroid.utils.configuration
 
-
 def get_global_settings(debug=False, nocache=True):
     """
     Returns global settings for Langroid.
@@ -20,7 +19,7 @@ def get_global_settings(debug=False, nocache=True):
     )
 
 
-def get_base_llm_config():
+def get_base_llm_config(config_agent_name):
     """
     Prompts the user to select a base LLM configuration.
 
@@ -28,7 +27,7 @@ def get_base_llm_config():
         OpenAIGPTConfig: Base configuration for the selected LLM.
     """
     chat_model_option = Prompt.ask(
-        "Which OpenAI Model do you want to use? Select an option:\n"
+        "Which OpenAI Model do you want to use? Select an option for " + config_agent_name + ":\n"
         "1: gpt-4o\n"
         "2: gpt-4\n"
         "3: gpt-4o-mini\n"
@@ -62,5 +61,3 @@ def get_base_llm_config():
         max_output_tokens=1500,  # Adjusted to prevent truncation
     )
     return base_llm_config
-
-
