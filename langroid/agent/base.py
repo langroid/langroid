@@ -283,8 +283,8 @@ class Agent(ABC):
         if tool has handler method explicitly defined - use it,
         otherwise use the tool name as the handler
         """
-        if hasattr(message_class, "handler"):
-            handler = message_class.default_value("handler")
+        if hasattr(message_class, "_handler"):
+            handler = getattr(message_class, "_handler", tool)
         else:
             handler = tool
 
@@ -1749,8 +1749,8 @@ class Agent(ABC):
         Asynch version of `handle_tool_message`. See there for details.
         """
         tool_name = tool.default_value("request")
-        if hasattr(tool, "handler"):
-            handler_name = tool.default_value("handler")
+        if hasattr(tool, "_handler"):
+            handler_name = getattr(tool, "_handler", tool_name)
         else:
             handler_name = tool_name
         handler_method = getattr(self, handler_name + "_async", None)
@@ -1792,8 +1792,8 @@ class Agent(ABC):
 
         """
         tool_name = tool.default_value("request")
-        if hasattr(tool, "handler"):
-            handler_name = tool.default_value("handler")
+        if hasattr(tool, "_handler"):
+            handler_name = getattr(tool, "_handler", tool_name)
         else:
             handler_name = tool_name
         handler_method = getattr(self, handler_name, None)

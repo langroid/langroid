@@ -70,7 +70,7 @@ class FileExistsMessage(ToolMessage):
 
 class PythonVersionMessage(ToolMessage):
     request: str = "python_version"
-    handler: str = "tool_handler"
+    _handler: str = "tool_handler"
     purpose: str = "To check which version of Python is needed."
 
     @classmethod
