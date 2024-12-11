@@ -9,8 +9,10 @@ from .base import (
 from .models import (
     OpenAIEmbeddings,
     OpenAIEmbeddingsConfig,
-    SentenceTransformerEmbeddingsConfig,
     SentenceTransformerEmbeddings,
+    SentenceTransformerEmbeddingsConfig,
+    LlamaCppServerEmbeddings,
+    LlamaCppServerEmbeddingsConfig,
     embedding_model,
 )
 from .remote_embeds import (
@@ -27,8 +29,10 @@ __all__ = [
     "EmbeddingModelsConfig",
     "OpenAIEmbeddings",
     "OpenAIEmbeddingsConfig",
-    "SentenceTransformerEmbeddingsConfig",
     "SentenceTransformerEmbeddings",
+    "SentenceTransformerEmbeddingsConfig",
+    "LlamaCppServerEmbeddings",
+    "LlamaCppServerEmbeddingsConfig",
     "embedding_model",
     "RemoteEmbeddingsConfig",
     "RemoteEmbeddings",

@@ -3,6 +3,7 @@ import os
 from functools import cached_property
 from typing import Any, Callable, Dict, List, Optional
 
+import requests
 import tiktoken
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -46,6 +47,11 @@ class FastEmbedEmbeddingsConfig(EmbeddingModelsConfig):
     threads: Optional[int] = None
     parallel: Optional[int] = None
     additional_kwargs: Dict[str, Any] = {}
+
+
+class LlamaCppServerEmbeddingsConfig(EmbeddingModelsConfig):
+    api_base: str = ""
+    context_length: int = 8192
 
 
 class EmbeddingFunctionCallable:
@@ -240,10 +246,108 @@ class FastEmbedEmbeddings(EmbeddingModel):
         return len(embed_func(["text"])[0])
 
 
+LCSEC = LlamaCppServerEmbeddingsConfig
+
+
+class LlamaCppServerEmbeddings(EmbeddingModel):
+    def __init__(self, config: LCSEC = LCSEC()):
+        super().__init__()
+        self.config = config
+
+        if self.config.api_base == "":
+            raise ValueError(
+                """Api Base MUST be set for Llama Server Embeddings.
+                """
+            )
+
+        self.tokenize_url = self.config.api_base + "/tokenize"
+        self.detokenize_url = self.config.api_base + "/detokenize"
+        self.embedding_url = self.config.api_base + "/embeddings"
+
+    def tokenize_string(self, text: str) -> List[int]:
+        data = {"content": text, "add_special": False, "with_pieces": False}
+        response = requests.post(self.tokenize_url, json=data)
+
+        if response.status_code == 200:
+            tokens = response.json()["tokens"]
+            if type(tokens) is not List[int]:
+                raise ValueError(
+                    """Tokenizer endpoint has not returned the correct format. 
+                   Is the URL correct?
+                """
+                )
+            return tokens
+        else:
+            raise requests.HTTPError(
+                self.tokenize_url,
+                response.status_code,
+                "Failed to connect to tokenisation provider",
+            )
+
+    def detokenize_string(self, tokens: List[int]) -> str:
+        data = {"tokens": tokens}
+        response = requests.post(self.detokenize_url, json=data)
+
+        if response.status_code == 200:
+            text = response.json()["content"]
+            if not isinstance(text, str):
+                raise ValueError(
+                    """Deokenizer endpoint has not returned the correct format. 
+                   Is the URL correct?
+                """
+                )
+            return text
+        else:
+            raise requests.HTTPError(
+                self.detokenize_url,
+                response.status_code,
+                "Failed to connect to detokenisation provider",
+            )
+
+    def truncate_string_to_context_size(self, text: str) -> str:
+        tokens = self.tokenize_string(text)
+        tokens = tokens[: self.config.context_length]
+        return self.detokenize_string(tokens)
+
+    def generate_embedding(self, text: str) -> List[int | float]:
+        data = {"content": text}
+        response = requests.post(self.embedding_url, json=data)
+
+        if response.status_code == 200:
+            embedding = response.json()["embedding"]
+            if type(embedding) is not List[int | float]:
+                raise ValueError(
+                    """Embedding endpoint has not returned the correct format. 
+                   Is the URL correct?
+                """
+                )
+            return embedding
+        else:
+            raise requests.HTTPError(
+                self.embedding_url,
+                response.status_code,
+                "Failed to connect to embedding provider",
+            )
+
+    def embedding_fn(self) -> Callable[[List[str]], Embeddings]:
+        def fn(texts: List[str]) -> Embeddings:
+            return [
+                self.generate_embedding(self.truncate_string_to_context_size(text))
+                for text in texts
+            ]
+
+        return fn
+
+    @property
+    def embedding_dims(self) -> int:
+        return self.config.dims
+
+
 def embedding_model(embedding_fn_type: str = "openai") -> EmbeddingModel:
     """
     Args:
-        embedding_fn_type: "openai" or "sentencetransformer" # others soon
+        embedding_fn_type: "openai" or "fastembed" or
+                           "llamacppserver" or "sentencetransformer" # others soon
     Returns:
         EmbeddingModel
     """
@@ -251,5 +355,7 @@ def embedding_model(embedding_fn_type: str = "openai") -> EmbeddingModel:
         return OpenAIEmbeddings  # type: ignore
     elif embedding_fn_type == "fastembed":
         return FastEmbedEmbeddings  # type: ignore
+    elif embedding_fn_type == "llamacppserver":
+        return LlamaCppServerEmbeddings  # type: ignore
     else:  # default sentence transformer
         return SentenceTransformerEmbeddings  # type: ignore
