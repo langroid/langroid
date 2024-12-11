@@ -1,10 +1,9 @@
 import atexit
 import os
-import requests
-import json
 from functools import cached_property
 from typing import Any, Callable, Dict, List, Optional
 
+import requests
 import tiktoken
 from dotenv import load_dotenv
 from openai import OpenAI
@@ -247,77 +246,97 @@ class FastEmbedEmbeddings(EmbeddingModel):
     def embedding_dims(self) -> int:
         embed_func = self.embedding_fn()
         return len(embed_func(["text"])[0])
-    
+
 
 class LlamaCppServerEmbeddings(EmbeddingModel):
-    def __init__(self, config: LlamaCppServerEmbeddingsConfig = LlamaCppServerEmbeddingsConfig()):
+    def __init__(
+        self, config: LlamaCppServerEmbeddingsConfig = LlamaCppServerEmbeddingsConfig()
+    ):
         super().__init__()
         self.config = config
 
-        # Llama Server embeddings requires an address for all tokenisation/embedding functions
         if self.config.api_base == "":
             raise ValueError(
                 """Api Base MUST be set for Llama Server Embeddings.
                 """
             )
-        
+
         self.tokenise_url = self.config.api_base + "/tokenize"
         self.detokenise_url = self.config.api_base + "/detokenize"
         self.embedding_url = self.config.api_base + "/embeddings"
 
     def tokenise_string(self, text: str) -> List[int]:
-        data = {
-            "content" : text,
-            "add_special" : False,
-            "with_pieces" : False
-        }
+        data = {"content": text, "add_special": False, "with_pieces": False}
         response = requests.post(self.tokenise_url, json=data)
 
         if response.status_code == 200:
             tokens = response.json()["tokens"]
+            if type(tokens) is not List[int]:
+                raise ValueError(
+                    """Tokeniser endpoint has not returned the correct format. 
+                   Is the URL correct?
+                """
+                )
             return tokens
         else:
-            raise requests.HTTPError(self.tokenise_url, response.status_code, "Failed to connect to tokenisation provider")
+            raise requests.HTTPError(
+                self.tokenise_url,
+                response.status_code,
+                "Failed to connect to tokenisation provider",
+            )
 
     def detokenise_string(self, tokens: List[int]) -> str:
-        data = {
-            "tokens" : tokens
-        }
+        data = {"tokens": tokens}
         response = requests.post(self.detokenise_url, json=data)
 
         if response.status_code == 200:
             text = response.json()["content"]
+            if not isinstance(text, str):
+                raise ValueError(
+                    """Deokeniser endpoint has not returned the correct format. 
+                   Is the URL correct?
+                """
+                )
             return text
         else:
-            raise requests.HTTPError(self.detokenise_url, response.status_code, "Failed to connect to detokenisation provider")
-    
+            raise requests.HTTPError(
+                self.detokenise_url,
+                response.status_code,
+                "Failed to connect to detokenisation provider",
+            )
+
     def truncate_string_to_context_size(self, text: str) -> str:
         tokens = self.tokenise_string(text)
-        tokens = tokens[:self.config.context_length]
-        return self.detokenise_string(self, tokens)
-    
-    def generate_embedding(self, text: str) -> Embeddings:
-        data = {
-            "content" : text
-        }
+        tokens = tokens[: self.config.context_length]
+        return self.detokenise_string(tokens)
+
+    def generate_embedding(self, text: str) -> List[int | float]:
+        data = {"content": text}
         response = requests.post(self.embedding_url, json=data)
 
         if response.status_code == 200:
             embedding = response.json()["embedding"]
+            if type(embedding) is not List[int | float]:
+                raise ValueError(
+                    """Embedding endpoint has not returned the correct format. 
+                   Is the URL correct?
+                """
+                )
             return embedding
         else:
-            raise requests.HTTPError(self.embedding_url, response.status_code, "Failed to connect to embedding provider")
-    
-    # TODO - Check if llama.cpp server support sending the tokens directly instead of a string.
+            raise requests.HTTPError(
+                self.embedding_url,
+                response.status_code,
+                "Failed to connect to embedding provider",
+            )
+
     def embedding_fn(self) -> Callable[[List[str]], Embeddings]:
         def fn(texts: List[str]) -> Embeddings:
             return [
-                [
-                    self.generate_embedding(
-                        self.truncate_string_to_context_size(text)
-                    )
-                ] for text in texts
+                self.generate_embedding(self.truncate_string_to_context_size(text))
+                for text in texts
             ]
+
         return fn
 
     @property
@@ -328,7 +347,8 @@ class LlamaCppServerEmbeddings(EmbeddingModel):
 def embedding_model(embedding_fn_type: str = "openai") -> EmbeddingModel:
     """
     Args:
-        embedding_fn_type: "openai" or "fastembed" or "llamacppserver" or "sentencetransformer" # others soon
+        embedding_fn_type: "openai" or "fastembed" or
+                           "llamacppserver" or "sentencetransformer" # others soon
     Returns:
         EmbeddingModel
     """
@@ -337,6 +357,6 @@ def embedding_model(embedding_fn_type: str = "openai") -> EmbeddingModel:
     elif embedding_fn_type == "fastembed":
         return FastEmbedEmbeddings  # type: ignore
     elif embedding_fn_type == "llamacppserver":
-        return LlamaCppServerEmbeddings # type: ignore
+        return LlamaCppServerEmbeddings  # type: ignore
     else:  # default sentence transformer
         return SentenceTransformerEmbeddings  # type: ignore

@@ -26,12 +26,12 @@ class EmbeddingModel(ABC):
         from langroid.embedding_models.models import (
             FastEmbedEmbeddings,
             FastEmbedEmbeddingsConfig,
+            LlamaCppServerEmbeddings,
+            LlamaCppServerEmbeddingsConfig,
             OpenAIEmbeddings,
             OpenAIEmbeddingsConfig,
             SentenceTransformerEmbeddings,
             SentenceTransformerEmbeddingsConfig,
-            LlamaCppServerEmbeddings,
-            LlamaCppServerEmbeddingsConfig
         )
         from langroid.embedding_models.remote_embeds import (
             RemoteEmbeddings,
