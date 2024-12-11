@@ -246,10 +246,11 @@ class FastEmbedEmbeddings(EmbeddingModel):
         return len(embed_func(["text"])[0])
 
 
+LCSEC = LlamaCppServerEmbeddingsConfig
+
+
 class LlamaCppServerEmbeddings(EmbeddingModel):
-    def __init__(
-        self, config: LlamaCppServerEmbeddingsConfig = LlamaCppServerEmbeddingsConfig()
-    ):
+    def __init__(self, config: LCSEC = LCSEC()):
         super().__init__()
         self.config = config
 
