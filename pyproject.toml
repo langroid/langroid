@@ -93,6 +93,7 @@ gitpython = "^3.1.43"
 python-arango = {version="^8.1.2", optional=true}
 arango-datasets = {version="^1.2.2", optional=true}
 adb-cloud-connector = "^1.0.2"
+pytest-rerunfailures = "^15.0"
 
 
 [tool.poetry.extras]

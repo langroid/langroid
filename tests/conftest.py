@@ -4,7 +4,7 @@ import threading
 import pytest
 
 from langroid.cachedb.redis_cachedb import RedisCache, RedisCacheConfig
-from langroid.language_models import OpenAIChatModel
+from langroid.language_models import GeminiModel, OpenAIChatModel
 from langroid.utils.configuration import Settings, set_global
 
 
@@ -70,19 +70,42 @@ def pytest_addoption(parser) -> None:
     )
 
 
-@pytest.fixture(scope="function")
-def test_settings(request) -> Settings:
-    chat_model = request.config.getoption("--m")
-    max_turns = request.config.getoption("--turns")
+@pytest.hookimpl(tryfirst=True, hookwrapper=True)
+def pytest_runtest_makereport(item, call):
+    outcome = yield
+    rep = outcome.get_result()
+    setattr(item, f"rep_{rep.when}", rep)
 
-    return Settings(
+
+def pytest_configure(config):
+    config.addinivalue_line(
+        "markers", "fallback: mark test to use fallback models on failure"
+    )
+
+
+@pytest.fixture(scope="function")
+def test_settings(request):
+    base_settings = dict(
         debug=request.config.getoption("--show"),
         cache=not request.config.getoption("--nc"),
         cache_type=request.config.getoption("--ct"),
         stream=not request.config.getoption("--ns"),
-        chat_model=chat_model,
-        max_turns=max_turns,
+        max_turns=request.config.getoption("--turns"),
     )
+
+    if request.node.get_closest_marker("fallback"):
+        models = [GeminiModel.GEMINI_2_FLASH]
+        retry_count = getattr(request.node, "retry_count", 0)
+        model = (
+            models[retry_count]
+            if retry_count < len(models)
+            else request.config.getoption("--m")
+        )
+    else:
+        model = request.config.getoption("--m")
+
+    settings = Settings(**base_settings, chat_model=model)
+    yield settings
 
 
 # Auto-inject this into every test, so we don't need to explicitly
