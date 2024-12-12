@@ -28,15 +28,15 @@ class _TestAsyncToolHandlerConfig(ChatAgentConfig):
     llm = MockLMConfig(
         response_dict={
             "sleep 1": 'TOOL sleep: {"seconds": "0"}',
-            "sleep 2": 'TOOL sleep: {"seconds": "0.1"}',
-            "sleep 3": 'TOOL sleep: {"seconds": "0.2"}',
-            "sleep 4": 'TOOL sleep: {"seconds": "0.3"}',
-            "sleep 5": 'TOOL sleep: {"seconds": "0.4"}',
+            "sleep 2": 'TOOL sleep: {"seconds": "1"}',
+            "sleep 3": 'TOOL sleep: {"seconds": "2"}',
+            "sleep 4": 'TOOL sleep: {"seconds": "3"}',
+            "sleep 5": 'TOOL sleep: {"seconds": "4"}',
         },
     )
 
 
-@pytest.mark.parametrize("stop_on_first", [True, False])
+@pytest.mark.parametrize("stop_on_first", [False, True])
 def test_async_tool_handler(
     test_settings: Settings,
     stop_on_first: bool,
@@ -123,13 +123,11 @@ def test_async_tool_handler(
         assert d["seconds"] == 0
     else:
         # tasks should end in reverse order
-        for i, a in enumerate(answers):
-            assert a is not None
-            if i > 0:
-                d = json.loads(a.content)
-                d_prev = json.loads(answers[i - 1].content)
-                assert d_prev["end"] > d["end"]
-                assert d_prev["seconds"] > d["seconds"]
+        assert all(a is not None for a in answers)
+        ends = [json.loads(a.content)["end"] for a in answers]
+        assert ends == sorted(ends, reverse=True)
+        seconds = [json.loads(a.content)["seconds"] for a in answers]
+        assert seconds == sorted(seconds, reverse=True)
 
 
 class _TestAsyncUserResponseConfig(ChatAgentConfig):
