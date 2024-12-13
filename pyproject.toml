@@ -248,3 +248,9 @@ lint.extend-ignore = ["F821", "F401"]
 [tool.pytest.ini_options]
 filterwarnings = ["ignore::DeprecationWarning"]
 
+[project.scripts]
+chat = "examples.basic.chat"
+completion = "examples.basic.completion"
+chatdoc = "examples.docqa.chat"
+chatsearch = "examples.docqa.chat-search"
+chatsql = "examples.data_qa.sql_chat.sql_chat"
