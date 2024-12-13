@@ -171,6 +171,8 @@ def is_llm_delegate() -> bool:
         "waiting for user input? or ask for your input first time?",
         default=False,
     )
+
+
 def is_google_api_key_configured() -> bool:
     """Prompt the user to validate if the Google API Key and CSE ID are configured.
 
@@ -207,12 +209,22 @@ def run_debate() -> None:
     global_settings = get_global_settings(nocache=True)
     langroid.utils.configuration.set_global(global_settings)
 
+    # Ask the user if they want to use the same LLM configuration for all agents
+    use_same_llm = Confirm.ask(
+        "Do you want to use the same LLM for all agents?",
+        default=True,
+    )
     # Get base LLM configuration
+    if use_same_llm:
+        shared_agent_config: OpenAIGPTConfig = get_base_llm_config("for main LLM")
+        pro_agent_config = con_agent_config = feedback_agent_config = shared_agent_config
+    else:
+        pro_agent_config: OpenAIGPTConfig = get_base_llm_config("for Pro Agent")
+        con_agent_config: OpenAIGPTConfig = get_base_llm_config("for Con Agent")
+        feedback_agent_config: OpenAIGPTConfig = get_base_llm_config("feedback and googleSearch")
 
-    pro_agent_config: OpenAIGPTConfig = get_base_llm_config("for Pro Agent")
-    con_agent_config: OpenAIGPTConfig = get_base_llm_config("for Con Agent")
-    agent_config: OpenAIGPTConfig = get_base_llm_config("feedback and googleSearch")
     system_messages: SystemMessages = load_system_messages("system_messages.json")
+
     llm_delegate: bool = is_llm_delegate()
 
     # Select topic and sides
@@ -247,9 +259,10 @@ def run_debate() -> None:
 
     feedback_agent = ChatAgent(
         ChatAgentConfig(
-            llm=agent_config,
+            llm=feedback_agent_config,
             name="feedback",
             system_message=f"""
+            
             You are an expert and experienced judge specializing in Lincoln-Douglas style debates. 
             Your goal is to evaluate the debate thoroughly based on the following criteria:
             1. Clash of Values: Assess how well each side upholds their stated value (e.g., justice, morality) 
@@ -266,10 +279,8 @@ def run_debate() -> None:
             Provide constructive feedback for each debater, 
             summarizing their performance and declaring a winner with justification.
             """
-
-        ),
+            ),
         )
-
 
     logger.info("Pro, Con, and feedback agents created.")
 
@@ -286,8 +297,11 @@ def run_debate() -> None:
         f"LLM Delegate: {llm_delegate}"
     )
 
-    # Prepare user agent history by clearing the memory
+    # Prepare agents  by clearing the memory
     user_agent.clear_history()
+    ai_agent.clear_history()
+    feedback_agent.clear_history()
+
     logger.info(f"\n{user_side} Agent ({topic_name}):\n")
 
     # Determine if the debate is autonomous or the user input for one side
@@ -310,7 +324,7 @@ def run_debate() -> None:
     user_task.run("get started", turns=max_turns)
 
     # Determine the last agent
-    last_agent = user_agent if max_turns % 2 == 0 else ai_agent
+    last_agent = ai_agent if max_turns % 2 == 0 else user_agent
 
     # Generate feedback summary and declare a winner using feedback agent
     validation_message: str = last_agent.message_history
@@ -322,7 +336,7 @@ def run_debate() -> None:
     if is_google_api_key_configured():
         google_validation_agent = ChatAgent(
             ChatAgentConfig(
-                llm=agent_config,
+                llm=feedback_agent_config,
                 name="validation",
                 system_message=f"""
                         You are a helpful assistant. Extract all the links in references and then use the 
