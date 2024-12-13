@@ -38,8 +38,7 @@ class CountryAreaTool(lr.agent.ToolMessage):
 class AssistantAgent(lr.ChatAgent):
     def country_tools_handler(self, tool: lr.agent.ToolMessage):
         response = requests.get(
-            f"https://restcountries.com/v3.1/name/{tool.country_name}",
-            timeout=5
+            f"https://restcountries.com/v3.1/name/{tool.country_name}", timeout=5
         )
         if not response.ok:
             return "invalid country name"
@@ -51,22 +50,21 @@ class AssistantAgent(lr.ChatAgent):
 
         match tool.request:
             case "country_language_tool":
-                language = ', '.join(data["languages"].values())
+                language = ", ".join(data["languages"].values())
                 return language
             case "country_population_tool":
                 population_millions = data["population"] / 1e6
-                return f'{population_millions:.1f} million people'
+                return f"{population_millions:.1f} million people"
             case "country_area_tool":
                 area_sq_km = data["area"] / 1e6
-                return f'{area_sq_km:.1f} million sq. km'
+                return f"{area_sq_km:.1f} million sq. km"
 
         return "invalid tool name"
 
 
 def make_assistant_task() -> lr.Task:
     llm_config = lr.language_models.OpenAIGPTConfig(
-        temperature=0.2,
-        max_output_tokens=250
+        temperature=0.2, max_output_tokens=250
     )
 
     assistant_config = lr.ChatAgentConfig(

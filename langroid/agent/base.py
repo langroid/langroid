@@ -324,8 +324,9 @@ class Agent(ABC):
                 len(inspect.signature(message_class.response).parameters) > 2
             )
             if has_chat_doc_arg:
-                setattr(self, handler, lambda obj,
-                        chat_doc: obj.response(self, chat_doc))
+                setattr(
+                    self, handler, lambda obj, chat_doc: obj.response(self, chat_doc)
+                )
             else:
                 setattr(self, handler, lambda obj: obj.response(self))
 
