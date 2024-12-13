@@ -8,12 +8,14 @@ import pytest
 from langroid.agent.batch import run_batch_task_gen
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.chat_document import ChatDocument
+from langroid.agent.special.doc_chat_agent import apply_nest_asyncio
 from langroid.agent.task import Task
 from langroid.agent.tool_message import ToolMessage
 from langroid.agent.tools.orchestration import DoneTool
 from langroid.language_models.mock_lm import MockLMConfig
-from langroid.utils.configuration import Settings, set_global
 from langroid.utils.constants import DONE
+
+apply_nest_asyncio()
 
 
 def echo_response(x: str) -> str:
@@ -36,9 +38,26 @@ class _TestAsyncToolHandlerConfig(ChatAgentConfig):
     )
 
 
+async def scheduler(events: dict[int, asyncio.Event], done_event: asyncio.Event):
+    """
+    Implicitly forces sequential scheduling (in the order of the keys
+    of `events`) via asyncio Events. Each scheduled task must first wait
+    on its corresponding Event and signal completion by setting `done_event`
+    on completion.
+    """
+    turns = list(sorted(list(events.items()), key=lambda item: item[0]))
+
+    for _, wait in turns:
+        wait.set()
+        await done_event.wait()
+        # Allow the task which signaled completion to exit
+        await asyncio.sleep(0.01)
+        done_event.clear()
+
+
 @pytest.mark.parametrize("stop_on_first", [False, True])
-def test_async_tool_handler(
-    test_settings: Settings,
+@pytest.mark.asyncio
+async def test_async_tool_handler(
     stop_on_first: bool,
 ):
     """
@@ -47,18 +66,21 @@ def test_async_tool_handler(
     Define an agent with a "sleep" tool that sleeps for specified number
     of seconds. Implement both sync and async handler for this tool.
     Create a batch of 5 tasks that run the "sleep" tool with decreasing
-    sleep times: 0.4, 0.3, 0.2, 0.1, 0 seconds.
+    sleep times: 4, 3, 2, 1, 0 seconds. Sleep is simulated by scheduling
+    the tasks from shortest to longest sleep times.
     Run these tasks in parallel and ensure that:
      * async handler is called for all tasks
      * tasks actually sleep
      * tasks finish in the expected order (reverse from the start order)
     """
-    set_global(test_settings)
 
     class SleepTool(ToolMessage):
         request: str = "sleep"
         purpose: str = "To sleep for specified number of seconds"
-        seconds: float
+        seconds: int
+
+    done_event = asyncio.Event()
+    wait_events = {i: asyncio.Event() for i in [0, 1, 2, 3, 4]}
 
     def task_gen(i: int) -> Task:
         # create a mock agent that calls "sleep" tool
@@ -86,9 +108,11 @@ def test_async_tool_handler(
                 "handler": "async",
                 "seconds": m.seconds,
             }
-            if m.seconds > 0:
-                await asyncio.sleep(m.seconds)
+            await wait_events[m.seconds].wait()
+
             response["end"] = time.perf_counter()
+
+            done_event.set()
             return DoneTool(content=json.dumps(response))
 
         setattr(agent, "sleep_async", handle_async)
@@ -101,6 +125,9 @@ def test_async_tool_handler(
     N = 5
     questions = [f"sleep {str(N - x)}" for x in range(N)]
 
+    # Start executing the scheduler
+    scheduler_task = asyncio.create_task(scheduler(wait_events, done_event))
+
     # batch run
     answers = run_batch_task_gen(
         task_gen,
@@ -108,6 +135,7 @@ def test_async_tool_handler(
         sequential=False,
         stop_on_first_result=stop_on_first,
     )
+    scheduler_task.cancel()
 
     for a in answers:
         if a is not None:
@@ -173,7 +201,8 @@ async def test_async_user_response():
 
 
 @pytest.mark.parametrize("stop_on_first", [True, False])
-def test_async_user_response_batch(
+@pytest.mark.asyncio
+async def test_async_user_response_batch(
     stop_on_first: bool,
 ):
     """
@@ -183,15 +212,20 @@ def test_async_user_response_batch(
     # Number of tasks
     N = 5
 
+    done_event = asyncio.Event()
+    wait_events = {i: asyncio.Event() for i in [0, 1, 2, 3, 4]}
+
     def task_gen(i: int) -> Task:
         # reverse order
-        task_id = N - i - 1
+        wait = N - i - 1
         cfg = _TestAsyncUserResponseConfig()
         agent = ChatAgent(cfg)
 
         async def get_user_response_async(prompt: str) -> str:
-            await asyncio.sleep(task_id / 10)
-            return f"{DONE} async response {task_id}"
+            await wait_events[wait].wait()
+            end_time = time.time()
+            done_event.set()
+            return f"{DONE} async response {end_time} {i}"
 
         agent.callbacks.get_user_response = get_user_response
         agent.callbacks.get_user_response_async = get_user_response_async
@@ -206,6 +240,9 @@ def test_async_user_response_batch(
     # run clones of this task on these inputs
     questions = [str(i) for i in range(N)]
 
+    # Start executing the scheduler
+    scheduler_task = asyncio.create_task(scheduler(wait_events, done_event))
+
     # batch run
     answers = run_batch_task_gen(
         task_gen,
@@ -213,6 +250,7 @@ def test_async_user_response_batch(
         sequential=False,
         stop_on_first_result=stop_on_first,
     )
+    scheduler_task.cancel()
 
     for a in answers:
         if a is not None:
@@ -226,9 +264,19 @@ def test_async_user_response_batch(
         assert "0" in non_null_answers[0].content
     else:
         # tasks should end in reverse order
-        def get_task_id(answer: Optional[ChatDocument]) -> int:
+        def get_task_result(answer: Optional[ChatDocument]) -> tuple[int, float]:
             assert answer is not None
-            return int(answer.content.rsplit(" ", 1)[-1])
+            end_time, id = answer.content.split()[-2:]
+            id = int(id)
+            end_time = float(end_time)
 
-        order = [get_task_id(a) for a in answers]
+            return id, end_time
+
+        order = [
+            result[0]
+            for result in sorted(
+                [get_task_result(a) for a in answers],
+                key=lambda result: result[1],
+            )
+        ]
         assert order == list(reversed(range(N)))
