@@ -1,3 +1,4 @@
+import logging
 import os
 import threading
 
@@ -6,6 +7,8 @@ import pytest
 from langroid.cachedb.redis_cachedb import RedisCache, RedisCacheConfig
 from langroid.language_models import GeminiModel, OpenAIChatModel
 from langroid.utils.configuration import Settings, set_global
+
+logger = logging.getLogger(__name__)
 
 
 def pytest_sessionfinish(session, exitstatus):
@@ -87,25 +90,35 @@ def pytest_configure(config):
 def test_settings(request):
     base_settings = dict(
         debug=request.config.getoption("--show"),
-        cache=not request.config.getoption("--nc"),
         cache_type=request.config.getoption("--ct"),
         stream=not request.config.getoption("--ns"),
         max_turns=request.config.getoption("--turns"),
     )
 
     if request.node.get_closest_marker("fallback"):
-        models = [GeminiModel.GEMINI_2_FLASH]
+        # we're in a test marked as requiring fallback,
+        # so we re-run with a sequence of settings, mainly
+        # on `chat_model` and `cache`.
+        logger.warning("Running test with fallback settings")
+        models = [request.config.getoption("--m")]
+        if OpenAIChatModel.GPT4o not in models:
+            # we may be using a weaker model, so add GPT4o as first fallback
+            models.append(OpenAIChatModel.GPT4o)
+        models.append(GeminiModel.GEMINI_2_FLASH)
+        caches = [True] + [False] * (len(models) - 1)
         retry_count = getattr(request.node, "retry_count", 0)
         model = (
             models[retry_count]
             if retry_count < len(models)
             else request.config.getoption("--m")
         )
+        cache = caches[retry_count] if retry_count < len(caches) else False
+        logger.warning(f"Retry count: {retry_count}, model: {model}, cache: {cache}")
     else:
         model = request.config.getoption("--m")
+        cache = not request.config.getoption("--nc")
 
-    settings = Settings(**base_settings, chat_model=model)
-    yield settings
+    yield Settings(**base_settings, chat_model=model, cache=cache)
 
 
 # Auto-inject this into every test, so we don't need to explicitly
