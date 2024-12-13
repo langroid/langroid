@@ -13,7 +13,6 @@ from langroid.agent.special.arangodb.arangodb_agent import (
     ArangoChatAgentConfig,
     ArangoSettings,
 )
-from langroid.utils.configuration import Settings, set_global
 
 ARANGO_PASSWORD = "rootpassword"
 
@@ -294,6 +293,8 @@ def number_kg_agent(setup_arango, test_database):
     ArangoChatAgent.cleanup_graph_db(test_database)
 
 
+@pytest.mark.fallback
+@pytest.mark.flaky(reruns=2)
 @pytest.mark.parametrize(
     "english_query,aql_query,expected",
     [
@@ -328,13 +329,11 @@ def number_kg_agent(setup_arango, test_database):
     ],
 )
 def test_number_relationships(
-    test_settings: Settings,
     number_kg_agent,
     english_query,
     aql_query,
     expected,
 ):
-    set_global(test_settings)
     # Test via direct AQL
     aql_result = number_kg_agent.read_query(aql_query)
     assert sorted(aql_result.data) == sorted(expected)

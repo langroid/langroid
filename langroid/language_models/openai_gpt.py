@@ -68,7 +68,7 @@ else:
     OLLAMA_BASE_URL = "http://localhost:11434/v1"
 
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
-GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/"
+GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai"
 GLHF_BASE_URL = "https://glhf.chat/api/openai/v1"
 OLLAMA_API_KEY = "ollama"
 DUMMY_API_KEY = "xxx"
@@ -102,9 +102,10 @@ class OpenAIChatModel(str, Enum):
 class GeminiModel(str, Enum):
     """Enum for Gemini models"""
 
-    GEMINI_1_5_FLASH = "gemini-1.5-flash"
-    GEMINI_1_5_FLASH_8B = "gemini-1.5-flash-8b"
-    GEMINI_1_5_PRO = "gemini-1.5-pro"
+    GEMINI_1_5_FLASH = "gemini/gemini-1.5-flash"
+    GEMINI_1_5_FLASH_8B = "gemini/gemini-1.5-flash-8b"
+    GEMINI_1_5_PRO = "gemini/gemini-1.5-pro"
+    GEMINI_2_FLASH = "gemini/gemini-2.0-flash-exp"
 
 
 class OpenAICompletionModel(str, Enum):
@@ -443,6 +444,7 @@ class OpenAIGPT(LanguageModel):
         config = config.copy()
         super().__init__(config)
         self.config: OpenAIGPTConfig = config
+        self.chat_model_orig = self.config.chat_model
 
         # Run the first time the model is used
         self.run_on_first_use = cache(self.config.run_on_first_use)
@@ -451,6 +453,7 @@ class OpenAIGPT(LanguageModel):
         # to allow quick testing with other models
         if settings.chat_model != "":
             self.config.chat_model = settings.chat_model
+            self.chat_model_orig = settings.chat_model
             self.config.completion_model = settings.chat_model
 
         if len(parts := self.config.chat_model.split("//")) > 1:
@@ -565,7 +568,7 @@ class OpenAIGPT(LanguageModel):
 
         self.is_groq = self.config.chat_model.startswith("groq/")
         self.is_cerebras = self.config.chat_model.startswith("cerebras/")
-        self.is_gemini = self.config.chat_model.startswith("gemini/")
+        self.is_gemini = self.is_gemini_model()
         self.is_glhf = self.config.chat_model.startswith("glhf/")
         self.is_openrouter = self.config.chat_model.startswith("openrouter/")
 
@@ -689,6 +692,20 @@ class OpenAIGPT(LanguageModel):
     def is_openai_completion_model(self) -> bool:
         openai_completion_models = [e.value for e in OpenAICompletionModel]
         return self.config.completion_model in openai_completion_models
+
+    def is_gemini_model(self) -> bool:
+        gemini_models = [e.value for e in GeminiModel]
+        return self.chat_model_orig in gemini_models or self.chat_model_orig.startswith(
+            "gemini/"
+        )
+
+    def requires_first_user_message(self) -> bool:
+        """
+        Does the chat_model require a non-empty first user message?
+        TODO: Add other models here; we know gemini requires a non-empty
+        user message, after the system message.
+        """
+        return self.is_gemini_model()
 
     def unsupported_params(self) -> List[str]:
         """
@@ -1663,6 +1680,20 @@ class OpenAIGPT(LanguageModel):
             ]
         else:
             llm_messages = messages
+            if (
+                len(llm_messages) == 1
+                and llm_messages[0].role == Role.SYSTEM
+                and self.requires_first_user_message()
+            ):
+                # some LLMs, notable Gemini as of 12/11/24,
+                # require the first message to be from the user,
+                # so insert a dummy user msg if needed.
+                llm_messages.insert(
+                    1,
+                    LLMMessage(
+                        role=Role.USER, content="Follow the above instructions."
+                    ),
+                )
 
         # Azure uses different parameters. It uses ``engine`` instead of ``model``
         # and the value should be the deployment_name not ``self.config.chat_model``

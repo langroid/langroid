@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "langroid"
-version = "0.27.1"
+version = "0.27.4"
 description = "Harness LLMs with Multi-Agent Programming"
 authors = ["Prasad Chalasani <pchalasani@gmail.com>"]
 readme = "README.md"
@@ -64,7 +64,7 @@ requests = "^2.31.0"
 pyparsing = "^3.0.9"
 nltk = "^3.8.2"
 qdrant-client = "^1.8.0"
-pydantic = ">=1,<3"
+pydantic = ">=1,<2.10.2"
 pandas = "^2.0.3"
 prettytable = "^3.8.0"
 
@@ -93,6 +93,7 @@ gitpython = "^3.1.43"
 python-arango = {version="^8.1.2", optional=true}
 arango-datasets = {version="^1.2.2", optional=true}
 adb-cloud-connector = "^1.0.2"
+pytest-rerunfailures = "^15.0"
 
 
 [tool.poetry.extras]
