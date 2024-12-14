@@ -1,11 +1,18 @@
 [tool.poetry]
 name = "langroid"
-version = "0.28.2"
+version = "0.28.3"
 description = "Harness LLMs with Multi-Agent Programming"
 authors = ["Prasad Chalasani <pchalasani@gmail.com>"]
 readme = "README.md"
 license = "MIT"
 include = ["pyproject.toml", "langroid/py.typed"]
+
+[tool.poetry.scripts]
+chat = "examples.basic.chat"
+completion = "examples.basic.completion"
+chatdoc = "examples.docqa.chat"
+chatsearch = "examples.docqa.chat-search"
+chatsql = "examples.data_qa.sql_chat.sql_chat"
 
 # =============== MAIN DEPS ==============
 [tool.poetry.dependencies]
@@ -248,9 +255,3 @@ lint.extend-ignore = ["F821", "F401"]
 [tool.pytest.ini_options]
 filterwarnings = ["ignore::DeprecationWarning"]
 
-[project.scripts]
-chat = "examples.basic.chat"
-completion = "examples.basic.completion"
-chatdoc = "examples.docqa.chat"
-chatsearch = "examples.docqa.chat-search"
-chatsql = "examples.data_qa.sql_chat.sql_chat"
