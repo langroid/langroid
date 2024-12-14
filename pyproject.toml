@@ -7,11 +7,6 @@ readme = "README.md"
 license = "MIT"
 include = ["pyproject.toml", "langroid/py.typed"]
 
-[tool.poetry.scripts]
-chat = "examples.basic.chat-local:main"
-completion = "examples.basic.completion:app"
-chatdoc = "examples.docqa.chat:app"
-chatsearch = "examples.docqa.chat-search:main"
 
 # =============== MAIN DEPS ==============
 [tool.poetry.dependencies]
