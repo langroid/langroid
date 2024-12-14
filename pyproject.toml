@@ -7,13 +7,6 @@ readme = "README.md"
 license = "MIT"
 include = ["pyproject.toml", "langroid/py.typed"]
 
-[tool.poetry.scripts]
-chat = "examples.basic.chat"
-completion = "examples.basic.completion"
-chatdoc = "examples.docqa.chat"
-chatsearch = "examples.docqa.chat-search"
-chatsql = "examples.data_qa.sql_chat.sql_chat"
-
 # =============== MAIN DEPS ==============
 [tool.poetry.dependencies]
 python = ">=3.10,<3.13"
