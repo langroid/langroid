@@ -21,9 +21,11 @@ class _TestChatAgentConfig(ChatAgentConfig):
 
 
 @pytest.mark.asyncio
-async def test_chat_agent_async(test_settings: Settings):
+@pytest.mark.parametrize("stream_quiet", [True, False])
+async def test_chat_agent_async(test_settings: Settings, stream_quiet: bool):
     set_global(test_settings)
     cfg = _TestChatAgentConfig()
+    cfg.llm.async_stream_quiet = stream_quiet
     # just testing that these don't fail
     agent = ChatAgent(cfg)
     response = await agent.llm_response_async("what is the capital of France?")

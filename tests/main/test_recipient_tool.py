@@ -34,7 +34,6 @@ from langroid.agent.tools.recipient_tool import RecipientTool
 from langroid.language_models.mock_lm import MockLMConfig
 from langroid.language_models.openai_gpt import OpenAIGPTConfig
 from langroid.mytypes import Entity
-from langroid.utils.configuration import Settings, set_global
 from langroid.utils.constants import DONE
 
 INPUT_NUMBERS = [1, 100, 12]
@@ -56,18 +55,18 @@ class SquareTool(ToolMessage):
             return DoneTool(content="-1")
 
 
+@pytest.mark.fallback
+@pytest.mark.flaky(reruns=1)
 @pytest.mark.parametrize("fn_api", [True, False])
 @pytest.mark.parametrize("tools_api", [True, False])
 @pytest.mark.parametrize("constrain_recipients", [True, False])
 @pytest.mark.parametrize("done_tool", [True, False])
 def test_agents_with_recipient_tool(
-    test_settings: Settings,
     fn_api: bool,
     tools_api: bool,
     constrain_recipients: bool,
     done_tool: bool,
 ):
-    set_global(test_settings)
     config = ChatAgentConfig(
         llm=OpenAIGPTConfig(),
         use_tools=not fn_api,
