@@ -1,3 +1,9 @@
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#     "langroid",
+# ]
+# ///
 """
 The most basic chatbot example, using the default settings.
 A single Agent allows you to chat with a pre-trained Language Model.

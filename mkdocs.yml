@@ -108,6 +108,7 @@ nav:
       - Large Tool Results: notes/large-tool-results.md
       - GLHF.chat Support: notes/glhf-chat.md
       - Structured Output: notes/structured-output.md
+      - Tool Handler Name: notes/tool-message-handler.md
 
   - Examples:
     - Guide: examples/guide.md
