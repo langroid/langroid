@@ -3,14 +3,14 @@ import json
 import logging
 from rich.prompt import Prompt, Confirm
 from typing import List, Tuple, Optional, Literal, Any
-import langroid.agent.tools.google_search_tool
+import langroid as lr
 from langroid.language_models import OpenAIGPTConfig
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
 from langroid.agent.tools.orchestration import DoneTool
 from langroid.agent.tools.google_search_tool import GoogleSearchTool
 from langroid.utils.logging import setup_logger
-
+from langroid.utils.configuration import set_global
 from config import get_base_llm_config, get_global_settings
 from models import SystemMessages, Message
 
@@ -271,7 +271,7 @@ def run_debate() -> None:
     """
 
     global_settings = get_global_settings(nocache=True)
-    langroid.utils.configuration.set_global(global_settings)
+    lr.utils.configuration.set_global(global_settings)
     same_llm: bool = is_same_llm_for_all_agents()
     llm_delegate: bool = is_llm_delegate()
 
@@ -289,7 +289,8 @@ def run_debate() -> None:
 
     # Prompt for number of debate turns
     max_turns: int = int(
-        Prompt.ask("How many turns should the debate continue for?", default=DEFAULT_TURN_COUNT)
+        Prompt.ask(f"How many turns should the debate continue for (Defalut is {DEFAULT_TURN_COUNT}?",
+                   default=DEFAULT_TURN_COUNT)
     )
 
     def create_chat_agent(
@@ -315,9 +316,12 @@ def run_debate() -> None:
             )
         )
 
-    pro_agent = create_chat_agent("Pro", pro_agent_config, system_messages.messages[pro_key].message + DEFAULT_SYSTEM_MESSAGE_ADDITION)
-    con_agent = create_chat_agent("Con", con_agent_config, system_messages.messages[con_key].message + DEFAULT_SYSTEM_MESSAGE_ADDITION)
-    feedback_agent = create_chat_agent("Feedback", feedback_agent_config, FEEDBACK_AGENT_SYSTEM_MESSAGE)
+    pro_agent = create_chat_agent("Pro", pro_agent_config, system_messages.messages[pro_key].message +
+                                  DEFAULT_SYSTEM_MESSAGE_ADDITION)
+    con_agent = create_chat_agent("Con", con_agent_config, system_messages.messages[con_key].message +
+                                  DEFAULT_SYSTEM_MESSAGE_ADDITION)
+    feedback_agent = create_chat_agent("Feedback", feedback_agent_config,
+                                       FEEDBACK_AGENT_SYSTEM_MESSAGE)
 
     logger.info("Pro, Con, and feedback agents created.")
 
@@ -334,6 +338,7 @@ def run_debate() -> None:
     user_agent.clear_history()
     ai_agent.clear_history()
     feedback_agent.clear_history()
+
     logger.info(f"\n{user_side} Agent ({topic_name}):\n")
 
     # Determine if the debate is autonomous or the user input for one side
@@ -361,6 +366,9 @@ def run_debate() -> None:
 
     # Generate feedback summary and declare a winner using feedback agent
     validation_message: str = last_agent.message_history
+    if not validation_message:
+        logger.warning("No agent message history found for the last agent")
+        validation_message = "No last agent history available to validate."
     feedback_agent.llm_response(
         f"Summarize the debate and declare a winner.\n{validation_message}"
     )
