@@ -1,41 +1,57 @@
 import typer
-from rich.prompt import Prompt, Confirm
 import json
-from config import get_base_llm_config, get_global_settings
-from models import SystemMessages, Message
-from typing import List, Tuple, Optional, Literal, Any
 import logging
-import langroid as lr
-import langroid.utils.logging
-import langroid.agent.tools
+from rich.prompt import Prompt, Confirm
+from typing import List, Tuple, Optional, Literal, Any
 import langroid.agent.tools.google_search_tool
 from langroid.language_models import OpenAIGPTConfig
-from langroid import ChatAgent, ChatAgentConfig
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
-from langroid.agent.tool_message import ToolMessage
 from langroid.agent.tools.orchestration import DoneTool
 from langroid.agent.tools.google_search_tool import GoogleSearchTool
+from langroid.utils.logging import setup_logger
+
+from config import get_base_llm_config, get_global_settings
+from models import SystemMessages, Message
+
+DEFAULT_SYSTEM_MESSAGE_ADDITION = f"""
+            PLEASE PROVIDE REAL AND VERIFIABLE REFERENCES WITH VALID URLS FOR ALL YOUR ARGUMENTS. 
+            DO NOT MAKE UP YOUR OWN SOURCES; ONLY USE SOURCES YOU FIND FROM A WEB SEARCH. 
+            ENSURE THE CONTENT GENERATED IS FROM REAL SOURCES. 
+            DO NOT REPEAT ARGUMENTS THAT HAVE BEEN PREVIOUSLY GENERATED 
+            AND CAN BE SEEN IN THE DEBATE HISTORY PROVIDED
+            """
+FEEDBACK_AGENT_SYSTEM_MESSAGE = f"""
+            You are an expert and experienced judge specializing in Lincoln-Douglas style debates. 
+            Your goal is to evaluate the debate thoroughly based on the following criteria:
+            1. Clash of Values: Assess how well each side upholds their stated value (e.g., justice, morality) 
+               and how effectively they compare and prioritize values.
+            2. Argumentation: Evaluate the clarity, organization, and logical soundness of each side's case structure, 
+               contentions, and supporting evidence.
+            3. Cross-Examination: Judge the effectiveness of questioning and answering during cross-examination.
+            4. Rebuttals: Analyze how well each side refutes their opponent's arguments.
+            5. Persuasion: Assess communication quality, tone, rhetorical effectiveness, and emotional/ethical appeals.
+            6. Technical Execution: Identify if major arguments were addressed or dropped and check consistency.
+            7. Debate Etiquette: Evaluate professionalism, respect, and demeanor.
+            8. Final Focus: Judge the strength of closing speeches, how well they summarize the case, 
+            and justify a winner.
+            Provide constructive feedback for each debater, 
+            summarizing their performance and declaring a winner with justification.
+            """
+GOOGLE_SEARCH_SYSTEM_MESSAGE = f"""
+            You are a helpful assistant. Extract all the links in references, ensure the URLs looks valid.  
+            Use the GoogleSearchTool to validate the references.
+            Please show a list of all provided references and then a list of validated ones.
+            DO NOT MAKE UP YOUR OWN SOURCES; ONLY USE SOURCES YOU FIND FROM A WEB SEARCH.
+            """
+DEFAULT_TURN_COUNT = 4
 
 # Initialize typer application
 app = typer.Typer()
 
-# Set up a logger for this module
-# Configure logging with a StreamHandler
-logger = logging.getLogger(__name__)
-logger.setLevel(logging.INFO)
-
-# Create a console handler
-console_handler = logging.StreamHandler()
-console_handler.setLevel(logging.INFO)
-
-# Set a logging format
-formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
-console_handler.setFormatter(formatter)
-
-# Add the handler to the logger
-if not logger.handlers:
-    logger.addHandler(console_handler)
+# set info logger
+logger = setup_logger(__name__, level=logging.INFO, terminal=True)
+logger.info("Starting multi-agent-debate")
 
 
 def load_system_messages(file_path: str) -> SystemMessages:
@@ -157,6 +173,38 @@ def select_side(topic_name: str) -> Literal["pro", "con"]:
     return "pro" if side == "1" else "con"
 
 
+def select_topic_and_setup_side(system_messages: SystemMessages) -> Tuple[str, str, str, str]:
+    """Prompt the user to select a debate topic and sets up the respective side.
+
+    This function handles the user interaction for selecting a debate topic and the side
+    (Pro or Con) they want to argue. It validates that a topic is selected and raises an
+    exception if the topic is not available.
+
+    Args:
+        system_messages (SystemMessages): The object containing system messages with respective
+                                          debate topics.
+
+    Returns:
+        Tuple[str, str, str, str]: A tuple containing:
+            - topic_name (str): The name of the selected debate topic.
+            - pro_key (str): The key for the Pro side of the selected topic.
+            - con_key (str): The key for the Con side of the selected topic.
+            - side (str): The user's selected side, either "pro" or "con".
+
+    Raises:
+        ValueError: If no topic is selected or no topics are available in the provided
+                    `system_messages`.
+    """
+    selected_topic_tuple = select_debate_topic(system_messages)
+    if not selected_topic_tuple:
+        logger.error("No topic selected. Exiting.")
+        raise ValueError("No topic selected.")
+
+    topic_name, pro_key, con_key = selected_topic_tuple
+    side = select_side(topic_name)
+    return topic_name, pro_key, con_key, side
+
+
 def is_llm_delegate() -> bool:
     """Prompt the user to decide on LLM delegation.
 
@@ -170,6 +218,21 @@ def is_llm_delegate() -> bool:
         "Would you like the LLM to autonomously continue the debate without "
         "waiting for user input? or ask for your input first time?",
         default=False,
+    )
+
+
+def is_same_llm_for_all_agents() -> bool:
+    """Prompt the user to decide if same LLM should be used for all agents.
+
+       Asks the user whether the same LLM should be configured for all agents.
+
+       Returns:
+           bool: True if the user chooses same LLM for all agents, otherwise return False.
+       """
+    # Ask the user if they want to use the same LLM configuration for all agents
+    return Confirm.ask(
+        "Do you want to use the same LLM for all agents?",
+        default=True,
     )
 
 
@@ -195,27 +258,25 @@ def run_debate() -> None:
     interactions, and final feedback. Handles both user-guided and LLM-
     delegated debates.
 
-
     This function:
     1. Loads global settings and the base LLM configurations.
-    2. Prompts the user to select a debate topic and a side(Pro or Con).
-    3. Sets up pro, con, and feedback agents.
-    4. Runs the debate for a specified number of turns, either interactively
+    2. Prompts the user to confirm if they want to use same LLM for all agents.
+    3. Prompts the user to select a debate topic and a side(Pro or Con).
+    4. Sets up pro, con, and feedback agents.
+    5. Runs the debate for a specified number of turns, either interactively
        or autonomously.
-    5. Provides a feedback summary at the end.
-    6. Optionally validates references if a Google API key is configured. Creates a references validation agent.
+    6. Provides a feedback summary at the end.
+    7. Optionally validates references if a Google API key is configured. Creates a references validation agent.
     Utilizes the langroid GoogleSearchTool.
     """
+
     global_settings = get_global_settings(nocache=True)
     langroid.utils.configuration.set_global(global_settings)
+    same_llm: bool = is_same_llm_for_all_agents()
+    llm_delegate: bool = is_llm_delegate()
 
-    # Ask the user if they want to use the same LLM configuration for all agents
-    use_same_llm = Confirm.ask(
-        "Do you want to use the same LLM for all agents?",
-        default=True,
-    )
     # Get base LLM configuration
-    if use_same_llm:
+    if same_llm:
         shared_agent_config: OpenAIGPTConfig = get_base_llm_config("for main LLM")
         pro_agent_config = con_agent_config = feedback_agent_config = shared_agent_config
     else:
@@ -224,84 +285,55 @@ def run_debate() -> None:
         feedback_agent_config: OpenAIGPTConfig = get_base_llm_config("feedback and googleSearch")
 
     system_messages: SystemMessages = load_system_messages("system_messages.json")
-
-    llm_delegate: bool = is_llm_delegate()
-
-    # Select topic and sides
-    selected_topic_tuple = select_debate_topic(system_messages)
-    if not selected_topic_tuple:
-        logger.error("No topic selected. Exiting.")
-        return
-    topic_name, pro_key, con_key = selected_topic_tuple
-    side: str = select_side(topic_name)
+    topic_name, pro_key, con_key, side = select_topic_and_setup_side(system_messages)
 
     # Prompt for number of debate turns
     max_turns: int = int(
-        Prompt.ask("How many turns should the debate continue for?", default="4")
+        Prompt.ask("How many turns should the debate continue for?", default=DEFAULT_TURN_COUNT)
     )
 
-    # Create agents for pro, con, and feedback
-    pro_agent = ChatAgent(
-        ChatAgentConfig(
-            llm=pro_agent_config,
-            name="Pro",
-            system_message=system_messages.messages[pro_key].message,
-        )
-    )
+    def create_chat_agent(
+            name: str,
+            llm_config: OpenAIGPTConfig,
+            system_message: str
+    ) -> ChatAgent:
+        """creates a ChatAgent with the given parameters.
 
-    con_agent = ChatAgent(
-        ChatAgentConfig(
-            llm=con_agent_config,
-            name="Con",
-            system_message=system_messages.messages[con_key].message,
-        )
-    )
+        Args:
+            name (str): The name of the agent.
+            llm_config (OpenAIGPTConfig): The LLM configuration for the agent.
+            system_message (str): The system message to guide the agent.
 
-    feedback_agent = ChatAgent(
-        ChatAgentConfig(
-            llm=feedback_agent_config,
-            name="feedback",
-            system_message=f"""
-            
-            You are an expert and experienced judge specializing in Lincoln-Douglas style debates. 
-            Your goal is to evaluate the debate thoroughly based on the following criteria:
-            1. Clash of Values: Assess how well each side upholds their stated value (e.g., justice, morality) 
-               and how effectively they compare and prioritize values.
-            2. Argumentation: Evaluate the clarity, organization, and logical soundness of each side's case structure, 
-               contentions, and supporting evidence.
-            3. Cross-Examination: Judge the effectiveness of questioning and answering during cross-examination.
-            4. Rebuttals: Analyze how well each side refutes their opponent's arguments.
-            5. Persuasion: Assess communication quality, tone, rhetorical effectiveness, and emotional/ethical appeals.
-            6. Technical Execution: Identify if major arguments were addressed or dropped and check consistency.
-            7. Debate Etiquette: Evaluate professionalism, respect, and demeanor.
-            8. Final Focus: Judge the strength of closing speeches, how well they summarize the case, 
-            and justify a winner.
-            Provide constructive feedback for each debater, 
-            summarizing their performance and declaring a winner with justification.
-            """
-            ),
+        Returns:
+            ChatAgent: A configured ChatAgent instance.
+        """
+        return ChatAgent(
+            ChatAgentConfig(
+                llm=llm_config,
+                name=name,
+                system_message=system_message,
+            )
         )
+
+    pro_agent = create_chat_agent("Pro", pro_agent_config, system_messages.messages[pro_key].message + DEFAULT_SYSTEM_MESSAGE_ADDITION)
+    con_agent = create_chat_agent("Con", con_agent_config, system_messages.messages[con_key].message + DEFAULT_SYSTEM_MESSAGE_ADDITION)
+    feedback_agent = create_chat_agent("Feedback", feedback_agent_config, FEEDBACK_AGENT_SYSTEM_MESSAGE)
 
     logger.info("Pro, Con, and feedback agents created.")
 
     # Determine user's side and assign user_agent and ai_agent based on user selection
-    if side == "pro":
-        user_agent, ai_agent = pro_agent, con_agent
-        user_side, ai_side = "Pro", "Con"
-    else:
-        user_agent, ai_agent = con_agent, pro_agent
-        user_side, ai_side = "Con", "Pro"
+    agents = {"pro": (pro_agent, con_agent, "Pro", "Con"), "con": (con_agent, pro_agent, "Con", "Pro")}
+    user_agent, ai_agent, user_side, ai_side = agents[side]
 
     logger.info(
         f"Starting debate on topic: {topic_name}, taking the {user_side} side. "
         f"LLM Delegate: {llm_delegate}"
     )
 
-    # Prepare agents  by clearing the memory
+    # Clear Agents memory
     user_agent.clear_history()
     ai_agent.clear_history()
     feedback_agent.clear_history()
-
     logger.info(f"\n{user_side} Agent ({topic_name}):\n")
 
     # Determine if the debate is autonomous or the user input for one side
@@ -309,6 +341,7 @@ def run_debate() -> None:
         logger.info("Autonomous Debate Selected")
         interactive_setting = False
     else:
+        logger.info("Manual Debate Selected with an AI Agent")
         interactive_setting = True
         user_input: str = Prompt.ask(
             "Your argument (or type 'f' for feedback, 'done' to end):"
@@ -334,18 +367,17 @@ def run_debate() -> None:
 
     # If Google API is configured, run validation checks
     if is_google_api_key_configured():
+        google_validation_agent= create_chat_agent("Validation", feedback_agent_config,
+                                                    GOOGLE_SEARCH_SYSTEM_MESSAGE)
+        """
         google_validation_agent = ChatAgent(
             ChatAgentConfig(
                 llm=feedback_agent_config,
                 name="validation",
-                system_message=f"""
-                        You are a helpful assistant. Extract all the links in references and then use the 
-                        GoogleSearchTool to validate the references.
-                        Please show a list of all provided references and then a list of validated ones.
-                        DO NOT MAKE UP YOUR OWN SOURCES; ONLY USE SOURCES YOU FIND FROM A WEB SEARCH.
-                        """
+                system_message=GOOGLE_SEARCH_SYSTEM_MESSAGE
             )
         )
+        """
         google_validation_agent.clear_history()
         google_validation_agent.enable_message(GoogleSearchTool)
         google_validate_task = Task(google_validation_agent, interactive=False)
@@ -354,6 +386,7 @@ def run_debate() -> None:
 
 @app.command()
 def main():
+    """Main function and entry point for the Debate System"""
     run_debate()
 
 

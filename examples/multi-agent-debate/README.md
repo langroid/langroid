@@ -3,8 +3,21 @@ Debate System Using LLM Agents
 
 Overview
 --------
-This project is a debate system powered by LLMs using Langroid, enabling structured debates on various topics such as AI in healthcare, education, intellectual property, and societal biases. The program creates and manages agents that represent opposing sides of a debate, interact with users, and provide constructive feedback based on established debate criteria.
+This project is a debate system powered by LLMs using Langroid, enabling structured debates on various topics 
+such as AI in healthcare, education, intellectual property, and societal biases. 
+The program creates and manages agents that represent opposing sides of a debate, 
+interact with users, and provide constructive feedback based on established debate criteria.
 
+New Topics and Pro and Con Side System messages can be manually configured by updating or modifying the 
+system_messages.json File. 
+"pro_ai": {
+        "topic": "Your New TOPIC",
+        "message": " YOUR Prompt"
+    },
+"con_ai": {
+        "topic": "Your New TOPIC",
+        "message": " YOUR CON or opposing Prompt"
+        }
 
 Features
 --------
@@ -46,6 +59,12 @@ Prerequisites
 1. Python 3.8+
 2. Langroid Framework: Install Langroid with necessary dependencies:
    pip install "langroid[litellm]"
+3. Setup the following env variables in the .env File or set them on your terminal.
+       export GOOGLE_API_KEY=GOOGLE API KEY
+       export GOOGLE_CSE_ID= GOOGLE CASE ID
+       export OPENAI_API_KEY=OPEN AI KEY
+       export GEMINI_API_KEY=GEMiNi API KEY
+4. Please read the following page for more information: https://langroid.github.io/langroid/quick-start/setup/
 
 Usage
 -----
@@ -59,25 +78,15 @@ Options
 - Disable Caching: Avoid using cached responses for LLM interactions.
   python main.py --nocache
 
-Run the Chainlit Application:
-chainlit run main_chainlit.py
-
-Options:
-Option               Description                                                                                      Default Value
--------------------- ------------------------------------------------------------------------------------------------ ----------------
---host <address>     Specifies the host address. Use 0.0.0.0 to make the app accessible from other devices.           127.0.0.1
---port <number>      Specifies the port the app will run on. Use any available port.                                  8000
---debug              Enables debug mode, providing detailed error messages and logs.                                  Disabled
---no-cache           Disables caching of your app, ensuring the latest changes are always loaded.                     Disabled
-
-
 
 Interaction
-1. Select a debate topic.
-2. Choose your side (Pro or Con).
-3. Engage in a debate by providing arguments and receiving responses from agents.
-4. Request feedback at any time by typing `f`.
-5. End the debate manually by typing `done`.
+1. Decide if you want to you use same LLM for all agents or different ones
+2. Decide if you want autonomous debate between AI Agents or user vs. AI Agent. 
+3. Select a debate topic.
+4. Choose your side (Pro or Con).
+5. Engage in a debate by providing arguments and receiving responses from agents.
+6. Request feedback at any time by typing `f`.
+7. End the debate manually by typing `done`.
 
 Feedback Criteria
 -----------------
@@ -94,4 +103,4 @@ The feedback mechanism evaluates debates based on:
 License
 -------
 This project is licensed under the MIT License.
-
+"""
