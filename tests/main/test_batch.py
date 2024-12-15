@@ -145,12 +145,14 @@ def test_task_batch_turns(
         assert any(str(e) in a.content.lower() for a in answers)
 
 
+@pytest.mark.parametrize("batch_size", [1, 2, 3, None])
 @pytest.mark.parametrize("sequential", [True, False])
 @pytest.mark.parametrize("stop_on_first", [True, False])
 def test_agent_llm_response_batch(
     test_settings: Settings,
     sequential: bool,
     stop_on_first: bool,
+    batch_size: Optional[int],
 ):
     set_global(test_settings)
     cfg = _TestChatAgentConfig()
@@ -171,6 +173,7 @@ def test_agent_llm_response_batch(
         output_map=lambda x: x,  # how to process the result of each task
         sequential=sequential,
         stop_on_first_result=stop_on_first,
+        batch_size=batch_size,
     )
 
     if stop_on_first:
@@ -182,6 +185,7 @@ def test_agent_llm_response_batch(
         for e in expected_answers:
             assert any(str(e) in a.content.lower() for a in answers)
 
+    # Test the helper function as well
     answers = llm_response_batch(
         agent,
         questions,
@@ -359,3 +363,30 @@ def test_task_gen_batch_exceptions(
 def test_run_batch_function(func, input_list, batch_size, expected):
     result = run_batch_function(func, input_list, batch_size=batch_size)
     assert result == expected
+
+
+def test_batch_size_processing(test_settings: Settings):
+    """Test that batch_size parameter correctly processes items in batches"""
+    set_global(test_settings)
+    cfg = _TestChatAgentConfig()
+    agent = ChatAgent(cfg)
+
+    N = 5
+    questions = list(range(N))
+    batch_size = 2
+
+    answers = run_batch_agent_method(
+        agent,
+        agent.llm_response_async,
+        questions,
+        input_map=lambda x: str(x),
+        output_map=lambda x: x,
+        sequential=True,
+        batch_size=batch_size,
+    )
+
+    # Verify we got all expected answers
+    assert len(answers) == N
+    for i, answer in enumerate(answers):
+        assert answer is not None
+        assert str(i + 1) in answer.content

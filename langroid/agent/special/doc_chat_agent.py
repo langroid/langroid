@@ -1,3 +1,4 @@
+# # langroid/agent/special/doc_chat_agent.py
 """
 Agent that supports asking queries about a set of documents, using
 retrieval-augmented generation (RAG).
@@ -133,14 +134,15 @@ class DocChatAgentConfig(ChatAgentConfig):
     # this might help in finding relevant chunks for a given question.
     hypothetical_questions: bool = False
     num_hypothetical_questions: int = 2
-    hypothetical_questions_prompt: str = f"""
-    Given the following text passage, generate up to {num_hypothetical_questions} 
+    hypothetical_questions_prompt: str = """
+    Given the following text passage, generate up to %(num_hypothetical_questions)s
     different questions that this passage would help answer. 
     Make the questions specific and diverse.
     
     PASSAGE:
     %(passage)s
     """
+    hypothetical_questions_batch_size: int | None = 50
 
     n_query_rephrases: int = 0
     n_neighbor_chunks: int = 0  # how many neighbors on either side of match to retrieve
@@ -356,6 +358,7 @@ class DocChatAgent(ChatAgent):
                     d.metadata = d.metadata.copy(update=meta)
                 docs.extend(path_docs)
         n_docs = len(docs)
+        # import ipdb; ipdb.set_trace()
         n_splits = self.ingest_docs(docs, split=self.config.split)
         if n_docs == 0:
             return []
@@ -420,7 +423,7 @@ class DocChatAgent(ChatAgent):
                 d.metadata.is_chunk = True
         if self.vecdb is None:
             raise ValueError("VecDB not set")
-
+        # # import ipdb; ipdb.set_trace()
         if self.config.hypothetical_questions:
             docs = self.add_hypothetical_questions(docs)
 
@@ -896,14 +899,19 @@ class DocChatAgent(ChatAgent):
 
         with status("[cyan]Generating hypothetical questions for chunks..."):
             # Process chunks in parallel using run_batch_agent_method
+            n_hq = self.config.num_hypothetical_questions or 1
             questions_batch = run_batch_agent_method(
                 agent=self,
                 method=self.llm_response_forget_async,
                 items=docs,
                 input_map=lambda doc: self.config.hypothetical_questions_prompt
-                % {"passage": doc.content},
+                % {
+                    "passage": doc.content,
+                    "num_hypothetical_questions": n_hq,
+                },
                 output_map=lambda response: response.content if response else "",
                 sequential=False,
+                batch_size=self.config.hypothetical_questions_batch_size,
             )
 
             # Combine original content with generated questions
@@ -1143,6 +1151,7 @@ class DocChatAgent(ChatAgent):
         # upstream of this one.
         # The `temp_update` context manager is defined in
         # `langroid/utils/pydantic_utils.py`
+        # import ipdb; ipdb.set_trace()
         return self.vecdb.similar_texts_with_scores(
             query,
             k=k,
@@ -1184,6 +1193,7 @@ class DocChatAgent(ChatAgent):
             not in self.vecdb.list_collections(empty=False)
         ):
             return []
+        # import ipdb; ipdb.set_trace()
 
         # if we are using cross-encoder reranking or reciprocal rank fusion (RRF),
         # we can retrieve more docs during retrieval, and leave it to the cross-encoder
@@ -1212,6 +1222,7 @@ class DocChatAgent(ChatAgent):
                     docs_and_scores, key=lambda x: x[1], reverse=True
                 )
 
+        # import ipdb; ipdb.set_trace()
         # keep only docs with unique d.id()
         id2_rank_semantic = {d.id(): i for i, (d, _) in enumerate(docs_and_scores)}
         id2doc = {d.id(): d for d, _ in docs_and_scores}
@@ -1374,8 +1385,9 @@ class DocChatAgent(ChatAgent):
         if self.config.n_query_rephrases > 0:
             rephrases = self.llm_rephrase_query(query)
             proxies += rephrases
-
+        # import ipdb; ipdb.set_trace()
         passages = self.get_relevant_chunks(query, proxies)  # no LLM involved
+        # # import ipdb; ipdb.set_trace()
 
         if len(passages) == 0:
             return query, []
@@ -1388,7 +1400,7 @@ class DocChatAgent(ChatAgent):
 
         return query, extracts
 
-    def clean_generated_content(self, passages: List[Document]) -> List[Document]:
+    def remove_hypothetical_questions(self, passages: List[Document]) -> List[Document]:
         """Remove any generated content (like hypothetical questions) from documents.
         Only cleans if corresponding generation was enabled in config.
 
@@ -1432,7 +1444,7 @@ class DocChatAgent(ChatAgent):
         Returns:
             List[Document]: list of Documents containing extracts and metadata.
         """
-        passages = self.clean_generated_content(passages)
+        passages = self.remove_hypothetical_questions(passages)
 
         agent_cfg = self.config.relevance_extractor_config
         if agent_cfg is None:

@@ -947,7 +947,7 @@ def test_doc_chat_batch(test_settings: Settings, vecdb):
 @pytest.mark.parametrize(
     "hypothetical_questions, expect_cleaned", [(True, True), (False, False)]
 )
-def test_clean_generated_content(
+def test_remove_generated_questions(
     test_settings: Settings,
     vecdb: VectorStore,
     hypothetical_questions: bool,
