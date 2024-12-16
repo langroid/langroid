@@ -123,6 +123,10 @@ class SearchDocChatAgent(DocChatAgent):
         return "\n".join(str(e) for e in extracts)
 
 
+def cli():
+    Fire(main)
+
+
 def main(
     debug: bool = False,
     nocache: bool = False,

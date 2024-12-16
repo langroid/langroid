@@ -57,19 +57,24 @@ class CountryCapitalMessage(ToolMessage):
 
 class FileExistsMessage(ToolMessage):
     request: str = "file_exists"
-    purpose: str = "To check whether a certain <filename> is in the repo."
+    purpose: str = """
+    To check whether a certain <filename> is in the repo,
+    recursively if needed, as specified by <recurse>.
+    """
     filename: str = Field(..., description="File name to check existence of")
+    recurse: bool = Field(..., description="Whether to recurse into subdirectories")
 
     @classmethod
     def examples(cls) -> List["FileExistsMessage"]:
         return [
-            cls(filename="README.md"),
-            cls(filename="Dockerfile"),
+            cls(filename="README.md", recurse=True),
+            cls(filename="Dockerfile", recurse=False),
         ]
 
 
 class PythonVersionMessage(ToolMessage):
     request: str = "python_version"
+    _handler: str = "tool_handler"
     purpose: str = "To check which version of Python is needed."
 
     @classmethod
@@ -86,8 +91,11 @@ class MessageHandlingAgent(ChatAgent):
     def file_exists(self, message: FileExistsMessage) -> str:
         return "yes" if message.filename == "requirements.txt" else "no"
 
-    def python_version(self, PythonVersionMessage) -> str:
-        return DEFAULT_PY_VERSION
+    def tool_handler(self, message: ToolMessage) -> str:
+        if message.request == "python_version":
+            return DEFAULT_PY_VERSION
+        else:
+            return "invalid tool name"
 
     def country_capital(self, message: CountryCapitalMessage) -> str:
         return (
@@ -203,7 +211,8 @@ FILE_EXISTS_MSG = """
 Ok, thank you.
 {
 "request": "file_exists",
-"filename": "test.txt"
+"filename": "test.txt",
+"recurse": true
 }
 Hope you can tell me!
 """
@@ -265,17 +274,24 @@ def test_handle_bad_tool_message():
     assert "file_exists" in result and "filename" in result and "required" in result
 
 
-@pytest.mark.parametrize("stream", [True, False])
+@pytest.mark.parametrize("stream", [False, True])
 @pytest.mark.parametrize(
     "use_functions_api",
-    [False],
+    [True, False],
+)
+@pytest.mark.parametrize(
+    "use_tools_api",
+    [True, False],
 )
 @pytest.mark.parametrize(
     "message_class, prompt, result",
     [
         (
             FileExistsMessage,
-            "You have to find out whether the file 'requirements.txt' exists",
+            """
+            You have to find out whether the file 'requirements.txt' exists in the repo,
+            recursively exploring subdirectories if needed.
+            """,
             "yes",
         ),
         (
@@ -293,6 +309,7 @@ def test_handle_bad_tool_message():
 def test_llm_tool_message(
     test_settings: Settings,
     use_functions_api: bool,
+    use_tools_api: bool,
     message_class: ToolMessage,
     prompt: str,
     result: str,
@@ -314,6 +331,7 @@ def test_llm_tool_message(
     agent = MessageHandlingAgent(cfg)
     agent.config.use_functions_api = use_functions_api
     agent.config.use_tools = not use_functions_api
+    agent.config.use_tools_api = use_tools_api
     if not agent.llm.is_openai_chat_model() and use_functions_api:
         pytest.skip(
             f"""
@@ -332,7 +350,10 @@ def test_llm_tool_message(
     llm_msg = agent.llm_response_forget(prompt)
     tool_name = message_class.default_value("request")
     if use_functions_api:
-        assert llm_msg.oai_tool_calls[0].function.name == tool_name
+        if use_tools_api:
+            assert llm_msg.oai_tool_calls[0].function.name == tool_name
+        else:
+            assert llm_msg.function_call.name == tool_name
 
     tools = agent.get_tool_messages(llm_msg)
     assert len(tools) == 1

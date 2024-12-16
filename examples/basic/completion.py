@@ -1,3 +1,9 @@
+# /// script
+# requires-python = ">=3.11"
+# dependencies = [
+#     "langroid",
+# ]
+# ///
 """
 Interact with a base completion model, specifically the original GPT-3 base model
 (i.e. davinci-002 or babbage-002),
@@ -34,6 +40,16 @@ from langroid.utils.configuration import set_global, Settings
 app = typer.Typer()
 
 
+def multiline_input(prompt_text):
+    lines = []
+    while True:
+        line = Prompt.ask(prompt_text)
+        if not line:
+            break
+        lines.append(line)
+    return "\n".join(lines)
+
+
 @app.command()
 def main(
     debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
@@ -50,7 +66,10 @@ def main(
     )
     print(
         """
-        [blue]Welcome to the basic chatbot!
+        [blue]Welcome to the basic completion engine.
+        Text you enter will be completed by an LLM 
+        (Default is a GPT3-class LLM, davinci-002). 
+        You can enter multi-line inputs; Enter return TWICE to send your message.
         Enter x or q to quit at any point.
         """
     )
@@ -66,11 +85,15 @@ def main(
     )
     llm = lm.OpenAIGPT(llm_config)
 
+    print()
     while True:
-        user_msg = Prompt.ask("You")
+        print("\n")
+        user_msg = multiline_input("[blue]You[/blue]")
         if user_msg.lower() in ["q", "x"]:
             break
-        response = llm.generate(prompt=user_msg, max_tokens=100)
+        print("\nBot: ")
+        response = llm.generate(prompt=user_msg, max_tokens=50)
+
         if response.cached:
             print(f"[red](Cached)[/red] [green] {response.message}[/green]")
 

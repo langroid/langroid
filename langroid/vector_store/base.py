@@ -30,6 +30,7 @@ class VectorStoreConfig(BaseSettings):
     embedding: EmbeddingModelsConfig = OpenAIEmbeddingsConfig(
         model_type="openai",
     )
+    embedding_model: Optional[EmbeddingModel] = None
     timeout: int = 60
     host: str = "127.0.0.1"
     port: int = 6333
@@ -46,7 +47,10 @@ class VectorStore(ABC):
 
     def __init__(self, config: VectorStoreConfig):
         self.config = config
-        self.embedding_model = EmbeddingModel.create(config.embedding)
+        if config.embedding_model is None:
+            self.embedding_model = EmbeddingModel.create(config.embedding)
+        else:
+            self.embedding_model = config.embedding_model
 
     @staticmethod
     def create(config: VectorStoreConfig) -> Optional["VectorStore"]:
