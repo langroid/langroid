@@ -303,7 +303,7 @@ def run_debate() -> None:
         Args:
             name (str): The name of the agent.
             llm_config (OpenAIGPTConfig): The LLM configuration for the agent.
-            system_message (str): The system message to guide the agent.
+            system_message (str): The system message to guide the agent's LLM.
 
         Returns:
             ChatAgent: A configured ChatAgent instance.
@@ -322,13 +322,11 @@ def run_debate() -> None:
                                   DEFAULT_SYSTEM_MESSAGE_ADDITION)
     feedback_agent = create_chat_agent("Feedback", feedback_agent_config,
                                        FEEDBACK_AGENT_SYSTEM_MESSAGE)
-
     logger.info("Pro, Con, and feedback agents created.")
 
     # Determine user's side and assign user_agent and ai_agent based on user selection
     agents = {"pro": (pro_agent, con_agent, "Pro", "Con"), "con": (con_agent, pro_agent, "Con", "Pro")}
     user_agent, ai_agent, user_side, ai_side = agents[side]
-
     logger.info(
         f"Starting debate on topic: {topic_name}, taking the {user_side} side. "
         f"LLM Delegate: {llm_delegate}"
@@ -375,17 +373,8 @@ def run_debate() -> None:
 
     # If Google API is configured, run validation checks
     if is_google_api_key_configured():
-        google_validation_agent= create_chat_agent("Validation", feedback_agent_config,
+        google_validation_agent = create_chat_agent("Validation", feedback_agent_config,
                                                     GOOGLE_SEARCH_SYSTEM_MESSAGE)
-        """
-        google_validation_agent = ChatAgent(
-            ChatAgentConfig(
-                llm=feedback_agent_config,
-                name="validation",
-                system_message=GOOGLE_SEARCH_SYSTEM_MESSAGE
-            )
-        )
-        """
         google_validation_agent.clear_history()
         google_validation_agent.enable_message(GoogleSearchTool)
         google_validate_task = Task(google_validation_agent, interactive=False)
