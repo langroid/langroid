@@ -1,13 +1,12 @@
 import typer
 import json
 import logging
+import langroid as lr
 from rich.prompt import Prompt, Confirm
 from typing import List, Tuple, Optional, Literal, Any
-import langroid as lr
 from langroid.language_models import OpenAIGPTConfig
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
-from langroid.agent.tools.orchestration import DoneTool
 from langroid.agent.tools.google_search_tool import GoogleSearchTool
 from langroid.utils.logging import setup_logger
 from langroid.utils.configuration import set_global
@@ -16,10 +15,10 @@ from models import SystemMessages, Message
 
 DEFAULT_SYSTEM_MESSAGE_ADDITION = f"""
             PLEASE PROVIDE REAL AND VERIFIABLE REFERENCES WITH VALID URLS FOR ALL YOUR ARGUMENTS. 
-            DO NOT MAKE UP YOUR OWN SOURCES; ONLY USE SOURCES YOU FIND FROM A WEB SEARCH. 
+            DO NOT MAKE UP YOUR OWN SOURCES; 
             ENSURE THE CONTENT GENERATED IS FROM REAL SOURCES. 
             DO NOT REPEAT ARGUMENTS THAT HAVE BEEN PREVIOUSLY GENERATED 
-            AND CAN BE SEEN IN THE DEBATE HISTORY PROVIDED
+            AND CAN BE SEEN IN THE DEBATE HISTORY PROVIDED. 
             """
 FEEDBACK_AGENT_SYSTEM_MESSAGE = f"""
             You are an expert and experienced judge specializing in Lincoln-Douglas style debates. 
@@ -40,10 +39,11 @@ FEEDBACK_AGENT_SYSTEM_MESSAGE = f"""
             """
 GOOGLE_SEARCH_SYSTEM_MESSAGE = f"""
             You are a helpful assistant. Extract all the links in references, ensure the URLs looks valid.  
-            Use the GoogleSearchTool to validate the references.
-            Please show a list of all provided references and then a list of validated ones.
-            DO NOT MAKE UP YOUR OWN SOURCES; ONLY USE SOURCES YOU FIND FROM A WEB SEARCH.
+            use the TOOL {GoogleSearchTool.name()} to validate the references.
+            Please show a list of all provided references by Pro and Con agents and then a list of validated ones.
             """
+
+# ONLY USE SOURCES YOU FIND FROM A WEB SEARCH.
 DEFAULT_TURN_COUNT = 4
 
 # Initialize typer application
@@ -220,7 +220,6 @@ def is_llm_delegate() -> bool:
         default=False,
     )
 
-
 def is_same_llm_for_all_agents() -> bool:
     """Prompt the user to decide if same LLM should be used for all agents.
 
@@ -277,7 +276,7 @@ def run_debate() -> None:
 
     # Get base LLM configuration
     if same_llm:
-        shared_agent_config: OpenAIGPTConfig = get_base_llm_config("for main LLM")
+        shared_agent_config: OpenAIGPTConfig = get_base_llm_config("main LLM")
         pro_agent_config = con_agent_config = feedback_agent_config = shared_agent_config
     else:
         pro_agent_config: OpenAIGPTConfig = get_base_llm_config("for Pro Agent")
@@ -316,11 +315,16 @@ def run_debate() -> None:
             )
         )
 
-    pro_agent = create_chat_agent("Pro", pro_agent_config, system_messages.messages[pro_key].message +
+    pro_agent = create_chat_agent("Pro",
+                                  pro_agent_config,
+                                  system_messages.messages[pro_key].message +
                                   DEFAULT_SYSTEM_MESSAGE_ADDITION)
-    con_agent = create_chat_agent("Con", con_agent_config, system_messages.messages[con_key].message +
+    con_agent = create_chat_agent("Con",
+                                  con_agent_config,
+                                  system_messages.messages[con_key].message +
                                   DEFAULT_SYSTEM_MESSAGE_ADDITION)
-    feedback_agent = create_chat_agent("Feedback", feedback_agent_config,
+    feedback_agent = create_chat_agent("Feedback",
+                                       feedback_agent_config,
                                        FEEDBACK_AGENT_SYSTEM_MESSAGE)
     logger.info("Pro, Con, and feedback agents created.")
 
@@ -350,16 +354,17 @@ def run_debate() -> None:
             "Your argument (or type 'f' for feedback, 'done' to end):"
         )
         user_agent.llm = None  # User message without LLM completion
-        user_agent.llm_response(user_input)
+        user_agent.user_message = user_input
 
     # Set up langroid tasks and run the debate
-    user_agent.enable_message(DoneTool)
+
     user_task = Task(user_agent, interactive=interactive_setting, restart=False)
     ai_task = Task(ai_agent, interactive=False, single_round=True)
     user_task.add_sub_task(ai_task)
     user_task.run("get started", turns=max_turns)
 
-    # Determine the last agent
+    # Determine the last agent based on turn count and alternation
+    # Note: user_agent and ai_agent are dynamically set based on the chosen user_side
     last_agent = ai_agent if max_turns % 2 == 0 else user_agent
 
     # Generate feedback summary and declare a winner using feedback agent
@@ -373,8 +378,10 @@ def run_debate() -> None:
 
     # If Google API is configured, run validation checks
     if is_google_api_key_configured():
-        google_validation_agent = create_chat_agent("Validation", feedback_agent_config,
-                                                    GOOGLE_SEARCH_SYSTEM_MESSAGE)
+
+        google_validation_agent= create_chat_agent("Validation",
+                                                   feedback_agent_config,
+                                                   GOOGLE_SEARCH_SYSTEM_MESSAGE)
         google_validation_agent.clear_history()
         google_validation_agent.enable_message(GoogleSearchTool)
         google_validate_task = Task(google_validation_agent, interactive=False)
