@@ -60,7 +60,7 @@ class EmbeddingFunctionCallable:
     the OpenAI API, with automatic retries on failure.
 
     Attributes:
-        model (OpenAIEmbeddings): An instance of OpenAIEmbeddings that provides
+        embed_model (EmbeddingModel): An instance of EmbeddingModel that provides
                                 configuration and utilities for generating embeddings.
 
     Methods:
@@ -68,7 +68,7 @@ class EmbeddingFunctionCallable:
                                 a list of input texts.
     """
 
-    def __init__(self, model: "OpenAIEmbeddings", batch_size: int = 512):
+    def __init__(self, embed_model: EmbeddingModel, batch_size: int = 512):
         """
         Initialize the EmbeddingFunctionCallable with a specific model.
 
@@ -77,7 +77,7 @@ class EmbeddingFunctionCallable:
             generating embeddings.
             batch_size (int): Batch size
         """
-        self.model = model
+        self.embed_model = embed_model
         self.batch_size = batch_size
 
     def __call__(self, input: List[str]) -> Embeddings:
@@ -97,14 +97,45 @@ class EmbeddingFunctionCallable:
         Returns:
             Embeddings: A list of embedding vectors corresponding to the input texts.
         """
-        tokenized_texts = self.model.truncate_texts(input)
         embeds = []
-        for batch in batched(tokenized_texts, self.batch_size):
-            result = self.model.client.embeddings.create(
-                input=batch, model=self.model.config.model_name
+
+        if isinstance(self.embed_model, OpenAIEmbeddings):
+            tokenized_texts = self.embed_model.truncate_texts(input)
+
+            for batch in batched(tokenized_texts, self.batch_size):
+                result = self.embed_model.client.embeddings.create(
+                    input=batch, model=self.embed_model.config.model_name
+                )
+                batch_embeds = [d.embedding for d in result.data]
+                embeds.extend(batch_embeds)
+
+        elif isinstance(self.embed_model, SentenceTransformerEmbeddings):
+            if self.embed_model.config.data_parallel:
+                embeds = self.embed_model.model.encode_multi_process(
+                    input,
+                    self.embed_model.pool,
+                    batch_size=self.embed_model.config.batch_size,
+                ).tolist()
+            else:
+                for str_batch in batched(input, self.embed_model.config.batch_size):
+                    batch_embeds = self.embed_model.model.encode(
+                        str_batch, convert_to_numpy=True
+                    ).tolist()  # type: ignore
+                    embeds.extend(batch_embeds)
+
+        elif isinstance(self.embed_model, FastEmbedEmbeddings):
+            embeddings = self.embed_model.model.embed(
+                input, batch_size=self.batch_size, parallel=self.embed_model.parallel
             )
-            batch_embeds = [d.embedding for d in result.data]
-            embeds.extend(batch_embeds)
+
+            embeds = [embedding.tolist() for embedding in embeddings]
+        elif isinstance(self.embed_model, LlamaCppServerEmbeddings):
+            embeds = [
+                self.embed_model.generate_embedding(
+                    self.embed_model.truncate_string_to_context_size(text)
+                )
+                for text in input
+            ]
         return embeds
 
 
@@ -182,24 +213,7 @@ class SentenceTransformerEmbeddings(EmbeddingModel):
         self.config.context_length = self.tokenizer.model_max_length
 
     def embedding_fn(self) -> Callable[[List[str]], Embeddings]:
-        def fn(texts: List[str]) -> Embeddings:
-            if self.config.data_parallel:
-                embeds: Embeddings = self.model.encode_multi_process(
-                    texts,
-                    self.pool,
-                    batch_size=self.config.batch_size,
-                ).tolist()
-            else:
-                embeds = []
-                for batch in batched(texts, self.config.batch_size):
-                    batch_embeds = self.model.encode(
-                        batch, convert_to_numpy=True
-                    ).tolist()  # type: ignore
-                    embeds.extend(batch_embeds)
-
-            return embeds
-
-        return fn
+        return EmbeddingFunctionCallable(self, self.config.batch_size)
 
     @property
     def embedding_dims(self) -> int:
@@ -220,10 +234,10 @@ class FastEmbedEmbeddings(EmbeddingModel):
 
         super().__init__()
         self.config = config
-        self._batch_size = config.batch_size
-        self._parallel = config.parallel
+        self.batch_size = config.batch_size
+        self.parallel = config.parallel
 
-        self._model = TextEmbedding(
+        self.model = TextEmbedding(
             model_name=self.config.model_name,
             cache_dir=self.config.cache_dir,
             threads=self.config.threads,
@@ -231,14 +245,7 @@ class FastEmbedEmbeddings(EmbeddingModel):
         )
 
     def embedding_fn(self) -> Callable[[List[str]], Embeddings]:
-        def fn(texts: List[str]) -> Embeddings:
-            embeddings = self._model.embed(
-                texts, batch_size=self._batch_size, parallel=self._parallel
-            )
-
-            return [embedding.tolist() for embedding in embeddings]
-
-        return fn
+        return EmbeddingFunctionCallable(self, self.config.batch_size)
 
     @cached_property
     def embedding_dims(self) -> int:
@@ -270,7 +277,8 @@ class LlamaCppServerEmbeddings(EmbeddingModel):
 
         if response.status_code == 200:
             tokens = response.json()["tokens"]
-            if type(tokens) is not List[int]:
+            if not (isinstance(tokens, list) and isinstance(tokens[0], (int, float))):
+                # not all(isinstance(token, (int, float)) for token in tokens):
                 raise ValueError(
                     """Tokenizer endpoint has not returned the correct format. 
                    Is the URL correct?
@@ -281,7 +289,7 @@ class LlamaCppServerEmbeddings(EmbeddingModel):
             raise requests.HTTPError(
                 self.tokenize_url,
                 response.status_code,
-                "Failed to connect to tokenisation provider",
+                "Failed to connect to tokenization provider",
             )
 
     def detokenize_string(self, tokens: List[int]) -> str:
@@ -301,7 +309,7 @@ class LlamaCppServerEmbeddings(EmbeddingModel):
             raise requests.HTTPError(
                 self.detokenize_url,
                 response.status_code,
-                "Failed to connect to detokenisation provider",
+                "Failed to connect to detokenization provider",
             )
 
     def truncate_string_to_context_size(self, text: str) -> str:
@@ -314,14 +322,16 @@ class LlamaCppServerEmbeddings(EmbeddingModel):
         response = requests.post(self.embedding_url, json=data)
 
         if response.status_code == 200:
-            embedding = response.json()["embedding"]
-            if type(embedding) is not List[int | float]:
+            embeddings = response.json()["embedding"]
+            if not (
+                isinstance(embeddings, list) and isinstance(embeddings[0], (int, float))
+            ):
                 raise ValueError(
                     """Embedding endpoint has not returned the correct format. 
                    Is the URL correct?
                 """
                 )
-            return embedding
+            return embeddings
         else:
             raise requests.HTTPError(
                 self.embedding_url,
@@ -330,13 +340,7 @@ class LlamaCppServerEmbeddings(EmbeddingModel):
             )
 
     def embedding_fn(self) -> Callable[[List[str]], Embeddings]:
-        def fn(texts: List[str]) -> Embeddings:
-            return [
-                self.generate_embedding(self.truncate_string_to_context_size(text))
-                for text in texts
-            ]
-
-        return fn
+        return EmbeddingFunctionCallable(self, self.config.batch_size)
 
     @property
     def embedding_dims(self) -> int:
