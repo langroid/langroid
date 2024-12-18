@@ -1,3 +1,4 @@
+import logging
 from typing import Callable
 
 from dotenv import load_dotenv
@@ -16,6 +17,8 @@ azureStructuredOutputList = [
 ]
 
 azureStructuredOutputAPIMin = "2024-08-01-preview"
+
+logger = logging.getLogger(__name__)
 
 
 class AzureConfig(OpenAIGPTConfig):
@@ -92,11 +95,26 @@ class AzureGPT(OpenAIGPT):
 
         if (
             self.config.azure_openai_client_provider
-            and self.config.azure_openai_async_client_provider
+            or self.config.azure_openai_async_client_provider
         ):
-            self.client = self.config.azure_openai_client_provider()
-            self.async_client = self.config.azure_openai_async_client_provider()
-            self.async_client.timeout = Timeout(self.config.timeout)
+            if not self.config.azure_openai_client_provider:
+                self.client = None
+                logger.warning(
+                    "Using user-provided Azure OpenAI client, but only async "
+                    "client has been provided. Synchronous calls will fail."
+                )
+            if not self.config.azure_openai_async_client_provider:
+                self.async_client = None
+                logger.warning(
+                    "Using user-provided Azure OpenAI client, but no async "
+                    "client has been provided. Asynchronous calls will fail."
+                )
+
+            if self.config.azure_openai_client_provider:
+                self.client = self.config.azure_openai_client_provider()
+            if self.config.azure_openai_async_client_provider:
+                self.async_client = self.config.azure_openai_async_client_provider()
+                self.async_client.timeout = Timeout(self.config.timeout)
         else:
             if self.config.api_key == "":
                 raise ValueError(
