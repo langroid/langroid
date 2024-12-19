@@ -34,7 +34,10 @@ from langroid.vector_store.lancedb import LanceDB, LanceDBConfig
 from langroid.vector_store.qdrantdb import QdrantDB, QdrantDBConfig
 
 """
-    Pytest for running Langroid with llama.cpp server acting as the embeddings host.
+    Pytest for running Langroid DocAgent with llama.cpp server acting as the 
+    embeddings host.
+    Not designed for main usage, but this has been useful for validating if local models
+    are sufficient to run Langroid. Feel free to delete!
 
     You can find an example of how to run llama.cpp server as an embeddings host in
     docs/notes/llama-cpp-embeddings.md
