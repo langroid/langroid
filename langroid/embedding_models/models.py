@@ -51,7 +51,8 @@ class FastEmbedEmbeddingsConfig(EmbeddingModelsConfig):
 
 class LlamaCppServerEmbeddingsConfig(EmbeddingModelsConfig):
     api_base: str = ""
-    context_length: int = 8192
+    context_length: int = 2048
+    batch_size: int = 2048
 
 
 class EmbeddingFunctionCallable:
@@ -114,10 +115,10 @@ class EmbeddingFunctionCallable:
                 embeds = self.embed_model.model.encode_multi_process(
                     input,
                     self.embed_model.pool,
-                    batch_size=self.embed_model.config.batch_size,
+                    batch_size=self.batch_size,
                 ).tolist()
             else:
-                for str_batch in batched(input, self.embed_model.config.batch_size):
+                for str_batch in batched(input, self.batch_size):
                     batch_embeds = self.embed_model.model.encode(
                         str_batch, convert_to_numpy=True
                     ).tolist()  # type: ignore
@@ -130,12 +131,13 @@ class EmbeddingFunctionCallable:
 
             embeds = [embedding.tolist() for embedding in embeddings]
         elif isinstance(self.embed_model, LlamaCppServerEmbeddings):
-            embeds = [
-                self.embed_model.generate_embedding(
-                    self.embed_model.truncate_string_to_context_size(text)
-                )
-                for text in input
-            ]
+            for input_string in input:
+                tokenized_text = self.embed_model.tokenize_string(input_string)
+                for batch in batched(tokenized_text, self.batch_size):
+                    result = self.embed_model.generate_embedding(
+                        self.embed_model.detokenize_string(batch)
+                    )
+                    embeds.append(result)
         return embeds
 
 
