@@ -133,11 +133,11 @@ class EmbeddingFunctionCallable:
         elif isinstance(self.embed_model, LlamaCppServerEmbeddings):
             for input_string in input:
                 tokenized_text = self.embed_model.tokenize_string(input_string)
-                for batch in batched(tokenized_text, self.batch_size):
-                    result = self.embed_model.generate_embedding(
-                        self.embed_model.detokenize_string(batch)
+                for token_batch in batched(tokenized_text, self.batch_size):
+                    gen_embedding = self.embed_model.generate_embedding(
+                        self.embed_model.detokenize_string(list(token_batch))
                     )
-                    embeds.append(result)
+                    embeds.append(gen_embedding)
         return embeds
 
 
