@@ -64,6 +64,7 @@ Prerequisites
        export GOOGLE_CSE_ID= GOOGLE CASE ID
        export OPENAI_API_KEY=OPEN AI KEY
        export GEMINI_API_KEY=GEMiNi API KEY
+       export export METAPHOR_API_KEY=METAPHOR_API_KEY
 4. Please read the following page for more information: https://langroid.github.io/langroid/quick-start/setup/
 
 Usage

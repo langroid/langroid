@@ -8,6 +8,7 @@ from langroid.language_models import OpenAIGPTConfig
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
 from langroid.agent.tools.google_search_tool import GoogleSearchTool
+from langroid.agent.tools.metaphor_search_tool import MetaphorSearchTool
 from langroid.utils.logging import setup_logger
 from langroid.utils.configuration import set_global
 from config import get_base_llm_config, get_global_settings
@@ -36,11 +37,45 @@ FEEDBACK_AGENT_SYSTEM_MESSAGE = f"""
             and justify a winner.
             Provide constructive feedback for each debater, 
             summarizing their performance and declaring a winner with justification.
-            """
-GOOGLE_SEARCH_SYSTEM_MESSAGE = f"""
-            You are a helpful assistant. Extract all the links in references, ensure the URLs looks valid.  
-            use the TOOL {GoogleSearchTool.name()} to validate the references.
-            Please show a list of all provided references by Pro and Con agents and then a list of validated ones.
+            After providing the above feedback:
+            Use the TOOL {GoogleSearchTool.name()} to search the web for 2 references for each pro and con. 
+            Be very CONCISE in your responses, use 5-7 sentences.
+            show me the SOURCE(s) and EXTRACT(s) and summary
+            in this format:
+        
+            <your answer here>
+            Here are additional references using Google Search to improve your knowledge of the subject:
+            
+            SOURCE: https://www.cdc.gov/pcd/issues/2024/24_0245.htm
+            EXTRACT: Health Equity and Ethical Considerations in Using Artificial Intelligence in Public Health and 
+            Medicine.
+            SUMMARY: This source discusses the ethical considerations and health equity challenges associated with using
+            AI in public health and medicine.
+        
+            SOURCE: ...
+            EXTRACT: ...
+            SUMMARY:
+        
+            DO NOT MAKE UP YOUR OWN SOURCES; ONLY USE SOURCES YOU FIND FROM A WEB SEARCH.
+            AFTER showing the results from Google Search: 
+            Use the TOOL {MetaphorSearchTool.name()} to search the web for 5 references for each pro and con. 
+            Be very CONCISE in your responses, use 5-7 sentences.
+            show me the SOURCE(s) and EXTRACT(s) and summary
+            in this format:
+        
+            <your answer here>
+            Here are additional references using Metaphor Search to improve your knowledge of the subject:
+            
+            SOURCE: https://journalofethics.ama-assn.org/article/should-artificial-intelligence-augment-medical-decision-making-case-autonomy-algorithm/2018-09
+            EXTRACT: Discusses the ethical implications of AI in medical decision-making and the concept of an autonomy algorithm.
+            SUMMARY: This article explores the ethical considerations of integrating AI into medical decision-making 
+                     processes, emphasizing the need for autonomy and ethical oversight.
+        
+            SOURCE: ...
+            EXTRACT: ...
+            SUMMARY:
+        
+            DO NOT MAKE UP YOUR OWN SOURCES; ONLY USE SOURCES YOU FIND FROM A WEB SEARCH.
             """
 
 # ONLY USE SOURCES YOU FIND FROM A WEB SEARCH.
@@ -235,21 +270,6 @@ def is_same_llm_for_all_agents() -> bool:
     )
 
 
-def is_google_api_key_configured() -> bool:
-    """Prompt the user to validate if the Google API Key and CSE ID are configured.
-
-    Asks the user whether they have configured the Google API key and CSE ID.
-
-    Returns:
-        bool: True if the user has configured the required env variables for Google API Key and CSE ID, otherwise
-        return False.
-    """
-    return Confirm.ask(
-        "Do you have a Google API key and configured? For example, GOOGLE_API_KEY=your-key and GOOGLE_CSE_ID=your-cse-id",
-        default=False,
-    )
-
-
 def run_debate() -> None:
     """Execute the main debate logic.
 
@@ -339,8 +359,6 @@ def run_debate() -> None:
     # Clear Agents memory
     user_agent.clear_history()
     ai_agent.clear_history()
-    feedback_agent.clear_history()
-
     logger.info(f"\n{user_side} Agent ({topic_name}):\n")
 
     # Determine if the debate is autonomous or the user input for one side
@@ -357,7 +375,6 @@ def run_debate() -> None:
         user_agent.user_message = user_input
 
     # Set up langroid tasks and run the debate
-
     user_task = Task(user_agent, interactive=interactive_setting, restart=False)
     ai_task = Task(ai_agent, interactive=False, single_round=True)
     user_task.add_sub_task(ai_task)
@@ -372,20 +389,12 @@ def run_debate() -> None:
     if not validation_message:
         logger.warning("No agent message history found for the last agent")
         validation_message = "No last agent history available to validate."
-    feedback_agent.llm_response(
-        f"Summarize the debate and declare a winner.\n{validation_message}"
-    )
 
-    # If Google API is configured, run validation checks
-    if is_google_api_key_configured():
-
-        google_validation_agent= create_chat_agent("Validation",
-                                                   feedback_agent_config,
-                                                   GOOGLE_SEARCH_SYSTEM_MESSAGE)
-        google_validation_agent.clear_history()
-        google_validation_agent.enable_message(GoogleSearchTool)
-        google_validate_task = Task(google_validation_agent, interactive=False)
-        google_validate_task.run(validation_message)
+    feedback_agent.clear_history()
+    feedback_agent.enable_message(GoogleSearchTool)
+    feedback_agent.enable_message(MetaphorSearchTool)
+    feedback_agent_task = Task(feedback_agent, interactive=False)
+    feedback_agent_task.run(validation_message)
 
 
 @app.command()
