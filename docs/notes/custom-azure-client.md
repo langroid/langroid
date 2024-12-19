@@ -5,7 +5,7 @@ of the Azure OpenAI client (see the [Setup guide](https://langroid.github.io/lan
 for details). In most cases, the available configuration options
 are sufficient, but if you need to manage any options that
 are not exposed, you instead have the option of providing a custom
-client.
+client, in Langroid v0.29.0 and later. 
 
 In order to use a custom client, you must provide a function that
 returns the configured client. Depending on whether you need to make
