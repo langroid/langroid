@@ -26,6 +26,8 @@ class EmbeddingModel(ABC):
         from langroid.embedding_models.models import (
             FastEmbedEmbeddings,
             FastEmbedEmbeddingsConfig,
+            LlamaCppServerEmbeddings,
+            LlamaCppServerEmbeddingsConfig,
             OpenAIEmbeddings,
             OpenAIEmbeddingsConfig,
             SentenceTransformerEmbeddings,
@@ -44,6 +46,8 @@ class EmbeddingModel(ABC):
             return SentenceTransformerEmbeddings(config)
         elif isinstance(config, FastEmbedEmbeddingsConfig):
             return FastEmbedEmbeddings(config)
+        elif isinstance(config, LlamaCppServerEmbeddingsConfig):
+            return LlamaCppServerEmbeddings(config)
         else:
             raise ValueError(f"Unknown embedding config: {config.__repr_name__}")
 
