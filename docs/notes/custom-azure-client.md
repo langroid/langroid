@@ -28,8 +28,7 @@ lm_config = lm.AzureConfig(
 
 ## Microsoft Entra ID Authentication
 
-A key use case for a custom client is [Microsoft Entra ID 
-authentication](https://learn.microsoft.com/en-us/azure/ai-services/openai/how-to/managed-identity).
+A key use case for a custom client is [Microsoft Entra ID authentication](https://learn.microsoft.com/en-us/azure/ai-services/openai/how-to/managed-identity).
 Here you need to provide an `azure_ad_token_provider` to the client. 
 For examples on this, see [examples/basic/chat-azure-client.py](https://github.com/langroid/langroid/blob/main/examples/basic/chat-azure-client.py) 
 and [examples/basic/chat-azure-async-client.py](https://github.com/langroid/langroid/blob/main/examples/basic/chat-azure-async-client.py).
