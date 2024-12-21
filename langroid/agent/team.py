@@ -1,11 +1,12 @@
 import logging
 from abc import ABC, abstractmethod
-from typing import Any, Callable, List, Union
+from typing import Callable, Dict, List, Optional, Union
 
 import langroid as lr
 from langroid.language_models.mock_lm import MockLMConfig
 
-logging.basicConfig(level=logging.warning)
+# Fix logging level type
+logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
 
 
@@ -19,9 +20,11 @@ def sum_fn(s: str) -> str:
     return str(sum(nums) + 1)
 
 
-def user_message(s: str) -> lr.ChatDocument:
+def user_message(msg: Union[str, lr.ChatDocument]) -> lr.ChatDocument:
+    if isinstance(msg, lr.ChatDocument):
+        return msg
     return lr.ChatDocument(
-        content=s,
+        content=msg,
         metadata=lr.ChatDocMetaData(
             sender=lr.Entity.USER,
             sender_name="user",
@@ -36,12 +39,12 @@ class InputContext:
         self.messages: List[lr.ChatDocument] = []
 
     def add(
-        self, results: str | List[str] | lr.ChatDocument | List[lr.ChatDocument]
+        self, results: Union[str, List[str], lr.ChatDocument, List[lr.ChatDocument]]
     ) -> None:
         """
         Add messages to the input messages list
         """
-        msgs = []
+        msgs: List[lr.ChatDocument] = []
         if isinstance(results, str):
             msgs = [user_message(results)]
         elif isinstance(results, lr.ChatDocument):
@@ -50,7 +53,7 @@ class InputContext:
             if isinstance(results[0], str):
                 msgs = [user_message(r) for r in results]
             else:
-                msgs = results
+                msgs = [r for r in results if isinstance(r, lr.ChatDocument)]
         self.messages.extend(msgs)
 
     def clear(self) -> None:
@@ -71,8 +74,8 @@ class Scheduler(ABC):
 
     def init_state(self) -> None:
         self.stepped = False
-        self.responders = []
-        self.responder_counts = {}
+        self.responders: List[str] = []
+        self.responder_counts: Dict[str, int] = {}
         self.current_result: List[lr.ChatDocument] = []
 
     @abstractmethod
@@ -100,6 +103,7 @@ class Component(ABC):
     def __init__(self) -> None:
         self.input = InputContext()
         self._listeners: List["Component"] = []
+        self.name: str = ""
 
     @abstractmethod
     def run(self) -> List[lr.ChatDocument]:
@@ -116,7 +120,7 @@ class Component(ABC):
     def listeners(self) -> List["Component"]:
         return self._listeners
 
-    def _notify(self, results: List[Any]) -> None:
+    def _notify(self, results: List[lr.ChatDocument]) -> None:
         for listener in self.listeners:
             listener.input.add(results)
 
@@ -131,10 +135,12 @@ class SimpleScheduler(Scheduler):
         self.stepped: bool = False
 
     def step(self) -> None:
-        self.current_result = [
-            comp.run(comp.input.messages) for comp in self.components
-        ]
-        self.current_result = [r for r in self.current_result if r is not None]
+        results = []
+        for comp in self.components:
+            result = comp.run()
+            if result:
+                results.extend(result)
+        self.current_result = results
         self.stepped = True
 
     def done(self) -> bool:
@@ -152,14 +158,15 @@ class OrElseScheduler(Scheduler):
     ) -> None:
         super().__init__()
         self.components = components
-        self.team = None
+        self.team: Optional[Team] = None
+        self.current_index: int = 0
 
     def init_state(self) -> None:
         super().init_state()
         self.current_index = 0
 
-    def is_valid(self, result: Any) -> bool:
-        return result is not None and result != ""
+    def is_valid(self, result: Optional[List[lr.ChatDocument]]) -> bool:
+        return result is not None and len(result) > 0
 
     def step(self) -> None:
         start_index = self.current_index
@@ -180,6 +187,8 @@ class OrElseScheduler(Scheduler):
                 return
 
     def done(self) -> bool:
+        if self.team is None:
+            return False
         return self.team.done(self)
 
     def result(self) -> List[lr.ChatDocument]:
@@ -188,13 +197,15 @@ class OrElseScheduler(Scheduler):
 
 class Team(Component):
     def __init__(
-        self, name: str, done_condition: Callable[["Team", Scheduler], bool] = None
+        self,
+        name: str,
+        done_condition: Optional[Callable[["Team", Scheduler], bool]] = None,
     ) -> None:
         super().__init__()
         self.name = name
         self.components: List[Component] = []
-        self.scheduler = None
-        self.done_condition = done_condition or self.default_done_condition
+        self.scheduler: Optional[Scheduler] = None
+        self.done_condition = done_condition or Team.default_done_condition
 
     def set_done_condition(
         self, done_condition: Callable[["Team", Scheduler], bool]
@@ -210,7 +221,8 @@ class Team(Component):
 
     def add_scheduler(self, scheduler_class: type) -> None:
         self.scheduler = scheduler_class(self.components)
-        self.scheduler.team = self
+        if hasattr(self.scheduler, "team"):
+            setattr(self.scheduler, "team", self)
 
     def add(self, component: Union[Component, List[Component]]) -> None:
         if isinstance(component, list):
@@ -262,9 +274,12 @@ class TaskComponent(Component):
         result_value = result.content if result else "null"
         logger.warning(f"Task {self.name} done: {result_value}")
         if result is not None:
-            self._notify(result if isinstance(result, list) else [result])
-        self.input.clear()
-        return [result]
+            if isinstance(result, list):
+                self._notify(result)
+                return result
+            self._notify([result])
+            return [result]
+        return []
 
 
 def make_task(name: str, sys: str = "") -> TaskComponent:
