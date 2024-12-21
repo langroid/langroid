@@ -432,8 +432,8 @@ class OpenAIGPT(LanguageModel):
     Class for OpenAI LLMs
     """
 
-    client: OpenAI | Groq | Cerebras
-    async_client: AsyncOpenAI | AsyncGroq | AsyncCerebras
+    client: OpenAI | Groq | Cerebras | None
+    async_client: AsyncOpenAI | AsyncGroq | AsyncCerebras | None
 
     def __init__(self, config: OpenAIGPTConfig = OpenAIGPTConfig()):
         """
@@ -1375,12 +1375,15 @@ class OpenAIGPT(LanguageModel):
             else:
                 if self.config.litellm:
                     from litellm import completion as litellm_completion
-                assert isinstance(self.client, OpenAI)
-                completion_call = (
-                    litellm_completion
-                    if self.config.litellm
-                    else self.client.completions.create
-                )
+
+                    completion_call = litellm_completion
+                else:
+                    if self.client is None:
+                        raise ValueError(
+                            "OpenAI/equivalent chat-completion client not set"
+                        )
+                    assert isinstance(self.client, OpenAI)
+                    completion_call = self.client.completions.create
                 if self.config.litellm and settings.debug:
                     kwargs["logger_fn"] = litellm_logging_fn
                 # If it's not in the cache, call the API
@@ -1619,14 +1622,15 @@ class OpenAIGPT(LanguageModel):
             if settings.debug:
                 print("[grey37]CACHED[/grey37]")
         else:
+            # If it's not in the cache, call the API
             if self.config.litellm:
                 from litellm import completion as litellm_completion
-            # If it's not in the cache, call the API
-            completion_call = (
-                litellm_completion
-                if self.config.litellm
-                else self.client.chat.completions.create
-            )
+
+                completion_call = litellm_completion
+            else:
+                if self.client is None:
+                    raise ValueError("OpenAI/equivalent chat-completion client not set")
+                completion_call = self.client.chat.completions.create
             if self.config.litellm and settings.debug:
                 kwargs["logger_fn"] = litellm_logging_fn
             result = completion_call(**kwargs)
@@ -1649,11 +1653,14 @@ class OpenAIGPT(LanguageModel):
         else:
             if self.config.litellm:
                 from litellm import acompletion as litellm_acompletion
-            acompletion_call = (
-                litellm_acompletion
-                if self.config.litellm
-                else self.async_client.chat.completions.create
-            )
+
+                acompletion_call = litellm_acompletion
+            else:
+                if self.async_client is None:
+                    raise ValueError(
+                        "OpenAI/equivalent async chat-completion client not set"
+                    )
+                acompletion_call = self.async_client.chat.completions.create
             if self.config.litellm and settings.debug:
                 kwargs["logger_fn"] = litellm_logging_fn
             # If it's not in the cache, call the API

@@ -109,6 +109,7 @@ nav:
       - GLHF.chat Support: notes/glhf-chat.md
       - Structured Output: notes/structured-output.md
       - Tool Handler Name: notes/tool-message-handler.md
+      - Custom Azure OpenAI client: notes/custom-azure-client.md
 
   - Examples:
     - Guide: examples/guide.md
