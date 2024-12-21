@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 def sum_fn(s: str) -> str:
+    """Dummy response for MockLM"""
     nums = [
         int(subpart)
         for part in s.split()
@@ -21,6 +22,7 @@ def sum_fn(s: str) -> str:
 
 
 def user_message(msg: Union[str, lr.ChatDocument]) -> lr.ChatDocument:
+    """Create a user-role msg from a string or ChatDocument"""
     if isinstance(msg, lr.ChatDocument):
         return msg
     return lr.ChatDocument(
@@ -33,7 +35,7 @@ def user_message(msg: Union[str, lr.ChatDocument]) -> lr.ChatDocument:
 
 
 class InputContext:
-    """Context for a Team to respond to"""
+    """Context for a Component to respond to"""
 
     def __init__(self) -> None:
         self.messages: List[lr.ChatDocument] = []
@@ -60,6 +62,9 @@ class InputContext:
         self.messages.clear()
 
     def get_context(self) -> lr.ChatDocument:
+        """Construct a user-role ChatDocument from the input messages"""
+        if len(self.messages) == 0:
+            return lr.ChatDocument(content="", metadata={"sender": lr.Entity.USER})
         content = "\n".join(
             f"{msg.metadata.sender_name}: {msg.content}" for msg in self.messages
         )
@@ -121,7 +126,9 @@ class Component(ABC):
         return self._listeners
 
     def _notify(self, results: List[lr.ChatDocument]) -> None:
+        logger.warning(f"{self.name} Notifying listeners...")
         for listener in self.listeners:
+            logger.warning(f"--> Listener {listener.name} notified")
             listener.input.add(results)
 
 
@@ -152,6 +159,15 @@ class SimpleScheduler(Scheduler):
 
 
 class OrElseScheduler(Scheduler):
+    """
+    Implements "OrElse scheduling", i.e. if the components are A, B, C, then
+    in each step, it will try for a valid response from A OrElse B OrElse C,
+    i.e. the first component that gives a valid response is chosen.
+    In the next step, it will start from the next component in the list,
+    cycling back to the first component after the last component.
+    (There may be a better name than OrElseScheduler though.)
+    """
+
     def __init__(
         self,
         components: List[Component],
@@ -230,19 +246,13 @@ class Team(Component):
         else:
             self.components.append(component)
 
-    def listen(self, component: Union[Component, List[Component]]) -> None:
-        if isinstance(component, list):
-            for comp in component:
-                comp.listeners.append(self)
-        else:
-            component.listeners.append(self)
-
     def run(self) -> List[lr.ChatDocument]:
         if self.scheduler is None:
             raise ValueError(
                 f"Team '{self.name}' has no scheduler. Call add_scheduler() first."
             )
-        logger.warning(f"Running team {self.name}...")
+        input_str = self.input.get_context().content
+        logger.warning(f"Running team {self.name}... on input = {input_str}")
         result = self.scheduler.run()
         if len(result) > 0:
             self._notify(result)
@@ -268,19 +278,18 @@ class TaskComponent(Component):
         self.name = task.agent.config.name
 
     def run(self) -> List[lr.ChatDocument]:
-        logger.warning(f"Running task {self.name}...")
         input = self.input.get_context()
+        if input.content == "":
+            return []
+        logger.warning(f"Running task {self.name} on input = {input.content}")
         result = self.task.run(input)
         result_value = result.content if result else "null"
         logger.warning(f"Task {self.name} done: {result_value}")
-        if result is not None:
-            if isinstance(result, list):
-                self._notify(result)
-                return result
-            self._notify([result])
-            return [result]
-        return []
-
+        result_list = [result] if result else []
+        if len(result_list) > 0:
+            self._notify(result_list)
+            self.input.clear()  # clear own input since we just consumed it!
+        return result_list
 
 def make_task(name: str, sys: str = "") -> TaskComponent:
     llm_config = MockLMConfig(response_fn=sum_fn)
@@ -301,6 +310,7 @@ if __name__ == "__main__":
     t2 = make_task("a2")
     t3 = make_task("a3")
 
+    # done conditions for each time
     def team1_done_condition(team: Team, scheduler: Scheduler) -> bool:
         return (
             scheduler.responder_counts.get("a1", 0) >= 2
