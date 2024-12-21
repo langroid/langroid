@@ -52,6 +52,8 @@ class InputContext:
         elif isinstance(results, lr.ChatDocument):
             msgs = [results]
         elif isinstance(results, list):
+            if len(results) == 0:
+                return
             if isinstance(results[0], str):
                 msgs = [user_message(r) for r in results]
             else:
@@ -246,13 +248,26 @@ class Team(Component):
         else:
             self.components.append(component)
 
-    def run(self) -> List[lr.ChatDocument]:
+    def reset(self) -> None:
+        self.input.clear()
+        if self.scheduler is not None:
+            self.scheduler.init_state()
+
+    def run(self, input: str | lr.ChatDocument | None = None) -> List[lr.ChatDocument]:
+        if input is not None:
+            self.input.add(input)
         if self.scheduler is None:
             raise ValueError(
                 f"Team '{self.name}' has no scheduler. Call add_scheduler() first."
             )
         input_str = self.input.get_context().content
         logger.warning(f"Running team {self.name}... on input = {input_str}")
+        # push the input of self to each component that's a listener of self.
+        for comp in self.components:
+            if comp in self.listeners:
+                comp.input.add(self.input.messages)
+            self.input.clear()
+
         result = self.scheduler.run()
         if len(result) > 0:
             self._notify(result)
@@ -277,12 +292,14 @@ class TaskComponent(Component):
         self.task = task
         self.name = task.agent.config.name
 
-    def run(self) -> List[lr.ChatDocument]:
-        input = self.input.get_context()
-        if input.content == "":
+    def run(self, input: str | lr.ChatDocument | None = None) -> List[lr.ChatDocument]:
+        if input is not None:
+            self.input.add(input)
+        input_msg = self.input.get_context()
+        if input_msg.content == "":
             return []
-        logger.warning(f"Running task {self.name} on input = {input.content}")
-        result = self.task.run(input)
+        logger.warning(f"Running task {self.name} on input = {input_msg.content}")
+        result = self.task.run(input_msg)
         result_value = result.content if result else "null"
         logger.warning(f"Task {self.name} done: {result_value}")
         result_list = [result] if result else []
@@ -290,6 +307,7 @@ class TaskComponent(Component):
             self._notify(result_list)
             self.input.clear()  # clear own input since we just consumed it!
         return result_list
+
 
 def make_task(name: str, sys: str = "") -> TaskComponent:
     llm_config = MockLMConfig(response_fn=sum_fn)
@@ -325,8 +343,8 @@ if __name__ == "__main__":
         return len(set(scheduler.responders)) == len(team.components)
 
     # Create teams
-    team1 = Team("Team1", done_condition=team1_done_condition)
-    team2 = Team("Team2", done_condition=team2_done_condition)
+    team1 = Team("T1", done_condition=team1_done_condition)
+    team2 = Team("T2", done_condition=team2_done_condition)
 
     team = Team("Team", done_condition=general_team_done_condition)
 
@@ -341,16 +359,22 @@ if __name__ == "__main__":
     team2.add(t3)
 
     # Set up listening
-    team2.listen(team1)  # listens to team1 final result
+    # team2.listen(team1)  # listens to team1 final result
+    team1.listen(team)
+    t1.listen(team1)
     t2.listen(t1)
     t1.listen(t2)
-    t3.listen([t1, t2])
+    # TODO should we forbid listening to a component OUTSIDE the team?
+
+    # t3 listens to its parent team2 =>
+    # any input to team2 gets pushed to t3 when t3 runs
+    team2.listen([t1, t2])
+    t3.listen(team2)
 
     # TODO - we should either define which component of a team gets the teams inputs,
     # or explicitly add messages to a specific component of the team
 
-    t1.input.add("1")
-
-    # Run scenarios
     print("Running top-level team...")
-    result = team.run()
+    result = team.run("1")
+
+    ##########
