@@ -1,3 +1,7 @@
+"""
+Run like this:
+python3 examples/experimental/mock-team.py
+"""
 from langroid.experimental.team import Team, Scheduler, OrElseScheduler, TaskComponent
 import langroid as lr
 from langroid.language_models.mock_lm import MockLMConfig

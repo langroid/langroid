@@ -1,3 +1,7 @@
+"""
+Run like this -
+python3 examples/experimental/panel-chat.py
+"""
 from langroid.experimental.team import Team, Scheduler, OrElseScheduler, TaskComponent
 import langroid as lr
 import langroid.language_models as lm
