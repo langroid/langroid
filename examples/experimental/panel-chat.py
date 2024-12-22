@@ -2,6 +2,7 @@
 Run like this -
 python3 examples/experimental/panel-chat.py
 """
+
 from langroid.experimental.team import Team, Scheduler, OrElseScheduler, TaskComponent
 import langroid as lr
 import langroid.language_models as lm
@@ -67,8 +68,7 @@ if __name__ == "__main__":
     team.add([ta, tb, tc])
 
     # Set up listening
-    # team2.listen(team1)  # listens to team1 final result
-    ta.listen(team)
+    ta.listen(team)  # ta gets the input x when team.run(x) is called
     ta.listen([tb, tc])
     tb.listen([ta, tc])
     tc.listen([ta, tb])
