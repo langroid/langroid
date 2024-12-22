@@ -1,6 +1,6 @@
 # Local embeddings provision via llama.cpp server
 
-As of Langroid v0.X.X, you can use llama.cpp as provider of embeddings
+As of Langroid v0.30.0, you can use llama.cpp as provider of embeddings
 to any of Langroid's vector stores, allowing access to a wide variety of
 GGUF-compatible embedding models, e.g. [nomic-ai's Embed Text V1.5](https://huggingface.co/nomic-ai/nomic-embed-text-v1.5-GGUF).
 
