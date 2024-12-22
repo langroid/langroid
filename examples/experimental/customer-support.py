@@ -181,7 +181,7 @@ class ClinicTeam(Team):
         self.cancel_task = make_cancel_task()
 
         # set up the listening relations
-        # scheduler, cancel tasks should get info from id task
+        # scheduler, cancel tasks should get info from intake task
         self.scheduler_task.listen(self.intake_task)
         self.cancel_task.listen(self.intake_task)
 
