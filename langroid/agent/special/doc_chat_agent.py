@@ -358,7 +358,6 @@ class DocChatAgent(ChatAgent):
                     d.metadata = d.metadata.copy(update=meta)
                 docs.extend(path_docs)
         n_docs = len(docs)
-        # import ipdb; ipdb.set_trace()
         n_splits = self.ingest_docs(docs, split=self.config.split)
         if n_docs == 0:
             return []
@@ -423,7 +422,6 @@ class DocChatAgent(ChatAgent):
                 d.metadata.is_chunk = True
         if self.vecdb is None:
             raise ValueError("VecDB not set")
-        # # import ipdb; ipdb.set_trace()
         if self.config.hypothetical_questions:
             docs = self.add_hypothetical_questions(docs)
 
@@ -1151,7 +1149,6 @@ class DocChatAgent(ChatAgent):
         # upstream of this one.
         # The `temp_update` context manager is defined in
         # `langroid/utils/pydantic_utils.py`
-        # import ipdb; ipdb.set_trace()
         return self.vecdb.similar_texts_with_scores(
             query,
             k=k,
@@ -1193,7 +1190,6 @@ class DocChatAgent(ChatAgent):
             not in self.vecdb.list_collections(empty=False)
         ):
             return []
-        # import ipdb; ipdb.set_trace()
 
         # if we are using cross-encoder reranking or reciprocal rank fusion (RRF),
         # we can retrieve more docs during retrieval, and leave it to the cross-encoder
@@ -1222,7 +1218,6 @@ class DocChatAgent(ChatAgent):
                     docs_and_scores, key=lambda x: x[1], reverse=True
                 )
 
-        # import ipdb; ipdb.set_trace()
         # keep only docs with unique d.id()
         id2_rank_semantic = {d.id(): i for i, (d, _) in enumerate(docs_and_scores)}
         id2doc = {d.id(): d for d, _ in docs_and_scores}
@@ -1385,9 +1380,7 @@ class DocChatAgent(ChatAgent):
         if self.config.n_query_rephrases > 0:
             rephrases = self.llm_rephrase_query(query)
             proxies += rephrases
-        # import ipdb; ipdb.set_trace()
         passages = self.get_relevant_chunks(query, proxies)  # no LLM involved
-        # # import ipdb; ipdb.set_trace()
 
         if len(passages) == 0:
             return query, []
