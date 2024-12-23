@@ -11,6 +11,7 @@ from langroid.agent.task import Task
 from langroid.agent.tools.metaphor_search_tool import MetaphorSearchTool
 from langroid.utils.logging import setup_logger
 from langroid.utils.configuration import set_global
+from langroid.agent.tools.orchestration import DoneTool
 
 from config import get_base_llm_config, get_global_settings
 from models import SystemMessages, Message
@@ -62,13 +63,13 @@ FEEDBACK_AGENT_SYSTEM_MESSAGE = f"""
             ENSURE STEP 2 IS COMPLETED BEFORE STARTING STEP 3
             
             STEP 3: Argue Pro and Con Cases
-            As an expert debater, your goal is to eloquently argue for both the Pro and Con cases using the web-search 
-            sources generated in Step 2.
+            As an expert debater, your goal is to eloquently argue for both the Pro and Con cases using the web-search sources generated in Step 2.
             Write at least 10 sentences for each side.
             Use references from Step 2, properly cited in BRACKETS (e.g., [SOURCE]).
             ENSURE STEP 3 IS COMPLETED AFTER STEPS 1 AND 2.  
             
-            ENSURE STEP1, 2, and 3 are completed.         
+            ENSURE STEP1, 2, and 3 are completed. 
+            After all STEPs are completed, use the `{DoneTool.name()}` tool to end the session      
             """
 
 # ONLY USE SOURCES YOU FIND FROM A WEB SEARCH.
@@ -243,8 +244,7 @@ def is_llm_delegate() -> bool:
         bool: True if the user chooses LLM delegation, otherwise return False.
     """
     return Confirm.ask(
-        "Would you like the LLM to autonomously continue the debate without "
-        "waiting for user input? or ask for your input first time?",
+        "Should the Pro and Con agents debate autonomously?",
         default=False,
     )
 
@@ -290,7 +290,15 @@ def run_debate() -> None:
     if same_llm:
         shared_agent_config: OpenAIGPTConfig = get_base_llm_config("main LLM")
         pro_agent_config = con_agent_config = shared_agent_config
-        feedback_agent_config: OpenAIGPTConfig = get_base_llm_config("main LLM", temperature=0.2)
+
+        # Create feedback_agent_config by modifying the temperature of shared_agent_config
+        feedback_agent_config: OpenAIGPTConfig = OpenAIGPTConfig(
+            chat_model=shared_agent_config.chat_model,
+            min_output_tokens=shared_agent_config.min_output_tokens,
+            max_output_tokens=shared_agent_config.max_output_tokens,
+            temperature=0.2,  # Override temperature
+            seed=shared_agent_config.seed,
+        )
     else:
         pro_agent_config: OpenAIGPTConfig = get_base_llm_config("for Pro Agent")
         con_agent_config: OpenAIGPTConfig = get_base_llm_config("for Con Agent")
@@ -349,9 +357,6 @@ def run_debate() -> None:
         f"LLM Delegate: {llm_delegate}"
     )
 
-    # Clear Agents memory
-    user_agent.clear_history()
-    ai_agent.clear_history()
     logger.info(f"\n{user_side} Agent ({topic_name}):\n")
 
     # Determine if the debate is autonomous or the user input for one side
@@ -383,8 +388,8 @@ def run_debate() -> None:
         logger.warning("No agent message history found for the last agent")
         validation_message = "No last agent history available to validate."
 
-    feedback_agent.clear_history()
     feedback_agent.enable_message(MetaphorSearchTool)
+    feedback_agent.enable_message(DoneTool)
     feedback_agent_task = Task(feedback_agent, interactive=False)
     feedback_agent_task.run(validation_message)
 
