@@ -62,23 +62,25 @@ Prerequisites
 1. Python 3.8+
 2. Langroid Framework: Install Langroid with necessary dependencies:
    pip install "langroid[litellm]"
-3. Setup the following env variables in the .env File or set them on your terminal.
+3. Setup the following env variables in the .env File in the root of your repo
+or set them on your terminal.
        export OPENAI_API_KEY=OPEN AI KEY
        export GEMINI_API_KEY=GEMiNi API KEY
        export METAPHOR_API_KEY=METAPHOR_API_KEY
-4. Please read the following page for more information: https://langroid.github.io/langroid/quick-start/setup/
+4. Please read the following page for more information:
+   https://langroid.github.io/langroid/quick-start/setup/
 
 Usage
 -----
 Run the CLI Application
-Start the application with:
-   python main.py
+Start the application from the root of the langroid repo with:
+   python examples/multi-agent-debate/main.py
 
 Options
 - Debug Mode: Run the program with debug logs for detailed output.
-  python main.py --debug
+  python examples/multi-agent-debate/main.py --debug
 - Disable Caching: Avoid using cached responses for LLM interactions.
-  python main.py --nocache
+  python examples/multi-agent-debate/main.py --nocache
 
 
 Interaction

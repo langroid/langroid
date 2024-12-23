@@ -304,7 +304,7 @@ def run_debate() -> None:
         con_agent_config: OpenAIGPTConfig = get_base_llm_config("for Con Agent")
         feedback_agent_config: OpenAIGPTConfig = get_base_llm_config("feedback", temperature=0.2)
 
-    system_messages: SystemMessages = load_system_messages("system_messages.json")
+    system_messages: SystemMessages = load_system_messages("examples/multi-agent-debate/system_messages.json")
     topic_name, pro_key, con_key, side = select_topic_and_setup_side(system_messages)
 
     # Prompt for number of debate turns
@@ -376,7 +376,10 @@ def run_debate() -> None:
     user_task = Task(user_agent, interactive=interactive_setting, restart=False)
     ai_task = Task(ai_agent, interactive=False, single_round=True)
     user_task.add_sub_task(ai_task)
-    user_task.run("get started", turns=max_turns)
+    if llm_delegate:
+        user_task.run(user_agent.user_message, turns=max_turns)
+    else:
+        user_task.run("get started", turns=max_turns)
 
     # Determine the last agent based on turn count and alternation
     # Note: user_agent and ai_agent are dynamically set based on the chosen user_side

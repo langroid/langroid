@@ -94,7 +94,7 @@ def create_llm_config(chat_model_option: str, temperature: Optional[float] = Non
     """
     chat_model = MODEL_MAP.get(chat_model_option)
     # Load generation configuration from JSON
-    generation_config: GenerationConfig = load_generation_config("generation_config.json")
+    generation_config: GenerationConfig = load_generation_config("examples/multi-agent-debate/generation_config.json")
 
     if not chat_model:
         raise ValueError(f"Invalid model selection: {chat_model_option}")
