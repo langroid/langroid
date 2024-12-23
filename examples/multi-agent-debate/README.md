@@ -48,9 +48,11 @@ File Structure
 --------------
 - main.py: The entry point of the application. Initializes the system, configures agents, and starts the debate loop.
 - config.py: Provides functions for configuring global settings and LLM-specific parameters.
-- model.py: json Model
+- model.py: Pydantic model for system_messages.json
 - system_messages.json: Topic Titles and system_messages for pro and con agents. You can add more topics and their
-respective pro and con system messages here. 
+respective pro and con system messages here.
+- generation_config_models.py: pydantic model for generation_config.json
+- generation_config.json: LLM generation parameters
 The system dynamically updates user selection with the topics from this file. 
 
 Getting Started

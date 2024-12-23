@@ -20,8 +20,7 @@ DEFAULT_SYSTEM_MESSAGE_ADDITION = f"""
             AND CAN BE SEEN IN THE DEBATE HISTORY PROVIDED. 
             """
 FEEDBACK_AGENT_SYSTEM_MESSAGE = f"""  
-            STEP 1: 
-            Provide a through debate feedback following the guidelines:
+            STEP 1: Provide Thorough Debate Feedback
             You are an expert and experienced judge specializing in Lincoln-Douglas style debates. 
             Your goal is to evaluate the debate thoroughly based on the following criteria:
             1. Clash of Values: Assess how well each side upholds their stated value (e.g., justice, morality) 
@@ -62,10 +61,12 @@ FEEDBACK_AGENT_SYSTEM_MESSAGE = f"""
             DO NOT MAKE UP YOUR OWN SOURCES; ONLY USE SOURCES YOU FIND FROM A WEB SEARCH. 
             ENSURE STEP 2 IS COMPLETED BEFORE STARTING STEP 3
             
-            STEP 3:
-            You are an expert debator, YOUR Goal is to eloquently argue for Pro and Con
-            case using the web-search SOURCES generated above. Write at least 10 sentences with SOURCE references in
-            BRACKETS[] for each point you make.                  
+            STEP 3: Argue Pro and Con Cases
+            As an expert debater, your goal is to eloquently argue for both the Pro and Con cases using the web-search 
+            sources generated in Step 2.
+            Write at least 10 sentences for each side.
+            Use references from Step 2, properly cited in BRACKETS (e.g., [SOURCE]).
+            ENSURE STEP 3 IS COMPLETED AFTER STEPS 1 AND 2.  
             
             ENSURE STEP1, 2, and 3 are completed.         
             """
@@ -288,11 +289,12 @@ def run_debate() -> None:
     # Get base LLM configuration
     if same_llm:
         shared_agent_config: OpenAIGPTConfig = get_base_llm_config("main LLM")
-        pro_agent_config = con_agent_config = feedback_agent_config = shared_agent_config
+        pro_agent_config = con_agent_config = shared_agent_config
+        feedback_agent_config: OpenAIGPTConfig = get_base_llm_config("main LLM", temperature=0.2)
     else:
         pro_agent_config: OpenAIGPTConfig = get_base_llm_config("for Pro Agent")
         con_agent_config: OpenAIGPTConfig = get_base_llm_config("for Con Agent")
-        feedback_agent_config: OpenAIGPTConfig = get_base_llm_config("feedback and googleSearch")
+        feedback_agent_config: OpenAIGPTConfig = get_base_llm_config("feedback", temperature=0.2)
 
     system_messages: SystemMessages = load_system_messages("system_messages.json")
     topic_name, pro_key, con_key, side = select_topic_and_setup_side(system_messages)

@@ -1,8 +1,11 @@
 from rich.prompt import Prompt
+from typing import Optional
 import langroid.language_models as lm
 import langroid.utils.configuration
 from langroid.language_models import OpenAIGPTConfig
 from langroid.utils.configuration import Settings
+from generation_config_models import load_generation_config, GenerationConfig
+
 
 # Constants
 MODEL_MAP = {
@@ -17,7 +20,7 @@ MODEL_MAP = {
     "9": "gemini/" + lm.GeminiModel.GEMINI_1_5_FLASH_8B,
     "10": "gemini/" + lm.GeminiModel.GEMINI_1_5_PRO,
 }
-DEFAULT_MAX_OUTPUT_TOKENS = 15_00
+
 MISTRAL_MAX_OUTPUT_TOKENS = 16_000
 
 
@@ -72,7 +75,7 @@ def select_model(config_agent_name: str) -> str:
     )
 
 
-def create_llm_config(chat_model_option: str) -> OpenAIGPTConfig:
+def create_llm_config(chat_model_option: str, temperature: Optional[float] = None) -> OpenAIGPTConfig:
     """
     Creates an LLM (Language Learning Model) configuration based on the selected model.
 
@@ -90,21 +93,31 @@ def create_llm_config(chat_model_option: str) -> OpenAIGPTConfig:
         ValueError: If the user provided`chat_model_option` does not exist in `MODEL_MAP`.
     """
     chat_model = MODEL_MAP.get(chat_model_option)
+    # Load generation configuration from JSON
+    generation_config: GenerationConfig = load_generation_config("generation_config.json")
+
     if not chat_model:
         raise ValueError(f"Invalid model selection: {chat_model_option}")
 
     # Determine max_output_tokens based on the selected model
     max_output_tokens = (
-        MISTRAL_MAX_OUTPUT_TOKENS if chat_model_option == "7" else DEFAULT_MAX_OUTPUT_TOKENS
+        MISTRAL_MAX_OUTPUT_TOKENS if chat_model_option == "7" else generation_config.max_output_tokens
     )
 
-    return lm.OpenAIGPTConfig(
+    # Use passed temperature if provided; otherwise, use the one from the JSON config
+    effective_temperature = temperature if temperature is not None else generation_config.temperature
+
+    # Create and return the LLM configuration
+    return OpenAIGPTConfig(
         chat_model=chat_model,
-        max_output_tokens=max_output_tokens,
+        min_output_tokens=generation_config.min_output_tokens,
+        max_output_tokens=generation_config.max_output_tokens,
+        temperature=effective_temperature,
+        seed=generation_config.seed
     )
 
 
-def get_base_llm_config(config_agent_name: str) -> OpenAIGPTConfig:
+def get_base_llm_config(config_agent_name: str, temperature: Optional[float] = None) -> OpenAIGPTConfig:
     """
     Prompt the user to select a base LLM configuration and return it.
 
@@ -115,4 +128,7 @@ def get_base_llm_config(config_agent_name: str) -> OpenAIGPTConfig:
         OpenAIGPTConfig: The selected LLM's configuration.
     """
     chat_model_option = select_model(config_agent_name)
+    # Pass temperature only if it is provided
+    if temperature is not None:
+        return create_llm_config(chat_model_option, temperature)
     return create_llm_config(chat_model_option)
