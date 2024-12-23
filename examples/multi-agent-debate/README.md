@@ -60,8 +60,6 @@ Prerequisites
 2. Langroid Framework: Install Langroid with necessary dependencies:
    pip install "langroid[litellm]"
 3. Setup the following env variables in the .env File or set them on your terminal.
-       export GOOGLE_API_KEY=GOOGLE API KEY
-       export GOOGLE_CSE_ID= GOOGLE CASE ID
        export OPENAI_API_KEY=OPEN AI KEY
        export GEMINI_API_KEY=GEMiNi API KEY
        export METAPHOR_API_KEY=METAPHOR_API_KEY

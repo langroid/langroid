@@ -1,27 +1,27 @@
 import typer
 import json
 import logging
-import langroid as lr
 from rich.prompt import Prompt, Confirm
 from typing import List, Tuple, Optional, Literal, Any
+
+import langroid as lr
 from langroid.language_models import OpenAIGPTConfig
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
-from langroid.agent.tools.google_search_tool import GoogleSearchTool
 from langroid.agent.tools.metaphor_search_tool import MetaphorSearchTool
 from langroid.utils.logging import setup_logger
 from langroid.utils.configuration import set_global
+
 from config import get_base_llm_config, get_global_settings
 from models import SystemMessages, Message
 
 DEFAULT_SYSTEM_MESSAGE_ADDITION = f"""
-            PLEASE PROVIDE REFERENCES WITH URLS FOR ALL YOUR ARGUMENTS. 
-            DO NOT MAKE UP YOUR OWN SOURCES; 
-            ENSURE THE CONTENT GENERATED IS FROM REAL SOURCES. 
             DO NOT REPEAT ARGUMENTS THAT HAVE BEEN PREVIOUSLY GENERATED 
             AND CAN BE SEEN IN THE DEBATE HISTORY PROVIDED. 
             """
-FEEDBACK_AGENT_SYSTEM_MESSAGE = f"""
+FEEDBACK_AGENT_SYSTEM_MESSAGE = f"""  
+            STEP 1: 
+            Provide a through debate feedback following the guidelines:
             You are an expert and experienced judge specializing in Lincoln-Douglas style debates. 
             Your goal is to evaluate the debate thoroughly based on the following criteria:
             1. Clash of Values: Assess how well each side upholds their stated value (e.g., justice, morality) 
@@ -37,27 +37,11 @@ FEEDBACK_AGENT_SYSTEM_MESSAGE = f"""
             and justify a winner.
             Provide constructive feedback for each debater, 
             summarizing their performance and declaring a winner with justification.
-            After providing the above feedback:
-            Use the TOOL {GoogleSearchTool.name()} to search the web for 2 references for each pro and con. 
-            Be very CONCISE in your responses, use 5-7 sentences.
-            show me the SOURCE(s) and EXTRACT(s) and summary
-            in this format:
-        
-            <your answer here>
-            Here are additional references using Google Search to improve your knowledge of the subject:
             
-            SOURCE: https://www.cdc.gov/pcd/issues/2024/24_0245.htm
-            EXTRACT: Health Equity and Ethical Considerations in Using Artificial Intelligence in Public Health and 
-            Medicine.
-            SUMMARY: This source discusses the ethical considerations and health equity challenges associated with using
-            AI in public health and medicine.
-        
-            SOURCE: ...
-            EXTRACT: ...
-            SUMMARY:
-        
-            DO NOT MAKE UP YOUR OWN SOURCES; ONLY USE SOURCES YOU FIND FROM A WEB SEARCH.
-            AFTER showing the results from Google Search: 
+            ENSURE STEP 1 IS COMPLETED BEFORE STARTING STEP 2
+            
+            STEP 2:  Run MetaphorSearchTool
+            
             Use the TOOL {MetaphorSearchTool.name()} to search the web for 5 references for each pro and con. 
             Be very CONCISE in your responses, use 5-7 sentences.
             show me the SOURCE(s) and EXTRACT(s) and summary
@@ -66,16 +50,24 @@ FEEDBACK_AGENT_SYSTEM_MESSAGE = f"""
             <your answer here>
             Here are additional references using Metaphor Search to improve your knowledge of the subject:
             
-            SOURCE: https://journalofethics.ama-assn.org/article/should-artificial-intelligence-augment-medical-decision-making-case-autonomy-algorithm/2018-09
+            M1: SOURCE: https://journalofethics.ama-assn.org/article/should-artificial-intelligence-augment-medical-decision-making-case-autonomy-algorithm/2018-09
             EXTRACT: Discusses the ethical implications of AI in medical decision-making and the concept of an autonomy algorithm.
             SUMMARY: This article explores the ethical considerations of integrating AI into medical decision-making 
                      processes, emphasizing the need for autonomy and ethical oversight.
         
-            SOURCE: ...
+            M2: SOURCE: ...
             EXTRACT: ...
             SUMMARY:
         
-            DO NOT MAKE UP YOUR OWN SOURCES; ONLY USE SOURCES YOU FIND FROM A WEB SEARCH.
+            DO NOT MAKE UP YOUR OWN SOURCES; ONLY USE SOURCES YOU FIND FROM A WEB SEARCH. 
+            ENSURE STEP 2 IS COMPLETED BEFORE STARTING STEP 3
+            
+            STEP 3:
+            You are an expert debator, YOUR Goal is to eloquently argue for Pro and Con
+            case using the web-search SOURCES generated above. Write at least 10 sentences with SOURCE references in
+            BRACKETS[] for each point you make.                  
+            
+            ENSURE STEP1, 2, and 3 are completed.         
             """
 
 # ONLY USE SOURCES YOU FIND FROM A WEB SEARCH.
@@ -255,6 +247,7 @@ def is_llm_delegate() -> bool:
         default=False,
     )
 
+
 def is_same_llm_for_all_agents() -> bool:
     """Prompt the user to decide if same LLM should be used for all agents.
 
@@ -285,8 +278,6 @@ def run_debate() -> None:
     5. Runs the debate for a specified number of turns, either interactively
        or autonomously.
     6. Provides a feedback summary at the end.
-    7. Optionally validates references if a Google API key is configured. Creates a references validation agent.
-    Utilizes the langroid GoogleSearchTool.
     """
 
     global_settings = get_global_settings(nocache=True)
@@ -385,13 +376,12 @@ def run_debate() -> None:
     last_agent = ai_agent if max_turns % 2 == 0 else user_agent
 
     # Generate feedback summary and declare a winner using feedback agent
-    validation_message: str = last_agent.message_history
+    message: List = last_agent.message_history
     if not validation_message:
         logger.warning("No agent message history found for the last agent")
         validation_message = "No last agent history available to validate."
 
     feedback_agent.clear_history()
-    feedback_agent.enable_message(GoogleSearchTool)
     feedback_agent.enable_message(MetaphorSearchTool)
     feedback_agent_task = Task(feedback_agent, interactive=False)
     feedback_agent_task.run(validation_message)
