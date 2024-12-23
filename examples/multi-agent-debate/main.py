@@ -376,7 +376,7 @@ def run_debate() -> None:
     last_agent = ai_agent if max_turns % 2 == 0 else user_agent
 
     # Generate feedback summary and declare a winner using feedback agent
-    message: List = last_agent.message_history
+    validation_message: List = last_agent.message_history
     if not validation_message:
         logger.warning("No agent message history found for the last agent")
         validation_message = "No last agent history available to validate."
