@@ -35,6 +35,7 @@ class ChromaDB(VectorStore):
         self.client = chromadb.Client(
             chromadb.config.Settings(
                 # chroma_db_impl="duckdb+parquet",
+                # is_persistent=bool(config.storage_path),
                 persist_directory=config.storage_path,
             )
         )
@@ -124,6 +125,13 @@ class ChromaDB(VectorStore):
             m["window_ids"] = ",".join(m["window_ids"])
 
         ids = [str(d.id()) for d in documents]
+
+        colls = self.list_collections(empty=True)
+        if self.config.collection_name is None:
+            raise ValueError("No collection name set, cannot ingest docs")
+        if self.config.collection_name not in colls:
+            self.create_collection(self.config.collection_name, replace=True)
+
         self.collection.add(
             # embedding_models=embedding_models,
             documents=contents,
