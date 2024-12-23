@@ -3,22 +3,10 @@ from abc import ABC, abstractmethod
 from typing import Callable, Dict, List, Optional, Union
 
 import langroid as lr
-from langroid.language_models.mock_lm import MockLMConfig
 
 # Fix logging level type
 logging.basicConfig(level=logging.WARNING)
 logger = logging.getLogger(__name__)
-
-
-def sum_fn(s: str) -> str:
-    """Dummy response for MockLM"""
-    nums = [
-        int(subpart)
-        for part in s.split()
-        for subpart in part.split(",")
-        if subpart.isdigit()
-    ]
-    return str(sum(nums) + 1)
 
 
 def user_message(msg: Union[str, lr.ChatDocument]) -> lr.ChatDocument:
@@ -64,7 +52,10 @@ class InputContext:
         self.messages.clear()
 
     def get_context(self) -> lr.ChatDocument:
-        """Construct a user-role ChatDocument from the input messages"""
+        """
+        Construct a ChatDocument with sender = User, from the input messages
+        accumulated so far.
+        """
         if len(self.messages) == 0:
             return lr.ChatDocument(content="", metadata={"sender": lr.Entity.USER})
         content = "\n".join(
@@ -263,10 +254,22 @@ class Team(Component):
         input_str = self.input.get_context().content
         logger.warning(f"Running team {self.name}... on input = {input_str}")
         # push the input of self to each component that's a listener of self.
+        n_pushed = 0
         for comp in self.components:
             if comp in self.listeners:
                 comp.input.add(self.input.messages)
-            self.input.clear()
+                n_pushed += 1
+        if len(self.input.messages) > 0 and n_pushed == 0:
+            logger.warning(
+                f"""
+                Team {self.name} has input but no internal listeners,
+                so this input will not be passed to any components,
+                and you may not be able to run the team successfully.
+                Make sure to set up components listening to parent team
+                if needed.
+                """
+            )
+        self.input.clear()
 
         result = self.scheduler.run()
         if len(result) > 0:
@@ -276,14 +279,6 @@ class Team(Component):
         result_value = result[0].content if len(result) > 0 else "null"
         logger.warning(f"Team {self.name} done: {result_value}")
         return result
-
-
-class DummyAgent:
-    def __init__(self, name: str) -> None:
-        self.name = name
-
-    def process(self, data: str) -> str:
-        return f"{self.name} processed: {data}"
 
 
 class TaskComponent(Component):
@@ -307,74 +302,3 @@ class TaskComponent(Component):
             self._notify(result_list)
             self.input.clear()  # clear own input since we just consumed it!
         return result_list
-
-
-def make_task(name: str, sys: str = "") -> TaskComponent:
-    llm_config = MockLMConfig(response_fn=sum_fn)
-    agent = lr.ChatAgent(
-        lr.ChatAgentConfig(
-            llm=llm_config,
-            name=name,
-        )
-    )
-    # set as single_round since there are no Tools
-    task = lr.Task(agent, interactive=False, single_round=True)
-    return TaskComponent(task)
-
-
-if __name__ == "__main__":
-    # Create agents, tasks
-    t1 = make_task("a1")
-    t2 = make_task("a2")
-    t3 = make_task("a3")
-
-    # done conditions for each time
-    def team1_done_condition(team: Team, scheduler: Scheduler) -> bool:
-        return (
-            scheduler.responder_counts.get("a1", 0) >= 2
-            and scheduler.responder_counts.get("a2", 0) >= 2
-        )
-
-    def team2_done_condition(team: Team, scheduler: Scheduler) -> bool:
-        return "a3" in scheduler.responders
-
-    def general_team_done_condition(team: Team, scheduler: Scheduler) -> bool:
-        # Example: all components have responded at least once
-        return len(set(scheduler.responders)) == len(team.components)
-
-    # Create teams
-    team1 = Team("T1", done_condition=team1_done_condition)
-    team2 = Team("T2", done_condition=team2_done_condition)
-
-    team = Team("Team", done_condition=general_team_done_condition)
-
-    team1.add_scheduler(OrElseScheduler)
-    team2.add_scheduler(OrElseScheduler)
-    team.add_scheduler(OrElseScheduler)
-
-    team.add([team1, team2])
-
-    # Build hierarchy
-    team1.add([t1, t2])
-    team2.add(t3)
-
-    # Set up listening
-    # team2.listen(team1)  # listens to team1 final result
-    team1.listen(team)
-    t1.listen(team1)
-    t2.listen(t1)
-    t1.listen(t2)
-    # TODO should we forbid listening to a component OUTSIDE the team?
-
-    # t3 listens to its parent team2 =>
-    # any input to team2 gets pushed to t3 when t3 runs
-    team2.listen([t1, t2])
-    t3.listen(team2)
-
-    # TODO - we should either define which component of a team gets the teams inputs,
-    # or explicitly add messages to a specific component of the team
-
-    print("Running top-level team...")
-    result = team.run("1")
-
-    ##########
