@@ -309,7 +309,7 @@ def run_debate() -> None:
 
     # Prompt for number of debate turns
     max_turns: int = int(
-        Prompt.ask(f"How many turns should the debate continue for (Defalut is {DEFAULT_TURN_COUNT}?",
+        Prompt.ask(f"How many turns should the debate continue for? (Defalut is {DEFAULT_TURN_COUNT})",
                    default=DEFAULT_TURN_COUNT)
     )
 
