@@ -107,6 +107,10 @@ nav:
       - Gemini LLMs: notes/gemini.md
       - Large Tool Results: notes/large-tool-results.md
       - GLHF.chat Support: notes/glhf-chat.md
+      - Structured Output: notes/structured-output.md
+      - Tool Handler Name: notes/tool-message-handler.md
+      - Llama.cpp Embeddings: notes/llama-cpp-embeddings.md
+      - Custom Azure OpenAI client: notes/custom-azure-client.md
 
   - Examples:
     - Guide: examples/guide.md

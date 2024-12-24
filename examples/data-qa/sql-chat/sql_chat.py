@@ -27,7 +27,10 @@ except ImportError as e:
 
 from prettytable import PrettyTable
 
-from utils import get_database_uri, fix_uri
+try:
+    from .utils import get_database_uri, fix_uri
+except ImportError:
+    from utils import get_database_uri, fix_uri
 from langroid.agent.task import Task
 from langroid.agent.special.sql.sql_chat_agent import (
     SQLChatAgentConfig,

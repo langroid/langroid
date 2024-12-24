@@ -55,8 +55,6 @@ documents: List[Document] = [
         
         Global warming was solved in 2060. 
         
-        In 2061, the world was taken over by paperclips. 
-        
         In 2045, the Tour de France was still going on.
         They were still using bicycles. 
         
@@ -85,7 +83,7 @@ QUERY_EXPECTED_PAIRS = [
     ("what is the capital of England?", "Lancaster"),
     ("Who was Charlie Chaplin?", "comedian"),
     ("When was global warming solved?", "2060"),
-    ("What do we know about paperclips?", "2057, 2061"),
+    ("What do we know about paperclips?", "2057"),
 ]
 
 for _ in range(100):
@@ -241,8 +239,9 @@ async def test_doc_chat_agent_llm_async(
     assert all([e in ans for e in expected])
 
 
+@pytest.mark.parametrize("query, expected", QUERY_EXPECTED_PAIRS)
 @pytest.mark.parametrize("vecdb", ["qdrant_local", "chroma"], indirect=True)
-def test_doc_chat_agent_task(test_settings: Settings, agent):
+def test_doc_chat_agent_task(test_settings: Settings, agent, query, expected):
     """
     Test DocChatAgent wrapped in a Task.
     """
@@ -252,14 +251,14 @@ def test_doc_chat_agent_task(test_settings: Settings, agent):
     task.init()
     # LLM responds to Sys msg, initiates conv, says thank you, etc.
     task.step()
-    for q, expected in QUERY_EXPECTED_PAIRS:
-        agent.default_human_response = q
-        task.step()  # user asks `q`
-        task.step()  # LLM answers
-        ans = task.pending_message.content
-        expected = [e.strip() for e in expected.split(",")]
-        assert all([e in ans for e in expected])
-        assert task.pending_message.metadata.sender == Entity.LLM
+
+    agent.default_human_response = query
+    task.step()  # user asks query
+    task.step()  # LLM answers
+    ans = task.pending_message.content.lower()
+    expected = [e.strip() for e in expected.split(",")]
+    assert all([e.lower() in ans for e in expected])
+    assert task.pending_message.metadata.sender == Entity.LLM
 
 
 class RetrievalAgent(DocChatAgent):

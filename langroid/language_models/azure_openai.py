@@ -1,3 +1,6 @@
+import logging
+from typing import Callable
+
 from dotenv import load_dotenv
 from httpx import Timeout
 from openai import AsyncAzureOpenAI, AzureOpenAI
@@ -7,6 +10,15 @@ from langroid.language_models.openai_gpt import (
     OpenAIGPT,
     OpenAIGPTConfig,
 )
+
+azureStructuredOutputList = [
+    "2024-08-06",
+    "2024-11-20",
+]
+
+azureStructuredOutputAPIMin = "2024-08-01-preview"
+
+logger = logging.getLogger(__name__)
 
 
 class AzureConfig(OpenAIGPTConfig):
@@ -35,6 +47,10 @@ class AzureConfig(OpenAIGPTConfig):
     model_version: str = ""  # is used to determine the cost of using the model
     api_base: str = ""
 
+    # Alternatively, bring your own clients:
+    azure_openai_client_provider: Callable[[], AzureOpenAI] | None = None
+    azure_openai_async_client_provider: Callable[[], AsyncAzureOpenAI] | None = None
+
     # all of the vars above can be set via env vars,
     # by upper-casing the name and prefixing with `env_prefix`, e.g.
     # AZURE_OPENAI_API_VERSION=2023-05-15
@@ -62,20 +78,6 @@ class AzureGPT(OpenAIGPT):
         load_dotenv()
         super().__init__(config)
         self.config: AzureConfig = config
-        if self.config.api_key == "":
-            raise ValueError(
-                """
-                AZURE_OPENAI_API_KEY not set in .env file,
-                please set it to your Azure API key."""
-            )
-
-        if self.config.api_base == "":
-            raise ValueError(
-                """
-                AZURE_OPENAI_API_BASE not set in .env file,
-                please set it to your Azure API key."""
-            )
-
         if self.config.deployment_name == "":
             raise ValueError(
                 """
@@ -91,23 +93,65 @@ class AzureGPT(OpenAIGPT):
                 please set it to chat model name in your deployment."""
             )
 
+        if (
+            self.config.azure_openai_client_provider
+            or self.config.azure_openai_async_client_provider
+        ):
+            if not self.config.azure_openai_client_provider:
+                self.client = None
+                logger.warning(
+                    "Using user-provided Azure OpenAI client, but only async "
+                    "client has been provided. Synchronous calls will fail."
+                )
+            if not self.config.azure_openai_async_client_provider:
+                self.async_client = None
+                logger.warning(
+                    "Using user-provided Azure OpenAI client, but no async "
+                    "client has been provided. Asynchronous calls will fail."
+                )
+
+            if self.config.azure_openai_client_provider:
+                self.client = self.config.azure_openai_client_provider()
+            if self.config.azure_openai_async_client_provider:
+                self.async_client = self.config.azure_openai_async_client_provider()
+                self.async_client.timeout = Timeout(self.config.timeout)
+        else:
+            if self.config.api_key == "":
+                raise ValueError(
+                    """
+                    AZURE_OPENAI_API_KEY not set in .env file,
+                    please set it to your Azure API key."""
+                )
+
+            if self.config.api_base == "":
+                raise ValueError(
+                    """
+                    AZURE_OPENAI_API_BASE not set in .env file,
+                    please set it to your Azure API key."""
+                )
+
+            self.client = AzureOpenAI(
+                api_key=self.config.api_key,
+                azure_endpoint=self.config.api_base,
+                api_version=self.config.api_version,
+                azure_deployment=self.config.deployment_name,
+            )
+            self.async_client = AsyncAzureOpenAI(
+                api_key=self.config.api_key,
+                azure_endpoint=self.config.api_base,
+                api_version=self.config.api_version,
+                azure_deployment=self.config.deployment_name,
+                timeout=Timeout(self.config.timeout),
+            )
+
         # set the chat model to be the same as the model_name
         # This corresponds to the gpt model you chose for your deployment
         # when you deployed a model
         self.set_chat_model()
 
-        self.client = AzureOpenAI(
-            api_key=self.config.api_key,
-            azure_endpoint=self.config.api_base,
-            api_version=self.config.api_version,
-            azure_deployment=self.config.deployment_name,
-        )
-        self.async_client = AsyncAzureOpenAI(
-            api_key=self.config.api_key,
-            azure_endpoint=self.config.api_base,
-            api_version=self.config.api_version,
-            azure_deployment=self.config.deployment_name,
-            timeout=Timeout(self.config.timeout),
+        self.supports_json_schema = (
+            self.config.api_version >= azureStructuredOutputAPIMin
+            and self.config.model_version in azureStructuredOutputList
         )
 
     def set_chat_model(self) -> None:
@@ -115,16 +159,28 @@ class AzureGPT(OpenAIGPT):
         Sets the chat model configuration based on the model name specified in the
         ``.env``. This function checks the `model_name` in the configuration and sets
         the appropriate chat model in the `config.chat_model`. It supports handling for
-        '35-turbo' and 'gpt-4' models. For 'gpt-4', it further delegates the handling
-        to `handle_gpt4_model` method. If the model name does not match any predefined
-        models, it defaults to `OpenAIChatModel.GPT4`.
+        'gpt-35-turbo', 'gpt4-turbo', 'gpt-4o' and 'gpt-4o-mini' models. For
+        'gpt-4', it further delegates the handling to `handle_gpt4_model` method.
+        If the model name does not match any predefined models, it defaults to
+        `OpenAIChatModel.GPT4`.
         """
-        MODEL_35_TURBO = "35-turbo"
-        MODEL_GPT4 = "gpt-4"
+        MODEL_35_TURBO_NAMES = ("gpt-35-turbo", "35-turbo")
+        MODEL_GPT4_TURBO_NAME = "gpt-4-turbo"
+        MODEL_GPT4o_NAME = "gpt-4o"
+        MODEL_GPT4o_MINI_NAME = "gpt-4o-mini"
+        MODEL_GPT4_PREFIX = "gpt-4"
 
-        if self.config.model_name == MODEL_35_TURBO:
+        if self.config.model_name in MODEL_35_TURBO_NAMES:
             self.config.chat_model = OpenAIChatModel.GPT3_5_TURBO
-        elif self.config.model_name == MODEL_GPT4:
+        elif self.config.model_name == MODEL_GPT4o_NAME:
+            self.config.chat_model = OpenAIChatModel.GPT4o
+        elif self.config.model_name == MODEL_GPT4o_MINI_NAME:
+            self.config.chat_model = OpenAIChatModel.GPT4o_MINI
+        elif self.config.model_name == MODEL_GPT4_TURBO_NAME:
+            self.config.chat_model = OpenAIChatModel.GPT4_TURBO
+        elif isinstance(
+            self.config.model_name, str
+        ) and self.config.model_name.startswith(MODEL_GPT4_PREFIX):
             self.handle_gpt4_model()
         else:
             self.config.chat_model = OpenAIChatModel.GPT4
@@ -136,12 +192,13 @@ class AzureGPT(OpenAIGPT):
         If the version is not set, it raises a ValueError indicating
         that the model version needs to be specified in the ``.env``
         file.  It sets `OpenAIChatMode.GPT4o` if the version is
-        '2024-05-13', `OpenAIChatModel.GPT4_TURBO` if the version is
-        '1106-Preview', otherwise, it defaults to setting
-        `OpenAIChatModel.GPT4`.
+        one of those listed below, and
+        `OpenAIChatModel.GPT4_TURBO` if
+        the version is '1106-Preview', otherwise, it defaults to
+        setting `OpenAIChatModel.GPT4`.
         """
-        VERSION_1106_PREVIEW = "1106-Preview"
-        VERSION_GPT4o = "2024-05-13"
+        VERSIONS_GPT4_TURBO = ("1106-Preview", "2024-04-09")
+        VERSIONS_GPT4o = ("2024-05-13", "2024-08-06", "2024-11-20")
 
         if self.config.model_version == "":
             raise ValueError(
@@ -149,9 +206,9 @@ class AzureGPT(OpenAIGPT):
                 "Please set it to the chat model version used in your deployment."
             )
 
-        if self.config.model_version == VERSION_GPT4o:
+        if self.config.model_version in VERSIONS_GPT4o:
             self.config.chat_model = OpenAIChatModel.GPT4o
-        elif self.config.model_version == VERSION_1106_PREVIEW:
+        elif self.config.model_version in VERSIONS_GPT4_TURBO:
             self.config.chat_model = OpenAIChatModel.GPT4_TURBO
         else:
             self.config.chat_model = OpenAIChatModel.GPT4

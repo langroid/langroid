@@ -64,5 +64,5 @@ async def on_message(message: cl.Message):
     # sometimes we may want the User to NOT have agent name in front,
     # and just show them as YOU.
     callback_config = lr.ChainlitCallbackConfig(user_has_agent_name=False)
-    lr.ChainlitTaskCallbacks(task, message, config=callback_config)
+    lr.ChainlitTaskCallbacks(task, config=callback_config)
     await task.run_async(message.content)

@@ -32,7 +32,7 @@ import langroid as lr
 from langroid.agent.callbacks.chainlit import add_instructions
 import langroid.language_models as lm
 from langroid import ChatDocument
-from langroid.agent.tools.duckduckgo_search_tool import DuckduckgoSearchTool
+from langroid.agent.tools.metaphor_search_tool import MetaphorSearchTool
 from langroid.utils.configuration import Settings, set_global
 
 
@@ -345,10 +345,10 @@ async def main(
     assistant_agent.enable_message(FinalAnswerTool)
     assistant_agent.enable_message(FeedbackTool, use=False, handle=True)
 
-    search_tool_handler_method = DuckduckgoSearchTool.default_value("request")
+    search_tool_handler_method = MetaphorSearchTool.name()
 
     search_agent_config = SearcherAgentConfig(
-        search_tool_class=DuckduckgoSearchTool,
+        search_tool_class=MetaphorSearchTool,
         llm=llm_config,
         vecdb=None,
         system_message=f"""
@@ -409,5 +409,5 @@ async def main(
 @cl.on_message
 async def on_message(message: cl.Message):
     assistant_task = cl.user_session.get("assistant_task")
-    lr.ChainlitTaskCallbacks(assistant_task, message)
+    lr.ChainlitTaskCallbacks(assistant_task)
     await assistant_task.run_async(message.content)

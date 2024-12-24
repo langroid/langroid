@@ -49,6 +49,7 @@ jobs:
     env:
       CI: true # allows conditional skipping of tests based on this env var
       OPENAI_API_KEY: ${{ secrets.OPENAI_KEY }}
+      GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
       GITHUB_ACCESS_TOKEN: ${{ secrets.GH_ACCESS_TOKEN }}
       REDIS_PASSWORD: ${{ secrets.REDIS_PASSWORD }}
       REDIS_HOST: ${{ secrets.REDIS_HOST }}
@@ -122,18 +123,18 @@ jobs:
       run: pip freeze > requirements_github.txt
 
     - name: Upload dependencies file
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: github-dependencies
         path: requirements_github.txt
 
 
-    - name: Run ALL tests with coverage (GPT-4o)
+    - name: Run ALL tests with coverage (GPT-4o-mini)
       id: first_test
       env:
         PYTEST_ADDOPTS: "-p no:logging"
       run: |
-        poetry run pytest --cov langroid --cov-config .coveragerc \
+        poetry run pytest --m gpt-4o-mini --cov langroid --cov-config .coveragerc \
           -rf -vv --log-cli-level=INFO --show-capture=no \
           -n auto --timeout=300 \
           --first-test-file=tests/main/test_llm.py \
@@ -144,14 +145,32 @@ jobs:
           tests/main tests/extras/test_hf_embeddings.py tests/extras/test_fastembed_embeddings.py
       continue-on-error: true
 
-    - name: Retry FAILED tests ONLY with gpt-4 instead of gpt-4o
+    - name: Retry FAILED tests ONLY with GPT-4o instead of GPT-4o-mini
       id: second_test
       if: steps.first_test.outcome == 'failure'
       env:
         PYTEST_ADDOPTS: "-p no:logging"
       run: |
-        poetry run pytest --m gpt-4 --cov --cov-append langroid --cov-config .coveragerc \
-          -rf --show-capture=no --timeout=300 \
+        poetry run pytest --cov langroid --cov-append --cov-config .coveragerc \
+          -rf -vv --log-cli-level=INFO --show-capture=no \
+          -n auto --timeout=300 \
+          --first-test-file=tests/main/test_llm.py \
+          --first-test-file=tests/main/test_task.py \
+          --first-test-file=tests/main/test_llm_async.py \
+          --first-test-file=tests/main/test_task_inf_loop.py \
+          --first-test-file=tests/main/test_lance_doc_chat_agent.py \
+          --lf --last-failed-no-failures none \
+          tests/main tests/extras/test_hf_embeddings.py tests/extras/test_fastembed_embeddings.py
+      continue-on-error: true
+
+    - name: Retry FAILED tests ONLY without cache (GPT-4o)
+      id: third_test
+      if: steps.second_test.outcome == 'failure'
+      env:
+        PYTEST_ADDOPTS: "-p no:logging"
+      run: |
+        poetry run pytest --nc --cov langroid --cov-append --cov-config .coveragerc \
+          -rf --show-capture=no --timeout=300 -n auto \
           --first-test-file=tests/main/test_llm.py \
           --first-test-file=tests/main/test_llm_async.py \
           --first-test-file=tests/main/test_task_inf_loop.py \
@@ -159,7 +178,6 @@ jobs:
           --first-test-file=tests/main/test_lance_doc_chat_agent.py \
           --lf --last-failed-no-failures none \
           tests/main tests/extras/test_hf_embeddings.py tests/extras/test_fastembed_embeddings.py
-
 
     - name: Generate final coverage report from all runs
       run: poetry run coverage report

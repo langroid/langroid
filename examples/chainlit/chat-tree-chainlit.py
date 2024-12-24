@@ -55,7 +55,36 @@ class MainChatAgent(ChatAgent):
 
 
 @cl.on_chat_start
-async def chat() -> None:
+async def on_start():
+    await add_instructions(
+        title="Multi-agent chat for tree-structured computation with tools",
+        content=dedent(
+            """
+        This task consists of performing this calculation for a given input number n:
+        
+        ```python
+        def Main(n):
+            if n is odd:
+                return (3*n+1) + n
+            else:
+                If n is divisible by 10:
+                    return n/10 + n
+                else:
+                    return n/2 + n
+        ```
+        
+        See details in the [chat-tree.py](https://github.com/langroid/langroid/blob/main/examples/basic/chat-tree.py), 
+        and the writeup on 
+        [Hierarchical Agent Computation](https://langroid.github.io/langroid/examples/agent-tree/).
+        
+        To start the computation, enter a number.  
+        """
+        ),
+    )
+
+
+@cl.on_message
+async def chat(msg: cl.Message) -> None:
     set_global(
         Settings(
             debug=False,
@@ -64,9 +93,11 @@ async def chat() -> None:
         )
     )
 
+    MyGlobalState.set_values(number=int(msg.content))
+
     config = ChatAgentConfig(
         llm=OpenAIGPTConfig(
-            chat_model=OpenAIChatModel.GPT4,
+            chat_model=OpenAIChatModel.GPT4o,
         ),
         vecdb=None,
     )
@@ -85,9 +116,6 @@ async def chat() -> None:
         RESULT Message format: RESULT <number>
         In this case simply say "DONE <number>", e.g.:
         DONE 19
-
-        To start off, ask the user for the initial number, 
-        using the `ask_num` tool/function.
         """,
     )
 
@@ -170,7 +198,7 @@ async def chat() -> None:
     adder_agent = ChatAgent(config)
     # set up the tools
     adder_agent.enable_message(AddNumTool)
-    main_agent.enable_message(AskNumTool)
+    # main_agent.enable_message(AskNumTool)
 
     adder_task = Task(
         adder_agent,
@@ -196,32 +224,5 @@ async def chat() -> None:
     # inject chainlit callbacks: this is the ONLY change to chat-tree.py
     lr.ChainlitTaskCallbacks(main_task)
 
-    await add_instructions(
-        title="Multi-agent chat for tree-structured computation with tools",
-        content=dedent(
-            """
-        This task consists of performing this calculation for a given input number n:
-        
-        ```python
-        def Main(n):
-            if n is odd:
-                return (3*n+1) + n
-            else:
-                If n is divisible by 10:
-                    return n/10 + n
-                else:
-                    return n/2 + n
-        ```
-        
-        See details in the [chat-tree.py](https://github.com/langroid/langroid/blob/main/examples/basic/chat-tree.py), 
-        and the writeup on 
-        [Hierarchical Agent Computation](https://langroid.github.io/langroid/examples/agent-tree/).
-        
-        The default mode is non-interactive. Initially the main agent
-        asks the user (you) to enter a number. Once you enter a number,
-        you can watch the computation unfold autonomously.
-        """
-        ),
-    )
     # start the chat
-    await main_task.run_async()
+    await main_task.run_async(msg.content)

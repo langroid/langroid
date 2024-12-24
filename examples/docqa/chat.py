@@ -9,9 +9,16 @@ To change the model, use the --model flag, e.g.:
 
 python3 examples/docqa/chat.py --model ollama/mistral:7b-instruct-v0.2-q8_0
 
-To change the embedding model, use the --embed flag, e.g.:
+To change the embedding service provider, use the --embed and --embedconfig flags, e.g.:
 
-python3 examples/docqa/chat.py --embed BAAI/bge-large-en-v1.5
+For OpenAI
+python3 examples/docqa/chat.py --embed openai
+
+For Huggingface SentenceTransformers
+python3 examples/docqa/chat.py --embed hf --embedconfig BAAI/bge-large-en-v1.5
+
+For Llama.cpp Server
+python3 examples/docqa/chat.py --embed llamacpp --embedconfig localhost:8000
 
 See here for how to set up a Local LLM to work with Langroid:
 https://langroid.github.io/langroid/tutorials/local-llm-setup/
@@ -46,13 +53,20 @@ def main(
         "qdrant", "--vecdb", "-v", help="vector db name (default: qdrant)"
     ),
     nostream: bool = typer.Option(False, "--nostream", "-ns", help="no streaming"),
-    embed: str = typer.Option(
+    embed_provider: str = typer.Option(
         "openai",
         "--embed",
         "-e",
-        help="sentence transformer model name",
-        # e.g. NeuML/pubmedbert-base-embeddings
+        help="Embedding service provider",
+        # openai, hf, llamacpp
     ),
+    embed_config: str = typer.Option(
+        None,
+        "--embedconfig",
+        "-ec",
+        help="Embedding service host/sentence transformer model",
+    ),
+    # e.g. NeuML/pubmedbert-base-embeddings
 ) -> None:
     llm_config = lm.OpenAIGPTConfig(
         chat_model=model or lm.OpenAIChatModel.GPT4o,
@@ -93,13 +107,19 @@ def main(
         ),
     )
 
-    if embed == "openai":
-        embed_cfg = lr.embedding_models.OpenAIEmbeddingsConfig()
-    else:
-        embed_cfg = lr.embedding_models.SentenceTransformerEmbeddingsConfig(
-            model_type="sentence-transformer",
-            model_name=embed,
-        )
+    match embed_provider:
+        case "hf":
+            embed_cfg = lr.embedding_models.SentenceTransformerEmbeddingsConfig(
+                model_type="sentence-transformer",
+                model_name=embed_config,
+            )
+        case "llamacpp":
+            embed_cfg = lr.embedding_models.LlamaCppServerEmbeddingsConfig(
+                api_base=embed_config,
+                dims=768,  # Change this to match the dimensions of your embedding model
+            )
+        case _:
+            embed_cfg = lr.embedding_models.OpenAIEmbeddingsConfig()
 
     match vecdb:
         case "lance" | "lancedb":
@@ -111,7 +131,7 @@ def main(
             )
         case "qdrant" | "qdrantdb":
             config.vecdb = lr.vector_store.QdrantDBConfig(
-                cloud=True,
+                cloud=False,
                 storage_path=".qdrant/doc-chat",
                 embedding=embed_cfg,
             )

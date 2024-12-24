@@ -1,31 +1,41 @@
 import copy
 import inspect
+import json
 import logging
 import textwrap
 from contextlib import ExitStack
-from typing import Dict, List, Optional, Set, Tuple, Type, cast
+from inspect import isclass
+from typing import Dict, List, Optional, Self, Set, Tuple, Type, Union, cast
 
+import openai
 from rich import print
 from rich.console import Console
 from rich.markup import escape
 
 from langroid.agent.base import Agent, AgentConfig, async_noop_fn, noop_fn
 from langroid.agent.chat_document import ChatDocument
-from langroid.agent.tool_message import ToolMessage
+from langroid.agent.tool_message import (
+    ToolMessage,
+    format_schema_for_strict,
+)
 from langroid.agent.xml_tool_message import XMLToolMessage
 from langroid.language_models.base import (
+    LLMFunctionCall,
     LLMFunctionSpec,
     LLMMessage,
     LLMResponse,
+    OpenAIJsonSchemaSpec,
     OpenAIToolSpec,
     Role,
     StreamingIfAllowed,
     ToolChoiceTypes,
 )
 from langroid.language_models.openai_gpt import OpenAIGPT
+from langroid.pydantic_v1 import BaseModel, ValidationError
 from langroid.utils.configuration import settings
 from langroid.utils.object_registry import ObjectRegistry
 from langroid.utils.output import status
+from langroid.utils.pydantic_utils import PydanticWrapper, get_pydantic_wrapper
 
 console = Console()
 
@@ -48,8 +58,28 @@ class ChatAgentConfig(AgentConfig):
             the OpenAI tool-call API is used, rather than the older/deprecated
             function-call API. However the tool-call API has some tricky aspects,
             hence we set this to False by default.
+        strict_recovery: whether to enable strict schema recovery when there
+            is a tool-generation error.
         enable_orchestration_tool_handling: whether to enable handling of orchestration
             tools, e.g. ForwardTool, DoneTool, PassTool, etc.
+        output_format: When supported by the LLM (certain OpenAI LLMs
+            and local LLMs served by providers such as vLLM), ensures
+            that the output is a JSON matching the corresponding
+            schema via grammar-based decoding
+        handle_output_format: When `output_format` is a `ToolMessage` T,
+            controls whether T is "enabled for handling".
+        use_output_format: When `output_format` is a `ToolMessage` T,
+            controls whether T is "enabled for use" (by LLM) and
+            instructions on using T are added to the system message.
+        instructions_output_format: Controls whether we generate instructions for
+            `output_format` in the system message.
+        use_tools_on_output_format: Controls whether to automatically switch
+            to the Langroid-native tools mechanism when `output_format` is set.
+            Note that LLMs may generate tool calls which do not belong to
+            `output_format` even when strict JSON mode is enabled, so this should be
+            enabled when such tool calls are not desired.
+        output_format_include_defaults: Whether to include fields with default arguments
+            in the output schema
     """
 
     system_message: str = "You are a helpful assistant."
@@ -57,7 +87,14 @@ class ChatAgentConfig(AgentConfig):
     use_tools: bool = False
     use_functions_api: bool = True
     use_tools_api: bool = False
+    strict_recovery: bool = True
     enable_orchestration_tool_handling: bool = True
+    output_format: Optional[type] = None
+    handle_output_format: bool = True
+    use_output_format: bool = True
+    instructions_output_format: bool = True
+    output_format_include_defaults: bool = True
+    use_tools_on_output_format: bool = True
 
     def _set_fn_or_tools(self, fn_available: bool) -> None:
         """
@@ -149,6 +186,30 @@ class ChatAgent(Agent):
         self.llm_functions_usable: Set[str] = set()
         self.llm_function_force: Optional[Dict[str, str]] = None
 
+        self.output_format: Optional[type[ToolMessage | BaseModel]] = None
+
+        self.saved_requests_and_tool_setings = self._requests_and_tool_settings()
+        # This variable is not None and equals a `ToolMessage` T, if and only if:
+        # (a) T has been set as the output_format of this agent, AND
+        # (b) T has been "enabled for use" ONLY for enforcing this output format, AND
+        # (c) T has NOT been explicitly "enabled for use" by this Agent.
+        self.enabled_use_output_format: Optional[type[ToolMessage]] = None
+        # As above but deals with "enabled for handling" instead of "enabled for use".
+        self.enabled_handling_output_format: Optional[type[ToolMessage]] = None
+        if config.output_format is not None:
+            self.set_output_format(config.output_format)
+        # instructions specifically related to enforcing `output_format`
+        self.output_format_instructions = ""
+
+        # controls whether to disable strict schemas for this agent if
+        # strict mode causes exception
+        self.disable_strict = False
+        # Tracks whether any strict tool is enabled; used to determine whether to set
+        # `self.disable_strict` on an exception
+        self.any_strict = False
+        # Tracks the set of tools on which we force-disable strict decoding
+        self.disable_strict_tools_set: set[str] = set()
+
         if self.config.enable_orchestration_tool_handling:
             # Only enable HANDLING by `agent_response`, NOT LLM generation of these.
             # This is useful where tool-handlers or agent_response generate these
@@ -221,6 +282,21 @@ class ChatAgent(Agent):
             ObjectRegistry.register_object(new_agent)
         return new_agent
 
+    def _strict_mode_for_tool(self, tool: str | type[ToolMessage]) -> bool:
+        """Should we enable strict mode for a given tool?"""
+        if isinstance(tool, str):
+            tool_class = self.llm_tools_map[tool]
+        else:
+            tool_class = tool
+        name = tool_class.default_value("request")
+        if name in self.disable_strict_tools_set or self.disable_strict:
+            return False
+        strict: Optional[bool] = tool_class.default_value("strict")
+        if strict is None:
+            strict = self._strict_tools_available()
+
+        return strict
+
     def _fn_call_available(self) -> bool:
         """Does this agent's LLM support function calling?"""
         return (
@@ -228,6 +304,25 @@ class ChatAgent(Agent):
             and isinstance(self.llm, OpenAIGPT)
             and self.llm.is_openai_chat_model()
             and self.llm.supports_functions_or_tools()
+        )
+
+    def _strict_tools_available(self) -> bool:
+        """Does this agent's LLM support strict tools?"""
+        return (
+            not self.disable_strict
+            and self.llm is not None
+            and isinstance(self.llm, OpenAIGPT)
+            and self.llm.config.parallel_tool_calls is False
+            and self.llm.supports_strict_tools
+        )
+
+    def _json_schema_available(self) -> bool:
+        """Does this agent's LLM support strict JSON schema output format?"""
+        return (
+            not self.disable_strict
+            and self.llm is not None
+            and isinstance(self.llm, OpenAIGPT)
+            and self.llm.supports_json_schema
         )
 
     def set_system_message(self, msg: str) -> None:
@@ -460,8 +555,9 @@ class ChatAgent(Agent):
             {self.system_tool_instructions}
             
             {self.system_tool_format_instructions}
-            
-            """.lstrip()
+
+            {self.output_format_instructions}
+            """
         )
         # remove leading and trailing newlines and other whitespace
         return LLMMessage(role=Role.SYSTEM, content=content.strip())
@@ -552,6 +648,15 @@ class ChatAgent(Agent):
             if handle:
                 self.llm_tools_handled.add(t)
                 self.llm_functions_handled.add(t)
+
+                if (
+                    self.enabled_handling_output_format is not None
+                    and self.enabled_handling_output_format.name() == t
+                ):
+                    # `t` was designated as "enabled for handling" ONLY for
+                    # output_format enforcement, but we are explicitly ]
+                    # enabling it for handling here, so we set the variable to None.
+                    self.enabled_handling_output_format = None
             else:
                 self.llm_tools_handled.discard(t)
                 self.llm_functions_handled.discard(t)
@@ -572,6 +677,14 @@ class ChatAgent(Agent):
                         set `_allow_llm_use=True` when you define the tool.
                         """
                     )
+                if (
+                    self.enabled_use_output_format is not None
+                    and self.enabled_use_output_format.default_value("request") == t
+                ):
+                    # `t` was designated as "enabled for use" ONLY for output_format
+                    # enforcement, but we are explicitly enabling it for use here,
+                    # so we set the variable to None.
+                    self.enabled_use_output_format = None
             else:
                 self.llm_tools_usable.discard(t)
                 self.llm_functions_usable.discard(t)
@@ -580,6 +693,213 @@ class ChatAgent(Agent):
         if self.config.use_tools:
             self.system_tool_format_instructions = self.tool_format_rules()
         self.system_tool_instructions = self.tool_instructions()
+
+    def _requests_and_tool_settings(self) -> tuple[Optional[set[str]], bool, bool]:
+        """
+        Returns the current set of enabled requests for inference and tools configs.
+        Used for restoring setings overriden by `set_output_format`.
+        """
+        return (
+            self.enabled_requests_for_inference,
+            self.config.use_functions_api,
+            self.config.use_tools,
+        )
+
+    @property
+    def all_llm_tools_known(self) -> set[str]:
+        """All known tools; we include `output_format` if it is a `ToolMessage`."""
+        known = self.llm_tools_known
+
+        if self.output_format is not None and issubclass(
+            self.output_format, ToolMessage
+        ):
+            return known.union({self.output_format.default_value("request")})
+
+        return known
+
+    def set_output_format(
+        self,
+        output_type: Optional[type],
+        force_tools: Optional[bool] = None,
+        use: Optional[bool] = None,
+        handle: Optional[bool] = None,
+        instructions: Optional[bool] = None,
+        is_copy: bool = False,
+    ) -> None:
+        """
+        Sets `output_format` to `output_type` and, if `force_tools` is enabled,
+        switches to the native Langroid tools mechanism to ensure that no tool
+        calls not of `output_type` are generated. By default, `force_tools`
+        follows the `use_tools_on_output_format` parameter in the config.
+
+        If `output_type` is None, restores to the state prior to setting
+        `output_format`.
+
+        If `use`, we enable use of `output_type` when it is a subclass
+        of `ToolMesage`. Note that this primarily controls instruction
+        generation: the model will always generate `output_type` regardless
+        of whether `use` is set. Defaults to the `use_output_format`
+        parameter in the config. Similarly, handling of `output_type` is
+        controlled by `handle`, which defaults to the
+        `handle_output_format` parameter in the config.
+
+        `instructions` controls whether we generate instructions specifying
+        the output format schema. Defaults to the `instructions_output_format`
+        parameter in the config.
+
+        `is_copy` is set when called via `__getitem__`. In that case, we must
+        copy certain fields to ensure that we do not overwrite the main agent's
+        setings.
+        """
+        # Disable usage of an output format which was not specifically enabled
+        # by `enable_message`
+        if self.enabled_use_output_format is not None:
+            self.disable_message_use(self.enabled_use_output_format)
+            self.enabled_use_output_format = None
+
+        # Disable handling of an output format which did not specifically have
+        # handling enabled via `enable_message`
+        if self.enabled_handling_output_format is not None:
+            self.disable_message_handling(self.enabled_handling_output_format)
+            self.enabled_handling_output_format = None
+
+        # Reset any previous instructions
+        self.output_format_instructions = ""
+
+        if output_type is None:
+            self.output_format = None
+            (
+                requests_for_inference,
+                use_functions_api,
+                use_tools,
+            ) = self.saved_requests_and_tool_setings
+            self.config = self.config.copy()
+            self.enabled_requests_for_inference = requests_for_inference
+            self.config.use_functions_api = use_functions_api
+            self.config.use_tools = use_tools
+        else:
+            if force_tools is None:
+                force_tools = self.config.use_tools_on_output_format
+
+            if not any(
+                (isclass(output_type) and issubclass(output_type, t))
+                for t in [ToolMessage, BaseModel]
+            ):
+                output_type = get_pydantic_wrapper(output_type)
+
+            if self.output_format is None and force_tools:
+                self.saved_requests_and_tool_setings = (
+                    self._requests_and_tool_settings()
+                )
+
+            self.output_format = output_type
+            if issubclass(output_type, ToolMessage):
+                name = output_type.default_value("request")
+                if use is None:
+                    use = self.config.use_output_format
+
+                if handle is None:
+                    handle = self.config.handle_output_format
+
+                if use or handle:
+                    is_usable = name in self.llm_tools_usable.union(
+                        self.llm_functions_usable
+                    )
+                    is_handled = name in self.llm_tools_handled.union(
+                        self.llm_functions_handled
+                    )
+
+                    if is_copy:
+                        if use:
+                            # We must copy `llm_tools_usable` so the base agent
+                            # is unmodified
+                            self.llm_tools_usable = copy.copy(self.llm_tools_usable)
+                            self.llm_functions_usable = copy.copy(
+                                self.llm_functions_usable
+                            )
+                        if handle:
+                            # If handling the tool, do the same for `llm_tools_handled`
+                            self.llm_tools_handled = copy.copy(self.llm_tools_handled)
+                            self.llm_functions_handled = copy.copy(
+                                self.llm_functions_handled
+                            )
+                    # Enable `output_type`
+                    self.enable_message(
+                        output_type,
+                        # Do not override existing settings
+                        use=use or is_usable,
+                        handle=handle or is_handled,
+                    )
+
+                    # If the `output_type` ToilMessage was not already enabled for
+                    # use, this means we are ONLY enabling it for use specifically
+                    # for enforcing this output format, so we set the
+                    # `enabled_use_output_forma  to this output_type, to
+                    # record that it should be disabled when `output_format` is changed
+                    if not is_usable:
+                        self.enabled_use_output_format = output_type
+
+                    # (same reasoning as for use-enabling)
+                    if not is_handled:
+                        self.enabled_handling_output_format = output_type
+
+                generated_tool_instructions = name in self.llm_tools_usable.union(
+                    self.llm_functions_usable
+                )
+            else:
+                generated_tool_instructions = False
+
+            if instructions is None:
+                instructions = self.config.instructions_output_format
+            if issubclass(output_type, BaseModel) and instructions:
+                if generated_tool_instructions:
+                    # Already generated tool instructions as part of "enabling for use",
+                    # so only need to generate a reminder to use this tool.
+                    name = cast(ToolMessage, output_type).default_value("request")
+                    self.output_format_instructions = textwrap.dedent(
+                        f"""
+                        === OUTPUT FORMAT INSTRUCTIONS ===
+
+                        Please provide output using the `{name}` tool/function.
+                        """
+                    )
+                else:
+                    if issubclass(output_type, ToolMessage):
+                        output_format_schema = output_type.llm_function_schema(
+                            request=True,
+                            defaults=self.config.output_format_include_defaults,
+                        ).parameters
+                    else:
+                        output_format_schema = output_type.schema()
+
+                    format_schema_for_strict(output_format_schema)
+
+                    self.output_format_instructions = textwrap.dedent(
+                        f"""
+                        === OUTPUT FORMAT INSTRUCTIONS ===
+                        Please provide output as JSON with the following schema:
+
+                        {output_format_schema}
+                        """
+                    )
+
+            if force_tools:
+                if issubclass(output_type, ToolMessage):
+                    self.enabled_requests_for_inference = {
+                        output_type.default_value("request")
+                    }
+                if self.config.use_functions_api:
+                    self.config = self.config.copy()
+                    self.config.use_functions_api = False
+                    self.config.use_tools = True
+
+    def __getitem__(self, output_type: type) -> Self:
+        """
+        Returns a (shallow) copy of `self` with a forced output type.
+        """
+        clone = copy.copy(self)
+        clone.set_output_format(output_type, is_copy=True)
+        return clone
 
     def disable_message_handling(
         self,
@@ -622,6 +942,205 @@ class ChatAgent(Agent):
         for r in to_remove:
             self.llm_tools_usable.discard(r)
             self.llm_functions_usable.discard(r)
+
+    def _load_output_format(self, message: ChatDocument) -> None:
+        """
+        If set, attempts to parse a value of type `self.output_format` from the message
+        contents or any tool/function call and assigns it to `content_any`.
+        """
+        if self.output_format is not None:
+            any_succeeded = False
+            attempts: list[str | LLMFunctionCall] = [
+                message.content,
+            ]
+
+            if message.function_call is not None:
+                attempts.append(message.function_call)
+
+            if message.oai_tool_calls is not None:
+                attempts.extend(
+                    [
+                        c.function
+                        for c in message.oai_tool_calls
+                        if c.function is not None
+                    ]
+                )
+
+            for attempt in attempts:
+                try:
+                    if isinstance(attempt, str):
+                        content = json.loads(attempt)
+                    else:
+                        if not (
+                            issubclass(self.output_format, ToolMessage)
+                            and attempt.name
+                            == self.output_format.default_value("request")
+                        ):
+                            continue
+
+                        content = attempt.arguments
+
+                    content_any = self.output_format.parse_obj(content)
+
+                    if issubclass(self.output_format, PydanticWrapper):
+                        message.content_any = content_any.value  # type: ignore
+                    else:
+                        message.content_any = content_any
+                    any_succeeded = True
+                    break
+                except (ValidationError, json.JSONDecodeError):
+                    continue
+
+            if not any_succeeded:
+                self.disable_strict = True
+                logging.warning(
+                    """
+                    Validation error occured with strict output format enabled.
+                    Disabling strict mode.
+                    """
+                )
+
+    def get_tool_messages(
+        self,
+        msg: str | ChatDocument | None,
+        all_tools: bool = False,
+    ) -> List[ToolMessage]:
+        """
+        Extracts messages and tracks whether any errors occured. If strict mode
+        was enabled, disables it for the tool, else triggers strict recovery.
+        """
+        self.tool_error = False
+        try:
+            tools = super().get_tool_messages(msg, all_tools)
+        except ValidationError as ve:
+            tool_class = ve.model
+            if issubclass(tool_class, ToolMessage):
+                was_strict = (
+                    self.config.use_functions_api
+                    and self.config.use_tools_api
+                    and self._strict_mode_for_tool(tool_class)
+                )
+                # If the result of strict output for a tool using the
+                # OpenAI tools API fails to parse, we infer that the
+                # schema edits necessary for compatibility prevented
+                # adherence to the underlying `ToolMessage` schema and
+                # disable strict output for the tool
+                if was_strict:
+                    name = tool_class.default_value("request")
+                    self.disable_strict_tools_set.add(name)
+                    logging.warning(
+                        f"""
+                        Validation error occured with strict tool format.
+                        Disabling strict mode for the {name} tool.
+                        """
+                    )
+                else:
+                    # We will trigger the strict recovery mechanism to force
+                    # the LLM to correct its output, allowing us to parse
+                    self.tool_error = True
+
+            raise ve
+
+        return tools
+
+    def _get_any_tool_message(self, optional: bool = True) -> type[ToolMessage]:
+        """
+        Returns a `ToolMessage` which wraps all enabled tools, excluding those
+        where strict recovery is disabled. Used in strict recovery.
+        """
+        any_tool_type = Union[  # type: ignore
+            *(
+                self.llm_tools_map[t]
+                for t in self.llm_tools_usable
+                if t not in self.disable_strict_tools_set
+            )
+        ]
+        maybe_optional_type = Optional[any_tool_type] if optional else any_tool_type
+
+        class AnyTool(ToolMessage):
+            purpose: str = "To call a tool/function."
+            request: str = "tool_or_function"
+            tool: maybe_optional_type  # type: ignore
+
+            def response(self, agent: ChatAgent) -> None | str | ChatDocument:
+                # One-time use
+                agent.set_output_format(None)
+
+                if self.tool is None:
+                    return None
+
+                # As the ToolMessage schema accepts invalid
+                # `tool.request` values, reparse with the
+                # corresponding tool
+                request = self.tool.request
+                if request not in agent.llm_tools_map:
+                    return None
+                tool = agent.llm_tools_map[request].parse_raw(self.tool.to_json())
+
+                return agent.handle_tool_message(tool)
+
+            async def response_async(
+                self, agent: ChatAgent
+            ) -> None | str | ChatDocument:
+                # One-time use
+                agent.set_output_format(None)
+
+                if self.tool is None:
+                    return None
+
+                # As the ToolMessage schema accepts invalid
+                # `tool.request` values, reparse with the
+                # corresponding tool
+                request = self.tool.request
+                if request not in agent.llm_tools_map:
+                    return None
+                tool = agent.llm_tools_map[request].parse_raw(self.tool.to_json())
+
+                return await agent.handle_tool_message_async(tool)
+
+        return AnyTool
+
+    def _strict_recovery_instructions(
+        self,
+        tool_type: Optional[type[ToolMessage]] = None,
+        optional: bool = True,
+    ) -> str:
+        """Returns instructions for strict recovery."""
+        optional_instructions = (
+            (
+                "\n"
+                + """
+        If you did NOT intend to do so, `tool` should be null.
+        """
+            )
+            if optional
+            else ""
+        )
+        response_prefix = "If you intended to make such a call, r" if optional else "R"
+        instruction_prefix = "If you do so, b" if optional else "B"
+
+        schema_instructions = (
+            f"""
+        The schema for `tool_or_function` is as follows:
+        {tool_type.llm_function_schema(defaults=True, request=True).parameters}
+        """
+            if tool_type
+            else ""
+        )
+
+        return textwrap.dedent(
+            f"""
+        Your previous attempt to make a tool/function call appears to have failed.
+        {response_prefix}espond with your desired tool/function. Do so with the
+        `tool_or_function` tool/function where `tool` is set to your intended call.
+        {schema_instructions}
+
+        {instruction_prefix}e sure that your corrected call matches your intention
+        in your previous request. For any field with a default value which
+        you did not intend to override in your previous attempt, be sure
+        to set that field to its default value. {optional_instructions}
+        """
+        )
 
     def truncate_message(
         self,
@@ -676,6 +1195,34 @@ class ChatAgent(Agent):
         """
         if self.llm is None:
             return None
+
+        # If enabled and a tool error occurred, we recover by generating the tool in
+        # strict json mode
+        if (
+            self.tool_error
+            and self.output_format is None
+            and self._json_schema_available()
+            and self.config.strict_recovery
+        ):
+            AnyTool = self._get_any_tool_message()
+            self.set_output_format(
+                AnyTool,
+                force_tools=True,
+                use=True,
+                handle=True,
+                instructions=True,
+            )
+            recovery_message = self._strict_recovery_instructions(AnyTool)
+
+            if message is None:
+                message = recovery_message
+            elif isinstance(message, str):
+                message = message + recovery_message
+            else:
+                message.content = message.content + recovery_message
+
+            return self.llm_response(message)
+
         hist, output_len = self._prep_llm_messages(message)
         if len(hist) == 0:
             return None
@@ -685,7 +1232,22 @@ class ChatAgent(Agent):
             else (message.oai_tool_choice if message is not None else "auto")
         )
         with StreamingIfAllowed(self.llm, self.llm.get_stream()):
-            response = self.llm_response_messages(hist, output_len, tool_choice)
+            try:
+                response = self.llm_response_messages(hist, output_len, tool_choice)
+            except openai.BadRequestError as e:
+                if self.any_strict:
+                    self.disable_strict = True
+                    self.set_output_format(None)
+                    logging.warning(
+                        f"""
+                        OpenAI BadRequestError raised with strict mode enabled.
+                        Message: {e.message}
+                        Disabling strict mode and retrying.
+                        """
+                    )
+                    return self.llm_response(message)
+                else:
+                    raise e
         self.message_history.extend(ChatDocument.to_LLMMessage(response))
         response.metadata.msg_idx = len(self.message_history) - 1
         response.metadata.agent_id = self.id
@@ -697,6 +1259,7 @@ class ChatAgent(Agent):
             if isinstance(message, str)
             else message.metadata.tool_ids if message is not None else []
         )
+
         return response
 
     async def llm_response_async(
@@ -707,6 +1270,34 @@ class ChatAgent(Agent):
         """
         if self.llm is None:
             return None
+
+        # If enabled and a tool error occurred, we recover by generating the tool in
+        # strict json mode
+        if (
+            self.tool_error
+            and self.output_format is None
+            and self._json_schema_available()
+            and self.config.strict_recovery
+        ):
+            AnyTool = self._get_any_tool_message()
+            self.set_output_format(
+                AnyTool,
+                force_tools=True,
+                use=True,
+                handle=True,
+                instructions=True,
+            )
+            recovery_message = self._strict_recovery_instructions(AnyTool)
+
+            if message is None:
+                message = recovery_message
+            elif isinstance(message, str):
+                message = message + recovery_message
+            else:
+                message.content = message.content + recovery_message
+
+            return self.llm_response(message)
+
         hist, output_len = self._prep_llm_messages(message)
         if len(hist) == 0:
             return None
@@ -716,9 +1307,24 @@ class ChatAgent(Agent):
             else (message.oai_tool_choice if message is not None else "auto")
         )
         with StreamingIfAllowed(self.llm, self.llm.get_stream()):
-            response = await self.llm_response_messages_async(
-                hist, output_len, tool_choice
-            )
+            try:
+                response = await self.llm_response_messages_async(
+                    hist, output_len, tool_choice
+                )
+            except openai.BadRequestError as e:
+                if self.any_strict:
+                    self.disable_strict = True
+                    self.set_output_format(None)
+                    logging.warning(
+                        f"""
+                        OpenAI BadRequestError raised with strict mode enabled.
+                        Message: {e.message}
+                        Disabling strict mode and retrying.
+                        """
+                    )
+                    return await self.llm_response_async(message)
+                else:
+                    raise e
         self.message_history.extend(ChatDocument.to_LLMMessage(response))
         response.metadata.msg_idx = len(self.message_history) - 1
         response.metadata.agent_id = self.id
@@ -730,6 +1336,7 @@ class ChatAgent(Agent):
             if isinstance(message, str)
             else message.metadata.tool_ids if message is not None else []
         )
+
         return response
 
     def init_message_history(self) -> None:
@@ -898,12 +1505,17 @@ class ChatAgent(Agent):
         str | Dict[str, str],
         Optional[List[OpenAIToolSpec]],
         Optional[Dict[str, Dict[str, str] | str]],
+        Optional[OpenAIJsonSchemaSpec],
     ]:
-        """Get function/tool spec arguments for OpenAI-compatible LLM API call"""
+        """
+        Get function/tool spec/output format arguments for
+        OpenAI-compatible LLM API call
+        """
         functions: Optional[List[LLMFunctionSpec]] = None
         fun_call: str | Dict[str, str] = "none"
         tools: Optional[List[OpenAIToolSpec]] = None
         force_tool: Optional[Dict[str, Dict[str, str] | str]] = None
+        self.any_strict = False
         if self.config.use_functions_api and len(self.llm_functions_usable) > 0:
             if not self.config.use_tools_api:
                 functions = [
@@ -915,10 +1527,24 @@ class ChatAgent(Agent):
                     else self.llm_function_force
                 )
             else:
-                tools = [
-                    OpenAIToolSpec(type="function", function=self.llm_functions_map[f])
-                    for f in self.llm_functions_usable
-                ]
+
+                def to_maybe_strict_spec(function: str) -> OpenAIToolSpec:
+                    spec = self.llm_functions_map[function]
+                    strict = self._strict_mode_for_tool(function)
+                    if strict:
+                        self.any_strict = True
+                        strict_spec = copy.deepcopy(spec)
+                        format_schema_for_strict(strict_spec.parameters)
+                    else:
+                        strict_spec = spec
+
+                    return OpenAIToolSpec(
+                        type="function",
+                        strict=strict,
+                        function=strict_spec,
+                    )
+
+                tools = [to_maybe_strict_spec(f) for f in self.llm_functions_usable]
                 force_tool = (
                     None
                     if self.llm_function_force is None
@@ -927,7 +1553,38 @@ class ChatAgent(Agent):
                         "function": {"name": self.llm_function_force["name"]},
                     }
                 )
-        return functions, fun_call, tools, force_tool
+        output_format = None
+        if self.output_format is not None and self._json_schema_available():
+            self.any_strict = True
+            if issubclass(self.output_format, ToolMessage) and not issubclass(
+                self.output_format, XMLToolMessage
+            ):
+                spec = self.output_format.llm_function_schema(
+                    request=True,
+                    defaults=self.config.output_format_include_defaults,
+                )
+                format_schema_for_strict(spec.parameters)
+
+                output_format = OpenAIJsonSchemaSpec(
+                    # We always require that outputs strictly match the schema
+                    strict=True,
+                    function=spec,
+                )
+            elif issubclass(self.output_format, BaseModel):
+                param_spec = self.output_format.schema()
+                format_schema_for_strict(param_spec)
+
+                output_format = OpenAIJsonSchemaSpec(
+                    # We always require that outputs strictly match the schema
+                    strict=True,
+                    function=LLMFunctionSpec(
+                        name="json_output",
+                        description="Strict Json output format.",
+                        parameters=param_spec,
+                    ),
+                )
+
+        return functions, fun_call, tools, force_tool, output_format
 
     def llm_response_messages(
         self,
@@ -963,7 +1620,9 @@ class ChatAgent(Agent):
                 stack.enter_context(cm)
             if self.llm.get_stream() and not settings.quiet:
                 console.print(f"[green]{self.indent}", end="")
-            functions, fun_call, tools, force_tool = self._function_args()
+            functions, fun_call, tools, force_tool, output_format = (
+                self._function_args()
+            )
             assert self.llm is not None
             response = self.llm.chat(
                 messages,
@@ -972,6 +1631,7 @@ class ChatAgent(Agent):
                 tool_choice=force_tool or tool_choice,
                 functions=functions,
                 function_call=fun_call,
+                response_format=output_format,
             )
         if self.llm.get_stream():
             self.callbacks.finish_llm_stream(
@@ -996,6 +1656,10 @@ class ChatAgent(Agent):
         self.oai_tool_id2call.update(
             {t.id: t for t in self.oai_tool_calls if t.id is not None}
         )
+
+        # If using strict output format, parse the output JSON
+        self._load_output_format(chat_doc)
+
         return chat_doc
 
     async def llm_response_messages_async(
@@ -1009,7 +1673,7 @@ class ChatAgent(Agent):
         """
         assert self.config.llm is not None and self.llm is not None
         output_len = output_len or self.config.llm.max_output_tokens
-        functions, fun_call, tools, force_tool = self._function_args()
+        functions, fun_call, tools, force_tool, output_format = self._function_args()
         assert self.llm is not None
 
         streamer_async = async_noop_fn
@@ -1024,6 +1688,7 @@ class ChatAgent(Agent):
             tool_choice=force_tool or tool_choice,
             functions=functions,
             function_call=fun_call,
+            response_format=output_format,
         )
         if self.llm.get_stream():
             self.callbacks.finish_llm_stream(
@@ -1048,6 +1713,10 @@ class ChatAgent(Agent):
         self.oai_tool_id2call.update(
             {t.id: t for t in self.oai_tool_calls if t.id is not None}
         )
+
+        # If using strict output format, parse the output JSON
+        self._load_output_format(chat_doc)
+
         return chat_doc
 
     def _render_llm_response(
@@ -1065,25 +1734,30 @@ class ChatAgent(Agent):
             # streaming was enabled, AND we did not find a cached response.
             # If we are here, it means the response has not yet been displayed.
             cached = f"[red]{self.indent}(cached)[/red]" if is_cached else ""
+            chat_doc = (
+                response
+                if isinstance(response, ChatDocument)
+                else ChatDocument.from_LLMResponse(response, displayed=True)
+            )
+            # TODO: prepend TOOL: or OAI-TOOL: if it's a tool-call
             if not settings.quiet:
-                chat_doc = (
-                    response
-                    if isinstance(response, ChatDocument)
-                    else ChatDocument.from_LLMResponse(response, displayed=True)
-                )
-                # TODO: prepend TOOL: or OAI-TOOL: if it's a tool-call
                 print(cached + "[green]" + escape(str(response)))
-                self.callbacks.show_llm_response(
-                    content=str(response),
-                    is_tool=self.has_tool_message_attempt(chat_doc),
-                    cached=is_cached,
-                )
+            self.callbacks.show_llm_response(
+                content=str(response),
+                is_tool=self.has_tool_message_attempt(chat_doc),
+                cached=is_cached,
+            )
         if isinstance(response, LLMResponse):
             # we are in the context immediately after an LLM responded,
             # we won't have citations yet, so we're done
             return
-        if response.metadata.has_citation and not settings.quiet:
-            print("[grey37]SOURCES:\n" + escape(response.metadata.source) + "[/grey37]")
+        if response.metadata.has_citation:
+            if not settings.quiet:
+                print(
+                    "[grey37]SOURCES:\n"
+                    + escape(response.metadata.source)
+                    + "[/grey37]"
+                )
             self.callbacks.show_llm_response(
                 content=str(response.metadata.source),
                 is_tool=False,
@@ -1155,6 +1829,9 @@ class ChatAgent(Agent):
         if len(self.message_history) > n_msgs:
             msg = self.message_history.pop()
             self._drop_msg_update_tool_calls(msg)
+
+        # If using strict output format, parse the output JSON
+        self._load_output_format(response)
 
         return response
 

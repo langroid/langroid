@@ -1,4 +1,3 @@
-import ast
 import json
 import logging
 from abc import ABC, abstractmethod
@@ -21,7 +20,7 @@ from typing import (
 from langroid.cachedb.base import CacheDBConfig
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
 from langroid.parsing.agent_chats import parse_message
-from langroid.parsing.parse_json import top_level_json_field
+from langroid.parsing.parse_json import parse_imperfect_json, top_level_json_field
 from langroid.prompts.dialog import collate_chat_history
 from langroid.pydantic_v1 import BaseModel, BaseSettings, Field
 from langroid.utils.configuration import settings
@@ -97,7 +96,17 @@ class LLMFunctionCall(BaseModel):
         # so we try to be safe by removing newlines.
         if fun_args_str is not None:
             fun_args_str = fun_args_str.replace("\n", "").strip()
-            fun_args = ast.literal_eval(fun_args_str)
+            dict_or_list = parse_imperfect_json(fun_args_str)
+
+            if not isinstance(dict_or_list, dict):
+                raise ValueError(
+                    f"""
+                        Invalid function args: {fun_args_str} 
+                        parsed as {dict_or_list},
+                        which is not a valid dict.
+                        """
+                )
+            fun_args = dict_or_list
         else:
             fun_args = None
         fun_call.arguments = fun_args
@@ -156,7 +165,27 @@ class OpenAIToolCall(BaseModel):
 
 class OpenAIToolSpec(BaseModel):
     type: ToolTypes
+    strict: Optional[bool] = None
     function: LLMFunctionSpec
+
+
+class OpenAIJsonSchemaSpec(BaseModel):
+    strict: Optional[bool] = None
+    function: LLMFunctionSpec
+
+    def to_dict(self) -> Dict[str, Any]:
+        json_schema: Dict[str, Any] = {
+            "name": self.function.name,
+            "description": self.function.description,
+            "schema": self.function.parameters,
+        }
+        if self.strict is not None:
+            json_schema["strict"] = self.strict
+
+        return {
+            "type": "json_schema",
+            "json_schema": json_schema,
+        }
 
 
 class LLMTokenUsage(BaseModel):
@@ -512,6 +541,7 @@ class LanguageModel(ABC):
         tool_choice: ToolChoiceTypes | Dict[str, str | Dict[str, str]] = "auto",
         functions: Optional[List[LLMFunctionSpec]] = None,
         function_call: str | Dict[str, str] = "auto",
+        response_format: Optional[OpenAIJsonSchemaSpec] = None,
     ) -> LLMResponse:
         """
         Get chat-completion response from LLM.
@@ -538,6 +568,7 @@ class LanguageModel(ABC):
         tool_choice: ToolChoiceTypes | Dict[str, str | Dict[str, str]] = "auto",
         functions: Optional[List[LLMFunctionSpec]] = None,
         function_call: str | Dict[str, str] = "auto",
+        response_format: Optional[OpenAIJsonSchemaSpec] = None,
     ) -> LLMResponse:
         """Async version of `chat`. See `chat` for details."""
         pass

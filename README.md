@@ -135,7 +135,17 @@ teacher_task.run()
 <details>
 <summary> <b>Click to expand</b></summary>
 
+- **Dec 2024:**
+  - [0.30.0](https://github.com/langroid/langroid/releases/tag/0.30.0) Llama-cpp embeddings.
+  - [0.29.0](https://github.com/langroid/langroid/releases/tag/0.29.0) Custom Azure OpenAI Client 
+  - [0.28.0](https://github.com/langroid/langroid/releases/tag/0.28.0) `ToolMessage`: `_handler` field to override 
+default handler method name in `request` field. 
+  - [0.27.0](https://github.com/langroid/langroid/releases/tag/0.27.0) OpenRouter Support.
+  - [0.26.0](https://github.com/langroid/langroid/releases/tag/0.26.0) Update to latest Chainlit.
+  - [0.25.0](https://github.com/langroid/langroid/releases/tag/0.25.0) True Async Methods for agent and user-response.
 - **Nov 2024:**
+  - **[0.24.0](https://langroid.github.io/langroid/notes/structured-output/)**: 
+     Enables support for `Agent`s with strict JSON schema output format on compatible LLMs and strict mode for the OpenAI tools API.
   - **[0.23.0](https://langroid.github.io/langroid/tutorials/local-llm-setup/#local-llms-hosted-on-glhfchat)**: 
       support for LLMs (e.g. `Qwen2.5-Coder-32b-Instruct`) hosted on glhf.chat 
   - **[0.22.0](https://langroid.github.io/langroid/notes/large-tool-results/)**: 
