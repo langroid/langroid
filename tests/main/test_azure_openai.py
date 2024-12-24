@@ -15,16 +15,15 @@ cfg = AzureConfig(
     max_output_tokens=100,
     min_output_tokens=10,
     cache_config=RedisCacheConfig(fake=False),
+    deployment_name="langroid-azure-gpt-4o",
+    model_name="gpt-4o",
 )
 
 
 class _TestChatAgentConfig(ChatAgentConfig):
     max_tokens: int = 200
     vecdb: VectorStoreConfig = None
-    llm: AzureConfig = AzureConfig(
-        cache_config=RedisCacheConfig(fake=False),
-        use_chat_for_completion=True,
-    )
+    llm: AzureConfig = cfg
     parsing: ParsingConfig = ParsingConfig()
     prompts: PromptsConfig = PromptsConfig(
         max_tokens=200,
@@ -65,9 +64,9 @@ def test_azure_wrapper(streaming, country, capital):
 
 def test_chat_agent(test_settings: Settings):
     set_global(test_settings)
-    cfg = _TestChatAgentConfig()
+    agent_cfg = _TestChatAgentConfig()
     # just testing that these don't fail
-    agent = ChatAgent(cfg)
+    agent = ChatAgent(agent_cfg)
     response = agent.llm_response("what is the capital of France?")
     assert "Paris" in response.content
 
@@ -75,11 +74,6 @@ def test_chat_agent(test_settings: Settings):
 @pytest.mark.asyncio
 async def test_azure_openai_async(test_settings: Settings):
     set_global(test_settings)
-    llm_cfg = AzureConfig(
-        max_output_tokens=100,
-        min_output_tokens=10,
-        cache_config=RedisCacheConfig(fake=False),
-    )
-    llm = AzureGPT(config=llm_cfg)
+    llm = AzureGPT(config=cfg)
     response = await llm.achat("What is the capital of Ontario?", max_tokens=10)
     assert "Toronto" in response.message

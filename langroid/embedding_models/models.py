@@ -30,8 +30,8 @@ class AzureOpenAIEmbeddingsConfig(EmbeddingModelsConfig):
     model_type: str = "azure-openai"
     model_name: str = "text-embedding-ada-002"
     api_key: str = ""
-    azure_endpoint: str = ""
-    azure_deployment: Optional[str] = None
+    api_base: str = ""
+    deployment_name: Optional[str] = None
     # api_version defaulted to 2024-06-01 as per https://learn.microsoft.com/en-us/azure/ai-services/openai/how-to/embeddings?tabs=python-new
     # change this to required  supported version
     api_version: Optional[str] = "2024-06-01"
@@ -40,6 +40,10 @@ class AzureOpenAIEmbeddingsConfig(EmbeddingModelsConfig):
     azure_ad_token_provider: Optional[AzureADTokenProvider] = None
     dims: int = 1536
     context_length: int = 8192
+
+    class Config:
+        # enable auto-loading of env vars with AZURE_OPENAI_ prefix
+        env_prefix = "AZURE_OPENAI_"
 
 
 class SentenceTransformerEmbeddingsConfig(EmbeddingModelsConfig):
@@ -216,9 +220,6 @@ class AzureOpenAIEmbeddings(EmbeddingModel):
         self.config = config
         load_dotenv()
 
-        self.config.api_key = self.config.api_key or os.getenv(
-            "AZURE_OPENAI_API_KEY", ""
-        )
         if self.config.api_key == "":
             raise ValueError(
                 """AZURE_OPENAI_API_KEY env variable must be set to use 
@@ -226,10 +227,7 @@ class AzureOpenAIEmbeddings(EmbeddingModel):
             in your .env file."""
             )
 
-        self.config.azure_endpoint = self.config.azure_endpoint or os.getenv(
-            "AZURE_OPENAI_API_BASE", ""
-        )
-        if self.config.azure_endpoint == "":
+        if self.config.api_base == "":
             raise ValueError(
                 """AZURE_OPENAI_API_BASE env variable must be set to use 
             AzureOpenAIEmbeddings. Please set the AZURE_OPENAI_API_BASE value 
@@ -238,7 +236,8 @@ class AzureOpenAIEmbeddings(EmbeddingModel):
         self.client = AzureOpenAI(
             api_key=self.config.api_key,
             api_version=self.config.api_version,
-            azure_endpoint=self.config.azure_endpoint,
+            azure_endpoint=self.config.api_base,
+            azure_deployment=self.config.deployment_name,
         )
         self.tokenizer = tiktoken.encoding_for_model(self.config.model_name)
 

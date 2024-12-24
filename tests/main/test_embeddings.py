@@ -27,6 +27,7 @@ def test_azure_openai_embeddings():
     azure_openai_cfg = AzureOpenAIEmbeddingsConfig(
         model_type="azure-openai",
         model_name="text-embedding-ada-002",
+        deployment_name="text-embedding-ada-002",
         dims=1536,
     )
     azure_openai_model = EmbeddingModel.create(azure_openai_cfg)
