@@ -155,7 +155,7 @@ fastembed = ["fastembed"]
 black = {extras = ["jupyter"], version = "^24.3.0"}
 flake8 = "^6.0.0"
 mypy = "^1.11.2"
-ruff = "^0.2.2"
+ruff = "^0.7.2"
 pre-commit = "^3.3.2"
 autopep8 = "^2.0.2"
 
@@ -211,10 +211,10 @@ python_version = "3.11"
 #mypy_path = ["stubs"]
 
 #follow_imports = "skip"
-#check_untyped_defs = "True"
-disallow_untyped_defs = "True"
-ignore_missing_imports = "True"
-warn_unused_ignores = "False"
+#check_untyped_defs = true
+disallow_untyped_defs = true
+ignore_missing_imports = true
+warn_unused_ignores = false
 strict = true
 exclude = [
     "docs", ".venv", "venv", "examples", "examples_dev", "langroid/utils/web",
