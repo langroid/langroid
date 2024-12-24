@@ -1,3 +1,4 @@
+# # langroid/agent/special/doc_chat_agent.py
 """
 Agent that supports asking queries about a set of documents, using
 retrieval-augmented generation (RAG).
@@ -23,7 +24,7 @@ import numpy as np
 import pandas as pd
 from rich.prompt import Prompt
 
-from langroid.agent.batch import run_batch_tasks
+from langroid.agent.batch import run_batch_agent_method, run_batch_tasks
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.chat_document import ChatDocMetaData, ChatDocument
 from langroid.agent.special.relevance_extractor_agent import (
@@ -81,6 +82,8 @@ DEFAULT_DOC_CHAT_SYSTEM_MESSAGE = """
 You are a helpful assistant, helping me understand a collection of documents.
 """
 
+GENERATED_QUESTIONS_MARKER = "--- Generated Questions ---"
+
 has_sentence_transformers = False
 try:
     from sentence_transformers import SentenceTransformer  # noqa: F401
@@ -126,6 +129,21 @@ class DocChatAgentConfig(ChatAgentConfig):
     # https://arxiv.org/pdf/2212.10496.pdf
     # It is False by default; its benefits depends on the context.
     hypothetical_answer: bool = False
+    # Flag to enable Hypothetical Question Indexing,
+    # which uses a language model to generate questions for each data chunk,
+    # this might help in finding relevant chunks for a given question.
+    hypothetical_questions: bool = False
+    num_hypothetical_questions: int = 2
+    hypothetical_questions_prompt: str = """
+    Given the following text passage, generate up to %(num_hypothetical_questions)s
+    different questions that this passage would help answer. 
+    Make the questions specific and diverse.
+    
+    PASSAGE:
+    %(passage)s
+    """
+    hypothetical_questions_batch_size: int | None = 50
+
     n_query_rephrases: int = 0
     n_neighbor_chunks: int = 0  # how many neighbors on either side of match to retrieve
     n_fuzzy_neighbor_words: int = 100  # num neighbor words to retrieve for fuzzy match
@@ -404,6 +422,8 @@ class DocChatAgent(ChatAgent):
                 d.metadata.is_chunk = True
         if self.vecdb is None:
             raise ValueError("VecDB not set")
+        if self.config.hypothetical_questions:
+            docs = self.add_hypothetical_questions(docs)
 
         # If any additional fields need to be added to content,
         # add them as key=value pairs for all docs, before batching.
@@ -860,6 +880,65 @@ class DocChatAgent(ChatAgent):
                 ).content
         return answer
 
+    def add_hypothetical_questions(self, docs: List[Document]) -> List[Document]:
+        """Add hypothetical questions to documents using batch processing.
+
+        Args:
+            docs: List of documents to generate questions for
+
+        Returns:
+            List[Document]: Documents augmented with generated questions
+        """
+        if self.llm is None:
+            raise ValueError("LLM not set")
+
+        if not self.config.hypothetical_questions:
+            return docs
+
+        with status("[cyan]Generating hypothetical questions for chunks..."):
+            # Process chunks in parallel using run_batch_agent_method
+            n_hq = self.config.num_hypothetical_questions or 1
+            questions_batch = run_batch_agent_method(
+                agent=self,
+                method=self.llm_response_forget_async,
+                items=docs,
+                input_map=lambda doc: self.config.hypothetical_questions_prompt
+                % {
+                    "passage": doc.content,
+                    "num_hypothetical_questions": n_hq,
+                },
+                output_map=lambda response: response.content if response else "",
+                sequential=False,
+                batch_size=self.config.hypothetical_questions_batch_size,
+            )
+
+            # Combine original content with generated questions
+            augmented_docs = []
+            for doc, questions in zip(docs, questions_batch):
+                if not questions:
+                    augmented_docs.append(doc)
+                    continue
+
+                # Combine original content with questions in a structured way
+                combined_content = f"""
+                {doc.content}
+                
+                {GENERATED_QUESTIONS_MARKER}
+                {questions}
+                """.strip()
+
+                new_doc = doc.copy(
+                    update={
+                        "content": combined_content,
+                        "metadata": doc.metadata.copy(
+                            update={"has_hypothetical_questions": True}
+                        ),
+                    }
+                )
+                augmented_docs.append(new_doc)
+
+            return augmented_docs
+
     def llm_rephrase_query(self, query: str) -> List[str]:
         if self.llm is None:
             raise ValueError("LLM not set")
@@ -1301,7 +1380,6 @@ class DocChatAgent(ChatAgent):
         if self.config.n_query_rephrases > 0:
             rephrases = self.llm_rephrase_query(query)
             proxies += rephrases
-
         passages = self.get_relevant_chunks(query, proxies)  # no LLM involved
 
         if len(passages) == 0:
@@ -1314,6 +1392,35 @@ class DocChatAgent(ChatAgent):
                 extracts = [e for e in extracts if e.content != NO_ANSWER]
 
         return query, extracts
+
+    def remove_hypothetical_questions(self, passages: List[Document]) -> List[Document]:
+        """Remove any generated content (like hypothetical questions) from documents.
+        Only cleans if corresponding generation was enabled in config.
+
+        Args:
+            passages: List of documents to clean
+
+        Returns:
+            List of documents with only original content
+        """
+        if not self.config.hypothetical_questions:
+            return passages
+
+        return [
+            (
+                doc.copy(
+                    update={
+                        "content": doc.content.split(GENERATED_QUESTIONS_MARKER)[
+                            0
+                        ].strip()
+                    }
+                )
+                if doc.content
+                and getattr(doc.metadata, "has_hypothetical_questions", False)
+                else doc
+            )
+            for doc in passages
+        ]
 
     def get_verbatim_extracts(
         self,
@@ -1330,6 +1437,8 @@ class DocChatAgent(ChatAgent):
         Returns:
             List[Document]: list of Documents containing extracts and metadata.
         """
+        passages = self.remove_hypothetical_questions(passages)
+
         agent_cfg = self.config.relevance_extractor_config
         if agent_cfg is None:
             # no relevance extraction: simply return passages
