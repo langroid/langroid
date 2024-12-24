@@ -126,6 +126,16 @@ class ToolMessage(ABC, BaseModel):
 
     @classmethod
     def instructions(cls) -> str:
+        """
+        Instructions on tool usage.
+        """
+        return ""
+
+    @classmethod
+    def use_tools_instructions(cls) -> str:
+        """
+        Instructions on tool usage when `use_tools == True`.
+        """
         return """
         IMPORTANT: When using this or any other tool/function, you MUST include a 
         `request` field and set it equal to the FUNCTION/TOOL NAME you intend to use.
