@@ -1702,12 +1702,7 @@ class OpenAIGPT(LanguageModel):
                     ),
                 )
 
-        # Azure uses different parameters. It uses ``engine`` instead of ``model``
-        # and the value should be the deployment_name not ``self.config.chat_model``
         chat_model = self.config.chat_model
-        if self.config.type == "azure":
-            if hasattr(self, "deployment_name"):
-                chat_model = self.deployment_name
 
         args: Dict[str, Any] = dict(
             model=chat_model,
