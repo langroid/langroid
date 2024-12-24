@@ -20,7 +20,7 @@ DEFAULT_SYSTEM_MESSAGE_ADDITION = f"""
             DO NOT REPEAT ARGUMENTS THAT HAVE BEEN PREVIOUSLY GENERATED 
             AND CAN BE SEEN IN THE DEBATE HISTORY PROVIDED. 
             """
-FEEDBACK_AGENT_SYSTEM_MESSAGE = f"""  
+FEEDBACK_AGENT_SYSTEM_MESSAGE_TEMPLATE = """  
             STEP 1: Provide Thorough Debate Feedback
             You are an expert and experienced judge specializing in Lincoln-Douglas style debates. 
             Your goal is to evaluate the debate thoroughly based on the following criteria:
@@ -42,8 +42,9 @@ FEEDBACK_AGENT_SYSTEM_MESSAGE = f"""
             
             STEP 2:  Run MetaphorSearchTool
             
-            Use the TOOL {MetaphorSearchTool.name()} to search the web for 5 references for each pro and con. 
-            Be very CONCISE in your responses, use 5-7 sentences.
+            Use the TOOL {metaphor_tool_name} to search the web for 5 references for Pro: {pro_message}
+            and Con: {con_message}
+            Be very CONCISE in your responses, use 5-7 sentences. 
             show me the SOURCE(s) and EXTRACT(s) and summary
             in this format:
         
@@ -69,7 +70,7 @@ FEEDBACK_AGENT_SYSTEM_MESSAGE = f"""
             ENSURE STEP 3 IS COMPLETED AFTER STEPS 1 AND 2.  
             
             ENSURE STEP1, 2, and 3 are completed. 
-            After all STEPs are completed, use the `{DoneTool.name()}` tool to end the session      
+            After all STEPs are completed, use the `{done_tool_name}` tool to end the session      
             """
 
 # ONLY USE SOURCES YOU FIND FROM A WEB SEARCH.
@@ -117,6 +118,15 @@ def load_system_messages(file_path: str) -> SystemMessages:
     except Exception as e:
         logger.error(f"Unexpected error loading system messages: {e}")
         raise
+
+
+def generate_feedback_agent_system_message(system_messages, pro_key, con_key):
+    return FEEDBACK_AGENT_SYSTEM_MESSAGE_TEMPLATE.format(
+        metaphor_tool_name=MetaphorSearchTool.name(),
+        pro_message=system_messages.messages[pro_key].message,
+        con_message=system_messages.messages[con_key].message,
+        done_tool_name=DoneTool.name()
+    )
 
 
 def extract_topics(system_messages: SystemMessages) -> List[Tuple[str, str, str]]:
@@ -264,6 +274,31 @@ def is_same_llm_for_all_agents() -> bool:
     )
 
 
+def parse_and_format_message_history(message_history: List[Any]) -> str:
+    """Parses and formats message history to exclude system messages and map roles to Pro/Con.
+
+    Args:
+        message_history (List[Any]): The full message history containing system, Pro, and Con messages.
+
+    Returns:
+        str: A formatted string with annotated Pro/Con messages.
+    """
+    annotated_history = []
+
+    for msg in message_history:
+        # Exclude system messages
+        if msg.role == "system":
+            continue
+
+        # Map roles to Pro/Con
+        if msg.role in ["pro", "user"]:  # User is treated as Pro in this context
+            annotated_history.append(f"Pro: {msg.content}")
+        elif msg.role in ["con", "assistant"]:  # Assistant is treated as Con
+            annotated_history.append(f"Con: {msg.content}")
+
+    return "\n".join(annotated_history)
+
+
 def run_debate() -> None:
     """Execute the main debate logic.
 
@@ -336,6 +371,8 @@ def run_debate() -> None:
             )
         )
 
+    # Generate the system message
+    feedback_agent_system_message = generate_feedback_agent_system_message(system_messages, pro_key, con_key)
     pro_agent = create_chat_agent("Pro",
                                   pro_agent_config,
                                   system_messages.messages[pro_key].message +
@@ -346,7 +383,7 @@ def run_debate() -> None:
                                   DEFAULT_SYSTEM_MESSAGE_ADDITION)
     feedback_agent = create_chat_agent("Feedback",
                                        feedback_agent_config,
-                                       FEEDBACK_AGENT_SYSTEM_MESSAGE)
+                                       feedback_agent_system_message)
     logger.info("Pro, Con, and feedback agents created.")
 
     # Determine user's side and assign user_agent and ai_agent based on user selection
@@ -394,7 +431,14 @@ def run_debate() -> None:
     feedback_agent.enable_message(MetaphorSearchTool)
     feedback_agent.enable_message(DoneTool)
     feedback_agent_task = Task(feedback_agent, interactive=False)
-    feedback_agent_task.run(validation_message)
+
+    formatted_history = parse_and_format_message_history(last_agent.message_history)
+    logger.info(f"Formatted Message History:\n{formatted_history}")
+
+    # Pass formatted history to the feedback agent
+    feedback_agent_task = Task(feedback_agent, interactive=False)
+    feedback_agent_task.run([formatted_history])
+
 
 
 @app.command()
