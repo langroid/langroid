@@ -540,9 +540,9 @@ def test_task_2_agent_tool(
     assert "200" in response.content
 
 
-@pytest.mark.parametrize("use_fn_api", [False, True])
+@pytest.mark.parametrize("use_fn_api", [True, False])
 @pytest.mark.parametrize("use_tools_api", [True, False])
-@pytest.mark.parametrize("use_orch_tools", [False, True])
+@pytest.mark.parametrize("use_orch_tools", [True, False])
 def test_task_2_agent_2_tool(
     test_settings: Settings,
     use_fn_api: bool,
@@ -609,7 +609,8 @@ def test_task_2_agent_2_tool(
                     This is a mysterious transform that you do not
                     know how to compute, but you try to find out, by GUESSING the
                     value and asking for CONFIRMATION, 
-                    using the `polinsky_query` tool/function.
+                    using the `polinsky_query` tool/function, ONE NUMBER AT A TIME.
+                    
                     Your FIRST GUESS is to simply guess that the Polinsky transform
                     of your number is the SUCCESSOR of the number.
                     Your SECOND GUESS is to guess that the Polinsky transform
@@ -625,6 +626,9 @@ def test_task_2_agent_2_tool(
                     use the `{done_tool_name}` with `content` showing summary 
                     of the transforms in this format:
                     '(number1, transform1), (number2, transform2)'
+                    
+                    IMPORTANT - YOU CAN ONLY use the `polinsky_feedback` tool/function
+                    ONCE per message.
                     """,
         )
     )
