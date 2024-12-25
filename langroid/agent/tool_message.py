@@ -134,7 +134,9 @@ class ToolMessage(ABC, BaseModel):
     @classmethod
     def use_tools_instructions(cls) -> str:
         """
-        Instructions on tool usage when `use_tools == True`.
+        Instructions on tool usage when `use_tools == True`, i.e.
+        when using langroid built-in tools
+        (as opposed to OpenAI-like function calls/tools).
         """
         return """
         IMPORTANT: When using this or any other tool/function, you MUST include a 

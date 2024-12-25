@@ -452,14 +452,15 @@ class ChatAgent(Agent):
         for msg_cls in enabled_classes:
             if msg_cls.default_value("request") in self.llm_tools_usable:
                 class_instructions = ""
-                if (hasattr(msg_cls, "instructions")
-                    and inspect.ismethod(msg_cls.instructions)
-                    ):
+                if hasattr(msg_cls, "instructions") and inspect.ismethod(
+                    msg_cls.instructions
+                ):
                     class_instructions = msg_cls.instructions()
-                if (self.config.use_tools
+                if (
+                    self.config.use_tools
                     and hasattr(msg_cls, "use_tools_instructions")
                     and inspect.ismethod(msg_cls.use_tools_instructions)
-                    ):
+                ):
                     class_instructions += msg_cls.use_tools_instructions()
                 # example will be shown in tool_format_rules() when using TOOLs,
                 # so we don't need to show it here.
