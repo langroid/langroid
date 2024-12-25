@@ -1,7 +1,5 @@
-import pytest
-
 import langroid as lr
-from langroid.experimental.team import OrElseScheduler, Scheduler, TaskComponent, Team
+from langroid.experimental.team import OrElseScheduler, Scheduler, TaskNode, Team
 from langroid.language_models.mock_lm import MockLMConfig
 
 
@@ -9,7 +7,7 @@ def make_task(name: str, response_fn):
     llm_config = MockLMConfig(response_fn=response_fn)
     agent = lr.ChatAgent(lr.ChatAgentConfig(llm=llm_config, name=name))
     task = lr.Task(agent, interactive=False, single_round=True)
-    return TaskComponent(task)
+    return TaskNode(task)
 
 
 def test_basic_team():
@@ -37,7 +35,7 @@ def test_team_with_listeners():
 
     def done_condition(team: Team, scheduler: Scheduler) -> bool:
         # done when each responder has run twice
-        return len(scheduler.responders) == len(team.components) * 2
+        return len(scheduler.responders) == len(team.Nodes) * 2
 
     # Create tasks and teams
     t1 = make_task("a1", sum_fn)
@@ -56,5 +54,5 @@ def test_team_with_listeners():
     # t1.run(5) -> 6 -> notify t2
     # t2.run(6) -> 7 -> notify t1
     # t1.run(7) -> 8 -> notify t2
-    # t2.run(8) -> 9 -> done (since each component has run twice)
+    # t2.run(8) -> 9 -> done (since each Node has run twice)
     assert result[0].content == "9"

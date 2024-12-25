@@ -23,7 +23,7 @@ def user_message(msg: Union[str, lr.ChatDocument]) -> lr.ChatDocument:
 
 
 class InputContext:
-    """Context for a Component to respond to"""
+    """Context for a Node to respond to"""
 
     def __init__(self) -> None:
         self.messages: List[lr.ChatDocument] = []
@@ -61,11 +61,18 @@ class InputContext:
         content = "\n".join(
             f"{msg.metadata.sender_name}: {msg.content}" for msg in self.messages
         )
-        return lr.ChatDocument(content=content, metadata={"sender": lr.Entity.USER})
+        tool_lists = [msg.tool_messages for msg in self.messages]
+        tool_messages = [msg for tools in tool_lists for msg in tools]
+        # TODO look at this more
+        return lr.ChatDocument(
+            content=content,
+            tool_messages=tool_messages,
+            metadata={"sender": lr.Entity.USER},
+        )
 
 
 class Scheduler(ABC):
-    """Schedule the Components of a Team"""
+    """Schedule the Nodes of a Team"""
 
     def __init__(self) -> None:
         self.init_state()
@@ -95,27 +102,27 @@ class Scheduler(ABC):
         return self.result()
 
 
-class Component(ABC):
-    """A component of a Team"""
+class Node(ABC):
+    """A Node of a Team"""
 
     def __init__(self) -> None:
         self.input = InputContext()
-        self._listeners: List["Component"] = []
+        self._listeners: List["Node"] = []
         self.name: str = ""
 
     @abstractmethod
     def run(self) -> List[lr.ChatDocument]:
         pass
 
-    def listen(self, component: Union["Component", List["Component"]]) -> None:
-        if isinstance(component, list):
-            for comp in component:
+    def listen(self, Node: Union["Node", List["Node"]]) -> None:
+        if isinstance(Node, list):
+            for comp in Node:
                 comp.listeners.append(self)
         else:
-            component.listeners.append(self)
+            Node.listeners.append(self)
 
     @property
-    def listeners(self) -> List["Component"]:
+    def listeners(self) -> List["Node"]:
         return self._listeners
 
     def _notify(self, results: List[lr.ChatDocument]) -> None:
@@ -128,15 +135,15 @@ class Component(ABC):
 class SimpleScheduler(Scheduler):
     def __init__(
         self,
-        components: List[Component],
+        Nodes: List[Node],
     ) -> None:
         super().__init__()
-        self.components = components  # Get components from team
+        self.Nodes = Nodes  # Get Nodes from team
         self.stepped: bool = False
 
     def step(self) -> None:
         results = []
-        for comp in self.components:
+        for comp in self.Nodes:
             result = comp.run()
             if result:
                 results.extend(result)
@@ -144,7 +151,7 @@ class SimpleScheduler(Scheduler):
         self.stepped = True
 
     def done(self) -> bool:
-        """done after 1 step, i.e. all components have responded"""
+        """done after 1 step, i.e. all Nodes have responded"""
         return self.stepped
 
     def result(self) -> List[lr.ChatDocument]:
@@ -153,20 +160,20 @@ class SimpleScheduler(Scheduler):
 
 class OrElseScheduler(Scheduler):
     """
-    Implements "OrElse scheduling", i.e. if the components are A, B, C, then
+    Implements "OrElse scheduling", i.e. if the Nodes are A, B, C, then
     in each step, it will try for a valid response from A OrElse B OrElse C,
-    i.e. the first component that gives a valid response is chosen.
-    In the next step, it will start from the next component in the list,
-    cycling back to the first component after the last component.
+    i.e. the first Node that gives a valid response is chosen.
+    In the next step, it will start from the next Node in the list,
+    cycling back to the first Node after the last Node.
     (There may be a better name than OrElseScheduler though.)
     """
 
     def __init__(
         self,
-        components: List[Component],
+        Nodes: List[Node],
     ) -> None:
         super().__init__()
-        self.components = components
+        self.Nodes = Nodes
         self.team: Optional[Team] = None
         self.current_index: int = 0
 
@@ -179,11 +186,11 @@ class OrElseScheduler(Scheduler):
 
     def step(self) -> None:
         start_index = self.current_index
-        n = len(self.components)
+        n = len(self.Nodes)
 
         for i in range(n):
             idx = (start_index + i) % n
-            comp = self.components[idx]
+            comp = self.Nodes[idx]
             result = comp.run()
             if self.is_valid(result):
                 self.responders.append(comp.name)
@@ -191,7 +198,7 @@ class OrElseScheduler(Scheduler):
                     self.responder_counts.get(comp.name, 0) + 1
                 )
                 self.current_result = result
-                # cycle to next component
+                # cycle to next Node
                 self.current_index = (idx + 1) % n
                 return
 
@@ -204,7 +211,7 @@ class OrElseScheduler(Scheduler):
         return self.current_result
 
 
-class Team(Component):
+class Team(Node):
     def __init__(
         self,
         name: str,
@@ -212,7 +219,7 @@ class Team(Component):
     ) -> None:
         super().__init__()
         self.name = name
-        self.components: List[Component] = []
+        self.Nodes: List[Node] = []
         self.scheduler: Optional[Scheduler] = None
         self.done_condition = done_condition or Team.default_done_condition
 
@@ -229,15 +236,15 @@ class Team(Component):
         return False
 
     def add_scheduler(self, scheduler_class: type) -> None:
-        self.scheduler = scheduler_class(self.components)
+        self.scheduler = scheduler_class(self.Nodes)
         if hasattr(self.scheduler, "team"):
             setattr(self.scheduler, "team", self)
 
-    def add(self, component: Union[Component, List[Component]]) -> None:
-        if isinstance(component, list):
-            self.components.extend(component)
+    def add(self, Node: Union[Node, List[Node]]) -> None:
+        if isinstance(Node, list):
+            self.Nodes.extend(Node)
         else:
-            self.components.append(component)
+            self.Nodes.append(Node)
 
     def reset(self) -> None:
         self.input.clear()
@@ -253,9 +260,9 @@ class Team(Component):
             )
         input_str = self.input.get_context().content
         logger.warning(f"Running team {self.name}... on input = {input_str}")
-        # push the input of self to each component that's a listener of self.
+        # push the input of self to each Node that's a listener of self.
         n_pushed = 0
-        for comp in self.components:
+        for comp in self.Nodes:
             if comp in self.listeners:
                 comp.input.add(self.input.messages)
                 n_pushed += 1
@@ -263,9 +270,9 @@ class Team(Component):
             logger.warning(
                 f"""
                 Team {self.name} has input but no internal listeners,
-                so this input will not be passed to any components,
+                so this input will not be passed to any Nodes,
                 and you may not be able to run the team successfully.
-                Make sure to set up components listening to parent team
+                Make sure to set up Nodes listening to parent team
                 if needed.
                 """
             )
@@ -281,7 +288,12 @@ class Team(Component):
         return result
 
 
-class TaskComponent(Component):
+class TaskNode(Node):
+    """
+    A "leaf" node consisting of just a Task
+    (which may have sub-tasks, but those are "internal" to this TaskNode).
+    """
+
     def __init__(self, task: lr.Task) -> None:
         super().__init__()
         self.task = task
