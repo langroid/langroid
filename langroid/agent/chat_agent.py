@@ -458,10 +458,10 @@ class ChatAgent(Agent):
                     class_instructions = msg_cls.instructions()
                 if (
                     self.config.use_tools
-                    and hasattr(msg_cls, "use_tools_instructions")
-                    and inspect.ismethod(msg_cls.use_tools_instructions)
+                    and hasattr(msg_cls, "langroid_tools_instructions")
+                    and inspect.ismethod(msg_cls.langroid_tools_instructions)
                 ):
-                    class_instructions += msg_cls.use_tools_instructions()
+                    class_instructions += msg_cls.langroid_tools_instructions()
                 # example will be shown in tool_format_rules() when using TOOLs,
                 # so we don't need to show it here.
                 example = "" if self.config.use_tools else (msg_cls.usage_examples())
