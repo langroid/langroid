@@ -375,7 +375,7 @@ async def test_orch_tools_async(
 
 
 @pytest.mark.parametrize("use_functions_api", [True, False])
-@pytest.mark.parametrize("use_tools_api", [True, False])
+@pytest.mark.parametrize("use_tools_api", [False, True])
 def test_send_tools(
     test_settings: Settings,
     use_functions_api: bool,
@@ -443,6 +443,7 @@ def test_send_tools(
     processor_task = lr.Task(processor, interactive=False)
     processor.enable_message(SendTool, use=True, handle=True)
     processor.enable_message(ThreeTool, use=True, handle=True)
+    processor.enable_message(DoneTool, use=True, handle=True)
 
     five_agent = lr.ChatAgent(
         lr.ChatAgentConfig(

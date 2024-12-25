@@ -1,7 +1,7 @@
 import atexit
 import os
 from functools import cached_property
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional
 
 import requests
 import tiktoken
