@@ -1826,12 +1826,6 @@ class Task:
             and (result.content in USER_QUIT_STRINGS or done_result)
             and result.metadata.sender == Entity.USER
         )
-        if self._level == 0 and self._user_can_respond() and self.only_user_quits_root:
-            # for top-level task, only user can quit out
-            return (user_quit, StatusCode.USER_QUIT if user_quit else StatusCode.OK)
-
-        if self.is_done:
-            return (True, StatusCode.DONE)
 
         if self.n_stalled_steps >= self.max_stalled_steps:
             # we are stuck, so bail to avoid infinite loop
@@ -1859,6 +1853,14 @@ class Task:
                     return (True, StatusCode.MAX_TOKENS)
             except Exception:
                 pass
+
+        if self._level == 0 and self._user_can_respond() and self.only_user_quits_root:
+            # for top-level task, only user can quit out
+            return (user_quit, StatusCode.USER_QUIT if user_quit else StatusCode.OK)
+
+        if self.is_done:
+            return (True, StatusCode.DONE)
+
         final = (
             # no valid response from any entity/agent in current turn
             result is None
