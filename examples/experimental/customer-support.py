@@ -12,7 +12,7 @@ python3 examples/experimental/customer-support.py
 from typing import List
 from enum import Enum
 
-from langroid.experimental.team import Team, TaskComponent
+from langroid.experimental.team import Team, TaskNode
 import langroid as lr
 import langroid.language_models as lm
 from langroid.pydantic_v1 import BaseModel, Field
@@ -37,7 +37,9 @@ class Intent(str, Enum):
 
 class CallerInfoTool(lr.ToolMessage):
     request: str = "caller_info_tool"
-    purpose: str = "Get caller's <patient_name> and <ssn>"
+    purpose: str = """
+        Get caller's <patient_name>, <ssn> and <intent> (Schedule or Cancel)
+    """
 
     patient_name: str
     ssn: str
@@ -111,7 +113,7 @@ class CancelTool(lr.ToolMessage):
         )
 
 
-def make_task(name: str, tool: lr.ToolMessage, sys: str) -> TaskComponent:
+def make_task(name: str, tool: lr.ToolMessage, sys: str) -> TaskNode:
     llm_config = OpenAIGPTConfig(
         chat_model=lm.OpenAIChatModel.GPT4o,
     )
@@ -124,10 +126,10 @@ def make_task(name: str, tool: lr.ToolMessage, sys: str) -> TaskComponent:
     )
     agent.enable_message(tool)
     task = lr.Task(agent, interactive=True, only_user_quits_root=False)
-    return TaskComponent(task)
+    return TaskNode(task)
 
 
-def make_intake_task(name="Intake") -> TaskComponent:
+def make_intake_task(name="Intake") -> TaskNode:
     return make_task(
         name,
         CallerInfoTool,
@@ -140,7 +142,7 @@ def make_intake_task(name="Intake") -> TaskComponent:
     )
 
 
-def make_schedule_task(name="Schedule") -> TaskComponent:
+def make_schedule_task(name="Schedule") -> TaskNode:
     return make_task(
         name,
         ScheduleTool,
@@ -154,7 +156,7 @@ def make_schedule_task(name="Schedule") -> TaskComponent:
     )
 
 
-def make_cancel_task(name="Cancel") -> TaskComponent:
+def make_cancel_task(name="Cancel") -> TaskNode:
     return make_task(
         name,
         CancelTool,
