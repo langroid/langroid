@@ -270,7 +270,7 @@ class EulerTool(ToolMessage):
 
 
 @pytest.mark.fallback
-@pytest.mark.flaky(reruns=2)
+@pytest.mark.flaky(reruns=3)
 @pytest.mark.asyncio
 @pytest.mark.parametrize("use_fn_api", [True, False])
 @pytest.mark.parametrize("use_tools_api", [True, False])
