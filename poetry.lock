@@ -1459,13 +1459,13 @@ websockets = ["websocket-client (>=1.3.0)"]
 
 [[package]]
 name = "docstring-parser"
-version = "0.15"
+version = "0.16"
 description = "Parse Python docstrings in reST, Google and Numpydoc format"
 optional = false
 python-versions = ">=3.6,<4.0"
 files = [
-    {file = "docstring_parser-0.15-py3-none-any.whl", hash = "sha256:d1679b86250d269d06a99670924d6bce45adc00b08069dae8c47d98e89b667a9"},
-    {file = "docstring_parser-0.15.tar.gz", hash = "sha256:48ddc093e8b1865899956fcc03b03e66bb7240c310fac5af81814580c55bf682"},
+    {file = "docstring_parser-0.16-py3-none-any.whl", hash = "sha256:bf0a1387354d3691d102edef7ec124f219ef639982d096e26e3b60aeffa90637"},
+    {file = "docstring_parser-0.16.tar.gz", hash = "sha256:538beabd0af1e2db0146b6bd3caa526c35a34d61af9fd2887f3a8a27a739aa6e"},
 ]
 
 [[package]]
@@ -10123,4 +10123,4 @@ vecdbs = ["chromadb", "lancedb", "pyarrow", "tantivy"]
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.10,<3.13"
-content-hash = "ae3607ec2ac995397186c6f3553bfab64db93511eacb65d7e3c30402b5d60cdf"
+content-hash = "22f9b0196965d793b1c1e904321f63edc37d7e6056b85de171247dcbf16a3101"
