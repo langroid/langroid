@@ -100,8 +100,9 @@ def test_agent_done_interactive():
     # LLM: XTool(34)
     # Agent (agent_response) -> AgentDoneTool(content="34", [XTool(34)])
     # After this point, we can't get response from
+    # - user since the curr pending msg contains a valid tool.
     # - agent_response since it cannot respond to own msg
-    # - llm_response since the curr pending msg contains a tool.
+    # - llm_response since the curr pending msg contains a valid tool.
     # So the task stalls until it hits max_stalled_steps and returns None
     assert result is None
 
