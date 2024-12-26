@@ -251,13 +251,13 @@ class CoriolisTool(ToolMessage):
     """Tool for testing handling of optional arguments, with default values."""
 
     request: str = "coriolis"
-    purpose: str = "to request computing the Coriolis transform of <x> and <y>"
-    x: int
-    y: int = 5
+    purpose: str = "to request computing the Coriolis transform of <cats> and <cows>"
+    cats: int
+    cows: int = 5
 
     def handle(self) -> str:
         # same as NabroskiTool result
-        return str(3 * self.x + self.y)
+        return str(3 * self.cats + self.cows)
 
 
 class EulerTool(ToolMessage):
@@ -270,7 +270,7 @@ class EulerTool(ToolMessage):
 
 
 @pytest.mark.fallback
-@pytest.mark.flaky(reruns=3)
+@pytest.mark.flaky(reruns=2)
 @pytest.mark.asyncio
 @pytest.mark.parametrize("use_fn_api", [True, False])
 @pytest.mark.parametrize("use_tools_api", [True, False])
@@ -418,7 +418,7 @@ async def test_structured_recovery_async(
         await simulate_failed_call(
             """
         request ":coriolis"
-        arguments {"xval": 1}
+        arguments {"n_cats": 1}
         """
         )
         == "8"
@@ -431,7 +431,7 @@ async def test_structured_recovery_async(
                 LLMFunctionCall(
                     name="Coriolis",
                     arguments={
-                        "xval": 1,
+                        "cats": 1,
                     },
                 )
             )
