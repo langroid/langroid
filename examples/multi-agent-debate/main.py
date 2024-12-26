@@ -154,6 +154,41 @@ def extract_topics(system_messages: SystemMessages) -> List[Tuple[str, str, str]
     return topics
 
 
+def select_model(config_agent_name: str) -> str:
+    """
+    Prompt the user to select an OpenAI or Gemini model for the specified agent.
+
+    This function prompts the user to select an option from  a list of available models.
+    The user's input corresponds to a predefined choice, which is
+    then returned as a string representing the selected option.
+
+    Args:
+        config_agent_name (str): The name of the agent being configured, used
+                                 in the prompt to personalize the message.
+
+    Returns:
+        str: The user's selected option as a string, corresponding to one of the
+             predefined model choices (e.g., "1", "2", ..., "10").
+
+    """
+    return Prompt.ask(
+        f"Select a Model for {config_agent_name}:\n"
+        "1: gpt-4o\n"
+        "2: gpt-4\n"
+        "3: gpt-4o-mini\n"
+        "4: gpt-4-turbo\n"
+        "5: gpt-4-32k\n"
+        "6: gpt-3.5-turbo-1106\n"
+        "7: Mistral: mistral:7b-instruct-v0.2-q8_0a\n"
+        "8: Gemini: gemini-2.0-flash\n"
+        "8: Gemini: gemini-1.5-flash\n"
+        "9: Gemini: gemini-1.5-flash-8b\n"
+        "10: Gemini: gemini-1.5-pro\n",
+        choices=["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"],
+        default="1",
+    )
+
+
 def select_debate_topic(system_messages: SystemMessages) -> Optional[tuple]:
     """Prompt the user to select a debate topic from SystemMessages.
 
@@ -299,6 +334,30 @@ def parse_and_format_message_history(message_history: List[Any]) -> str:
     return "\n".join(annotated_history)
 
 
+def create_chat_agent(
+        name: str,
+        llm_config: OpenAIGPTConfig,
+        system_message: str
+) -> ChatAgent:
+    """creates a ChatAgent with the given parameters.
+
+        Args:
+            name (str): The name of the agent.
+            llm_config (OpenAIGPTConfig): The LLM configuration for the agent.
+            system_message (str): The system message to guide the agent's LLM.
+
+        Returns:
+            ChatAgent: A configured ChatAgent instance.
+        """
+    return ChatAgent(
+        ChatAgentConfig(
+            llm=llm_config,
+            name=name,
+            system_message=system_message,
+        )
+    )
+
+
 def run_debate() -> None:
     """Execute the main debate logic.
 
@@ -318,12 +377,14 @@ def run_debate() -> None:
 
     global_settings = get_global_settings(nocache=True)
     lr.utils.configuration.set_global(global_settings)
+
     same_llm: bool = is_same_llm_for_all_agents()
     llm_delegate: bool = is_llm_delegate()
 
     # Get base LLM configuration
     if same_llm:
-        shared_agent_config: OpenAIGPTConfig = get_base_llm_config("main LLM")
+
+        shared_agent_config: OpenAIGPTConfig = get_base_llm_config(select_model("main LLM"))
         pro_agent_config = con_agent_config = shared_agent_config
 
         # Create feedback_agent_config by modifying the temperature of shared_agent_config
@@ -335,44 +396,22 @@ def run_debate() -> None:
             seed=shared_agent_config.seed,
         )
     else:
-        pro_agent_config: OpenAIGPTConfig = get_base_llm_config("for Pro Agent")
-        con_agent_config: OpenAIGPTConfig = get_base_llm_config("for Con Agent")
-        feedback_agent_config: OpenAIGPTConfig = get_base_llm_config("feedback", temperature=0.2)
+        pro_agent_config: OpenAIGPTConfig = get_base_llm_config(select_model("for Pro Agent"))
+        con_agent_config: OpenAIGPTConfig = get_base_llm_config(select_model("for Con Agent"))
+        feedback_agent_config: OpenAIGPTConfig = get_base_llm_config(select_model("feedback"), temperature=0.2)
 
     system_messages: SystemMessages = load_system_messages("examples/multi-agent-debate/system_messages.json")
     topic_name, pro_key, con_key, side = select_topic_and_setup_side(system_messages)
 
     # Prompt for number of debate turns
     max_turns: int = int(
-        Prompt.ask(f"How many turns should the debate continue for? (Defalut is {DEFAULT_TURN_COUNT})",
+        Prompt.ask(f"How many turns should the debate continue for? (Default is {DEFAULT_TURN_COUNT})",
                    default=DEFAULT_TURN_COUNT)
     )
 
-    def create_chat_agent(
-            name: str,
-            llm_config: OpenAIGPTConfig,
-            system_message: str
-    ) -> ChatAgent:
-        """creates a ChatAgent with the given parameters.
-
-        Args:
-            name (str): The name of the agent.
-            llm_config (OpenAIGPTConfig): The LLM configuration for the agent.
-            system_message (str): The system message to guide the agent's LLM.
-
-        Returns:
-            ChatAgent: A configured ChatAgent instance.
-        """
-        return ChatAgent(
-            ChatAgentConfig(
-                llm=llm_config,
-                name=name,
-                system_message=system_message,
-            )
-        )
-
     # Generate the system message
     feedback_agent_system_message = generate_feedback_agent_system_message(system_messages, pro_key, con_key)
+
     pro_agent = create_chat_agent("Pro",
                                   pro_agent_config,
                                   system_messages.messages[pro_key].message +
@@ -413,7 +452,7 @@ def run_debate() -> None:
     user_task = Task(user_agent, interactive=interactive_setting, restart=False)
     ai_task = Task(ai_agent, interactive=False, single_round=True)
     user_task.add_sub_task(ai_task)
-    if llm_delegate:
+    if not llm_delegate:
         user_task.run(user_agent.user_message, turns=max_turns)
     else:
         user_task.run("get started", turns=max_turns)
@@ -423,22 +462,15 @@ def run_debate() -> None:
     last_agent = ai_agent if max_turns % 2 == 0 else user_agent
 
     # Generate feedback summary and declare a winner using feedback agent
-    validation_message: List = last_agent.message_history
-    if not validation_message:
+
+    if not last_agent.message_history:
         logger.warning("No agent message history found for the last agent")
-        validation_message = "No last agent history available to validate."
 
     feedback_agent.enable_message(MetaphorSearchTool)
     feedback_agent.enable_message(DoneTool)
     feedback_agent_task = Task(feedback_agent, interactive=False)
-
     formatted_history = parse_and_format_message_history(last_agent.message_history)
-    logger.info(f"Formatted Message History:\n{formatted_history}")
-
-    # Pass formatted history to the feedback agent
-    feedback_agent_task = Task(feedback_agent, interactive=False)
-    feedback_agent_task.run([formatted_history])
-
+    feedback_agent_task.run(formatted_history)  # Pass formatted history to the feedback agent
 
 
 @app.command()
