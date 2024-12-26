@@ -1129,7 +1129,9 @@ class Agent(ABC):
             # or they were added by an agent_response.
             # note these could be from a forwarded msg from another agent,
             # so return ONLY the messages THIS agent to enabled to handle.
-            return msg.tool_messages
+            if all_tools:
+                return msg.tool_messages
+            return [t for t in msg.tool_messages if self._tool_recipient_match(t)]
         assert isinstance(msg, ChatDocument)
         if (
             msg.content != ""

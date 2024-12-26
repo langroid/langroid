@@ -3,7 +3,7 @@ from typing import Optional
 import pytest
 
 import langroid as lr
-from langroid import ChatDocument
+from langroid import ChatDocument, InfiniteLoopException
 from langroid.language_models.mock_lm import MockLMConfig
 from langroid.utils.configuration import Settings, set_global
 
@@ -62,8 +62,16 @@ def test_llm_done_tool(
     assert result == 3
 
 
-def test_agent_done_interactive():
+@pytest.mark.parametrize("xtool", [True, False])
+@pytest.mark.parametrize("only_user_quits", [True, False])
+def test_agent_done_interactive(xtool: bool, only_user_quits: bool):
     AgentDoneTool = lr.agent.tools.orchestration.AgentDoneTool
+
+    class OtherTool(lr.ToolMessage):
+        purpose = "a tool not enabled for agent"
+        request = "other_tool"
+
+        z: int
 
     class XTool(lr.ToolMessage):
         purpose = "to show x"
@@ -73,7 +81,7 @@ def test_agent_done_interactive():
         def handle(self) -> AgentDoneTool:
             return AgentDoneTool(
                 content=self.x,
-                tools=[self],
+                tools=[self if xtool else OtherTool(z=3)],
             )
 
     _first_time = True
@@ -90,21 +98,39 @@ def test_agent_done_interactive():
     )
     agent.enable_message(XTool)
     task = lr.Task(
-        agent, interactive=True, default_human_response="34", only_user_quits_root=True
+        agent,
+        interactive=True,
+        default_human_response="34",
+        only_user_quits_root=only_user_quits,
     )
 
-    result = task.run()
-    # sequence:
-    # LLM: give me a number
-    # User: 34
-    # LLM: XTool(34)
-    # Agent (agent_response) -> AgentDoneTool(content="34", [XTool(34)])
-    # After this point, we can't get response from
-    # - user since the curr pending msg contains a valid tool.
-    # - agent_response since it cannot respond to own msg
-    # - llm_response since the curr pending msg contains a valid tool.
-    # So the task stalls until it hits max_stalled_steps and returns None
-    assert result is None
+    try:
+        result = task.run()
+        # sequence:
+        # LLM: give me a number
+        # User: 34
+        # LLM: XTool(34)
+        # Agent (agent_response) -> AgentDoneTool(content="34", [Tool])
+        #   where Tool is either XTool(34) or OtherTool(3)
+
+    except InfiniteLoopException:
+        # inapplicable (unhandled) OtherTool => LLM, User allowed to respond,
+        # and only_user_quits_root is True,
+        # so task keeps asking for user input, triggering infinite loop check
+        assert not xtool and only_user_quits
+        return
+
+    if not only_user_quits:
+        # only_user_quits is False, so AgentDoneTool causes task exit
+        assert "34" in result.content
+        return
+    if xtool:
+        # After this point, we can't get response from
+        # - user since the curr pending msg contains a valid tool.
+        # - agent_response since it cannot respond to own msg
+        # - llm_response since the curr pending msg contains a valid tool.
+        # So the task stalls until it hits max_stalled_steps and returns None
+        assert result is None
 
 
 def test_agent_done_tool(test_settings: Settings):
