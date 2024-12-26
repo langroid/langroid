@@ -1,4 +1,4 @@
-# Setting up a local LLM to work with Langroid
+# Setting up a Local/Open LLM to work with Langroid
 
 !!! tip "Examples scripts in [`examples/`](https://github.com/langroid/langroid/tree/main/examples) directory."
       There are numerous examples of scripts that can be run with local LLMs,
@@ -160,6 +160,15 @@ To run with one of these models, set the `chat_model` in the `OpenAIGPTConfig` t
 `"glhf/<model_name>"`, where `model_name` is `hf:` followed by the HuggingFace repo 
 path, e.g. `Qwen/Qwen2.5-Coder-32B-Instruct`, so the full `chat_model` would be
 `"glhf/hf:Qwen/Qwen2.5-Coder-32B-Instruct"`. 
+
+## DeepSeek LLMs
+
+As of 26-Dec-2024, DeepSeek-v3 is available via their [api](https://platform.deepseek.com).
+To use it with Langroid:
+
+- set up your `DEEPSEEK_API_KEY` environment variable in the `.env` file or as
+ an explicit export in your shell
+- set the `chat_model` in the `OpenAIGPTConfig` to `deepseek/deepseek-chat`
 
 ## Other non-OpenAI LLMs supported by LiteLLM
 

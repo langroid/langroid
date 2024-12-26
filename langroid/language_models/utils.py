@@ -53,6 +53,10 @@ def retry_with_exponential_backoff(
                 logger.error(f"OpenAI API request failed with error: {e}.")
                 raise e
 
+            except openai.UnprocessableEntityError as e:
+                logger.error(f"OpenAI API request failed with error: {e}.")
+                raise e
+
             # Retry on specified errors
             except errors as e:
                 # Increment retries
