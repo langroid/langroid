@@ -20,7 +20,7 @@ DEFAULT_SYSTEM_MESSAGE_ADDITION = f"""
             DO NOT REPEAT ARGUMENTS THAT HAVE BEEN PREVIOUSLY GENERATED 
             AND CAN BE SEEN IN THE DEBATE HISTORY PROVIDED. 
             """
-FEEDBACK_AGENT_SYSTEM_MESSAGE_TEMPLATE = """  
+FEEDBACK_AGENT_SYSTEM_MESSAGE = f"""  
             STEP 1: Provide Thorough Debate Feedback
             You are an expert and experienced judge specializing in Lincoln-Douglas style debates. 
             Your goal is to evaluate the debate thoroughly based on the following criteria:
@@ -36,11 +36,10 @@ FEEDBACK_AGENT_SYSTEM_MESSAGE_TEMPLATE = """
             8. Final Focus: Judge the strength of closing speeches, how well they summarize the case, 
             and justify a winner.
             Provide constructive feedback for each debater, 
-            summarizing their performance and declaring a winner with justification.
-            
-            ENSURE STEP 1 IS COMPLETED BEFORE STARTING STEP 2
-            
-            STEP 2:  Run MetaphorSearchTool
+            summarizing their performance and declaring a winner with justification.   
+            """
+METAPHOR_SEARCH_AGENT_SYSTEM_MESSAGE_TEMPLATE = """
+            STEP 1:  Run MetaphorSearchTool
             
             Use the TOOL {metaphor_tool_name} to search the web for 5 references for Pro: {pro_message}
             and Con: {con_message}
@@ -67,13 +66,11 @@ FEEDBACK_AGENT_SYSTEM_MESSAGE_TEMPLATE = """
             As an expert debater, your goal is to eloquently argue for both the Pro and Con cases using the web-search sources generated in Step 2.
             Write at least 10 sentences for each side.
             Use references from Step 2, properly cited in BRACKETS (e.g., [SOURCE]).
-            ENSURE STEP 3 IS COMPLETED AFTER STEPS 1 AND 2.  
-            
-            ENSURE STEP1, 2, and 3 are completed. 
-            After all STEPs are completed, use the `{done_tool_name}` tool to end the session      
+           
+            ENSURE BOTH STEP 1 and 2 are completed. 
+            After all STEPs are completed, use the `{done_tool_name}` tool to end the session   
             """
 
-# ONLY USE SOURCES YOU FIND FROM A WEB SEARCH.
 DEFAULT_TURN_COUNT = 4
 
 # Initialize typer application
@@ -120,8 +117,8 @@ def load_system_messages(file_path: str) -> SystemMessages:
         raise
 
 
-def generate_feedback_agent_system_message(system_messages, pro_key, con_key):
-    return FEEDBACK_AGENT_SYSTEM_MESSAGE_TEMPLATE.format(
+def generate_metaphor_search_agent_system_message(system_messages, pro_key, con_key):
+    return METAPHOR_SEARCH_AGENT_SYSTEM_MESSAGE_TEMPLATE.format(
         metaphor_tool_name=MetaphorSearchTool.name(),
         pro_message=system_messages.messages[pro_key].message,
         con_message=system_messages.messages[con_key].message,
@@ -294,6 +291,21 @@ def is_llm_delegate() -> bool:
     )
 
 
+def is_metaphor_search_key_set() -> bool:
+    """Prompt the user to decide on LLM delegation.
+
+    Asks the user whether the LLM should autonomously continue the debate
+    without requiring user input.
+
+    Returns:
+        bool: True if the user chooses LLM delegation, otherwise return False.
+    """
+    return Confirm.ask(
+        "Do you have the Metaphor Search API Key set, and should I search to provide pro and con summaries for your topic?",
+        default=False,
+    )
+
+
 def is_same_llm_for_all_agents() -> bool:
     """Prompt the user to decide if same LLM should be used for all agents.
 
@@ -380,6 +392,7 @@ def run_debate() -> None:
 
     same_llm: bool = is_same_llm_for_all_agents()
     llm_delegate: bool = is_llm_delegate()
+    metaphor_search: bool = is_metaphor_search_key_set()
 
     # Get base LLM configuration
     if same_llm:
@@ -410,7 +423,8 @@ def run_debate() -> None:
     )
 
     # Generate the system message
-    feedback_agent_system_message = generate_feedback_agent_system_message(system_messages, pro_key, con_key)
+    metaphor_search_agent_system_message = generate_metaphor_search_agent_system_message(system_messages, pro_key,
+                                                                                         con_key)
 
     pro_agent = create_chat_agent("Pro",
                                   pro_agent_config,
@@ -422,8 +436,11 @@ def run_debate() -> None:
                                   DEFAULT_SYSTEM_MESSAGE_ADDITION)
     feedback_agent = create_chat_agent("Feedback",
                                        feedback_agent_config,
-                                       feedback_agent_system_message)
-    logger.info("Pro, Con, and feedback agents created.")
+                                       FEEDBACK_AGENT_SYSTEM_MESSAGE)
+    metaphor_search_agent = create_chat_agent("MetaphorSearch",
+                                              feedback_agent_config,
+                                              metaphor_search_agent_system_message)
+    logger.info("Pro, Con, feedback, and metaphor_search agents created.")
 
     # Determine user's side and assign user_agent and ai_agent based on user selection
     agents = {"pro": (pro_agent, con_agent, "Pro", "Con"), "con": (con_agent, pro_agent, "Con", "Pro")}
@@ -466,11 +483,15 @@ def run_debate() -> None:
     if not last_agent.message_history:
         logger.warning("No agent message history found for the last agent")
 
-    feedback_agent.enable_message(MetaphorSearchTool)
-    feedback_agent.enable_message(DoneTool)
     feedback_agent_task = Task(feedback_agent, interactive=False)
     formatted_history = parse_and_format_message_history(last_agent.message_history)
     feedback_agent_task.run(formatted_history)  # Pass formatted history to the feedback agent
+
+    if metaphor_search:
+        metaphor_search_agent_task = Task(metaphor_search_agent, interactive=False)
+        metaphor_search_agent.enable_message(MetaphorSearchTool)
+        metaphor_search_agent.enable_message(DoneTool)
+        metaphor_search_agent_task.run("run the search")
 
 
 @app.command()
