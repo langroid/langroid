@@ -61,12 +61,13 @@ class InputContext:
         content = "\n".join(
             f"{msg.metadata.sender_name}: {msg.content}" for msg in self.messages
         )
-        tool_lists = [msg.tool_messages for msg in self.messages]
-        tool_messages = [msg for tools in tool_lists for msg in tools]
-        # TODO look at this more
+        # tool_lists = [msg.tool_messages for msg in self.messages]
+        # tool_messages = [msg for tools in tool_lists for msg in tools]
+        # TODO look at this more - returning tool_messages
+        # can complicate the run() handling.
         return lr.ChatDocument(
             content=content,
-            tool_messages=tool_messages,
+            # tool_messages=tool_messages,
             metadata={"sender": lr.Entity.USER},
         )
 

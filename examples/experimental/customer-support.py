@@ -72,7 +72,7 @@ class ScheduleTool(lr.ToolMessage):
     def handle(self) -> str:
         print(
             f"""
-         Got it! I'll cancel {self.patient_name}'s appointment 
+         Got it! I'll Schedule {self.patient_name}'s appointment 
          with {self.doctor} on {self.date}
          """
         )
@@ -147,7 +147,7 @@ def make_schedule_task(name="Schedule") -> TaskNode:
         name,
         ScheduleTool,
         sys=f"""
-            You are operating a clinic front-desk, responsible for canceling
+            You are operating a clinic front-desk, responsible for SCHEDULING
             an appointment for the caller, with a doctor.
             From the user identified in your context, elicit which doctor
             and what date they would like to cancel the appointment,
@@ -161,7 +161,7 @@ def make_cancel_task(name="Cancel") -> TaskNode:
         name,
         CancelTool,
         sys=f"""
-            You are operating a clinic front-desk, responsible for cancelling
+            You are operating a clinic front-desk, responsible for CANCELLING
             an appointment for the caller, with a doctor.
             From the user identified in your context, elicit which doctor
             and what date they would like to cancel an appointment,
@@ -201,5 +201,22 @@ class ClinicTeam(Team):
 
 
 if __name__ == "__main__":
-    team = ClinicTeam("Clinic")
-    team.run()
+    intake_task = make_intake_task()
+    scheduler_task = make_schedule_task()
+    cancel_task = make_cancel_task()
+
+    # set up the listening relations
+    # scheduler, cancel tasks should get info from intake task
+    scheduler_task.listen(intake_task)
+    cancel_task.listen(intake_task)
+
+    caller_result: lr.ChatDocument = intake_task.run("get_started")[0]
+
+    caller_info: CallerInfoTool = caller_result.tool_messages[0]
+
+    # the scheduler and cancel tasks will have this info since
+    # they listen to the id task
+    if caller_info.intent == Intent.schedule.value:
+        scheduler_task.run()
+    else:
+        cancel_task.run()
