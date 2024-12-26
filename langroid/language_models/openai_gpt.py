@@ -67,6 +67,7 @@ if "OLLAMA_HOST" in os.environ:
 else:
     OLLAMA_BASE_URL = "http://localhost:11434/v1"
 
+DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai"
 GLHF_BASE_URL = "https://glhf.chat/api/openai/v1"
@@ -75,6 +76,10 @@ DUMMY_API_KEY = "xxx"
 
 VLLM_API_KEY = os.environ.get("VLLM_API_KEY", DUMMY_API_KEY)
 LLAMACPP_API_KEY = os.environ.get("LLAMA_API_KEY", DUMMY_API_KEY)
+
+
+class DeepSeekModel(str, Enum):
+    DEEPSEEK = "deepseek/deepseek-chat"
 
 
 class AnthropicModel(str, Enum):
@@ -130,6 +135,11 @@ _context_length: Dict[str, int] = {
     AnthropicModel.CLAUDE_3_OPUS: 200_000,
     AnthropicModel.CLAUDE_3_SONNET: 200_000,
     AnthropicModel.CLAUDE_3_HAIKU: 200_000,
+    DeepSeekModel.DEEPSEEK: 64_000,
+    GeminiModel.GEMINI_2_FLASH: 1_000_000,
+    GeminiModel.GEMINI_1_5_FLASH: 1_000_000,
+    GeminiModel.GEMINI_1_5_FLASH_8B: 1_000_000,
+    GeminiModel.GEMINI_1_5_PRO: 2_000_000,
 }
 
 _cost_per_1k_tokens: Dict[str, Tuple[float, float]] = {
@@ -146,6 +156,8 @@ _cost_per_1k_tokens: Dict[str, Tuple[float, float]] = {
     AnthropicModel.CLAUDE_3_OPUS: (0.015, 0.075),
     AnthropicModel.CLAUDE_3_SONNET: (0.003, 0.015),
     AnthropicModel.CLAUDE_3_HAIKU: (0.00025, 0.00125),
+    DeepSeekModel.DEEPSEEK: (0.00014, 0.00028),
+    # Gemini models have complex pricing based on input-len
 }
 
 
@@ -444,6 +456,8 @@ class OpenAIGPT(LanguageModel):
         config = config.copy()
         super().__init__(config)
         self.config: OpenAIGPTConfig = config
+        # save original model name such as `provider/model` before
+        # we strip out the `provider`
         self.chat_model_orig = self.config.chat_model
 
         # Run the first time the model is used
@@ -569,6 +583,7 @@ class OpenAIGPT(LanguageModel):
         self.is_groq = self.config.chat_model.startswith("groq/")
         self.is_cerebras = self.config.chat_model.startswith("cerebras/")
         self.is_gemini = self.is_gemini_model()
+        self.is_deepseek = self.is_deepseek_model()
         self.is_glhf = self.config.chat_model.startswith("glhf/")
         self.is_openrouter = self.config.chat_model.startswith("openrouter/")
 
@@ -609,6 +624,10 @@ class OpenAIGPT(LanguageModel):
                 )
                 self.api_key = os.getenv("OPENROUTER_API_KEY", DUMMY_API_KEY)
                 self.api_base = OPENROUTER_BASE_URL
+            elif self.is_deepseek:
+                self.config.chat_model = self.config.chat_model.replace("deepseek/", "")
+                self.api_base = DEEPSEEK_BASE_URL
+                self.api_key = os.getenv("DEEPSEEK_API_KEY", DUMMY_API_KEY)
 
             self.client = OpenAI(
                 api_key=self.api_key,
@@ -699,6 +718,13 @@ class OpenAIGPT(LanguageModel):
             "gemini/"
         )
 
+    def is_deepseek_model(self) -> bool:
+        deepseek_models = [e.value for e in DeepSeekModel]
+        return (
+            self.chat_model_orig in deepseek_models
+            or self.chat_model_orig.startswith("deepseek/")
+        )
+
     def requires_first_user_message(self) -> bool:
         """
         Does the chat_model require a non-empty first user message?
@@ -711,7 +737,7 @@ class OpenAIGPT(LanguageModel):
         """
         List of params that are not supported by the current model
         """
-        match self.config.chat_model:
+        match self.chat_model_orig:
             case OpenAIChatModel.O1_MINI | OpenAIChatModel.O1_PREVIEW:
                 return ["temperature", "stream"]
             case _:
@@ -764,7 +790,7 @@ class OpenAIGPT(LanguageModel):
         models/endpoints.
         Get it from the dict, otherwise fail-over to general method
         """
-        return _cost_per_1k_tokens.get(self.config.chat_model, super().chat_cost())
+        return _cost_per_1k_tokens.get(self.chat_model_orig, super().chat_cost())
 
     def set_stream(self, stream: bool) -> bool:
         """Enable or disable streaming output from API.
