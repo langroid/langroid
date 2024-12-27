@@ -1,6 +1,7 @@
 from langroid.agent.tools.metaphor_search_tool import MetaphorSearchTool
 from langroid.agent.tools.orchestration import DoneTool
 
+
 DEFAULT_SYSTEM_MESSAGE_ADDITION = f"""
             DO NOT REPEAT ARGUMENTS THAT HAVE BEEN PREVIOUSLY GENERATED 
             AND CAN BE SEEN IN THE DEBATE HISTORY PROVIDED. 
@@ -23,6 +24,7 @@ FEEDBACK_AGENT_SYSTEM_MESSAGE = f"""
             summarizing their performance and declaring a winner with justification.   
             """
 METAPHOR_SEARCH_AGENT_SYSTEM_MESSAGE_TEMPLATE = """
+            There are 2 STEPs. Your Goal is to execute both of them. 
             STEP 1:  Run MetaphorSearchTool
 
             Use the TOOL {metaphor_tool_name} to search the web for 5 references for Pro: {pro_message}
@@ -35,7 +37,8 @@ METAPHOR_SEARCH_AGENT_SYSTEM_MESSAGE_TEMPLATE = """
             <your answer here>
             Here are additional references using Metaphor Search to improve your knowledge of the subject:
 
-            M1: SOURCE: https://journalofethics.ama-assn.org/article/should-artificial-intelligence-augment-medical-decision-making-case-autonomy-algorithm/2018-09
+            M1: SOURCE: https://journalofethics.ama-assn.org/article/should-artificial-intelligence-augment-
+            medical-decision-making-case-autonomy-algorithm/2018-09
             EXTRACT: Discusses the ethical implications of AI in medical decision-making and 
             the concept of an autonomy algorithm.
             SUMMARY: This article explores the ethical considerations of integrating AI into medical decision-making 
@@ -50,9 +53,9 @@ METAPHOR_SEARCH_AGENT_SYSTEM_MESSAGE_TEMPLATE = """
 
             STEP 2: Argue Pro and Con Cases
             As an expert debater, your goal is to eloquently argue for both the Pro and Con cases
-            using the web-search sources generated in Step 1.
+            using the references from web-search SOURCES generated in Step 1 and properly cite the Sources in BRACKETS 
+            (e.g., [SOURCE])
             Write at least 5 sentences for each side.
-            Use references from Step 2, properly cited in BRACKETS (e.g., [SOURCE]).
 
             ENSURE BOTH STEP 1 and 2 are completed. 
             After all STEPs are completed, use the `{done_tool_name}` tool to end the session   

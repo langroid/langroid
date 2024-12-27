@@ -4,6 +4,7 @@ from langroid.utils.logging import setup_logger
 from models import SystemMessages
 from typing import List, Tuple, Optional, Literal
 
+DEFAULT_TURN_COUNT = 2
 
 # set info logger
 logger = setup_logger(__name__, level=logging.INFO, terminal=True)
@@ -20,15 +21,19 @@ def extract_topics(system_messages: SystemMessages) -> List[Tuple[str, str, str]
             with `pro_` and `con_` topic keys.
 
     Returns:
-        List[Tuple[str, str, str]]: A list of tuples, where each tuple contains:
+        List[Tuple[str, str, str]]: A list of tuples,
+        where each tuple contains:
             - topic_name (str): The name of the debate topic.
             - pro_key (str): The key for the pro side of the debate.
             - con_key (str): The key for the con side of the debate.
     """
     topics: List[Tuple[str, str, str]] = []
     for key, message in system_messages.messages.items():
-        if key.startswith("pro_"):  # Process only "pro_" keys to avoid duplicates
-            con_key = key.replace("pro_", "con_", 1)  # Match "con_" dynamically
+        # Process only "pro_" keys to avoid duplicates
+        if key.startswith("pro_"):
+            con_key = key.replace("pro_",
+                                  "con_",
+                                  1)  # Match "con_" dynamically
             if con_key in system_messages.messages:  # Ensure "con_" exists
                 topics.append((message.topic, key, con_key))
     return topics
@@ -36,20 +41,21 @@ def extract_topics(system_messages: SystemMessages) -> List[Tuple[str, str, str]
 
 def select_model(config_agent_name: str) -> str:
     """
-    Prompt the user to select an OpenAI or Gemini model for the specified agent.
+    Prompt the user to select an OpenAI or Gemini model
+    for the specified agent.
 
-    This function prompts the user to select an option from  a list of available models.
+    This function prompts the user to select an option from
+    a list of available models.
     The user's input corresponds to a predefined choice, which is
     then returned as a string representing the selected option.
 
     Args:
-        config_agent_name (str): The name of the agent being configured, used
-                                 in the prompt to personalize the message.
+        config_agent_name (str): The name of the agent being configured,
+        used in the prompt to personalize the message.
 
     Returns:
         str: The user's selected option as a string, corresponding to one of the
              predefined model choices (e.g., "1", "2", ..., "10").
-
     """
     return Prompt.ask(
         f"Select a Model for {config_agent_name}:\n"
@@ -120,7 +126,8 @@ def select_side(topic_name: str) -> Literal["pro", "con"]:
         Literal["pro", "con"]: The selected debate side.
     """
     side = Prompt.ask(
-        f"Which side would you like to debate on?\n1. Pro-{topic_name}\n2. Con-{topic_name}",
+        f"Which side would you like to debate on?\n1. Pro-{topic_name}\n2. "
+        f"Con-{topic_name}",
         choices=["1", "2"],
         default="1",
     )
@@ -204,4 +211,11 @@ def is_same_llm_for_all_agents() -> bool:
     )
 
 
-
+def select_max_debate_turns() -> int:
+    # Prompt for number of debate turns
+    while True:
+        max_turns = Prompt.ask(f"How many turns should the debate continue for?", default=str(DEFAULT_TURN_COUNT))
+        try:
+            return int(max_turns)
+        except ValueError:
+            return DEFAULT_TURN_COUNT

@@ -1,10 +1,8 @@
 import typer
-
 import logging
 
-from langroid.agent.tools import AgentDoneTool
-from rich.prompt import Prompt, Confirm
-from typing import List, Tuple, Optional, Literal, Any
+from rich.prompt import Prompt
+from typing import List, Any
 
 import langroid as lr
 from langroid.language_models import OpenAIGPTConfig
@@ -12,7 +10,6 @@ from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
 from langroid.agent.tools.metaphor_search_tool import MetaphorSearchTool
 from langroid.utils.logging import setup_logger
-from langroid.utils.configuration import set_global
 from langroid.agent.tools.orchestration import DoneTool
 from langroid.agent.tools.orchestration import AgentDoneTool
 from langroid import ChatDocument, Entity
@@ -24,17 +21,15 @@ from system_messages import (
     FEEDBACK_AGENT_SYSTEM_MESSAGE,
     generate_metaphor_search_agent_system_message,
 )
-from utils import (  # Import from utils.py
+# Import from utils.py
+from utils import (
     select_model,
-    select_debate_topic,
-    select_side,
     select_topic_and_setup_side,
     is_llm_delegate,
     is_metaphor_search_key_set,
     is_same_llm_for_all_agents,
+    select_max_debate_turns,
 )
-
-DEFAULT_TURN_COUNT = 4
 
 
 class MetaphorSearchChatAgent(ChatAgent):
@@ -56,10 +51,13 @@ logger.info("Starting multi-agent-debate")
 
 
 def parse_and_format_message_history(message_history: List[Any]) -> str:
-    """Parses and formats message history to exclude system messages and map roles to Pro/Con.
+    """
+    Parses and formats message history to exclude system messages
+    and map roles to Pro/Con.
 
     Args:
-        message_history (List[Any]): The full message history containing system, Pro, and Con messages.
+        message_history (List[Any]): The full message history
+        containing system, Pro, and Con messages.
 
     Returns:
         str: A formatted string with annotated Pro/Con messages.
@@ -126,14 +124,16 @@ def run_debate() -> None:
 
     same_llm: bool = is_same_llm_for_all_agents()
     llm_delegate: bool = is_llm_delegate()
+    max_turns: int = select_max_debate_turns()
 
     # Get base LLM configuration
     if same_llm:
 
-        shared_agent_config: OpenAIGPTConfig = get_base_llm_config(select_model("main LLM"))
+        shared_agent_config: OpenAIGPTConfig = get_base_llm_config(
+                                                select_model("main LLM"))
         pro_agent_config = con_agent_config = shared_agent_config
 
-        # Create feedback_agent_config by modifying the temperature of shared_agent_config
+        # Create feedback_agent_config by modifying shared_agent_config
         feedback_agent_config: OpenAIGPTConfig = OpenAIGPTConfig(
             chat_model=shared_agent_config.chat_model,
             min_output_tokens=shared_agent_config.min_output_tokens,
@@ -145,21 +145,15 @@ def run_debate() -> None:
     else:
         pro_agent_config: OpenAIGPTConfig = get_base_llm_config(select_model("for Pro Agent"))
         con_agent_config: OpenAIGPTConfig = get_base_llm_config(select_model("for Con Agent"))
-        feedback_agent_config: OpenAIGPTConfig = get_base_llm_config(select_model("feedback"), temperature=0.2)
+        feedback_agent_config: OpenAIGPTConfig = get_base_llm_config(select_model("feedback"),temperature=0.2)
         metaphor_search_agent_config = feedback_agent_config
 
     system_messages: SystemMessages = load_system_messages("examples/multi-agent-debate/system_messages.json")
     topic_name, pro_key, con_key, side = select_topic_and_setup_side(system_messages)
 
-    # Prompt for number of debate turns
-    max_turns: int = int(
-        Prompt.ask(f"How many turns should the debate continue for? (Default is {DEFAULT_TURN_COUNT})",
-                   default=DEFAULT_TURN_COUNT)
-    )
-
     # Generate the system message
-    metaphor_search_agent_system_message = generate_metaphor_search_agent_system_message(system_messages, pro_key,
-                                                                                         con_key)
+    metaphor_search_agent_system_message = (generate_metaphor_search_agent_system_message(
+                                            system_messages, pro_key, con_key))
 
     pro_agent = create_chat_agent("Pro",
                                   pro_agent_config,
@@ -219,7 +213,6 @@ def run_debate() -> None:
     last_agent = ai_agent if max_turns % 2 == 0 else user_agent
 
     # Generate feedback summary and declare a winner using feedback agent
-
     if not last_agent.message_history:
         logger.warning("No agent message history found for the last agent")
 
@@ -228,16 +221,8 @@ def run_debate() -> None:
     feedback_task.run(formatted_history)  # Pass formatted history to the feedback agent
 
     metaphor_search: bool = is_metaphor_search_key_set()
+
     if metaphor_search:
-
-        def handle_message_fallback(
-                self, msg: str | ChatDocument
-        ) -> AgentDoneTool | None:
-            """Handle scenario where LLM did not generate any Tool"""
-            if isinstance(msg, ChatDocument) and msg.metadata.sender == Entity.LLM:
-                return AgentDoneTool(content="done")
-            return None
-
         metaphor_search_task = Task(metaphor_search_agent, interactive=False)
         metaphor_search_agent.enable_message(MetaphorSearchTool)
         metaphor_search_agent.enable_message(DoneTool)
