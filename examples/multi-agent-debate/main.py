@@ -1,5 +1,5 @@
 import typer
-import json
+
 import logging
 from rich.prompt import Prompt, Confirm
 from typing import List, Tuple, Optional, Literal, Any
@@ -14,62 +14,22 @@ from langroid.utils.configuration import set_global
 from langroid.agent.tools.orchestration import DoneTool
 
 from config import get_base_llm_config, get_global_settings
-from models import SystemMessages, Message
+from models import SystemMessages, load_system_messages
+from system_messages import (
+    DEFAULT_SYSTEM_MESSAGE_ADDITION,
+    FEEDBACK_AGENT_SYSTEM_MESSAGE,
+    generate_metaphor_search_agent_system_message,
+)
+from utils import (  # Import from utils.py
+    select_model,
+    select_debate_topic,
+    select_side,
+    select_topic_and_setup_side,
+    is_llm_delegate,
+    is_metaphor_search_key_set,
+    is_same_llm_for_all_agents,
+)
 
-DEFAULT_SYSTEM_MESSAGE_ADDITION = f"""
-            DO NOT REPEAT ARGUMENTS THAT HAVE BEEN PREVIOUSLY GENERATED 
-            AND CAN BE SEEN IN THE DEBATE HISTORY PROVIDED. 
-            """
-FEEDBACK_AGENT_SYSTEM_MESSAGE = f"""  
-            STEP 1: Provide Thorough Debate Feedback
-            You are an expert and experienced judge specializing in Lincoln-Douglas style debates. 
-            Your goal is to evaluate the debate thoroughly based on the following criteria:
-            1. Clash of Values: Assess how well each side upholds their stated value (e.g., justice, morality) 
-               and how effectively they compare and prioritize values.
-            2. Argumentation: Evaluate the clarity, organization, and logical soundness of each side's case structure, 
-               contentions, and supporting evidence.
-            3. Cross-Examination: Judge the effectiveness of questioning and answering during cross-examination.
-            4. Rebuttals: Analyze how well each side refutes their opponent's arguments.
-            5. Persuasion: Assess communication quality, tone, rhetorical effectiveness, and emotional/ethical appeals.
-            6. Technical Execution: Identify if major arguments were addressed or dropped and check consistency.
-            7. Debate Etiquette: Evaluate professionalism, respect, and demeanor.
-            8. Final Focus: Judge the strength of closing speeches, how well they summarize the case, 
-            and justify a winner.
-            Provide constructive feedback for each debater, 
-            summarizing their performance and declaring a winner with justification.   
-            """
-METAPHOR_SEARCH_AGENT_SYSTEM_MESSAGE_TEMPLATE = """
-            STEP 1:  Run MetaphorSearchTool
-            
-            Use the TOOL {metaphor_tool_name} to search the web for 5 references for Pro: {pro_message}
-            and Con: {con_message}
-            Be very CONCISE in your responses, use 5-7 sentences. 
-            show me the SOURCE(s) and EXTRACT(s) and summary
-            in this format:
-        
-            <your answer here>
-            Here are additional references using Metaphor Search to improve your knowledge of the subject:
-            
-            M1: SOURCE: https://journalofethics.ama-assn.org/article/should-artificial-intelligence-augment-medical-decision-making-case-autonomy-algorithm/2018-09
-            EXTRACT: Discusses the ethical implications of AI in medical decision-making and the concept of an autonomy algorithm.
-            SUMMARY: This article explores the ethical considerations of integrating AI into medical decision-making 
-                     processes, emphasizing the need for autonomy and ethical oversight.
-        
-            M2: SOURCE: ...
-            EXTRACT: ...
-            SUMMARY:
-        
-            DO NOT MAKE UP YOUR OWN SOURCES; ONLY USE SOURCES YOU FIND FROM A WEB SEARCH. 
-            ENSURE STEP 2 IS COMPLETED BEFORE STARTING STEP 3
-            
-            STEP 3: Argue Pro and Con Cases
-            As an expert debater, your goal is to eloquently argue for both the Pro and Con cases using the web-search sources generated in Step 2.
-            Write at least 10 sentences for each side.
-            Use references from Step 2, properly cited in BRACKETS (e.g., [SOURCE]).
-           
-            ENSURE BOTH STEP 1 and 2 are completed. 
-            After all STEPs are completed, use the `{done_tool_name}` tool to end the session   
-            """
 
 DEFAULT_TURN_COUNT = 4
 
@@ -79,246 +39,6 @@ app = typer.Typer()
 # set info logger
 logger = setup_logger(__name__, level=logging.INFO, terminal=True)
 logger.info("Starting multi-agent-debate")
-
-
-def load_system_messages(file_path: str) -> SystemMessages:
-    """Load and validate system messages from a JSON file.
-
-    Reads the JSON file containing system messages, maps each entry to a
-    `Message` object, and wraps the result in a `SystemMessages` object.
-
-    Args:
-        file_path (str): The path to the JSON file containing system messages.
-
-    Returns:
-        SystemMessages: A `SystemMessages` object containing validated messages.
-
-    Raises:
-        IOError: If the file cannot be read or found.
-        json.JSONDecodeError: If the JSON file is not properly formatted.
-        Exception: For any other unexpected errors during processing.
-    """
-    try:
-        with open(file_path, "r", encoding="utf-8") as f:
-            data: Any = json.load(f)
-        # Map dictionaries to Message objects
-        messages = {key: Message(**value) for key, value in data.items()}
-        return SystemMessages(messages=messages)
-    except FileNotFoundError as e:
-        logger.error(f"File not found: {file_path}")
-        raise IOError(f"Could not find the file: {file_path}") from e
-    except json.JSONDecodeError as e:
-        logger.error(f"Error decoding JSON file: {file_path}")
-        raise json.JSONDecodeError(
-            f"Invalid JSON format in file: {file_path}", e.doc, e.pos
-        ) from e
-    except Exception as e:
-        logger.error(f"Unexpected error loading system messages: {e}")
-        raise
-
-
-def generate_metaphor_search_agent_system_message(system_messages, pro_key, con_key):
-    return METAPHOR_SEARCH_AGENT_SYSTEM_MESSAGE_TEMPLATE.format(
-        metaphor_tool_name=MetaphorSearchTool.name(),
-        pro_message=system_messages.messages[pro_key].message,
-        con_message=system_messages.messages[con_key].message,
-        done_tool_name=DoneTool.name()
-    )
-
-
-def extract_topics(system_messages: SystemMessages) -> List[Tuple[str, str, str]]:
-    """Extract unique debate topics from the SystemMessages object.
-
-    Processes the `SystemMessages` object to identify debate topics by pairing
-    `pro_` and `con_` keys. Ensures each topic is represented only once.
-
-    Args:
-        system_messages (SystemMessages): The object containing system messages
-            with `pro_` and `con_` topic keys.
-
-    Returns:
-        List[Tuple[str, str, str]]: A list of tuples, where each tuple contains:
-            - topic_name (str): The name of the debate topic.
-            - pro_key (str): The key for the pro side of the debate.
-            - con_key (str): The key for the con side of the debate.
-    """
-    topics: List[Tuple[str, str, str]] = []
-    for key, message in system_messages.messages.items():
-        if key.startswith("pro_"):  # Process only "pro_" keys to avoid duplicates
-            con_key = key.replace("pro_", "con_", 1)  # Match "con_" dynamically
-            if con_key in system_messages.messages:  # Ensure "con_" exists
-                topics.append((message.topic, key, con_key))
-    return topics
-
-
-def select_model(config_agent_name: str) -> str:
-    """
-    Prompt the user to select an OpenAI or Gemini model for the specified agent.
-
-    This function prompts the user to select an option from  a list of available models.
-    The user's input corresponds to a predefined choice, which is
-    then returned as a string representing the selected option.
-
-    Args:
-        config_agent_name (str): The name of the agent being configured, used
-                                 in the prompt to personalize the message.
-
-    Returns:
-        str: The user's selected option as a string, corresponding to one of the
-             predefined model choices (e.g., "1", "2", ..., "10").
-
-    """
-    return Prompt.ask(
-        f"Select a Model for {config_agent_name}:\n"
-        "1: gpt-4o\n"
-        "2: gpt-4\n"
-        "3: gpt-4o-mini\n"
-        "4: gpt-4-turbo\n"
-        "5: gpt-4-32k\n"
-        "6: gpt-3.5-turbo-1106\n"
-        "7: Mistral: mistral:7b-instruct-v0.2-q8_0a\n"
-        "8: Gemini: gemini-2.0-flash\n"
-        "8: Gemini: gemini-1.5-flash\n"
-        "9: Gemini: gemini-1.5-flash-8b\n"
-        "10: Gemini: gemini-1.5-pro\n",
-        choices=["1", "2", "3", "4", "5", "6", "7", "8", "9", "10"],
-        default="1",
-    )
-
-
-def select_debate_topic(system_messages: SystemMessages) -> Optional[tuple]:
-    """Prompt the user to select a debate topic from SystemMessages.
-
-    Dynamically loads debate topics from the SystemMessages object, displays
-    the options to the user, and prompts them to select a topic.
-
-    Args:
-        system_messages (SystemMessages): The object containing debate topics.
-
-    Returns:
-        Optional[tuple]: A tuple containing:
-            - topic_name (str): The selected topic's name.
-            - pro_key (str): The key for the pro side of the debate.
-            - con_key (str): The key for the con side of the debate.
-            Returns None if no topics are available or an error occurs.
-    """
-    topics = extract_topics(system_messages)
-
-    if not topics:
-        logger.error("No topics found in the JSON file.")
-        return None
-
-    # Prepare topic choices for user selection
-    topic_choices = "\n".join(
-        [f"{i + 1}. {topic[0]}" for i, topic in enumerate(topics)]
-    )
-    user_input = Prompt.ask(
-        f"Select a debate topic:\n{topic_choices}",
-        choices=[str(i + 1) for i in range(len(topics))],
-        default="1",
-    )
-    topic_index = int(user_input) - 1
-
-    selected_topic = topics[topic_index]
-    logger.info(f"Selected topic: {selected_topic[0]}")
-    return selected_topic
-
-
-def select_side(topic_name: str) -> Literal["pro", "con"]:
-    """Prompt the user to select their side in the debate.
-
-    Presents the user with a choice to debate on either the pro or con side
-    of the given topic.
-
-    Args:
-        topic_name (str): The name of the debate topic.
-
-    Returns:
-        Literal["pro", "con"]: The selected debate side.
-    """
-    side = Prompt.ask(
-        f"Which side would you like to debate on?\n1. Pro-{topic_name}\n2. Con-{topic_name}",
-        choices=["1", "2"],
-        default="1",
-    )
-    return "pro" if side == "1" else "con"
-
-
-def select_topic_and_setup_side(system_messages: SystemMessages) -> Tuple[str, str, str, str]:
-    """Prompt the user to select a debate topic and sets up the respective side.
-
-    This function handles the user interaction for selecting a debate topic and the side
-    (Pro or Con) they want to argue. It validates that a topic is selected and raises an
-    exception if the topic is not available.
-
-    Args:
-        system_messages (SystemMessages): The object containing system messages with respective
-                                          debate topics.
-
-    Returns:
-        Tuple[str, str, str, str]: A tuple containing:
-            - topic_name (str): The name of the selected debate topic.
-            - pro_key (str): The key for the Pro side of the selected topic.
-            - con_key (str): The key for the Con side of the selected topic.
-            - side (str): The user's selected side, either "pro" or "con".
-
-    Raises:
-        ValueError: If no topic is selected or no topics are available in the provided
-                    `system_messages`.
-    """
-    selected_topic_tuple = select_debate_topic(system_messages)
-    if not selected_topic_tuple:
-        logger.error("No topic selected. Exiting.")
-        raise ValueError("No topic selected.")
-
-    topic_name, pro_key, con_key = selected_topic_tuple
-    side = select_side(topic_name)
-    return topic_name, pro_key, con_key, side
-
-
-def is_llm_delegate() -> bool:
-    """Prompt the user to decide on LLM delegation.
-
-    Asks the user whether the LLM should autonomously continue the debate
-    without requiring user input.
-
-    Returns:
-        bool: True if the user chooses LLM delegation, otherwise return False.
-    """
-    return Confirm.ask(
-        "Should the Pro and Con agents debate autonomously?",
-        default=False,
-    )
-
-
-def is_metaphor_search_key_set() -> bool:
-    """Prompt the user to decide on LLM delegation.
-
-    Asks the user whether the LLM should autonomously continue the debate
-    without requiring user input.
-
-    Returns:
-        bool: True if the user chooses LLM delegation, otherwise return False.
-    """
-    return Confirm.ask(
-        "Do you have the Metaphor Search API Key set, and should I search to provide pro and con summaries for your topic?",
-        default=False,
-    )
-
-
-def is_same_llm_for_all_agents() -> bool:
-    """Prompt the user to decide if same LLM should be used for all agents.
-
-       Asks the user whether the same LLM should be configured for all agents.
-
-       Returns:
-           bool: True if the user chooses same LLM for all agents, otherwise return False.
-       """
-    # Ask the user if they want to use the same LLM configuration for all agents
-    return Confirm.ask(
-        "Do you want to use the same LLM for all agents?",
-        default=True,
-    )
 
 
 def parse_and_format_message_history(message_history: List[Any]) -> str:
@@ -392,7 +112,6 @@ def run_debate() -> None:
 
     same_llm: bool = is_same_llm_for_all_agents()
     llm_delegate: bool = is_llm_delegate()
-    metaphor_search: bool = is_metaphor_search_key_set()
 
     # Get base LLM configuration
     if same_llm:
@@ -483,15 +202,16 @@ def run_debate() -> None:
     if not last_agent.message_history:
         logger.warning("No agent message history found for the last agent")
 
-    feedback_agent_task = Task(feedback_agent, interactive=False)
+    feedback_task = Task(feedback_agent, interactive=False, single_round=True)
     formatted_history = parse_and_format_message_history(last_agent.message_history)
-    feedback_agent_task.run(formatted_history)  # Pass formatted history to the feedback agent
+    feedback_task.run(formatted_history)  # Pass formatted history to the feedback agent
 
+    metaphor_search: bool = is_metaphor_search_key_set()
     if metaphor_search:
-        metaphor_search_agent_task = Task(metaphor_search_agent, interactive=False)
+        metaphor_search_task = Task(metaphor_search_agent, interactive=False)
         metaphor_search_agent.enable_message(MetaphorSearchTool)
         metaphor_search_agent.enable_message(DoneTool)
-        metaphor_search_agent_task.run("run the search")
+        metaphor_search_task.run("run the search")
 
 
 @app.command()
