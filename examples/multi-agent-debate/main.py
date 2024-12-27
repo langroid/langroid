@@ -1,6 +1,8 @@
 import typer
 
 import logging
+
+from langroid.agent.tools import AgentDoneTool
 from rich.prompt import Prompt, Confirm
 from typing import List, Tuple, Optional, Literal, Any
 
@@ -12,6 +14,8 @@ from langroid.agent.tools.metaphor_search_tool import MetaphorSearchTool
 from langroid.utils.logging import setup_logger
 from langroid.utils.configuration import set_global
 from langroid.agent.tools.orchestration import DoneTool
+from langroid.agent.tools.orchestration import AgentDoneTool
+from langroid import ChatDocument, Entity
 
 from config import get_base_llm_config, get_global_settings
 from models import SystemMessages, load_system_messages
@@ -30,8 +34,18 @@ from utils import (  # Import from utils.py
     is_same_llm_for_all_agents,
 )
 
-
 DEFAULT_TURN_COUNT = 4
+
+
+class MetaphorSearchChatAgent(ChatAgent):
+    def handle_message_fallback(
+            self, msg: str | ChatDocument
+    ) -> AgentDoneTool | None:
+        """Handle scenario where LLM did not generate any Tool"""
+        if isinstance(msg, ChatDocument) and msg.metadata.sender == Entity.LLM:
+            return AgentDoneTool(content="done")
+        return None
+
 
 # Initialize typer application
 app = typer.Typer()
@@ -127,10 +141,12 @@ def run_debate() -> None:
             temperature=0.2,  # Override temperature
             seed=shared_agent_config.seed,
         )
+        metaphor_search_agent_config = feedback_agent_config
     else:
         pro_agent_config: OpenAIGPTConfig = get_base_llm_config(select_model("for Pro Agent"))
         con_agent_config: OpenAIGPTConfig = get_base_llm_config(select_model("for Con Agent"))
         feedback_agent_config: OpenAIGPTConfig = get_base_llm_config(select_model("feedback"), temperature=0.2)
+        metaphor_search_agent_config = feedback_agent_config
 
     system_messages: SystemMessages = load_system_messages("examples/multi-agent-debate/system_messages.json")
     topic_name, pro_key, con_key, side = select_topic_and_setup_side(system_messages)
@@ -156,9 +172,14 @@ def run_debate() -> None:
     feedback_agent = create_chat_agent("Feedback",
                                        feedback_agent_config,
                                        FEEDBACK_AGENT_SYSTEM_MESSAGE)
-    metaphor_search_agent = create_chat_agent("MetaphorSearch",
-                                              feedback_agent_config,
-                                              metaphor_search_agent_system_message)
+    metaphor_search_agent = MetaphorSearchChatAgent(  # Use the subclass here
+        ChatAgentConfig(
+            llm=metaphor_search_agent_config,
+            name="MetaphorSearch",
+            system_message=metaphor_search_agent_system_message,
+        )
+    )
+
     logger.info("Pro, Con, feedback, and metaphor_search agents created.")
 
     # Determine user's side and assign user_agent and ai_agent based on user selection
@@ -208,6 +229,15 @@ def run_debate() -> None:
 
     metaphor_search: bool = is_metaphor_search_key_set()
     if metaphor_search:
+
+        def handle_message_fallback(
+                self, msg: str | ChatDocument
+        ) -> AgentDoneTool | None:
+            """Handle scenario where LLM did not generate any Tool"""
+            if isinstance(msg, ChatDocument) and msg.metadata.sender == Entity.LLM:
+                return AgentDoneTool(content="done")
+            return None
+
         metaphor_search_task = Task(metaphor_search_agent, interactive=False)
         metaphor_search_agent.enable_message(MetaphorSearchTool)
         metaphor_search_agent.enable_message(DoneTool)
