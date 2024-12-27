@@ -36,9 +36,10 @@ Features
           5: gpt-4-32k
           6: gpt-3.5-turbo-1106 
           7: Mistral: mistral:7b-instruct-v0.2-q8_0a
-          8: Gemini:gemini-1.5-flash
-          9: Gemini:gemini-1.5-flash-8b
-          10: Gemini:gemini-1.5-pro
+          8: Gemini:gemini-2.0-flash
+          9: Gemini:gemini-1.5-flash
+          10: Gemini:gemini-1.5-flash-8b
+          11: Gemini:gemini-1.5-pro
 - Feedback Mechanism:
   - Provides structured feedback on debate performance based on key criteria.
 - Interactive or Autonomous Mode:
@@ -51,7 +52,9 @@ File Structure
 - model.py: Pydantic model for system_messages.json
 - system_messages.json: Topic Titles and system_messages for pro and con agents. You can add more topics and their
 respective pro and con system messages here. The system_messages has a statement: 
-"Limit responses to MAXIMUM 3 points expressed as single sentences." Please change or delete it for a realistic debate. 
+"Limit responses to MAXIMUM 2 points expressed as single sentences." Please change or delete it for a realistic debate. 
+- system_message.py: Global system messages
+- utils.py: User Prompts and other helper functions
 - generation_config_models.py: pydantic model for generation_config.json
 - generation_config.json: LLM generation parameters
 The system dynamically updates user selection with the topics from this file. 
@@ -90,7 +93,9 @@ Interaction
 4. Choose your side (Pro or Con).
 5. Engage in a debate by providing arguments and receiving responses from agents.
 6. Request feedback at any time by typing `f`.
-7. End the debate manually by typing `done`.
+7. Decide if you want the Metaphor Search to run to find Topic relevant web links
+   and summarize them. 
+8. End the debate manually by typing `done`.
 
 Feedback Criteria
 -----------------
