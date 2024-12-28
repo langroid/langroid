@@ -11,7 +11,6 @@ from langroid.agent.task import Task
 from langroid.agent.tools.metaphor_search_tool import MetaphorSearchTool
 from langroid.utils.logging import setup_logger
 from langroid.agent.tools.orchestration import DoneTool
-from langroid.agent.tools.orchestration import AgentDoneTool
 from langroid import ChatDocument, Entity
 
 from config import get_base_llm_config, get_global_settings
@@ -35,10 +34,14 @@ from utils import (
 class MetaphorSearchChatAgent(ChatAgent):
     def handle_message_fallback(
             self, msg: str | ChatDocument
-    ) -> AgentDoneTool | None:
+    ) -> str | None:
         """Handle scenario where LLM did not generate any Tool"""
         if isinstance(msg, ChatDocument) and msg.metadata.sender == Entity.LLM:
-            return AgentDoneTool(content="done")
+            return f"""
+            Have you presented pro and con arguments based on 
+            your search results? If so, use the TOOL `{DoneTool.name()}` to indicate you're finished. 
+            Otherwise, argue both sides and then send the `{DoneTool.name()}`
+            """
         return None
 
 
