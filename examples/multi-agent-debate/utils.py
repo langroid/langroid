@@ -31,9 +31,7 @@ def extract_topics(system_messages: SystemMessages) -> List[Tuple[str, str, str]
     for key, message in system_messages.messages.items():
         # Process only "pro_" keys to avoid duplicates
         if key.startswith("pro_"):
-            con_key = key.replace("pro_",
-                                  "con_",
-                                  1)  # Match "con_" dynamically
+            con_key = key.replace("pro_", "con_", 1)  # Match "con_" dynamically
             if con_key in system_messages.messages:  # Ensure "con_" exists
                 topics.append((message.topic, key, con_key))
     return topics
@@ -134,7 +132,9 @@ def select_side(topic_name: str) -> Literal["pro", "con"]:
     return "pro" if side == "1" else "con"
 
 
-def select_topic_and_setup_side(system_messages: SystemMessages) -> Tuple[str, str, str, str]:
+def select_topic_and_setup_side(
+    system_messages: SystemMessages,
+) -> Tuple[str, str, str, str]:
     """Prompt the user to select a debate topic and sets up the respective side.
 
     This function handles the user interaction for selecting a debate topic and the side
@@ -199,11 +199,11 @@ def is_metaphor_search_key_set() -> bool:
 def is_same_llm_for_all_agents() -> bool:
     """Prompt the user to decide if same LLM should be used for all agents.
 
-       Asks the user whether the same LLM should be configured for all agents.
+    Asks the user whether the same LLM should be configured for all agents.
 
-       Returns:
-           bool: True if the user chooses same LLM for all agents, otherwise return False.
-       """
+    Returns:
+        bool: True if the user chooses same LLM for all agents, otherwise return False.
+    """
     # Ask the user if they want to use the same LLM configuration for all agents
     return Confirm.ask(
         "Do you want to use the same LLM for all agents?",
@@ -214,7 +214,10 @@ def is_same_llm_for_all_agents() -> bool:
 def select_max_debate_turns() -> int:
     # Prompt for number of debate turns
     while True:
-        max_turns = Prompt.ask(f"How many turns should the debate continue for?", default=str(DEFAULT_TURN_COUNT))
+        max_turns = Prompt.ask(
+            "How many turns should the debate continue for?",
+            default=str(DEFAULT_TURN_COUNT),
+        )
         try:
             return int(max_turns)
         except ValueError:

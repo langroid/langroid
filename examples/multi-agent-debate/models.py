@@ -1,5 +1,5 @@
 from typing import Dict
-from pydantic import BaseModel
+from langroid.pydantic_v1 import BaseModel
 import json
 import logging
 from langroid.utils.logging import setup_logger
@@ -16,6 +16,7 @@ class Message(BaseModel):
         topic (str): The topic of the message.
         message (str): The content of the message.
     """
+
     topic: str
     message: str
 
@@ -27,6 +28,7 @@ class SystemMessages(BaseModel):
         messages (Dict[str, Message]): A dictionary where the key is the message
             identifier (e.g., 'pro_ai') and the value is a `Message` object.
     """
+
     messages: Dict[str, Message]
 
 
