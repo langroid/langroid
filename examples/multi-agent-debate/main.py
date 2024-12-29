@@ -20,6 +20,7 @@ from system_messages import (
     FEEDBACK_AGENT_SYSTEM_MESSAGE,
     generate_metaphor_search_agent_system_message,
 )
+
 # Import from utils.py
 from utils import (
     select_model,
@@ -32,9 +33,7 @@ from utils import (
 
 
 class MetaphorSearchChatAgent(ChatAgent):
-    def handle_message_fallback(
-            self, msg: str | ChatDocument
-    ) -> str | None:
+    def handle_message_fallback(self, msg: str | ChatDocument) -> str | None:
         """Handle scenario where LLM did not generate any Tool"""
         if isinstance(msg, ChatDocument) and msg.metadata.sender == Entity.LLM:
             return f"""
@@ -82,20 +81,18 @@ def parse_and_format_message_history(message_history: List[Any]) -> str:
 
 
 def create_chat_agent(
-        name: str,
-        llm_config: OpenAIGPTConfig,
-        system_message: str
+    name: str, llm_config: OpenAIGPTConfig, system_message: str
 ) -> ChatAgent:
     """creates a ChatAgent with the given parameters.
 
-        Args:
-            name (str): The name of the agent.
-            llm_config (OpenAIGPTConfig): The LLM configuration for the agent.
-            system_message (str): The system message to guide the agent's LLM.
+    Args:
+        name (str): The name of the agent.
+        llm_config (OpenAIGPTConfig): The LLM configuration for the agent.
+        system_message (str): The system message to guide the agent's LLM.
 
-        Returns:
-            ChatAgent: A configured ChatAgent instance.
-        """
+    Returns:
+        ChatAgent: A configured ChatAgent instance.
+    """
     return ChatAgent(
         ChatAgentConfig(
             llm=llm_config,
@@ -131,9 +128,9 @@ def run_debate() -> None:
 
     # Get base LLM configuration
     if same_llm:
-
         shared_agent_config: OpenAIGPTConfig = get_base_llm_config(
-                                                select_model("main LLM"))
+            select_model("main LLM")
+        )
         pro_agent_config = con_agent_config = shared_agent_config
 
         # Create feedback_agent_config by modifying shared_agent_config
@@ -146,29 +143,40 @@ def run_debate() -> None:
         )
         metaphor_search_agent_config = feedback_agent_config
     else:
-        pro_agent_config: OpenAIGPTConfig = get_base_llm_config(select_model("for Pro Agent"))
-        con_agent_config: OpenAIGPTConfig = get_base_llm_config(select_model("for Con Agent"))
-        feedback_agent_config: OpenAIGPTConfig = get_base_llm_config(select_model("feedback"),temperature=0.2)
+        pro_agent_config: OpenAIGPTConfig = get_base_llm_config(
+            select_model("for Pro Agent")
+        )
+        con_agent_config: OpenAIGPTConfig = get_base_llm_config(
+            select_model("for Con Agent")
+        )
+        feedback_agent_config: OpenAIGPTConfig = get_base_llm_config(
+            select_model("feedback"), temperature=0.2
+        )
         metaphor_search_agent_config = feedback_agent_config
 
-    system_messages: SystemMessages = load_system_messages("examples/multi-agent-debate/system_messages.json")
+    system_messages: SystemMessages = load_system_messages(
+        "examples/multi-agent-debate/system_messages.json"
+    )
     topic_name, pro_key, con_key, side = select_topic_and_setup_side(system_messages)
 
     # Generate the system message
-    metaphor_search_agent_system_message = (generate_metaphor_search_agent_system_message(
-                                            system_messages, pro_key, con_key))
+    metaphor_search_agent_system_message = (
+        generate_metaphor_search_agent_system_message(system_messages, pro_key, con_key)
+    )
 
-    pro_agent = create_chat_agent("Pro",
-                                  pro_agent_config,
-                                  system_messages.messages[pro_key].message +
-                                  DEFAULT_SYSTEM_MESSAGE_ADDITION)
-    con_agent = create_chat_agent("Con",
-                                  con_agent_config,
-                                  system_messages.messages[con_key].message +
-                                  DEFAULT_SYSTEM_MESSAGE_ADDITION)
-    feedback_agent = create_chat_agent("Feedback",
-                                       feedback_agent_config,
-                                       FEEDBACK_AGENT_SYSTEM_MESSAGE)
+    pro_agent = create_chat_agent(
+        "Pro",
+        pro_agent_config,
+        system_messages.messages[pro_key].message + DEFAULT_SYSTEM_MESSAGE_ADDITION,
+    )
+    con_agent = create_chat_agent(
+        "Con",
+        con_agent_config,
+        system_messages.messages[con_key].message + DEFAULT_SYSTEM_MESSAGE_ADDITION,
+    )
+    feedback_agent = create_chat_agent(
+        "Feedback", feedback_agent_config, FEEDBACK_AGENT_SYSTEM_MESSAGE
+    )
     metaphor_search_agent = MetaphorSearchChatAgent(  # Use the subclass here
         ChatAgentConfig(
             llm=metaphor_search_agent_config,
@@ -180,7 +188,10 @@ def run_debate() -> None:
     logger.info("Pro, Con, feedback, and metaphor_search agents created.")
 
     # Determine user's side and assign user_agent and ai_agent based on user selection
-    agents = {"pro": (pro_agent, con_agent, "Pro", "Con"), "con": (con_agent, pro_agent, "Con", "Pro")}
+    agents = {
+        "pro": (pro_agent, con_agent, "Pro", "Con"),
+        "con": (con_agent, pro_agent, "Con", "Pro"),
+    }
     user_agent, ai_agent, user_side, ai_side = agents[side]
     logger.info(
         f"Starting debate on topic: {topic_name}, taking the {user_side} side. "

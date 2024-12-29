@@ -2,11 +2,11 @@ from langroid.agent.tools.metaphor_search_tool import MetaphorSearchTool
 from langroid.agent.tools.orchestration import DoneTool
 
 
-DEFAULT_SYSTEM_MESSAGE_ADDITION = f"""
+DEFAULT_SYSTEM_MESSAGE_ADDITION = """
             DO NOT REPEAT ARGUMENTS THAT HAVE BEEN PREVIOUSLY GENERATED 
             AND CAN BE SEEN IN THE DEBATE HISTORY PROVIDED. 
             """
-FEEDBACK_AGENT_SYSTEM_MESSAGE = f"""  
+FEEDBACK_AGENT_SYSTEM_MESSAGE = """  
             You are an expert and experienced judge specializing in Lincoln-Douglas style debates. 
             Your goal is to evaluate the debate thoroughly based on the following criteria:
             1. Clash of Values: Assess how well each side upholds their stated value (e.g., justice, morality) 
@@ -67,5 +67,5 @@ def generate_metaphor_search_agent_system_message(system_messages, pro_key, con_
         metaphor_tool_name=MetaphorSearchTool.name(),
         pro_message=system_messages.messages[pro_key].message,
         con_message=system_messages.messages[con_key].message,
-        done_tool_name=DoneTool.name()
+        done_tool_name=DoneTool.name(),
     )
