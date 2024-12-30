@@ -32,7 +32,7 @@ import langroid as lr
 from langroid.agent.callbacks.chainlit import add_instructions
 import langroid.language_models as lm
 from langroid import ChatDocument
-from langroid.agent.tools.metaphor_search_tool import MetaphorSearchTool
+from langroid.agent.tools.exa_search_tool import ExaSearchTool
 from langroid.utils.configuration import Settings, set_global
 
 
@@ -345,10 +345,10 @@ async def main(
     assistant_agent.enable_message(FinalAnswerTool)
     assistant_agent.enable_message(FeedbackTool, use=False, handle=True)
 
-    search_tool_handler_method = MetaphorSearchTool.name()
+    search_tool_handler_method = ExaSearchTool.name()
 
     search_agent_config = SearcherAgentConfig(
-        search_tool_class=MetaphorSearchTool,
+        search_tool_class=ExaSearchTool,
         llm=llm_config,
         vecdb=None,
         system_message=f"""

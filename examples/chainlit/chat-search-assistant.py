@@ -36,7 +36,7 @@ async def main(
     debug: bool = False,
     # e.g. ollama/mistral or local/localhost:5000/v1 default is GPT4o
     model: str = os.getenv("MODEL", ""),
-    provider: str = "metaphor",  # or "google", "ddg"
+    provider: str = "metaphor" or "exa",  # or "google", "ddg"
     nocache: bool = False,
 ):
     set_global(
@@ -88,10 +88,10 @@ async def main(
     match provider:
         case "google":
             search_tool_class = GoogleSearchTool
-        case "metaphor":
-            from langroid.agent.tools.metaphor_search_tool import MetaphorSearchTool
+        case "metaphor" | "exa":
+            from langroid.agent.tools.exa_search_tool import ExaSearchTool
 
-            search_tool_class = MetaphorSearchTool
+            search_tool_class = ExaSearchTool
         case "ddg":
             search_tool_class = DuckduckgoSearchTool
         case _:

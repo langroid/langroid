@@ -83,7 +83,7 @@ def google_search(query: str, num_results: int = 5) -> List[WebSearchResult]:
     ]
 
 
-def metaphor_search(query: str, num_results: int = 5) -> List[WebSearchResult]:
+def exa_search(query: str, num_results: int = 5) -> List[WebSearchResult]:
     """
     Method that makes an API call by Metaphor client that queries
     the top num_results links that matches the query. Returns a list
@@ -107,16 +107,16 @@ def metaphor_search(query: str, num_results: int = 5) -> List[WebSearchResult]:
         )
 
     try:
-        from metaphor_python import Metaphor
+        from exa_py import Exa
     except ImportError:
         raise ImportError(
-            "You are attempting to use the `metaphor_python` library;"
-            "To use it, please install langroid with the `metaphor` extra, e.g. "
-            "`pip install langroid[metaphor]` or `poetry add langroid[metaphor]` "
-            "(it installs the `metaphor_python` package from pypi)."
+            "You are attempting to use the `exa_py` library;"
+            "To use it, please install langroid with the `exa` extra, e.g. "
+            "`pip install langroid[exa]` or `poetry add langroid[exa]` "
+            "(it installs the `exa_py` package from pypi)."
         )
 
-    client = Metaphor(api_key=api_key)
+    client = Exa(api_key=api_key)
 
     response = client.search(
         query=query,
@@ -132,7 +132,7 @@ def metaphor_search(query: str, num_results: int = 5) -> List[WebSearchResult]:
 def duckduckgo_search(query: str, num_results: int = 5) -> List[WebSearchResult]:
     """
     Method that makes an API call by DuckDuckGo client that queries
-    the top `num_results` links that matche the query. Returns a list
+    the top `num_results` links that match the query. Returns a list
     of WebSearchResult objects.
 
     Args:
