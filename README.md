@@ -47,7 +47,7 @@ This Multi-Agent paradigm is inspired by the
 into simplifying the developer experience; 
 it does not use `Langchain`, or any other LLM framework.
 
-:fire: Read the (WIP) [overview of the langroid architecture](https://langroid.github.io/langroid/blog/2024/08/15/overview-of-langroids-multi-agent-architecture-prelim/)
+:fire: Read the (WIP) [overview of the langroid architecture](https://langroid.github.io/langroid/blog/2024/08/15/overview-of-langroids-multi-agent-architecture-prelim/) and a [quick tour of Langroid](https://langroid.github.io/langroid/tutorials/langroid-tour/)
 
 📢 Companies are using/adapting Langroid in **production**. Here is a quote:
 
