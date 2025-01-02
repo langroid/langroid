@@ -856,6 +856,15 @@ class OpenAIGPT(LanguageModel):
                 tool_deltas += event_tool_deltas
         else:
             event_text = choices[0]["text"]
+
+        finish_reason = choices[0].get("finish_reason", "")
+        if not event_text and finish_reason == "content_filter":
+            filter_names = []
+            for n, r in choices[0].get("content_filter_results", {}).items():
+                if r.get("filtered"):
+                    filter_names.append(n)
+            event_text = 'Content filtered by [' + ', '.join(filter_names) + ']'
+
         if event_text:
             completion += event_text
             sys.stdout.write(Colors().GREEN + event_text)
@@ -891,7 +900,7 @@ class OpenAIGPT(LanguageModel):
                     self.config.streamer(tool_fn_args)
 
         # show this delta in the stream
-        if choices[0].get("finish_reason", "") in [
+        if finish_reason in [
             "stop",
             "function_call",
             "tool_calls",
