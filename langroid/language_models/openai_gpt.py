@@ -859,10 +859,10 @@ class OpenAIGPT(LanguageModel):
 
         finish_reason = choices[0].get("finish_reason", "")
         if not event_text and finish_reason == "content_filter":
-            filter_names = []
-            for n, r in choices[0].get("content_filter_results", {}).items():
-                if r.get("filtered"):
-                    filter_names.append(n)
+            filter_names = [
+                n for n, r in choices[0].get("content_filter_results", {}).items()
+                    if r.get("filtered")
+            ]
             event_text = 'Content filtered by [' + ', '.join(filter_names) + ']'
 
         if event_text:
