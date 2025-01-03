@@ -856,6 +856,21 @@ class OpenAIGPT(LanguageModel):
                 tool_deltas += event_tool_deltas
         else:
             event_text = choices[0]["text"]
+
+        finish_reason = choices[0].get("finish_reason", "")
+        if not event_text and finish_reason == "content_filter":
+            filter_names = [
+                n
+                for n, r in choices[0].get("content_filter_results", {}).items()
+                if r.get("filtered")
+            ]
+            event_text = (
+                "Cannot respond due to content filters ["
+                + ", ".join(filter_names)
+                + "]"
+            )
+            logging.warning("LLM API returned content filter error: " + event_text)
+
         if event_text:
             completion += event_text
             sys.stdout.write(Colors().GREEN + event_text)
@@ -891,7 +906,7 @@ class OpenAIGPT(LanguageModel):
                     self.config.streamer(tool_fn_args)
 
         # show this delta in the stream
-        if choices[0].get("finish_reason", "") in [
+        if finish_reason in [
             "stop",
             "function_call",
             "tool_calls",
