@@ -860,10 +860,16 @@ class OpenAIGPT(LanguageModel):
         finish_reason = choices[0].get("finish_reason", "")
         if not event_text and finish_reason == "content_filter":
             filter_names = [
-                n for n, r in choices[0].get("content_filter_results", {}).items()
-                    if r.get("filtered")
+                n
+                for n, r in choices[0].get("content_filter_results", {}).items()
+                if r.get("filtered")
             ]
-            event_text = 'Content filtered by [' + ', '.join(filter_names) + ']'
+            event_text = (
+                "Cannot respond due to content filters ["
+                + ", ".join(filter_names)
+                + "]"
+            )
+            logging.warning("LLM API returned content filter error: " + event_text)
 
         if event_text:
             completion += event_text
