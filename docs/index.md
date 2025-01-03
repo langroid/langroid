@@ -30,9 +30,9 @@ Langroid allows an intuitive definition of agents, tasks and task-delegation
 among agents. There is a principled mechanism to orchestrate multi-agent 
 collaboration. Agents act as message-transformers, and take turns responding to (and
 transforming) the current message. The architecture is lightweight, transparent, 
-flexible, and allows other types of orchestration to be implemented.
-Besides Agents, Langroid also provides simple ways to directly interact with  
-LLMs and vector-stores.  
+flexible, and allows other types of orchestration to be implemented; see the (WIP) 
+[langroid architecture document](blog/posts/langroid-architecture.md).
+Besides Agents, Langroid also provides simple ways to directly interact with LLMs and vector-stores. See the Langroid [quick-tour](tutorials/langroid-tour.md).
 
 ## Highlights
 - **Agents as first-class citizens:** The `Agent` class encapsulates LLM conversation state,
