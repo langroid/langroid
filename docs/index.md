@@ -49,11 +49,10 @@ LLMs and vector-stores.
   after the agent's own responders.
 - **Modularity, Reusabilily, Loose coupling:** The `Agent` and `Task` abstractions allow users to design
   Agents with specific skills, wrap them in Tasks, and combine tasks in a flexible way.
-- **LLM Support**: Langroid supports OpenAI LLMs including GPT-3.5-Turbo,
-  GPT-4.
+- **LLM Support**: Langroid works with practically any LLM, local/open or remote/proprietary/API-based, via a variety of libraries and providers. See guides to using [local LLMs](tutorials/local-llm-setup.md) and [non-OpenAI LLMs](tutorials/non-openai-llms.md).
 - **Caching of LLM prompts, responses:** Langroid by default uses [Redis](https://redis.com/try-free/) for caching. 
   Caching with [Momento](https://www.gomomento.com/) is also supported.
-- **Vector-stores**: [Qdrant](https://qdrant.tech/) and [Chroma](https://www.trychroma.com/) are currently supported.
+- **Vector-stores**: [Qdrant](https://qdrant.tech/), [Chroma](https://www.trychroma.com/) and [LanceDB](https://www.lancedb.com/) are currently supported.
   Vector stores allow for Retrieval-Augmented-Generation (RAG).
 - **Grounding and source-citation:** Access to external documents via vector-stores
   allows for grounding and source-citation.
