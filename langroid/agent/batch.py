@@ -1,17 +1,7 @@
 import asyncio
 import copy
 import inspect
-from typing import (
-    Any,
-    Awaitable,
-    Callable,
-    Coroutine,
-    Iterable,
-    List,
-    Optional,
-    TypeVar,
-    cast,
-)
+from typing import Any, Callable, Coroutine, Iterable, List, Optional, TypeVar, cast
 
 from dotenv import load_dotenv
 
@@ -29,9 +19,6 @@ load_dotenv()
 
 T = TypeVar("T")
 U = TypeVar("U")
-
-AsyncFunc = Callable[[T], Awaitable[U]]
-SyncFunc = Callable[[T], U]
 
 
 def run_batch_task_gen(
@@ -255,7 +242,7 @@ def run_batch_agent_method(
     output_map: Callable[[ChatDocument | None], Any] = lambda x: x,
     sequential: bool = True,
     stop_on_first_result: bool = False,
-    batch_size: Optional[int] = None,  # Added parameter
+    batch_size: Optional[int] = None,
 ) -> List[Any]:
     """
     Run the `method` on copies of `agent`, async/concurrently one per
@@ -297,64 +284,75 @@ def run_batch_agent_method(
     agent_cls = type(agent)
     agent_name = agent_cfg.name
 
-    first_result = None
-    first_result_lock = asyncio.Lock()
-
-    async def _do_task(input_with_index: tuple[str | ChatDocument, int]) -> Any:
-        """Process a single task with its input and index."""
-        nonlocal first_result
-
-        input_item, original_index = input_with_index
-        agent_cfg.name = f"{agent_cfg.name}-{original_index}"
+    async def _do_task(input: str | ChatDocument, i: int) -> Any:
+        agent_cfg.name = f"{agent_cfg.name}-{i}"
         agent_i = agent_cls(agent_cfg)
         method_i = getattr(agent_i, method_name, None)
-
         if method_i is None:
             raise ValueError(f"Agent {agent_name} has no method {method_name}")
+        result = await method_i(input)
+        return output_map(result)
 
+    async def _do_all(
+        inputs: Iterable[str | ChatDocument], start_idx: int = 0
+    ) -> List[Any]:
         if stop_on_first_result:
-            async with first_result_lock:
-                if first_result is not None:
-                    return None
+            tasks = [
+                asyncio.create_task(_do_task(input, i + start_idx))
+                for i, input in enumerate(inputs)
+            ]
+            results = [None] * len(tasks)
+            try:
+                done, pending = await asyncio.wait(
+                    tasks, return_when=asyncio.FIRST_COMPLETED
+                )
+                for task in done:
+                    index = tasks.index(task)
+                    results[index] = await task
+            finally:
+                for task in pending:
+                    task.cancel()
+                await asyncio.gather(*pending, return_exceptions=True)
+            return results
+        elif sequential:
+            results = []
+            for i, input in enumerate(inputs):
+                result = await _do_task(input, i + start_idx)
+                results.append(result)
+            return results
 
-                result = await method_i(input_item)
-                processed_result = output_map(result)
+        with quiet_mode(), SuppressLoggerWarnings():
+            return await asyncio.gather(
+                *(_do_task(input, i + start_idx) for i, input in enumerate(inputs))
+            )
 
-                if processed_result is not None:
-                    # Store both result and original index
-                    first_result = (processed_result, original_index)
-                return processed_result
-        else:
-            with quiet_mode(), SuppressLoggerWarnings():
-                result = await method_i(input_item)
-                return output_map(result)
+    results: List[Any] = []
+    if batch_size is None:
+        # Process all items in one batch
+        msg = f"[bold green]Running {len(items)} copies of {agent_name}..."
+        with status(msg), SuppressLoggerWarnings():
+            results = asyncio.run(_do_all(inputs))
+    else:
+        # Process items in batches using the same batched utility as run_batch_task_gen
+        batches = batched(inputs, batch_size)
 
-    # Important: Create list of (input, index) pairs maintaining original order
-    # This ensures task 0 processes first as expected by the test
-    indexed_inputs = [(input_item, i) for i, input_item in enumerate(inputs)]
+        for batch in batches:
+            start_idx = len(results)
+            complete_str = f", {start_idx} complete" if start_idx > 0 else ""
+            msg = (
+                f"[bold green]Running {len(items)} copies of "
+                f"{agent_name}{complete_str}..."
+            )
 
-    with status(f"[bold green]Running {len(items)} copies of {agent_name}..."):
-        # Use the batch utility function with original ordering
-        results = run_batch_function(
-            function=_do_task,
-            items=indexed_inputs,
-            sequential=sequential
-            or stop_on_first_result,  # Force sequential if stop_on_first_result
-            batch_size=(
-                1 if stop_on_first_result else batch_size
-            ),  # Force batch_size=1 if stopping on first
-        )
+            if stop_on_first_result and any(results):
+                # If we already have a result and stop_on_first_result is True,
+                # pad remaining results with None
+                results.extend([None] * len(batch))
+            else:
+                with status(msg), SuppressLoggerWarnings():
+                    results.extend(asyncio.run(_do_all(batch, start_idx=start_idx)))
 
-        if stop_on_first_result:
-            # Create a list of None values
-            final_results = [None] * len(items)
-            # If we got a result, place it at its original position
-            if first_result is not None:
-                result, original_index = first_result
-                final_results[original_index] = result
-            return final_results
-
-        return results
+    return results
 
 
 def llm_response_batch(
@@ -399,85 +397,34 @@ def agent_response_batch(
     )
 
 
-async def run_all_batches(
+def run_batch_function(
     function: Callable[[T], U],
-    items: List[T],
-    sequential: bool,
-    batch_size: Optional[int],
+    items: list[T],
+    sequential: bool = True,
+    batch_size: Optional[int] = None,
 ) -> List[U]:
-    """Run a function on a list of items in batches.
-
-    Args:
-        function (Callable[[T], U]): Function to run on each item (sync or async)
-        items (List[T]): List of items to process
-        sequential (bool): If True, run tasks sequentially
-        batch_size (Optional[int]): Number of items to process in each batch
-
-    Returns:
-        List[U]: List of results
-    """
-    is_async = inspect.iscoroutinefunction(function)
-
     async def _do_task(item: T) -> U:
-        if is_async:
-            # We know it's an async function in this branch
-            async_fn = cast(AsyncFunc[T, U], function)
-            return await async_fn(item)
+        return function(item)
 
-        # We know it's a sync function in this branch
-        sync_fn = function  # type: SyncFunc[T, U]
-        loop = asyncio.get_running_loop()
-        result = await loop.run_in_executor(None, sync_fn, item)
-        return result
-
-    async def _do_all(batch: Iterable[T]) -> List[U]:
+    async def _do_all(items: Iterable[T]) -> List[U]:
         if sequential:
             results = []
-            for item in batch:
+            for item in items:
                 result = await _do_task(item)
                 results.append(result)
             return results
-        return await asyncio.gather(*(_do_task(item) for item in batch))
+
+        return await asyncio.gather(*(_do_task(item) for item in items))
 
     results: List[U] = []
 
     if batch_size is None:
-        # Single batch with all items
-        batch_results = await _do_all(items)
-        results.extend(batch_results)
+        with status(f"[bold green]Running {len(items)} tasks:"):
+            results = asyncio.run(_do_all(items))
     else:
-        # Process in multiple batches
-        batches = list(batched(items, batch_size))
-        total_batches = len(batches)
-        for i, batch in enumerate(batches, 1):
-            with status(
-                f"[bold green]Running batch {i}/{total_batches} of "
-                f"{len(batch)} {'async ' if is_async else ''}tasks:"
-            ):
-                batch_results = await _do_all(batch)
-                results.extend(batch_results)
+        batches = batched(items, batch_size)
+        for batch in batches:
+            with status(f"[bold green]Running batch of {len(batch)} tasks:"):
+                results.extend(asyncio.run(_do_all(batch)))
 
     return results
-
-
-def run_batch_function(
-    function: Callable[[T], U],
-    items: List[T],
-    sequential: bool = True,
-    batch_size: Optional[int] = None,
-) -> List[U]:
-    """Handle running a function on a list of items in batches.
-
-    Function can be either sync or async.
-
-
-    Args:
-        function (Callable[[T], U]): Function to run on each item
-        items (List[T]): List of items to process
-        sequential (bool, optional): Defaults to True.
-        batch_size (Optional[int], optional): Defaults to None.
-
-    Returns:
-        List[U]: List of results
-    """
-    return asyncio.run(run_all_batches(function, items, sequential, batch_size))

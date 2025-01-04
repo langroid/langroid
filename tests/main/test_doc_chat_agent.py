@@ -947,14 +947,14 @@ def test_doc_chat_batch(test_settings: Settings, vecdb):
 @pytest.mark.parametrize(
     "hypothetical_questions, expect_cleaned", [(True, True), (False, False)]
 )
-def test_remove_generated_questions(
+def test_remove_hypothetical_questions(
     test_settings: Settings,
     vecdb: VectorStore,
     hypothetical_questions: bool,
     expect_cleaned: bool,
 ) -> None:
     """
-    Test removal of generated questions from documents both if
+    Test removal of generated hypothetical questions from documents both if
     they have hypothetical questions or not.
     """
     set_global(test_settings)
@@ -978,7 +978,7 @@ def test_remove_generated_questions(
     )
     agent.vecdb = vecdb
 
-    cleaned_docs = agent.clean_generated_content(sample_docs)
+    cleaned_docs = agent.remove_hypothetical_questions(sample_docs)
 
     assert len(cleaned_docs) == len(sample_docs)
     # Document with questions should be cleaned
@@ -1044,8 +1044,8 @@ def test_hypothetical_questions_disabled(
     assert processed_docs[0].content == sample_docs[0].content
     assert not hasattr(processed_docs[0].metadata, "has_hypothetical_questions")
 
-    # Test clean_generated_content
-    cleaned_docs = agent.clean_generated_content(sample_docs)
+    # Test remove_hypothetical_questions
+    cleaned_docs = agent.remove_hypothetical_questions(sample_docs)
     assert len(cleaned_docs) == len(sample_docs)
     assert cleaned_docs[0].content == sample_docs[0].content
 
