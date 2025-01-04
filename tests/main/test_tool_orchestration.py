@@ -3,7 +3,7 @@ from typing import Optional
 import pytest
 
 import langroid as lr
-from langroid import ChatDocument
+from langroid import ChatDocument, InfiniteLoopException
 from langroid.language_models.mock_lm import MockLMConfig
 from langroid.utils.configuration import Settings, set_global
 
@@ -60,6 +60,77 @@ def test_llm_done_tool(
 
     result = task[int].run(12)  # 12 -> 6 -> 3 -> done
     assert result == 3
+
+
+@pytest.mark.parametrize("xtool", [True, False])
+@pytest.mark.parametrize("only_user_quits", [True, False])
+def test_agent_done_interactive(xtool: bool, only_user_quits: bool):
+    AgentDoneTool = lr.agent.tools.orchestration.AgentDoneTool
+
+    class OtherTool(lr.ToolMessage):
+        purpose = "a tool not enabled for agent"
+        request = "other_tool"
+
+        z: int
+
+    class XTool(lr.ToolMessage):
+        purpose = "to show x"
+        request = "x_tool"
+        x: int
+
+        def handle(self) -> AgentDoneTool:
+            return AgentDoneTool(
+                content=self.x,
+                tools=[self if xtool else OtherTool(z=3)],
+            )
+
+    _first_time = True
+
+    def mock_response(x: str) -> str:
+        nonlocal _first_time
+        if _first_time:
+            _first_time = False
+            return "give me a number"
+        return XTool(x=int(x))
+
+    agent = lr.ChatAgent(
+        lr.ChatAgentConfig(name="Test", llm=MockLMConfig(response_fn=mock_response))
+    )
+    agent.enable_message(XTool)
+    task = lr.Task(
+        agent,
+        interactive=True,
+        default_human_response="34",
+        only_user_quits_root=only_user_quits,
+    )
+
+    try:
+        result = task.run()
+        # sequence:
+        # LLM: give me a number
+        # User: 34
+        # LLM: XTool(34)
+        # Agent (agent_response) -> AgentDoneTool(content="34", [Tool])
+        #   where Tool is either XTool(34) or OtherTool(3)
+
+    except InfiniteLoopException:
+        # inapplicable (unhandled) OtherTool => LLM, User allowed to respond,
+        # and only_user_quits_root is True,
+        # so task keeps asking for user input, triggering infinite loop check
+        assert not xtool and only_user_quits
+        return
+
+    if not only_user_quits:
+        # only_user_quits is False, so AgentDoneTool causes task exit
+        assert "34" in result.content
+        return
+    if xtool:
+        # After this point, we can't get response from
+        # - user since the curr pending msg contains a valid tool.
+        # - agent_response since it cannot respond to own msg
+        # - llm_response since the curr pending msg contains a valid tool.
+        # So the task stalls until it hits max_stalled_steps and returns None
+        assert result is None
 
 
 def test_agent_done_tool(test_settings: Settings):
@@ -375,7 +446,7 @@ async def test_orch_tools_async(
 
 
 @pytest.mark.parametrize("use_functions_api", [True, False])
-@pytest.mark.parametrize("use_tools_api", [True, False])
+@pytest.mark.parametrize("use_tools_api", [False, True])
 def test_send_tools(
     test_settings: Settings,
     use_functions_api: bool,
@@ -443,6 +514,7 @@ def test_send_tools(
     processor_task = lr.Task(processor, interactive=False)
     processor.enable_message(SendTool, use=True, handle=True)
     processor.enable_message(ThreeTool, use=True, handle=True)
+    processor.enable_message(DoneTool, use=True, handle=True)
 
     five_agent = lr.ChatAgent(
         lr.ChatAgentConfig(
