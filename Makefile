@@ -19,7 +19,7 @@ type-check:
 	@black --check .
 	@echo "Running flake8 on git-tracked files ONLY! ..."
 	@git ls-files | grep '\.py$$' | xargs flake8 --exclude=.git,__pycache__,.venv,langroid/embedding_models/protoc/*
-	@poetry run ruff .
+	@poetry run ruff check .
 	@echo "Running mypy...";
 	@poetry run mypy -p langroid
 	@echo "All checks passed!"
@@ -27,7 +27,7 @@ type-check:
 .PHONE: lint
 lint:
 	black .
-	poetry run ruff . --fix
+	poetry run ruff check . --fix
 
 .PHONY: stubs
 stubs:

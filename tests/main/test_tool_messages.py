@@ -1099,6 +1099,26 @@ def test_llm_end_with_tool(
         assert tool.pair.a == 1 and tool.pair.b == 2
 
 
+def test_final_result_tool():
+    """Test that FinalResultTool can be returned by agent_response"""
+
+    class MyAgent(ChatAgent):
+        def agent_response(self, msg: str | ChatDocument) -> Any:
+            return FinalResultTool(answer="42")
+
+    agent = MyAgent(
+        ChatAgentConfig(
+            name="MyAgent",
+            llm=MockLMConfig(response_fn=lambda x: x),
+        )
+    )
+
+    task = Task(agent, interactive=False)[ToolMessage]
+    result = task.run("3")
+    assert isinstance(result, FinalResultTool)
+    assert result.answer == "42"
+
+
 @pytest.mark.parametrize("tool", ["none", "a", "aa", "b"])
 def test_agent_respond_only_tools(tool: str):
     """

@@ -24,8 +24,12 @@ class EmbeddingModel(ABC):
     @classmethod
     def create(cls, config: EmbeddingModelsConfig) -> "EmbeddingModel":
         from langroid.embedding_models.models import (
+            AzureOpenAIEmbeddings,
+            AzureOpenAIEmbeddingsConfig,
             FastEmbedEmbeddings,
             FastEmbedEmbeddingsConfig,
+            LlamaCppServerEmbeddings,
+            LlamaCppServerEmbeddingsConfig,
             OpenAIEmbeddings,
             OpenAIEmbeddingsConfig,
             SentenceTransformerEmbeddings,
@@ -40,10 +44,14 @@ class EmbeddingModel(ABC):
             return RemoteEmbeddings(config)
         elif isinstance(config, OpenAIEmbeddingsConfig):
             return OpenAIEmbeddings(config)
+        elif isinstance(config, AzureOpenAIEmbeddingsConfig):
+            return AzureOpenAIEmbeddings(config)
         elif isinstance(config, SentenceTransformerEmbeddingsConfig):
             return SentenceTransformerEmbeddings(config)
         elif isinstance(config, FastEmbedEmbeddingsConfig):
             return FastEmbedEmbeddings(config)
+        elif isinstance(config, LlamaCppServerEmbeddingsConfig):
+            return LlamaCppServerEmbeddings(config)
         else:
             raise ValueError(f"Unknown embedding config: {config.__repr_name__}")
 

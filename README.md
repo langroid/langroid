@@ -47,7 +47,7 @@ This Multi-Agent paradigm is inspired by the
 into simplifying the developer experience; 
 it does not use `Langchain`, or any other LLM framework.
 
-:fire: Read the (WIP) [overview of the langroid architecture](https://langroid.github.io/langroid/blog/2024/08/15/overview-of-langroids-multi-agent-architecture-prelim/)
+:fire: Read the (WIP) [overview of the langroid architecture](https://langroid.github.io/langroid/blog/2024/08/15/overview-of-langroids-multi-agent-architecture-prelim/) and a [quick tour of Langroid](https://langroid.github.io/langroid/tutorials/langroid-tour/)
 
 📢 Companies are using/adapting Langroid in **production**. Here is a quote:
 
@@ -135,6 +135,14 @@ teacher_task.run()
 <details>
 <summary> <b>Click to expand</b></summary>
 
+- **Dec 2024:**
+  - [0.30.0](https://github.com/langroid/langroid/releases/tag/0.30.0) Llama-cpp embeddings.
+  - [0.29.0](https://github.com/langroid/langroid/releases/tag/0.29.0) Custom Azure OpenAI Client 
+  - [0.28.0](https://github.com/langroid/langroid/releases/tag/0.28.0) `ToolMessage`: `_handler` field to override 
+default handler method name in `request` field. 
+  - [0.27.0](https://github.com/langroid/langroid/releases/tag/0.27.0) OpenRouter Support.
+  - [0.26.0](https://github.com/langroid/langroid/releases/tag/0.26.0) Update to latest Chainlit.
+  - [0.25.0](https://github.com/langroid/langroid/releases/tag/0.25.0) True Async Methods for agent and user-response.
 - **Nov 2024:**
   - **[0.24.0](https://langroid.github.io/langroid/notes/structured-output/)**: 
      Enables support for `Agent`s with strict JSON schema output format on compatible LLMs and strict mode for the OpenAI tools API.
