@@ -1,201 +1,250 @@
-[tool.poetry]
+[project]
+authors = [
+    {name = "Prasad Chalasani", email = "pchalasani@gmail.com"},
+]
+license = {text = "MIT"}
+requires-python = "<3.13,>=3.10"
+dependencies = [
+    "adb-cloud-connector<2.0.0,>=1.0.2",
+    "aiohttp<4.0.0,>=3.9.1",
+    "async-generator<2.0,>=1.10",
+    "bs4<1.0.0,>=0.0.1",
+    "cerebras-cloud-sdk<2.0.0,>=1.1.0",
+    "colorlog<7.0.0,>=6.7.0",
+    "docstring-parser<1.0,>=0.16",
+    "duckduckgo-search<7.0.0,>=6.0.0",
+    "faker<19.0.0,>=18.9.0",
+    "fakeredis<3.0.0,>=2.12.1",
+    "fire<1.0.0,>=0.5.0",
+    "gitpython<4.0.0,>=3.1.43",
+    "google-api-python-client<3.0.0,>=2.95.0",
+    "google-generativeai<1.0.0,>=0.5.2",
+    "groq<1.0.0,>=0.13.0",
+    "grpcio<2.0.0,>=1.62.1",
+    "halo<1.0.0,>=0.0.31",
+    "jinja2<4.0.0,>=3.1.2",
+    "json-repair<1.0.0,>=0.29.9",
+    "lxml<5.0.0,>=4.9.3",
+    "nest-asyncio<2.0.0,>=1.6.0",
+    "nltk<4.0.0,>=3.8.2",
+    "onnxruntime<2.0.0,>=1.16.1",
+    "openai<2.0.0,>=1.45.0",
+    "pandas<3.0.0,>=2.0.3",
+    "prettytable<4.0.0,>=3.8.0",
+    "pydantic<2.10.2,>=1",
+    "pygithub<2.0.0,>=1.58.1",
+    "pygments<3.0.0,>=2.15.1",
+    "pyparsing<4.0.0,>=3.0.9",
+    "pytest-rerunfailures<16.0,>=15.0",
+    "python-dotenv<2.0.0,>=1.0.0",
+    "python-magic<1.0.0,>=0.4.27",
+    "pyyaml<7.0.0,>=6.0.1",
+    "qdrant-client<2.0.0,>=1.8.0",
+    "rank-bm25<1.0.0,>=0.2.2",
+    "redis<6.0.0,>=5.0.1",
+    "requests<3.0.0,>=2.31.0",
+    "requests-oauthlib<2.0.0,>=1.3.1",
+    "rich<14.0.0,>=13.3.4",
+    "thefuzz<1.0.0,>=0.20.0",
+    "tiktoken<1.0.0,>=0.7.0",
+    "trafilatura<2.0.0,>=1.5.0",
+    "typer<1.0.0,>=0.9.0",
+    "wget<4.0,>=3.2",
+]
 name = "langroid"
 version = "0.32.2"
 description = "Harness LLMs with Multi-Agent Programming"
-authors = ["Prasad Chalasani <pchalasani@gmail.com>"]
 readme = "README.md"
-license = "MIT"
-include = ["pyproject.toml", "langroid/py.typed"]
 
-
-# =============== MAIN DEPS ==============
-[tool.poetry.dependencies]
-python = ">=3.10,<3.13"
-
-# =========== OPTIONALS ==============================
-chromadb = {version=">=0.4.21, <=0.4.23", optional=true}
-momento = {version=">=1.10.2, < 1.21", optional=true}
-unstructured = {extras = ["docx", "pptx", "pdf"], version = ">=0.10.16,<0.10.18", optional=true}
-sentence-transformers = {version="^2.2.2", optional=true}
-torch = {version="^2.0.0", optional=true}
-psycopg2 = {version="^2.9.7", optional=true}
-pymysql = {version = "^1.1.0", optional = true}
-meilisearch-python-sdk = {version="^2.2.3", optional=true}
-litellm = {version = "^1.30.1", optional = true}
-metaphor-python = {version = "^0.1.23", optional = true}
-chainlit = {version = "^1.3.2", optional = true}
-python-socketio = {version="^5.11.0", optional=true}
-neo4j = {version = "^5.14.1", optional = true}
-huggingface-hub = {version="^0.21.2", optional=true}
-transformers = {version="^4.40.1", optional=true}
-lancedb = {version="^0.8.2", optional=true}
-tantivy = {version="^0.21.0", optional=true}
-pypdf = {version=">=5.1.0", optional=true}
-pymupdf = {version="^1.23.3", optional=true}
-pdf2image = {version="^1.17.0", optional=true}
-pytesseract = {version="^0.3.10", optional=true}
-sqlalchemy = {version="^2.0.19", optional=true}
-pyarrow = {version="15.0.0", optional=true}
-pdfplumber = {version="^0.10.2", optional=true}
-python-docx = {version="^1.1.0", optional=true}
-scrapy = {version="^2.11.0", optional=true}
-fastembed = {version="^0.3.1", optional=true}
-
-# ====CORE================================
-pyyaml = "^6.0.1"
-onnxruntime = "^1.16.1"
-fire = "^0.5.0"
-bs4 = "^0.0.1"
-python-dotenv = "^1.0.0"
-wget = "^3.2"
-rich = "^13.3.4"
-requests-oauthlib = "^1.3.1"
-trafilatura = "^1.5.0"
-halo = "^0.0.31"
-typer = "^0.9.0"
-colorlog = "^6.7.0"
-openai = "^1.45.0"
-tiktoken = "^0.7.0"
-pygithub = "^1.58.1"
-pygments = "^2.15.1"
-redis = "^5.0.1"
-fakeredis = "^2.12.1"
-faker = "^18.9.0"
-requests = "^2.31.0"
-pyparsing = "^3.0.9"
-nltk = "^3.8.2"
-qdrant-client = "^1.8.0"
-pydantic = ">=1,<2.10.2"
-pandas = "^2.0.3"
-prettytable = "^3.8.0"
-
-google-api-python-client = "^2.95.0"
-lxml = "^4.9.3"
-
-rank-bm25 = "^0.2.2"
-thefuzz = "^0.20.0"
-
-jinja2 = "^3.1.2"
-docstring-parser = "^0.16"
-
-aiohttp = "^3.9.1"
-grpcio = "^1.62.1"
-duckduckgo-search = "^6.0.0"
-
-google-generativeai = "^0.5.2"
-groq = "^0.13.0"
-nest-asyncio = "^1.6.0"
-async-generator = "^1.10"
-
-python-magic = "^0.4.27"
-json-repair = "^0.29.9"
-cerebras-cloud-sdk = "^1.1.0"
-gitpython = "^3.1.43"
-python-arango = {version="^8.1.2", optional=true}
-arango-datasets = {version="^1.2.2", optional=true}
-adb-cloud-connector = "^1.0.2"
-pytest-rerunfailures = "^15.0"
-
-
-[tool.poetry.extras]
-# install these using, e.g.,
-# `poetry install -E [...]` where [...] is one of the extras below
-# or install multiple extras using, e.g.,  `poetry install -E "litellm mysql"
-
-# Groupings for common use-cases
+[project.optional-dependencies]
 doc-chat = [
-    "unstructured", "python-docx", "pdfplumber", "pypdf",
-    "pymupdf", "pdf2image", "pytesseract"
+    "pdf2image<2.0.0,>=1.17.0",
+    "pdfplumber<0.11.0,>=0.10.2",
+    "pymupdf<2.0.0,>=1.23.3",
+    "pypdf>=5.1.0",
+    "pytesseract<0.4.0,>=0.3.10",
+    "python-docx<2.0.0,>=1.1.0",
+    "unstructured[docx,pdf,pptx]<0.10.18,>=0.10.16",
 ]
-db = ["postgres", "mysql", "sqlalchemy", "psycopg2", "pymysql"]
-hf-transformers = ["sentence-transformers", "torch", "transformers", "huggingface-hub"]
-vecdbs = ["lancedb", "tantivy", "pyarrow", "chromadb"]
+
+hf-transformers = [
+    "sentence-transformers<3.0.0,>=2.2.2",
+    "torch<3.0.0,>=2.0.0",
+    "transformers<5.0.0,>=4.40.1",
+    "huggingface-hub<0.22.0,>=0.21.2",
+]
+
+vecdbs = [
+    "lancedb<0.9.0,>=0.8.2",
+    "tantivy<0.22.0,>=0.21.0",
+    "pyarrow<16.0.0,>=15.0.0",
+    "chromadb<=0.4.23,>=0.4.21",
+]
+
+db = [
+    "sqlalchemy<3.0.0,>=2.0.19",
+    "psycopg2<3.0.0,>=2.9.7",
+    "pymysql<2.0.0,>=1.1.0",
+]
+
 all = [
-    "unstructured", "python-docx", "pdfplumber", "pypdf",
-    "pymupdf", "pdf2image", "pytesseract",
-    "postgres", "mysql", "sqlalchemy", "psycopg2", "pymysql",
-    "sentence-transformers", "torch", "transformers", "huggingface-hub",
-#    "lancedb", "tantivy", "pyarrow",
-    "chromadb",
-    "metaphor-python", "neo4j",
-    "python-arango", "arango-datasets",
-    "litellm",
-    "chainlit", "python-socketio",
-    "fastembed"
+    "pdf2image<2.0.0,>=1.17.0",
+    "pdfplumber<0.11.0,>=0.10.2",
+    "pymupdf<2.0.0,>=1.23.3",
+    "pypdf>=5.1.0",
+    "pytesseract<0.4.0,>=0.3.10",
+    "python-docx<2.0.0,>=1.1.0",
+    "unstructured[docx,pdf,pptx]<0.10.18,>=0.10.16",
+    "sqlalchemy<3.0.0,>=2.0.19",
+    "psycopg2<3.0.0,>=2.9.7",
+    "pymysql<2.0.0,>=1.1.0",
+    "sentence-transformers<3.0.0,>=2.2.2",
+    "torch<3.0.0,>=2.0.0",
+    "transformers<5.0.0,>=4.40.1",
+    "huggingface-hub<0.22.0,>=0.21.2",
+    "chromadb<=0.4.23,>=0.4.21",
+    "metaphor-python<0.2.0,>=0.1.23",
+    "neo4j<6.0.0,>=5.14.1",
+    "python-arango",
+    "arango-datasets",
+    "litellm<2.0.0,>=1.30.1",
+    "chainlit<2.0.0,>=1.3.2",
+    "python-socketio<6.0.0,>=5.11.0",
+    "fastembed<0.4.0,>=0.3.1",
 ]
-# more granular groupings
-lancedb = ["lancedb", "tantivy", "pyarrow"]
-pdf-parsers = ["pdfplumber", "pypdf", "pymupdf", "pdf2image", "pytesseract"]
-docx = ["python-docx"]
-scrapy = ["scrapy"]
-hf-embeddings = ["sentence-transformers", "torch"]
-transformers = ["transformers", "huggingface-hub", "torch"]
-unstructured = ["unstructured"]
-postgres = ["psycopg2"]
-mysql = ["pymysql"]
-sql = ["sqlalchemy", "pymysql",  "psycopg2"]
-litellm = ["litellm"]
-neo4j = ["neo4j"]
-arango = ["python-arango", "arango-datasets"]
-metaphor = ["metaphor-python"]
-chainlit = ["chainlit", "python-socketio"]
-chromadb = ["chromadb"]
-mkdocs = [
-    "mkdocs", "mkdocs-material", "mkdocstrings", "mkdocs-awesome-pages-plugin",
-    "mkdocs-gen-files", "mkdocs-literate-nav",
-    "mkdocs-section-index", "mkdocs-jupyter", "mkdocs-rss-plugin"
+
+# More granular groupings
+lancedb = [
+    "lancedb<0.9.0,>=0.8.2",
+    "tantivy<0.22.0,>=0.21.0",
+    "pyarrow<16.0.0,>=15.0.0",
 ]
-meilisearch = ["meilisearch-python-sdk"]
-momento = ["momento"]
-fastembed = ["fastembed"]
+
+pdf-parsers = [
+    "pdfplumber<0.11.0,>=0.10.2",
+    "pypdf>=5.1.0",
+    "pymupdf<2.0.0,>=1.23.3",
+    "pdf2image<2.0.0,>=1.17.0",
+    "pytesseract<0.4.0,>=0.3.10",
+]
+
+docx = [
+    "python-docx<2.0.0,>=1.1.0",
+]
+
+scrapy = [
+    "scrapy<3.0.0,>=2.11.0",
+]
+
+hf-embeddings = [
+    "sentence-transformers<3.0.0,>=2.2.2",
+    "torch<3.0.0,>=2.0.0",
+]
+
+transformers = [
+    "transformers<5.0.0,>=4.40.1",
+    "huggingface-hub<0.22.0,>=0.21.2",
+    "torch<3.0.0,>=2.0.0",
+]
+
+unstructured = [
+    "unstructured[docx,pdf,pptx]<0.10.18,>=0.10.16",
+]
+
+postgres = [
+    "psycopg2<3.0.0,>=2.9.7",
+]
+
+mysql = [
+    "pymysql<2.0.0,>=1.1.0",
+]
+
+sql = [
+    "sqlalchemy<3.0.0,>=2.0.19",
+    "pymysql<2.0.0,>=1.1.0",
+    "psycopg2<3.0.0,>=2.9.7",
+]
+
+litellm = [
+    "litellm<2.0.0,>=1.30.1",
+]
+
+neo4j = [
+    "neo4j<6.0.0,>=5.14.1",
+]
+
+arango = [
+    "python-arango",
+    "arango-datasets",
+]
+
+metaphor = [
+    "metaphor-python<0.2.0,>=0.1.23",
+]
+
+chainlit = [
+    "chainlit<2.0.0,>=1.3.2",
+    "python-socketio<6.0.0,>=5.11.0",
+]
+
+chromadb = [
+    "chromadb<=0.4.23,>=0.4.21",
+]
+
+meilisearch = [
+    "meilisearch-python-sdk<3.0.0,>=2.2.3",
+]
+
+momento = [
+    "momento<1.21.0,>=1.10.2",
+]
+
+fastembed = [
+    "fastembed<0.4.0,>=0.3.1",
+]
 
 
-# ================= DEV DEPS =================
-[tool.poetry.group.dev.dependencies]
-black = {extras = ["jupyter"], version = "^24.3.0"}
-flake8 = "^6.0.0"
-mypy = "^1.11.2"
-ruff = "^0.8.4"
-pre-commit = "^3.3.2"
-autopep8 = "^2.0.2"
+[dependency-groups]
+dev = [
+    "black[jupyter]<25.0.0,>=24.3.0",
+    "flake8<7.0.0,>=6.0.0",
+    "mypy<2.0.0,>=1.11.2",
+    "ruff<1.0.0,>=0.8.4",
+    "pre-commit<4.0.0,>=3.3.2",
+    "autopep8<3.0.0,>=2.0.2",
+    "types-redis<5.0.0.0,>=4.5.5.2",
+    "types-requests<3.0.0.0,>=2.31.0.1",
+    "types-pyyaml<7.0.0.0,>=6.0.12.20240311",
+    "types-pillow<11.0.0.0,>=10.2.0.20240406",
+    "pytest<8.0.0,>=7.3.1",
+    "pytest-redis<4.0.0,>=3.0.2",
+    "pytest-asyncio<1.0.0,>=0.21.1",
+    "pytest-postgresql<6.0.0,>=5.0.0",
+    "pytest-mysql<3.0.0,>=2.4.2",
+    "coverage<8.0.0,>=7.2.5",
+    "pytest-xdist<4.0.0,>=3.6.1",
+    "pytest-timeout<3.0.0,>=2.3.1",
+    "pytest-cov<6.0.0,>=5.0.0",
+    "docker<8.0.0,>=7.1.0",
+]
+docs = [
+    "mkdocs<2.0.0,>=1.4.2",
+    "mkdocs-material<10.0.0,>=9.1.5",
+    "mkdocstrings[python]<1.0.0,>=0.25.2",
+    "mkdocs-awesome-pages-plugin<3.0.0,>=2.8.0",
+    "mkdocs-rss-plugin<2.0.0,>=1.8.0",
+    "mkdocs-gen-files<1.0.0,>=0.4.0",
+    "mkdocs-literate-nav<1.0.0,>=0.6.0",
+    "mkdocs-section-index<1.0.0,>=0.3.5",
+    "mkdocs-jupyter<1.0.0,>=0.24.1",
+    "griffe<1.0.0",
+]
 
-types-redis = "^4.5.5.2"
-types-requests = "^2.31.0.1"
-types-pyyaml = "^6.0.12.20240311"
-types-pillow = "^10.2.0.20240406"
-
-pytest = "^7.3.1"
-pytest-redis = "^3.0.2"
-pytest-asyncio = "^0.21.1"
-pytest-postgresql = "^5.0.0"
-pytest-mysql = "^2.4.2"
-coverage = "^7.2.5"
-pytest-xdist = "^3.6.1"
-pytest-timeout = "^2.3.1"
-pytest-cov = "^5.0.0"
-docker = "^7.1.0"
-
-[tool.poetry.group.docs]
-optional = true
-
-[tool.poetry.group.docs.dependencies]
-
-mkdocs = "^1.4.2"
-mkdocs-material = "^9.1.5"
-mkdocstrings = {extras = ["python"], version = "^0.25.2"}
-mkdocs-awesome-pages-plugin = "^2.8.0"
-mkdocs-rss-plugin = "^1.8.0"
-mkdocs-gen-files = "^0.4.0"
-mkdocs-literate-nav = "^0.6.0"
-mkdocs-section-index = "^0.3.5"
-mkdocs-jupyter = "^0.24.1"
-griffe = "<1.0.0"
-
-
-# ========================================
+[tool.pdm.build]
+includes = ["pyproject.toml", "langroid/py.typed"]
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["pdm-backend"]
+build-backend = "pdm.backend"
 
 [tool.black]
 line-length = 88
