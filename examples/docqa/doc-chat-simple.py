@@ -1,9 +1,9 @@
 """
 Bare-bones example of using DocChatAgent to query a document.
 
-Run like this:
+Run like this (omit the model to use default GPT-4o):
     
-    python3 examples/docqa/doc-chat-simple.py
+    python3 examples/docqa/doc-chat-simple.py --model ollama/qwen2.5:latest
     
 """
 
