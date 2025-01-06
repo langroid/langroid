@@ -2,9 +2,11 @@ name: Lint
 
 on:
   push:
-    branches: [ main ]
+    branches: 
+      - main 
   pull_request:
-    branches: [ main ]
+    branches: 
+      - main 
 
 jobs:
   lint:
@@ -18,26 +20,28 @@ jobs:
         with:
           python-version: 3.11  # Replace with your desired Python version
 
-      - name: Install Poetry
-        uses: Gr1N/setup-poetry@v8
+      - name: Install uv
+        uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
 
-      - name: Install Poetry dependencies
+      - name: Install dependencies
         run: |
-          poetry --version
-          echo "$HOME/.local/bin" >> $GITHUB_PATH
-          python -m pip install --upgrade pip
-          
-          poetry install
+          sudo apt-get update
+          sudo apt-get install -y libmagic1
+          sudo apt-get install -y poppler-utils tesseract-ocr
+
+      - name: Install project dependencies with uv
+        run: uv sync
 
       - name: Run black
         run: |
-          poetry run black --check .
+          uv run black --check .
 
       - name: Install ruff
         uses: chartboost/ruff-action@v1
 
       - name: Run mypy
         run: |
-          poetry run mypy -p langroid
+          uv run mypy -p langroid
 
-  # Any additional jobs...
