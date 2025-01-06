@@ -1,7 +1,11 @@
 [project]
+name = "langroid"
+version = "0.32.2"
 authors = [
     {name = "Prasad Chalasani", email = "pchalasani@gmail.com"},
 ]
+description = "Harness LLMs with Multi-Agent Programming"
+readme = "README.md"
 license = {text = "MIT"}
 requires-python = "<3.13,>=3.10"
 dependencies = [
@@ -51,10 +55,6 @@ dependencies = [
     "typer<1.0.0,>=0.9.0",
     "wget<4.0,>=3.2",
 ]
-name = "langroid"
-version = "0.32.2"
-description = "Harness LLMs with Multi-Agent Programming"
-readme = "README.md"
 
 [project.optional-dependencies]
 doc-chat = [
@@ -105,8 +105,8 @@ all = [
     "chromadb<=0.4.23,>=0.4.21",
     "metaphor-python<0.2.0,>=0.1.23",
     "neo4j<6.0.0,>=5.14.1",
-    "python-arango",
-    "arango-datasets",
+    "python-arango<9.0.0,>=8.1.2",
+    "arango-datasets<2.0.0,>=1.2.2",
     "litellm<2.0.0,>=1.30.1",
     "chainlit<2.0.0,>=1.3.2",
     "python-socketio<6.0.0,>=5.11.0",
@@ -174,8 +174,8 @@ neo4j = [
 ]
 
 arango = [
-    "python-arango",
-    "arango-datasets",
+    "python-arango<9.0.0,>=8.1.2",
+    "arango-datasets<2.0.0,>=1.2.2",
 ]
 
 metaphor = [
@@ -240,11 +240,14 @@ docs = [
     "griffe<1.0.0",
 ]
 
-[tool.pdm.build]
-includes = ["pyproject.toml", "langroid/py.typed"]
+
 [build-system]
 requires = ["pdm-backend"]
 build-backend = "pdm.backend"
+
+[tool.pdm.build]
+includes = ["pyproject.toml", "langroid/py.typed"]
+excludes = ["tests/"]
 
 [tool.black]
 line-length = 88
