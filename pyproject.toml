@@ -226,6 +226,7 @@ dev = [
     "pytest-timeout<3.0.0,>=2.3.1",
     "pytest-cov<6.0.0,>=5.0.0",
     "docker<8.0.0,>=7.1.0",
+    "commitizen>=4.1.0",
 ]
 docs = [
     "mkdocs<2.0.0,>=1.4.2",
@@ -286,8 +287,6 @@ plugins = [
 line-length = 88
 # Allow unused variables when underscore-prefixed.
 lint.dummy-variable-rgx = "^(_+|(_+[a-zA-Z0-9_]*[a-zA-Z0-9]+?))$"
-# Assume Python 3.11.
-target-version = "py311"
 lint.select = [
     "E",  # pycodestyle
     "F",  # pyflakes
@@ -297,7 +296,16 @@ lint.exclude = ["docs/**", ".venv", "venv", "examples/**", "examples_dev", "lang
 lint.fixable = ["A", "B", "C", "D", "E", "F", "G", "I", "N", "Q", "S", "T", "W", "ANN", "ARG", "BLE", "COM", "DJ", "DTZ", "EM", "ERA", "EXE", "FBT", "ICN", "INP", "ISC", "NPY", "PD", "PGH", "PIE", "PL", "PT", "PTH", "PYI", "RET", "RSE", "RUF", "SIM", "SLF", "TCH", "TID", "TRY", "UP", "YTT"]
 lint.unfixable = []
 lint.extend-ignore = ["F821", "F401"]
+# Assume Python 3.11.
+target-version = "py311"
 
 [tool.pytest.ini_options]
 filterwarnings = ["ignore::DeprecationWarning"]
 
+
+[tool.commitizen]
+name = "cz_conventional_commits"
+tag_format = "$version"
+version_scheme = "semver"
+version_provider = "pep621"
+major_version_zero = true
