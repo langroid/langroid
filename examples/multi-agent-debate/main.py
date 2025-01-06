@@ -8,7 +8,7 @@ import langroid as lr
 from langroid.language_models import OpenAIGPTConfig
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
-from langroid.agent.tools.metaphor_search_tool import MetaphorSearchTool
+from langroid.agent.tools.exa_search_tool import ExaSearchTool
 from langroid.utils.logging import setup_logger
 from langroid.agent.tools.orchestration import DoneTool
 from langroid import ChatDocument, Entity
@@ -238,7 +238,7 @@ def run_debate() -> None:
 
     if metaphor_search:
         metaphor_search_task = Task(metaphor_search_agent, interactive=False)
-        metaphor_search_agent.enable_message(MetaphorSearchTool)
+        metaphor_search_agent.enable_message(ExaSearchTool)
         metaphor_search_agent.enable_message(DoneTool)
         metaphor_search_task.run("run the search")
 

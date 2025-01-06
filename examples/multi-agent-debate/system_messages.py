@@ -1,4 +1,4 @@
-from langroid.agent.tools.metaphor_search_tool import MetaphorSearchTool
+from langroid.agent.tools.exa_search_tool import ExaSearchTool
 from langroid.agent.tools.orchestration import DoneTool
 
 
@@ -25,7 +25,7 @@ FEEDBACK_AGENT_SYSTEM_MESSAGE = """
             """
 METAPHOR_SEARCH_AGENT_SYSTEM_MESSAGE_TEMPLATE = """
             There are 2 STEPs. Your Goal is to execute both of them. 
-            STEP 1:  Run MetaphorSearchTool
+            STEP 1:  Run ExaSearchTool
 
             Use the TOOL {metaphor_tool_name} to search the web for 5 references for Pro: {pro_message}
             and Con: {con_message}.     
@@ -64,7 +64,7 @@ METAPHOR_SEARCH_AGENT_SYSTEM_MESSAGE_TEMPLATE = """
 
 def generate_metaphor_search_agent_system_message(system_messages, pro_key, con_key):
     return METAPHOR_SEARCH_AGENT_SYSTEM_MESSAGE_TEMPLATE.format(
-        metaphor_tool_name=MetaphorSearchTool.name(),
+        metaphor_tool_name=ExaSearchTool.name(),
         pro_message=system_messages.messages[pro_key].message,
         con_message=system_messages.messages[con_key].message,
         done_tool_name=DoneTool.name(),

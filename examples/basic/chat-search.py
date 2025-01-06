@@ -3,7 +3,7 @@ This is a basic example of a chatbot that uses one of these web-search Tools to
 answer questions:
  - GoogleSearchTool
  - DuckduckgoSearchTool
- - MetaphorSearchTool
+ - ExaSearchTool
 When the LLM doesn't know the answer to a question, it will use the tool to
 search the web for relevant results, and then use the results to answer the
 question.
@@ -14,7 +14,7 @@ python3 examples/basic/chat-search.py
 
 There are optional args, especially note these:
 
--p or --provider: google or ddg or metaphor (default: google)
+-p or --provider: google or ddg or exa (default: google)
 -m <model_name>: to run with a different LLM model (default: gpt4-turbo)
 
 You can specify a local in a few different ways, e.g. `-m local/localhost:8000/v1`
@@ -28,14 +28,16 @@ environment variables in your `.env` file, as explained in the
 [README](https://github.com/langroid/langroid#gear-installation-and-setup).
 
 
-(b) If using MetaphorSearchTool, you need to:
-* set the METAPHOR_API_KEY environment variables in
-your `.env` file, e.g. `METAPHOR_API_KEY=your_api_key_here`
-* install langroid with the `metaphor` extra, e.g.
-`pip install langroid[metaphor]` or `poetry add langroid[metaphor]`
-(it installs the `metaphor-python` package from pypi).
+(b) If using ExaSearchTool, you need to:
+* set the METAPHOR_API_KEY or EXA_API_KEY environment variables in
+your `.env` file, e.g. `METAPHOR_API_KEY=your_api_key_here` or
+`EXA_API_KEY=your_api_key_here`
+* install langroid with the `exa` extra, e.g.
+`pip install langroid[exa]` or `poetry add langroid[exa]`
+(it installs the `exa_py` package from pypi).
 For more information, please refer to the official docs:
-https://metaphor.systems/
+https://docs.exa.ai/reference/quickstart
+
 
 """
 
@@ -62,7 +64,7 @@ def main(
         "google",
         "--provider",
         "-p",
-        help="search provider name (google, ddg, metaphor)",
+        help="search provider name (google, ddg, metaphor, exa)",
     ),
     no_stream: bool = typer.Option(False, "--nostream", "-ns", help="no streaming"),
     nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
@@ -108,10 +110,10 @@ def main(
     match provider:
         case "google":
             search_tool_class = GoogleSearchTool
-        case "metaphor":
-            from langroid.agent.tools.metaphor_search_tool import MetaphorSearchTool
+        case "metaphor" | "exa":
+            from langroid.agent.tools.exa_search_tool import ExaSearchTool
 
-            search_tool_class = MetaphorSearchTool
+            search_tool_class = ExaSearchTool
         case "ddg":
             search_tool_class = DuckduckgoSearchTool
         case _:
