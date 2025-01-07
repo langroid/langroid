@@ -7,10 +7,10 @@ on:
       - "tests/**"
       - ".github/workflows/pytest.yml"
     branches:
-      - main  # Replace with your default branch name 
+      - main
   pull_request:
     branches:
-      - main  # Replace with your default branch name
+      - main 
 
 jobs:
   cancel:
@@ -69,6 +69,7 @@ jobs:
       AZURE_OPENAI_DEPLOYMENT_NAME: ${{ secrets.AZURE_OPENAI_DEPLOYMENT_NAME }}
       AZURE_OPENAI_MODEL_NAME: ${{ secrets.AZURE_GPT_MODEL_NAME }} 
       AZURE_OPENAI_MODEL_VERSION: ${{ secrets.AZURE_OPENAI_MODEL_VERSION }}
+      
     steps:
     - name: Check out repository
       uses: actions/checkout@v3
@@ -78,22 +79,36 @@ jobs:
       uses: actions/setup-python@v4
       with:
         python-version: 3.11  # Replace with your desired Python version
-    - name: Setup uv
-      uses: astral-sh/setup-uv@v5
-      with:
-        version: "0.4.15"
-        enable-cache: true
-        cache-dependency-glob: |
-          requirements**.txt
-          pyproject.toml
 
     - name: Install dependencies
       run: |
         sudo apt-get update
         sudo apt-get install -y libmagic1
         sudo apt-get install -y poppler-utils tesseract-ocr
+    # - name: Restore uv cache
+    #   uses: actions/cache@v4
+    #   with:
+    #     path: ~/.local
+    #     key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+    #     restore-keys: |
+    #       uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+    #       uv-${{ runner.os }}
+
+    - name: Setup uv
+      uses: astral-sh/setup-uv@v5
+      with: 
+        enable-cache: true
+        cache-dependency-glob: "uv.lock"
+
+    # - name: Load cached venv
+    #   id: cached-uv-dependencies
+    #   uses: actions/cache@v4
+    #   with:
+    #       path: .venv
+    #       key: venv-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('uv.lock') }}
     
     - name: Install project dependencies with uv
+      # if: steps.cached-uv-dependencies.outputs.cache-hit != 'true'
       run: |
         uv sync --dev \
           --extra neo4j \
@@ -109,7 +124,7 @@ jobs:
           --extra sql \
           --extra fastembed
       
-
+    
 
     - name: Download NLTK data
       run: uv run python -c "import nltk; nltk.download('punkt_tab')"
@@ -173,7 +188,6 @@ jobs:
           --first-test-file=tests/main/test_lance_doc_chat_agent.py \
           --lf --last-failed-no-failures none \
           tests/main tests/extras/test_hf_embeddings.py tests/extras/test_fastembed_embeddings.py
-
     - name: Generate final coverage report from all runs
       run: uv run coverage report
 
@@ -188,6 +202,3 @@ jobs:
         fail_ci_if_error: false
       env:
         CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-
-
-

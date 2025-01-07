@@ -32,7 +32,6 @@ share/python-wheels/
 .installed.cfg
 *.egg
 MANIFEST
-uv.lock
 
 # PyInstaller
 #  Usually these files are written by a python script from a template
@@ -61,7 +60,6 @@ coverage.xml
 # Translations
 *.mo
 *.pot
-.chainlit
 
 # Django stuff:
 *.log
