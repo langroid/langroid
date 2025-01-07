@@ -13,7 +13,7 @@ from langroid.utils.logging import setup_logger
 from langroid.agent.tools.orchestration import DoneTool
 from langroid import ChatDocument, Entity
 
-from config import get_base_llm_config, get_global_settings
+from config import get_base_llm_config, get_global_settings, get_questions_agent_config
 from models import SystemMessages, load_system_messages
 from system_messages import (
     DEFAULT_SYSTEM_MESSAGE_ADDITION,
@@ -29,6 +29,8 @@ from utils import (
     is_metaphor_search_key_set,
     is_same_llm_for_all_agents,
     select_max_debate_turns,
+    is_url_ask_question,
+    extract_urls,
 )
 
 
@@ -241,6 +243,21 @@ def run_debate() -> None:
         metaphor_search_agent.enable_message(MetaphorSearchTool)
         metaphor_search_agent.enable_message(DoneTool)
         metaphor_search_task.run("run the search")
+
+        url_docs_ask_questions = is_url_ask_question(topic_name)
+        if url_docs_ask_questions:
+            searched_urls = extract_urls(metaphor_search_agent.message_history)
+            logger.info(searched_urls)
+            ask_questions_agent = lr.agent.special.DocChatAgent(
+                get_questions_agent_config(
+                    searched_urls, feedback_agent_config.chat_model
+                )
+            )
+            ask_questions_agent.ingest()
+            ask_questions_task = lr.Task(ask_questions_agent)
+            ask_questions_task.run(
+                "Describe Extracts",
+            )
 
 
 @app.command()
