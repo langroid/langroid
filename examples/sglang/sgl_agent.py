@@ -21,7 +21,6 @@ load_dotenv()
 
 set_default_backend(OpenAI("gpt-4o"))
 
-
 class SGLAgent(lr.ChatAgent):
     def llm_response_messages(
         self,
