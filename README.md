@@ -454,7 +454,9 @@ with a postgres db, you will need to:
   - `sudo apt-get install libpq-dev` on Ubuntu,
   - `brew install postgresql` on Mac, etc.
 - Install langroid with the postgres extra, e.g. `pip install langroid[postgres]`
-  or `poetry add langroid[postgres]` or `poetry install -E postgres`.
+  or `poetry add "langroid[postgres]"` or `poetry install -E postgres`,
+  (or the corresponding `uv` versions, e.g. `uv add "langroid[postgres]"`
+  or `uv pip install --extra postgres`).
   If this gives you an error, try `pip install psycopg2-binary` in your virtualenv.
 </details>
 
@@ -608,12 +610,16 @@ All of these can be run in a Colab notebook:
 [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/langroid/langroid/blob/main/examples/Langroid_quick_start.ipynb)
 
 <details>
-<summary> <b> Direct interaction with OpenAI LLM </b> </summary>
+<summary> <b> Direct interaction with LLM </b> </summary>
 
 ```python
 import langroid.language_models as lm
 
-mdl = lm.OpenAIGPT()
+mdl = lm.OpenAIGPT(
+    lm.OpenAIGPTConfig(
+        chat_model=lm.OpenAIChatModel.GPT4, # or, e.g.  "ollama/qwen2.5"
+    ),
+)
 
 messages = [
   lm.LLMMessage(content="You are a helpful assistant",  role=lm.Role.SYSTEM), 
@@ -623,6 +629,8 @@ messages = [
 response = mdl.chat(messages, max_tokens=200)
 print(response.message)
 ```
+See the guides to use
+([local/open LLMs](https://langroid.github.io/langroid/tutorials/local-llm-setup/) or [remote/commercial LLMs](https://langroid.github.io/langroid/tutorials/non-openai-llms/)).
 </details>
 
 <details>
@@ -636,24 +644,6 @@ cfg = lm.OpenAIGPTConfig(
 )
 mdl = lm.OpenAIGPT(cfg)
 # now interact with it as above, or create an Agent + Task as shown below.
-```
-
-If the model is [supported by `liteLLM`](https://docs.litellm.ai/docs/providers), 
-then no need to launch the proxy server.
-Just set the `chat_model` param above to `litellm/[provider]/[model]`, e.g. 
-`litellm/anthropic/claude-instant-1` and use the config object as above.
-Note that to use `litellm` you need to install langroid with the `litellm` extra:
-`poetry install -E litellm` or `pip install langroid[litellm]`.
-For remote models, you will typically need to set API Keys etc as environment variables.
-You can set those based on the LiteLLM docs. 
-If any required environment variables are missing, Langroid gives a helpful error
-message indicating which ones are needed.
-Note that to use `langroid` with `litellm` you need to install the `litellm` 
-extra, i.e. either `pip install langroid[litellm]` in your virtual env,
-or if you are developing within the `langroid` repo, 
-`poetry install -E litellm`.
-```bash
-pip install langroid[litellm]
 ```
 </details>
 

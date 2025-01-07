@@ -11,14 +11,17 @@ python3 -m venv .venv
 . ./.venv/bin/activate
 ```
 To see how to use Langroid in your own repo, you can take a look at the
-[`langroid-examples`](https://github.com/langroid/langroid-examples) repo, which can be a good starting point for your own repo.
-The `langroid-examples` repo already contains a `pyproject.toml` file so that you can 
-use `Poetry` to manage your virtual environment and dependencies. 
-For example you can do 
+[`langroid-examples`](https://github.com/langroid/langroid-examples) repo, which can be a good starting point for your own repo, 
+or use the [`langroid-template`](https://github.com/langroid/langroid-template) repo.
+These repos contain a `pyproject.toml` file suitable for use with the [`uv`](https://docs.astral.sh/uv/) dependency manager. After installing `uv` you can 
+set up your virtual env, activate it, and install langroid into your venv like this:
 
 ```bash
-poetry install # installs latest version of langroid
+uv venv --python 3.11
+. ./.venv/bin/activate 
+uv sync
 ```
+
 Alternatively, use `pip` to install `langroid` into your virtual environment:
 ```bash
 pip install langroid
@@ -57,8 +60,9 @@ For many practical scenarios, you may need additional optional dependencies:
         - `sudo apt-get install libpq-dev` on Ubuntu,
         - `brew install postgresql` on Mac, etc.
     - Install langroid with the postgres extra, e.g. `pip install langroid[postgres]`
-      or `poetry add langroid[postgres]` or `poetry install -E postgres`.
-      If this gives you an error, try `pip install psycopg2-binary` in your virtualenv.
+      or `uv add "langroid[postgres]"` or `uv pip install --extra postgres`.
+      If this gives you an error, try 
+      `uv pip install psycopg2-binary` in your virtualenv.
 
 
 !!! tip "Work in a nice terminal, such as Iterm2, rather than a notebook"
