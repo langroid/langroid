@@ -1,4 +1,4 @@
 #!/bin/sh
-poetry version $1
+cz bump --increment $1
 git commit pyproject.toml -m "Bump version"
-poetry version | cut -d' ' -f2
+cz version -p | cut -d' ' -f2

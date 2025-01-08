@@ -456,7 +456,7 @@ with a postgres db, you will need to:
 - Install langroid with the postgres extra, e.g. `pip install langroid[postgres]`
   or `poetry add "langroid[postgres]"` or `poetry install -E postgres`,
   (or the corresponding `uv` versions, e.g. `uv add "langroid[postgres]"`
-  or `uv pip install --extra postgres`).
+  or `uv pip install langroid[postgres]`).
   If this gives you an error, try `pip install psycopg2-binary` in your virtualenv.
 </details>
 

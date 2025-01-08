@@ -115,33 +115,31 @@ Emergent autonomous scientific research capabilities of large language models ht
 
 ## Set up dev env
 
-We use [`poetry`](https://python-poetry.org/docs/#installation)
+We use [`uv`](https://docs.astral.sh/uv/getting-started/installation/)
 to manage dependencies, and `python 3.11` for development.
 
-First install `poetry`, then create virtual env and install dependencies:
+First install `uv`, then create virtual env and install dependencies:
 
 ```bash
 # clone this repo and cd into repo root
 git clone ...
 cd <repo_root>
 # create a virtual env under project root, .venv directory
-python3 -m venv .venv
+uv venv --python 3.11
 
 # activate the virtual env
 . .venv/bin/activate
 
-# specify python version for poetry to use
-poetry env use python3.11
 
 # use poetry to install dependencies (these go into .venv dir)
-poetry install --with dev
+uv sync --dev 
 ```
 
 Important note about dependencies management:
-> As of version 0.18.3, we are starting to include the `poetry.lock` file as part of 
+> As of version 0.18.3, we are starting to include the `uv.lock` file as part of 
 > the repo. This ensures that all contributors are using the same versions of 
-> dependencies. If you add a new dependency, you should run `poetry update` to update
-> the `poetry.lock` file. This will also update the `pyproject.toml` file.
+> dependencies. If you add a new dependency, `uv add` will automatically update 
+> the `uv.lock` file. This will also update the `pyproject.toml` file.
 
 To add packages, use `poetry add <package-name>`. This will automatically
 find the latest compatible version of the package and add it to `pyproject.
