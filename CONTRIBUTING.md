@@ -141,7 +141,7 @@ Important note about dependencies management:
 > dependencies. If you add a new dependency, `uv add` will automatically update 
 > the `uv.lock` file. This will also update the `pyproject.toml` file.
 
-To add packages, use `poetry add <package-name>`. This will automatically
+To add packages, use `uv add <package-name>`. This will automatically
 find the latest compatible version of the package and add it to `pyproject.
 toml`. _Do not manually edit `pyproject.toml` to add packages._
 
