@@ -136,7 +136,7 @@ uv sync --dev
 ```
 
 Important note about dependencies management:
-> As of version 0.18.3, we are starting to include the `uv.lock` file as part of 
+> As of version 0.33.0, we are starting to include the `uv.lock` file as part of 
 > the repo. This ensures that all contributors are using the same versions of 
 > dependencies. If you add a new dependency, `uv add` will automatically update 
 > the `uv.lock` file. This will also update the `pyproject.toml` file.
