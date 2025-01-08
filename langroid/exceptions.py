@@ -48,12 +48,18 @@ class LangroidImportError(ImportError):
                 
                 For multiple extras with Poetry, list them with spaces:
                 poetry add langroid --extras "{extra} another-extra"
+
+                If you are using uv:
+                uv add langroid"[{extra}]"
+
+                For multiple extras with uv, you can separate them with commas: 
+                uv add "langroid[{extra},another-extra]"
                 
-                If you are working within the langroid dev env (which uses Poetry),
+                If you are working within the langroid dev env (which uses uv),
                 you can do:
-                poetry install -E "{extra}" 
+                uv sync --dev --extra "{extra}"
                 or if you want to include multiple extras:
-                poetry install -E "{extra} another-extra"
+                uv sync --dev --extra "{extra}" --extra "another-extra"
                 """
         else:
             install_help = """

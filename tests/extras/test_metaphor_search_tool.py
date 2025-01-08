@@ -3,6 +3,7 @@ NOTE: running this example requires setting METAPHOR_API_KEY
 environment variables in your `.env` file, and installing
 langroid with the `metaphor` extra, e.g.
 `pip install langroid[metaphor]` or `poetry add langroid[metaphor]`
+or `uv add langroid[metaphor]`
 (it installs the `metaphor-python` package from pypi).
 Or directly install the `metaphor-python` package from pypi via:
 `pip install metaphor-python`

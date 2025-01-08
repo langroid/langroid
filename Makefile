@@ -5,34 +5,34 @@ SHELL := /bin/bash
 .PHONY: setup update
 
 setup: ## Setup the git pre-commit hooks
-	poetry run pre-commit install
+	uv run pre-commit install
 
 update: ## Update the git pre-commit hooks
-	poetry run pre-commit autoupdate
+	uv run pre-commit autoupdate
 
 .PHONY: type-check
 type-check:
-	@poetry run pre-commit install
-	@poetry run pre-commit autoupdate
-	@poetry run pre-commit run --all-files
+	@uv run pre-commit install
+	@uv run pre-commit autoupdate
+	@uv run pre-commit run --all-files
 	@echo "Running black..."
 	@black --check .
 	@echo "Running flake8 on git-tracked files ONLY! ..."
 	@git ls-files | grep '\.py$$' | xargs flake8 --exclude=.git,__pycache__,.venv,langroid/embedding_models/protoc/*
-	@poetry run ruff check .
+	@uv run ruff check .
 	@echo "Running mypy...";
-	@poetry run mypy -p langroid
+	@uv run mypy -p langroid
 	@echo "All checks passed!"
 
 .PHONE: lint
 lint:
 	black .
-	poetry run ruff check . --fix
+	uv run ruff check . --fix
 
 .PHONY: stubs
 stubs:
 	@echo "Generating Python stubs for the langroid package..."
-	@poetry run stubgen -p langroid -o stubs
+	@uv run stubgen -p langroid -o stubs
 	@echo "Stubs generated in the 'stubs' directory"
 
 .PHONY: fix-pydantic
@@ -73,22 +73,22 @@ loc:
 
 .PHONY: bump-patch
 bump-patch:
-	@poetry version patch
+	@cz bump --increment PATCH
 	@git commit pyproject.toml -m "Bump version"
 
 .PHONY: bump-minor
 bump-minor:
-	@poetry version minor
+	@cz bump --increment MINOR 
 	@git commit pyproject.toml -m "Bump version"
 
 .PHONY: bump-major
 bump-major:
-	@poetry version major
+	@cz bump --increment MAJOR 
 	@git commit pyproject.toml -m "Bump version"
 
 .PHONY: build
 build:
-	@poetry build
+	@uv build
 
 .PHONY: push
 push:
@@ -100,7 +100,7 @@ clean:
 
 .PHONY: release
 release:
-	@VERSION=$$(poetry version | cut -d' ' -f2) && gh release create $${VERSION} dist/*
+	@VERSION=$$(cz version -p | cut -d' ' -f2) && gh release create $${VERSION} dist/*
 
 .PHONY: all-patch
 all-patch: bump-patch clean build push release
@@ -113,4 +113,4 @@ all-major: bump-major clean build push release
 
 .PHONY: publish
 publish:
-	poetry publish
+	uv publish
