@@ -71,6 +71,24 @@ loc:
 	@echo "Lines in git-tracked files python files:"
 	@git ls-files | grep '\.py$$' | xargs cat | grep -v '^\s*$$' | wc -l
 
+.PHONY: revert-tag
+revert-tag:
+	@LATEST_TAG=$$(git describe --tags --abbrev=0) && \
+	echo "Deleting tag: $$LATEST_TAG" && \
+	git tag -d $$LATEST_TAG
+
+.PHONY: revert-bump
+revert-bump:
+	@if git log -1 --pretty=%B | grep -q "bump"; then \
+		git reset --hard HEAD~1; \
+		echo "Reverted last commit (bump commit)"; \
+	else \
+		echo "Last commit was not a bump commit"; \
+	fi
+
+.PHONY: revert
+revert: revert-bump revert-tag
+	
 .PHONY: bump-patch
 bump-patch:
 	@cz bump --increment PATCH
