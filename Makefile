@@ -74,17 +74,14 @@ loc:
 .PHONY: bump-patch
 bump-patch:
 	@cz bump --increment PATCH
-	@git commit pyproject.toml -m "Bump version"
 
 .PHONY: bump-minor
 bump-minor:
 	@cz bump --increment MINOR 
-	@git commit pyproject.toml -m "Bump version"
 
 .PHONY: bump-major
 bump-major:
 	@cz bump --increment MAJOR 
-	@git commit pyproject.toml -m "Bump version"
 
 .PHONY: build
 build:
