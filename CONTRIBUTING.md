@@ -131,7 +131,7 @@ uv venv --python 3.11
 . .venv/bin/activate
 
 
-# use poetry to install dependencies (these go into .venv dir)
+# use uv to install dependencies (these go into .venv dir)
 uv sync --dev 
 ```
 
