@@ -32,7 +32,7 @@ you need to install the `langroid[postgres]` extra, e.g.:
 
     - `pip install "langroid[postgres]"` or 
     - `poetry add "langroid[postgres]"` or `uv add "langroid[postgres]"`
-    - `poetry install -E postgres` or `uv pip install --extra postgres`
+    - `poetry install -E postgres` or `uv pip install --extra postgres -r pyproject.toml`
 
 
 If this gives you an error, try `pip install psycopg2-binary` in your virtualenv.

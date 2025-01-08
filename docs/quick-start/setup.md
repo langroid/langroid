@@ -60,7 +60,7 @@ For many practical scenarios, you may need additional optional dependencies:
         - `sudo apt-get install libpq-dev` on Ubuntu,
         - `brew install postgresql` on Mac, etc.
     - Install langroid with the postgres extra, e.g. `pip install langroid[postgres]`
-      or `uv add "langroid[postgres]"` or `uv pip install --extra postgres`.
+      or `uv add "langroid[postgres]"` or `uv pip install --extra postgres -r pyproject.toml`.
       If this gives you an error, try 
       `uv pip install psycopg2-binary` in your virtualenv.
 
