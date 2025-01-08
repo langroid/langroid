@@ -107,7 +107,7 @@ build:
 
 .PHONY: push
 push:
-	@git push origin main
+	@git push --follow-tags origin main
 
 .PHONY: clean
 clean:
