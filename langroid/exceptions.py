@@ -50,7 +50,7 @@ class LangroidImportError(ImportError):
                 poetry add langroid --extras "{extra} another-extra"
 
                 If you are using uv:
-                uv add langroid"[{extra}]"
+                uv add "langroid[{extra}]"
 
                 For multiple extras with uv, you can separate them with commas: 
                 uv add "langroid[{extra},another-extra]"
