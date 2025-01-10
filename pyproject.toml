@@ -247,7 +247,7 @@ requires = ["pdm-backend"]
 build-backend = "pdm.backend"
 
 [tool.pdm.build]
-includes = ["pyproject.toml", "langroid/py.typed"]
+includes = ["langroid", "langroid/py.typed"]
 excludes = ["tests/"]
 
 [tool.black]
