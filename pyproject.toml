@@ -243,12 +243,20 @@ docs = [
 
 
 [build-system]
-requires = ["pdm-backend"]
-build-backend = "pdm.backend"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
 
-[tool.pdm.build]
-includes = ["langroid", "langroid/py.typed"]
-excludes = ["tests/"]
+
+[tool.hatch.build]
+only-packages = true
+include = ["langroid/py.typed", "langroid/"]
+exclude = [
+    "tests/",
+    "examples/",
+    "**/__pycache__",
+    "**/*.pyc",
+    "**/node_modules/**",
+]
 
 [tool.black]
 line-length = 88
