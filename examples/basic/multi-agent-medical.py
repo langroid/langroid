@@ -54,7 +54,9 @@ class ExpectedTextTool(lr.ToolMessage):
             return ForwardTool(agent=PA_NAME)
 
 
-# inherit from ToolMessage, not AgentDoneTool
+# inherit from ToolMessage, not AgentDoneTool;
+# But this tool is not really needed since we can set the assistant_task with
+# single_round=True, and its response will immediately be returned to the senior agent.
 class DiscussionTextTool(lr.ToolMessage):
     """Write an answer to senior agent"""
 
@@ -99,18 +101,20 @@ SENIOR_SYS_MSG = f"""You are Dr. X, the Chief Physician, collaborating with Dr. 
                     DO NOT mention the TOOL to Dr. Y. It is your responsibility to write and submit the expectedText.
                     """
 
-ASSISTANT_SYS_MSG = f"""You are Dr. Y, an assistant physician working under the supervision of Dr. X, the chief physician.                                     
+ASSISTANT_SYS_MSG = """You are Dr. Y, an assistant physician working under the supervision of Dr. X, the chief physician.                                     
                             Your role is to check a medical question and provide your initial evaluation, which will guide Dr. X 
                             toward finalizing the answer. Dr X may ask you a series of questions, and you should respond
                             based on your expertise and the preceding discussion.
                             ### Instructions:
                             1. Ensure your evaluation is clear, precise, and structured to facilitate an informed discussion. 
                             2. In each round of the discussion, limit yourself to a CONCISE message.
-                            3. ALWAYS use the TOOL `{DiscussionTextTool.name()}` to return your answers.
-                            ### Process:
-                            You will first receive a message from Dr. X, asking for your initial assessment. 
-                            Afterward, you can follow up in each discussion round to collaboratively refine the answer.
-                            """
+                        ### Process:
+                        You will first receive a message from Dr. X, asking for your initial assessment. 
+                        Afterward, you can follow up in each discussion round to collaboratively refine the answer.
+                        """
+
+# no need for discussion tool -- commenting out
+#                        f"3. ALWAYS use the TOOL `{DiscussionTextTool.name()}` to return your answers." +
 
 
 # no need to inherit this from ChatAgent - it's not a real agent, i.e.e
@@ -136,7 +140,8 @@ class ChatManager:
                 system_message=ASSISTANT_SYS_MSG,
             ),
         )
-        self.ass_agent.enable_message(DiscussionTextTool)
+        # no need for the DiscussionTextTool
+        # self.ass_agent.enable_message(DiscussionTextTool)
         self.senior_lm_config = lm.OpenAIGPTConfig(
             chat_model=MODEL,
             chat_context_length=1040_000,
@@ -170,7 +175,7 @@ class ChatManager:
             self.ass_agent,
             llm_delegate=True,
             interactive=False,
-            single_round=False,
+            single_round=True,  # set to True, eliminates need for DiscussionTextTool
             restart=True,  # ignored for a subtask
             config=task_config,
         )
