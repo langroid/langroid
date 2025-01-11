@@ -242,6 +242,7 @@ def run_batch_agent_method(
     output_map: Callable[[ChatDocument | None], Any] = lambda x: x,
     sequential: bool = True,
     stop_on_first_result: bool = False,
+    batch_size: Optional[int] = None,
 ) -> List[Any]:
     """
     Run the `method` on copies of `agent`, async/concurrently one per
@@ -265,6 +266,8 @@ def run_batch_agent_method(
             to final result
         sequential (bool): whether to run sequentially
             (e.g. some APIs such as ooba don't support concurrent requests)
+        batch_size (Optional[int]): The number of items to process in each batch.
+            If None, process all items at once.
     Returns:
         List[Any]: list of final results
     """
@@ -290,10 +293,12 @@ def run_batch_agent_method(
         result = await method_i(input)
         return output_map(result)
 
-    async def _do_all() -> List[Any]:
+    async def _do_all(
+        inputs: Iterable[str | ChatDocument], start_idx: int = 0
+    ) -> List[Any]:
         if stop_on_first_result:
             tasks = [
-                asyncio.create_task(_do_task(input, i))
+                asyncio.create_task(_do_task(input, i + start_idx))
                 for i, input in enumerate(inputs)
             ]
             results = [None] * len(tasks)
@@ -312,17 +317,40 @@ def run_batch_agent_method(
         elif sequential:
             results = []
             for i, input in enumerate(inputs):
-                result = await _do_task(input, i)
+                result = await _do_task(input, i + start_idx)
                 results.append(result)
             return results
+
         with quiet_mode(), SuppressLoggerWarnings():
             return await asyncio.gather(
-                *(_do_task(input, i) for i, input in enumerate(inputs))
+                *(_do_task(input, i + start_idx) for i, input in enumerate(inputs))
             )
 
-    n = len(items)
-    with status(f"[bold green]Running {n} copies of {agent_name}..."):
-        results = asyncio.run(_do_all())
+    results: List[Any] = []
+    if batch_size is None:
+        # Process all items in one batch
+        msg = f"[bold green]Running {len(items)} copies of {agent_name}..."
+        with status(msg), SuppressLoggerWarnings():
+            results = asyncio.run(_do_all(inputs))
+    else:
+        # Process items in batches using the same batched utility as run_batch_task_gen
+        batches = batched(inputs, batch_size)
+
+        for batch in batches:
+            start_idx = len(results)
+            complete_str = f", {start_idx} complete" if start_idx > 0 else ""
+            msg = (
+                f"[bold green]Running {len(items)} copies of "
+                f"{agent_name}{complete_str}..."
+            )
+
+            if stop_on_first_result and any(results):
+                # If we already have a result and stop_on_first_result is True,
+                # pad remaining results with None
+                results.extend([None] * len(batch))
+            else:
+                with status(msg), SuppressLoggerWarnings():
+                    results.extend(asyncio.run(_do_all(batch, start_idx=start_idx)))
 
     return results
 
@@ -334,6 +362,7 @@ def llm_response_batch(
     output_map: Callable[[ChatDocument | None], Any] = lambda x: x,
     sequential: bool = True,
     stop_on_first_result: bool = False,
+    batch_size: Optional[int] = None,
 ) -> List[Any]:
     return run_batch_agent_method(
         agent,
@@ -343,6 +372,7 @@ def llm_response_batch(
         output_map=output_map,
         sequential=sequential,
         stop_on_first_result=stop_on_first_result,
+        batch_size=batch_size,
     )
 
 
@@ -353,6 +383,7 @@ def agent_response_batch(
     output_map: Callable[[ChatDocument | None], Any] = lambda x: x,
     sequential: bool = True,
     stop_on_first_result: bool = False,
+    batch_size: Optional[int] = None,
 ) -> List[Any]:
     return run_batch_agent_method(
         agent,
@@ -362,6 +393,7 @@ def agent_response_batch(
         output_map=output_map,
         sequential=sequential,
         stop_on_first_result=stop_on_first_result,
+        batch_size=batch_size,
     )
 
 
