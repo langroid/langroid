@@ -218,13 +218,15 @@ if __name__ == "__main__":
         )["test"]
     )
     model_responses = []
-    questions = [row.QUESTION for row in pubmed_ds.itertuples()]
-    print(f"Processing {len(questions)} questions")
-    for i, question in enumerate(questions[:10]):
+    nrows = len(pubmed_ds)
+    print(f"Processing {nrows} questions")
+    for i, row in enumerate(pubmed_ds.itertuples()):
+        question = row.QUESTION
+        reference_decision = row.final_decision
         print(f"QUESTION: {question}")
         response: ExpectedText = chatAgent.start_chat(question=question)
         model_responses.append(response)
-        print(f"Got response {i}: {response.final_decision}")
+        print(f"Got response {i}: {response.final_decision}, reference: {reference_decision}")
         cont = Prompt.ask("Continue? (y/n)", default="y")
         if cont.lower() != "y":
             break
