@@ -179,7 +179,7 @@ class ChatManager:
             self.senior_agent,
             llm_delegate=True,
             interactive=False,
-            single_round=True,
+            single_round=False,
             restart=True,
             config=task_config,
         )[
