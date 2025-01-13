@@ -253,11 +253,8 @@ def run_debate() -> None:
                     searched_urls, feedback_agent_config.chat_model
                 )
             )
-            ask_questions_agent.ingest()
             ask_questions_task = lr.Task(ask_questions_agent)
-            ask_questions_task.run(
-                "Describe Extracts",
-            )
+            ask_questions_task.run()
 
 
 @app.command()
