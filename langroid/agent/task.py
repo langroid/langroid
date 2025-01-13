@@ -200,7 +200,11 @@ class Task:
                 control of task termination.
             system_message (str): if not empty, overrides agent's system_message
             user_message (str): if not empty, overrides agent's user_message
-            restart (bool): if true, resets the agent's message history *at every run*.
+            restart (bool): if true (default), resets the agent's message history 
+                *at every run* when it is the top-level task. Ignored when 
+                the task is a subtask of another task. Restart behavior of a subtask's
+                `run()` can be controlled via the `TaskConfig.restart_as_subtask` 
+                setting.
             default_human_response (str|None): default response from user; useful for
                 testing, to avoid interactive input from user.
                 [Instead of this, setting `interactive` usually suffices]
