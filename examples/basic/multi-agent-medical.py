@@ -1,3 +1,26 @@
+"""
+Credit to @burcusayin for contributing this example.
+
+Run like this:
+
+    python3 examples/basic/multi-agent-medical.py
+
+or
+    uv run examples/basic/multi-agent-medical.py
+
+A two-agent system to answer medical questions that require a binary yes/no answer,
+along with a `long_answer` explanation. The agents consist of:
+
+- Chief Physician (CP) agent who is in charge of the final binary decision and explanation.
+- Physician Assistant (PA) agent who is consulted by the CP; The CP may ask a series of questions to the PA, and once the CP decides they have sufficient information, they will return their final decision using a structured tool message.
+
+The system is run over 445 medical questions from this dataset:
+https://huggingface.co/datasets/burcusayin/pubmedqa_binary_with_plausible_gpt4_long_answers
+
+In each row of this dataset, there is a QUESTION, and a final_decision
+which we use as reference to compare the system-generated final decision.
+"""
+
 import langroid as lr
 import langroid.language_models as lm
 import logging
@@ -21,18 +44,15 @@ PA_NAME = "PA"
 
 
 class ExpectedText(BaseModel):
-
     final_decision: str = Field(..., description="binary yes/no answer")
     long_answer: str = Field(..., description="explanation for the final decision")
 
 
-# inherit only from ToolMessage, not (ResultTool, ForwardTool)
 class ExpectedTextTool(lr.ToolMessage):
     request: str = "expected_text_tool"
     purpose: str = """
-    To write the final <expectedText> AFTER having a multi-turn discussion about ... with the Assistant Agent,
-    with all fields of the appropriate type filled out;
-    SIMPLY TALK IN NATURAL LANGUAGE.
+    To write the final <expectedText> AFTER having a multi-turn discussion
+    with the Assistant Agent, with all fields of the appropriate type filled out.
     """
     expectedText: ExpectedText
 
@@ -54,71 +74,39 @@ class ExpectedTextTool(lr.ToolMessage):
             return ForwardTool(agent=PA_NAME)
 
 
-# inherit from ToolMessage, not AgentDoneTool;
-# But this tool is not really needed since we can set the assistant_task with
-# single_round=True, and its response will immediately be returned to the senior agent.
-class DiscussionTextTool(lr.ToolMessage):
-    """Write an answer to senior agent"""
-
-    request: str = "discussion_text_tool"
-    purpose: str = """
-    To express your <answer> AFTER receiving a message from the senior agent (CP);
-    SIMPLY TALK IN NATURAL LANGUAGE.
-    """
-    answer: str
-
-    def handle(self) -> AgentDoneTool:
-        return AgentDoneTool(content=self.answer)
-
-    @staticmethod
-    def handle_message_fallback(
-        agent: lr.ChatAgent, msg: str | lr.ChatDocument
-    ) -> AgentDoneTool:
-        """
-        We end up here when there was no recognized tool msg from the LLM;
-        In this case forward the message to the user using ForwardTool.
-        """
-        if isinstance(msg, lr.ChatDocument) and msg.metadata.sender == lr.Entity.LLM:
-            return AgentDoneTool(content=msg.content)
-
-
 # Define fixed system messages outside of the question-loop
 # Pass each question as senior_task.run(question)
 
-SENIOR_SYS_MSG = f"""You are Dr. X, the Chief Physician, collaborating with Dr. Y, your assistant. 
-                    Your task is to come up with concise answers to medical questions. 
+SENIOR_SYS_MSG = f"""You are Dr. X, the Chief Physician, collaborating with Dr. Y, your assistant.
+                    Your task is to come up with concise answers to medical questions.
                     To make better decisions, when you receive a question, you should follow a TWO-PHASE procedure:
-                    
+
                     PHASE 1: Ask your assistant NATURAL LANGUAGE questions (NO TOOLS), which may span
                         MULTIPLE ROUNDS. ASK EXACTLY ONE QUESTION in each round. DO NOT ASK MULTIPLE QUESTIONS AT ONCE.
-                        Avoid fabricating interactions or simulating dialogue with Dr. Y. 
-                        Instead, clearly articulate your questions or follow-ups, analyze Dr. Y's responses, 
+                        Avoid fabricating interactions or simulating dialogue with Dr. Y.
+                        Instead, clearly articulate your questions or follow-ups, analyze Dr. Y's responses,
                         and use this information to guide your decision-making.
-                    PHASE 2: Once you have gathered sufficient information, return your final decision 
+                    PHASE 2: Once you have gathered sufficient information, return your final decision
                         using the TOOL `{ExpectedTextTool.name()}`:
                         - `final_decision` should be your BINARY yes/no answer
                         - `long_answer` should provide a detailed explanation for your final decision.
                     DO NOT mention the TOOL to Dr. Y. It is your responsibility to write and submit the expectedText.
                     """
 
-ASSISTANT_SYS_MSG = """You are Dr. Y, an assistant physician working under the supervision of Dr. X, the chief physician.                                     
-                            Your role is to check a medical question and provide your initial evaluation, which will guide Dr. X 
+ASSISTANT_SYS_MSG = """You are Dr. Y, an assistant physician working under the supervision of Dr. X, the chief physician.
+                            Your role is to respond to a medical question
+                            by providing your initial evaluation, which will guide Dr. X
                             toward finalizing the answer. Dr X may ask you a series of questions, and you should respond
                             based on your expertise and the preceding discussion.
                             ### Instructions:
-                            1. Ensure your evaluation is clear, precise, and structured to facilitate an informed discussion. 
+                            1. Ensure your evaluation is clear, precise, and structured to facilitate an informed discussion.
                             2. In each round of the discussion, limit yourself to a CONCISE message.
                         ### Process:
-                        You will first receive a message from Dr. X, asking for your initial assessment. 
+                        You will first receive a message from Dr. X, asking for your initial assessment.
                         Afterward, you can follow up in each discussion round to collaboratively refine the answer.
                         """
 
-# no need for discussion tool -- commenting out
-#                        f"3. ALWAYS use the TOOL `{DiscussionTextTool.name()}` to return your answers." +
 
-
-# no need to inherit this from ChatAgent - it's not a real agent, i.e.e
-# we are not trying to use its llm_response or other *_response methods
 class ChatManager:
     def __init__(
         self,
@@ -156,17 +144,6 @@ class ChatManager:
         )
         self.senior_agent.enable_message(ExpectedTextTool)
 
-    # This will not be used since MainChatAgent is not a real agent with a task wrapper;
-    # it's just managing the other 2 agents.
-
-    # def handle_message_fallback(self, msg: str | lr.ChatDocument) -> ForwardTool:
-    #     """
-    #     We'd be here if there were no recognized tools in the incoming msg.
-    #     If this was from LLM, forward to Assistant agent.
-    #     """
-    #     if isinstance(msg, lr.ChatDocument) and msg.metadata.sender == lr.Entity.LLM:
-    #         return ForwardTool(agent="PA")
-
     def start_chat(
         self, question: str
     ) -> ExpectedText:  # this is our main function to start the chat
@@ -187,9 +164,7 @@ class ChatManager:
             single_round=False,
             restart=True,
             config=task_config,
-        )[
-            ResultTool
-        ]  # specialize task to strictly return ResultTool
+        )[ResultTool]  # specialize task to strictly return ResultTool or None
 
         self.senior_task.add_sub_task(self.ass_task)
         response_tool: ResultTool | None = self.senior_task.run(
@@ -226,9 +201,9 @@ if __name__ == "__main__":
         print(f"QUESTION: {question}")
         response: ExpectedText = chatAgent.start_chat(question=question)
         model_responses.append(response)
-        print(f"Got response {i}: {response.final_decision}, reference: {reference_decision}")
+        print(
+            f"Got response {i}: {response.final_decision}, reference: {reference_decision}"
+        )
         cont = Prompt.ask("Continue? (y/n)", default="y")
         if cont.lower() != "y":
             break
-
-        # we save the responses here.
