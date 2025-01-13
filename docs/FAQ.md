@@ -349,7 +349,9 @@ r = r1 = True
 agent = ...
 task_config = TaskConfig(restart_as_subtask=rs) 
 t = Task(agent, restart=r, config=task_config)
-t1 = Task(agent, restart=r1, config=task_config)
+
+agent1 = ...
+t1 = Task(agent1, restart=r1, config=task_config)
 t.add_subtask(t1)
 ```
 
@@ -377,3 +379,39 @@ These settings can be mixed and matched as needed.
 Additionally, all reset behavior can be turned off during a specific `run()` invocation
 by calling it with `allow_restart=False`, e.g.,  `t.run(..., allow_restart=False)`.
 
+## How can I set up a task to exit as soon as the LLM responds?
+
+In some cases you may want the top-level task or a subtask to exit as soon as the LLM responds. You can get this behavior by setting `single_round=True` during task construction, e.g.,
+
+```python
+from langroid.agent.task import Task
+
+agent = ...
+t = Task(agent, single_round=True, interactive=False)
+
+result = t.run("What is 4 + 5?")
+```
+
+The name `single_round` comes from the fact that the task loop ends as soon as 
+any **one** of the agent's responders return a valid response. Recall that an 
+agent's responders are `llm_response`, `agent_response` (for tool handling), and `user_response` (for user input). In the above example there are no tools and no 
+user interaction (since `interactive=False`), so the task will exit as soon as the LLM responds.
+
+More commonly, you may only want this single-round behavior for a subtask, e.g.,
+
+```python
+agent = ...
+t = Task(agent, single_round=False, interactive=True)
+
+agent1 = ...
+t1 = Task(agent1, single_round=True, interactive=False)
+
+t.add_subtask(t1)
+top_level_query = ...
+result = t.run(...)
+```
+
+See the example script [`chat-2-agent-discuss.py`](https://github.com/langroid/langroid/blob/main/examples/basic/chat-2-agent-discuss.py) for an example of this, and also search for `single_round` in the rest of the examples.
+
+!!! warning "Using `single_round=True` will not handle the tool"
+    As explained above, setting `single_round=True` will cause the task to exit as soon as the LLM responds, and thus if it emits a valid tool (which the agent is enabled to handle), this tool will *not* be handled
