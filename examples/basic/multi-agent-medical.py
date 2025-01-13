@@ -26,7 +26,7 @@ import langroid.language_models as lm
 import logging
 from langroid.pydantic_v1 import BaseModel, Field
 from langroid.utils.configuration import settings
-from langroid.agent.tools.orchestration import ForwardTool, AgentDoneTool, ResultTool
+from langroid.agent.tools.orchestration import ForwardTool, ResultTool
 from langroid.agent.task import TaskConfig
 import datasets
 from rich.prompt import Prompt
@@ -164,7 +164,9 @@ class ChatManager:
             single_round=False,
             restart=True,
             config=task_config,
-        )[ResultTool]  # specialize task to strictly return ResultTool or None
+        )[
+            ResultTool
+        ]  # specialize task to strictly return ResultTool or None
 
         self.senior_task.add_sub_task(self.ass_task)
         response_tool: ResultTool | None = self.senior_task.run(
