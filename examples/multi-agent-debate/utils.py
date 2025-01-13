@@ -1,4 +1,5 @@
 import logging
+import re
 from rich.prompt import Prompt, Confirm
 from langroid.utils.logging import setup_logger
 from models import SystemMessages
@@ -182,10 +183,9 @@ def is_llm_delegate() -> bool:
 
 
 def is_metaphor_search_key_set() -> bool:
-    """Prompt the user to decide on LLM delegation.
+    """Prompt the user confirmation about metaphorSearch API keys.
 
-    Asks the user whether the LLM should autonomously continue the debate
-    without requiring user input.
+    Asks the user to confirm the metaphorSearch API keys.
 
     Returns:
         bool: True if the user chooses LLM delegation, otherwise return False.
@@ -222,3 +222,39 @@ def select_max_debate_turns() -> int:
             return int(max_turns)
         except ValueError:
             return DEFAULT_TURN_COUNT
+
+
+def extract_urls(message_history):
+    """
+    Extracts all URLs from the given message history content and returns them in the format [url1, url2, ..., urln].
+
+    Parameters:
+        message_history (list): A list of LLMMessage objects containing message history.
+
+    Returns:
+        str: A string representation of a list of URLs.
+    """
+    # Extract content only from non-system messages
+    content = " ".join(
+        message.content
+        for message in message_history
+        if hasattr(message, "content") and message.content and message.role != "system"
+    )
+
+    # Extract URLs from content
+    urls = re.findall(r"https?://\S+", content)
+    return urls  # Return the list of URLs directly
+
+
+def is_url_ask_question(topic_name: str) -> bool:
+    """Prompt the user to decide to ask questions from the searched URL docs.
+
+    Asks the user whether they want to ask questions from the searched URL docs?
+
+    Returns:
+        bool: True if the user chooses to ask questions from searched url docs., otherwise return False.
+    """
+    return Confirm.ask(
+        f"Would you like to Chat with documents found through Search for more information on the {topic_name}",
+        default=False,
+    )
