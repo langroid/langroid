@@ -11,8 +11,11 @@ or
 A two-agent system to answer medical questions that require a binary yes/no answer,
 along with a `long_answer` explanation. The agents consist of:
 
-- Chief Physician (CP) agent who is in charge of the final binary decision and explanation.
-- Physician Assistant (PA) agent who is consulted by the CP; The CP may ask a series of questions to the PA, and once the CP decides they have sufficient information, they will return their final decision using a structured tool message.
+- Chief Physician (CP) agent who is in charge of the final binary decision
+    and explanation.
+- Physician Assistant (PA) agent who is consulted by the CP; The CP may ask a
+  series of questions to the PA, and once the CP decides they have sufficient
+  information, they will return their final decision using a structured tool message.
 
 The system is run over 445 medical questions from this dataset:
 https://huggingface.co/datasets/burcusayin/pubmedqa_binary_with_plausible_gpt4_long_answers
@@ -152,8 +155,7 @@ class ChatManager:
             self.ass_agent,
             llm_delegate=True,
             interactive=False,
-            single_round=True,  # set to True, eliminates need for DiscussionTextTool
-            restart=True,  # ignored for a subtask
+            single_round=True,  
             config=task_config,
         )
 
@@ -162,11 +164,8 @@ class ChatManager:
             llm_delegate=True,
             interactive=False,
             single_round=False,
-            restart=True,
             config=task_config,
-        )[
-            ResultTool
-        ]  # specialize task to strictly return ResultTool or None
+        )[ResultTool]  # specialize task to strictly return ResultTool or None
 
         self.senior_task.add_sub_task(self.ass_task)
         response_tool: ResultTool | None = self.senior_task.run(
