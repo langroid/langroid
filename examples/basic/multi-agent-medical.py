@@ -155,7 +155,7 @@ class ChatManager:
             self.ass_agent,
             llm_delegate=True,
             interactive=False,
-            single_round=True,  
+            single_round=True,
             config=task_config,
         )
 
@@ -165,7 +165,9 @@ class ChatManager:
             interactive=False,
             single_round=False,
             config=task_config,
-        )[ResultTool]  # specialize task to strictly return ResultTool or None
+        )[
+            ResultTool
+        ]  # specialize task to strictly return ResultTool or None
 
         self.senior_task.add_sub_task(self.ass_task)
         response_tool: ResultTool | None = self.senior_task.run(
