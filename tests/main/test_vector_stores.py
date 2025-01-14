@@ -333,8 +333,19 @@ def test_vector_stores_context_window(vecdb):
     
     docs_scores = vecdb.add_context_window(docs_scores, neighbors=2)
     
+    assert len(docs_scores) == 1
     giraffes, score = docs_scores[0]
-    
+    assert all(
+        p in giraffes.content
+        for p in [
+            phrases.CATS,
+            phrases.DOGS,
+            phrases.GIRAFFES,
+            phrases.ELEPHANTS,
+            phrases.OWLS,
+        ]
+    )
+    # check they are in the right sequence
     indices = [
         giraffes.content.index(p)
         for p in ["Cats", "Dogs", "Giraffes", "Elephants", "Owls"]
