@@ -277,7 +277,7 @@ class ChainlitAgentCallbacks:
     def get_last_step(self) -> Optional[cl.Step]:
         return self.last_step
 
-    def start_llm_stream(self) -> Callable[[str], None]:
+    def start_llm_stream(self) -> Callable[[str, StreamEventType], None]:
         """Returns a streaming fn that can be passed to the LLM class"""
         self.stream = cl.Message(
             content="",
@@ -303,7 +303,7 @@ class ChainlitAgentCallbacks:
 
         return stream_token
 
-    async def start_llm_stream_async(self) -> Callable[[str], None]:
+    async def start_llm_stream_async(self) -> Callable[[str, StreamEventType], None]:
         """Returns a streaming fn that can be passed to the LLM class"""
         self.stream = cl.Message(
             content="",
