@@ -2,6 +2,7 @@ import hashlib
 import json
 import logging
 import os
+import time
 import uuid
 from typing import Dict, List, Optional, Sequence, Tuple, TypeVar
 
@@ -323,6 +324,26 @@ class QdrantDB(VectorStore):
             }
             if self.config.use_sparse_embeddings:
                 vectors["text-sparse"] = sparse_embedding_vecs[i : i + b]
+            coll_found: bool = False
+            for _ in range(3):
+                # poll until collection is ready
+                if (
+                    self.client.collection_exists(self.config.collection_name)
+                    and self.client.get_collection(self.config.collection_name).status
+                    == CollectionStatus.GREEN
+                ):
+                    coll_found = True
+                    break
+                time.sleep(1)
+
+            if not coll_found:
+                raise ValueError(
+                    f"""
+                    QdrantDB Collection {self.config.collection_name} 
+                    not found or not ready
+                    """
+                )
+
             self.client.upsert(
                 collection_name=self.config.collection_name,
                 points=Batch(

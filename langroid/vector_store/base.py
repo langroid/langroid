@@ -122,6 +122,8 @@ class VectorStore(ABC):
 
         self.config.collection_name = collection_name
         self.config.replace_collection = replace
+        if replace:
+            self.create_collection(collection_name, replace=True)
 
     @abstractmethod
     def create_collection(self, collection_name: str, replace: bool = False) -> None:
