@@ -292,6 +292,9 @@ def test_vector_stores_access(vecdb):
     # LanceDB.create_collection() does nothing, since we can't create a table
     # without a schema or data.
     assert n_colls == n_dels == (0 if isinstance(vecdb, LanceDB) else len(coll_names))
+    vecdb.set_collection(coll_name, replace=True)
+    assert vecdb.config.collection_name == coll_name
+    assert vecdb.get_all_documents() == []
 
 
 @pytest.mark.parametrize(
