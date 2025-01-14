@@ -20,6 +20,7 @@ from chainlit.logger import logger
 
 import langroid as lr
 import langroid.language_models as lm
+from langroid.language_models import StreamEventType
 from langroid.utils.configuration import settings
 from langroid.utils.constants import NO_ANSWER
 
@@ -295,7 +296,7 @@ class ChainlitAgentCallbacks:
         """
         )
 
-        def stream_token(t: str) -> None:
+        def stream_token(t: str, e: StreamEventType) -> None:
             if self.stream is None:
                 raise ValueError("Stream not initialized")
             run_sync(self.stream.stream_token(t))
@@ -321,7 +322,7 @@ class ChainlitAgentCallbacks:
             """
         )
 
-        async def stream_token(t: str) -> None:
+        async def stream_token(t: str, e: StreamEventType) -> None:
             if self.stream is None:
                 raise ValueError("Stream not initialized")
             await self.stream.stream_token(t)
