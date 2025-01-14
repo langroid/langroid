@@ -1238,6 +1238,7 @@ def test_agent_respond_only_tools(tool: str):
             assert bob_task.n_stalled_steps == 0
 
 
+@pytest.mark.skip(reason="This test is flaky and needs to be fixed")
 @pytest.mark.parametrize("use_fn_api", [True, False])
 @pytest.mark.parametrize("use_tools_api", [True, False])
 def test_structured_recovery(

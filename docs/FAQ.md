@@ -324,3 +324,94 @@ From `ChatAgent`'s `llm_response` method: you can define a subclass of a
 `FinalResultTool` and enable the agent to use this tool, which means it will become
 available for the LLM to generate. 
 See [examples/basic/multi-agent-return-result.py](https://github.com/langroid/langroid/blob/main/examples/basic/multi-agent-return-result.py).
+
+## How can I configure a task to retain or discard prior conversation?
+
+In some scenarios, you may want to control whether each time you call a task's `run` 
+method, the underlying agent retains the conversation history from the previous run.
+There are two boolean config parameters that control this behavior: 
+
+- the `restart` parameter (default `True`) in the `Task` constructor, and
+- the `restart_as_subtask` (default `False`) parameter in the `TaskConfig` argument of the `Task` constructor.
+
+To understand how these work, consider a simple scenario of a task `t` that has a 
+subtask `t1`, e.g., suppose you have the following code with default settings 
+of the `restart` and `restart_as_subtask` parameters:
+
+```python
+from langroid.agent.task import Task
+from langroid.agent.task import TaskConfig
+
+# default setttings:
+rs = False
+r = r1 = True
+
+agent = ...
+task_config = TaskConfig(restart_as_subtask=rs) 
+t = Task(agent, restart=r, config=task_config)
+
+agent1 = ...
+t1 = Task(agent1, restart=r1, config=task_config)
+t.add_subtask(t1)
+```
+
+This default setting works as follows:
+Since task `t` was constructed with the default `restart=True`, when `t.run()` is called, the conversation histories of the agent underlying `t` as well as all 
+those of all subtasks (such as `t1`) are reset. However, if during `t.run()`,
+there are multiple calls to `t1.run()`, then the conversation history is retained across these calls, even though `t1` was constructed with the default `restart=True` --
+this is because the `restart` constructor parameter has no effect on a task's reset
+behavior **when it is a subtask**. 
+
+The `TaskConfig.restart_as_subtask` parameter
+controls the reset behavior of a task's `run` method when invoked as a subtask.
+It defaults to `False`, which is why in the above example, the conversation history
+of `t1` is retained across multiple calls to `t1.run()` that may occur
+during execution of `t.run()`. If you set this parameter to `True` in the above
+example, then the conversation history of `t1` would be reset each time `t1.run()` is called, during a call to `t.run()`.
+
+To summarize, 
+
+- The `Task` constructor's `restart` parameter controls the reset behavior of the task's `run` method when it is called directly, not as a subtask.
+- The `TaskConfig.restart_as_subtask` parameter controls the reset behavior of the task's `run` method when it is called as a subtask.
+
+These settings can be mixed and matched as needed.
+
+Additionally, all reset behavior can be turned off during a specific `run()` invocation
+by calling it with `allow_restart=False`, e.g.,  `t.run(..., allow_restart=False)`.
+
+## How can I set up a task to exit as soon as the LLM responds?
+
+In some cases you may want the top-level task or a subtask to exit as soon as the LLM responds. You can get this behavior by setting `single_round=True` during task construction, e.g.,
+
+```python
+from langroid.agent.task import Task
+
+agent = ...
+t = Task(agent, single_round=True, interactive=False)
+
+result = t.run("What is 4 + 5?")
+```
+
+The name `single_round` comes from the fact that the task loop ends as soon as 
+any **one** of the agent's responders return a valid response. Recall that an 
+agent's responders are `llm_response`, `agent_response` (for tool handling), and `user_response` (for user input). In the above example there are no tools and no 
+user interaction (since `interactive=False`), so the task will exit as soon as the LLM responds.
+
+More commonly, you may only want this single-round behavior for a subtask, e.g.,
+
+```python
+agent = ...
+t = Task(agent, single_round=False, interactive=True)
+
+agent1 = ...
+t1 = Task(agent1, single_round=True, interactive=False)
+
+t.add_subtask(t1)
+top_level_query = ...
+result = t.run(...)
+```
+
+See the example script [`chat-2-agent-discuss.py`](https://github.com/langroid/langroid/blob/main/examples/basic/chat-2-agent-discuss.py) for an example of this, and also search for `single_round` in the rest of the examples.
+
+!!! warning "Using `single_round=True` will prevent tool-handling"
+    As explained above, setting `single_round=True` will cause the task to exit as soon as the LLM responds, and thus if it emits a valid tool (which the agent is enabled to handle), this tool will *not* be handled.

@@ -14,7 +14,8 @@ your `.env` file, e.g. `METAPHOR_API_KEY=your_api_key_here`
 `EXA_API_KEY=your_api_key_here`)
 
 * install langroid with the `metaphor` extra, e.g.
-`pip install langroid[metaphor]` or `poetry add langroid[metaphor]`
+`pip install langroid[metaphor]` or `uv pip install langroid[metaphor]` 
+or `poetry add langroid[metaphor]`  or `uv add langroid[metaphor]`
 (it installs the `metaphor-python` package from pypi).
 
 For more information, please refer to the official docs:

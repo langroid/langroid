@@ -113,6 +113,7 @@ def metaphor_search(query: str, num_results: int = 5) -> List[WebSearchResult]:
             "You are attempting to use the `metaphor_python` library;"
             "To use it, please install langroid with the `metaphor` extra, e.g. "
             "`pip install langroid[metaphor]` or `poetry add langroid[metaphor]` "
+            "or `uv add langroid[metaphor]`"
             "(it installs the `metaphor_python` package from pypi)."
         )
 
