@@ -12,6 +12,7 @@ from langroid.vector_store.base import VectorStore
 from langroid.vector_store.lancedb import LanceDB, LanceDBConfig
 from langroid.vector_store.meilisearch import MeiliSearch, MeiliSearchConfig
 from langroid.vector_store.momento import MomentoVI, MomentoVIConfig
+from langroid.vector_store.pgvector import PGVector, PGVectorConfig
 from langroid.vector_store.qdrantdb import QdrantDB, QdrantDBConfig
 
 load_dotenv()
@@ -144,6 +145,16 @@ def vecdb(request) -> VectorStore:
         ldb.add_documents(stored_docs)
         yield ldb
         rmdir(ldb_dir)
+        return
+
+    if request.param == "pgvector":
+        pg_cfg = PGVectorConfig(
+            collection_name="test-pgvector", table_name="test_vectors"
+        )
+        pg = PGVector(pg_cfg)
+        pg.add_documents(stored_docs)
+        yield pg
+        pg.delete_collection(pg_cfg.collection_name)
         return
 
 
