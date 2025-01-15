@@ -2289,7 +2289,7 @@ wheels = [
 
 [[package]]
 name = "langroid"
-version = "0.33.8"
+version = "0.33.9"
 source = { editable = "." }
 dependencies = [
     { name = "adb-cloud-connector", marker = "platform_machine == 'aarch64' or platform_system != 'Darwin' or sys_platform != 'linux'" },
