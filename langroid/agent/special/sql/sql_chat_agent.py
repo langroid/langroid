@@ -72,7 +72,8 @@ Start by asking what I would like to know about the data.
 
 ADDRESSING_INSTRUCTION = """
 IMPORTANT - Whenever you are NOT writing a SQL query, make sure you address the user
-using {prefix}User. You MUST use the EXACT syntax {prefix} !!!
+using {prefix}User (NO SPACE between {prefix} and User). 
+You MUST use the EXACT syntax {prefix}User !!!
 
 In other words, you ALWAYS write EITHER:
  - a SQL query using the `run_query` tool, 
