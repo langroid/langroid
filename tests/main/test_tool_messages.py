@@ -446,6 +446,15 @@ class EulerTool(ToolMessage):
         return str(2 * self.fruit_pair.pears - self.fruit_pair.apples)
 
 
+class BoilerTool(ToolMessage):
+    request: str = "boiler"
+    purpose: str = "to request computing the Boiler transform of <fruit_pair>"
+    fruit_pair: FruitPair
+
+    def handle(self) -> str:
+        return str(3 * self.fruit_pair.pears - 5 * self.fruit_pair.apples)
+
+
 class SumTool(ToolMessage):
     request: str = "sum"
     purpose: str = "to request computing the sum of <x> and <y>"
@@ -484,7 +493,7 @@ def test_agent_infer_tool(
 ):
     set_global(test_settings)
     gauss_request = """{"xval": 1, "yval": 3}"""
-    nabrowski_or_euler_request = """{"num_pair": {"xval": 1, "yval": 3}}"""
+    boiler_or_euler_request = """{"fruit_pair": {"pears": 1, "apples": 3}}"""
     euler_request = """{"request": "euler", "fruit_pair": {"pears": 1, "apples": 3}}"""
     additional_args_request = """{"xval": 1, "yval": 3, "zval": 4}"""
     additional_args_request_specified = """
@@ -504,15 +513,17 @@ def test_agent_infer_tool(
             NabroskiTool,
             GaussTool,
             CoinFlipTool,
+            BoilerTool,
         ]
     )
     agent.enable_message(EulerTool, handle=False)
 
-    # Nabrowski is the only option prior to enabling EulerTool handling
-    assert agent.agent_response(nabrowski_or_euler_request).content == "6"
+    # Boiler is the only option prior to enabling EulerTool handling
+    assert agent.agent_response(boiler_or_euler_request).content == "-12"
 
     # Enable handling EulerTool, this makes nabrowski_or_euler_request ambiguous
     agent.enable_message(EulerTool)
+    agent.enable_message(BoilerTool)
 
     # Gauss is the only option
     assert agent.agent_response(gauss_request).content == "12"
@@ -521,7 +532,7 @@ def test_agent_infer_tool(
     assert agent.agent_response(euler_request).content == "-1"
 
     # We cannot infer the correct tool if there exist multiple matches
-    assert agent.agent_response(nabrowski_or_euler_request) is None
+    assert agent.agent_response(boiler_or_euler_request) is None
 
     # We do not infer tools where the request has additional arguments
     assert agent.agent_response(additional_args_request) is None
