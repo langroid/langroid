@@ -15,6 +15,9 @@ from langroid.parsing.utils import batched
 
 AzureADTokenProvider = Callable[[], str]
 
+LANGDB_BASE_URL = "https://api.us-east-1.langdb.ai"
+DUMMY_API_KEY = "xxx"
+LANGDB_API_KEY = os.environ.get("LANGDB_API_KEY", DUMMY_API_KEY)
 
 class OpenAIEmbeddingsConfig(EmbeddingModelsConfig):
     model_type: str = "openai"
@@ -168,16 +171,26 @@ class OpenAIEmbeddings(EmbeddingModel):
         super().__init__()
         self.config = config
         load_dotenv()
-        self.config.api_key = os.getenv("OPENAI_API_KEY", "")
+        if self.config.model_name.startswith("langdb/"):
+            self.config.model_name = self.config.model_name.replace("langdb/", "")
+            if not self.config.api_base:
+                self.config.api_base = LANGDB_BASE_URL
+            if not self.config.api_key:
+                self.config.api_key = LANGDB_API_KEY
+        if not self.config.api_key:
+            self.config.api_key = os.getenv("OPENAI_API_KEY", "")
         self.config.organization = os.getenv("OPENAI_ORGANIZATION", "")
+
         if self.config.api_key == "":
             raise ValueError(
-                """OPENAI_API_KEY env variable must be set to use 
-                OpenAIEmbeddings. Please set the OPENAI_API_KEY value 
-                in your .env file.
-                """
+                """OPENAI_API_KEY (or LANGDB_API_KEY if using "langdb/") 
+                must be set in .env or your environment to use OpenAIEmbeddings."""
             )
-        self.client = OpenAI(base_url=self.config.api_base, api_key=self.config.api_key)
+        self.client = OpenAI(
+            base_url=self.config.api_base,
+            api_key=self.config.api_key,
+            organization=self.config.organization,
+        )
         self.tokenizer = tiktoken.encoding_for_model(self.config.model_name)
 
     def truncate_texts(self, texts: List[str]) -> List[List[int]]:

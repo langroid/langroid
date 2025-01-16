@@ -71,9 +71,10 @@ DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai"
 GLHF_BASE_URL = "https://glhf.chat/api/openai/v1"
+LANGDB_BASE_URL = "https://api.us-east-1.langdb.ai"
 OLLAMA_API_KEY = "ollama"
 DUMMY_API_KEY = "xxx"
-
+LANGDB_API_KEY = os.environ.get("LANGDB_API_KEY", DUMMY_API_KEY)
 VLLM_API_KEY = os.environ.get("VLLM_API_KEY", DUMMY_API_KEY)
 LLAMACPP_API_KEY = os.environ.get("LLAMA_API_KEY", DUMMY_API_KEY)
 
@@ -332,6 +333,7 @@ class OpenAIGPTConfig(LLMConfig):
     # e.g. "mistral-instruct-v0.2 (a fuzzy search is done to find the closest match)
     formatter: str | None = None
     hf_formatter: HFFormatter | None = None
+    headers: Dict[str, str] = {}
 
     def __init__(self, **kwargs) -> None:  # type: ignore
         local_model = "api_base" in kwargs and kwargs["api_base"] is not None
@@ -586,6 +588,7 @@ class OpenAIGPT(LanguageModel):
         self.is_deepseek = self.is_deepseek_model()
         self.is_glhf = self.config.chat_model.startswith("glhf/")
         self.is_openrouter = self.config.chat_model.startswith("openrouter/")
+        self.is_langdb = self.config.chat_model.startswith("langdb/")
 
         if self.is_groq:
             # use groq-specific client
@@ -628,12 +631,19 @@ class OpenAIGPT(LanguageModel):
                 self.config.chat_model = self.config.chat_model.replace("deepseek/", "")
                 self.api_base = DEEPSEEK_BASE_URL
                 self.api_key = os.getenv("DEEPSEEK_API_KEY", DUMMY_API_KEY)
+            elif self.is_langdb:
+                self.config.chat_model = self.config.chat_model.replace(
+                    "langdb/", ""
+                )
+                self.api_base = LANGDB_BASE_URL
+                self.api_key = LANGDB_API_KEY
 
             self.client = OpenAI(
                 api_key=self.api_key,
                 base_url=self.api_base,
                 organization=self.config.organization,
                 timeout=Timeout(self.config.timeout),
+                default_headers = self.config.headers
             )
             self.async_client = AsyncOpenAI(
                 api_key=self.api_key,
