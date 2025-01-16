@@ -598,7 +598,7 @@ def test_tool_optional_args(
     response = agent.llm_response("What is the Coriolis transform of 1, 2?")
     assert isinstance(agent.get_tool_messages(response)[0], CoriolisTool)
     tool = agent.get_tool_messages(response)[0]
-    assert tool.x == 1 and tool.y == 2
+    assert tool.cats == 1 and tool.cows == 2
 
 
 @pytest.mark.parametrize("tool", [NabroskiTool, CoriolisTool])
