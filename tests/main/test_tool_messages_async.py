@@ -259,9 +259,11 @@ class CoriolisTool(ToolMessage):
         # same as NabroskiTool result
         return str(3 * self.cats + self.cows)
 
+
 class NumPairE(BaseModel):
     ex: int
     ey: int
+
 
 class EulerTool(ToolMessage):
     request: str = "euler"
