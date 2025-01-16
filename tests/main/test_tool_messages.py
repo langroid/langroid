@@ -393,13 +393,13 @@ class CoriolisTool(ToolMessage):
     """Tool for testing handling of optional arguments, with default values."""
 
     request: str = "coriolis"
-    purpose: str = "to request computing the Coriolis transform of <x> and <y>"
-    x: int
-    y: int = 5
+    purpose: str = "to request computing the Coriolis transform of <cats> and <cows>"
+    cats: int
+    cows: int = 5
 
     def handle(self) -> str:
         # same as NabroskiTool result
-        return str(3 * self.x + self.y)
+        return str(3 * self.cats + self.cows)
 
 
 wrong_nabroski_tool = """
@@ -1238,7 +1238,6 @@ def test_agent_respond_only_tools(tool: str):
             assert bob_task.n_stalled_steps == 0
 
 
-@pytest.mark.skip(reason="This test is flaky and needs to be fixed")
 @pytest.mark.parametrize("use_fn_api", [True, False])
 @pytest.mark.parametrize("use_tools_api", [True, False])
 def test_structured_recovery(
@@ -1387,11 +1386,19 @@ def test_structured_recovery(
     # should infer from context. In addition, the name of the
     # function is incorrect (the LLM should infer "coriolis" in
     # recovery) and the JSON output is malformed
+
+    # Note here we intentionally use "catss" as the arg to ensure that
+    # the tool-name inference doesn't work (see `maybe_parse` agent/base.py,
+    # there's a mechanism that infers the intended tool if the arguments are
+    # unambiguously for a specific tool) -- here since we use `catss` that
+    # mechanism fails, and we can do this test properly to focus on structured
+    # recovery. But `catss' is sufficiently similar to 'cats' that the
+    # intent-based recovery should work.
     assert (
         simulate_failed_call(
             """
         request ":coriolis"
-        arguments {"xval": 1}
+        arguments {"catss": 1} 
         """
         )
         == "8"
@@ -1404,7 +1411,7 @@ def test_structured_recovery(
                 LLMFunctionCall(
                     name="Coriolis",
                     arguments={
-                        "xval": 1,
+                        "cats": 1,
                     },
                 )
             )
