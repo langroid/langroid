@@ -539,6 +539,20 @@ class ChatAgent(Agent):
                 self.message_history[i].content = message
                 break
 
+    def delete_last_message(self, role: str = Role.USER) -> None:
+        """
+        Delete the last message that has role `role` from the message history.
+        Args:
+            role (str): role of message to delete
+        """
+        if len(self.message_history) == 0:
+            return
+        # find last message in self.message_history with role `role`
+        for i in range(len(self.message_history) - 1, -1, -1):
+            if self.message_history[i].role == role:
+                self.message_history.pop(i)
+                break
+
     def _create_system_and_tools_message(self) -> LLMMessage:
         """
         (Re-)Create the system message for the LLM of the agent,
@@ -1219,15 +1233,25 @@ class ChatAgent(Agent):
                 instructions=True,
             )
             recovery_message = self._strict_recovery_instructions(AnyTool)
-
-            if message is None:
-                message = recovery_message
-            elif isinstance(message, str):
-                message = message + recovery_message
+            augmented_message = message
+            if augmented_message is None:
+                augmented_message = recovery_message
+            elif isinstance(augmented_message, str):
+                augmented_message = augmented_message + recovery_message
             else:
-                message.content = message.content + recovery_message
+                augmented_message.content = augmented_message.content + recovery_message
 
-            return self.llm_response(message)
+            # only use the augmented message for this one response...
+            result = self.llm_response(augmented_message)
+            # ... restore the original user message so that the AnyTool recover
+            # instructions don't persist in the message history
+            # (this can cause the LLM to use the AnyTool directly as a tool)
+            if message is None:
+                self.delete_last_message(role=Role.USER)
+            else:
+                msg = message if isinstance(message, str) else message.content
+                self.update_last_message(msg, role=Role.USER)
+            return result
 
         hist, output_len = self._prep_llm_messages(message)
         if len(hist) == 0:
@@ -1294,15 +1318,25 @@ class ChatAgent(Agent):
                 instructions=True,
             )
             recovery_message = self._strict_recovery_instructions(AnyTool)
-
-            if message is None:
-                message = recovery_message
-            elif isinstance(message, str):
-                message = message + recovery_message
+            augmented_message = message
+            if augmented_message is None:
+                augmented_message = recovery_message
+            elif isinstance(augmented_message, str):
+                augmented_message = augmented_message + recovery_message
             else:
-                message.content = message.content + recovery_message
+                augmented_message.content = augmented_message.content + recovery_message
 
-            return self.llm_response(message)
+            # only use the augmented message for this one response...
+            result = self.llm_response(augmented_message)
+            # ... restore the original user message so that the AnyTool recover
+            # instructions don't persist in the message history
+            # (this can cause the LLM to use the AnyTool directly as a tool)
+            if message is None:
+                self.delete_last_message(role=Role.USER)
+            else:
+                msg = message if isinstance(message, str) else message.content
+                self.update_last_message(msg, role=Role.USER)
+            return result
 
         hist, output_len = self._prep_llm_messages(message)
         if len(hist) == 0:
