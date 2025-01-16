@@ -1741,3 +1741,33 @@ def test_reduce_raw_tool_result():
     assert len(agent.message_history) == 7
     tool_result = agent.message_history[3].content
     assert "my_tool" in tool_result and str(MyTool._max_retained_tokens) in tool_result
+
+
+def test_valid_structured_recovery():
+    """
+    Test that structured recovery is not triggered inappropriately
+    when agent response contains a JSON-like string.
+    """
+
+    class MyAgent(ChatAgent):
+        def agent_response(self, msg: str | ChatDocument) -> Any:
+            return "{'x': 1, 'y': 2}"
+
+    agent = MyAgent(
+        ChatAgentConfig(
+            llm=OpenAIGPTConfig(),
+            system_message="""Simply respond No for any input""",
+        )
+    )
+
+    # with no tool enabled
+    task = Task(agent, interactive=False)
+    result = task.run("3", turns=4)
+    # response-sequence: agent, llm, agent, llm -> done
+    assert "No" in result.content
+
+    # with a tool enabled
+    agent.enable_message(NabroskiTool)
+    task = Task(agent, interactive=False)
+    result = task.run("3", turns=4)
+    assert "No" in result.content
