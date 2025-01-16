@@ -19,6 +19,7 @@ LANGDB_BASE_URL = "https://api.us-east-1.langdb.ai"
 DUMMY_API_KEY = "xxx"
 LANGDB_API_KEY = os.environ.get("LANGDB_API_KEY", DUMMY_API_KEY)
 
+
 class OpenAIEmbeddingsConfig(EmbeddingModelsConfig):
     model_type: str = "openai"
     model_name: str = "text-embedding-ada-002"

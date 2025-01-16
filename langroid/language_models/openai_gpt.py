@@ -632,9 +632,7 @@ class OpenAIGPT(LanguageModel):
                 self.api_base = DEEPSEEK_BASE_URL
                 self.api_key = os.getenv("DEEPSEEK_API_KEY", DUMMY_API_KEY)
             elif self.is_langdb:
-                self.config.chat_model = self.config.chat_model.replace(
-                    "langdb/", ""
-                )
+                self.config.chat_model = self.config.chat_model.replace("langdb/", "")
                 self.api_base = LANGDB_BASE_URL
                 self.api_key = LANGDB_API_KEY
 
@@ -643,7 +641,7 @@ class OpenAIGPT(LanguageModel):
                 base_url=self.api_base,
                 organization=self.config.organization,
                 timeout=Timeout(self.config.timeout),
-                default_headers = self.config.headers
+                default_headers=self.config.headers,
             )
             self.async_client = AsyncOpenAI(
                 api_key=self.api_key,
