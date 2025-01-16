@@ -1063,18 +1063,20 @@ class ChatAgent(Agent):
 
         return tools
 
-    def _get_any_tool_message(self, optional: bool = True) -> type[ToolMessage]:
+    def _get_any_tool_message(self, optional: bool = True) -> type[ToolMessage] | None:
         """
         Returns a `ToolMessage` which wraps all enabled tools, excluding those
         where strict recovery is disabled. Used in strict recovery.
         """
-        any_tool_type = Union[  # type: ignore
-            *(
-                self.llm_tools_map[t]
-                for t in self.llm_tools_usable
-                if t not in self.disable_strict_tools_set
-            )
-        ]
+        possible_tools = tuple(
+            self.llm_tools_map[t]
+            for t in self.llm_tools_usable
+            if t not in self.disable_strict_tools_set
+        )
+        if len(possible_tools) == 0:
+            return None
+        any_tool_type = Union.__getitem__(possible_tools)  # type ignore
+
         maybe_optional_type = Optional[any_tool_type] if optional else any_tool_type
 
         class AnyTool(ToolMessage):
@@ -1225,6 +1227,8 @@ class ChatAgent(Agent):
             and self.config.strict_recovery
         ):
             AnyTool = self._get_any_tool_message()
+            if AnyTool is None:
+                return None
             self.set_output_format(
                 AnyTool,
                 force_tools=True,
