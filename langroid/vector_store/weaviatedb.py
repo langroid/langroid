@@ -37,17 +37,14 @@ class WeaviateDB(VectorStore):
         self.config: WeaviateDBConfig = config
         self.embedding_fn: EmbeddingFunction = self.embedding_model.embedding_fn()
         self.embedding_dim = self.embedding_model.embedding_dims
-        self.host = config.host
-        self.port = config.port
         load_dotenv()
         key = os.getenv("WEAVIATE_API_KEY")
         url = os.getenv("WEAVIATE_API_URL")
         if config.cloud and None in [key, url]:
             logger.warning(
-                f"""WEAVIATE_API_KEY, WEAVIATE_API_URL env variable must be set to use
+                """WEAVIATE_API_KEY, WEAVIATE_API_URL env variable must be set to use
                 WeaviateDB in cloud mode. Please set these values
                 in your .env file.
-                Switching to local storage at {config.storage_path}
                 """
             )
             config.cloud = False
@@ -57,9 +54,14 @@ class WeaviateDB(VectorStore):
                 auth_credentials=Auth.api_key(key),
             )
         if config.collection_name is not None:
-            self.create_collection(
-                config.collection_name, replace=config.replace_collection
-            )
+             if config.collection_name[0].islower():
+                logger.warning(
+                    f"""Beware that WeaviateDB collection names always start with first
+                            letter capitalized so creating collection name with
+                            {config.collection_name[0].upper()
+                             + config.collection_name[1:]}
+                    """
+                    )
 
     def clear_empty_collections(self) -> int:
         colls = self.client.collections.list_all()
@@ -114,6 +116,9 @@ class WeaviateDB(VectorStore):
         self.client.collections.delete(name=collection_name)
 
     def create_collection(self, collection_name: str, replace: bool = False) -> None:
+         # Capitalize the first letter if necessary
+        if collection_name and collection_name[0].islower():
+            collection_name = collection_name[0].upper() + collection_name[1:]
         self.config.collection_name = collection_name
         if self.client.collections.exists(name=collection_name):
             coll = self.client.collections.get(name=collection_name)
