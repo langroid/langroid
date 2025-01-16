@@ -432,13 +432,18 @@ def test_agent_malformed_tool(
     assert "num_pair" in response.content and "yval" in response.content
 
 
+class FruitPair(BaseModel):
+    pears: int
+    apples: int
+
+
 class EulerTool(ToolMessage):
     request: str = "euler"
-    purpose: str = "to request computing the Euler transform of <num_pair>"
-    num_pair: NumPair
+    purpose: str = "to request computing the Euler transform of <fruit_pair>"
+    fruit_pair: FruitPair
 
     def handle(self) -> str:
-        return str(2 * self.num_pair.xval - self.num_pair.yval)
+        return str(2 * self.fruit_pair.pears - self.fruit_pair.apples)
 
 
 class SumTool(ToolMessage):
@@ -480,7 +485,7 @@ def test_agent_infer_tool(
     set_global(test_settings)
     gauss_request = """{"xval": 1, "yval": 3}"""
     nabrowski_or_euler_request = """{"num_pair": {"xval": 1, "yval": 3}}"""
-    euler_request = """{"request": "euler", "num_pair": {"xval": 1, "yval": 3}}"""
+    euler_request = """{"request": "euler", "fruit_pair": {"pears": 1, "apples": 3}}"""
     additional_args_request = """{"xval": 1, "yval": 3, "zval": 4}"""
     additional_args_request_specified = """
     {"request": "gauss", "xval": 1, "yval": 3, "zval": 4}
@@ -1425,8 +1430,8 @@ def test_structured_recovery(
                 LLMFunctionCall(
                     name="EulerTool",
                     arguments={
-                        "xval": 6,
-                        "yval": 4,
+                        "pears": 6,
+                        "apples": 4,
                     },
                 )
             )
