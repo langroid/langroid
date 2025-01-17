@@ -101,7 +101,7 @@ class ToolMessage(ABC, BaseModel):
     # Some tools can have large results that we may not want to fully retain,
     # e.g. result of a db query, which the LLM later reduces to a summary, so
     # in subsequent dialog we may only want to retain the summary,
-    # and replace this raw result truncated to _max_result_tokens.
+    # and replace this raw result truncated to _max_retained_tokens.
     # Important to note: unlike _max_result_tokens, this param is used
     # NOT used to immediately truncate the result;
     # it is only used to truncate what is retained in msg history AFTER the

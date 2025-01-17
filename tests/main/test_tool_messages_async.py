@@ -260,13 +260,18 @@ class CoriolisTool(ToolMessage):
         return str(3 * self.cats + self.cows)
 
 
+class NumPairE(BaseModel):
+    ex: int
+    ey: int
+
+
 class EulerTool(ToolMessage):
     request: str = "euler"
-    purpose: str = "to request computing the Euler transform of <num_pair>"
-    num_pair: NumPair
+    purpose: str = "to request computing the Euler transform of <num_paire>"
+    num_paire: NumPairE
 
     def handle(self) -> str:
-        return str(2 * self.num_pair.xval - self.num_pair.yval)
+        return str(2 * self.num_paire.ex - self.num_paire.ey)
 
 
 @pytest.mark.fallback
@@ -445,8 +450,8 @@ async def test_structured_recovery_async(
                 LLMFunctionCall(
                     name="EulerTool",
                     arguments={
-                        "xval": 6,
-                        "yval": 4,
+                        "x": 6,
+                        "y": 4,
                     },
                 )
             )
