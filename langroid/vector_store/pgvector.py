@@ -1,219 +1,294 @@
+import json
 import logging
-from typing import List, Optional, Sequence, Tuple
+import uuid
+from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-import psycopg2
-from pgvector.psycopg2 import register_vector
+from pgvector.sqlalchemy import Vector
+from sqlalchemy import Column, Index, MetaData, String, create_engine, inspect, text
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.engine import Engine
+from sqlalchemy.ext.declarative import declarative_base
+from sqlalchemy.orm import scoped_session, sessionmaker
 
-from langroid.embedding_models.base import EmbeddingModel
+from langroid.embedding_models.base import EmbeddingModelsConfig
+from langroid.embedding_models.models import OpenAIEmbeddingsConfig
 from langroid.mytypes import Document
 from langroid.vector_store.base import VectorStore, VectorStoreConfig
 
+Base = declarative_base()
 logger = logging.getLogger(__name__)
 
 
 class PGVectorConfig(VectorStoreConfig):
-    """
-    Configuration for PGVector vector store.
-    """
-
-    table_name: str = "vectors"
-    distance_metric: str = "cosine"
-    database: str
-    user: str
-    password: str
+    docker: bool = True
+    collection_name: str | None = "temp"
+    storage_path: str = ".postgres/data"
     host: str = "localhost"
-    port: int = 5432
+    port: int = 5435
+    username: str = "postgres"
+    password: str = "postgres"
+    database: str = "langroid"
+    replace_collection: bool = False
+    embedding: EmbeddingModelsConfig = OpenAIEmbeddingsConfig()
+    use_jsonb: bool = True
 
 
 class PGVector(VectorStore):
-    """
-    Implementation of a vector store using pgvector with PostgreSQL.
-    """
-
     def __init__(self, config: PGVectorConfig):
         super().__init__(config)
         self.config: PGVectorConfig = config
+        self.embedding_fn = self.embedding_model.embedding_fn()
+        self.embedding_dim = self.embedding_model.embedding_dims
+        self._classes: Dict[str, Any] = {}
 
-        # Connect to PostgreSQL
-        self.conn = psycopg2.connect(
-            host=config.host,
-            port=config.port,
-            database=config.database,
-            user=config.user,
-            password=config.password,
+        if Vector is None:
+            raise ImportError("pgvector is not installed")
+
+        self.engine = create_engine(
+            f"postgresql+psycopg2://{self.config.username}:{self.config.password}@"
+            f"{self.config.host}:{self.config.port}/{self.config.database}",
+            pool_size=10,
+            max_overflow=20,
         )
-        register_vector(self.conn)
-        self.cursor = self.conn.cursor()
+        self._create_vector_extension(self.engine)
 
-        # Ensure the table exists
-        if not config.collection_name:
-            raise ValueError("Collection name must be provided.")
-        self.create_collection(
-            config.collection_name, replace=config.replace_collection
+        self.SessionLocal = scoped_session(
+            sessionmaker(
+                autocommit=False,
+                autoflush=False,
+                bind=self.engine,
+            )
         )
+        self.metadata = MetaData()
+        self.metadata.reflect(bind=self.engine)
+        self.EmbeddingTable = self._get_embedding_table_class(
+            self.config.collection_name, self.embedding_dim
+        )
+        Base.metadata.create_all(bind=self.engine)
 
-    def clear_empty_collections(self) -> int:
-        """Clear empty collections (not applicable to pgvector)."""
-        logger.warning("`clear_empty_collections` not applicable to pgvector.")
-        return 0
+    def _create_vector_extension(self, conn: Engine) -> None:
+        with conn.connect() as connection:
+            with connection.begin():
+                statement = text(
+                    "SELECT pg_advisory_xact_lock(1573678846307946496);"
+                    "CREATE EXTENSION IF NOT EXISTS vector;"
+                )
+                connection.execute(statement)
+
+    def _get_embedding_table_class(
+        self, table_name: str, vector_dimension: Optional[int] = None
+    ) -> Any:
+        class EmbeddingTable(Base):
+            __tablename__ = table_name
+
+            id = Column(
+                String, nullable=False, primary_key=True, index=True, unique=True
+            )
+            embedding = Column(Vector(vector_dimension))
+            document = Column(String, nullable=True)
+            cmetadata = Column(JSONB, nullable=True)
+
+            __table_args__ = (
+                Index(
+                    f"ix_{table_name}_cmetadata_gin",
+                    "cmetadata",
+                    postgresql_using="gin",
+                    postgresql_ops={"cmetadata": "jsonb_path_ops"},
+                ),
+            )
+
+        self._classes[table_name] = EmbeddingTable
+        return EmbeddingTable
+
+    def _parse_embedding_store_record(self, res: Any) -> Dict[str, Any]:
+        metadata = res.cmetadata or {}
+        window_ids_str = metadata.get("window_ids", "[]")
+        try:
+            window_ids = json.loads(window_ids_str)
+        except json.JSONDecodeError:
+            logger.warning(
+                f"Could not decode window_ids for document {res.id}, "
+                f"metadata: {metadata}. Using empty list."
+            )
+            window_ids = []
+
+        if not isinstance(window_ids, list):
+            logger.warning(
+                f"window_ids for document {res.id} is not a list: {window_ids}."
+                "Using empty list."
+            )
+            window_ids = []
+
+        metadata["window_ids"] = window_ids
+        metadata["id"] = res.id
+
+        return {
+            "content": res.document,
+            "metadata": self.config.metadata_class(**metadata),
+        }
 
     def clear_all_collections(self, really: bool = False, prefix: str = "") -> int:
-        """
-        Clear all collections by deleting the vectors table if confirmed.
-
-        Args:
-            really (bool, optional): Whether to confirm deletion. Defaults to False.
-            prefix (str, optional): Prefix of collections to clear (unused here).
-
-        Returns:
-            int: Number of collections deleted.
-        """
         if not really:
-            logger.warning("Set `really=True` to confirm deletion of all collections.")
+            logger.warning("Not deleting all tables, set really=True to confirm")
             return 0
 
-        self.cursor.execute(f"DROP TABLE IF EXISTS {self.config.table_name};")
-        self.conn.commit()
-        logger.info(f"Cleared table: {self.config.table_name}.")
-        return 1
+        with self.SessionLocal() as session:
+            metadata = MetaData()
+            metadata.reflect(bind=self.engine)
+            deleted_count = 0
+            for table_name in list(self._classes.keys()):
+                if table_name.startswith(prefix):
+                    self._classes.pop(table_name)
 
-    def list_collections(self, empty: bool = False) -> List[str]:
-        """
-        List all collections (always one for pgvector).
+                    if table_name in metadata.tables:
+                        table = metadata.tables[table_name]
+                        table.drop(self.engine, checkfirst=True)
 
-        Args:
-            empty (bool, optional): Whether to list empty collections (unused).
+                    deleted_count += 1
+            session.commit()
+            logger.warning(f"Deleted {deleted_count} tables with prefix '{prefix}'.")
+            return deleted_count
 
-        Returns:
-            List[str]: List containing the single table name.
-        """
-        return [self.config.table_name]
+    def clear_empty_collections(self) -> int:
+        with self.SessionLocal() as session:
+            metadata = MetaData()
+            metadata.reflect(bind=self.engine)
+            deleted_count = 0
+            for table_name in list(self._classes.keys()):
+                EmbeddingTable = self._classes[table_name]
 
-    def set_collection(self, collection_name: str, replace: bool = False) -> None:
-        """
-        Set the current collection (table) to the given name.
+                embedding_count = session.query(EmbeddingTable).count()
 
-        Args:
-            collection_name (str): Name of the table.
-            replace (bool, optional): Whether to replace the table if it exists.
-        """
-        self.config.collection_name = collection_name
-        if replace:
-            self.create_collection(collection_name, replace=True)
+                if embedding_count == 0:
+                    if table_name in metadata.tables:
+                        table = metadata.tables[table_name]
+                        table.drop(self.engine, checkfirst=True)
+                    self._classes.pop(table_name)
+                    deleted_count += 1
+
+            session.commit()
+            logger.warning(f"Deleted {deleted_count} empty tables.")
+            return deleted_count
+
+    def list_collections(self, empty: bool = True) -> List[str]:
+        with self.SessionLocal() as session:
+            table_names = []
+            for table_name in self._classes.keys():
+                EmbeddingTable = self._classes[table_name]
+                if empty:
+                    table_names.append(table_name)
+                else:
+                    embedding_count = session.query(EmbeddingTable).count()
+                    if embedding_count > 0:
+                        table_names.append(table_name)
+            return table_names
 
     def create_collection(self, collection_name: str, replace: bool = False) -> None:
-        """
-        Create a collection (table) in the database.
-
-        Args:
-            collection_name (str): Name of the table to create.
-            replace (bool, optional): Whether to replace the table if it exists.
-        """
         if replace:
-            self.cursor.execute(f"DROP TABLE IF EXISTS {collection_name};")
-        self.cursor.execute(
-            f"""
-        CREATE TABLE IF NOT EXISTS {collection_name} (
-            id SERIAL PRIMARY KEY,
-            vector VECTOR({self.embedding_model.embedding_dims}),
-            metadata JSONB
-        );
-        """
+            self.delete_collection(collection_name)
+
+        self.set_collection(collection_name, replace=False)
+
+    def set_collection(self, collection_name: str, replace: bool = False) -> None:
+        if collection_name == self.config.collection_name:
+            return
+
+        super().set_collection(collection_name, replace)
+
+        self.EmbeddingTable = self._get_embedding_table_class(
+            collection_name, self.embedding_dim
         )
-        self.conn.commit()
-        logger.info(f"Table {collection_name} created or exists.")
+
+        if not inspect(self.engine).has_table(collection_name):
+            Base.metadata.create_all(bind=self.engine)
+
+    @staticmethod
+    def _generate_ids(documents: Sequence[Document]) -> List[str]:
+        return [str(uuid.uuid5(uuid.NAMESPACE_DNS, d.content)) for d in documents]
 
     def add_documents(self, documents: Sequence[Document]) -> None:
-        """
-        Add documents to the vector store.
-
-        Args:
-            documents (Sequence[Document]): Documents to add.
-        """
         super().maybe_add_ids(documents)
-        for doc in documents:
-            vector = self.embedding_model.embedding_fn()([doc.content])[0]
-            metadata = doc.dict()
-            self.cursor.execute(
-                f"""
-            INSERT INTO {self.config.collection_name} (vector, metadata)
-            VALUES (%s, %s);
-            """,
-                (vector, metadata),
-            )
-        self.conn.commit()
+        with self.SessionLocal() as session:
+            embeddings = [self.embedding_fn([d.content])[0] for d in documents]
+            ids = self._generate_ids(documents)
+            metadatas = [d.metadata.dict() for d in documents]
+
+            for m in metadatas:
+                for k, v in m.items():
+                    if isinstance(v, list):
+                        m[k] = json.dumps(v)
+
+            new_embeddings = [
+                self.EmbeddingTable(
+                    id=ids[i],
+                    embedding=embeddings[i],
+                    document=documents[i].content,
+                    cmetadata=metadatas[i],
+                )
+                for i in range(len(documents))
+            ]
+            session.add_all(new_embeddings)
+            session.commit()
 
     def similar_texts_with_scores(
-        self,
-        text: str,
-        k: int = 1,
-        where: Optional[str] = None,
+        self, text: str, k: int = 5
     ) -> List[Tuple[Document, float]]:
-        """
-        Find k most similar texts to the given input text.
-
-        Args:
-            text (str): Input text to search for.
-            k (int, optional): Number of similar texts to retrieve. Defaults to 1.
-            where (Optional[str], optional): Not implemented for pgvector.
-
-        Returns:
-            List[Tuple[Document, float]]: List of (Document, score) tuples.
-        """
-        query_vector = self.embedding_model.embedding_fn()([text])[0]
-        self.cursor.execute(
-            f"""
-        SELECT metadata, (vector <-> %s) AS distance
-        FROM {self.config.collection_name}
-        ORDER BY distance ASC
-        LIMIT %s;
-        """,
-            (query_vector, k),
-        )
-        rows = self.cursor.fetchall()
-        return [(Document(**row[0]), row[1]) for row in rows]
+        embedding = self.embedding_fn([text])[0]
+        with self.SessionLocal() as session:
+            results = (
+                session.query(
+                    self.EmbeddingTable,
+                    self.EmbeddingTable.embedding.cosine_distance(embedding).label(
+                        "distance"
+                    ),
+                )
+                .order_by("distance")
+                .limit(k)
+                .all()
+            )
+            return [
+                (
+                    Document(
+                        content=r.EmbeddingTable.content,
+                        metadata=self.config.metadata_class(
+                            **json.loads(r.EmbeddingTable.metadata)
+                        ),
+                    ),
+                    r.distance,
+                )
+                for r in results
+            ]
 
     def get_all_documents(self, where: str = "") -> List[Document]:
-        """
-        Retrieve all documents from the collection.
+        with self.SessionLocal() as session:
+            query = session.query(self.EmbeddingTable)
+            results = query.all()
 
-        Args:
-            where (str, optional): Not implemented for pgvector.
-
-        Returns:
-            List[Document]: All documents in the collection.
-        """
-        self.cursor.execute(f"SELECT metadata FROM {self.config.collection_name};")
-        rows = self.cursor.fetchall()
-        return [Document(**row[0]) for row in rows]
+            documents = [
+                Document(**self._parse_embedding_store_record(res)) for res in results
+            ]
+            return documents
 
     def get_documents_by_ids(self, ids: List[str]) -> List[Document]:
-        """
-        Retrieve documents by IDs.
+        with self.SessionLocal() as session:
+            query = session.query(self.EmbeddingTable).filter(
+                self.EmbeddingTable.id.in_(ids),
+            )
+            results = query.all()
 
-        Args:
-            ids (List[str]): List of document IDs.
-
-        Returns:
-            List[Document]: Matching documents.
-        """
-        self.cursor.execute(
-            f"""
-        SELECT metadata FROM {self.config.collection_name}
-        WHERE id = ANY(%s);
-        """,
-            (ids,),
-        )
-        rows = self.cursor.fetchall()
-        return [Document(**row[0]) for row in rows]
+            documents = [
+                Document(**self._parse_embedding_store_record(row)) for row in results
+            ]
+            return documents
 
     def delete_collection(self, collection_name: str) -> None:
-        """
-        Delete a collection (table) from the database.
+        if collection_name in self._classes:
+            self._classes.pop(collection_name)
 
-        Args:
-            collection_name (str): Name of the table to delete.
-        """
-        self.cursor.execute(f"DROP TABLE IF EXISTS {collection_name};")
-        self.conn.commit()
-        logger.info(f"Table {collection_name} deleted.")
+            metadata = MetaData()
+            metadata.reflect(bind=self.engine)
+            table = metadata.tables[collection_name]
+            table.drop(self.engine, checkfirst=True)
+
+        else:
+            logger.warning(f"Table '{collection_name}' not found.")
