@@ -3,8 +3,6 @@
 
 # **Using WeaviateDB as a Vector Store with Langroid**
 
-WeaviateDB can be seamlessly integrated as your vector store with Langroid. Follow the steps below to set it up and use it effectively.
-
 ---
 
 ## **1. Set Up Weaviate**
@@ -20,7 +18,7 @@ WeaviateDB can be seamlessly integrated as your vector store with Langroid. Foll
 
 4. **Get Your REST Endpoint and API Key**  
    - Retrieve the REST endpoint URL.  
-   - Generate an API key with admin access.
+   - Copy an API key with admin access.
 
 5. **Set Environment Variables**  
    Add the following variables to your `.env` file:
