@@ -432,13 +432,27 @@ def test_agent_malformed_tool(
     assert "num_pair" in response.content and "yval" in response.content
 
 
+class FruitPair(BaseModel):
+    pears: int
+    apples: int
+
+
 class EulerTool(ToolMessage):
     request: str = "euler"
-    purpose: str = "to request computing the Euler transform of <num_pair>"
-    num_pair: NumPair
+    purpose: str = "to request computing the Euler transform of <fruit_pair>"
+    fruit_pair: FruitPair
 
     def handle(self) -> str:
-        return str(2 * self.num_pair.xval - self.num_pair.yval)
+        return str(2 * self.fruit_pair.pears - self.fruit_pair.apples)
+
+
+class BoilerTool(ToolMessage):
+    request: str = "boiler"
+    purpose: str = "to request computing the Boiler transform of <fruit_pair>"
+    fruit_pair: FruitPair
+
+    def handle(self) -> str:
+        return str(3 * self.fruit_pair.pears - 5 * self.fruit_pair.apples)
 
 
 class SumTool(ToolMessage):
@@ -479,8 +493,8 @@ def test_agent_infer_tool(
 ):
     set_global(test_settings)
     gauss_request = """{"xval": 1, "yval": 3}"""
-    nabrowski_or_euler_request = """{"num_pair": {"xval": 1, "yval": 3}}"""
-    euler_request = """{"request": "euler", "num_pair": {"xval": 1, "yval": 3}}"""
+    boiler_or_euler_request = """{"fruit_pair": {"pears": 1, "apples": 3}}"""
+    euler_request = """{"request": "euler", "fruit_pair": {"pears": 1, "apples": 3}}"""
     additional_args_request = """{"xval": 1, "yval": 3, "zval": 4}"""
     additional_args_request_specified = """
     {"request": "gauss", "xval": 1, "yval": 3, "zval": 4}
@@ -499,15 +513,17 @@ def test_agent_infer_tool(
             NabroskiTool,
             GaussTool,
             CoinFlipTool,
+            BoilerTool,
         ]
     )
     agent.enable_message(EulerTool, handle=False)
 
-    # Nabrowski is the only option prior to enabling EulerTool handling
-    assert agent.agent_response(nabrowski_or_euler_request).content == "6"
+    # Boiler is the only option prior to enabling EulerTool handling
+    assert agent.agent_response(boiler_or_euler_request).content == "-12"
 
     # Enable handling EulerTool, this makes nabrowski_or_euler_request ambiguous
     agent.enable_message(EulerTool)
+    agent.enable_message(BoilerTool)
 
     # Gauss is the only option
     assert agent.agent_response(gauss_request).content == "12"
@@ -516,7 +532,7 @@ def test_agent_infer_tool(
     assert agent.agent_response(euler_request).content == "-1"
 
     # We cannot infer the correct tool if there exist multiple matches
-    assert agent.agent_response(nabrowski_or_euler_request) is None
+    assert agent.agent_response(boiler_or_euler_request) is None
 
     # We do not infer tools where the request has additional arguments
     assert agent.agent_response(additional_args_request) is None
@@ -1425,8 +1441,8 @@ def test_structured_recovery(
                 LLMFunctionCall(
                     name="EulerTool",
                     arguments={
-                        "xval": 6,
-                        "yval": 4,
+                        "pears": 6,
+                        "apples": 4,
                     },
                 )
             )
@@ -1741,3 +1757,33 @@ def test_reduce_raw_tool_result():
     assert len(agent.message_history) == 7
     tool_result = agent.message_history[3].content
     assert "my_tool" in tool_result and str(MyTool._max_retained_tokens) in tool_result
+
+
+def test_valid_structured_recovery():
+    """
+    Test that structured recovery is not triggered inappropriately
+    when agent response contains a JSON-like string.
+    """
+
+    class MyAgent(ChatAgent):
+        def agent_response(self, msg: str | ChatDocument) -> Any:
+            return "{'x': 1, 'y': 2}"
+
+    agent = MyAgent(
+        ChatAgentConfig(
+            llm=OpenAIGPTConfig(),
+            system_message="""Simply respond No for any input""",
+        )
+    )
+
+    # with no tool enabled
+    task = Task(agent, interactive=False)
+    result = task.run("3", turns=4)
+    # response-sequence: agent, llm, agent, llm -> done
+    assert "No" in result.content
+
+    # with a tool enabled
+    agent.enable_message(NabroskiTool)
+    task = Task(agent, interactive=False)
+    result = task.run("3", turns=4)
+    assert "No" in result.content
