@@ -945,12 +945,12 @@ def test_doc_chat_batch(test_settings: Settings, vecdb):
     "vecdb", ["lancedb", "qdrant_local", "qdrant_cloud", "chroma"], indirect=True
 )
 @pytest.mark.parametrize(
-    "hypothetical_questions, expect_cleaned", [(True, True), (False, False)]
+    "num_hypothetical_questions, expect_cleaned", [(1, True), (0, False)]
 )
 def test_remove_hypothetical_questions(
     test_settings: Settings,
     vecdb: VectorStore,
-    hypothetical_questions: bool,
+    num_hypothetical_questions: int,
     expect_cleaned: bool,
 ) -> None:
     """
@@ -974,7 +974,7 @@ def test_remove_hypothetical_questions(
     ]
 
     agent = DocChatAgent(
-        _TestDocChatAgentConfig(hypothetical_questions=hypothetical_questions)
+        _TestDocChatAgentConfig(num_hypothetical_questions=num_hypothetical_questions)
     )
     agent.vecdb = vecdb
 
@@ -1001,11 +1001,7 @@ def test_add_hypothetical_questions(
         Document(content="Doc 2", metadata=DocMetaData(source="two")),
     ]
 
-    agent = DocChatAgent(
-        _TestDocChatAgentConfig(
-            hypothetical_questions=True, num_hypothetical_questions=2
-        )
-    )
+    agent = DocChatAgent(_TestDocChatAgentConfig(num_hypothetical_questions=2))
     agent.vecdb = vecdb
 
     augmented_docs = agent.add_hypothetical_questions(sample_docs)
@@ -1035,7 +1031,7 @@ def test_hypothetical_questions_disabled(
 
     sample_docs = [Document(content="Doc 1", metadata=DocMetaData(source="one"))]
 
-    agent = DocChatAgent(_TestDocChatAgentConfig(hypothetical_questions=False))
+    agent = DocChatAgent(_TestDocChatAgentConfig(num_hypothetical_questions=0))
     agent.vecdb = vecdb
 
     # Test add_hypothetical_questions
@@ -1074,7 +1070,6 @@ def test_hypothetical_questions_integration(
 
     agent = DocChatAgent(
         _TestDocChatAgentConfig(
-            hypothetical_questions=True,
             num_hypothetical_questions=2,
         )
     )

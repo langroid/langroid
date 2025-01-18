@@ -82,7 +82,7 @@ DEFAULT_DOC_CHAT_SYSTEM_MESSAGE = """
 You are a helpful assistant, helping me understand a collection of documents.
 """
 
-GENERATED_QUESTIONS_MARKER = "--- Generated Questions ---"
+GENERATED_QUESTIONS_MARKER = "<##-##-##>"
 
 has_sentence_transformers = False
 try:
@@ -132,8 +132,7 @@ class DocChatAgentConfig(ChatAgentConfig):
     # Flag to enable Hypothetical Question Indexing,
     # which uses a language model to generate questions for each data chunk,
     # this might help in finding relevant chunks for a given question.
-    hypothetical_questions: bool = False
-    num_hypothetical_questions: int = 2
+    num_hypothetical_questions: int = 0
     hypothetical_questions_prompt: str = """
     Given the following text passage, generate up to %(num_hypothetical_questions)s
     different questions that this passage would help answer. 
@@ -422,7 +421,7 @@ class DocChatAgent(ChatAgent):
                 d.metadata.is_chunk = True
         if self.vecdb is None:
             raise ValueError("VecDB not set")
-        if self.config.hypothetical_questions:
+        if self.config.num_hypothetical_questions > 0:
             docs = self.add_hypothetical_questions(docs)
 
         # If any additional fields need to be added to content,
@@ -892,7 +891,7 @@ class DocChatAgent(ChatAgent):
         if self.llm is None:
             raise ValueError("LLM not set")
 
-        if not self.config.hypothetical_questions:
+        if self.config.num_hypothetical_questions == 0:
             return docs
 
         with status("[cyan]Generating hypothetical questions for chunks..."):
@@ -1403,7 +1402,7 @@ class DocChatAgent(ChatAgent):
         Returns:
             List of documents with only original content
         """
-        if not self.config.hypothetical_questions:
+        if self.config.num_hypothetical_questions == 0:
             return passages
 
         return [

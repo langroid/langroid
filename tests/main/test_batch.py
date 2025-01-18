@@ -6,6 +6,9 @@ import pytest
 
 from langroid import ChatDocument
 from langroid.agent.batch import (
+    ExceptionHandling,
+    _convert_exception_handling,
+    _process_batch_async,
     llm_response_batch,
     run_batch_agent_method,
     run_batch_function,
@@ -268,7 +271,9 @@ def test_task_gen_batch(
 
 
 @pytest.mark.parametrize("batch_size", [None, 1, 2, 3])
-@pytest.mark.parametrize("handle_exceptions", [False, True])
+@pytest.mark.parametrize(
+    "handle_exceptions", [False, True, ExceptionHandling.RETURN_EXCEPTION]
+)
 @pytest.mark.parametrize("sequential", [True, False])
 @pytest.mark.parametrize("fn_api", [False, True])
 @pytest.mark.parametrize("tools_api", [False, True])
@@ -279,10 +284,11 @@ def test_task_gen_batch_exceptions(
     tools_api: bool,
     use_done_tool: bool,
     sequential: bool,
-    handle_exceptions: bool,
+    handle_exceptions: bool | ExceptionHandling,
     batch_size: Optional[int],
 ):
     set_global(test_settings)
+    kill_called = []  # Track Task.kill() calls
 
     class ComputeTool(ToolMessage):
         request: str = "compute"
@@ -293,6 +299,13 @@ def test_task_gen_batch_exceptions(
     You will make a call with the `compute` tool/function with
     `input` the value I provide. 
     """
+
+    class MockTask(Task):
+        """Mock Task that raises exceptions for testing"""
+
+        def kill(self):
+            kill_called.append(self.name)
+            super().kill()
 
     def task_gen(i: int) -> Task:
         cfg = ChatAgentConfig(
@@ -306,7 +319,7 @@ def test_task_gen_batch_exceptions(
         agent.enable_message(ComputeTool)
         if use_done_tool:
             agent.enable_message(DoneTool)
-        task = Task(
+        task = MockTask(
             agent,
             name=f"Test-{i}",
             system_message=system_message,
@@ -314,20 +327,17 @@ def test_task_gen_batch_exceptions(
         )
 
         def handle(m: ComputeTool) -> str | DoneTool:
-            if i != 1:
-                return (
-                    DoneTool(content="success") if use_done_tool else f"{DONE} success"
-                )
-            else:
+            if i == 1:
                 raise RuntimeError("disaster")
+            elif i == 2:
+                raise asyncio.CancelledError()
+            return DoneTool(content="success") if use_done_tool else f"{DONE} success"
 
         setattr(agent, "compute", handle)
         return task
 
-    # run the generated tasks on these inputs
     questions = list(range(3))
 
-    # batch run
     try:
         answers = run_batch_task_gen(
             task_gen,
@@ -338,17 +348,39 @@ def test_task_gen_batch_exceptions(
         )
         error_encountered = False
 
-        for i in [0, 2]:
-            a = answers[i]
-            assert a is not None
-            assert "success" in a.content.lower()
+        # Test successful case
+        assert answers[0] is not None
+        assert "success" in answers[0].content.lower()
 
-        assert answers[1] is None
+        # the task that raised CancelledError
+        assert kill_called == ["Test-2"]
+
+        # Test RuntimeError case
+        if (
+            _convert_exception_handling(handle_exceptions)
+            == ExceptionHandling.RETURN_EXCEPTION
+        ):
+            assert isinstance(answers[1], RuntimeError)
+            assert "disaster" in str(answers[1])
+
+            assert isinstance(answers[2], asyncio.CancelledError)
+        elif (
+            _convert_exception_handling(handle_exceptions)
+            == ExceptionHandling.RETURN_NONE
+        ):
+            assert answers[1] is None
+            assert answers[2] is None
+        else:
+            assert False, "Invalid handle_exceptions value"
     except RuntimeError as e:
         error_encountered = True
         assert "disaster" in str(e)
+    except asyncio.CancelledError:
+        error_encountered = True
 
-    assert error_encountered != handle_exceptions
+    assert error_encountered == (
+        _convert_exception_handling(handle_exceptions) == ExceptionHandling.RAISE
+    )
 
 
 @pytest.mark.parametrize(
@@ -390,3 +422,81 @@ def test_batch_size_processing(test_settings: Settings):
     for i, answer in enumerate(answers):
         assert answer is not None
         assert str(i + 1) in answer.content
+
+
+@pytest.mark.parametrize("sequential", [True, False])
+@pytest.mark.parametrize(
+    "handle_exceptions", [True, False, ExceptionHandling.RETURN_EXCEPTION]
+)
+def test_process_batch_async_basic(sequential, handle_exceptions):
+    """Test the core async batch processing function"""
+
+    async def mock_task(input: str, i: int) -> str:
+        if i == 1:  # Make second task fail
+            raise ValueError("Task failed")
+        await asyncio.sleep(0.1)
+        return f"Processed {input}"
+
+    inputs = ["a", "b", "c"]
+    coroutine = _process_batch_async(
+        inputs,
+        mock_task,
+        sequential=sequential,
+        handle_exceptions=handle_exceptions,
+        output_map=lambda x: x,
+    )
+    # If handle_exceptions is True, the function should return
+    # the results of the successful tasks
+    if _convert_exception_handling(handle_exceptions) == ExceptionHandling.RETURN_NONE:
+        results = asyncio.run(coroutine)
+        assert results[1] is None
+        assert "Processed" in results[0]
+        assert "Processed" in results[2]
+    # If handle_exceptions is False, the function should raise an error
+    elif _convert_exception_handling(handle_exceptions) == ExceptionHandling.RAISE:
+        with pytest.raises(ValueError):
+            results = asyncio.run(coroutine)
+    # If handle_exceptions is RETURN_EXCEPTION, the function should return
+    # the results of the successful tasks and the exception of the failed task
+    else:
+        assert (
+            _convert_exception_handling(handle_exceptions)
+            == ExceptionHandling.RETURN_EXCEPTION
+        )
+        results = asyncio.run(coroutine)
+        assert "Processed" in results[0]
+        assert "Processed" in results[2]
+        assert isinstance(results[1], ValueError)
+
+
+@pytest.mark.parametrize("stop_on_first_result", [True, False])
+def test_process_batch_async_stop_on_first(stop_on_first_result):
+    """Test stop_on_first_result behavior"""
+
+    async def mock_task(input: str, i: int) -> str:
+        await asyncio.sleep(0.1 * i)  # Make later tasks slower
+        return f"Processed {input}"
+
+    inputs = ["a", "b", "c"]
+    results = asyncio.run(
+        _process_batch_async(
+            inputs,
+            mock_task,
+            stop_on_first_result=stop_on_first_result,
+            sequential=False,
+            handle_exceptions=ExceptionHandling.RAISE,
+            output_map=lambda x: x,
+        )
+    )
+
+    # When stop_on_first_result is True, only the first task should complete
+    if stop_on_first_result:
+        assert any(r is not None for r in results)
+        assert any(r is None for r in results)
+        # First task should complete first due to sleep timing
+        assert results[0] is not None
+        assert "Processed a" in results[0]
+    # When stop_on_first_result is False, all tasks should complete
+    else:
+        assert all(r is not None for r in results)
+        assert all("Processed" in r for r in results)
