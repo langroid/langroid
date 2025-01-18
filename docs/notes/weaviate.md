@@ -6,6 +6,7 @@
 ---
 
 ## **1. Set Up Weaviate**
+## **You can refer this link for [quickstart](https://weaviate.io/developers/weaviate/quickstart) guide** 
 
 1. **Access Weaviate Cloud Console**  
    Go to the [Weaviate Cloud Console](https://console.weaviate.cloud/).

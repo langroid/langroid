@@ -2351,7 +2351,6 @@ dependencies = [
     { name = "tiktoken" },
     { name = "trafilatura" },
     { name = "typer" },
-    { name = "weaviate-client" },
     { name = "wget" },
 ]
 
@@ -2380,6 +2379,7 @@ all = [
     { name = "torch" },
     { name = "transformers" },
     { name = "unstructured", extra = ["docx", "pdf", "pptx"] },
+    { name = "weaviate-client" },
 ]
 arango = [
     { name = "arango-datasets" },
@@ -2476,6 +2476,10 @@ vecdbs = [
     { name = "lancedb" },
     { name = "pyarrow" },
     { name = "tantivy" },
+    { name = "weaviate-client" },
+]
+weaviate = [
+    { name = "weaviate-client" },
 ]
 
 [package.dev-dependencies]
@@ -2634,7 +2638,9 @@ requires-dist = [
     { name = "unstructured", extras = ["docx", "pdf", "pptx"], marker = "extra == 'all'", specifier = ">=0.10.16,<0.10.18" },
     { name = "unstructured", extras = ["docx", "pdf", "pptx"], marker = "extra == 'doc-chat'", specifier = ">=0.10.16,<0.10.18" },
     { name = "unstructured", extras = ["docx", "pdf", "pptx"], marker = "extra == 'unstructured'", specifier = ">=0.10.16,<0.10.18" },
-    { name = "weaviate-client", specifier = ">=4.9.6" },
+    { name = "weaviate-client", marker = "extra == 'all'", specifier = ">=4.9.6" },
+    { name = "weaviate-client", marker = "extra == 'vecdbs'", specifier = ">=4.9.6" },
+    { name = "weaviate-client", marker = "extra == 'weaviate'", specifier = ">=4.9.6" },
     { name = "wget", specifier = ">=3.2,<4.0" },
 ]
 

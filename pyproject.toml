@@ -53,7 +53,6 @@ dependencies = [
     "tiktoken<1.0.0,>=0.7.0",
     "trafilatura<2.0.0,>=1.5.0",
     "typer<1.0.0,>=0.9.0",
-    "weaviate-client>=4.9.6",
     "wget<4.0,>=3.2",
 ]
 
@@ -80,6 +79,7 @@ vecdbs = [
     "tantivy<0.22.0,>=0.21.0",
     "pyarrow<16.0.0,>=15.0.0",
     "chromadb<=0.4.23,>=0.4.21",
+    "weaviate-client>=4.9.6",
 ]
 
 db = [
@@ -104,6 +104,7 @@ all = [
     "transformers<5.0.0,>=4.40.1",
     "huggingface-hub<0.22.0,>=0.21.2",
     "chromadb<=0.4.23,>=0.4.21",
+    "weaviate-client>=4.9.6",
     "metaphor-python<0.2.0,>=0.1.23",
     "neo4j<6.0.0,>=5.14.1",
     "python-arango<9.0.0,>=8.1.2",
@@ -190,6 +191,9 @@ chainlit = [
 
 chromadb = [
     "chromadb<=0.4.23,>=0.4.21",
+]
+weaviate = [
+    "weaviate-client>=4.9.6",
 ]
 
 meilisearch = [
