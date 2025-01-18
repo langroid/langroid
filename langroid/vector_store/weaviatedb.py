@@ -2,25 +2,29 @@ import logging
 import os
 from typing import Dict, List, Optional, Sequence, Tuple, TypeVar
 
-import weaviate
 from dotenv import load_dotenv
-from weaviate.classes.config import (
-    Configure,
-    VectorDistances,
-)
-from weaviate.classes.init import Auth
-from weaviate.classes.query import Filter, MetadataQuery
-from weaviate.util import generate_uuid5, get_valid_uuid
 
 from langroid.embedding_models.base import (
     EmbeddingModelsConfig,
 )
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
+from langroid.exceptions import LangroidImportError
 from langroid.mytypes import DocMetaData, Document, EmbeddingFunction, Embeddings
 from langroid.utils.configuration import settings
 from langroid.vector_store.base import VectorStore, VectorStoreConfig
 
 logger = logging.getLogger(__name__)
+try:
+    import weaviate
+    from weaviate.classes.config import (
+        Configure,
+        VectorDistances,
+    )
+    from weaviate.classes.init import Auth
+    from weaviate.classes.query import Filter, MetadataQuery
+    from weaviate.util import generate_uuid5, get_valid_uuid
+except ImportError:
+    raise LangroidImportError("weaviate", "weaviate")
 
 
 class WeaviateDBConfig(VectorStoreConfig):
