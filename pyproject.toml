@@ -40,7 +40,7 @@ dependencies = [
     "pygments<3.0.0,>=2.15.1",
     "pyparsing<4.0.0,>=3.0.9",
     "pytest-rerunfailures<16.0,>=15.0",
-    "python-dotenv<2.0.0,>=1.0.0",
+    "python-dotenv>=1.0.0,<2.0.0",
     "python-magic<1.0.0,>=0.4.27",
     "pyyaml<7.0.0,>=6.0.1",
     "qdrant-client<2.0.0,>=1.8.0",
@@ -53,6 +53,7 @@ dependencies = [
     "tiktoken<1.0.0,>=0.7.0",
     "trafilatura<2.0.0,>=1.5.0",
     "typer<1.0.0,>=0.9.0",
+    "weaviate-client>=4.9.6",
     "wget<4.0,>=3.2",
 ]
 
