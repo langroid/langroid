@@ -43,11 +43,11 @@ def main(
     llm_config = lr.language_models.OpenAIGPTConfig(
         chat_model=model or lr.language_models.OpenAIChatModel.GPT4o,
         # or, e.g., "ollama/qwen2.5-coder:latest", or "gemini/gemini-2.0-flash-exp"
-    )    
-    
+    )
+
     processor_config = lr.ChatAgentConfig(
         name="Processor",
-        llm = llm_config,
+        llm=llm_config,
         system_message="""
         You will receive a number from the user.
         Simply repeat that number, DO NOT SAY ANYTHING else,
@@ -56,20 +56,20 @@ def main(
         
         Once you have received the RESULT, simply say "DONE",
         do not say anything else.
-        """,        
+        """,
         vecdb=None,
     )
-    
+
     processor_agent = lr.ChatAgent(processor_config)
     processor_task = lr.Task(
         processor_agent,
         interactive=False,
         single_round=False,
     )
-    
+
     even_config = lr.ChatAgentConfig(
         name="EvenHandler",
-        llm = llm_config,
+        llm=llm_config,
         system_message=f"""
         You will be given a number N. Respond as follows:
         
@@ -78,17 +78,17 @@ def main(
             RESULT = <result>
           and say NOTHING ELSE.
         - If N is odd, say {NO_ANSWER}
-        """,    
+        """,
     )
     even_agent = lr.ChatAgent(even_config)
     even_task = lr.Task(
         even_agent,
         single_round=True,  # task done after 1 step() with valid response
     )
-    
+
     odd_config = lr.ChatAgentConfig(
         name="OddHandler",
-        llm = llm_config,
+        llm=llm_config,
         system_message=f"""
         You will be given a number N. Respond as follows:
         
@@ -105,13 +105,12 @@ def main(
         single_round=True,  # task done after 1 step() with valid response
     )
 
-
     processor_task.add_sub_task([even_task, odd_task])
     number = Prompt.ask(
         "[blue]What number do you want to transform? ",
         default="11",
     )
-    
+
     processor_task.run(number)
 
 

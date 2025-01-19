@@ -16,7 +16,6 @@ For more explanation see the
 import typer
 from rich.prompt import Prompt
 import langroid as lr
-import langroid.language_models as lm
 
 app = typer.Typer()
 
@@ -35,15 +34,15 @@ def main(
             cache=not nocache,
         )
     )
-    
+
     llm_config = lr.language_models.OpenAIGPTConfig(
         chat_model=model or lr.language_models.OpenAIChatModel.GPT4o,
     )
-    
+
     student_config = lr.ChatAgentConfig(
         name="Student",
         llm=llm_config,
-        vecdb=None, #(1)!
+        vecdb=None,  # (1)!
         system_message="""
             You will receive a list of numbers from me (the User),
             and your goal is to calculate their sum.
@@ -56,30 +55,30 @@ def main(
             e.g., simply say "1 + 2", etc, and say nothing else.
             Once you have added all the numbers in the list, 
             say DONE and give me the final sum. 
-        """,    
+        """,
     )
     student_agent = lr.ChatAgent(student_config)
     student_task = lr.Task(
         student_agent,
-        name = "Student",
+        name="Student",
         interactive=False,
-        single_round=False,  
+        single_round=False,
         llm_delegate=True,
     )
-    
+
     adder_config = lr.ChatAgentConfig(
-        name = "Adder", #(1)!
+        name="Adder",  # (1)!
         llm=llm_config,
         vecdb=None,
         system_message="""
             You are an expert on addition of numbers. 
             When given numbers to add, simply return their sum, say nothing else
-            """,     
+            """,
     )
     adder_agent = lr.ChatAgent(adder_config)
     adder_task = lr.Task(
         adder_agent,
-        interactive=False, #(2)!
+        interactive=False,  # (2)!
         single_round=True,  # task done after 1 step() with valid response (3)!
     )
 
@@ -91,7 +90,7 @@ def main(
         """,
         default="3 1 5 2",
     )
-    
+
     student_task.run(nums)
 
 
