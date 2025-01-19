@@ -140,6 +140,11 @@ def main(
                 storage_path=".chroma/doc-chat",
                 embedding=embed_cfg,
             )
+        case "weaviate" | "weaviatedb":
+            config.vecdb = lr.vector_store.WeaviateDBConfig(
+                storage_path=".weaviate/doc-chat",
+                embedding=embed_cfg,
+            )
 
     set_global(
         Settings(

@@ -112,22 +112,14 @@ agent.ingest_docs(documents)
 
 ---
 
-## **4. Create and Run a Task**
+## **4. Get an answer from LLM**
 
 Create a task and start interacting with the agent.
 
 ### **Code Example**
 ```python
-task = lr.Task(agent)
-
-# Run the task
-task.run()
+answer = agent.llm_response("When will new ice age begin.")
 ```
 
 ---
-
-## **5. Example Chat Interaction**
-
-When running the task in the CLI, the interaction might look like this:
-![alt text](./image.png)
 
