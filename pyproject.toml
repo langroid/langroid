@@ -1,6 +1,6 @@
 [project]
 name = "langroid"
-version = "0.33.13"
+version = "0.34.0"
 authors = [
     {name = "Prasad Chalasani", email = "pchalasani@gmail.com"},
 ]
