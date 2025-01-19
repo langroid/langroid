@@ -79,7 +79,7 @@ def main(
     adder_task = lr.Task(
         adder_agent,
         interactive=False,
-        single_round=True,  
+        single_round=True,
     )
 
     student_task.add_sub_task(adder_task)
