@@ -6,6 +6,7 @@ from . import azure_openai
 from . import prompt_formatter
 
 from .base import (
+    StreamEventType,
     LLMConfig,
     LLMMessage,
     LLMFunctionCall,
@@ -33,6 +34,7 @@ __all__ = [
     "openai_gpt",
     "azure_openai",
     "prompt_formatter",
+    "StreamEventType",
     "LLMConfig",
     "LLMMessage",
     "LLMFunctionCall",

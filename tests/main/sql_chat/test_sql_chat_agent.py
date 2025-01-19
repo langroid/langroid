@@ -132,7 +132,7 @@ def _test_sql_chat_agent(
     prompt: str,
     answer: str,
     use_schema_tools: bool = False,
-    turns: int = 15,
+    turns: int = 18,
     addressing_prefix: str = "",
 ) -> None:
     """

@@ -42,6 +42,14 @@ ToolChoiceTypes = Literal["none", "auto", "required"]
 ToolTypes = Literal["function"]
 
 
+class StreamEventType(Enum):
+    TEXT = 1
+    FUNC_NAME = 2
+    FUNC_ARGS = 3
+    TOOL_NAME = 4
+    TOOL_ARGS = 5
+
+
 class LLMConfig(BaseSettings):
     """
     Common configuration for all language models.

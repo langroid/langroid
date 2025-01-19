@@ -43,6 +43,7 @@ from langroid.language_models.base import (
     OpenAIToolCall,
     OpenAIToolSpec,
     Role,
+    StreamEventType,
     ToolChoiceTypes,
 )
 from langroid.language_models.config import HFPromptFormatterConfig
@@ -875,19 +876,19 @@ class OpenAIGPT(LanguageModel):
             completion += event_text
             sys.stdout.write(Colors().GREEN + event_text)
             sys.stdout.flush()
-            self.config.streamer(event_text)
+            self.config.streamer(event_text, StreamEventType.TEXT)
         if event_fn_name:
             function_name = event_fn_name
             has_function = True
             sys.stdout.write(Colors().GREEN + "FUNC: " + event_fn_name + ": ")
             sys.stdout.flush()
-            self.config.streamer(event_fn_name)
+            self.config.streamer(event_fn_name, StreamEventType.FUNC_NAME)
 
         if event_args:
             function_args += event_args
             sys.stdout.write(Colors().GREEN + event_args)
             sys.stdout.flush()
-            self.config.streamer(event_args)
+            self.config.streamer(event_args, StreamEventType.FUNC_ARGS)
 
         if event_tool_deltas is not None:
             # print out streaming tool calls, if not async
@@ -898,12 +899,12 @@ class OpenAIGPT(LanguageModel):
                         Colors().GREEN + "OAI-TOOL: " + tool_fn_name + ": "
                     )
                     sys.stdout.flush()
-                    self.config.streamer(tool_fn_name)
+                    self.config.streamer(tool_fn_name, StreamEventType.TOOL_NAME)
                 if td["function"]["arguments"] != "":
                     tool_fn_args = td["function"]["arguments"]
                     sys.stdout.write(Colors().GREEN + tool_fn_args)
                     sys.stdout.flush()
-                    self.config.streamer(tool_fn_args)
+                    self.config.streamer(tool_fn_args, StreamEventType.TOOL_ARGS)
 
         # show this delta in the stream
         if finish_reason in [
@@ -968,21 +969,23 @@ class OpenAIGPT(LanguageModel):
             if not silent:
                 sys.stdout.write(Colors().GREEN + event_text)
                 sys.stdout.flush()
-                await self.config.streamer_async(event_text)
+                await self.config.streamer_async(event_text, StreamEventType.TEXT)
         if event_fn_name:
             function_name = event_fn_name
             has_function = True
             if not silent:
                 sys.stdout.write(Colors().GREEN + "FUNC: " + event_fn_name + ": ")
                 sys.stdout.flush()
-                await self.config.streamer_async(event_fn_name)
+                await self.config.streamer_async(
+                    event_fn_name, StreamEventType.FUNC_NAME
+                )
 
         if event_args:
             function_args += event_args
             if not silent:
                 sys.stdout.write(Colors().GREEN + event_args)
                 sys.stdout.flush()
-                await self.config.streamer_async(event_args)
+                await self.config.streamer_async(event_args, StreamEventType.FUNC_ARGS)
 
         if event_tool_deltas is not None and not silent:
             # print out streaming tool calls, if not async
@@ -993,12 +996,16 @@ class OpenAIGPT(LanguageModel):
                         Colors().GREEN + "OAI-TOOL: " + tool_fn_name + ": "
                     )
                     sys.stdout.flush()
-                    await self.config.streamer_async(tool_fn_name)
+                    await self.config.streamer_async(
+                        tool_fn_name, StreamEventType.TOOL_NAME
+                    )
                 if td["function"]["arguments"] != "":
                     tool_fn_args = td["function"]["arguments"]
                     sys.stdout.write(Colors().GREEN + tool_fn_args)
                     sys.stdout.flush()
-                    await self.config.streamer_async(tool_fn_args)
+                    await self.config.streamer_async(
+                        tool_fn_args, StreamEventType.TOOL_ARGS
+                    )
 
         # show this delta in the stream
         if choices[0].get("finish_reason", "") in [

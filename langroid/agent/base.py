@@ -1039,6 +1039,11 @@ class Agent(ABC):
         """
         if msg is None:
             return False
+        if isinstance(msg, ChatDocument):
+            if len(msg.tool_messages) > 0:
+                return True
+            if msg.metadata.sender != Entity.LLM:
+                return False
         try:
             tools = self.get_tool_messages(msg)
             return len(tools) > 0

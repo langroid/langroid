@@ -393,13 +393,13 @@ class CoriolisTool(ToolMessage):
     """Tool for testing handling of optional arguments, with default values."""
 
     request: str = "coriolis"
-    purpose: str = "to request computing the Coriolis transform of <x> and <y>"
-    x: int
-    y: int = 5
+    purpose: str = "to request computing the Coriolis transform of <cats> and <cows>"
+    cats: int
+    cows: int = 5
 
     def handle(self) -> str:
         # same as NabroskiTool result
-        return str(3 * self.x + self.y)
+        return str(3 * self.cats + self.cows)
 
 
 wrong_nabroski_tool = """
@@ -432,13 +432,27 @@ def test_agent_malformed_tool(
     assert "num_pair" in response.content and "yval" in response.content
 
 
+class FruitPair(BaseModel):
+    pears: int
+    apples: int
+
+
 class EulerTool(ToolMessage):
     request: str = "euler"
-    purpose: str = "to request computing the Euler transform of <num_pair>"
-    num_pair: NumPair
+    purpose: str = "to request computing the Euler transform of <fruit_pair>"
+    fruit_pair: FruitPair
 
     def handle(self) -> str:
-        return str(2 * self.num_pair.xval - self.num_pair.yval)
+        return str(2 * self.fruit_pair.pears - self.fruit_pair.apples)
+
+
+class BoilerTool(ToolMessage):
+    request: str = "boiler"
+    purpose: str = "to request computing the Boiler transform of <fruit_pair>"
+    fruit_pair: FruitPair
+
+    def handle(self) -> str:
+        return str(3 * self.fruit_pair.pears - 5 * self.fruit_pair.apples)
 
 
 class SumTool(ToolMessage):
@@ -479,8 +493,8 @@ def test_agent_infer_tool(
 ):
     set_global(test_settings)
     gauss_request = """{"xval": 1, "yval": 3}"""
-    nabrowski_or_euler_request = """{"num_pair": {"xval": 1, "yval": 3}}"""
-    euler_request = """{"request": "euler", "num_pair": {"xval": 1, "yval": 3}}"""
+    boiler_or_euler_request = """{"fruit_pair": {"pears": 1, "apples": 3}}"""
+    euler_request = """{"request": "euler", "fruit_pair": {"pears": 1, "apples": 3}}"""
     additional_args_request = """{"xval": 1, "yval": 3, "zval": 4}"""
     additional_args_request_specified = """
     {"request": "gauss", "xval": 1, "yval": 3, "zval": 4}
@@ -499,15 +513,17 @@ def test_agent_infer_tool(
             NabroskiTool,
             GaussTool,
             CoinFlipTool,
+            BoilerTool,
         ]
     )
     agent.enable_message(EulerTool, handle=False)
 
-    # Nabrowski is the only option prior to enabling EulerTool handling
-    assert agent.agent_response(nabrowski_or_euler_request).content == "6"
+    # Boiler is the only option prior to enabling EulerTool handling
+    assert agent.agent_response(boiler_or_euler_request).content == "-12"
 
     # Enable handling EulerTool, this makes nabrowski_or_euler_request ambiguous
     agent.enable_message(EulerTool)
+    agent.enable_message(BoilerTool)
 
     # Gauss is the only option
     assert agent.agent_response(gauss_request).content == "12"
@@ -516,7 +532,7 @@ def test_agent_infer_tool(
     assert agent.agent_response(euler_request).content == "-1"
 
     # We cannot infer the correct tool if there exist multiple matches
-    assert agent.agent_response(nabrowski_or_euler_request) is None
+    assert agent.agent_response(boiler_or_euler_request) is None
 
     # We do not infer tools where the request has additional arguments
     assert agent.agent_response(additional_args_request) is None
@@ -598,7 +614,7 @@ def test_tool_optional_args(
     response = agent.llm_response("What is the Coriolis transform of 1, 2?")
     assert isinstance(agent.get_tool_messages(response)[0], CoriolisTool)
     tool = agent.get_tool_messages(response)[0]
-    assert tool.x == 1 and tool.y == 2
+    assert tool.cats == 1 and tool.cows == 2
 
 
 @pytest.mark.parametrize("tool", [NabroskiTool, CoriolisTool])
@@ -1238,7 +1254,6 @@ def test_agent_respond_only_tools(tool: str):
             assert bob_task.n_stalled_steps == 0
 
 
-@pytest.mark.skip(reason="This test is flaky and needs to be fixed")
 @pytest.mark.parametrize("use_fn_api", [True, False])
 @pytest.mark.parametrize("use_tools_api", [True, False])
 def test_structured_recovery(
@@ -1387,11 +1402,19 @@ def test_structured_recovery(
     # should infer from context. In addition, the name of the
     # function is incorrect (the LLM should infer "coriolis" in
     # recovery) and the JSON output is malformed
+
+    # Note here we intentionally use "catss" as the arg to ensure that
+    # the tool-name inference doesn't work (see `maybe_parse` agent/base.py,
+    # there's a mechanism that infers the intended tool if the arguments are
+    # unambiguously for a specific tool) -- here since we use `catss` that
+    # mechanism fails, and we can do this test properly to focus on structured
+    # recovery. But `catss' is sufficiently similar to 'cats' that the
+    # intent-based recovery should work.
     assert (
         simulate_failed_call(
             """
         request ":coriolis"
-        arguments {"xval": 1}
+        arguments {"catss": 1} 
         """
         )
         == "8"
@@ -1404,7 +1427,7 @@ def test_structured_recovery(
                 LLMFunctionCall(
                     name="Coriolis",
                     arguments={
-                        "xval": 1,
+                        "cats": 1,
                     },
                 )
             )
@@ -1418,8 +1441,8 @@ def test_structured_recovery(
                 LLMFunctionCall(
                     name="EulerTool",
                     arguments={
-                        "xval": 6,
-                        "yval": 4,
+                        "pears": 6,
+                        "apples": 4,
                     },
                 )
             )
@@ -1734,3 +1757,33 @@ def test_reduce_raw_tool_result():
     assert len(agent.message_history) == 7
     tool_result = agent.message_history[3].content
     assert "my_tool" in tool_result and str(MyTool._max_retained_tokens) in tool_result
+
+
+def test_valid_structured_recovery():
+    """
+    Test that structured recovery is not triggered inappropriately
+    when agent response contains a JSON-like string.
+    """
+
+    class MyAgent(ChatAgent):
+        def agent_response(self, msg: str | ChatDocument) -> Any:
+            return "{'x': 1, 'y': 2}"
+
+    agent = MyAgent(
+        ChatAgentConfig(
+            llm=OpenAIGPTConfig(),
+            system_message="""Simply respond No for any input""",
+        )
+    )
+
+    # with no tool enabled
+    task = Task(agent, interactive=False)
+    result = task.run("3", turns=4)
+    # response-sequence: agent, llm, agent, llm -> done
+    assert "No" in result.content
+
+    # with a tool enabled
+    agent.enable_message(NabroskiTool)
+    task = Task(agent, interactive=False)
+    result = task.run("3", turns=4)
+    assert "No" in result.content
