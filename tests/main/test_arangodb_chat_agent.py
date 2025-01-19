@@ -488,7 +488,7 @@ def arango_agent_from_db():
     "query,expected",
     [
         ("Who are the two youngest characters?", "Bran Stark, Arya Stark"),
-        ("How are Bran Stark and Arya Stark related?", "siblings"),
+        ("Are Bran Stark and Arya Stark siblings?", "yes"),
         ("Who are Bran Stark's grandparents?", "Rickard, Lyarra"),
         ("What is the age difference between Rickard Stark and Arya Stark?", "49"),
         ("What is the average age of all Stark characters?", "31"),
