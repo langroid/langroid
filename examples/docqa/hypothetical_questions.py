@@ -1,18 +1,35 @@
 """
-Demonstrating the utility of Hypothetical Questions (hq) in the context of a Chatbot.
+Demonstrating the utility of Hypothetical Questions (HQ) in the context of a
+DocChatAgent.
 
 In the following example, a DocChatAgent is created and it can be queried on its
 documents both in a normal way and in a hypothetical way.
 
-The successful execution of this example depends on the generated hypothetical questions,
-but with the current default configuration, it should be able to generate questions that
-are relevant to the given user query `How does the system generate responses in conversation mode?`.
-The same query does not return accurate answers in the normal mode, while in the
-hypothetical mode it returns a relevant document.
+Although this is being referred to as Hypothetical Questions, it is not limited to
+just questions -- it is simply a way to augment the document-chunks at ingestion time,
+with keywords that increase the "semantic surface" of the chunks to improve
+retrieval accuracy.
 
-Run like this:
+This example illustrates the benefit of HQ in a medical scenario
+where each "document chunk" is simply the name of a medical test
+(e.g. "cholesterol", "BUN", "PSA", etc)
+and when `use_hypothetical_question` is enabled,
+the chunk (i.e. test name) is augment it with keywords that add more
+context, such as which organ it is related to
+(e.g., "heart", "kidney", "prostate", etc).
+This way, when a user asks "which tests are related to kidney health",
+these augmentations ensure that the test names are retrieved more accurately.
 
-python3 examples/docqa/hypothetical_questions.py --no-debug --reset --no-cache --docker --use-hq
+Running the script compares the accuracy of
+results of the DocChatAgent with and without HQ.
+
+Run like this to use HQ:
+
+python3 examples/docqa/hypothetical_questions.py
+
+or without HQ:
+
+python3 examples/docqa/hypothetical_questions.py --no-use-hq
 """
 
 import typer
