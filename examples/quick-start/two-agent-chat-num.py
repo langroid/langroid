@@ -42,7 +42,7 @@ def main(
     student_config = lr.ChatAgentConfig(
         name="Student",
         llm=llm_config,
-        vecdb=None,  # (1)!
+        vecdb=None,
         system_message="""
             You will receive a list of numbers from me (the User),
             and your goal is to calculate their sum.
@@ -67,7 +67,7 @@ def main(
     )
 
     adder_config = lr.ChatAgentConfig(
-        name="Adder",  # (1)!
+        name="Adder",
         llm=llm_config,
         vecdb=None,
         system_message="""
@@ -78,8 +78,8 @@ def main(
     adder_agent = lr.ChatAgent(adder_config)
     adder_task = lr.Task(
         adder_agent,
-        interactive=False,  # (2)!
-        single_round=True,  # task done after 1 step() with valid response (3)!
+        interactive=False,
+        single_round=True,  
     )
 
     student_task.add_sub_task(adder_task)
