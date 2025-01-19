@@ -28,7 +28,6 @@ except ImportError:
 
 
 class WeaviateDBConfig(VectorStoreConfig):
-    cloud: bool = True
     collection_name: str | None = "temp"
     storage_path: str = ".weaviate/data"
     embedding: EmbeddingModelsConfig = OpenAIEmbeddingsConfig()
@@ -44,28 +43,25 @@ class WeaviateDB(VectorStore):
         load_dotenv()
         key = os.getenv("WEAVIATE_API_KEY")
         url = os.getenv("WEAVIATE_API_URL")
-        if config.cloud and None in [key, url]:
+        if None in [key, url]:
             logger.warning(
                 """WEAVIATE_API_KEY, WEAVIATE_API_URL env variable must be set to use
                 WeaviateDB in cloud mode. Please set these values
                 in your .env file.
                 """
             )
-            config.cloud = False
-        if config.cloud:
-            self.client = weaviate.connect_to_weaviate_cloud(
-                cluster_url=url,
-                auth_credentials=Auth.api_key(key),
-            )
+        self.client = weaviate.connect_to_weaviate_cloud(
+            cluster_url=url,
+            auth_credentials=Auth.api_key(key),
+        )
         if config.collection_name is not None:
-             if config.collection_name[0].islower():
+            if config.collection_name[0].islower():
                 logger.warning(
-                    f"""Beware that WeaviateDB collection names always start with first
+                    f"""Note that WeaviateDB collection names always start with first
                             letter capitalized so creating collection name with
-                            {config.collection_name[0].upper()
-                             + config.collection_name[1:]}
+                            {config.collection_name.capitalize()}
                     """
-                    )
+                )
 
     def clear_empty_collections(self) -> int:
         colls = self.client.collections.list_all()
@@ -81,10 +77,12 @@ class WeaviateDB(VectorStore):
         colls = self.client.collections.list_all()
         if empty:
             return list(colls.keys())
-        non_empty_colls = []
-        for coll_name in colls.keys():
-            if len(self.client.collections.get(coll_name)) > 0:
-                non_empty_colls.append(coll_name)
+        non_empty_colls = [
+            coll_name
+            for coll_name in colls.keys()
+            if len(self.client.collections.get(coll_name)) > 0
+        ]
+
         return non_empty_colls
 
     def clear_all_collections(self, really: bool = False, prefix: str = "") -> int:
@@ -120,9 +118,9 @@ class WeaviateDB(VectorStore):
         self.client.collections.delete(name=collection_name)
 
     def create_collection(self, collection_name: str, replace: bool = False) -> None:
-         # Capitalize the first letter if necessary
+        # Capitalize the first letter if necessary
         if collection_name and collection_name[0].islower():
-            collection_name = collection_name[0].upper() + collection_name[1:]
+            collection_name = collection_name.capitalize()
         self.config.collection_name = collection_name
         if self.client.collections.exists(name=collection_name):
             coll = self.client.collections.get(name=collection_name)
@@ -181,36 +179,29 @@ class WeaviateDB(VectorStore):
     def get_all_documents(self, where: str = "") -> List[Document]:
         if self.config.collection_name is None:
             raise ValueError("No collection name set, cannot retrieve docs")
-        docs = []
         # cannot use filter as client does not support json type queries
         coll = self.client.collections.get(self.config.collection_name)
-        for item in coll.iterator():
-            docs.append(self.weaviate_obj_to_doc(item))
-        return docs
+        return [self.weaviate_obj_to_doc(item) for item in coll.iterator()]
 
     def get_documents_by_ids(self, ids: List[str]) -> List[Document]:
         if self.config.collection_name is None:
             raise ValueError("No collection name set, cannot retrieve docs")
-        
+
         docs = []
         coll_name = self.client.collections.get(self.config.collection_name)
-        
+
         result = coll_name.query.fetch_objects(
-            filters=Filter.by_property("_id").contains_any(ids),
-            limit=len(coll_name)
+            filters=Filter.by_property("_id").contains_any(ids), limit=len(coll_name)
         )
-        
-        # Create a dictionary mapping IDs to documents
+
         id_to_doc = {}
         for item in result.objects:
             doc = self.weaviate_obj_to_doc(item)
             id_to_doc[doc.metadata.id] = doc
-        
+
         # Reconstruct the list of documents in the original order of input ids
-        for id in ids:
-            if id in id_to_doc:
-                docs.append(id_to_doc[id])
-        
+        docs = [id_to_doc[id] for id in ids if id in id_to_doc]
+
         return docs
 
     def similar_texts_with_scores(
@@ -226,13 +217,10 @@ class WeaviateDB(VectorStore):
             return_properties=True,
             return_metadata=MetadataQuery(distance=True),
         )
-        docs = []
-        distances = []
-        for item in response.objects:
-            docs.append(self.weaviate_obj_to_doc(item))
-            distances.append(1 - item.metadata.distance)
-        doc_score_pairs = list(zip(docs, distances))
-        return doc_score_pairs
+        return [
+            (self.weaviate_obj_to_doc(item), 1 - item.metadata.distance)
+            for item in response.objects
+        ]
 
     def _create_valid_uuid_id(self, id: str) -> str:
         try:
@@ -249,7 +237,6 @@ class WeaviateDB(VectorStore):
         is_chunk = metadata_dict.get("is_chunk", False)
         window_ids = metadata_dict.get("window_ids", [])
         window_ids = [str(uuid) for uuid in window_ids]
-
 
         # Ensure the id is a valid UUID string
         id_value = get_valid_uuid(input_object.uuid)
