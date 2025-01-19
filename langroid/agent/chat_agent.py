@@ -1845,14 +1845,16 @@ class ChatAgent(Agent):
         self.update_last_message(message, role=Role.USER)
         return answer_doc
 
-    def llm_response_forget(self, message: str) -> ChatDocument:
+    def llm_response_forget(
+        self, message: Optional[str | ChatDocument] = None
+    ) -> ChatDocument:
         """
         LLM Response to single message, and restore message_history.
         In effect a "one-off" message & response that leaves agent
         message history state intact.
 
         Args:
-            message (str): user message
+            message (str|ChatDocument): message to respond to.
 
         Returns:
             A Document object with the response.
@@ -1879,7 +1881,9 @@ class ChatAgent(Agent):
 
         return response
 
-    async def llm_response_forget_async(self, message: str) -> ChatDocument:
+    async def llm_response_forget_async(
+        self, message: Optional[str | ChatDocument] = None
+    ) -> ChatDocument:
         """
         Async version of `llm_response_forget`. See there for details.
         """
