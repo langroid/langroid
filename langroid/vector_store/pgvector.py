@@ -193,7 +193,7 @@ class PGVector(VectorStore):
         if collection_name == self.config.collection_name:
             return
 
-        super().set_collection(collection_name, replace)
+        super().set_collection(collection_name,  replace)
 
         self.EmbeddingTable = self._get_embedding_table_class(
             collection_name, self.embedding_dim
