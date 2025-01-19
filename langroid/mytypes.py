@@ -75,6 +75,16 @@ class Document(BaseModel):
     def id(self) -> str:
         return self.metadata.id
 
+    def from_string(
+        content: str,
+        source: str = "context",
+        is_chunk: bool = True,
+    ) -> "Document":
+        return Document(
+            content=content,
+            metadata=DocMetaData(source=source, is_chunk=is_chunk),
+        )
+
     def __str__(self) -> str:
         return dedent(
             f"""

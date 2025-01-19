@@ -1143,20 +1143,22 @@ class DocChatAgent(ChatAgent):
         id2_rank_semantic = {d.id(): i for i, (d, _) in enumerate(docs_and_scores)}
         id2doc = {d.id(): d for d, _ in docs_and_scores}
         # make sure we get unique docs
-        passages = [id2doc[id] for id, _ in id2_rank_semantic.items()]
+        passages = [id2doc[id] for id in id2_rank_semantic.keys()]
 
         id2_rank_bm25 = {}
         if self.config.use_bm25_search:
             # TODO: Add score threshold in config
             docs_scores = self.get_similar_chunks_bm25(query, retrieval_multiple)
+            id2doc.update({d.id(): d for d, _ in docs_scores})
             if self.config.cross_encoder_reranking_model == "":
                 # only if we're not re-ranking with a cross-encoder,
                 # we collect these ranks for Reciprocal Rank Fusion down below.
                 docs_scores = sorted(docs_scores, key=lambda x: x[1], reverse=True)
                 id2_rank_bm25 = {d.id(): i for i, (d, _) in enumerate(docs_scores)}
-                id2doc.update({d.id(): d for d, _ in docs_scores})
             else:
                 passages += [d for (d, _) in docs_scores]
+                # eliminate duplicate ids
+                passages = [id2doc[id] for id in id2doc.keys()]
 
         id2_rank_fuzzy = {}
         if self.config.use_fuzzy_match:
@@ -1174,6 +1176,8 @@ class DocChatAgent(ChatAgent):
                 id2doc.update({d.id(): d for d, _ in fuzzy_match_doc_scores})
             else:
                 passages += [d for (d, _) in fuzzy_match_doc_scores]
+                # eliminate duplicate ids
+                passages = [id2doc[id] for id in id2doc.keys()]
 
         if (
             self.config.cross_encoder_reranking_model == ""
