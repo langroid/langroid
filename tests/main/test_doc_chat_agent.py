@@ -10,7 +10,8 @@ from langroid import ChatDocument
 from langroid.agent.batch import run_batch_task_gen, run_batch_tasks
 from langroid.agent.chat_agent import ChatAgent
 from langroid.agent.special.doc_chat_agent import (
-    GENERATED_QUESTIONS_MARKER,
+    CHUNK_ENRICHMENT_DELIMITER,
+    ChunkEnrichmentAgentConfig,
     DocChatAgent,
     DocChatAgentConfig,
     RetrievalTool,
@@ -19,6 +20,7 @@ from langroid.agent.special.lance_doc_chat_agent import LanceDocChatAgent
 from langroid.agent.task import Task
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
+from langroid.language_models.mock_lm import MockLMConfig
 from langroid.language_models.openai_gpt import OpenAIGPTConfig
 from langroid.mytypes import DocMetaData, Document, Entity
 from langroid.parsing.parser import ParsingConfig, Splitter
@@ -941,44 +943,36 @@ def test_doc_chat_batch(test_settings: Settings, vecdb):
         a.clear()
 
 
-@pytest.mark.parametrize(
-    "vecdb", ["lancedb", "qdrant_local", "qdrant_cloud", "chroma"], indirect=True
-)
-@pytest.mark.parametrize(
-    "num_hypothetical_questions, expect_cleaned", [(1, True), (0, False)]
-)
-def test_remove_hypothetical_questions(
-    test_settings: Settings,
-    vecdb: VectorStore,
-    num_hypothetical_questions: int,
+@pytest.mark.parametrize("enrichment, expect_cleaned", [(True, True), (False, False)])
+def test_remove_enrichments(
+    enrichment: bool,
     expect_cleaned: bool,
 ) -> None:
     """
-    Test removal of generated hypothetical questions from documents both if
-    they have hypothetical questions or not.
+    Test removal of generated enrichments from documents both if
+    they have enrichment or not.
     """
-    set_global(test_settings)
 
     original_content = "This is the original content"
     sample_docs = [
         Document(
             content=f"""
-                {original_content}\n\n{GENERATED_QUESTIONS_MARKER}
-                Some generated questions
+                {original_content}\n\n{CHUNK_ENRICHMENT_DELIMITER}
+                Some generated enrichments
             """,
-            metadata=DocMetaData(source="one", has_hypothetical_questions=True),
+            metadata=DocMetaData(source="one", has_enrichment=True),
         ),
         Document(
             content="This is a normal document", metadata=DocMetaData(source="twp")
         ),
     ]
 
+    enrichment_config = ChunkEnrichmentAgentConfig() if enrichment else None
     agent = DocChatAgent(
-        _TestDocChatAgentConfig(num_hypothetical_questions=num_hypothetical_questions)
+        _TestDocChatAgentConfig(chunk_enrichment_config=enrichment_config)
     )
-    agent.vecdb = vecdb
 
-    cleaned_docs = agent.remove_hypothetical_questions(sample_docs)
+    cleaned_docs = agent.remove_chunk_enrichments(sample_docs)
 
     assert len(cleaned_docs) == len(sample_docs)
     # Document with questions should be cleaned
@@ -987,61 +981,55 @@ def test_remove_hypothetical_questions(
     assert cleaned_docs[1].content == sample_docs[1].content
 
 
-@pytest.mark.parametrize(
-    "vecdb", ["lancedb", "qdrant_local", "qdrant_cloud", "chroma"], indirect=True
-)
-def test_add_hypothetical_questions(
-    test_settings: Settings, vecdb: VectorStore
-) -> None:
-    """Test generation of hypothetical questions for documents"""
-    set_global(test_settings)
+def test_add_enrichments() -> None:
+    """Test generation of enrichments for documents"""
 
     sample_docs = [
         Document(content="Doc 1", metadata=DocMetaData(source="one")),
         Document(content="Doc 2", metadata=DocMetaData(source="two")),
     ]
 
-    agent = DocChatAgent(_TestDocChatAgentConfig(num_hypothetical_questions=2))
-    agent.vecdb = vecdb
+    enrichment_agent_config = ChunkEnrichmentAgentConfig(
+        llm=MockLMConfig(
+            response_fn=lambda x: "Keyword1, keyword2 " + x,
+        ),
+        enrichment_prompt_fn=lambda x: "Add keywords to " + x,
+    )
+    agent = DocChatAgent(
+        _TestDocChatAgentConfig(
+            chunk_enrichment_config=enrichment_agent_config,
+        )
+    )
 
-    augmented_docs = agent.add_hypothetical_questions(sample_docs)
+    augmented_docs = agent.enrich_chunks(sample_docs)
 
     assert len(augmented_docs) == len(sample_docs)
     for doc in augmented_docs:
-        assert GENERATED_QUESTIONS_MARKER in doc.content
-        assert doc.metadata.has_hypothetical_questions
+        assert CHUNK_ENRICHMENT_DELIMITER in doc.content
+        assert doc.metadata.has_enrichment
         # Original content should be preserved before marker
         assert (
-            doc.content.split(GENERATED_QUESTIONS_MARKER)[0].strip()
+            doc.content.split(CHUNK_ENRICHMENT_DELIMITER)[0].strip()
             in sample_docs[0].content + sample_docs[1].content
         )
-        # Should have generated questions after marker
-        questions_part = doc.content.split(GENERATED_QUESTIONS_MARKER)[1].strip()
-        assert len(questions_part) > 0
+        # Should have enrichment after marker
+        enrichment_part = doc.content.split(CHUNK_ENRICHMENT_DELIMITER)[1].strip()
+        assert len(enrichment_part) > 0
 
 
-@pytest.mark.parametrize(
-    "vecdb", ["lancedb", "qdrant_local", "qdrant_cloud", "chroma"], indirect=True
-)
-def test_hypothetical_questions_disabled(
-    test_settings: Settings, vecdb: VectorStore
-) -> None:
-    """Test that hypothetical questions are not generated when disabled"""
-    set_global(test_settings)
+def test_enrichments_disabled() -> None:
+    """Test that enrichments are not generated when disabled"""
 
     sample_docs = [Document(content="Doc 1", metadata=DocMetaData(source="one"))]
 
-    agent = DocChatAgent(_TestDocChatAgentConfig(num_hypothetical_questions=0))
-    agent.vecdb = vecdb
+    agent = DocChatAgent(_TestDocChatAgentConfig(chunk_enrichment_config=None))
 
-    # Test add_hypothetical_questions
-    processed_docs = agent.add_hypothetical_questions(sample_docs)
+    processed_docs = agent.enrich_chunks(sample_docs)
     assert len(processed_docs) == len(sample_docs)
     assert processed_docs[0].content == sample_docs[0].content
-    assert not hasattr(processed_docs[0].metadata, "has_hypothetical_questions")
+    assert not hasattr(processed_docs[0].metadata, "has_enrichment")
 
-    # Test remove_hypothetical_questions
-    cleaned_docs = agent.remove_hypothetical_questions(sample_docs)
+    cleaned_docs = agent.remove_chunk_enrichments(sample_docs)
     assert len(cleaned_docs) == len(sample_docs)
     assert cleaned_docs[0].content == sample_docs[0].content
 
@@ -1051,26 +1039,54 @@ def test_hypothetical_questions_disabled(
     ["lancedb", "qdrant_local", "qdrant_cloud", "chroma"],
     indirect=True,
 )
-def test_hypothetical_questions_integration(
-    test_settings: Settings, vecdb: VectorStore
-) -> None:
-    """Integration test for hypothetical questions in RAG pipeline"""
-    set_global(test_settings)
+def test_enrichments_integration(vecdb: VectorStore) -> None:
+    """Integration test for chunk-enrichments in RAG pipeline"""
 
     sample_docs = [
         Document(
-            content="Gravity is a fundamental force of nature.",
-            metadata=DocMetaData(source="physics"),
+            content="Blood Test name: BUN",
+            # Blood Urea Nitrogen test for kidney function
+            metadata=DocMetaData(source="blood-work", is_chunk=True),
         ),
         Document(
-            content="Photosynthesis is how plants convert sunlight into energy.",
-            metadata=DocMetaData(source="biology"),
+            content="Blood test name: BNP",
+            # B-type natriuretic peptide test for heart function
+            metadata=DocMetaData(source="blood-work", is_chunk=True),
         ),
     ]
 
+    # add 20 random docs
+    sample_docs.extend(
+        [
+            Document(
+                content=generate_random_text(5),
+                metadata=DocMetaData(source="blood-work", is_chunk=True),
+            )
+            for _ in range(20)
+        ]
+    )
+
     agent = DocChatAgent(
         _TestDocChatAgentConfig(
-            num_hypothetical_questions=2,
+            rerank_diversity=False,
+            rerank_periphery=False,
+            relevance_extractor_config=None,
+            conversation_mode=False,
+            chunk_enrichment_config=ChunkEnrichmentAgentConfig(
+                system_message="""
+                You are an expert in medical tests, well-versed in 
+                test names and which organs they are associated with.
+                """,
+                enrichment_prompt_fn=lambda x: (
+                    f"""
+                    Which organ function or health is the following blood test
+                    most closely associated with? 
+                    (Answer in ONE WORD; if unsure, say UNKNOWN)
+                    
+                    {x}
+                    """
+                ),
+            ),
         )
     )
     agent.vecdb = vecdb
@@ -1081,18 +1097,22 @@ def test_hypothetical_questions_integration(
     # Verify questions were generated during ingestion
     all_docs = agent.vecdb.get_all_documents()
     assert all(
-        GENERATED_QUESTIONS_MARKER in doc.content for doc in all_docs
-    ), "Generated questions not found in all docs"
+        CHUNK_ENRICHMENT_DELIMITER in doc.content for doc in all_docs
+    ), "Generated enrichments not found in all docs"
 
-    # retrieve docs they should not contain generated questions
-    doc1 = agent.answer_from_docs("What is photosynthesis?")
-    doc2 = agent.answer_from_docs("What is gravity?")
+    # retrieve docs they should not contain generated enrichments
+    doc1 = agent.answer_from_docs("Which medical test is kidney-related?")
+    doc2 = agent.answer_from_docs("Which blood test is related to heart-function?")
 
-    # they are documents augumented with hypothetical
-    # questions but the questions should be removed on retrieval
+    # they are documents enriched with keywords
+    # but the keywords should be removed on retrieval
     assert (
-        GENERATED_QUESTIONS_MARKER not in doc1.content
+        CHUNK_ENRICHMENT_DELIMITER not in doc1.content
     ), f"Doc 1 has not been cleaned: {doc1.content}"
     assert (
-        GENERATED_QUESTIONS_MARKER not in doc2.content
+        CHUNK_ENRICHMENT_DELIMITER not in doc2.content
     ), f"Doc 2 has not been cleaned: {doc2.content}"
+
+    # check that the right content is in the docs
+    assert "BUN" in doc1.content
+    assert "BNP" in doc2.content

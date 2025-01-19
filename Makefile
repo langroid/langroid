@@ -26,7 +26,7 @@ type-check:
 
 .PHONE: lint
 lint:
-	black .
+	uv run black .
 	uv run ruff check . --fix
 
 .PHONY: stubs

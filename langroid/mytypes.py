@@ -75,6 +75,7 @@ class Document(BaseModel):
     def id(self) -> str:
         return self.metadata.id
 
+    @staticmethod
     def from_string(
         content: str,
         source: str = "context",

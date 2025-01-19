@@ -17,7 +17,7 @@ pip install "langroid[hf-embeddings]"
 import logging
 from collections import OrderedDict
 from functools import cache
-from typing import Any, Dict, List, Optional, Set, Tuple, no_type_check
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, no_type_check
 
 import nest_asyncio
 import numpy as np
@@ -82,7 +82,7 @@ DEFAULT_DOC_CHAT_SYSTEM_MESSAGE = """
 You are a helpful assistant, helping me understand a collection of documents.
 """
 
-GENERATED_QUESTIONS_MARKER = "<##-##-##>"
+CHUNK_ENRICHMENT_DELIMITER = "<##-##-##>"
 
 has_sentence_transformers = False
 try:
@@ -103,6 +103,12 @@ oai_embed_config = OpenAIEmbeddingsConfig(
     model_name="text-embedding-ada-002",
     dims=1536,
 )
+
+
+class ChunkEnrichmentAgentConfig(ChatAgentConfig):
+    batch_size: int = 50
+    delimiter: str = CHUNK_ENRICHMENT_DELIMITER
+    enrichment_prompt_fn: Callable[[str], str] = lambda x: x
 
 
 class DocChatAgentConfig(ChatAgentConfig):
@@ -129,19 +135,11 @@ class DocChatAgentConfig(ChatAgentConfig):
     # https://arxiv.org/pdf/2212.10496.pdf
     # It is False by default; its benefits depends on the context.
     hypothetical_answer: bool = False
-    # Flag to enable Hypothetical Question Indexing,
-    # which uses a language model to generate questions for each data chunk,
-    # this might help in finding relevant chunks for a given question.
-    num_hypothetical_questions: int = 0
-    hypothetical_questions_prompt: str = """
-    Given the following text passage, generate up to %(num_hypothetical_questions)s
-    different questions that this passage would help answer. 
-    Make the questions specific and diverse.
-    
-    PASSAGE:
-    %(passage)s
-    """
-    hypothetical_questions_batch_size: int | None = 50
+    # Optional config for chunk enrichment agent, e.g. to enrich
+    # chunks with hypothetical questions, or keywords to increase
+    # the "semantic surface area" of the chunks, which may help
+    # improve retrieval.
+    chunk_enrichment_config: Optional[ChunkEnrichmentAgentConfig] = None
 
     n_query_rephrases: int = 0
     n_neighbor_chunks: int = 0  # how many neighbors on either side of match to retrieve
@@ -421,8 +419,8 @@ class DocChatAgent(ChatAgent):
                 d.metadata.is_chunk = True
         if self.vecdb is None:
             raise ValueError("VecDB not set")
-        if self.config.num_hypothetical_questions > 0:
-            docs = self.add_hypothetical_questions(docs)
+        if self.config.chunk_enrichment_config is not None:
+            docs = self.enrich_chunks(docs)
 
         # If any additional fields need to be added to content,
         # add them as key=value pairs for all docs, before batching.
@@ -879,42 +877,51 @@ class DocChatAgent(ChatAgent):
                 ).content
         return answer
 
-    def add_hypothetical_questions(self, docs: List[Document]) -> List[Document]:
-        """Add hypothetical questions to documents using batch processing.
+    def enrich_chunks(self, docs: List[Document]) -> List[Document]:
+        """
+        Enrich chunks using Agent configured with self.config.chunk_enrichment_config.
+
+        We assume that the system message of the agent is set in such a way
+        that when we run
+        ```
+        prompt = self.config.chunk_enrichment_config.enrichment_prompt_fn(text)
+        result = await agent.llm_response_forget_async(prompt)
+        ```
+
+        then `result.content` will contain the augmentation to the text.
 
         Args:
-            docs: List of documents to generate questions for
+            docs: List of document chunks to enrich
 
         Returns:
-            List[Document]: Documents augmented with generated questions
+            List[Document]: Documents (chunks) enriched with additional text,
+                separated by a delimiter.
         """
-        if self.llm is None:
+        if self.config.chunk_enrichment_config is None:
+            return docs
+        enrichment_config = self.config.chunk_enrichment_config
+        agent = ChatAgent(enrichment_config)
+        if agent.llm is None:
             raise ValueError("LLM not set")
 
-        if self.config.num_hypothetical_questions == 0:
-            return docs
-
-        with status("[cyan]Generating hypothetical questions for chunks..."):
+        with status("[cyan]Augmenting chunks..."):
             # Process chunks in parallel using run_batch_agent_method
-            n_hq = self.config.num_hypothetical_questions or 1
             questions_batch = run_batch_agent_method(
-                agent=self,
-                method=self.llm_response_forget_async,
+                agent=agent,
+                method=agent.llm_response_forget_async,
                 items=docs,
-                input_map=lambda doc: self.config.hypothetical_questions_prompt
-                % {
-                    "passage": doc.content,
-                    "num_hypothetical_questions": n_hq,
-                },
+                input_map=lambda doc: (
+                    enrichment_config.enrichment_prompt_fn(doc.content)
+                ),
                 output_map=lambda response: response.content if response else "",
                 sequential=False,
-                batch_size=self.config.hypothetical_questions_batch_size,
+                batch_size=enrichment_config.batch_size,
             )
 
             # Combine original content with generated questions
             augmented_docs = []
-            for doc, questions in zip(docs, questions_batch):
-                if not questions:
+            for doc, enrichment in zip(docs, questions_batch):
+                if not enrichment:
                     augmented_docs.append(doc)
                     continue
 
@@ -922,16 +929,14 @@ class DocChatAgent(ChatAgent):
                 combined_content = f"""
                 {doc.content}
                 
-                {GENERATED_QUESTIONS_MARKER}
-                {questions}
+                {enrichment_config.delimiter}
+                {enrichment}
                 """.strip()
 
                 new_doc = doc.copy(
                     update={
                         "content": combined_content,
-                        "metadata": doc.metadata.copy(
-                            update={"has_hypothetical_questions": True}
-                        ),
+                        "metadata": doc.metadata.copy(update={"has_enrichment": True}),
                     }
                 )
                 augmented_docs.append(new_doc)
@@ -1396,9 +1401,10 @@ class DocChatAgent(ChatAgent):
 
         return query, extracts
 
-    def remove_hypothetical_questions(self, passages: List[Document]) -> List[Document]:
-        """Remove any generated content (like hypothetical questions) from documents.
-        Only cleans if corresponding generation was enabled in config.
+    def remove_chunk_enrichments(self, passages: List[Document]) -> List[Document]:
+        """Remove any enrichments (like hypothetical questions, or keywords)
+        from documents.
+        Only cleans if enrichment was enabled in config.
 
         Args:
             passages: List of documents to clean
@@ -1406,20 +1412,13 @@ class DocChatAgent(ChatAgent):
         Returns:
             List of documents with only original content
         """
-        if self.config.num_hypothetical_questions == 0:
+        if self.config.chunk_enrichment_config is None:
             return passages
-
+        delimiter = self.config.chunk_enrichment_config.delimiter
         return [
             (
-                doc.copy(
-                    update={
-                        "content": doc.content.split(GENERATED_QUESTIONS_MARKER)[
-                            0
-                        ].strip()
-                    }
-                )
-                if doc.content
-                and getattr(doc.metadata, "has_hypothetical_questions", False)
+                doc.copy(update={"content": doc.content.split(delimiter)[0].strip()})
+                if doc.content and getattr(doc.metadata, "has_enrichment", False)
                 else doc
             )
             for doc in passages
@@ -1440,7 +1439,7 @@ class DocChatAgent(ChatAgent):
         Returns:
             List[Document]: list of Documents containing extracts and metadata.
         """
-        passages = self.remove_hypothetical_questions(passages)
+        passages = self.remove_chunk_enrichments(passages)
 
         agent_cfg = self.config.relevance_extractor_config
         if agent_cfg is None:

@@ -41,13 +41,11 @@ import langroid.language_models as lm
 from langroid.agent.special.doc_chat_agent import (
     DocChatAgent,
     DocChatAgentConfig,
-    RelevanceExtractorAgentConfig,
+    ChunkEnrichmentAgentConfig,
 )
-from langroid.agent.task import Task
 from langroid.parsing.parser import ParsingConfig
 from langroid.utils.configuration import Settings
 from langroid.vector_store.qdrantdb import QdrantDBConfig
-from langroid.utils.constants import NO_ANSWER
 from langroid.agent.batch import run_batch_function
 
 app = typer.Typer()
@@ -55,6 +53,7 @@ app = typer.Typer()
 lr.utils.logging.setup_colored_logging()
 
 ORGAN = "kidney"
+
 
 def setup_vecdb(docker: bool, reset: bool, collection: str) -> QdrantDBConfig:
     """Configure vector database."""
@@ -82,9 +81,34 @@ def run_document_chatbot(
     """
     llm_config = lm.OpenAIGPTConfig(chat_model=model)
     vecdb_config = setup_vecdb(docker=docker, reset=reset, collection=collection)
-    relevance_extractor_config = RelevanceExtractorAgentConfig(
-        segment_length=-1, # treat entire passage as a segment
+    enrichment_config = ChunkEnrichmentAgentConfig(
+        batch_size=10,
+        system_message="""
+        You are an experienced clinical physician, very well-versed in
+        medical tests and their names.
+        You will be asked to identify WHICH ORGAN(s) Function/Health
+        a test name is most closely associated with, to aid in 
+        retrieving the medical test names more accurately from an embeddings db
+        that contains thousands of such test names.
+        The idea is to use the ORGAN NAME(S) provided by you, 
+        to make the right test names easier to discover via keyword-matching
+        or semantic (embedding) similarity.
+         Your job is to generate up to 3 ORGAN NAMES
+         MOST CLOSELY associated with the test name shown, ONE PER LINE.
+         DO NOT SAY ANYTHING ELSE, and DO NOT BE OBLIGATED to provide 3 organs --
+         if there is just one or two that are most relevant, that is fine.
+        Examples:
+          "cholesterol" -> "heart function", 
+          "LDL" -> "artery health", etc,
+          "PSA" -> "prostate health", 
+          "TSH" -> "thyroid function", etc.                
+        """,
+        enrichment_prompt_fn=lambda test: f"""
+        Which ORGAN(S) Function/Health is the medical test named 
+        '{test}' most closely associated with?
+        """,
     )
+
     config = DocChatAgentConfig(
         llm=llm_config,
         vecdb=vecdb_config,
@@ -99,44 +123,25 @@ def run_document_chatbot(
             n_similar_docs=10,
         ),
         # n_neighbor_chunks=1,
-        num_hypothetical_questions=3 if use_hq else 0,
+        chunk_enrichment_config=enrichment_config if use_hq else None,
         relevance_extractor_config=None,
-        hypothetical_questions_prompt="""
-        You are an experienced clinical physician, very well-versed in
-        medical tests and their names. 
-        The PASSAGE below contains the name of a medical test, 
-        e.g. "cholesterol", "LDL", "PSA", etc. This is just one of
-        thousands of such test names,
-        and we want to make the test names easier to discover via keyword-matching
-        or semantic (embedding) similarity.
-         Your job is to generate up to %(num_hypothetical_questions)s
-         keywords that will aid with such discovery.
-         MAKE SURE YOU INCLUDE KEYWORDS describing which ORGAN(S) Function
-        and what type of health condition the test is related to!!
-        Examples:
-          "cholesterol" -> "heart function", "LDL" -> "artery health", etc,
-
-          "PSA" -> "prostate health", "TSH" -> "thyroid function", etc.
-
-        PASSAGE:
-        %(passage)s
-        """,
-        hypothetical_questions_batch_size=5,
     )
 
     doc_agent = DocChatAgent(config=config)
-    medical_tests = "BUN, Creatinine, GFR, ALT, AST, ALP, Albumin, Bilirubin, CBC, eGFR, PTH, Uric Acid, Ammonia, Protein/Creatinine Ratio, Total Protein, LDH, SPEP, CRP, ESR, Cystatin C"
+    medical_tests = """
+    BUN, Creatinine, GFR, ALT, AST, ALP, Albumin, Bilirubin, CBC, eGFR, PTH, 
+    Uric Acid, Ammonia, Protein/Creatinine Ratio, Total Protein, LDH, SPEP, CRP, 
+    ESR, Cystatin C
+    """
 
     medical_test_list = [test.strip() for test in medical_tests.split(",")]
 
     # already "chunked" docs:
-    docs = [
-        lr.Document.from_string(test, is_chunk=True) for test in medical_test_list
-    ]
-    # this should augment each test name with keywords that help improve retrieval
+    docs = [lr.Document.from_string(test, is_chunk=True) for test in medical_test_list]
+    # this should augment each test name with organ names that help improve retrieval
     doc_agent.ingest_docs(docs)
     if use_hq:
-        print("[cyan]Test names augmented with retrieval-enhancing keywords:")
+        print("[cyan]Test names augmented with organ names:")
         for doc in doc_agent.chunked_docs:
             print(doc.content)
             print("---")
@@ -189,13 +194,15 @@ def run_document_chatbot(
     print(f"\n\nAnswer from DocChatAgent.llm after retrieval:\n{retrieval_answer}")
     retrieval_tests = retrieval_answer.split("\n")
     retrieval_tests = [
-        test.strip() for test in retrieval_tests
+        test.strip()
+        for test in retrieval_tests
         if test.strip() and test.strip() in medical_test_list
     ]
 
     # compare this with directly asking the LLM about each individual test
     print(f"[blue]Directly asking the LLM whether each test is related to {ORGAN}:")
     llm = doc_agent.llm
+
     def llm_classify(test: str) -> str:
         return llm.chat(
             [
@@ -208,20 +215,18 @@ def run_document_chatbot(
                           simply say 'yes' or 'no'
                           """,
                     role=lm.Role.USER,
-                )
+                ),
             ]
         ).message
 
-
     classifications = run_batch_function(llm_classify, medical_test_list, batch_size=5)
     direct_llm_tests = [
-        test for test, classification in zip(medical_test_list, classifications)
+        test
+        for test, classification in zip(medical_test_list, classifications)
         if "yes" in classification.lower()
     ]
     print("[green]Relevant tests from direct LLM query:\n")
     print("\n".join(direct_llm_tests))
-
-
 
     # Create a table with test comparison
     test_union = set(direct_llm_tests).union(set(retrieval_tests))
@@ -244,13 +249,13 @@ def run_document_chatbot(
 
     # calc percent overlap or jacard similarity between the two sets of relevant tests
     overlap = len(
-        set(direct_llm_tests).intersection(
-            set(relevant_chunks_str.split("\n"))
-        )
+        set(direct_llm_tests).intersection(set(relevant_chunks_str.split("\n")))
     )
     union = len(test_union)
     jacard_pct = (100 * overlap / union) if union > 0 else 0
-    print(f"[cyan]Jaccard similarity between the two sets of relevant tests: {jacard_pct:.2f}%")
+    print(
+        f"[cyan]Jaccard similarity between the two sets of relevant tests: {jacard_pct:.2f}%"
+    )
 
 
 @app.command()
