@@ -131,21 +131,21 @@ def vecdb(request) -> VectorStore:
         yield vdb
         vdb.delete_collection(collection_name=cfg.collection_name)
 
-    # if request.param == "lancedb":
-    #     ldb_dir = ".lancedb/data/" + embed_cfg.model_type
-    #     rmdir(ldb_dir)
-    #     ldb_cfg = LanceDBConfig(
-    #         cloud=False,
-    #         collection_name="test-" + embed_cfg.model_type,
-    #         storage_path=ldb_dir,
-    #         embedding=embed_cfg,
-    #         # document_class=MyDoc,  # IMPORTANT, to ensure table has full schema!
-    #     )
-    #     ldb = LanceDB(ldb_cfg)
-    #     ldb.add_documents(stored_docs)
-    #     yield ldb
-    #     rmdir(ldb_dir)
-    #     return
+    if request.param == "lancedb":
+        ldb_dir = ".lancedb/data/" + embed_cfg.model_type
+        rmdir(ldb_dir)
+        ldb_cfg = LanceDBConfig(
+            cloud=False,
+            collection_name="test-" + embed_cfg.model_type,
+            storage_path=ldb_dir,
+            embedding=embed_cfg,
+            # document_class=MyDoc,  # IMPORTANT, to ensure table has full schema!
+        )
+        ldb = LanceDB(ldb_cfg)
+        ldb.add_documents(stored_docs)
+        yield ldb
+        rmdir(ldb_dir)
+        return
 
     if request.param == "pgvector":
         pg_cfg = PGVectorConfig(
@@ -174,8 +174,8 @@ def vecdb(request) -> VectorStore:
 # add "momento" when their API docs are ready
 @pytest.mark.parametrize(
     "vecdb",
-    # ["lancedb", "chroma", "qdrant_cloud", "qdrant_local"],
-    ["pgvector"],
+    ["lancedb", "chroma", "qdrant_cloud", "qdrant_local"],
+    # ["pgvector"],
     indirect=True,
 )
 def test_vector_stores_search(
@@ -224,7 +224,7 @@ def test_hybrid_vector_search(
 
 @pytest.mark.parametrize(
     "vecdb",
-    # ["lancedb", "chroma", "qdrant_local", "qdrant_cloud"],
+    # ["lancedb", "chroma", "qdrant_local", "qdrant_cloud", "pgvector"],
     ["pgvector"],
     indirect=True,
 )
