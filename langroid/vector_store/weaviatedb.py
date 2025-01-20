@@ -29,7 +29,6 @@ except ImportError:
 
 class WeaviateDBConfig(VectorStoreConfig):
     collection_name: str | None = "temp"
-    storage_path: str = ".weaviate/data"
     embedding: EmbeddingModelsConfig = OpenAIEmbeddingsConfig()
     distance: str = VectorDistances.COSINE
 
@@ -233,21 +232,16 @@ class WeaviateDB(VectorStore):
         content = input_object.properties.get("content", "")
         metadata_dict = input_object.properties.get("metadata", {})
 
-        source = metadata_dict.get("source", "")
-        is_chunk = metadata_dict.get("is_chunk", False)
-        window_ids = metadata_dict.get("window_ids", [])
+        window_ids = metadata_dict.pop("window_ids", [])
         window_ids = [str(uuid) for uuid in window_ids]
 
         # Ensure the id is a valid UUID string
         id_value = get_valid_uuid(input_object.uuid)
 
-        # Construct the MyDocMetaData object
         metadata = DocMetaData(
-            source=source,
-            is_chunk=is_chunk,
             id=id_value,
             window_ids=window_ids,
+            **metadata_dict
         )
 
-        # Construct and return the MyDoc object
         return Document(content=content, metadata=metadata)
