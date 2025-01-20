@@ -100,10 +100,10 @@ class PineconeDB(VectorStore):
         if empty:
             return indexes.names()
         res = []
-        for coll in indexes.names():
-            index_meta = self.client.Index(name=coll)
+        for index in indexes.names():
+            index_meta = self.client.Index(name=index)
             if index_meta.describe_index_stats().get("total_vector_count", 0) > 0:
-                res.append(index_meta)
+                res.append(index)
         return res
 
     def _list_index_metas(self, empty: bool = False) -> List[IndexMeta]:
