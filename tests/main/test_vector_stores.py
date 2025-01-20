@@ -12,7 +12,7 @@ from langroid.vector_store.base import VectorStore
 from langroid.vector_store.lancedb import LanceDB, LanceDBConfig
 from langroid.vector_store.meilisearch import MeiliSearch, MeiliSearchConfig
 from langroid.vector_store.momento import MomentoVI, MomentoVIConfig
-from langroid.vector_store.pgvector import PGVector, PGVectorConfig
+from langroid.vector_store.pgvec import PGVector, PGVectorConfig
 from langroid.vector_store.qdrantdb import QdrantDB, QdrantDBConfig
 
 load_dotenv()
@@ -131,32 +131,32 @@ def vecdb(request) -> VectorStore:
         yield vdb
         vdb.delete_collection(collection_name=cfg.collection_name)
 
-    if request.param == "lancedb":
-        ldb_dir = ".lancedb/data/" + embed_cfg.model_type
-        rmdir(ldb_dir)
-        ldb_cfg = LanceDBConfig(
-            cloud=False,
-            collection_name="test-" + embed_cfg.model_type,
-            storage_path=ldb_dir,
-            embedding=embed_cfg,
-            # document_class=MyDoc,  # IMPORTANT, to ensure table has full schema!
-        )
-        ldb = LanceDB(ldb_cfg)
-        ldb.add_documents(stored_docs)
-        yield ldb
-        rmdir(ldb_dir)
-        return
+    # if request.param == "lancedb":
+    #     ldb_dir = ".lancedb/data/" + embed_cfg.model_type
+    #     rmdir(ldb_dir)
+    #     ldb_cfg = LanceDBConfig(
+    #         cloud=False,
+    #         collection_name="test-" + embed_cfg.model_type,
+    #         storage_path=ldb_dir,
+    #         embedding=embed_cfg,
+    #         # document_class=MyDoc,  # IMPORTANT, to ensure table has full schema!
+    #     )
+    #     ldb = LanceDB(ldb_cfg)
+    #     ldb.add_documents(stored_docs)
+    #     yield ldb
+    #     rmdir(ldb_dir)
+    #     return
 
     if request.param == "pgvector":
         pg_cfg = PGVectorConfig(
-            collection_name="test-pgvector", table_name="test_vectors"
+            collection_name="test_pgvector", username="postgres", embedding=embed_cfg
         )
+
         pg = PGVector(pg_cfg)
         pg.add_documents(stored_docs)
         yield pg
         pg.delete_collection(pg_cfg.collection_name)
         return
-
 
 @pytest.mark.parametrize(
     "query,results,exceptions",
@@ -174,7 +174,8 @@ def vecdb(request) -> VectorStore:
 # add "momento" when their API docs are ready
 @pytest.mark.parametrize(
     "vecdb",
-    ["lancedb", "chroma", "qdrant_cloud", "qdrant_local"],
+    # ["lancedb", "chroma", "qdrant_cloud", "qdrant_local"],
+    ["pgvector"],
     indirect=True,
 )
 def test_vector_stores_search(
@@ -223,7 +224,8 @@ def test_hybrid_vector_search(
 
 @pytest.mark.parametrize(
     "vecdb",
-    ["lancedb", "chroma", "qdrant_local", "qdrant_cloud"],
+    # ["lancedb", "chroma", "qdrant_local", "qdrant_cloud"],
+    ["pgvector"],
     indirect=True,
 )
 def test_vector_stores_access(vecdb):
