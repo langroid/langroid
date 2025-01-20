@@ -48,3 +48,14 @@ try:
     __all__.extend(["chromadb", "ChromaDBConfig", "ChromaDB"])
 except ImportError:
     pass
+
+try:
+    from . import weaviatedb
+    from .weaviatedb import WeaviateDBConfig, WeaviateDB
+
+    weaviatedb
+    WeaviateDB
+    WeaviateDBConfig
+    __all__.extend(["weaviatedb", "WeaviateDB", "WeaviateDBConfig"])
+except ImportError:
+    pass
