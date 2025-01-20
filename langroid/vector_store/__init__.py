@@ -48,3 +48,14 @@ try:
     __all__.extend(["chromadb", "ChromaDBConfig", "ChromaDB"])
 except ImportError:
     pass
+
+try:
+    from . import pgvec
+    from .pgvec import PGVector, PGVectorConfig
+
+    pgvec
+    PGVector
+    PGVectorConfig
+    __all__.extend(["pgvec", "PGVector", "PGVectorConfig"])
+except ImportError:
+    pass
