@@ -13,51 +13,64 @@ logging.basicConfig(level=logging.INFO)
 
 def parse_boolean_response(response: str) -> bool:
     """
-    Parse user's response into a boolean value.
+    Convert a user response into a boolean value.
     Args:
-        response (str): User input as a string.
+        response (str): User input as "yes" or "no".
     Returns:
-        bool: True for yes/true, False for no/false.
+        bool: True for "yes", False for "no".
     """
-    response = response.strip().lower()
-    if response in ["yes", "y", "true"]:
+    if response == "yes":
         return True
-    elif response in ["no", "n", "false"]:
+    elif response == "no":
         return False
-    raise ValueError("Invalid boolean response")
+    raise ValueError("Invalid response: expected 'yes' or 'no'.")
+
+
+async def handle_boolean_response(res, default=False):
+    """
+    Handle the user's response from an AskActionMessage.
+
+    Args:
+        res (dict): The response dictionary from AskActionMessage.
+        default (bool): The default value to return in case of errors or timeouts.
+
+    Returns:
+        bool: Parsed boolean response from the user.
+    """
+    if res:
+        try:
+            user_choice = res.get("payload", {}).get("value", "").lower()
+            return parse_boolean_response(user_choice)
+        except ValueError:
+            await cl.Message(
+                content=f"Unexpected response. Defaulting to '{default}'."
+            ).send()
+            return default
+    # Default if no response or timeout
+    await cl.Message(
+        content=f"You didn't respond in time. Defaulting to '{default}'."
+    ).send()
+    return default
 
 
 async def is_same_llm_for_all_agents() -> bool:
     """
     Ask the user if they want to use the same LLM for all agents.
+
     Returns:
-        bool: True if yes, False if no.
+        bool: True if yes, False if no. Timeout or no response is defaulted to False.
     """
-    same_llm = await cl.AskUserMessage(
-        content="Do you want to use the same LLM for all agents? (yes/no)", timeout=10
+    res = await cl.AskActionMessage(
+        content="Do you want to use the same LLM for all agents?",
+        actions=[
+            cl.Action(name="yes", payload={"value": "yes"}, label="Yes"),
+            cl.Action(name="no", payload={"value": "no"}, label="No"),
+        ],
+        timeout=30,
     ).send()
-    if same_llm:
-        try:
-            result = parse_boolean_response(same_llm["output"])
-            if result:
-                await cl.Message(
-                    content="Great! Same LLM will be used for all agents."
-                ).send()
-            else:
-                await cl.Message(
-                    content="Ok. Different LLMs will be configured for the agents."
-                ).send()
-            return result
-        except ValueError:
-            await cl.Message(
-                content="Invalid response. Please answer yes or no."
-            ).send()
-            return await is_same_llm_for_all_agents()  # Retry on invalid input
-    else:
-        await cl.Message(
-            content="You didn't respond in time. Defaulting to 'no'."
-        ).send()
-        return False
+
+    # Use the helper function with the default set to False
+    return await handle_boolean_response(res, default=False)
 
 
 async def select_max_debate_turns() -> int:
@@ -147,35 +160,16 @@ async def is_llm_delegate() -> bool:
     Returns:
         bool: True if yes, False if no.
     """
-    llm_delegate = await cl.AskUserMessage(
-        content="Should the Pro and Con agents debate autonomously? (yes/no)",
+    res = await cl.AskActionMessage(
+        content="Should the Pro and Con agents debate autonomously?",
+        actions=[
+            cl.Action(name="yes", payload={"value": "yes"}, label="Yes"),
+            cl.Action(name="no", payload={"value": "no"}, label="No"),
+        ],
         timeout=10,
     ).send()
-    if llm_delegate:
-        llm_delegate = llm_delegate["output"].strip().lower()
-        is_yes = llm_delegate in ["yes", "y", "true"]
-        is_no = llm_delegate in ["no", "n", "false"]
 
-        if is_yes:
-            await cl.Message(
-                content="Great! The agents will debate autonomously."
-            ).send()
-            return True
-        elif is_no:
-            await cl.Message(
-                content="Okay, agents will not debate autonomously."
-            ).send()
-            return False
-        else:
-            await cl.Message(
-                content="I didn't understand your response. Please answer yes or no."
-            ).send()
-            return await is_llm_delegate()  # Retry on invalid input
-    else:
-        await cl.Message(
-            content="You didn't respond in time. Defaulting to 'no'."
-        ).send()
-        return False
+    return await handle_boolean_response(res, default=True)
 
 
 async def select_side(topic_name: str) -> str:
@@ -299,65 +293,37 @@ async def is_metaphor_search_key_set() -> bool:
     Returns:
         bool: True if the user confirms they have an API key, otherwise False.
     """
-    response = await cl.AskUserMessage(
-        content="Do you have an API Key for Metaphor Search? (yes/no)",
+    res = await cl.AskActionMessage(
+        content="Do you have an API Key for Metaphor Search?",
+        actions=[
+            cl.Action(name="yes", payload={"value": "yes"}, label="Yes"),
+            cl.Action(name="no", payload={"value": "no"}, label="No"),
+        ],
         timeout=20,
     ).send()
 
-    if response:
-        try:
-            result = parse_boolean_response(response["output"])
-            if result:
-                await cl.Message(
-                    content="Great! You confirmed having an API Key for Metaphor Search."
-                ).send()
-            else:
-                await cl.Message(
-                    content="You confirmed not having an API Key for Metaphor Search."
-                ).send()
-            return result
-        except ValueError:
-            await cl.Message(
-                content="Invalid response. Please answer with yes or no."
-            ).send()
-            return await is_metaphor_search_key_set()  # Retry on invalid input
-    else:
-        await cl.Message(
-            content="You didn't respond in time. Defaulting to 'no'."
-        ).send()
-        return False
+    # Use the helper function with the default set to False
+    return await handle_boolean_response(res, default=False)
 
 
 async def is_url_ask_question(topic_name: str) -> bool:
     """
-    Prompt the user for confirmation if they want to Q/A by loading  the URLS docs into vecdb
+    Prompt the user for confirmation if they want to Q/A by loading the URL documents into vecdb.
+
+    Args:
+        topic_name (str): The topic name for the question.
+
     Returns:
         bool: True if the user confirms for Q/A, otherwise False.
     """
-    response = await cl.AskUserMessage(
-        content=f"Would you like to Chat with documents found through Search for more information on the {topic_name}",
+    res = await cl.AskActionMessage(
+        content=f"Would you like to chat with web searched documents for more information on {topic_name}?",
+        actions=[
+            cl.Action(name="yes", payload={"value": "yes"}, label="Yes"),
+            cl.Action(name="no", payload={"value": "no"}, label="No"),
+        ],
         timeout=20,
     ).send()
 
-    if response:
-        try:
-            result = parse_boolean_response(response["output"])
-            if result:
-                await cl.Message(
-                    content="Great! You confirmed to Chat with documents"
-                ).send()
-            else:
-                await cl.Message(
-                    content="You confirmed not to chat with documents."
-                ).send()
-            return result
-        except ValueError:
-            await cl.Message(
-                content="Invalid response. Please answer with yes or no."
-            ).send()
-            return await is_metaphor_search_key_set()  # Retry on invalid input
-    else:
-        await cl.Message(
-            content="You didn't respond in time. Defaulting to 'no'."
-        ).send()
-        return False
+    # Use the helper function with the default set to False
+    return await handle_boolean_response(res, default=False)
