@@ -48,3 +48,13 @@ try:
     __all__.extend(["chromadb", "ChromaDBConfig", "ChromaDB"])
 except ImportError:
     pass
+
+try:
+    from . import pineconedb
+    from .pineconedb import PineconeDB, PineconeDBConfig
+    pineconedb
+    PineconeDB
+    PineconeDBConfig
+    __all__.extend(["pineconedb", "PineconeDB", "PineconeDBConfig"])
+except ImportError:
+    pass

@@ -54,6 +54,7 @@ dependencies = [
     "trafilatura<2.0.0,>=1.5.0",
     "typer<1.0.0,>=0.9.0",
     "wget<4.0,>=3.2",
+    "pinecone-client>=5.0.1",
 ]
 
 [project.optional-dependencies]
@@ -79,6 +80,7 @@ vecdbs = [
     "tantivy<0.22.0,>=0.21.0",
     "pyarrow<16.0.0,>=15.0.0",
     "chromadb<=0.4.23,>=0.4.21",
+    "pinecone-client>=5.0.1",
 ]
 
 db = [
@@ -201,6 +203,10 @@ momento = [
 
 fastembed = [
     "fastembed<0.4.0,>=0.3.1",
+]
+
+pinecone = [
+    "pinecone-client>=5.0.1"
 ]
 
 
