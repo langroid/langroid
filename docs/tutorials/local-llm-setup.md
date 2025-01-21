@@ -163,12 +163,17 @@ path, e.g. `Qwen/Qwen2.5-Coder-32B-Instruct`, so the full `chat_model` would be
 
 ## DeepSeek LLMs
 
-As of 26-Dec-2024, DeepSeek-v3 is available via their [api](https://platform.deepseek.com).
+As of 26-Dec-2024, DeepSeek models are available via their [api](https://platform.deepseek.com).
 To use it with Langroid:
 
 - set up your `DEEPSEEK_API_KEY` environment variable in the `.env` file or as
  an explicit export in your shell
 - set the `chat_model` in the `OpenAIGPTConfig` to `deepseek/deepseek-chat`
+
+The DeepSeek models are also available via OpenRouter (see the corresponding 
+in the OpenRouter section here) or ollama (see those instructions). E.g. you
+can use the DeepSeek R1 or its distilled variants by setting `chat_model` to 
+`openrouter/deepseek/deepseek-r1` or `ollama/deepseek-r1:8b`.
 
 ## Other non-OpenAI LLMs supported by LiteLLM
 
