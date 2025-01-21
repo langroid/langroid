@@ -211,6 +211,7 @@ async def on_chat_start(
     # Note: user_agent and ai_agent are dynamically set based on the chosen user_side
     last_agent = ai_agent if max_turns % 2 == 0 else user_agent
 
+    await cl.Message(content="## Feedback and Debate Evaluation:").send()
     # Generate feedback summary and declare a winner using feedback agent
 
     if not last_agent.message_history:
