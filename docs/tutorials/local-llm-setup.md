@@ -168,7 +168,8 @@ To use it with Langroid:
 
 - set up your `DEEPSEEK_API_KEY` environment variable in the `.env` file or as
  an explicit export in your shell
-- set the `chat_model` in the `OpenAIGPTConfig` to `deepseek/deepseek-chat`
+- set the `chat_model` in the `OpenAIGPTConfig` to `deepseek/deepseek-chat` to use the 
+`DeepSeek-V3` model, or `deepseek/deepseek-reasoner` to use the full (i.e. non-distilled) `DeepSeek-R1` "reasoning" model.
 
 The DeepSeek models are also available via OpenRouter (see the corresponding 
 in the OpenRouter section here) or ollama (see those instructions). E.g. you
