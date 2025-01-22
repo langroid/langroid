@@ -77,9 +77,7 @@ def vecdb(request) -> VectorStore:
         qd_cloud.delete_collection(collection_name=qd_cfg_cloud.collection_name)
         return
     if request.param == "weaviate_cloud":
-        # wv_dir = ".wv/cloud" + embed_cfg.model_type
         wv_cfg_cloud = WeaviateDBConfig(
-            cloud=True,
             collection_name="test_"+embed_cfg.model_type,
             embedding=embed_cfg,
         )
@@ -327,7 +325,7 @@ def test_vector_stores_context_window(vecdb):
     parser = Parser(cfg)
     splits = parser.split([doc])
 
-    vecdb.create_collection(collection_name="Test_context_window", replace=True)
+    vecdb.create_collection(collection_name="test_context_window", replace=True)
     vecdb.add_documents(splits)
 
     # Test context window retrieval
@@ -399,7 +397,7 @@ def test_vector_stores_overlapping_matches(vecdb):
     parser = Parser(cfg)
     splits = parser.split([doc])
 
-    vecdb.create_collection(collection_name="Test_context_window", replace=True)
+    vecdb.create_collection(collection_name="test_context_window", replace=True)
     vecdb.add_documents(splits)
 
     # Test context window retrieval
