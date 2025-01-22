@@ -55,7 +55,7 @@ class WeaviateDB(VectorStore):
             auth_credentials=Auth.api_key(key),
         )
         if config.collection_name is not None:
-            validate_and_format_collection_name(config.collection_name)
+            WeaviateDB.validate_and_format_collection_name(config.collection_name)
 
     def clear_empty_collections(self) -> int:
         colls = self.client.collections.list_all()
@@ -112,8 +112,9 @@ class WeaviateDB(VectorStore):
         self.client.collections.delete(name=collection_name)
 
     def create_collection(self, collection_name: str, replace: bool = False) -> None:
-        # Capitalize the first letter if necessary
-        collection_name = validate_and_format_collection_name(collection_name)
+        collection_name = WeaviateDB.validate_and_format_collection_name(
+            collection_name
+        )
         self.config.collection_name = collection_name
         if self.client.collections.exists(name=collection_name):
             coll = self.client.collections.get(name=collection_name)
@@ -236,34 +237,35 @@ class WeaviateDB(VectorStore):
 
         return Document(content=content, metadata=metadata)
 
+    @staticmethod
+    def validate_and_format_collection_name(name: str) -> str:
+        """
+        Formats the collection name to comply with Weaviate's naming rules:
+        - Name must start with a capital letter.
+        - Name can only contain letters, numbers, and underscores.
+        - Replaces invalid characters with underscores.
+        """
+        if not name:
+            raise ValueError("Collection name cannot be empty.")
 
-def validate_and_format_collection_name(name: str) -> str:
-    """
-    Validates and formats the collection name to comply with Weaviate's naming rules:
-    - Name must start with a capital letter.
-    - Name can only contain letters, numbers, and underscores.
-    - Replaces invalid characters with underscores.
-    """
-    if not name:
-        raise ValueError("Collection name cannot be empty.")
+        formatted_name = re.sub(r"[^a-zA-Z0-9_]", "_", name)
 
-    formatted_name = re.sub(r"[^a-zA-Z0-9_]", "_", name)
+        # Ensure the first letter is capitalized
+        if not formatted_name[0].isupper():
+            formatted_name = formatted_name.capitalize()
 
-    # Ensure the first letter is capitalized
-    if not formatted_name[0].isupper():
-        formatted_name = formatted_name.capitalize()
+        # Check if the name now meets the criteria
+        if not re.match(r"^[A-Z][A-Za-z0-9_]*$", formatted_name):
+            raise ValueError(
+                f"Invalid collection name '{name}'."
+                " Names must start with a capital letter "
+                "and contain only letters, numbers, and underscores."
+            )
 
-    # Check if the name now meets the criteria
-    if not re.match(r"^[A-Z][A-Za-z0-9_]*$", formatted_name):
-        raise ValueError(
-            f"Invalid collection name '{name}'. Names must start with a capital letter "
-            "and contain only letters, numbers, and underscores."
-        )
+        if formatted_name != name:
+            logger.warning(
+                f"Collection name '{name}' was reformatted to '{formatted_name}' "
+                "to comply with Weaviate's rules."
+            )
 
-    if formatted_name != name:
-        logger.warning(
-            f"Collection name '{name}' was reformatted to '{formatted_name}' "
-            "to comply with Weaviate's rules."
-        )
-
-    return formatted_name
+        return formatted_name
