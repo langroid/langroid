@@ -820,6 +820,7 @@ class OpenAIGPT(LanguageModel):
         tool_deltas: List[Dict[str, Any]] = [],
         has_function: bool = False,
         completion: str = "",
+        reasoning: str = "",
         function_args: str = "",
         function_name: str = "",
     ) -> Tuple[bool, bool, str, str]:
@@ -845,7 +846,9 @@ class OpenAIGPT(LanguageModel):
         # In the 1st: choices list is empty, in the 2nd: the dict delta has null content
         if chat:
             delta = choices[0].get("delta", {})
+            # capture both content and reasoning_content
             event_text = delta.get("content", "")
+            event_reasoning = delta.get("reasoning_content", "")
             if "function_call" in delta and delta["function_call"] is not None:
                 if "name" in delta["function_call"]:
                     event_fn_name = delta["function_call"]["name"]
@@ -857,6 +860,7 @@ class OpenAIGPT(LanguageModel):
                 tool_deltas += event_tool_deltas
         else:
             event_text = choices[0]["text"]
+            event_reasoning = ""  # TODO: Ignoring reasoning for non-chat models
 
         finish_reason = choices[0].get("finish_reason", "")
         if not event_text and finish_reason == "content_filter":
@@ -877,6 +881,11 @@ class OpenAIGPT(LanguageModel):
             sys.stdout.write(Colors().GREEN + event_text)
             sys.stdout.flush()
             self.config.streamer(event_text, StreamEventType.TEXT)
+        if event_reasoning:
+            reasoning += event_reasoning
+            sys.stdout.write(Colors().GREEN_DIM + event_reasoning)
+            sys.stdout.flush()
+            self.config.streamer(event_reasoning, StreamEventType.TEXT)
         if event_fn_name:
             function_name = event_fn_name
             has_function = True
@@ -915,8 +924,15 @@ class OpenAIGPT(LanguageModel):
             # for function_call, finish_reason does not necessarily
             # contain "function_call" as mentioned in the docs.
             # So we check for "stop" or "function_call" here.
-            return True, has_function, function_name, function_args, completion
-        return False, has_function, function_name, function_args, completion
+            return (
+                True,
+                has_function,
+                function_name,
+                function_args,
+                completion,
+                reasoning,
+            )
+        return False, has_function, function_name, function_args, completion, reasoning
 
     @no_type_check
     async def _process_stream_event_async(
@@ -926,6 +942,7 @@ class OpenAIGPT(LanguageModel):
         tool_deltas: List[Dict[str, Any]] = [],
         has_function: bool = False,
         completion: str = "",
+        reasoning: str = "",
         function_args: str = "",
         function_name: str = "",
     ) -> Tuple[bool, bool, str, str]:
@@ -953,6 +970,7 @@ class OpenAIGPT(LanguageModel):
         if chat:
             delta = choices[0].get("delta", {})
             event_text = delta.get("content", "")
+            event_reasoning = delta.get("reasoning_content", "")
             if "function_call" in delta and delta["function_call"] is not None:
                 if "name" in delta["function_call"]:
                     event_fn_name = delta["function_call"]["name"]
@@ -964,12 +982,19 @@ class OpenAIGPT(LanguageModel):
                 tool_deltas += event_tool_deltas
         else:
             event_text = choices[0]["text"]
+            event_reasoning = ""  # TODO: Ignoring reasoning for non-chat models
         if event_text:
             completion += event_text
             if not silent:
                 sys.stdout.write(Colors().GREEN + event_text)
                 sys.stdout.flush()
                 await self.config.streamer_async(event_text, StreamEventType.TEXT)
+        if event_reasoning:
+            reasoning += event_reasoning
+            if not silent:
+                sys.stdout.write(Colors().GREEN + event_reasoning)
+                sys.stdout.flush()
+                await self.config.streamer_async(event_reasoning, StreamEventType.TEXT)
         if event_fn_name:
             function_name = event_fn_name
             has_function = True
@@ -1016,8 +1041,15 @@ class OpenAIGPT(LanguageModel):
             # for function_call, finish_reason does not necessarily
             # contain "function_call" as mentioned in the docs.
             # So we check for "stop" or "function_call" here.
-            return True, has_function, function_name, function_args, completion
-        return False, has_function, function_name, function_args, completion
+            return (
+                True,
+                has_function,
+                function_name,
+                function_args,
+                completion,
+                reasoning,
+            )
+        return False, has_function, function_name, function_args, completion, reasoning
 
     @retry_with_exponential_backoff
     def _stream_response(  # type: ignore
@@ -1035,6 +1067,7 @@ class OpenAIGPT(LanguageModel):
 
         """
         completion = ""
+        reasoning = ""
         function_args = ""
         function_name = ""
 
@@ -1050,12 +1083,14 @@ class OpenAIGPT(LanguageModel):
                     function_name,
                     function_args,
                     completion,
+                    reasoning,
                 ) = self._process_stream_event(
                     event,
                     chat=chat,
                     tool_deltas=tool_deltas,
                     has_function=has_function,
                     completion=completion,
+                    reasoning=reasoning,
                     function_args=function_args,
                     function_name=function_name,
                 )
@@ -1072,6 +1107,7 @@ class OpenAIGPT(LanguageModel):
             tool_deltas=tool_deltas,
             has_function=has_function,
             completion=completion,
+            reasoning=reasoning,
             function_args=function_args,
             function_name=function_name,
         )
@@ -1092,6 +1128,7 @@ class OpenAIGPT(LanguageModel):
 
         """
         completion = ""
+        reasoning = ""
         function_args = ""
         function_name = ""
 
@@ -1107,12 +1144,14 @@ class OpenAIGPT(LanguageModel):
                     function_name,
                     function_args,
                     completion,
+                    reasoning,
                 ) = await self._process_stream_event_async(
                     event,
                     chat=chat,
                     tool_deltas=tool_deltas,
                     has_function=has_function,
                     completion=completion,
+                    reasoning=reasoning,
                     function_args=function_args,
                     function_name=function_name,
                 )
@@ -1129,6 +1168,7 @@ class OpenAIGPT(LanguageModel):
             tool_deltas=tool_deltas,
             has_function=has_function,
             completion=completion,
+            reasoning=reasoning,
             function_args=function_args,
             function_name=function_name,
         )
@@ -1263,6 +1303,7 @@ class OpenAIGPT(LanguageModel):
         tool_deltas: List[Dict[str, Any]] = [],
         has_function: bool = False,
         completion: str = "",
+        reasoning: str = "",
         function_args: str = "",
         function_name: str = "",
     ) -> Tuple[LLMResponse, Dict[str, Any]]:
@@ -1298,7 +1339,12 @@ class OpenAIGPT(LanguageModel):
                 tool_deltas,
             )
             completion = completion + "\n" + failed_content
-            msg: Dict[str, Any] = dict(message=dict(content=completion))
+            msg: Dict[str, Any] = dict(
+                message=dict(
+                    content=completion,
+                    reasoning_content=reasoning,
+                ),
+            )
             if len(tool_dicts) > 0:
                 msg["message"]["tool_calls"] = tool_dicts
 
@@ -1314,6 +1360,7 @@ class OpenAIGPT(LanguageModel):
         else:
             # non-chat mode has no function_call
             msg = dict(text=completion)
+            # TODO: Ignoring reasoning content for non-chat models
 
         # create an OpenAIResponse object so we can cache it as if it were
         # a non-streaming response
@@ -1324,6 +1371,7 @@ class OpenAIGPT(LanguageModel):
         return (
             LLMResponse(
                 message=completion,
+                reasoning=reasoning,
                 cached=False,
                 # don't allow empty list [] here
                 oai_tool_calls=tool_calls or None if len(tool_deltas) > 0 else None,
@@ -1461,6 +1509,7 @@ class OpenAIGPT(LanguageModel):
         )
         args = self._openai_api_call_params(args)
         cached, hashed_key, response = completions_with_backoff(**args)
+        # assume response is an actual response rather than a streaming event
         if not isinstance(response, dict):
             response = response.dict()
         if "message" in response["choices"][0]:
@@ -1534,6 +1583,7 @@ class OpenAIGPT(LanguageModel):
             max_tokens=max_tokens,
             stream=False,
         )
+        # assume response is an actual response rather than a streaming event
         if not isinstance(response, dict):
             response = response.dict()
         if "message" in response["choices"][0]:
@@ -1738,7 +1788,9 @@ class OpenAIGPT(LanguageModel):
             if (
                 len(llm_messages) == 1
                 and llm_messages[0].role == Role.SYSTEM
-                and self.requires_first_user_message()
+                # TODO: we will unconditionally insert a dummy user msg
+                # if the only msg is a system msg.
+                # and self.requires_first_user_message()
             ):
                 # some LLMs, notable Gemini as of 12/11/24,
                 # require the first message to be from the user,
@@ -1827,6 +1879,7 @@ class OpenAIGPT(LanguageModel):
                     "role": "assistant",
                     "name": "",
                     "content": "\n\nHello there, how may I help you?",
+                    "reasoning_content": "Okay, let's see here, hmmm...",
                     "function_call": {
                         "name": "fun_name",
                         "arguments: {
@@ -1845,7 +1898,8 @@ class OpenAIGPT(LanguageModel):
         }
         """
         message = response["choices"][0]["message"]
-        msg = message["content"] or ""
+        msg = message.get("content", "")
+        reasoning = message.get("reasoning_content", "")
 
         if message.get("function_call") is None:
             fun_call = None
@@ -1878,7 +1932,8 @@ class OpenAIGPT(LanguageModel):
                     )
                     msg = msg + "\n" + json.dumps(tool_call_dict)
         return LLMResponse(
-            message=msg.strip() if msg is not None else "",
+            message=msg.strip(),
+            reasoning=reasoning.strip(),
             function_call=fun_call,
             oai_tool_calls=oai_tool_calls or None,  # don't allow empty list [] here
             cached=cached,
