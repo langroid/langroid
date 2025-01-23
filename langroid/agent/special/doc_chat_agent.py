@@ -212,6 +212,12 @@ class DocChatAgentConfig(ChatAgentConfig):
     )
 
 
+def _append_metadata_source(orig_source: str, source: str) -> str:
+    if orig_source != source and source != "" and orig_source != "":
+        return f"{orig_source.strip()}; {source.strip()}"
+    return orig_source.strip() + source.strip()
+
+
 class DocChatAgent(ChatAgent):
     """
     Agent for chatting with a collection of documents.
@@ -337,7 +343,11 @@ class DocChatAgent(ChatAgent):
                 url_docs = loader.load()
                 # update metadata of each doc with meta
                 for d in url_docs:
+                    orig_source = d.metadata.source
                     d.metadata = d.metadata.copy(update=meta)
+                    d.metadata.source = _append_metadata_source(
+                        orig_source, meta.get("source", "")
+                    )
                 docs.extend(url_docs)
         if len(paths) > 0:  # paths OR bytes are handled similarly
             for pi in path_idxs:
@@ -350,7 +360,11 @@ class DocChatAgent(ChatAgent):
                 )
                 # update metadata of each doc with meta
                 for d in path_docs:
+                    orig_source = d.metadata.source
                     d.metadata = d.metadata.copy(update=meta)
+                    d.metadata.source = _append_metadata_source(
+                        orig_source, meta.get("source", "")
+                    )
                 docs.extend(path_docs)
         n_docs = len(docs)
         n_splits = self.ingest_docs(docs, split=self.config.split)
@@ -391,15 +405,26 @@ class DocChatAgent(ChatAgent):
         """
         if isinstance(metadata, list) and len(metadata) > 0:
             for d, m in zip(docs, metadata):
-                d.metadata = d.metadata.copy(
-                    update=m if isinstance(m, dict) else m.dict()  # type: ignore
+                orig_source = d.metadata.source
+                m_dict = m if isinstance(m, dict) else m.dict()  # type: ignore
+                d.metadata = d.metadata.copy(update=m_dict)  # type: ignore
+                d.metadata.source = _append_metadata_source(
+                    orig_source, m_dict.get("source", "")
                 )
         elif isinstance(metadata, dict):
             for d in docs:
+                orig_source = d.metadata.source
                 d.metadata = d.metadata.copy(update=metadata)
+                d.metadata.source = _append_metadata_source(
+                    orig_source, metadata.get("source", "")
+                )
         elif isinstance(metadata, DocMetaData):
             for d in docs:
+                orig_source = d.metadata.source
                 d.metadata = d.metadata.copy(update=metadata.dict())
+                d.metadata.source = _append_metadata_source(
+                    orig_source, metadata.source
+                )
 
         self.original_docs.extend(docs)
         if self.parser is None:
