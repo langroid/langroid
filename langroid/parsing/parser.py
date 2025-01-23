@@ -1,4 +1,5 @@
 import logging
+import re
 from enum import Enum
 from typing import Dict, List, Literal
 
@@ -250,12 +251,12 @@ class Parser:
                 continue
 
             # Find the last period or punctuation mark in the chunk
-            last_punctuation = max(
-                chunk_text.rfind("."),
-                chunk_text.rfind("?"),
-                chunk_text.rfind("!"),
-                chunk_text.rfind("\n"),
-            )
+            punctuation_matches = [
+                (m.start(), m.group())
+                for m in re.finditer(r"(?:[.!?][\s\n]|\n)", chunk_text)
+            ]
+
+            last_punctuation = max([pos for pos, _ in punctuation_matches] + [-1])
 
             # If there is a punctuation mark, and the last punctuation index is
             # after MIN_CHUNK_SIZE_CHARS
@@ -268,7 +269,7 @@ class Parser:
 
             # Remove any newline characters and strip any leading or
             # trailing whitespace
-            chunk_text_to_append = chunk_text.replace("\n", " ").strip()
+            chunk_text_to_append = re.sub(r"\n{2,}", "\n", chunk_text).strip()
 
             if len(chunk_text_to_append) > self.config.discard_chunk_chars:
                 # Append the chunk text to the list of chunks

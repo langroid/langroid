@@ -28,7 +28,6 @@ from langroid.agent.tool_message import ToolMessage
 from langroid.agent.tools.orchestration import FinalResultTool
 import langroid.language_models as lm
 from rich.prompt import Prompt
-from langroid.agent.tools.orchestration import ForwardTool
 from langroid.agent.chat_document import ChatDocument
 
 # for best results:
@@ -66,7 +65,7 @@ class CityTool(lr.agent.ToolMessage):
     def handle(self) -> FinalResultTool:
         """Handle LLM's structured output if it matches City structure"""
         print("SUCCESS! Got Valid City Info")
-        return FinalResultTool(answer = self.city_info)
+        return FinalResultTool(answer=self.city_info)
 
     @staticmethod
     def handle_message_fallback(
@@ -149,13 +148,13 @@ def app(
     agent.enable_message(CityTool)
 
     # (5) Create task specialized to return City object
-    task: City|None = lr.Task(agent, interactive=False)[City]
+    task: City | None = lr.Task(agent, interactive=False)[City]
 
     while True:
         city = Prompt.ask("Enter a city name")
         if city in ["q", "x"]:
             break
-        result: City|None = task.run(city)
+        result: City | None = task.run(city)
         if result:
             print(f"City Info: {result}")
         else:

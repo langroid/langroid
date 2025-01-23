@@ -72,14 +72,13 @@ def apply_nest_asyncio() -> None:
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_DOC_CHAT_INSTRUCTIONS = """
-Your task is to answer questions about various documents.
-You will be given various passages from these documents, and asked to answer questions
-about them, or summarize them into coherent answers.
-"""
 
 DEFAULT_DOC_CHAT_SYSTEM_MESSAGE = """
 You are a helpful assistant, helping me understand a collection of documents.
+
+Your TASK is to answer questions about various documents.
+You will be given various passages from these documents, and asked to answer questions
+about them, or summarize them into coherent answers.
 """
 
 CHUNK_ENRICHMENT_DELIMITER = "<##-##-##>"
@@ -113,7 +112,6 @@ class ChunkEnrichmentAgentConfig(ChatAgentConfig):
 
 class DocChatAgentConfig(ChatAgentConfig):
     system_message: str = DEFAULT_DOC_CHAT_SYSTEM_MESSAGE
-    user_message: str = DEFAULT_DOC_CHAT_INSTRUCTIONS
     summarize_prompt: str = SUMMARY_ANSWER_PROMPT_GPT4
     # extra fields to include in content as key=value pairs
     # (helps retrieval for table-like data)
