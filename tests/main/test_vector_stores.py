@@ -12,11 +12,12 @@ from langroid.vector_store.base import VectorStore
 from langroid.vector_store.lancedb import LanceDB, LanceDBConfig
 from langroid.vector_store.meilisearch import MeiliSearch, MeiliSearchConfig
 from langroid.vector_store.momento import MomentoVI, MomentoVIConfig
+from langroid.vector_store.postgres import PostgresDB, PostgresDBConfig
 from langroid.vector_store.qdrantdb import QdrantDB, QdrantDBConfig
 
 load_dotenv()
 embed_cfg = OpenAIEmbeddingsConfig(
-    model_type="openai",
+    model_type="openai", 
 )
 
 phrases = SimpleNamespace(
@@ -111,6 +112,17 @@ def vecdb(request) -> VectorStore:
         rmdir(cd_dir)
         return
 
+    if request.param == "postgres":
+        pg_cfg = PostgresDBConfig(
+            collection_name="test_" + embed_cfg.model_type,
+            embedding=embed_cfg,
+            replace_collection=True,
+        )
+        pg = PostgresDB(pg_cfg)
+        pg.add_documents(stored_docs)
+        yield pg
+        return
+
     if request.param == "meilisearch":
         ms_cfg = MeiliSearchConfig(
             collection_name="test-meilisearch",
@@ -163,7 +175,7 @@ def vecdb(request) -> VectorStore:
 # add "momento" when their API docs are ready
 @pytest.mark.parametrize(
     "vecdb",
-    ["lancedb", "chroma", "qdrant_cloud", "qdrant_local"],
+    ["lancedb", "chroma", "qdrant_cloud", "qdrant_local", "postgres"],
     indirect=True,
 )
 def test_vector_stores_search(
@@ -212,7 +224,7 @@ def test_hybrid_vector_search(
 
 @pytest.mark.parametrize(
     "vecdb",
-    ["lancedb", "chroma", "qdrant_local", "qdrant_cloud"],
+    ["lancedb", "chroma", "qdrant_local", "qdrant_cloud", "postgres"],
     indirect=True,
 )
 def test_vector_stores_access(vecdb):
@@ -285,7 +297,7 @@ def test_vector_stores_access(vecdb):
 
 @pytest.mark.parametrize(
     "vecdb",
-    ["lancedb", "chroma", "qdrant_cloud", "qdrant_local"],
+    ["lancedb", "chroma", "qdrant_cloud", "qdrant_local", "postgres"],
     indirect=True,
 )
 def test_vector_stores_context_window(vecdb):
@@ -314,7 +326,7 @@ def test_vector_stores_context_window(vecdb):
     parser = Parser(cfg)
     splits = parser.split([doc])
 
-    vecdb.create_collection(collection_name="test-context-window", replace=True)
+    vecdb.create_collection(collection_name="test_context_window", replace=True)
     vecdb.add_documents(splits)
 
     # Test context window retrieval
@@ -343,7 +355,7 @@ def test_vector_stores_context_window(vecdb):
 
 @pytest.mark.parametrize(
     "vecdb",
-    ["chroma", "lancedb", "qdrant_cloud", "qdrant_local"],
+    ["chroma", "lancedb", "qdrant_cloud", "qdrant_local", "postgres"],
     indirect=True,
 )
 def test_vector_stores_overlapping_matches(vecdb):
@@ -383,7 +395,7 @@ def test_vector_stores_overlapping_matches(vecdb):
     parser = Parser(cfg)
     splits = parser.split([doc])
 
-    vecdb.create_collection(collection_name="test-context-window", replace=True)
+    vecdb.create_collection(collection_name="test_context_window", replace=True)
     vecdb.add_documents(splits)
 
     # Test context window retrieval

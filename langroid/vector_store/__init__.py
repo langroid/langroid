@@ -48,3 +48,14 @@ try:
     __all__.extend(["chromadb", "ChromaDBConfig", "ChromaDB"])
 except ImportError:
     pass
+
+try:
+    from . import postgres 
+    from .postgres import PostgresDB, PostgresDBConfig 
+
+    postgres# silence linters
+    PostgresDB 
+    PostgresDBConfig 
+    __all__.extend(["postgres", "PostgresDB", "PostgresDBConfig"])
+except ImportError:
+    pass
