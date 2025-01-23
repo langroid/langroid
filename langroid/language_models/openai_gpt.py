@@ -1932,8 +1932,8 @@ class OpenAIGPT(LanguageModel):
                     )
                     msg = msg + "\n" + json.dumps(tool_call_dict)
         return LLMResponse(
-            message=msg.strip(),
-            reasoning=reasoning.strip(),
+            message=msg.strip() if msg is not None else "",
+            reasoning=reasoning.strip() if reasoning is not None else "",
             function_call=fun_call,
             oai_tool_calls=oai_tool_calls or None,  # don't allow empty list [] here
             cached=cached,
