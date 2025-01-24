@@ -2266,7 +2266,7 @@ wheels = [
 
 [[package]]
 name = "langroid"
-version = "0.35.0"
+version = "0.35.1"
 source = { editable = "." }
 dependencies = [
     { name = "adb-cloud-connector" },

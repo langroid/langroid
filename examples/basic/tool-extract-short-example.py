@@ -9,9 +9,10 @@ python3 examples/basic/tool-extract-short-example.py
 """
 
 import langroid as lr
+import langroid.language_models as lm
 from langroid.pydantic_v1 import BaseModel, Field
 from langroid.agent.tools.orchestration import ResultTool
-
+from fire import Fire
 
 # desired output structure
 class CompanyInfo(BaseModel):
@@ -67,37 +68,46 @@ class CompanyInfoTool(lr.agent.ToolMessage):
 
 # define agent, attach the tool
 
-agent = lr.ChatAgent(
-    lr.ChatAgentConfig(
-        system_message="""
-        Use the `company_info` tool to extract company information from a passage
-        and compute market-capitalization.
-        """,
+def main(model:str=""):
+    llm_config = lm.OpenAIGPTConfig(
+        chat_model=model or lm.OpenAIChatModel.GPT4o,
     )
-)
+    agent = lr.ChatAgent(
+        lr.ChatAgentConfig(
+            llm=llm_config,
+            system_message="""
+            Use the `company_info` tool to extract company information from a passage
+            and compute market-capitalization.
+            """,
+        )
+    )
 
-agent.enable_message(CompanyInfoTool)
+    agent.enable_message(CompanyInfoTool)
 
-# define and run task on a passage about some company
+    # define and run task on a passage about some company
 
-task = lr.Task(agent, interactive=False)
-result = task.run(
-    """
-    Qualcomm has shares outstanding of 1.12 billion and a price per share of $217.09.
-    """
-)
+    task = lr.Task(agent, interactive=False)
+    result = task.run(
+        """
+        Qualcomm has shares outstanding of 1.12 billion and a price per share of $217.09.
+        """
+    )
 
-# note the result.tool_messages will be a list containing
-# an obj of type FinalResultTool, so we can extract fields from it.
-company_result = result.tool_messages[0]
-assert isinstance(company_result, ResultTool)
-assert isinstance(company_result.info, CompanyInfo)
+    # note the result.tool_messages will be a list containing
+    # an obj of type FinalResultTool, so we can extract fields from it.
+    company_result = result.tool_messages[0]
+    assert isinstance(company_result, ResultTool)
+    assert isinstance(company_result.info, CompanyInfo)
 
-info = company_result.info
-mktcap = company_result.market_cap
-assert company_result.comment == "success"
-print(
-    f"""
-    Found company info: {info} and market cap: {mktcap}
-    """
-)
+    info = company_result.info
+    mktcap = company_result.market_cap
+    assert company_result.comment == "success"
+    print(
+        f"""
+        Found company info: {info} and market cap: {mktcap}
+        """
+    )
+
+
+if __name__ == "__main__":
+    Fire(main)
