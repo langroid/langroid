@@ -34,6 +34,12 @@
 
 Here’s an example of how to configure and use WeaviateDB in Langroid:
 
+### **Installation**
+If you are using uv or pip for package management install langroid with weaviate extra
+```
+uv add langroid[weaviate] or pip install langroid[weaviate]
+```
+
 ### **Code Example**
 ```python
 import langroid as lr
