@@ -264,9 +264,9 @@ def test_sql_chat_db_update(
     )
 
 
-@pytest.mark.parametrize("tools_api", [True, False])
-@pytest.mark.parametrize("fn_api", [True, False])
-@pytest.mark.parametrize("json_schema", [False, True])
+@pytest.mark.parametrize("tools_api", [False, True])
+@pytest.mark.parametrize("fn_api", [False, True])
+@pytest.mark.parametrize("json_schema", [True, False])
 @pytest.mark.parametrize(
     "query,answer",
     [
