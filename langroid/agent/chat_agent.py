@@ -416,7 +416,7 @@ class ChatAgent(Agent):
         ]
 
         if len(usable_tool_classes) == 0:
-            return "You can ask questions in natural language."
+            return ""
         format_instructions = "\n\n".join(
             [
                 msg_cls.format_instructions(tool=self.config.use_tools)
@@ -568,17 +568,14 @@ class ChatAgent(Agent):
         Returns:
             LLMMessage object
         """
-        content = textwrap.dedent(
-            f"""
-            {self.system_message}
-            
-            {self.system_tool_instructions}
-            
-            {self.system_tool_format_instructions}
+        content = self.system_message
+        if self.system_tool_instructions != "":
+            content += "\n\n" + self.system_tool_instructions
+        if self.system_tool_format_instructions != "":
+            content += "\n\n" + self.system_tool_format_instructions
+        if self.output_format_instructions != "":
+            content += "\n\n" + self.output_format_instructions
 
-            {self.output_format_instructions}
-            """
-        )
         # remove leading and trailing newlines and other whitespace
         return LLMMessage(role=Role.SYSTEM, content=content.strip())
 
