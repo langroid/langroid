@@ -1,7 +1,7 @@
 import logging
 import os
 import re
-from typing import Dict, List, Optional, Sequence, Tuple, TypeVar
+from typing import Any, List, Optional, Sequence, Tuple
 
 from dotenv import load_dotenv
 
@@ -10,7 +10,7 @@ from langroid.embedding_models.base import (
 )
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
 from langroid.exceptions import LangroidImportError
-from langroid.mytypes import DocMetaData, Document, EmbeddingFunction, Embeddings
+from langroid.mytypes import DocMetaData, Document, EmbeddingFunction
 from langroid.utils.configuration import settings
 from langroid.vector_store.base import VectorStore, VectorStoreConfig
 
@@ -166,9 +166,9 @@ class WeaviateDB(VectorStore):
             self.create_collection(self.config.collection_name, replace=True)
         coll_name = self.client.collections.get(self.config.collection_name)
         with coll_name.batch.dynamic() as batch:
-            for i, doc in enumerate(document_dicts):
-                id = doc["metadata"].pop("id", None)
-                batch.add_object(properties=doc, uuid=id, vector=embedding_vecs[i])
+            for i, doc_dict in enumerate(document_dicts):
+                id = doc_dict["metadata"].pop("id", None)
+                batch.add_object(properties=doc_dict, uuid=id, vector=embedding_vecs[i])
 
     def get_all_documents(self, where: str = "") -> List[Document]:
         if self.config.collection_name is None:
@@ -216,14 +216,14 @@ class WeaviateDB(VectorStore):
             for item in response.objects
         ]
 
-    def _create_valid_uuid_id(self, id: str) -> str:
+    def _create_valid_uuid_id(self, id: str) -> Any:
         try:
             id = get_valid_uuid(id)
             return id
         except Exception:
             return generate_uuid5(id)
 
-    def weaviate_obj_to_doc(self, input_object) -> Document:
+    def weaviate_obj_to_doc(self, input_object: Any) -> Document:
         content = input_object.properties.get("content", "")
         metadata_dict = input_object.properties.get("metadata", {})
 
