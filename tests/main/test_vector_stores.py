@@ -78,7 +78,7 @@ def vecdb(request) -> VectorStore:
         return
     if request.param == "weaviate_cloud":
         wv_cfg_cloud = WeaviateDBConfig(
-            collection_name="test_"+embed_cfg.model_type,
+            collection_name="test_" + embed_cfg.model_type,
             embedding=embed_cfg,
         )
         weaviate_cloud = WeaviateDB(wv_cfg_cloud)
@@ -86,7 +86,6 @@ def vecdb(request) -> VectorStore:
         yield weaviate_cloud
         weaviate_cloud.delete_collection(collection_name=wv_cfg_cloud.collection_name)
         return
-
 
     if request.param == "qdrant_hybrid_cloud":
         qd_dir = ".qdrant/cloud/" + embed_cfg.model_type
@@ -176,7 +175,7 @@ def vecdb(request) -> VectorStore:
 # add "momento" when their API docs are ready
 @pytest.mark.parametrize(
     "vecdb",
-    ["lancedb", "chroma", "qdrant_cloud", "qdrant_local","weaviate_cloud"],
+    ["lancedb", "chroma", "qdrant_cloud", "qdrant_local", "weaviate_cloud"],
     indirect=True,
 )
 def test_vector_stores_search(
@@ -225,7 +224,7 @@ def test_hybrid_vector_search(
 
 @pytest.mark.parametrize(
     "vecdb",
-    ["lancedb", "chroma", "qdrant_local", "qdrant_cloud","weaviate_cloud"],
+    ["lancedb", "chroma", "qdrant_local", "qdrant_cloud", "weaviate_cloud"],
     indirect=True,
 )
 def test_vector_stores_access(vecdb):
@@ -279,7 +278,6 @@ def test_vector_stores_access(vecdb):
     assert len(docs_and_scores) == 1
     assert docs_and_scores[0][0].content == "cow"
 
-
     coll_names = [f"Test_junk_{i}" for i in range(3)]
     for coll in coll_names:
         vecdb.create_collection(collection_name=coll)
@@ -297,7 +295,7 @@ def test_vector_stores_access(vecdb):
 
 @pytest.mark.parametrize(
     "vecdb",
-    ["lancedb", "chroma", "qdrant_cloud", "qdrant_local","weaviate_cloud"],
+    ["lancedb", "chroma", "qdrant_cloud", "qdrant_local", "weaviate_cloud"],
     indirect=True,
 )
 def test_vector_stores_context_window(vecdb):
@@ -331,9 +329,9 @@ def test_vector_stores_context_window(vecdb):
     # Test context window retrieval
 
     docs_scores = vecdb.similar_texts_with_scores("What are Giraffes like?", k=1)
-    
+
     docs_scores = vecdb.add_context_window(docs_scores, neighbors=2)
-    
+
     assert len(docs_scores) == 1
     giraffes, score = docs_scores[0]
     assert all(
@@ -351,13 +349,13 @@ def test_vector_stores_context_window(vecdb):
         giraffes.content.index(p)
         for p in ["Cats", "Dogs", "Giraffes", "Elephants", "Owls"]
     ]
-    
+
     assert indices == sorted(indices)
 
 
 @pytest.mark.parametrize(
     "vecdb",
-    ["chroma", "lancedb", "qdrant_cloud", "qdrant_local","weaviate_cloud"],
+    ["chroma", "lancedb", "qdrant_cloud", "qdrant_local", "weaviate_cloud"],
     indirect=True,
 )
 def test_vector_stores_overlapping_matches(vecdb):
