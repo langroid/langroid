@@ -142,7 +142,6 @@ def main(
             )
         case "weaviate" | "weaviatedb":
             config.vecdb = lr.vector_store.WeaviateDBConfig(
-                storage_path=".weaviate/doc-chat",
                 embedding=embed_cfg,
             )
 

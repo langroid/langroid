@@ -54,7 +54,7 @@ embed_cfg = OpenAIEmbeddingsConfig(
 # Configure the DocChatAgent with WeaviateDB
 config = DocChatAgentConfig(
     llm=lr.language_models.OpenAIGPTConfig(
-        chat_model="gemini/" + lr.language_models.OpenAIChatModel.GPT4o
+     chat_model=lr.language_models.OpenAIChatModel.GPT4o
     ),
     vecdb=lr.vector_store.WeaviateDBConfig(
         collection_name="quick_start_chat_agent_docs",
