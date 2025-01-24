@@ -2,8 +2,13 @@
 Single agent to use to chat with a Retrieval-augmented LLM.
 Repeat: User asks question -> LLM answers.
 
-Run like this:
-python3 examples/docqa/chat.py
+Run like this, either with a document-path (can be URL, file-path, folder-path):
+
+python3 examples/docqa/chat.py url-or-file-orfolder-path
+
+(or run with no arguments to go through the dialog).
+
+If a document-arg is provided, it will be ingested into the vector database.
 
 To change the model, use the --model flag, e.g.:
 
