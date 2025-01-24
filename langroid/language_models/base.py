@@ -42,6 +42,14 @@ ToolChoiceTypes = Literal["none", "auto", "required"]
 ToolTypes = Literal["function"]
 
 
+class StreamEventType(Enum):
+    TEXT = 1
+    FUNC_NAME = 2
+    FUNC_ARGS = 3
+    TOOL_NAME = 4
+    TOOL_ARGS = 5
+
+
 class LLMConfig(BaseSettings):
     """
     Common configuration for all language models.
@@ -67,6 +75,8 @@ class LLMConfig(BaseSettings):
     # use chat model for completion? For OpenAI models, this MUST be set to True!
     use_chat_for_completion: bool = True
     stream: bool = True  # stream output from API?
+    # TODO: we could have a `stream_reasoning` flag here to control whether to show
+    # reasoning output from reasoning models
     cache_config: None | CacheDBConfig = RedisCacheConfig()
 
     # Dict of model -> (input/prompt cost, output/completion cost)
@@ -309,6 +319,7 @@ class LLMResponse(BaseModel):
     """
 
     message: str
+    reasoning: str = ""  # optional reasoning text from reasoning models
     # TODO tool_id needs to generalize to multi-tool calls
     tool_id: str = ""  # used by OpenAIAssistant
     oai_tool_calls: Optional[List[OpenAIToolCall]] = None

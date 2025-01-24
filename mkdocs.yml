@@ -111,6 +111,7 @@ nav:
       - Tool Handler Name: notes/tool-message-handler.md
       - Llama.cpp Embeddings: notes/llama-cpp-embeddings.md
       - Custom Azure OpenAI client: notes/custom-azure-client.md
+      - Enriching Chunks for Retrieval: notes/enriching-for-retrieval.md
 
   - Examples:
     - Guide: examples/guide.md

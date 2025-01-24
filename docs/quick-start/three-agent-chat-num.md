@@ -7,46 +7,52 @@
 
 
 Let us set up a simple numbers exercise between 3 agents.
-The `Processor` agent receives a list of numbers, and its goal is to 
-apply a transformation to each number $n$. However it does not know how to apply these
-transformations, and takes the help of two other agents to do so.
+The `Processor` agent receives a number $n$, and its goal is to 
+apply a transformation to the it. However it does not know how to apply the
+transformation, and takes the help of two other agents to do so.
 Given a number $n$,
 
 - The `EvenHandler` returns $n/2$ if n is even, otherwise says `DO-NOT-KNOW`.
 - The `OddHandler` returns $3n+1$ if n is odd, otherwise says `DO-NOT-KNOW`.
 
-As before we first create a common `ChatAgentConfig` to use for all agents:
+We'll first define a shared LLM config:
 
 ```py
-config = lr.ChatAgentConfig(
-    llm = lr.language_models.OpenAIGPTConfig(
-        chat_model=lr.language_models.OpenAIChatModel.GPT4,
-    ),
+llm_config = lr.language_models.OpenAIGPTConfig(
+    chat_model=lr.language_models.OpenAIChatModel.GPT4o,
+    # or, e.g., "ollama/qwen2.5-coder:latest", or "gemini/gemini-2.0-flash-exp"
+)
+```
+
+Next define the config for the `Processor` agent:
+```py
+processor_config = lr.ChatAgentConfig(
+    name="Processor",
+    llm = llm_config,
+    system_message="""
+    You will receive a number from the user.
+    Simply repeat that number, DO NOT SAY ANYTHING else,
+    and wait for a TRANSFORMATION of the number 
+    to be returned to you.
+    
+    Once you have received the RESULT, simply say "DONE",
+    do not say anything else.
+    """,        
     vecdb=None,
 )
 ```
 
-Next, set up the `processor_agent`, along with instructions for the task:
+Then set up the `processor_agent`, along with the corresponding task:
 ```py
-processor_agent = lr.ChatAgent(config)
+processor_agent = lr.ChatAgent(processor_config)
+
 processor_task = lr.Task(
     processor_agent,
-    name = "Processor",
-    system_message="""
-        You will receive a list of numbers from the user.
-        Your goal is to apply a transformation to each number.
-        However you do not know how to do this transformation,
-        so the user will help you. 
-        You can simply send the user each number FROM THE GIVEN LIST
-        and the user will return the result 
-        with the appropriate transformation applied.
-        IMPORTANT: only send one number at a time, concisely, say nothing else.
-        Once you have accomplished your goal, say DONE and show the result.
-        Start by asking the user for the list of numbers.
-        """,
     llm_delegate=True, #(1)!
-    single_round=False, #(2)!
+    interactive=False, #(2)!
+    single_round=False, #(3)!
 )
+
 ```
 
 1. Setting the `llm_delegate` option to `True` means that the `processor_task` is
@@ -56,7 +62,8 @@ processor_task = lr.Task(
     when a sub-task returns `DO-NOT-KNOW`,
     it is _not_ considered a valid response, and the search for a valid response 
     continues to the next sub-task if any.
-2. `single_round=False` means that the `processor_task` should _not_ terminate after 
+2. `interactive=False` means the task loop will not wait for user input.
+3. `single_round=False` means that the `processor_task` should _not_ terminate after 
     a valid response from a responder.
 
 Set up the other two agents and tasks:
@@ -64,38 +71,55 @@ Set up the other two agents and tasks:
 ```py
 NO_ANSWER = lr.utils.constants.NO_ANSWER
 
-even_agent = lr.ChatAgent(config)
+even_config = lr.ChatAgentConfig(
+    name="EvenHandler",
+    llm = llm_config,
+    system_message=f"""
+    You will be given a number N. Respond as follows:
+    
+    - If N is even, divide N by 2 and show the result, 
+      in the format: 
+        RESULT = <result>
+      and say NOTHING ELSE.
+    - If N is odd, say {NO_ANSWER}
+    """,    
+)
+even_agent = lr.ChatAgent(even_config)
 even_task = lr.Task(
     even_agent,
-    name = "EvenHandler",
-    system_message=f"""
-    You will be given a number. 
-    If it is even, divide by 2 and say the result, nothing else.
-    If it is odd, say {NO_ANSWER}
-    """,
     single_round=True,  # task done after 1 step() with valid response
 )
 
-odd_agent = lr.ChatAgent(config)
+odd_config = lr.ChatAgentConfig(
+    name="OddHandler",
+    llm = llm_config,
+    system_message=f"""
+    You will be given a number N. Respond as follows:
+    
+    - if N is odd, return the result (N*3+1), in the format:
+        RESULT = <result> 
+        and say NOTHING ELSE.
+    
+    - If N is even, say {NO_ANSWER}
+    """,
+)
+odd_agent = lr.ChatAgent(odd_config)
 odd_task = lr.Task(
     odd_agent,
-    name = "OddHandler",
-    system_message=f"""
-    You will be given a number n. 
-    If it is odd, return (n*3+1), say nothing else. 
-    If it is even, say {NO_ANSWER}
-    """,
     single_round=True,  # task done after 1 step() with valid response
 )
+
 ```
 
 Now add the `even_task` and `odd_task` as subtasks of the `processor_task`, 
-and then run it as before:
+and then run it with a number as input:
 
 ```python
 processor_task.add_sub_task([even_task, odd_task])
-processor_task.run()
+processor_task.run(13)
 ```
+
+The input number will be passed to the `Processor` agent as the user input.
 
 
 Feel free to try the working example script
@@ -109,6 +133,7 @@ python3 examples/quick-start/three-agent-chat-num.py
 
 Here's a screenshot of what it looks like:
 ![three-agent-num.png](three-agent-num.png)
+
 
 ## Next steps
 

@@ -2,8 +2,13 @@
 Single agent to use to chat with a Retrieval-augmented LLM.
 Repeat: User asks question -> LLM answers.
 
-Run like this:
-python3 examples/docqa/chat.py
+Run like this, either with a document-path (can be URL, file-path, folder-path):
+
+python3 examples/docqa/chat.py url-or-file-orfolder-path
+
+(or run with no arguments to go through the dialog).
+
+If a document-arg is provided, it will be ingested into the vector database.
 
 To change the model, use the --model flag, e.g.:
 
@@ -46,6 +51,7 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 @app.command()
 def main(
+    doc: str = typer.Argument("", help="url, file-path or folder to chat about"),
     debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
     model: str = typer.Option("", "--model", "-m", help="model name"),
     nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
@@ -155,8 +161,14 @@ def main(
 
     agent = DocChatAgent(config)
     print("[blue]Welcome to the document chatbot!")
-    agent.user_docs_ingest_dialog()
-    print("[cyan]Enter x or q to quit, or ? for evidence")
+
+    if doc:
+        # TODO - could save time by checking whether we've already ingested this doc(s)
+        agent.ingest_doc_paths([doc])
+    else:
+        agent.user_docs_ingest_dialog()
+
+    print("[cyan]Enter x or q to quit")
 
     task = lr.Task(
         agent,
