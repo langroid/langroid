@@ -416,7 +416,7 @@ class ChatAgent(Agent):
         ]
 
         if len(usable_tool_classes) == 0:
-            return "You can ask questions in natural language."
+            return ""
         format_instructions = "\n\n".join(
             [
                 msg_cls.format_instructions(tool=self.config.use_tools)
@@ -568,17 +568,14 @@ class ChatAgent(Agent):
         Returns:
             LLMMessage object
         """
-        content = textwrap.dedent(
-            f"""
-            {self.system_message}
-            
-            {self.system_tool_instructions}
-            
-            {self.system_tool_format_instructions}
+        content = self.system_message
+        if self.system_tool_instructions != "":
+            content += "\n\n" + self.system_tool_instructions
+        if self.system_tool_format_instructions != "":
+            content += "\n\n" + self.system_tool_format_instructions
+        if self.output_format_instructions != "":
+            content += "\n\n" + self.output_format_instructions
 
-            {self.output_format_instructions}
-            """
-        )
         # remove leading and trailing newlines and other whitespace
         return LLMMessage(role=Role.SYSTEM, content=content.strip())
 
@@ -1845,14 +1842,16 @@ class ChatAgent(Agent):
         self.update_last_message(message, role=Role.USER)
         return answer_doc
 
-    def llm_response_forget(self, message: str) -> ChatDocument:
+    def llm_response_forget(
+        self, message: Optional[str | ChatDocument] = None
+    ) -> ChatDocument:
         """
         LLM Response to single message, and restore message_history.
         In effect a "one-off" message & response that leaves agent
         message history state intact.
 
         Args:
-            message (str): user message
+            message (str|ChatDocument): message to respond to.
 
         Returns:
             A Document object with the response.
@@ -1879,7 +1878,9 @@ class ChatAgent(Agent):
 
         return response
 
-    async def llm_response_forget_async(self, message: str) -> ChatDocument:
+    async def llm_response_forget_async(
+        self, message: Optional[str | ChatDocument] = None
+    ) -> ChatDocument:
         """
         Async version of `llm_response_forget`. See there for details.
         """

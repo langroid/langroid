@@ -1,6 +1,6 @@
 [project]
 name = "langroid"
-version = "0.33.11"
+version = "0.35.1"
 authors = [
     {name = "Prasad Chalasani", email = "pchalasani@gmail.com"},
 ]
@@ -225,13 +225,13 @@ dev = [
     "pytest-redis<4.0.0,>=3.0.2",
     "pytest-asyncio<1.0.0,>=0.21.1",
     "pytest-postgresql<6.0.0,>=5.0.0",
-    "pytest-mysql<3.0.0,>=2.4.2",
     "coverage<8.0.0,>=7.2.5",
     "pytest-xdist<4.0.0,>=3.6.1",
     "pytest-timeout<3.0.0,>=2.3.1",
     "pytest-cov<6.0.0,>=5.0.0",
     "docker<8.0.0,>=7.1.0",
     "commitizen>=4.1.0",
+    "pytest-mysql>=3.1.0",
 ]
 docs = [
     "mkdocs<2.0.0,>=1.4.2",

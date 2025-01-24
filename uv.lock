@@ -2292,7 +2292,7 @@ wheels = [
 
 [[package]]
 name = "langroid"
-version = "0.33.11"
+version = "0.35.1"
 source = { editable = "." }
 dependencies = [
     { name = "adb-cloud-connector" },
@@ -2645,7 +2645,7 @@ dev = [
     { name = "pytest", specifier = ">=7.3.1,<8.0.0" },
     { name = "pytest-asyncio", specifier = ">=0.21.1,<1.0.0" },
     { name = "pytest-cov", specifier = ">=5.0.0,<6.0.0" },
-    { name = "pytest-mysql", specifier = ">=2.4.2,<3.0.0" },
+    { name = "pytest-mysql", specifier = ">=3.1.0" },
     { name = "pytest-postgresql", specifier = ">=5.0.0,<6.0.0" },
     { name = "pytest-redis", specifier = ">=3.0.2,<4.0.0" },
     { name = "pytest-timeout", specifier = ">=2.3.1,<3.0.0" },
@@ -4978,7 +4978,7 @@ wheels = [
 
 [[package]]
 name = "pytest-mysql"
-version = "2.5.0"
+version = "3.1.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "mirakuru" },
@@ -4987,9 +4987,9 @@ dependencies = [
     { name = "port-for" },
     { name = "pytest" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/dd/cd/cf10d8dca6444d961427439541102e90742d87d91dd8f369fe9e6c4b3234/pytest-mysql-2.5.0.tar.gz", hash = "sha256:2213fd79dab523e9aca8c9d0aaead6bfaa2266b2c37c3270df7556c167b38bc3", size = 37494 }
+sdist = { url = "https://files.pythonhosted.org/packages/23/9e/fdce5258bcef3e1143de166bd1aed71c63a2ffaa1170b230e822b2a9c249/pytest_mysql-3.1.0.tar.gz", hash = "sha256:51f4d90f3cbc0e45d4bb04c24172c2fe97eae8623b86a18a014c976dfeb449d7", size = 37784 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e3/57/a5dfc358fc979189d8d7d64efab05277fdf8f844f3459245bd803627d802/pytest_mysql-2.5.0-py3-none-any.whl", hash = "sha256:e55979b5c2f4bfb4b58625e5e40d0563eb593ccd63dd8be650528d965ddc8975", size = 34291 },
+    { url = "https://files.pythonhosted.org/packages/95/aa/870d54693b652e93fd338e1f79ddac3642385d0b5b9129dffc61a175b328/pytest_mysql-3.1.0-py3-none-any.whl", hash = "sha256:26d70c1db401a24d302a8dd93ff6b92457e94cbef4fd7b2f86343d8205129a3b", size = 34452 },
 ]
 
 [[package]]

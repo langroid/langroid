@@ -25,8 +25,9 @@ from langroid.pydantic_v1 import BaseModel, Field
 import langroid as lr
 from langroid.utils.configuration import settings
 from langroid.agent.tool_message import ToolMessage
+from langroid.agent.tools.orchestration import FinalResultTool
 import langroid.language_models as lm
-from langroid.agent.tools.orchestration import ForwardTool
+from rich.prompt import Prompt
 from langroid.agent.chat_document import ChatDocument
 
 # for best results:
@@ -58,29 +59,28 @@ class CityTool(lr.agent.ToolMessage):
     purpose: str = """
     To present <city_info> AFTER user gives a city name,
     with all fields of the appropriate type filled out;
-    DO NOT USE THIS TOOL TO ASK FOR A CITY NAME.
-    SIMPLY ASK IN NATURAL LANGUAGE.
     """
     city_info: City = Field(..., description="information about a city")
 
-    def handle(self) -> str:
+    def handle(self) -> FinalResultTool:
         """Handle LLM's structured output if it matches City structure"""
         print("SUCCESS! Got Valid City Info")
-        return """
-            Thanks! ask me for another city name, do not say anything else
-            until you get a city name.
-            """
+        return FinalResultTool(answer=self.city_info)
 
     @staticmethod
     def handle_message_fallback(
         agent: lr.ChatAgent, msg: str | ChatDocument
-    ) -> ForwardTool:
+    ) -> str | None:
         """
         We end up here when there was no recognized tool msg from the LLM;
-        In this case forward the message to the user using ForwardTool.
+        In this case use the AgentDoneTool with content set to
+        the original message content.
         """
         if isinstance(msg, ChatDocument) and msg.metadata.sender == lr.Entity.LLM:
-            return ForwardTool(agent="User")
+            return f"""
+            You forgot to use the TOOL/Function `{CityTool.name()}`.
+            Please use this tool to present the city info.
+            """
 
     @classmethod
     def examples(cls) -> List["ToolMessage"]:
@@ -108,8 +108,8 @@ def app(
     # create LLM config
     llm_cfg = lm.OpenAIGPTConfig(
         chat_model=m or DEFAULT_LLM,
-        chat_context_length=4096,  # set this based on model
-        max_output_tokens=100,
+        chat_context_length=32000,  # set this based on model
+        max_output_tokens=1000,
         temperature=0.2,
         stream=True,
         timeout=45,
@@ -134,21 +134,10 @@ def app(
 
     config = lr.ChatAgentConfig(
         llm=llm_cfg,
-        system_message="""
-        You are an expert on world city information. 
-        We will play this game, taking turns:
-        YOU: ask me to give you a city name.
-        I: will give you a city name.
-        YOU: use the "city_tool" to generate information about the city, and present it to me.
-            Make up the values if you don't know them exactly.
-        I: will confirm whether you provided the info in a valid form,
-            and if not I will ask you to try again.
-        YOU: wait for my confirmation, and then ask for another city name, and so on.
-        
-        
-        START BY ASKING ME TO GIVE YOU A CITY NAME. 
-        DO NOT SAY ANYTHING UNTIL YOU GET A CITY NAME.
-
+        system_message=f"""
+        You will receive a city name, 
+        and you must use the TOOL/FUNCTION `{CityTool.name()}` to generate/present
+        information about the city.
         """,
     )
 
@@ -158,9 +147,18 @@ def app(
     # and few-shot examples (specified in the tool defn above) into the system message
     agent.enable_message(CityTool)
 
-    # (5) Create task and run it to start an interactive loop
-    task = lr.Task(agent, interactive=False)
-    task.run("Start by asking me for a city name")
+    # (5) Create task specialized to return City object
+    task: City | None = lr.Task(agent, interactive=False)[City]
+
+    while True:
+        city = Prompt.ask("Enter a city name")
+        if city in ["q", "x"]:
+            break
+        result: City | None = task.run(city)
+        if result:
+            print(f"City Info: {result}")
+        else:
+            print("No valid city info found.")
 
 
 if __name__ == "__main__":

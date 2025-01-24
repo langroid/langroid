@@ -135,7 +135,11 @@ teacher_task.run()
 <details>
 <summary> <b>Click to expand</b></summary>
 
+- **Jan 2025:**
+  - [0.33.0](https://github.com/langroid/langroid/releases/tag/0.33.3) Move from Poetry to uv!
+  - [0.32.0](https://github.com/langroid/langroid/releases/tag/0.32.0) DeepSeek v3 support.
 - **Dec 2024:**
+  - [0.31.0](https://github.com/langroid/langroid/releases/tag/0.31.0) Azure OpenAI Embeddings
   - [0.30.0](https://github.com/langroid/langroid/releases/tag/0.30.0) Llama-cpp embeddings.
   - [0.29.0](https://github.com/langroid/langroid/releases/tag/0.29.0) Custom Azure OpenAI Client 
   - [0.28.0](https://github.com/langroid/langroid/releases/tag/0.28.0) `ToolMessage`: `_handler` field to override 
