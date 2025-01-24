@@ -46,7 +46,7 @@ os.environ["TOKENIZERS_PARALLELISM"] = "false"
 
 @app.command()
 def main(
-    doc: str =typer.Argument("", help="url, file-path or folder to chat about"),
+    doc: str = typer.Argument("", help="url, file-path or folder to chat about"),
     debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
     model: str = typer.Option("", "--model", "-m", help="model name"),
     nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
@@ -154,7 +154,7 @@ def main(
     print("[blue]Welcome to the document chatbot!")
 
     if doc:
-        #TODO - could save time by checking whether we've already ingested this doc(s)
+        # TODO - could save time by checking whether we've already ingested this doc(s)
         agent.ingest_doc_paths([doc])
     else:
         agent.user_docs_ingest_dialog()

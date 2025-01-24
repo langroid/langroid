@@ -14,6 +14,7 @@ from langroid.pydantic_v1 import BaseModel, Field
 from langroid.agent.tools.orchestration import ResultTool
 from fire import Fire
 
+
 # desired output structure
 class CompanyInfo(BaseModel):
     name: str = Field(..., description="name of company")
@@ -68,7 +69,8 @@ class CompanyInfoTool(lr.agent.ToolMessage):
 
 # define agent, attach the tool
 
-def main(model:str=""):
+
+def main(model: str = ""):
     llm_config = lm.OpenAIGPTConfig(
         chat_model=model or lm.OpenAIChatModel.GPT4o,
     )
