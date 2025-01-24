@@ -659,11 +659,13 @@ def test_task_2_agent_2_tool(
             use_tools=not use_fn_api,
             system_message="""
                     When you receive a query asking whether the Polinsky
-                    transform of a number x is y, and you must give FEEDBACK
+                    transform of a number x is y, you must give FEEDBACK
                     on this using the `polinsky_feedback` tool/function.
                     Here are the rules:
                     - If y = x + 1, feedback should be "WRONG, try another guess",
                     - Otherwise, feedback should be EMPTY STRING: ""
+                    IMPORTANT - Use the `polinsky_query` tool/function 
+                    ONLY ONCE per query.
                     """,
         )
     )
