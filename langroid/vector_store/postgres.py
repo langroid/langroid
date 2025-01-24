@@ -34,7 +34,7 @@ class PostgresDBConfig(VectorStoreConfig):
     cloud: bool = False
     docker: bool = True
     host: str = "127.0.0.1"
-    port: int = 5435
+    port: int = 5432
     replace_collection: bool = False
     embedding: EmbeddingModelsConfig = OpenAIEmbeddingsConfig()
     hnsw_m: int = 16
