@@ -1,4 +1,4 @@
-"""
+r"""
 Single-agent to use to chat with a Neo4j knowledge-graph (KG)
 that models a dependency graph of Python packages.
 
@@ -10,16 +10,19 @@ User specifies package name
 -> Query results returned to LLM
 -> LLM translates to natural language response
 
-This example relies on neo4j. The easiest way to get access to neo4j is by
-creating a cloud account at `https://neo4j.com/cloud/platform/aura-graph-database/`
-
-Upon creating the account successfully, neo4j will create a text file that contains
+If you want to use Neo4j cloud version: 
+  - create an account at `https://neo4j.com/cloud/platform/aura-graph-database/`
+  - Upon creating the account successfully, neo4j will create a text file that contains
 account settings, please provide the following information (uri, username, password) as
-described here
-`https://github.com/langroid/langroid/tree/main/examples/kg-chat#requirements`
 
-The rest of requirements are described in
- `https://github.com/langroid/langroid/blob/main/examples/kg-chat/README.md`
+If you want to use Neo4j Docker image, run the following command:
+
+docker run \
+   -e NEO4J_AUTH=neo4j/password \
+   -p 7474:7474 -p 7687:7687 \
+   -e NEO4J_PLUGINS=\[\"apoc\"\] \
+   -d neo4j:5.6.0
+Then, use the default (uri, username, password) provided in this script. 
 
 Run like this:
 ```
@@ -36,13 +39,17 @@ from pyvis.network import Network
 import webbrowser
 from pathlib import Path
 
+import langroid.language_models as lm
 from langroid import TaskConfig
 from langroid.agent.special.neo4j.neo4j_chat_agent import (
     Neo4jChatAgent,
     Neo4jChatAgentConfig,
     Neo4jSettings,
 )
-from langroid.language_models.openai_gpt import OpenAIGPTConfig, OpenAIChatModel
+from langroid.agent.special.neo4j.tools import (
+    cypher_retrieval_tool_name,
+    graph_schema_tool_name,
+)
 from langroid.utils.constants import NO_ANSWER, SEND_TO
 from langroid.utils.configuration import set_global, Settings
 from langroid.agent.tool_message import ToolMessage
@@ -52,6 +59,8 @@ from langroid.agent.task import Task
 from cypher_message import CONSTRUCT_DEPENDENCY_GRAPH
 
 app = typer.Typer()
+
+web_search_name = GoogleSearchTool.default_value("request")
 
 
 class DepGraphTool(ToolMessage):
@@ -68,6 +77,9 @@ class DepGraphTool(ToolMessage):
     package_name: str
 
 
+construct_dependency_graph_name = DepGraphTool.default_value("request")
+
+
 class VisualizeGraph(ToolMessage):
     request = "visualize_dependency_graph"
     purpose = """
@@ -77,6 +89,9 @@ class VisualizeGraph(ToolMessage):
     package_type: str
     package_name: str
     query: str
+
+
+visualize_dependency_graph_name = VisualizeGraph.default_value("request")
 
 
 class DependencyGraphAgent(Neo4jChatAgent):
@@ -228,7 +243,23 @@ def main(
 
     load_dotenv()
 
-    neo4j_settings = Neo4jSettings()
+    uri = Prompt.ask(
+        "Neo4j URI ",
+        default="bolt://localhost:7687",
+    )
+    username = Prompt.ask(
+        "No4j username ",
+        default="neo4j",
+    )
+    db = Prompt.ask(
+        "Neo4j database ",
+        default="neo4j",
+    )
+    pw = Prompt.ask(
+        "Neo4j password ",
+        default="password",
+    )
+    neo4j_settings = Neo4jSettings(uri=uri, username=username, database=db, password=pw)
 
     dependency_agent = DependencyGraphAgent(
         config=Neo4jChatAgentConfig(
@@ -237,8 +268,9 @@ def main(
             show_stats=False,
             use_tools=tools,
             use_functions_api=not tools,
-            llm=OpenAIGPTConfig(
-                chat_model=model or OpenAIChatModel.GPT4o,
+            addressing_prefix=SEND_TO,
+            llm=lm.OpenAIGPTConfig(
+                chat_model=model or lm.OpenAIChatModel.GPT4o,
             ),
         ),
     )
@@ -246,31 +278,27 @@ def main(
     system_message = f"""You are an expert in Dependency graphs and analyzing them using
     Neo4j. 
     
-    FIRST, I'll give you the name of the package that I want to analyze.
-    
-    THEN, you can also use the `web_search` tool/function to find out information about a package,
-      such as version number and package type (PyPi or not). 
-    
-    If unable to get this info, you can ask me and I can tell you.
-    
-    DON'T forget to include the package name in your questions. 
+    The User will provide package information.
       
     After receiving this information, make sure the package version is a number and the
     package type is PyPi.
     THEN ask the user if they want to construct the dependency graph,
-    and if so, use the tool/function `construct_dependency_graph` to construct
+    and if so, use the tool/function `{construct_dependency_graph_name}` to construct
       the dependency graph. Otherwise, say `Couldn't retrieve package type or version`
       and {NO_ANSWER}.
     After constructing the dependency graph successfully, you will have access to Neo4j 
     graph database, which contains dependency graph.
-    You will try your best to answer my questions. Note that:
-    1. You can use the tool `get_schema` to get node label and relationships in the
-    dependency graph. 
-    2. You can use the tool `retrieval_query` to get relevant information from the
-      graph database. I will execute this query and send you back the result.
+    **IMPORTANT**: Address the user using `{SEND_TO}User` to have a conversation with
+    the User.
+    Note that:
+    1. You can use the tool `{graph_schema_tool_name}` to get node label and
+     relationships in the dependency graph. 
+    2. You can use the tool `{cypher_retrieval_tool_name}` to get relevant information
+     from the graph database. I will execute this query and send you back the result.
       Make sure your queries comply with the database schema.
-    3. Use the `web_search` tool/function to get information if needed.
-    To display the dependency graph use this tool `visualize_dependency_graph`.
+    3. Use the `{web_search_name}` tool/function to get information if needed.
+    To display the dependency graph use this tool `{visualize_dependency_graph_name}`.
+    You will try your best to answer User's questions. 
     """
     task_config = TaskConfig(addressing_prefix=SEND_TO)
     task = Task(
@@ -286,8 +314,19 @@ def main(
     dependency_agent.enable_message(DepGraphTool)
     dependency_agent.enable_message(GoogleSearchTool)
     dependency_agent.enable_message(VisualizeGraph)
-
-    task.run()
+    package_name = Prompt.ask(
+        "Name of package to be analyze: ",
+        default="chainlit",
+    )
+    package_version = Prompt.ask(
+        "Package version",
+        default="1.1.200",
+    )
+    package_ecosystem = Prompt.ask(
+        "Package ecosystem",
+        default="pypi",
+    )
+    task.run(f"Package info: {package_name} {package_version} {package_ecosystem}")
 
     # check if the user wants to delete the database
     if dependency_agent.config.database_created:

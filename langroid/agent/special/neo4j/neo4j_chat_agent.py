@@ -87,12 +87,12 @@ class Neo4jChatAgent(ChatAgent):
         self._import_neo4j()
         self._initialize_db()
         self._init_tools_sys_message()
-        self.init_state()
+        # self.init_state() # already called inside _init_tools_sys_message()
 
     def init_state(self) -> None:
         super().init_state()
         self.current_retrieval_cypher_query: str = ""
-        self.tried_schema: bool = False
+        self.tried_schema: bool = self.tried_schema or False
 
     def handle_message_fallback(
         self, msg: str | ChatDocument
@@ -151,6 +151,7 @@ class Neo4jChatAgent(ChatAgent):
         """
         Initializes a connection to the Neo4j database using the configuration settings.
         """
+        self.tried_schema = False
         try:
             assert isinstance(self.config, Neo4jChatAgentConfig)
             self.driver = neo4j.GraphDatabase.driver(
@@ -398,7 +399,7 @@ class Neo4jChatAgent(ChatAgent):
 
     def _init_tools_sys_message(self) -> None:
         """Initialize message tools used for chatting."""
-        self.tried_schema = False
+        self.tried_schema = self.tried_schema or False
         message = self._format_message()
         self.config.system_message = self.config.system_message.format(mode=message)
         if self.config.chat_mode:
