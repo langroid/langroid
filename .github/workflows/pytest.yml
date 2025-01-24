@@ -117,6 +117,7 @@ jobs:
           --extra momento \
           --extra meilisearch \
           --extra chromadb \
+          --extra weaviate \
           --extra hf-embeddings \
           --extra unstructured \
           --extra pdf-parsers \
