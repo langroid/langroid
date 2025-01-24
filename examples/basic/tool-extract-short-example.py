@@ -2,9 +2,13 @@
 Short example of using Langroid ToolMessage to extract structured info from a passage,
 and perform computation on it.
 
-Run like this:
+Run like this (omit --model to default to GPT4o):
 
-python3 examples/basic/tool-extract-short-example.py
+python3 examples/basic/tool-extract-short-example.py --model deepseek/deepseek-reasoner
+
+or
+
+uv run examples/basic/tool-extract-short-example.py --model deepseek/deepseek-reasoner
 
 """
 
@@ -12,6 +16,8 @@ import langroid as lr
 import langroid.language_models as lm
 from langroid.pydantic_v1 import BaseModel, Field
 from langroid.agent.tools.orchestration import ResultTool
+from rich.prompt import Prompt
+from rich import print
 from fire import Fire
 
 
@@ -89,26 +95,44 @@ def main(model: str = ""):
     # define and run task on a passage about some company
 
     task = lr.Task(agent, interactive=False)
-    result = task.run(
-        """
-        Qualcomm has shares outstanding of 1.12 billion and a price per share of $217.09.
-        """
-    )
 
-    # note the result.tool_messages will be a list containing
-    # an obj of type FinalResultTool, so we can extract fields from it.
-    company_result = result.tool_messages[0]
-    assert isinstance(company_result, ResultTool)
-    assert isinstance(company_result.info, CompanyInfo)
-
-    info = company_result.info
-    mktcap = company_result.market_cap
-    assert company_result.comment == "success"
     print(
-        f"""
-        Found company info: {info} and market cap: {mktcap}
+        """
+        [blue]Welcome to the company info extractor!
+        Write a sentence containing company name, shares outstanding and share price,
+        and the Agent will use a tool/function extract the info in structured form,
+        and the tool-handler will compute the market-cap.[/blue]
         """
     )
+
+    while True:
+        statement = Prompt.ask(
+            """
+            Enter a sentence containing company name, 
+            shares outstanding and share price, or 
+            hit enter to use default sentence.
+            """,
+            default="""
+            Qualcomm has shares outstanding of 1.12 billion and a 
+            price per share of $217.09.
+            """,
+        )
+        result = task.run(statement)
+
+        # note the result.tool_messages will be a list containing
+        # an obj of type FinalResultTool, so we can extract fields from it.
+        company_result = result.tool_messages[0]
+        assert isinstance(company_result, ResultTool)
+        assert isinstance(company_result.info, CompanyInfo)
+
+        info = company_result.info
+        mktcap = company_result.market_cap
+        assert company_result.comment == "success"
+        print(
+            f"""
+            Found company info: {info} and market cap: {mktcap}
+            """
+        )
 
 
 if __name__ == "__main__":
