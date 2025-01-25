@@ -7,7 +7,6 @@ from typing import Any, Dict, List, Optional, Sequence, Tuple
 
 from sqlalchemy import (
     Column,
-    Index,
     MetaData,
     String,
     Table,
@@ -60,7 +59,8 @@ class PostgresDB(VectorStore):
             from pgvector.sqlalchemy import Vector
         except ImportError:
             raise ImportError(
-        "pgvector is not installed. Please install it with `pip install pgvector`."
+                "pgvector is not installed. "
+                "Please install it with `pip install pgvector`."
             )
         if self.config.docker:
             username = os.getenv("POSTGRES_USER", "postgres")
@@ -74,7 +74,7 @@ class PostgresDB(VectorStore):
                 and database
             ):
                 raise ValueError(
-                "Provide POSTGRES_USER, POSTGRES_PASSWORD and POSTGERS_DB."
+                    "Provide POSTGRES_USER, POSTGRES_PASSWORD and POSTGERS_DB."
                 )
             connection_string = (
                 f"postgresql+psycopg2://{username}:{password}@"
@@ -85,7 +85,7 @@ class PostgresDB(VectorStore):
             connection_string = os.getenv("POSTGRES_CONNECTION_STRING")
             if not connection_string:
                 raise ValueError(
-                "Provide the POSTGRES_CONNECTION_STRING for cloud config."
+                    "Provide the POSTGRES_CONNECTION_STRING for cloud config."
                 )
         else:
             logger.warning(
@@ -221,7 +221,7 @@ class PostgresDB(VectorStore):
                     # Use delete_collection to handle index and table deletion
                     self.delete_collection(table_name)
                     deleted_count += 1
-            session.commit()  
+            session.commit()
             logger.warning(f"Deleted {deleted_count} tables with prefix '{prefix}'.")
             return deleted_count
 

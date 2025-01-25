@@ -17,7 +17,7 @@ from langroid.vector_store.qdrantdb import QdrantDB, QdrantDBConfig
 
 load_dotenv()
 embed_cfg = OpenAIEmbeddingsConfig(
-    model_type="openai", 
+    model_type="openai",
 )
 
 phrases = SimpleNamespace(

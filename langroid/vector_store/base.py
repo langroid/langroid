@@ -58,8 +58,8 @@ class VectorStore(ABC):
         from langroid.vector_store.lancedb import LanceDB, LanceDBConfig
         from langroid.vector_store.meilisearch import MeiliSearch, MeiliSearchConfig
         from langroid.vector_store.momento import MomentoVI, MomentoVIConfig
+        from langroid.vector_store.postgres import PostgresDB, PostgresDBConfig
         from langroid.vector_store.qdrantdb import QdrantDB, QdrantDBConfig
-        from langroid.vector_store.postgres import PostgresDB,PostgresDBConfig
 
         if isinstance(config, QdrantDBConfig):
             return QdrantDB(config)
