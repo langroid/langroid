@@ -79,7 +79,7 @@ class LlamaCppServerEmbeddingsConfig(EmbeddingModelsConfig):
 
 class GeminiEmbeddingsConfig(EmbeddingModelsConfig):
     model_type: str = "gemini"
-    model_name: str = "models/embedding-001"
+    model_name: str = "models/text-embedding-004"
     api_key: str = ""
     dims: int = 768
     batch_size: int = 512
