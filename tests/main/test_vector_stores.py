@@ -186,8 +186,7 @@ def vecdb(request) -> VectorStore:
 # add "momento" when their API docs are ready
 @pytest.mark.parametrize(
     "vecdb",
-    ["lancedb", "chroma", "qdrant_cloud", "qdrant_local", "postgres"],
-    ["lancedb", "chroma", "qdrant_cloud", "qdrant_local", "weaviate_cloud"],
+    ["lancedb", "chroma", "qdrant_cloud", "qdrant_local", "postgres", "weaviate_cloud"],
     indirect=True,
 )
 def test_vector_stores_search(
@@ -236,8 +235,7 @@ def test_hybrid_vector_search(
 
 @pytest.mark.parametrize(
     "vecdb",
-    ["lancedb", "chroma", "qdrant_local", "qdrant_cloud", "postgres"],
-    ["lancedb", "chroma", "qdrant_local", "qdrant_cloud", "weaviate_cloud"],
+    ["lancedb", "chroma", "qdrant_local", "qdrant_cloud", "postgres", "weaviate_cloud"],
     indirect=True,
 )
 def test_vector_stores_access(vecdb):
@@ -308,8 +306,7 @@ def test_vector_stores_access(vecdb):
 
 @pytest.mark.parametrize(
     "vecdb",
-    ["lancedb", "chroma", "qdrant_cloud", "qdrant_local", "postgres"],
-    ["lancedb", "chroma", "qdrant_cloud", "qdrant_local", "weaviate_cloud"],
+    ["lancedb", "chroma", "qdrant_cloud", "qdrant_local", "postgres", "weaviate_cloud"],
     indirect=True,
 )
 def test_vector_stores_context_window(vecdb):
@@ -369,8 +366,7 @@ def test_vector_stores_context_window(vecdb):
 
 @pytest.mark.parametrize(
     "vecdb",
-    ["chroma", "lancedb", "qdrant_cloud", "qdrant_local", "postgres"],
-    ["chroma", "lancedb", "qdrant_cloud", "qdrant_local", "weaviate_cloud"],
+    ["chroma", "lancedb", "qdrant_cloud", "qdrant_local", "postgres", "weaviate_cloud"],
     indirect=True,
 )
 def test_vector_stores_overlapping_matches(vecdb):
