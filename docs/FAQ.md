@@ -1,5 +1,10 @@
 # Frequently Asked Questions
 
+## Can I view the reasoning (thinking) text when using a Reasoning LLM like R1 or o1?
+
+Yes, see this note on [reasoning-content](https://langroid.github.io/langroid/notes/reasoning-content/).
+
+
 ## Does Langroid work with non-OpenAI LLMs?
 
 Yes! Langroid works with practically any LLM, local or remote, closed or open.
@@ -152,6 +157,11 @@ For more complex persistence, you can take advantage of the `GlobalState`,
 where you can store message histories of multiple agents indexed by their name.
 Simple examples of `GlobalState` are in the [`chat-tree.py`](https://github.com/langroid/langroid/blob/main/examples/basic/chat-tree.py) example, 
 and the [`test_global_state.py`](https://github.com/langroid/langroid/blob/main/tests/main/test_global_state.py) test.
+
+## Is it possible to share state between agents/tasks?
+
+The above-mentioned `GlobalState` mechanism can be used to share state between 
+agents/tasks. See the links mentioned in the previous answer.
 
 ## How can I suppress LLM output?
 

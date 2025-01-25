@@ -59,6 +59,7 @@ class VectorStore(ABC):
         from langroid.vector_store.meilisearch import MeiliSearch, MeiliSearchConfig
         from langroid.vector_store.momento import MomentoVI, MomentoVIConfig
         from langroid.vector_store.qdrantdb import QdrantDB, QdrantDBConfig
+        from langroid.vector_store.weaviatedb import WeaviateDB, WeaviateDBConfig
         from langroid.vector_store.pineconedb import PineconeDB, PineconeDBConfig
 
         if isinstance(config, QdrantDBConfig):
@@ -71,6 +72,8 @@ class VectorStore(ABC):
             return LanceDB(config)
         elif isinstance(config, MeiliSearchConfig):
             return MeiliSearch(config)
+        elif isinstance(config, WeaviateDBConfig):
+            return WeaviateDB(config)
         elif isinstance(config, PineconeDBConfig):
             return PineconeDB(config)
 

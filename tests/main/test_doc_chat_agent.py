@@ -15,6 +15,7 @@ from langroid.agent.special.doc_chat_agent import (
     DocChatAgent,
     DocChatAgentConfig,
     RetrievalTool,
+    _append_metadata_source,
 )
 from langroid.agent.special.lance_doc_chat_agent import LanceDocChatAgent
 from langroid.agent.task import Task
@@ -1116,3 +1117,169 @@ def test_enrichments_integration(vecdb: VectorStore) -> None:
     # check that the right content is in the docs
     assert "BUN" in doc1.content
     assert "BNP" in doc2.content
+
+
+@pytest.mark.parametrize("vecdb", ["chroma", "lancedb", "qdrant_local"], indirect=True)
+def test_doc_chat_agent_ingest(test_settings: Settings, vecdb):
+    agent = DocChatAgent(_MyDocChatAgentConfig())
+    agent.vecdb = vecdb
+
+    # Base documents with simple metadata
+    docs = [
+        Document(content="Doc 1", metadata=DocMetaData(source="original1")),
+        Document(content="Doc 2", metadata=DocMetaData(source="original2")),
+    ]
+
+    # Test case 1: List of metadata dicts
+    docs_copy = [d.copy() for d in docs]
+    meta_list = [
+        {"category": "A", "source": "new1"},
+        {"category": "B", "source": "new2"},
+    ]
+    agent.ingest_docs(docs_copy, metadata=meta_list)
+    stored = agent.vecdb.get_all_documents()
+    assert set([d.metadata.category for d in stored]) == {"A", "B"}
+
+    assert set(d.metadata.source for d in stored) == {
+        _append_metadata_source("original1", "new1"),
+        _append_metadata_source("original2", "new2"),
+    }
+
+    agent.clear()
+
+    # Test case 2: Single metadata dict for all docs
+    docs_copy = [d.copy() for d in docs]
+    meta_dict = {"category": "common", "source": "new"}
+    agent.ingest_docs(docs_copy, metadata=meta_dict)
+    stored = agent.vecdb.get_all_documents()
+    assert all(d.metadata.category == "common" for d in stored)
+
+    assert set(d.metadata.source for d in stored) == {
+        _append_metadata_source("original1", "new"),
+        _append_metadata_source("original2", "new"),
+    }
+    agent.clear()
+
+    # Test case 3: List of DocMetaData
+    docs_copy = [d.copy() for d in docs]
+    meta_docs = [
+        DocMetaData(category="X", source="new1"),
+        DocMetaData(category="Y", source="new2"),
+    ]
+    agent.ingest_docs(docs_copy, metadata=meta_docs)
+    stored = agent.vecdb.get_all_documents()
+    assert set([d.metadata.category for d in stored]) == {"X", "Y"}
+
+    assert set(d.metadata.source for d in stored) == {
+        _append_metadata_source("original1", "new1"),
+        _append_metadata_source("original2", "new2"),
+    }
+    agent.clear()
+
+    # Test case 4: Single DocMetaData for all docs
+    docs_copy = [d.copy() for d in docs]
+    meta_doc = DocMetaData(category="shared", source="new")
+    agent.ingest_docs(docs_copy, metadata=meta_doc)
+    stored = agent.vecdb.get_all_documents()
+    assert all(d.metadata.category == "shared" for d in stored)
+
+    assert set(d.metadata.source for d in stored) == {
+        _append_metadata_source("original1", "new"),
+        _append_metadata_source("original2", "new"),
+    }
+    agent.clear()
+
+
+@pytest.mark.parametrize("vecdb", ["chroma", "lancedb", "qdrant_local"], indirect=True)
+def test_doc_chat_agent_ingest_paths(test_settings: Settings, vecdb):
+    agent = DocChatAgent(_MyDocChatAgentConfig())
+    agent.vecdb = vecdb
+
+    # Create temp files and byte contents
+    import tempfile
+
+    # Create two temp files
+    file_contents = ["Content of file 1", "Content of file 2"]
+    temp_files = []
+    for content in file_contents:
+        with tempfile.NamedTemporaryFile(mode="w", delete=False) as f:
+            f.write(content)
+            temp_files.append(f.name)
+
+    # Create two byte contents
+    byte_contents = [b"Bytes content 1", b"Bytes content 2"]
+
+    # Test case 1: List of metadata dicts
+    paths = temp_files + byte_contents
+    meta_list = [
+        {"category": "file", "source": "src1"},
+        {"category": "file", "source": "src2"},
+        {"category": "bytes", "source": "src3"},
+        {"category": "bytes", "source": "src4"},
+    ]
+    # ingest with no additional metadata so we can get the original source
+    docs = agent.ingest_doc_paths(paths)
+    orig_sources = [d.metadata.source for d in docs]
+    agent.clear()
+    # now ingest with additional metadata
+    agent.ingest_doc_paths(paths, metadata=meta_list)
+    stored = agent.vecdb.get_all_documents()
+
+    # Create sets of expected and actual metadata
+    expected_categories = {"file", "bytes"}
+    expected_sources = {
+        _append_metadata_source(s, f"src{i+1}") for i, s in enumerate(orig_sources)
+    }
+
+    actual_categories = {d.metadata.category for d in stored}
+    actual_sources = {d.metadata.source for d in stored}
+
+    assert expected_categories == actual_categories
+    assert expected_sources == actual_sources
+    agent.clear()
+
+    # Test case 2: Single metadata dict
+    meta_dict = {"category": "common", "source": "shared"}
+    # now ingest with additional metadata
+    agent.ingest_doc_paths(paths, metadata=meta_dict)
+    stored = agent.vecdb.get_all_documents()
+
+    assert all(d.metadata.category == "common" for d in stored)
+    expected_sources = {_append_metadata_source(s, "shared") for s in orig_sources}
+    actual_sources = {d.metadata.source for d in stored}
+    assert expected_sources == actual_sources
+    agent.clear()
+
+    # Test case 3: List of DocMetaData
+    meta_docs = [DocMetaData(category="X", source=f"src{i}") for i in range(len(paths))]
+
+    # now ingest with metadata
+    agent.ingest_doc_paths(paths, metadata=meta_docs)
+    stored = agent.vecdb.get_all_documents()
+
+    expected_categories = {"X"}
+    expected_sources = {
+        _append_metadata_source(s, f"src{i}") for i, s in enumerate(orig_sources)
+    }
+
+    actual_categories = {d.metadata.category for d in stored}
+    actual_sources = {d.metadata.source for d in stored}
+
+    assert expected_categories == actual_categories
+    assert expected_sources == actual_sources
+    agent.clear()
+
+    # Test case 4: Single DocMetaData
+    meta_doc = DocMetaData(category="shared", source="new")
+    docs = agent.ingest_doc_paths(paths, metadata=meta_doc)
+    stored = agent.vecdb.get_all_documents()
+
+    assert all(d.metadata.category == "shared" for d in stored)
+    expected_sources = {_append_metadata_source(s, "new") for s in orig_sources}
+    actual_sources = {d.metadata.source for d in stored}
+    assert expected_sources == actual_sources
+    agent.clear()
+
+    # Cleanup temp files
+    for f in temp_files:
+        os.remove(f)

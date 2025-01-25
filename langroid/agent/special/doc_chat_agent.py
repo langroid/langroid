@@ -72,14 +72,13 @@ def apply_nest_asyncio() -> None:
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_DOC_CHAT_INSTRUCTIONS = """
-Your task is to answer questions about various documents.
-You will be given various passages from these documents, and asked to answer questions
-about them, or summarize them into coherent answers.
-"""
 
 DEFAULT_DOC_CHAT_SYSTEM_MESSAGE = """
 You are a helpful assistant, helping me understand a collection of documents.
+
+Your TASK is to answer questions about various documents.
+You will be given various passages from these documents, and asked to answer questions
+about them, or summarize them into coherent answers.
 """
 
 CHUNK_ENRICHMENT_DELIMITER = "<##-##-##>"
@@ -113,7 +112,6 @@ class ChunkEnrichmentAgentConfig(ChatAgentConfig):
 
 class DocChatAgentConfig(ChatAgentConfig):
     system_message: str = DEFAULT_DOC_CHAT_SYSTEM_MESSAGE
-    user_message: str = DEFAULT_DOC_CHAT_INSTRUCTIONS
     summarize_prompt: str = SUMMARY_ANSWER_PROMPT_GPT4
     # extra fields to include in content as key=value pairs
     # (helps retrieval for table-like data)
@@ -212,6 +210,12 @@ class DocChatAgentConfig(ChatAgentConfig):
     prompts: PromptsConfig = PromptsConfig(
         max_tokens=1000,
     )
+
+
+def _append_metadata_source(orig_source: str, source: str) -> str:
+    if orig_source != source and source != "" and orig_source != "":
+        return f"{orig_source.strip()}; {source.strip()}"
+    return orig_source.strip() + source.strip()
 
 
 class DocChatAgent(ChatAgent):
@@ -339,7 +343,11 @@ class DocChatAgent(ChatAgent):
                 url_docs = loader.load()
                 # update metadata of each doc with meta
                 for d in url_docs:
+                    orig_source = d.metadata.source
                     d.metadata = d.metadata.copy(update=meta)
+                    d.metadata.source = _append_metadata_source(
+                        orig_source, meta.get("source", "")
+                    )
                 docs.extend(url_docs)
         if len(paths) > 0:  # paths OR bytes are handled similarly
             for pi in path_idxs:
@@ -352,7 +360,11 @@ class DocChatAgent(ChatAgent):
                 )
                 # update metadata of each doc with meta
                 for d in path_docs:
+                    orig_source = d.metadata.source
                     d.metadata = d.metadata.copy(update=meta)
+                    d.metadata.source = _append_metadata_source(
+                        orig_source, meta.get("source", "")
+                    )
                 docs.extend(path_docs)
         n_docs = len(docs)
         n_splits = self.ingest_docs(docs, split=self.config.split)
@@ -393,15 +405,26 @@ class DocChatAgent(ChatAgent):
         """
         if isinstance(metadata, list) and len(metadata) > 0:
             for d, m in zip(docs, metadata):
-                d.metadata = d.metadata.copy(
-                    update=m if isinstance(m, dict) else m.dict()  # type: ignore
+                orig_source = d.metadata.source
+                m_dict = m if isinstance(m, dict) else m.dict()  # type: ignore
+                d.metadata = d.metadata.copy(update=m_dict)  # type: ignore
+                d.metadata.source = _append_metadata_source(
+                    orig_source, m_dict.get("source", "")
                 )
         elif isinstance(metadata, dict):
             for d in docs:
+                orig_source = d.metadata.source
                 d.metadata = d.metadata.copy(update=metadata)
+                d.metadata.source = _append_metadata_source(
+                    orig_source, metadata.get("source", "")
+                )
         elif isinstance(metadata, DocMetaData):
             for d in docs:
+                orig_source = d.metadata.source
                 d.metadata = d.metadata.copy(update=metadata.dict())
+                d.metadata.source = _append_metadata_source(
+                    orig_source, metadata.source
+                )
 
         self.original_docs.extend(docs)
         if self.parser is None:

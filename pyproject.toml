@@ -1,6 +1,6 @@
 [project]
 name = "langroid"
-version = "0.34.0"
+version = "0.36.0"
 authors = [
     {name = "Prasad Chalasani", email = "pchalasani@gmail.com"},
 ]
@@ -40,7 +40,7 @@ dependencies = [
     "pygments<3.0.0,>=2.15.1",
     "pyparsing<4.0.0,>=3.0.9",
     "pytest-rerunfailures<16.0,>=15.0",
-    "python-dotenv<2.0.0,>=1.0.0",
+    "python-dotenv>=1.0.0,<2.0.0",
     "python-magic<1.0.0,>=0.4.27",
     "pyyaml<7.0.0,>=6.0.1",
     "qdrant-client<2.0.0,>=1.8.0",
@@ -79,6 +79,7 @@ vecdbs = [
     "tantivy<0.22.0,>=0.21.0",
     "pyarrow<16.0.0,>=15.0.0",
     "chromadb<=0.4.23,>=0.4.21",
+    "weaviate-client>=4.9.6",
     "pinecone-client>=5.0.1",
 ]
 
@@ -104,6 +105,7 @@ all = [
     "transformers<5.0.0,>=4.40.1",
     "huggingface-hub<0.22.0,>=0.21.2",
     "chromadb<=0.4.23,>=0.4.21",
+    "weaviate-client>=4.9.6",
     "metaphor-python<0.2.0,>=0.1.23",
     "neo4j<6.0.0,>=5.14.1",
     "python-arango<9.0.0,>=8.1.2",
@@ -191,6 +193,9 @@ chainlit = [
 chromadb = [
     "chromadb<=0.4.23,>=0.4.21",
 ]
+weaviate = [
+    "weaviate-client>=4.9.6",
+]
 
 meilisearch = [
     "meilisearch-python-sdk<3.0.0,>=2.2.3",
@@ -225,13 +230,13 @@ dev = [
     "pytest-redis<4.0.0,>=3.0.2",
     "pytest-asyncio<1.0.0,>=0.21.1",
     "pytest-postgresql<6.0.0,>=5.0.0",
-    "pytest-mysql<3.0.0,>=2.4.2",
     "coverage<8.0.0,>=7.2.5",
     "pytest-xdist<4.0.0,>=3.6.1",
     "pytest-timeout<3.0.0,>=2.3.1",
     "pytest-cov<6.0.0,>=5.0.0",
     "docker<8.0.0,>=7.1.0",
     "commitizen>=4.1.0",
+    "pytest-mysql>=3.1.0",
 ]
 docs = [
     "mkdocs<2.0.0,>=1.4.2",

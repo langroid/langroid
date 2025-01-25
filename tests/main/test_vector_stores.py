@@ -14,6 +14,7 @@ from langroid.vector_store.meilisearch import MeiliSearch, MeiliSearchConfig
 from langroid.vector_store.momento import MomentoVI, MomentoVIConfig
 from langroid.vector_store.pineconedb import PineconeDB, PineconeDBConfig
 from langroid.vector_store.qdrantdb import QdrantDB, QdrantDBConfig
+from langroid.vector_store.weaviatedb import WeaviateDB, WeaviateDBConfig
 
 load_dotenv()
 embed_cfg = OpenAIEmbeddingsConfig(
@@ -74,6 +75,16 @@ def vecdb(request) -> VectorStore:
         qd_cloud.add_documents(stored_docs)
         yield qd_cloud
         qd_cloud.delete_collection(collection_name=qd_cfg_cloud.collection_name)
+        return
+    if request.param == "weaviate_cloud":
+        wv_cfg_cloud = WeaviateDBConfig(
+            collection_name="test_" + embed_cfg.model_type,
+            embedding=embed_cfg,
+        )
+        weaviate_cloud = WeaviateDB(wv_cfg_cloud)
+        weaviate_cloud.add_documents(stored_docs)
+        yield weaviate_cloud
+        weaviate_cloud.delete_collection(collection_name=wv_cfg_cloud.collection_name)
         return
 
     if request.param == "qdrant_hybrid_cloud":
@@ -175,7 +186,7 @@ def vecdb(request) -> VectorStore:
 # add "momento" when their API docs are ready
 @pytest.mark.parametrize(
     "vecdb",
-    ["lancedb", "chroma", "qdrant_cloud", "qdrant_local", "pinecone_serverless"],
+    ["lancedb", "chroma", "qdrant_cloud", "qdrant_local", "weaviate_cloud", "pinecone_serverless"],
     indirect=True,
 )
 def test_vector_stores_search(
@@ -224,7 +235,7 @@ def test_hybrid_vector_search(
 
 @pytest.mark.parametrize(
     "vecdb",
-    ["lancedb", "chroma", "qdrant_local", "qdrant_cloud", "pinecone_serverless"],
+    ["lancedb", "chroma", "qdrant_local", "qdrant_cloud", "weaviate_cloud", "pinecone_serverless"],
     indirect=True,
 )
 def test_vector_stores_access(vecdb):
@@ -284,8 +295,8 @@ def test_vector_stores_access(vecdb):
         coll_names = [f"test-junk-{i}" for i in range(3)]
         test_prefix = "test-junk"
     else:
-        coll_names = [f"test_junk_{i}" for i in range(3)]
-        test_prefix = "test_junk"
+        coll_names = [f"Test_junk_{i}" for i in range(3)]
+        test_prefix = "Test_junk"
     for coll in coll_names:
         vecdb.create_collection(collection_name=coll)
     n_colls = len(
@@ -295,7 +306,6 @@ def test_vector_stores_access(vecdb):
     # LanceDB.create_collection() does nothing, since we can't create a table
     # without a schema or data.
     assert n_colls == n_dels == (0 if isinstance(vecdb, LanceDB) else len(coll_names))
-    # test set_collection with replace=True has same effect as create_collection
     vecdb.set_collection(coll_name, replace=True)
     assert vecdb.config.collection_name == coll_name
     assert vecdb.get_all_documents() == []
@@ -303,7 +313,7 @@ def test_vector_stores_access(vecdb):
 
 @pytest.mark.parametrize(
     "vecdb",
-    ["lancedb", "chroma", "qdrant_cloud", "qdrant_local", "pinecone_serverless"],
+    ["lancedb", "chroma", "qdrant_cloud", "qdrant_local", "weaviate_cloud", "pinecone_serverless"],
     indirect=True,
 )
 def test_vector_stores_context_window(vecdb):
@@ -319,7 +329,6 @@ def test_vector_stores_context_window(vecdb):
     )
     text = "\n\n".join(vars(phrases).values())
     doc = Document(content=text, metadata=DocMetaData(id="0"))
-
     cfg = ParsingConfig(
         splitter=Splitter.SIMPLE,
         n_neighbor_ids=2,
@@ -356,12 +365,13 @@ def test_vector_stores_context_window(vecdb):
         giraffes.content.index(p)
         for p in ["Cats", "Dogs", "Giraffes", "Elephants", "Owls"]
     ]
+
     assert indices == sorted(indices)
 
 
 @pytest.mark.parametrize(
     "vecdb",
-    ["chroma", "lancedb", "qdrant_cloud", "qdrant_local", "pinecone_serverless"],
+    ["chroma", "lancedb", "qdrant_cloud", "qdrant_local", "weaviate_cloud", "pinecone_serverless"],
     indirect=True,
 )
 def test_vector_stores_overlapping_matches(vecdb):

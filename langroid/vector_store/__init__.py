@@ -50,8 +50,20 @@ except ImportError:
     pass
 
 try:
+    from . import weaviatedb
+    from .weaviatedb import WeaviateDBConfig, WeaviateDB
+
+    weaviatedb
+    WeaviateDB
+    WeaviateDBConfig
+    __all__.extend(["weaviatedb", "WeaviateDB", "WeaviateDBConfig"])
+except ImportError:
+    pass
+
+try:
     from . import pineconedb
     from .pineconedb import PineconeDB, PineconeDBConfig
+
     pineconedb
     PineconeDB
     PineconeDBConfig
