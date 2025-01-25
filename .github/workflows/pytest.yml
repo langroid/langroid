@@ -61,6 +61,8 @@ jobs:
       CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
       GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
       GOOGLE_CSE_ID: ${{ secrets.GOOGLE_CSE_ID }}
+      WEAVIATE_API_KEY: ${{ secrets.WEAVIATE_API_KEY }}
+      WEAVIATE_API_URL: ${{ secrets.WEAVIATE_API_URL }}
 
       # Azure OpenAI env vars
       AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
