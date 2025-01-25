@@ -60,6 +60,7 @@ class VectorStore(ABC):
         from langroid.vector_store.momento import MomentoVI, MomentoVIConfig
         from langroid.vector_store.postgres import PostgresDB, PostgresDBConfig
         from langroid.vector_store.qdrantdb import QdrantDB, QdrantDBConfig
+        from langroid.vector_store.weaviatedb import WeaviateDB, WeaviateDBConfig
 
         if isinstance(config, QdrantDBConfig):
             return QdrantDB(config)
@@ -73,6 +74,8 @@ class VectorStore(ABC):
             return MeiliSearch(config)
         elif isinstance(config, PostgresDBConfig):
             return PostgresDB(config)
+        elif isinstance(config, WeaviateDBConfig):
+            return WeaviateDB(config)
 
         else:
             logger.warning(

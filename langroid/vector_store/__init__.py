@@ -57,5 +57,12 @@ try:
     PostgresDB
     PostgresDBConfig
     __all__.extend(["postgres", "PostgresDB", "PostgresDBConfig"])
+    from . import weaviatedb
+    from .weaviatedb import WeaviateDBConfig, WeaviateDB
+
+    weaviatedb
+    WeaviateDB
+    WeaviateDBConfig
+    __all__.extend(["weaviatedb", "WeaviateDB", "WeaviateDBConfig"])
 except ImportError:
     pass
