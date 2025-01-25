@@ -61,6 +61,8 @@ jobs:
       CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
       GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
       GOOGLE_CSE_ID: ${{ secrets.GOOGLE_CSE_ID }}
+      WEAVIATE_API_KEY: ${{ secrets.WEAVIATE_API_KEY }}
+      WEAVIATE_API_URL: ${{ secrets.WEAVIATE_API_URL }}
 
       # Azure OpenAI env vars
       AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
@@ -117,6 +119,7 @@ jobs:
           --extra momento \
           --extra meilisearch \
           --extra chromadb \
+          --extra weaviate \
           --extra hf-embeddings \
           --extra unstructured \
           --extra pdf-parsers \
@@ -147,6 +150,7 @@ jobs:
         uv run pytest --m gpt-4o-mini --cov langroid --cov-config .coveragerc \
           -rf -vv --log-cli-level=INFO --show-capture=no \
           -n auto --timeout=300 \
+          --first-test-file=tests/main/sql_chat/test_sql_chat_agent.py \
           --first-test-file=tests/extras/test_hf_embeddings.py \
           --first-test-file=tests/extras/test_fastembed_embeddings.py \
           --first-test-file=tests/main/test_llm.py \
@@ -166,6 +170,7 @@ jobs:
         uv run pytest --cov langroid --cov-append --cov-config .coveragerc \
           -rf -vv --log-cli-level=INFO --show-capture=no \
           -n auto --timeout=300 \
+          --first-test-file=tests/main/sql_chat/test_sql_chat_agent.py \
           --first-test-file=tests/main/test_llm.py \
           --first-test-file=tests/main/test_task.py \
           --first-test-file=tests/main/test_llm_async.py \
@@ -184,6 +189,7 @@ jobs:
       run: |
         uv run pytest --nc --cov langroid --cov-append --cov-config .coveragerc \
           -rf --show-capture=no --timeout=300 -n auto \
+          --first-test-file=tests/main/sql_chat/test_sql_chat_agent.py \
           --first-test-file=tests/main/test_llm.py \
           --first-test-file=tests/main/test_llm_async.py \
           --first-test-file=tests/main/test_task_inf_loop.py \
