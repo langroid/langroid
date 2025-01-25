@@ -28,6 +28,8 @@ class EmbeddingModel(ABC):
             AzureOpenAIEmbeddingsConfig,
             FastEmbedEmbeddings,
             FastEmbedEmbeddingsConfig,
+            GeminiEmbeddings,
+            GeminiEmbeddingsConfig,
             LlamaCppServerEmbeddings,
             LlamaCppServerEmbeddingsConfig,
             OpenAIEmbeddings,
@@ -52,6 +54,8 @@ class EmbeddingModel(ABC):
             return FastEmbedEmbeddings(config)
         elif isinstance(config, LlamaCppServerEmbeddingsConfig):
             return LlamaCppServerEmbeddings(config)
+        elif isinstance(config, GeminiEmbeddingsConfig):
+            return GeminiEmbeddings(config)
         else:
             raise ValueError(f"Unknown embedding config: {config.__repr_name__}")
 

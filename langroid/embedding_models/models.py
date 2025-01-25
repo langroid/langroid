@@ -77,6 +77,14 @@ class LlamaCppServerEmbeddingsConfig(EmbeddingModelsConfig):
     batch_size: int = 2048
 
 
+class GeminiEmbeddingsConfig(EmbeddingModelsConfig):
+    model_type: str = "gemini"
+    model_name: str = "models/embedding-001"
+    api_key: str = ""
+    dims: int = 768
+    batch_size: int = 512
+
+
 class EmbeddingFunctionCallable:
     """
     A callable class designed to generate embeddings for a list of texts using
@@ -160,6 +168,8 @@ class EmbeddingFunctionCallable:
                         self.embed_model.detokenize_string(list(token_batch))
                     )
                     embeds.append(gen_embedding)
+        elif isinstance(self.embed_model, GeminiEmbeddings):
+            embeds = self.embed_model.generate_embeddings(input)
         return embeds
 
 
@@ -437,6 +447,51 @@ class LlamaCppServerEmbeddings(EmbeddingModel):
         return self.config.dims
 
 
+class GeminiEmbeddings(EmbeddingModel):
+    def __init__(self, config: GeminiEmbeddingsConfig = GeminiEmbeddingsConfig()):
+        try:
+            import google.generativeai as genai
+        except ImportError:
+            raise ImportError(
+                """
+                To use Gemini embeddings, you must install 
+                the google-generativeai package,
+                e.g.: pip install google-generativeai
+                """
+            )
+        super().__init__()
+        self.config = config
+        load_dotenv()
+        self.config.api_key = os.getenv("GEMINI_API_KEY", "")
+
+        if self.config.api_key == "":
+            raise ValueError(
+                """
+                GEMINI_API_KEY env variable must be set to use GeminiEmbeddings.
+                """
+            )
+        genai.configure(api_key=self.config.api_key)
+        self.client = genai
+
+    def embedding_fn(self) -> Callable[[List[str]], Embeddings]:
+        return EmbeddingFunctionCallable(self, self.config.batch_size)
+
+    def generate_embeddings(self, texts: List[str]) -> Embeddings:
+        all_embeddings = []
+        for batch in batched(texts, self.config.batch_size):
+            result = self.client.embed_content(
+                model=self.config.model_name,
+                content=batch,
+                task_type="RETRIEVAL_DOCUMENT",
+            )
+            all_embeddings.extend(result["embedding"])
+        return all_embeddings
+
+    @property
+    def embedding_dims(self) -> int:
+        return self.config.dims
+
+
 def embedding_model(embedding_fn_type: str = "openai") -> EmbeddingModel:
     """
     Args:
@@ -457,5 +512,7 @@ def embedding_model(embedding_fn_type: str = "openai") -> EmbeddingModel:
         return FastEmbedEmbeddings  # type: ignore
     elif embedding_fn_type == "llamacppserver":
         return LlamaCppServerEmbeddings  # type: ignore
+    elif embedding_fn_type == "gemini":
+        return GeminiEmbeddings
     else:  # default sentence transformer
         return SentenceTransformerEmbeddings  # type: ignore
