@@ -113,6 +113,7 @@ nav:
       - Custom Azure OpenAI client: notes/custom-azure-client.md
       - Enriching Chunks for Retrieval: notes/enriching-for-retrieval.md
       - Reasoning Content: notes/reasoning-content.md
+      - Weaviate: notes/weaviate.md
 
   - Examples:
     - Guide: examples/guide.md
