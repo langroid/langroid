@@ -17,10 +17,8 @@ logger = logging.getLogger(__name__)
 
 try:
     from pinecone import Pinecone, PineconeApiException, ServerlessSpec
-
-    has_pinecone = True
 except ImportError:
-    has_pinecone = False
+    raise LangroidImportError("pinecone", "pinecone")
 
 
 @dataclass(frozen=True)
@@ -34,9 +32,7 @@ class PineconeDBConfig(VectorStoreConfig):
     collection_name: str | None = "temp"
     embedding: EmbeddingModelsConfig = OpenAIEmbeddingsConfig()
     dimension: int = 1536
-    spec: ServerlessSpec | None = (
-        ServerlessSpec(cloud="aws", region="us-east-1") if has_pinecone else None
-    )
+    spec: ServerlessSpec = ServerlessSpec(cloud="aws", region="us-east-1")
     deletion_protection: Literal["enabled", "disabled"] | None = None
     metric: str = "cosine"
     pagination_size: int = 100
@@ -45,10 +41,6 @@ class PineconeDBConfig(VectorStoreConfig):
 class PineconeDB(VectorStore):
     def __init__(self, config: PineconeDBConfig = PineconeDBConfig()):
         super().__init__(config)
-
-        if not config.spec or not has_pinecone:
-            raise LangroidImportError("pinecone", "pinecone")
-
         self.config: PineconeDBConfig = config
         self.embedding_fn: EmbeddingFunction = self.embedding_model.embedding_fn()
         load_dotenv()
