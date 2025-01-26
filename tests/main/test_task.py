@@ -4,7 +4,7 @@ Other tests for Task are in test_chat_agent.py
 
 import asyncio
 import json
-from typing import List, Optional
+from typing import Any, List, Optional
 
 import pytest
 
@@ -596,6 +596,21 @@ def test_task_2_agent_2_tool(
                 {msg.feedback}
                 """
 
+        def handle_message_fallback(self, msg: str | ChatDocument) -> Any:
+            if isinstance(msg, ChatDocument) and msg.metadata.sender == Entity.LLM:
+                return f"""
+                Your INTENT is unclear!
+                
+                - If you intended to say you're finished with your task,
+                then use the `{DoneTool.name()}` tool/function with 
+                the `content` field set to the summary of the Polinsky transforms
+                of 100 and 500.
+                
+                - If you intended to ask about the Polinsky transform,
+                then use the `{QueryTool.name()}` tool/function to ask about
+                the Polinsky transform of a number.
+                """
+
     done_tool_name = DoneTool.default_value("request")
     requestor_agent = Requestor(
         ChatAgentConfig(
@@ -658,13 +673,16 @@ def test_task_2_agent_2_tool(
             use_tools_api=use_tools_api,
             use_tools=not use_fn_api,
             system_message="""
-                    When you receive a query asking whether the Polinsky
-                    transform of a number x is y, and you must give FEEDBACK
-                    on this using the `polinsky_feedback` tool/function.
-                    Here are the rules:
-                    - If y = x + 1, feedback should be "WRONG, try another guess",
-                    - Otherwise, feedback should be EMPTY STRING: ""
-                    """,
+            When you receive a query asking whether the Polinsky
+            transform of a number x is y, and you must give FEEDBACK
+            on this using the `polinsky_feedback` tool/function.
+            Here are the rules:
+            - If y = x + 1, feedback should be "WRONG, try another guess",
+            - Otherwise, feedback should be EMPTY STRING: ""
+            
+            IMPORTANT - YOU CAN ONLY use the `polinsky_feedback` tool/function
+            ONCE per message.
+            """,
         )
     )
 
