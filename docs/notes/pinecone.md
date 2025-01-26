@@ -51,7 +51,7 @@ agent_config = DocChatAgentConfig(
         chat_model=OpenAIChatModel.GPT4o_MINI
     ),
     vecdb=PineconeDBConfig(
-        # note, Pinecone indexes must be alphanumeric characters or "-"
+        # note, Pinecone indexes must be alphanumeric lowercase characters or "-"
         collection_name="pinecone-serverless-example",
         replace_collection=True,
         embedding=agent_embed_cfg,
@@ -106,7 +106,7 @@ agent.ingest_docs(documents)
 ###################
 
 formula_one_world_champion_2007 = agent.llm_response(
-    message="Who was the Formula 1 World Drivers Champion in 2007?"
+    message="Who was the Formula 1 World Drivers' Champion in 2007?"
 )
 try:
     assert "Kimi Räikkönen" in formula_one_world_champion_2007.content

@@ -1,13 +1,13 @@
-from dataclasses import dataclass
-from pinecone import Pinecone, PineconeApiException, ServerlessSpec
-from typing import Dict, List, Literal, Sequence, Optional, Tuple
-
 import json
 import logging
 import os
 import re
+from dataclasses import dataclass
+from typing import Any, Dict, List, Literal, Optional, Sequence, Tuple, Union
 
 from dotenv import load_dotenv
+
+from langroid import LangroidImportError
 from langroid.embedding_models import EmbeddingModelsConfig, OpenAIEmbeddingsConfig
 from langroid.mytypes import Document, EmbeddingFunction
 from langroid.utils.configuration import settings
@@ -15,24 +15,40 @@ from langroid.vector_store.base import VectorStore, VectorStoreConfig
 
 logger = logging.getLogger(__name__)
 
+try:
+    from pinecone import Pinecone, PineconeApiException, ServerlessSpec
+
+    has_pinecone = True
+except ImportError:
+    has_pinecone = False
+
+
 @dataclass(frozen=True)
 class IndexMeta:
     name: str
     total_vector_count: int
+
 
 class PineconeDBConfig(VectorStoreConfig):
     cloud: bool = True
     collection_name: str | None = "temp"
     embedding: EmbeddingModelsConfig = OpenAIEmbeddingsConfig()
     dimension: int = 1536
-    spec: ServerlessSpec = ServerlessSpec(cloud="aws", region="us-east-1")
+    spec: ServerlessSpec | None = (
+        ServerlessSpec(cloud="aws", region="us-east-1") if has_pinecone else None
+    )
     deletion_protection: Literal["enabled", "disabled"] | None = None
     metric: str = "cosine"
     pagination_size: int = 100
 
+
 class PineconeDB(VectorStore):
     def __init__(self, config: PineconeDBConfig = PineconeDBConfig()):
         super().__init__(config)
+
+        if not config.spec or not has_pinecone:
+            raise LangroidImportError("pinecone", "pinecone")
+
         self.config: PineconeDBConfig = config
         self.embedding_fn: EmbeddingFunction = self.embedding_model.embedding_fn()
         load_dotenv()
@@ -44,7 +60,8 @@ class PineconeDB(VectorStore):
 
         if config.collection_name:
             self.create_collection(
-                collection_name=config.collection_name, replace=config.replace_collection
+                collection_name=config.collection_name,
+                replace=config.replace_collection,
             )
 
     def clear_empty_collections(self) -> int:
@@ -52,7 +69,9 @@ class PineconeDB(VectorStore):
         n_deletes = 0
         for index in indexes:
             if index.total_vector_count == -1:
-                logger.warning(f"Error fetching details for {index.name} when scanning indexes")
+                logger.warning(
+                    f"Error fetching details for {index.name} when scanning indexes"
+                )
             n_deletes += 1
             self.delete_collection(collection_name=index.name)
         return n_deletes
@@ -64,7 +83,8 @@ class PineconeDB(VectorStore):
 
         Args:
             really: Optional[bool] - whether to delete empty Pinecone indexes
-            prefix: Optional[str] - predicate to match potential Pinecone indexes for deletion
+            prefix: Optional[str] - string to match potential Pinecone
+                indexes for deletion
         """
         if not really:
             logger.warning("Not deleting all collections, set really=True to confirm")
@@ -77,9 +97,9 @@ class PineconeDB(VectorStore):
             return 0
         n_empty_deletes, n_non_empty_deletes = 0, 0
         for index_desc in indexes:
-            if self.delete_collection(collection_name=index_desc.name):
-                n_empty_deletes += index_desc.total_vector_count == 0
-                n_non_empty_deletes += index_desc.total_vector_count > 0
+            self.delete_collection(collection_name=index_desc.name)
+            n_empty_deletes += index_desc.total_vector_count == 0
+            n_non_empty_deletes += index_desc.total_vector_count > 0
         logger.warning(
             f"""
             Deleted {n_empty_deletes} empty indexes and
@@ -97,9 +117,11 @@ class PineconeDB(VectorStore):
             empty: Optional[bool] - whether to include empty collections
         """
         indexes = self.client.list_indexes()
+        res: List[str] = []
         if empty:
-            return indexes.names()
-        res = []
+            res.extend(indexes.names())
+            return res
+
         for index in indexes.names():
             index_meta = self.client.Index(name=index)
             if index_meta.describe_index_stats().get("total_vector_count", 0) > 0:
@@ -136,7 +158,9 @@ class PineconeDB(VectorStore):
         try:
             index = self.client.Index(name=index_name)
             stats = index.describe_index_stats()
-            return IndexMeta(name=index_name, total_vector_count=stats.get("total_vector_count", 0))
+            return IndexMeta(
+                name=index_name, total_vector_count=stats.get("total_vector_count", 0)
+            )
         except PineconeApiException as e:
             logger.warning(f"Error fetching details for index {index_name}")
             logger.warning(e)
@@ -154,7 +178,9 @@ class PineconeDB(VectorStore):
         """
         pattern = re.compile(r"^[a-z0-9-]+$")
         if not pattern.match(collection_name):
-            raise ValueError("Pinecone index names must be lowercase alphanumeric characters or '-'")
+            raise ValueError(
+                "Pinecone index names must be lowercase alphanumeric characters or '-'"
+            )
         self.config.collection_name = collection_name
         if collection_name in self.list_collections(empty=True):
             index = self.client.Index(name=collection_name)
@@ -167,16 +193,14 @@ class PineconeDB(VectorStore):
                     return
                 else:
                     logger.warning("Recreating fresh collection")
-            if not self.delete_collection(collection_name=collection_name):
-                logger.error("Failed to delete creation with forced replacement")
-                return
+            self.delete_collection(collection_name=collection_name)
 
         payload = {
             "name": collection_name,
             "dimension": self.config.dimension,
             "spec": self.config.spec,
             "metric": self.config.metric,
-            "timeout": self.config.timeout
+            "timeout": self.config.timeout,
         }
 
         if self.config.deletion_protection:
@@ -187,15 +211,13 @@ class PineconeDB(VectorStore):
         except PineconeApiException as e:
             logger.error(e)
 
-    def delete_collection(self, collection_name: str) -> bool:
+    def delete_collection(self, collection_name: str) -> None:
         logger.info(f"Attempting to delete {collection_name}")
         try:
             self.client.delete_index(name=collection_name)
-            return True
         except PineconeApiException as e:
             logger.error(f"Failed to delete {collection_name}")
             logger.error(e)
-            return False
 
     def add_documents(self, documents: Sequence[Document], namespace: str = "") -> None:
         if self.config.collection_name is None:
@@ -215,15 +237,22 @@ class PineconeDB(VectorStore):
                 "values": embedding_vector,
                 "metadata": {
                     **document_dict["metadata"],
-                    **{key: value for key,value in document_dict.items() if key != "metadata"},
-                }
+                    **{
+                        key: value
+                        for key, value in document_dict.items()
+                        if key != "metadata"
+                    },
+                },
             }
-            for document_dict, document_id, embedding_vector
-            in zip(document_dicts, document_ids, embedding_vectors)
+            for document_dict, document_id, embedding_vector in zip(
+                document_dicts, document_ids, embedding_vectors
+            )
         ]
 
         if self.config.collection_name not in self.list_collections(empty=True):
-            self.create_collection(collection_name=self.config.collection_name, replace=True)
+            self.create_collection(
+                collection_name=self.config.collection_name, replace=True
+            )
 
         index = self.client.Index(name=self.config.collection_name)
         batch_size = self.config.batch_size
@@ -235,13 +264,18 @@ class PineconeDB(VectorStore):
                 else:
                     index.upsert(vectors=vectors[i:batch_size])
             except PineconeApiException as e:
-                logger.error(f"Unable to add batch of documents between indices {i} and {batch_size}")
+                logger.error(
+                    f"Unable to add of docs between indices {i} and {batch_size}"
+                )
                 logger.error(e)
 
-    def get_all_documents(self, prefix: str = "", namespace: str = "") -> List[Document]:
+    def get_all_documents(
+        self, prefix: str = "", namespace: str = ""
+    ) -> List[Document]:
         """
         Returns:
-            All documents for the collection currently defined in the configuration object
+            All documents for the collection currently defined in
+            the configuration object
 
         Args:
             prefix: str - document id prefix to search for
@@ -251,7 +285,9 @@ class PineconeDB(VectorStore):
             raise ValueError("No collection name set, cannot retrieve docs")
         docs = []
 
-        request_filters = {"limit": self.config.pagination_size}
+        request_filters: Dict[str, Union[str, int]] = {
+            "limit": self.config.pagination_size
+        }
         if prefix:
             request_filters["prefix"] = prefix
         if namespace:
@@ -264,16 +300,18 @@ class PineconeDB(VectorStore):
             vectors = response.get("vectors", [])
 
             if not vectors:
-                logger.warning("Received empty response list when requesting for vector ids, halting fetch requests")
+                logger.warning("Received empty list while requesting for vector ids")
+                logger.warning("Halting fetch requests")
                 if settings.debug:
                     logger.debug(f"Request for failed fetch was: {request_filters}")
                 break
 
-            get_request = {"ids": [vector.get("id") for vector in vectors]}
-
-            if namespace:
-                get_request["namespace"] = namespace
-            docs.extend(self.get_documents_by_ids(**get_request))
+            docs.extend(
+                self.get_documents_by_ids(
+                    ids=[vector.get("id") for vector in vectors],
+                    namespace=namespace if namespace else "",
+                )
+            )
 
             pagination_token = response.get("pagination", {}).get("next", None)
 
@@ -284,7 +322,9 @@ class PineconeDB(VectorStore):
 
         return docs
 
-    def get_documents_by_ids(self, ids: List[str], namespace: str = "") -> List[Document]:
+    def get_documents_by_ids(
+        self, ids: List[str], namespace: str = ""
+    ) -> List[Document]:
         """
         Returns:
             Fetches document text embedded in Pinecone index metadata
@@ -306,8 +346,7 @@ class PineconeDB(VectorStore):
         ordered_payloads = [id_mapping[_id] for _id in ids if _id in id_mapping]
         return [
             self.transform_pinecone_vector(payload.get("metadata", {}))
-            for payload
-            in ordered_payloads
+            for payload in ordered_payloads
         ]
 
     def similar_texts_with_scores(
@@ -315,13 +354,15 @@ class PineconeDB(VectorStore):
         text: str,
         k: int = 1,
         where: Optional[str] = None,
-        namespace: Optional[str] = None
+        namespace: Optional[str] = None,
     ) -> List[Tuple[Document, float]]:
         if self.config.collection_name is None:
             raise ValueError("No collection name set, cannot search")
 
         if k < 1 or k > 9999:
-            raise ValueError(f"TopK for Pinecone vector search must be between 1 < k < 10000, k was {k}")
+            raise ValueError(
+                f"TopK for Pinecone vector search must be 1 < k < 10000, k was {k}"
+            )
 
         vector_search_request = {
             "top_k": k,
@@ -338,7 +379,7 @@ class PineconeDB(VectorStore):
         doc_score_pairs = [
             (
                 self.transform_pinecone_vector(match.get("metadata", {})),
-                match.get("score", 0)
+                match.get("score", 0),
             )
             for match in response.get("matches", [])
         ]
@@ -348,7 +389,7 @@ class PineconeDB(VectorStore):
         self.show_if_debug(doc_score_pairs)
         return doc_score_pairs
 
-    def transform_pinecone_vector(self, metadata_dict: Dict) -> Document:
+    def transform_pinecone_vector(self, metadata_dict: Dict[str, Any]) -> Document:
         """
         Parses the metadata response from the Pinecone vector query and
         formats it into a dictionary that can be parsed by the Document class
@@ -358,6 +399,9 @@ class PineconeDB(VectorStore):
             Well formed dictionary object to be transformed into a Document
 
         Args:
-            metadata_dict: Dict - the metadata dictionary from the Pinecone vector query match
+            metadata_dict: Dict - the metadata dictionary from the Pinecone
+                vector query match
         """
-        return self.config.document_class(**{**metadata_dict, "metadata": {**metadata_dict}})
+        return self.config.document_class(
+            **{**metadata_dict, "metadata": {**metadata_dict}}
+        )
