@@ -531,10 +531,11 @@ class DoclingParser(DocumentParser):
         doc = result.document
         n_pages = doc.num_pages()  # type: ignore
         for i in range(n_pages):
-            texts = []
-            for item in doc.iterate_items(page_no=i + 1):
-                if isinstance(item[0], TextItem):
-                    texts.append(item[0].text)
+            texts = [
+                item[0].text
+                for item in doc.iterate_items(page_no=i + 1)
+                if isinstance(item[0], TextItem)
+            ]
             text = "\n".join(texts)
             yield i, text
 
