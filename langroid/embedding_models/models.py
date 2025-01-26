@@ -18,17 +18,17 @@ AzureADTokenProvider = Callable[[], str]
 
 class OpenAIEmbeddingsConfig(EmbeddingModelsConfig):
     model_type: str = "openai"
-    model_name: str = "text-embedding-ada-002"
+    model_name: str = "text-embedding-3-large"
     api_key: str = ""
     api_base: Optional[str] = None
     organization: str = ""
-    dims: int = 1536
+    dims: int = 3072
     context_length: int = 8192
 
 
 class AzureOpenAIEmbeddingsConfig(EmbeddingModelsConfig):
     model_type: str = "azure-openai"
-    model_name: str = "text-embedding-ada-002"
+    model_name: str = "text-embedding-3-large"
     api_key: str = ""
     api_base: str = ""
     deployment_name: Optional[str] = None
