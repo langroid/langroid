@@ -310,9 +310,9 @@ def extract_numbered_segments(s: str, specs: str) -> str:
         ]
 
         # If we extracted any segments from this paragraph,
-        # join them and append to results
+        # join them with ellipsis (...) and append to results.
         if extracted_segments:
-            extracted_paragraphs.append(" ".join(extracted_segments))
+            extracted_paragraphs.append("...".join(extracted_segments))
 
     return "\n\n".join(extracted_paragraphs)
 
