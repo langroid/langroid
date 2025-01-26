@@ -100,7 +100,7 @@ hf_embed_config = SentenceTransformerEmbeddingsConfig(
 
 oai_embed_config = OpenAIEmbeddingsConfig(
     model_type="openai",
-    model_name="text-embedding-ada-002",
+    model_name="text-embedding-3-small",
     dims=1536,
 )
 

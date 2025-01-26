@@ -11,7 +11,7 @@ def test_openai_embeddings():
     load_dotenv(find_dotenv(usecwd=True))
     openai_cfg = OpenAIEmbeddingsConfig(
         model_type="openai",
-        model_name="text-embedding-ada-002",
+        model_name="text-embedding-3-small",
         dims=1536,
     )
 
@@ -26,8 +26,8 @@ def test_azure_openai_embeddings():
     load_dotenv(find_dotenv(usecwd=True))
     azure_openai_cfg = AzureOpenAIEmbeddingsConfig(
         model_type="azure-openai",
-        model_name="text-embedding-ada-002",
-        deployment_name="text-embedding-ada-002",
+        model_name="text-embedding-3-small",
+        deployment_name="text-embedding-3-small",
         dims=1536,
     )
     azure_openai_model = EmbeddingModel.create(azure_openai_cfg)

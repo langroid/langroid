@@ -51,7 +51,7 @@ class ParsingConfig(BaseSettings):
     n_similar_docs: int = 4
     n_neighbor_ids: int = 5  # window size to store around each chunk
     separators: List[str] = ["\n\n", "\n", " ", ""]
-    token_encoding_model: str = "text-embedding-large-3"
+    token_encoding_model: str = "text-embedding-3-large"
     pdf: PdfParsingConfig = PdfParsingConfig()
     docx: DocxParsingConfig = DocxParsingConfig()
     doc: DocParsingConfig = DocParsingConfig()
@@ -63,7 +63,7 @@ class Parser:
         try:
             self.tokenizer = tiktoken.encoding_for_model(config.token_encoding_model)
         except Exception:
-            self.tokenizer = tiktoken.encoding_for_model("text-embedding-ada-002")
+            self.tokenizer = tiktoken.encoding_for_model("text-embedding-3-small")
 
     def num_tokens(self, text: str) -> int:
         tokens = self.tokenizer.encode(text)

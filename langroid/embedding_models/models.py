@@ -22,7 +22,7 @@ class OpenAIEmbeddingsConfig(EmbeddingModelsConfig):
     api_key: str = ""
     api_base: Optional[str] = None
     organization: str = ""
-    dims: int = 3072
+    dims: int = 1536
     context_length: int = 8192
 
 
