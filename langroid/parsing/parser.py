@@ -267,9 +267,11 @@ class Parser:
                 # Truncate the chunk text at the punctuation mark
                 chunk_text = chunk_text[: last_punctuation + 1]
 
-            # Remove any newline characters and strip any leading or
-            # trailing whitespace
-            chunk_text_to_append = re.sub(r"\n{2,}", "\n", chunk_text).strip()
+            # Replace redundant (3 or more) newlines with 2 newlines to preser
+            # paragraph separation!
+            # But do NOT strip leading/trailing whitespace, to preserve formatting
+            # (e.g. code blocks, or in case we want to stitch chunks back together)
+            chunk_text_to_append = re.sub(r"\n{3,}", "\n\n", chunk_text)
 
             if len(chunk_text_to_append) > self.config.discard_chunk_chars:
                 # Append the chunk text to the list of chunks
