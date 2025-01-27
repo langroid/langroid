@@ -27,7 +27,7 @@ from langroid.embedding_models.base import (
     EmbeddingModelsConfig,
 )
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
-from langroid.mytypes import Document, EmbeddingFunction, Embeddings
+from langroid.mytypes import Document, Embeddings
 from langroid.utils.configuration import settings
 from langroid.vector_store.base import VectorStore, VectorStoreConfig
 
@@ -77,8 +77,6 @@ class QdrantDB(VectorStore):
     def __init__(self, config: QdrantDBConfig = QdrantDBConfig()):
         super().__init__(config)
         self.config: QdrantDBConfig = config
-        self.embedding_fn: EmbeddingFunction = self.embedding_model.embedding_fn()
-        self.embedding_dim = self.embedding_model.embedding_dims
         if self.config.use_sparse_embeddings:
             try:
                 from transformers import AutoModelForMaskedLM, AutoTokenizer

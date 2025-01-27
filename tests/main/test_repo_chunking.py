@@ -18,7 +18,7 @@ def test_repo_chunking():
     parse_cfg = CodeParsingConfig(
         chunk_size=MAX_CHUNK_SIZE,
         extensions=["py", "sh", "md", "txt"],  # include text, code
-        token_encoding_model="text-embedding-ada-002",
+        token_encoding_model="text-embedding-3-small",
     )
 
     parser = CodeParser(parse_cfg)

@@ -1,6 +1,6 @@
 [project]
 name = "langroid"
-version = "0.36.0"
+version = "0.37.4"
 authors = [
     {name = "Prasad Chalasani", email = "pchalasani@gmail.com"},
 ]
@@ -15,6 +15,7 @@ dependencies = [
     "bs4<1.0.0,>=0.0.1",
     "cerebras-cloud-sdk<2.0.0,>=1.1.0",
     "colorlog<7.0.0,>=6.7.0",
+    "docling<3.0.0,>=2.16.0",
     "docstring-parser<1.0,>=0.16",
     "duckduckgo-search<7.0.0,>=6.0.0",
     "faker<19.0.0,>=18.9.0",
@@ -35,9 +36,10 @@ dependencies = [
     "openai<2.0.0,>=1.45.0",
     "pandas<3.0.0,>=2.0.3",
     "prettytable<4.0.0,>=3.8.0",
-    "pydantic<2.10.2,>=1",
+    "pydantic<3.0.0,>=1",
     "pygithub<2.0.0,>=1.58.1",
     "pygments<3.0.0,>=2.15.1",
+    "pymupdf4llm<0.1.0,>=0.0.17",
     "pyparsing<4.0.0,>=3.0.9",
     "pytest-rerunfailures<16.0,>=15.0",
     "python-dotenv>=1.0.0,<2.0.0",
@@ -58,20 +60,21 @@ dependencies = [
 
 [project.optional-dependencies]
 doc-chat = [
+    "docling<3.0.0,>=2.16.0",
     "pdf2image<2.0.0,>=1.17.0",
-    "pdfplumber<0.11.0,>=0.10.2",
+    "pymupdf4llm<0.1.0,>=0.0.17",
     "pymupdf<2.0.0,>=1.23.3",
     "pypdf>=5.1.0",
     "pytesseract<0.4.0,>=0.3.10",
     "python-docx<2.0.0,>=1.1.0",
-    "unstructured[docx,pdf,pptx]<0.10.18,>=0.10.16",
+    "unstructured[docx,pdf,pptx]<1.0.0,>=0.16.15",
 ]
 
 hf-transformers = [
     "sentence-transformers<3.0.0,>=2.2.2",
     "torch<3.0.0,>=2.0.0",
     "transformers<5.0.0,>=4.40.1",
-    "huggingface-hub<0.22.0,>=0.21.2",
+    "huggingface-hub<1.0.0,>=0.21.2",    
 ]
 
 vecdbs = [
@@ -91,19 +94,20 @@ db = [
 
 all = [
     "pdf2image<2.0.0,>=1.17.0",
-    "pdfplumber<0.11.0,>=0.10.2",
     "pymupdf<2.0.0,>=1.23.3",
+    "pymupdf4llm<0.1.0,>=0.0.17",
+    "docling<3.0.0,>=2.16.0",
     "pypdf>=5.1.0",
     "pytesseract<0.4.0,>=0.3.10",
     "python-docx<2.0.0,>=1.1.0",
-    "unstructured[docx,pdf,pptx]<0.10.18,>=0.10.16",
+    "unstructured[docx,pdf,pptx]<1.0.0,>=0.16.15",
     "sqlalchemy<3.0.0,>=2.0.19",
     "psycopg2<3.0.0,>=2.9.7",
     "pymysql<2.0.0,>=1.1.0",
     "sentence-transformers<3.0.0,>=2.2.2",
     "torch<3.0.0,>=2.0.0",
     "transformers<5.0.0,>=4.40.1",
-    "huggingface-hub<0.22.0,>=0.21.2",
+    "huggingface-hub<1.0.0,>=0.21.2",
     "chromadb<=0.4.23,>=0.4.21",
     "weaviate-client>=4.9.6",
     "metaphor-python<0.2.0,>=0.1.23",
@@ -123,10 +127,19 @@ lancedb = [
     "pyarrow<16.0.0,>=15.0.0",
 ]
 
+docling = [
+    "docling<3.0.0,>=2.16.0",
+]
+
+pymupdf4llm = [
+    "pymupdf4llm<0.1.0,>=0.0.17",
+]
+
 pdf-parsers = [
-    "pdfplumber<0.11.0,>=0.10.2",
+    "docling<3.0.0,>=2.16.0",
     "pypdf>=5.1.0",
     "pymupdf<2.0.0,>=1.23.3",
+    "pymupdf4llm<0.1.0,>=0.0.17",
     "pdf2image<2.0.0,>=1.17.0",
     "pytesseract<0.4.0,>=0.3.10",
 ]
@@ -146,12 +159,12 @@ hf-embeddings = [
 
 transformers = [
     "transformers<5.0.0,>=4.40.1",
-    "huggingface-hub<0.22.0,>=0.21.2",
+    "huggingface-hub<1.0.0,>=0.21.2",
     "torch<3.0.0,>=2.0.0",
 ]
 
 unstructured = [
-    "unstructured[docx,pdf,pptx]<0.10.18,>=0.10.16",
+    "unstructured[docx,pdf,pptx]<1.0.0,>=0.16.15",
 ]
 
 postgres = [

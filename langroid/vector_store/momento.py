@@ -37,7 +37,7 @@ from langroid.embedding_models.base import (
     EmbeddingModelsConfig,
 )
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
-from langroid.mytypes import Document, EmbeddingFunction
+from langroid.mytypes import Document
 from langroid.utils.configuration import settings
 from langroid.utils.pydantic_utils import (
     flatten_pydantic_instance,
@@ -61,8 +61,6 @@ class MomentoVI(VectorStore):
             raise LangroidImportError("momento", "momento")
         self.distance = SimilarityMetric.COSINE_SIMILARITY
         self.config: MomentoVIConfig = config
-        self.embedding_fn: EmbeddingFunction = self.embedding_model.embedding_fn()
-        self.embedding_dim = self.embedding_model.embedding_dims
         self.host = config.host
         self.port = config.port
         load_dotenv()

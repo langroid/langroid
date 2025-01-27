@@ -1091,6 +1091,16 @@ def test_enrichments_integration(vecdb: VectorStore) -> None:
         )
     )
     agent.vecdb = vecdb
+    agent.augment_system_message(
+        """
+        
+        You are an expert in medical tests, well-versed in 
+        test names and which organs they are associated with.
+        
+        You must answer questions based on the provided document-extracts,
+        combined with your medical knowledge.
+        """
+    )
     # clear existing docs
     agent.clear()
     agent.ingest_docs(sample_docs)
