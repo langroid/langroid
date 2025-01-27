@@ -13,9 +13,7 @@ except ImportError:
 from langroid.exceptions import LangroidImportError
 
 if fitz is None:
-    raise LangroidImportError(
-        "fitz", ["pymupdf", "docling", "all", "pdf-parsers", "doc-chat"]
-    )
+    raise LangroidImportError("fitz", ["pymupdf", "all", "pdf-parsers", "doc-chat"])
 
 
 def pdf_split_pages(
@@ -24,7 +22,7 @@ def pdf_split_pages(
     """Splits a PDF into individual pages in a temporary directory.
 
     Args:
-        input_pdf: Input PDF file path or file-like object
+        input_pdf: Input PDF file in bytes or binary mode
         max_workers: Maximum number of concurrent workers for parallel processing
 
     Returns:

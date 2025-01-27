@@ -3,12 +3,13 @@ from __future__ import annotations
 import itertools
 import logging
 import re
+import tempfile
 from enum import Enum
 from io import BytesIO
+from itertools import accumulate
 from typing import TYPE_CHECKING, Any, Dict, Generator, List, Tuple
 
 from langroid.exceptions import LangroidImportError
-from langroid.parsing.pdf_utils import pdf_split_pages
 from langroid.utils.object_registry import ObjectRegistry
 
 try:
@@ -511,22 +512,6 @@ class DoclingParser(DocumentParser):
         Returns:
             Generator[docling.Page]: Generator yielding each page.
         """
-
-        page_files, tmp_dir = pdf_split_pages(self.doc_bytes)
-        for i, page_file in enumerate(page_files):
-            yield i, page_file
-        tmp_dir.cleanup()
-
-    def get_document_from_page(self, page_file: str) -> Document:
-        """
-        Get Document object from a given 1-page file-path
-
-        Args:
-            page (docling.chunking.DocChunk): The `docling` chunk
-
-        Returns:
-            Document: Document object, with content and possible metadata.
-        """
         if docling is None:
             raise LangroidImportError(
                 "docling", ["docling", "pdf-parsers", "all", "doc-chat"]
@@ -539,10 +524,44 @@ class DoclingParser(DocumentParser):
         from docling_core.types.doc import ImageRefMode  # type: ignore
 
         converter = DocumentConverter()
-        result: ConversionResult = converter.convert(page_file)
-        md_text = result.document.export_to_markdown(image_mode=ImageRefMode.REFERENCED)
+        doc_path = self.source
+        if doc_path == "bytes":
+            # write to tmp file, then use that path
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_file:
+                temp_file.write(self.doc_bytes.getvalue())
+                doc_path = temp_file.name
+
+        result: ConversionResult = converter.convert(doc_path)
+
+        def n_page_elements(page) -> int:  # type: ignore
+            if page.assembled is None:
+                return 0
+            return 1 + len(page.assembled.elements)
+
+        page_element_count = [n_page_elements(i) for i in result.pages]
+        element_page_cutoff = list(accumulate([1] + page_element_count))
+        for i, page in enumerate(result.pages):
+            page_start = element_page_cutoff[i]
+            page_end = element_page_cutoff[i + 1]
+            page_str = result.document.export_to_markdown(
+                from_element=page_start,
+                to_element=page_end,
+                image_mode=ImageRefMode.REFERENCED,
+            )
+            yield i, page_str
+
+    def get_document_from_page(self, page: str) -> Document:
+        """
+        Get Document object from a given 1-page markdown text
+
+        Args:
+            page (str): The markdown text for the page.
+
+        Returns:
+            Document: Document object, with content and possible metadata.
+        """
         return Document(
-            content=self.fix_text(md_text),
+            content=self.fix_text(page),
             metadata=DocMetaData(source=self.source),
         )
 
