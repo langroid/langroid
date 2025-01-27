@@ -1,4 +1,4 @@
-from typing import Optional
+from typing import List, Optional
 
 
 class XMLException(Exception):
@@ -15,7 +15,7 @@ class LangroidImportError(ImportError):
     def __init__(
         self,
         package: Optional[str] = None,
-        extra: Optional[str] = None,
+        extra: Optional[str | List[str]] = None,
         error: str = "",
         *args: object,
     ) -> None:
@@ -33,9 +33,21 @@ class LangroidImportError(ImportError):
             error = f"{package} is not installed by default with Langroid.\n"
 
         if extra:
+            if isinstance(extra, list):
+                help_preamble = f"""
+                If you want to use it, please install langroid with one of these 
+                extras: {', '.join(extra)}. The examples below use the first one, 
+                i.e. {extra[0]}.
+                """
+                extra = extra[0]
+            else:
+                help_preamble = f"""
+                If you want to use it, please install langroid with the
+                `{extra}` extra.
+                """
+
             install_help = f"""
-                If you want to use it, please install langroid 
-                with the `{extra}` extra, for example:
+                {help_preamble}
                 
                 If you are using pip:
                 pip install "langroid[{extra}]"

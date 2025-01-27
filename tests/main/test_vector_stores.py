@@ -174,7 +174,7 @@ def vecdb(request) -> VectorStore:
 # add "momento" when their API docs are ready
 @pytest.mark.parametrize(
     "vecdb",
-    ["lancedb", "chroma", "qdrant_cloud", "qdrant_local", "weaviate_cloud"],
+    ["qdrant_cloud", "chroma", "weaviate_cloud", "lancedb", "qdrant_local"],
     indirect=True,
 )
 def test_vector_stores_search(
