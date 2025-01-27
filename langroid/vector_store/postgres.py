@@ -55,13 +55,6 @@ class PostgresDB(VectorStore):
         self._setup_table()
 
     def _create_engine(self) -> Engine:
-        try:
-            from pgvector.sqlalchemy import Vector
-        except ImportError:
-            raise ImportError(
-                "pgvector is not installed. "
-                "Please install it with `pip install pgvector`."
-            )
         if self.config.docker:
             username = os.getenv("POSTGRES_USER", "postgres")
             password = os.getenv("POSTGRES_PASSWORD", "postgres")
@@ -257,9 +250,19 @@ class PostgresDB(VectorStore):
     def get_all_documents(self, where: str = "") -> List[Document]:
         with self.SessionLocal() as session:
             query = session.query(self.embeddings_table)
-            # Placeholder for future implementation of the 'where' clause
-            results = query.all()
 
+            # Apply 'where' clause if provided
+            if where:
+                try:
+                    where_json = json.loads(where)
+                    query = query.filter(
+                        self.embeddings_table.c.cmetadata.contains(where_json)
+                    )
+                except json.JSONDecodeError:
+                    logger.error(f"Invalid JSON in 'where' clause: {where}")
+                    return []  # Return empty list or handle error as appropriate
+
+            results = query.all()
             documents = [
                 Document(**self._parse_embedding_store_record(res)) for res in results
             ]

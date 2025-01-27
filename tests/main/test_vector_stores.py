@@ -288,14 +288,22 @@ def test_vector_stores_access(vecdb):
     docs_and_scores = vecdb.similar_texts_with_scores("cow", k=1)
     assert len(docs_and_scores) == 1
     assert docs_and_scores[0][0].content == "cow"
-
-    coll_names = [f"Test_junk_{i}" for i in range(3)]
-    for coll in coll_names:
-        vecdb.create_collection(collection_name=coll)
-    n_colls = len(
-        [c for c in vecdb.list_collections(empty=True) if c.startswith("Test_junk")]
-    )
-    n_dels = vecdb.clear_all_collections(really=True, prefix="Test_junk")
+    if isinstance(vecdb, WeaviateDB):
+        coll_names = [f"Test_junk_{i}" for i in range(3)]
+        for coll in coll_names:
+            vecdb.create_collection(collection_name=coll)
+        n_colls = len(
+            [c for c in vecdb.list_collections(empty=True) if c.startswith("Test_junk")]
+        )
+        n_dels = vecdb.clear_all_collections(really=True, prefix="Test_junk")
+    else:
+        coll_names = [f"test_junk_{i}" for i in range(3)]
+        for coll in coll_names:
+            vecdb.create_collection(collection_name=coll)
+        n_colls = len(
+            [c for c in vecdb.list_collections(empty=True) if c.startswith("test_junk")]
+        )
+        n_dels = vecdb.clear_all_collections(really=True, prefix="test_junk")
     # LanceDB.create_collection() does nothing, since we can't create a table
     # without a schema or data.
     assert n_colls == n_dels == (0 if isinstance(vecdb, LanceDB) else len(coll_names))
