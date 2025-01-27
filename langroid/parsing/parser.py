@@ -51,7 +51,7 @@ class ParsingConfig(BaseSettings):
     n_similar_docs: int = 4
     n_neighbor_ids: int = 5  # window size to store around each chunk
     separators: List[str] = ["\n\n", "\n", " ", ""]
-    token_encoding_model: str = "text-embedding-3-large"
+    token_encoding_model: str = "text-embedding-3-small"
     pdf: PdfParsingConfig = PdfParsingConfig()
     docx: DocxParsingConfig = DocxParsingConfig()
     doc: DocParsingConfig = DocParsingConfig()

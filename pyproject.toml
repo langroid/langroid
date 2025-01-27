@@ -128,7 +128,6 @@ lancedb = [
 
 docling = [
     "docling<3.0.0,>=2.16.0",
-    "pypdf>=5.1.0", # needed to split pdf into pages, then use docling
 ]
 
 pymupdf4llm = [

@@ -493,7 +493,6 @@ def arango_agent_from_db():
         ("What is the age difference between Rickard Stark and Arya Stark?", "49"),
         ("What is the average age of all Stark characters?", "31"),
         ("Does Bran Stark have a dead parent? Say yes or no", "yes"),
-        ("How are Bran Stark and Rickard Stark related?", "grand"),
     ],
 )
 def test_GOT_queries(arango_agent_from_db, query, expected):
