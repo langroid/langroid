@@ -56,7 +56,7 @@ def test_get_pdf_doc_url(source, pdflib: str):
 
 @pytest.mark.parametrize("source", ["path", "bytes"])
 @pytest.mark.parametrize(
-    "pdflib", ["docling", "fitz", "pypdf", "unstructured", "pymupdf4llm"]
+    "pdflib", ["unstructured", "docling", "fitz", "pypdf", "pymupdf4llm"]
 )
 def test_get_pdf_doc_path(source, pdflib: str):
     current_dir = os.path.dirname(os.path.abspath(__file__))

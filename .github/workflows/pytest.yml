@@ -131,8 +131,8 @@ jobs:
       
     
 
-    - name: Download NLTK data
-      run: uv run python -c "import nltk; nltk.download('punkt_tab')"
+    - name: Download ALL NLTK data (needed by unstructured and others)
+      run: uv run python -c "import nltk; nltk.download('all')"
 
     - name: Dump dependencies to file
       run: uv pip freeze > requirements_github.txt
