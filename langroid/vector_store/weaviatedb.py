@@ -43,8 +43,8 @@ class WeaviateDB(VectorStore):
         load_dotenv()
         key = os.getenv("WEAVIATE_API_KEY")
         url = os.getenv("WEAVIATE_API_URL")
-        if None in [key, url]:
-            logger.warning(
+        if url is None or key is None:
+            raise ValueError(
                 """WEAVIATE_API_KEY, WEAVIATE_API_URL env variable must be set to use
                 WeaviateDB in cloud mode. Please set these values
                 in your .env file.
@@ -130,9 +130,9 @@ class WeaviateDB(VectorStore):
         vector_index_config = Configure.VectorIndex.hnsw(
             distance_metric=VectorDistances.COSINE,
         )
-        if self.config.embedding == OpenAIEmbeddingsConfig:
+        if isinstance(self.config.embedding, OpenAIEmbeddingsConfig):
             vectorizer_config = Configure.Vectorizer.text2vec_openai(
-                model=self.embedding_model
+                model=self.config.embedding.model_name,
             )
         else:
             vectorizer_config = None
@@ -212,7 +212,7 @@ class WeaviateDB(VectorStore):
             return_metadata=MetadataQuery(distance=True),
         )
         return [
-            (self.weaviate_obj_to_doc(item), 1 - item.metadata.distance)
+            (self.weaviate_obj_to_doc(item), 1 - (item.metadata.distance or 1))
             for item in response.objects
         ]
 

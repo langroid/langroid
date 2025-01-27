@@ -23,11 +23,12 @@ class Splitter(str, Enum):
 class PdfParsingConfig(BaseSettings):
     library: Literal[
         "fitz",
-        "pdfplumber",
+        "pymupdf4llm",
+        "docling",
         "pypdf",
         "unstructured",
         "pdf2image",
-    ] = "pdfplumber"
+    ] = "pymupdf4llm"
 
 
 class DocxParsingConfig(BaseSettings):
@@ -40,6 +41,7 @@ class DocParsingConfig(BaseSettings):
 
 class ParsingConfig(BaseSettings):
     splitter: str = Splitter.TOKENS
+    chunk_by_page: bool = False  # split by page?
     chunk_size: int = 200  # aim for this many tokens per chunk
     overlap: int = 50  # overlap between chunks
     max_chunks: int = 10_000
@@ -49,7 +51,7 @@ class ParsingConfig(BaseSettings):
     n_similar_docs: int = 4
     n_neighbor_ids: int = 5  # window size to store around each chunk
     separators: List[str] = ["\n\n", "\n", " ", ""]
-    token_encoding_model: str = "text-embedding-ada-002"
+    token_encoding_model: str = "text-embedding-3-large"
     pdf: PdfParsingConfig = PdfParsingConfig()
     docx: DocxParsingConfig = DocxParsingConfig()
     doc: DocParsingConfig = DocParsingConfig()
@@ -61,7 +63,7 @@ class Parser:
         try:
             self.tokenizer = tiktoken.encoding_for_model(config.token_encoding_model)
         except Exception:
-            self.tokenizer = tiktoken.encoding_for_model("text-embedding-ada-002")
+            self.tokenizer = tiktoken.encoding_for_model("text-embedding-3-small")
 
     def num_tokens(self, text: str) -> int:
         tokens = self.tokenizer.encode(text)
@@ -267,9 +269,11 @@ class Parser:
                 # Truncate the chunk text at the punctuation mark
                 chunk_text = chunk_text[: last_punctuation + 1]
 
-            # Remove any newline characters and strip any leading or
-            # trailing whitespace
-            chunk_text_to_append = re.sub(r"\n{2,}", "\n", chunk_text).strip()
+            # Replace redundant (3 or more) newlines with 2 newlines to preser
+            # paragraph separation!
+            # But do NOT strip leading/trailing whitespace, to preserve formatting
+            # (e.g. code blocks, or in case we want to stitch chunks back together)
+            chunk_text_to_append = re.sub(r"\n{3,}", "\n\n", chunk_text)
 
             if len(chunk_text_to_append) > self.config.discard_chunk_chars:
                 # Append the chunk text to the list of chunks

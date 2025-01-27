@@ -1,6 +1,6 @@
 import json
 import logging
-from typing import Any, Dict, List, Optional, Sequence, Tuple
+from typing import Any, Dict, List, Literal, Optional, Sequence, Tuple
 
 from langroid.embedding_models.base import (
     EmbeddingModelsConfig,
@@ -18,6 +18,10 @@ logger = logging.getLogger(__name__)
 class ChromaDBConfig(VectorStoreConfig):
     collection_name: str = "temp"
     storage_path: str = ".chroma/data"
+    distance: Literal["cosine", "l2", "ip"] = "cosine"
+    construction_ef: int = 100
+    search_ef: int = 100
+    max_neighbors: int = 16
     embedding: EmbeddingModelsConfig = OpenAIEmbeddingsConfig()
     host: str = "127.0.0.1"
     port: int = 6333
@@ -109,6 +113,13 @@ class ChromaDB(VectorStore):
             name=self.config.collection_name,
             embedding_function=self.embedding_fn,
             get_or_create=not replace,
+            metadata={
+                "hnsw:space": self.config.distance,
+                "hnsw:construction_ef": self.config.construction_ef,
+                "hnsw:search_ef": self.config.search_ef,
+                # we could expose other configs, see:
+                # https://docs.trychroma.com/docs/collections/configure
+            },
         )
 
     def add_documents(self, documents: Sequence[Document]) -> None:

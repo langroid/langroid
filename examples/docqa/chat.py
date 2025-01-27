@@ -107,8 +107,9 @@ def main(
             # NOTE: PDF parsing is extremely challenging, each library has its own
             # strengths and weaknesses. Try one that works for your use case.
             pdf=PdfParsingConfig(
-                # alternatives: "unstructured", "pdfplumber", "fitz"
-                library="fitz",
+                # see here for possible values:
+                # https://github.com/langroid/langroid/blob/main/langroid/parsing/parser.py
+                library="pymupdf4llm",
             ),
         ),
     )

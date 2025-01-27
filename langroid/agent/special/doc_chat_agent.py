@@ -15,6 +15,7 @@ pip install "langroid[hf-embeddings]"
 """
 
 import logging
+import textwrap
 from collections import OrderedDict
 from functools import cache
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, no_type_check
@@ -81,7 +82,7 @@ You will be given various passages from these documents, and asked to answer que
 about them, or summarize them into coherent answers.
 """
 
-CHUNK_ENRICHMENT_DELIMITER = "<##-##-##>"
+CHUNK_ENRICHMENT_DELIMITER = "\n<##-##-##>"
 
 has_sentence_transformers = False
 try:
@@ -99,7 +100,7 @@ hf_embed_config = SentenceTransformerEmbeddingsConfig(
 
 oai_embed_config = OpenAIEmbeddingsConfig(
     model_type="openai",
-    model_name="text-embedding-ada-002",
+    model_name="text-embedding-3-small",
     dims=1536,
 )
 
@@ -188,8 +189,8 @@ class DocChatAgentConfig(ChatAgentConfig):
             # NOTE: PDF parsing is extremely challenging, and each library
             # has its own strengths and weaknesses.
             # Try one that works for your use case.
-            # or "unstructured", "pdfplumber", "fitz", "pypdf"
-            library="pdfplumber",
+            # or "unstructured", "fitz", "pymupdf4llm", "pypdf"
+            library="pymupdf4llm",
         ),
     )
 
@@ -810,9 +811,11 @@ class DocChatAgent(ChatAgent):
         return "\n".join(
             [
                 f"""
-                [{i+1}]
+                -----[EXTRACT #{i+1}]----------
                 {content}
                 {source}
+                -----END OF EXTRACT------------
+                
                 """
                 for i, (content, source) in enumerate(zip(contents, sources))
             ]
@@ -949,12 +952,13 @@ class DocChatAgent(ChatAgent):
                     continue
 
                 # Combine original content with questions in a structured way
-                combined_content = f"""
-                {doc.content}
-                
+                combined_content = textwrap.dedent(
+                    f"""\
+                {doc.content}                
                 {enrichment_config.delimiter}
                 {enrichment}
-                """.strip()
+                """
+                )
 
                 new_doc = doc.copy(
                     update={
@@ -1440,7 +1444,7 @@ class DocChatAgent(ChatAgent):
         delimiter = self.config.chunk_enrichment_config.delimiter
         return [
             (
-                doc.copy(update={"content": doc.content.split(delimiter)[0].strip()})
+                doc.copy(update={"content": doc.content.split(delimiter)[0]})
                 if doc.content and getattr(doc.metadata, "has_enrichment", False)
                 else doc
             )
