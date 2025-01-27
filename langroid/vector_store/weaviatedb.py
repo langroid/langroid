@@ -10,7 +10,7 @@ from langroid.embedding_models.base import (
 )
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
 from langroid.exceptions import LangroidImportError
-from langroid.mytypes import DocMetaData, Document, EmbeddingFunction
+from langroid.mytypes import DocMetaData, Document
 from langroid.utils.configuration import settings
 from langroid.vector_store.base import VectorStore, VectorStoreConfig
 
@@ -38,8 +38,6 @@ class WeaviateDB(VectorStore):
     def __init__(self, config: WeaviateDBConfig = WeaviateDBConfig()):
         super().__init__(config)
         self.config: WeaviateDBConfig = config
-        self.embedding_fn: EmbeddingFunction = self.embedding_model.embedding_fn()
-        self.embedding_dim = self.embedding_model.embedding_dims
         load_dotenv()
         key = os.getenv("WEAVIATE_API_KEY")
         url = os.getenv("WEAVIATE_API_URL")
