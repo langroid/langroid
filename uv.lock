@@ -2591,7 +2591,7 @@ sdist = { url = "https://files.pythonhosted.org/packages/0e/72/a3add0e4eec4eb9e2
 
 [[package]]
 name = "langroid"
-version = "0.36.1"
+version = "0.37.0"
 source = { editable = "." }
 dependencies = [
     { name = "adb-cloud-connector" },
@@ -2699,6 +2699,7 @@ doc-chat = [
 ]
 docling = [
     { name = "docling" },
+    { name = "pypdf" },
 ]
 docx = [
     { name = "python-docx" },
@@ -2899,6 +2900,7 @@ requires-dist = [
     { name = "pyparsing", specifier = ">=3.0.9,<4.0.0" },
     { name = "pypdf", marker = "extra == 'all'", specifier = ">=5.1.0" },
     { name = "pypdf", marker = "extra == 'doc-chat'", specifier = ">=5.1.0" },
+    { name = "pypdf", marker = "extra == 'docling'", specifier = ">=5.1.0" },
     { name = "pypdf", marker = "extra == 'pdf-parsers'", specifier = ">=5.1.0" },
     { name = "pytesseract", marker = "extra == 'all'", specifier = ">=0.3.10,<0.4.0" },
     { name = "pytesseract", marker = "extra == 'doc-chat'", specifier = ">=0.3.10,<0.4.0" },
