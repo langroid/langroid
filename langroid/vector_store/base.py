@@ -267,7 +267,7 @@ class VectorStore(ABC):
             metadata = copy.deepcopy(id2metadata[w[0]])
             metadata.window_ids = w
             document = Document(
-                content=" ".join([d.content for d in self.get_documents_by_ids(w)]),
+                content="".join([d.content for d in self.get_documents_by_ids(w)]),
                 metadata=metadata,
             )
             # make a fresh id since content is in general different

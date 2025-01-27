@@ -78,7 +78,7 @@ class QdrantDB(VectorStore):
         super().__init__(config)
         self.config: QdrantDBConfig = config
         self.embedding_fn: EmbeddingFunction = self.embedding_model.embedding_fn()
-        self.embedding_dim = self.embedding_model.embedding_dims
+        self.embedding_dim = len(self.embedding_fn(["test"])[0])
         if self.config.use_sparse_embeddings:
             try:
                 from transformers import AutoModelForMaskedLM, AutoTokenizer
