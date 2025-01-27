@@ -511,6 +511,22 @@ class DoclingParser(DocumentParser):
         Returns:
             Generator[docling.Page]: Generator yielding each page.
         """
+
+        page_files, tmp_dir = pdf_split_pages(self.doc_bytes)
+        for i, page_file in enumerate(page_files):
+            yield i, page_file
+        tmp_dir.cleanup()
+
+    def get_document_from_page(self, page_file: str) -> Document:
+        """
+        Get Document object from a given 1-page file-path
+
+        Args:
+            page (docling.chunking.DocChunk): The `docling` chunk
+
+        Returns:
+            Document: Document object, with content and possible metadata.
+        """
         if docling is None:
             raise LangroidImportError(
                 "docling", ["docling", "pdf-parsers", "all", "doc-chat"]
@@ -522,29 +538,11 @@ class DoclingParser(DocumentParser):
         )
         from docling_core.types.doc import ImageRefMode  # type: ignore
 
-        page_files, tmp_dir = pdf_split_pages(self.doc_bytes)
         converter = DocumentConverter()
-        for i, page_file in enumerate(page_files):
-            result: ConversionResult = converter.convert(page_file)
-            md_text = result.document.export_to_markdown(
-                image_mode=ImageRefMode.REFERENCED
-            )
-            yield i, md_text
-
-        tmp_dir.cleanup()
-
-    def get_document_from_page(self, page: str) -> Document:
-        """
-        Get Document object from a given `docling` "page" (actually a chunk).
-
-        Args:
-            page (docling.chunking.DocChunk): The `docling` chunk
-
-        Returns:
-            Document: Document object, with content and possible metadata.
-        """
+        result: ConversionResult = converter.convert(page_file)
+        md_text = result.document.export_to_markdown(image_mode=ImageRefMode.REFERENCED)
         return Document(
-            content=self.fix_text(page),
+            content=self.fix_text(md_text),
             metadata=DocMetaData(source=self.source),
         )
 
