@@ -3,12 +3,12 @@ from __future__ import annotations
 import itertools
 import logging
 import re
-import tempfile
 from enum import Enum
 from io import BytesIO
 from typing import TYPE_CHECKING, Any, Dict, Generator, List, Tuple
 
 from langroid.exceptions import LangroidImportError
+from langroid.parsing.pdf_utils import pdf_split_pages
 from langroid.utils.object_registry import ObjectRegistry
 
 try:
@@ -515,29 +515,23 @@ class DoclingParser(DocumentParser):
             raise LangroidImportError(
                 "docling", ["docling", "pdf-parsers", "all", "doc-chat"]
             )
-        from docling.datamodel.document import TextItem  # type: ignore
+
         from docling.document_converter import (  # type: ignore
             ConversionResult,
             DocumentConverter,
         )
+        from docling_core.types.doc import ImageRefMode  # type: ignore
 
+        page_files, tmp_dir = pdf_split_pages(self.doc_bytes)
         converter = DocumentConverter()
-        file_path = self.source
-        if file_path == "bytes":
-            with tempfile.NamedTemporaryFile(delete=False) as tmp:
-                tmp.write(self.doc_bytes.getvalue())
-                file_path = tmp.name
-        result: ConversionResult = converter.convert(file_path)
-        doc = result.document
-        n_pages = doc.num_pages()  # type: ignore
-        for i in range(n_pages):
-            texts = [
-                item[0].text
-                for item in doc.iterate_items(page_no=i + 1)
-                if isinstance(item[0], TextItem)
-            ]
-            text = "\n".join(texts)
-            yield i, text
+        for i, page_file in enumerate(page_files):
+            result: ConversionResult = converter.convert(page_file)
+            md_text = result.document.export_to_markdown(
+                image_mode=ImageRefMode.REFERENCED
+            )
+            yield i, md_text
+
+        tmp_dir.cleanup()
 
     def get_document_from_page(self, page: str) -> Document:
         """
