@@ -15,7 +15,6 @@ pip install "langroid[hf-embeddings]"
 """
 
 import logging
-import textwrap
 from collections import OrderedDict
 from functools import cache
 from typing import Any, Callable, Dict, List, Optional, Set, Tuple, no_type_check
@@ -82,7 +81,7 @@ You will be given various passages from these documents, and asked to answer que
 about them, or summarize them into coherent answers.
 """
 
-CHUNK_ENRICHMENT_DELIMITER = "\n<##-##-##>"
+CHUNK_ENRICHMENT_DELIMITER = "\n<##-##-##>\n"
 
 has_sentence_transformers = False
 try:
@@ -805,9 +804,9 @@ class DocChatAgent(ChatAgent):
         Returns:
             str: string representation
         """
-        contents = [f"Extract: {d.content}" for d in docs]
+        contents = [d.content for d in docs]
         sources = [d.metadata.source for d in docs]
-        sources = [f"Source: {s}" if s is not None else "" for s in sources]
+        sources = [f"SOURCE: {s}" if s is not None else "" for s in sources]
         return "\n".join(
             [
                 f"""
@@ -952,12 +951,8 @@ class DocChatAgent(ChatAgent):
                     continue
 
                 # Combine original content with questions in a structured way
-                combined_content = textwrap.dedent(
-                    f"""\
-                {doc.content}                
-                {enrichment_config.delimiter}
-                {enrichment}
-                """
+                combined_content = (
+                    f"{doc.content}{enrichment_config.delimiter}{enrichment}"
                 )
 
                 new_doc = doc.copy(
