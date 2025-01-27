@@ -211,12 +211,8 @@ class WeaviateDB(VectorStore):
             return_properties=True,
             return_metadata=MetadataQuery(distance=True),
         )
-        maybe_distances = [
-            item.metadata.distance for item in response.objects
-        ]
-        similarities = [
-            0 if d is None else 1-d for d in maybe_distances
-        ]
+        maybe_distances = [item.metadata.distance for item in response.objects]
+        similarities = [0 if d is None else 1 - d for d in maybe_distances]
         docs = [self.weaviate_obj_to_doc(item) for item in response.objects]
         return list(zip(docs, similarities))
 
