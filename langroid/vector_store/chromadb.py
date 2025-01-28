@@ -35,7 +35,6 @@ class ChromaDB(VectorStore):
         except ImportError:
             raise LangroidImportError("chromadb", "chromadb")
         self.config = config
-        self.embedding_fn = self.embedding_model.embedding_fn()
         self.client = chromadb.Client(
             chromadb.config.Settings(
                 # chroma_db_impl="duckdb+parquet",
