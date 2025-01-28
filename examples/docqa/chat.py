@@ -151,6 +151,11 @@ def main(
             config.vecdb = lr.vector_store.WeaviateDBConfig(
                 embedding=embed_cfg,
             )
+        case "pinecone" | "pineconedb":
+            config.vecdb = lr.vector_store.PineconeDBConfig(
+                collection_name="doc-chat-pinecone-serverless",
+                embedding=embed_cfg,
+            )
 
     set_global(
         Settings(

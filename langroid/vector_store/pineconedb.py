@@ -8,8 +8,7 @@ from typing import Any, Dict, List, Literal, Optional, Sequence, Tuple, Union
 from dotenv import load_dotenv
 
 from langroid import LangroidImportError
-from langroid.embedding_models import EmbeddingModelsConfig, OpenAIEmbeddingsConfig
-from langroid.mytypes import Document, EmbeddingFunction
+from langroid.mytypes import Document
 from langroid.utils.configuration import settings
 from langroid.vector_store.base import VectorStore, VectorStoreConfig
 
@@ -30,8 +29,6 @@ class IndexMeta:
 class PineconeDBConfig(VectorStoreConfig):
     cloud: bool = True
     collection_name: str | None = "temp"
-    embedding: EmbeddingModelsConfig = OpenAIEmbeddingsConfig()
-    dimension: int = 1536
     spec: ServerlessSpec = ServerlessSpec(cloud="aws", region="us-east-1")
     deletion_protection: Literal["enabled", "disabled"] | None = None
     metric: str = "cosine"
@@ -42,7 +39,6 @@ class PineconeDB(VectorStore):
     def __init__(self, config: PineconeDBConfig = PineconeDBConfig()):
         super().__init__(config)
         self.config: PineconeDBConfig = config
-        self.embedding_fn: EmbeddingFunction = self.embedding_model.embedding_fn()
         load_dotenv()
         key = os.getenv("PINECONE_API_KEY")
 
@@ -189,7 +185,7 @@ class PineconeDB(VectorStore):
 
         payload = {
             "name": collection_name,
-            "dimension": self.config.dimension,
+            "dimension": self.embedding_dim,
             "spec": self.config.spec,
             "metric": self.config.metric,
             "timeout": self.config.timeout,

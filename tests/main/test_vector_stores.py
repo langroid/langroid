@@ -192,7 +192,7 @@ def vecdb(request) -> VectorStore:
         "weaviate_cloud",
         "lancedb",
         "qdrant_local",
-        "pinecone_serverless"
+        "pinecone_serverless",
     ],
     indirect=True,
 )
