@@ -2,13 +2,16 @@ from __future__ import annotations
 
 import itertools
 import logging
+import os
 import re
+import tempfile
 from enum import Enum
 from io import BytesIO
+from itertools import accumulate
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, Dict, Generator, List, Tuple
 
 from langroid.exceptions import LangroidImportError
-from langroid.parsing.pdf_utils import pdf_split_pages
 from langroid.utils.object_registry import ObjectRegistry
 
 try:
@@ -507,6 +510,8 @@ class DoclingParser(DocumentParser):
     def iterate_pages(self) -> Generator[Tuple[int, Any], None, None]:
         """
         Yield each page in the PDF using `docling`.
+        Code largely from this example:
+        https://github.com/DS4SD/docling/blob/4d41db3f7abb86c8c65386bf94e7eb0bf22bb82b/docs/examples/export_figures.py
 
         Returns:
             Generator[docling.Page]: Generator yielding each page.
@@ -516,35 +521,74 @@ class DoclingParser(DocumentParser):
                 "docling", ["docling", "pdf-parsers", "all", "doc-chat"]
             )
 
+        from docling.datamodel.base_models import InputFormat  # type: ignore
+        from docling.datamodel.pipeline_options import PdfPipelineOptions
         from docling.document_converter import (  # type: ignore
             ConversionResult,
             DocumentConverter,
+            PdfFormatOption,
         )
         from docling_core.types.doc import ImageRefMode  # type: ignore
 
-        page_files, tmp_dir = pdf_split_pages(self.doc_bytes)
-        converter = DocumentConverter()
-        for i, page_file in enumerate(page_files):
-            result: ConversionResult = converter.convert(page_file)
-            md_text = result.document.export_to_markdown(
-                image_mode=ImageRefMode.REFERENCED
+        IMAGE_RESOLUTION_SCALE = 2.0
+        pipeline_options = PdfPipelineOptions()
+        pipeline_options.images_scale = IMAGE_RESOLUTION_SCALE
+        pipeline_options.generate_page_images = True
+        pipeline_options.generate_picture_images = True
+
+        converter = DocumentConverter(
+            format_options={
+                InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)
+            }
+        )
+        doc_path = self.source
+        if doc_path == "bytes":
+            # write to tmp file, then use that path
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_file:
+                temp_file.write(self.doc_bytes.getvalue())
+                doc_path = temp_file.name
+
+        output_dir = Path(str(Path(doc_path).with_suffix("")) + "-pages")
+        os.makedirs(output_dir, exist_ok=True)
+
+        result: ConversionResult = converter.convert(doc_path)
+
+        def n_page_elements(page) -> int:  # type: ignore
+            if page.assembled is None:
+                return 0
+            return 1 + len(page.assembled.elements)
+
+        page_element_count = [n_page_elements(i) for i in result.pages]
+        element_page_cutoff = list(accumulate([1] + page_element_count))
+        for i, page in enumerate(result.pages):
+            page_start = element_page_cutoff[i]
+            page_end = element_page_cutoff[i + 1]
+            md_file = output_dir / f"page_{i}.md"
+            # we could have just directly exported to a markdown string,
+            # but we need to save to a file to force generation of image-files.
+            result.document.save_as_markdown(
+                md_file,
+                image_mode=ImageRefMode.REFERENCED,
+                from_element=page_start,
+                to_element=page_end,
             )
-            yield i, md_text
+            yield i, md_file
 
-        tmp_dir.cleanup()
-
-    def get_document_from_page(self, page: str) -> Document:
+    def get_document_from_page(self, md_file: str) -> Document:
         """
-        Get Document object from a given `docling` "page" (actually a chunk).
+        Get Document object from a given 1-page markdown file,
+        possibly containing image refs.
 
         Args:
-            page (docling.chunking.DocChunk): The `docling` chunk
+            md_file (str): The markdown file path for the page.
 
         Returns:
             Document: Document object, with content and possible metadata.
         """
+        with open(md_file, "r") as f:
+            text = f.read()
         return Document(
-            content=self.fix_text(page),
+            content=self.fix_text(text),
             metadata=DocMetaData(source=self.source),
         )
 

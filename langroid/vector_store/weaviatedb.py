@@ -10,7 +10,7 @@ from langroid.embedding_models.base import (
 )
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
 from langroid.exceptions import LangroidImportError
-from langroid.mytypes import DocMetaData, Document, EmbeddingFunction
+from langroid.mytypes import DocMetaData, Document
 from langroid.utils.configuration import settings
 from langroid.vector_store.base import VectorStore, VectorStoreConfig
 
@@ -38,8 +38,6 @@ class WeaviateDB(VectorStore):
     def __init__(self, config: WeaviateDBConfig = WeaviateDBConfig()):
         super().__init__(config)
         self.config: WeaviateDBConfig = config
-        self.embedding_fn: EmbeddingFunction = self.embedding_model.embedding_fn()
-        self.embedding_dim = self.embedding_model.embedding_dims
         load_dotenv()
         key = os.getenv("WEAVIATE_API_KEY")
         url = os.getenv("WEAVIATE_API_URL")
@@ -211,10 +209,10 @@ class WeaviateDB(VectorStore):
             return_properties=True,
             return_metadata=MetadataQuery(distance=True),
         )
-        return [
-            (self.weaviate_obj_to_doc(item), 1 - (item.metadata.distance or 1))
-            for item in response.objects
-        ]
+        maybe_distances = [item.metadata.distance for item in response.objects]
+        similarities = [0 if d is None else 1 - d for d in maybe_distances]
+        docs = [self.weaviate_obj_to_doc(item) for item in response.objects]
+        return list(zip(docs, similarities))
 
     def _create_valid_uuid_id(self, id: str) -> Any:
         try:
