@@ -290,7 +290,6 @@ class PostgresDB(VectorStore):
 
     def add_documents(self, documents: Sequence[Document]) -> None:
         super().maybe_add_ids(documents)
-        # Pre-generate UUIDs and embeddings
         for doc in documents:
             doc.metadata.id = str(PostgresDB._id_to_uuid(doc.metadata.id, doc.metadata))
 
@@ -302,16 +301,15 @@ class PostgresDB(VectorStore):
                 batch_docs = documents[i : i + batch_size]
                 batch_embeddings = embeddings[i : i + batch_size]
 
-                new_records = []
-                for doc, embedding in zip(batch_docs, batch_embeddings):
-                    metadatas = doc.dict().pop("metadata")
-                    record = {
+                new_records = [
+                    {
                         "id": doc.metadata.id,
                         "embedding": embedding,
                         "document": doc.content,
-                        "cmetadata": metadatas,
+                        "cmetadata": doc.metadata.dict() 
                     }
-                    new_records.append(record)
+                    for doc, embedding in zip(batch_docs, batch_embeddings)
+                ]
 
                 if new_records:
                     stmt = insert(self.embeddings_table).values(new_records)
