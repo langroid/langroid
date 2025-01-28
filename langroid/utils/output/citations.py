@@ -17,25 +17,45 @@ def extract_markdown_references(md_string: str) -> list[int]:
     return sorted(set(int(match) for match in matches))
 
 
-def format_footnote_text(content: str, width: int = 80) -> str:
+def format_footnote_text(content: str, width: int = 0) -> str:
     """
-    Formats the content part of a footnote (i.e. not the first line that
-    appears right after the reference [^4])
-    It wraps the text so that no line is longer than the specified width and indents
-    lines as necessary for markdown footnotes.
+    Formats the content so that each original line is individually processed.
+    - If width=0, no wrapping is done (lines remain as is).
+    - If width>0, lines are wrapped to that width.
+    - Blank lines remain blank (with indentation).
+    - Everything is indented by 4 spaces (for markdown footnotes).
 
     Args:
         content (str): The text of the footnote to be formatted.
-        width (int): Maximum width of the text lines.
+        width (int): Maximum width of the text lines. If 0, lines are not wrapped.
 
     Returns:
         str: Properly formatted markdown footnote text.
     """
     import textwrap
 
-    # Wrap the text to the specified width
-    wrapped_lines = textwrap.wrap(content, width)
-    if len(wrapped_lines) == 0:
-        return ""
-    indent = "    "  # Indentation for markdown footnotes
-    return indent + ("\n" + indent).join(wrapped_lines)
+    indent = "    "  # 4 spaces for markdown footnotes
+    lines = content.split("\n")  # keep original line structure
+
+    output_lines = []
+    for line in lines:
+        # If the line is empty (or just spaces), keep it blank (but indented)
+        if not line.strip():
+            output_lines.append(indent)
+            continue
+
+        if width > 0:
+            # Wrap each non-empty line to the specified width
+            wrapped = textwrap.wrap(line, width=width)
+            if not wrapped:
+                # If textwrap gives nothing, add a blank (indented) line
+                output_lines.append(indent)
+            else:
+                for subline in wrapped:
+                    output_lines.append(indent + subline)
+        else:
+            # No wrapping: just indent the original line
+            output_lines.append(indent + line)
+
+    # Join them with newline so we preserve the paragraph/blank line structure
+    return "\n".join(output_lines)
