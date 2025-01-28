@@ -290,22 +290,32 @@ class PostgresDB(VectorStore):
 
     def add_documents(self, documents: Sequence[Document]) -> None:
         super().maybe_add_ids(documents)
+        # Pre-generate UUIDs and embeddings
         for doc in documents:
             doc.metadata.id = str(PostgresDB._id_to_uuid(doc.metadata.id, doc.metadata))
-        with self.SessionLocal() as session:
-            new_records = []
-            for doc in documents:
-                metadatas = doc.dict().pop("metadata")
-                record = {
-                    "id": doc.metadata.id,
-                    "embedding": self.embedding_fn([doc.content])[0],
-                    "document": doc.content,
-                    "cmetadata": metadatas,
-                }
-                new_records.append(record)
 
-            if new_records:
-                session.execute(insert(self.embeddings_table), new_records)
+        embeddings = self.embedding_fn([doc.content for doc in documents])
+
+        batch_size = self.config.batch_size
+        with self.SessionLocal() as session:
+            for i in range(0, len(documents), batch_size):
+                batch_docs = documents[i : i + batch_size]
+                batch_embeddings = embeddings[i : i + batch_size]
+
+                new_records = []
+                for doc, embedding in zip(batch_docs, batch_embeddings):
+                    metadatas = doc.dict().pop("metadata")
+                    record = {
+                        "id": doc.metadata.id,
+                        "embedding": embedding,
+                        "document": doc.content,
+                        "cmetadata": metadatas,
+                    }
+                    new_records.append(record)
+
+                if new_records:
+                    stmt = insert(self.embeddings_table).values(new_records)
+                    session.execute(stmt)
                 session.commit()
 
     @staticmethod
@@ -315,13 +325,10 @@ class PostgresDB(VectorStore):
         except ValueError:
             obj_repr = repr(obj)
 
-            # Create a hash of the object representation
             obj_hash = hashlib.sha256(obj_repr.encode()).hexdigest()
 
-            # Combine the ID and the hash
             combined = f"{id}-{obj_hash}"
 
-            # Generate a UUID from the combined string
             doc_id = str(uuid.uuid5(uuid.NAMESPACE_DNS, combined))
 
         return doc_id
@@ -386,13 +393,15 @@ class PostgresDB(VectorStore):
                     .all()
                 )
 
-            documents_with_scores = []
-            for result in results:
-                id, document, cmetadata, score = result
-                doc = Document(
-                    content=document,
-                    metadata=DocMetaData(**(cmetadata or {})),
+            documents_with_scores = [
+                (
+                    Document(
+                        content=result.document,
+                        metadata=DocMetaData(**(result.cmetadata or {})),
+                    ),
+                    result.score,
                 )
-                documents_with_scores.append((doc, score))
+                for result in results
+            ]
 
             return documents_with_scores
