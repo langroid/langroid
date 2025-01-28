@@ -306,7 +306,7 @@ class PostgresDB(VectorStore):
                         "id": doc.metadata.id,
                         "embedding": embedding,
                         "document": doc.content,
-                        "cmetadata": doc.metadata.dict() 
+                        "cmetadata": doc.metadata.dict(),
                     }
                     for doc, embedding in zip(batch_docs, batch_embeddings)
                 ]
@@ -341,7 +341,11 @@ class PostgresDB(VectorStore):
         embedding = self.embedding_fn([query])[0]
 
         with self.SessionLocal() as session:
-            # Select only necessary columns, excluding 'embedding'
+            # Calculate the score (1 - cosine_distance) and label it as "score"
+            score = (
+                1 - (self.embeddings_table.c.embedding.cosine_distance(embedding))
+            ).label("score")
+
             if where is not None:
                 try:
                     json_query = json.loads(where)
@@ -353,19 +357,10 @@ class PostgresDB(VectorStore):
                         self.embeddings_table.c.id,
                         self.embeddings_table.c.document,
                         self.embeddings_table.c.cmetadata,
-                        (
-                            1
-                            - (
-                                self.embeddings_table.c.embedding.cosine_distance(
-                                    embedding
-                                )
-                            )
-                        ).label("score"),
+                        score,  # Select the calculated score
                     )
                     .filter(self.embeddings_table.c.cmetadata.contains(json_query))
-                    .order_by(
-                        self.embeddings_table.c.embedding.cosine_distance(embedding)
-                    )
+                    .order_by(score.desc())  # Order by score in descending order
                     .limit(k)
                     .all()
                 )
@@ -375,18 +370,9 @@ class PostgresDB(VectorStore):
                         self.embeddings_table.c.id,
                         self.embeddings_table.c.document,
                         self.embeddings_table.c.cmetadata,
-                        (
-                            1
-                            - (
-                                self.embeddings_table.c.embedding.cosine_distance(
-                                    embedding
-                                )
-                            )
-                        ).label("score"),
+                        score,  # Select the calculated score
                     )
-                    .order_by(
-                        self.embeddings_table.c.embedding.cosine_distance(embedding)
-                    )
+                    .order_by(score.desc())  # Order by score in descending order
                     .limit(k)
                     .all()
                 )
@@ -397,7 +383,7 @@ class PostgresDB(VectorStore):
                         content=result.document,
                         metadata=DocMetaData(**(result.cmetadata or {})),
                     ),
-                    result.score,
+                    result.score,  # Use the score from the query result
                 )
                 for result in results
             ]
