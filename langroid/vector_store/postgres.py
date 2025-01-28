@@ -20,7 +20,9 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.sql.expression import insert
 
-from langroid.embedding_models.base import EmbeddingFunction, EmbeddingModelsConfig
+from langroid.embedding_models.base import (
+    EmbeddingModelsConfig,
+)
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
 from langroid.mytypes import DocMetaData, Document
 from langroid.vector_store.base import VectorStore, VectorStoreConfig
@@ -44,8 +46,6 @@ class PostgresDB(VectorStore):
     def __init__(self, config: PostgresDBConfig = PostgresDBConfig()):
         super().__init__(config)
         self.config: PostgresDBConfig = config
-        self.embedding_fn: EmbeddingFunction = self.embedding_model.embedding_fn()
-        self.embedding_dim = self.embedding_model.embedding_dims
         self.engine = self._create_engine()
         PostgresDB._create_vector_extension(self.engine)
         self.SessionLocal = sessionmaker(
