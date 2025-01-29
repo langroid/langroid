@@ -151,6 +151,10 @@ def main(
             config.vecdb = lr.vector_store.WeaviateDBConfig(
                 embedding=embed_cfg,
             )
+        case "postgres" | "postgresdb":
+            config.vecdb = lr.vector_store.PostgresDBConfig(
+                embedding=embed_cfg,
+            )
 
     set_global(
         Settings(
