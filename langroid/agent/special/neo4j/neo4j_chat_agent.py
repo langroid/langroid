@@ -7,7 +7,7 @@ from rich.console import Console
 from langroid.pydantic_v1 import BaseModel, BaseSettings
 
 if TYPE_CHECKING:
-    import neo4j
+    import neo4j  # noqa
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.chat_document import ChatDocument

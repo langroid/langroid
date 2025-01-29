@@ -68,5 +68,5 @@ for _ in range(10):
     for i, r in enumerate(results):
         if r.content != NO_ANSWER:
             n = int(r.content)
-            print(f"agent{i+1} responded with {n}")
+            print(f"agent{i + 1} responded with {n}")
             break

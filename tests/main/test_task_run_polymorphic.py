@@ -87,7 +87,7 @@ def test_task_in_out_types(
         def handle(self) -> Any:
             match pair_tool_handler_return_type:
                 case "str":
-                    return f"Here is a pair of numbers: {self.x-1}, {self.x+1}"
+                    return f"Here is a pair of numbers: {self.x - 1}, {self.x + 1}"
                 case "list":
                     return [self.x - 1, self.x + 1]
                 case "dict":

@@ -162,7 +162,7 @@ class RepoLoader:
             except Exception as e:
                 delay = min(max_delay, base_delay * 2**attempt)
                 logger.info(
-                    f"Attempt {attempt+1} failed with error: {str(e)}. "
+                    f"Attempt {attempt + 1} failed with error: {str(e)}. "
                     f"Retrying in {delay} seconds..."
                 )
                 time.sleep(delay)

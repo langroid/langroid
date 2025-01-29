@@ -84,7 +84,7 @@ class CompanyInfoTool(lr.agent.ToolMessage):
         print(
             f"""
             Got Valid Company Info.
-            The market cap of {self.company_info.name} is ${mkt_cap/1e9}B.
+            The market cap of {self.company_info.name} is ${mkt_cap / 1e9}B.
             """
         )
         return FinalResultTool(

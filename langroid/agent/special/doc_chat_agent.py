@@ -810,7 +810,7 @@ class DocChatAgent(ChatAgent):
         return "\n".join(
             [
                 f"""
-                -----[EXTRACT #{i+1}]----------
+                -----[EXTRACT #{i + 1}]----------
                 {content}
                 {source}
                 -----END OF EXTRACT------------
@@ -866,8 +866,8 @@ class DocChatAgent(ChatAgent):
             # append [i] source, content for each citation
             citations_str = "\n".join(
                 [
-                    f"[^{c}] {passages[c-1].metadata.source}"
-                    f"\n{format_footnote_text(passages[c-1].content)}"
+                    f"[^{c}] {passages[c - 1].metadata.source}"
+                    f"\n{format_footnote_text(passages[c - 1].content)}"
                     for c in citations
                 ]
             )
