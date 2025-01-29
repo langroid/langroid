@@ -16,7 +16,7 @@ from sqlalchemy import (
     text,
 )
 from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.engine import Engine
+from sqlalchemy.engine import Connection, Engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.sql.expression import insert
 
@@ -55,10 +55,15 @@ class PostgresDB(VectorStore):
         self._setup_table()
 
     def _create_engine(self) -> Engine:
+        """Creates a SQLAlchemy engine based on the configuration."""
+
+        connection_string = None  # Ensure variable is always defined
+
         if self.config.docker:
             username = os.getenv("POSTGRES_USER", "postgres")
             password = os.getenv("POSTGRES_PASSWORD", "postgres")
             database = os.getenv("POSTGRES_DB", "langroid")
+
             if not (
                 self.config.host
                 and self.config.port
@@ -67,26 +72,32 @@ class PostgresDB(VectorStore):
                 and database
             ):
                 raise ValueError(
-                    "Provide POSTGRES_USER, POSTGRES_PASSWORD and POSTGERS_DB."
+                    "Provide POSTGRES_USER, POSTGRES_PASSWORD, "
+                    "POSTGRES_DB, host, and port."
                 )
+
+
             connection_string = (
                 f"postgresql+psycopg2://{username}:{password}@"
                 f"{self.config.host}:{self.config.port}/{database}"
             )
-            self.config.cloud = False
+            self.config.cloud = False  # Ensures cloud is disabled if using Docker
+
         elif self.config.cloud:
             connection_string = os.getenv("POSTGRES_CONNECTION_STRING")
             if not connection_string:
                 raise ValueError(
                     "Provide the POSTGRES_CONNECTION_STRING for cloud config."
                 )
+
         else:
-            logger.warning(
-                "Provide docker config or cloud config to connect to your database"
+            raise ValueError(
+                "Provide either Docker or Cloud config to connect to the database."
             )
+
         return create_engine(connection_string, pool_size=10, max_overflow=20)
 
-    def _setup_table(self):
+    def _setup_table(self) -> None:
         try:
             from pgvector.sqlalchemy import Vector
         except ImportError:
@@ -128,7 +139,7 @@ class PostgresDB(VectorStore):
                 )
                 connection.execute(create_index_query)
 
-    def index_exists(self, connection, index_name):
+    def index_exists(self, connection: Connection, index_name: str) -> bool:
         """Check if an index exists."""
         query = text(
             "SELECT 1 FROM pg_indexes WHERE indexname = :index_name"
