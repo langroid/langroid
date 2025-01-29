@@ -1,7 +1,7 @@
 import atexit
 import os
 from functools import cached_property
-from typing import Any, Callable, Dict, List, Optional
+from typing import Any, Callable, Dict, List, Optional, Union
 
 import requests
 import tiktoken
@@ -470,21 +470,30 @@ class GeminiEmbeddings(EmbeddingModel):
                 GEMINI_API_KEY env variable must be set to use GeminiEmbeddings.
                 """
             )
-        genai.configure(api_key=self.config.api_key)
+        genai.configure(api_key=self.config.api_key)  # type: ignore[attr-defined]
         self.client = genai
 
     def embedding_fn(self) -> Callable[[List[str]], Embeddings]:
         return EmbeddingFunctionCallable(self, self.config.batch_size)
 
     def generate_embeddings(self, texts: List[str]) -> Embeddings:
-        all_embeddings = []
+        all_embeddings = []  # More precise type hint
         for batch in batched(texts, self.config.batch_size):
-            result = self.client.embed_content(
+            result = self.client.embed_content(  # type: ignore[attr-defined]
                 model=self.config.model_name,
                 content=batch,
                 task_type="RETRIEVAL_DOCUMENT",
             )
-            all_embeddings.extend(result["embedding"])
+
+            embeddings = result["embedding"]
+            if not isinstance(embeddings, list):
+                raise ValueError("Unexpected format for embeddings: not a list")
+
+            if embeddings and isinstance(embeddings[0], list):
+                all_embeddings.extend(embeddings)
+            else:
+                all_embeddings.append(embeddings)
+
         return all_embeddings
 
     @property
@@ -513,6 +522,6 @@ def embedding_model(embedding_fn_type: str = "openai") -> EmbeddingModel:
     elif embedding_fn_type == "llamacppserver":
         return LlamaCppServerEmbeddings  # type: ignore
     elif embedding_fn_type == "gemini":
-        return GeminiEmbeddings
+        return GeminiEmbeddings  # type: ignore
     else:  # default sentence transformer
         return SentenceTransformerEmbeddings  # type: ignore
