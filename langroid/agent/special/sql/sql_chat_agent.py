@@ -427,15 +427,7 @@ class SQLChatAgent(ChatAgent):
         return error_message_template
 
     def _available_tool_names(self) -> str:
-        return ",".join(
-            tool.name()  # type: ignore
-            for tool in [
-                RunQueryTool,
-                GetTableNamesTool,
-                GetTableSchemaTool,
-                GetColumnDescriptionsTool,
-            ]
-        )
+        return ",".join(self.llm_tools_usable)
 
     def _tool_result_llm_answer_prompt(self) -> str:
         """
@@ -510,7 +502,7 @@ class SQLChatAgent(ChatAgent):
         {self._tool_result_llm_answer_prompt()}
         OTHERWISE:
              continue using one of your available TOOLs:
-             {self._available_tool_names()}
+             {",".join(self.llm_tools_usable)}
         """
         return final_message
 

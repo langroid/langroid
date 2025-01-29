@@ -1897,7 +1897,12 @@ class OpenAIGPT(LanguageModel):
             }
         }
         """
-        message = response["choices"][0]["message"]
+        if response.get("choices") is None:
+            message = {}
+        else:
+            message = response["choices"][0].get("message", {})
+        if message is None:
+            message = {}
         msg = message.get("content", "")
         reasoning = message.get("reasoning_content", "")
 
