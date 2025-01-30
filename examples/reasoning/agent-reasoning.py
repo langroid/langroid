@@ -24,7 +24,7 @@ def main(model: str = ""):
     # (1) Direct LLM interaction
     llm = lm.OpenAIGPT(llm_config)
 
-    response = llm.chat("Is 9.9 bigger than 9.11?", max_tokens=1000)
+    response = llm.chat("Is 9.8 bigger than 9.11?", max_tokens=1000)
 
     # extract reasoning
     print(response.reasoning)
