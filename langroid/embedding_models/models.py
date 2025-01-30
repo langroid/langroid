@@ -1,7 +1,7 @@
 import atexit
 import os
 from functools import cached_property
-from typing import Any, Callable, Dict, List, Optional, Union
+from typing import Any, Callable, Dict, List, Optional
 
 import requests
 import tiktoken
@@ -451,14 +451,8 @@ class GeminiEmbeddings(EmbeddingModel):
     def __init__(self, config: GeminiEmbeddingsConfig = GeminiEmbeddingsConfig()):
         try:
             import google.generativeai as genai
-        except ImportError:
-            raise ImportError(
-                """
-                To use Gemini embeddings, you must install 
-                the google-generativeai package,
-                e.g.: pip install google-generativeai
-                """
-            )
+        except ImportError as e:
+            raise LangroidImportError(extra="google-generativeai", error=str(e))
         super().__init__()
         self.config = config
         load_dotenv()
