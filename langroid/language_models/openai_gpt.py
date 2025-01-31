@@ -1910,7 +1910,7 @@ class OpenAIGPT(LanguageModel):
             message = {}
         msg = message.get("content", "")
         reasoning = message.get("reasoning_content", "")
-        if reasoning == "":
+        if reasoning == "" and msg is not None:
             # some LLM APIs may not return a separate reasoning field,
             # and the reasoning may be included in the message content
             # within delimiters like <think> ... </think>
