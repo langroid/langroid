@@ -12,6 +12,7 @@ from langroid.vector_store.base import VectorStore
 from langroid.vector_store.lancedb import LanceDB, LanceDBConfig
 from langroid.vector_store.meilisearch import MeiliSearch, MeiliSearchConfig
 from langroid.vector_store.momento import MomentoVI, MomentoVIConfig
+from langroid.vector_store.pineconedb import PineconeDB, PineconeDBConfig
 from langroid.vector_store.qdrantdb import QdrantDB, QdrantDBConfig
 from langroid.vector_store.weaviatedb import WeaviateDB, WeaviateDBConfig
 
@@ -157,6 +158,17 @@ def vecdb(request) -> VectorStore:
         rmdir(ldb_dir)
         return
 
+    if request.param == "pinecone_serverless":
+        cfg = PineconeDBConfig(
+            collection_name="pinecone-serverless-test",
+            embedding=embed_cfg,
+        )
+        pinecone_serverless = PineconeDB(config=cfg)
+        pinecone_serverless.add_documents(stored_docs)
+        yield pinecone_serverless
+        pinecone_serverless.delete_collection(collection_name=cfg.collection_name)
+        return
+
 
 @pytest.mark.parametrize(
     "query,results,exceptions",
@@ -174,7 +186,14 @@ def vecdb(request) -> VectorStore:
 # add "momento" when their API docs are ready
 @pytest.mark.parametrize(
     "vecdb",
-    ["qdrant_cloud", "chroma", "weaviate_cloud", "lancedb", "qdrant_local"],
+    [
+        "qdrant_cloud",
+        "chroma",
+        "weaviate_cloud",
+        "lancedb",
+        "qdrant_local",
+        "pinecone_serverless",
+    ],
     indirect=True,
 )
 def test_vector_stores_search(
@@ -223,7 +242,14 @@ def test_hybrid_vector_search(
 
 @pytest.mark.parametrize(
     "vecdb",
-    ["lancedb", "chroma", "qdrant_local", "qdrant_cloud", "weaviate_cloud"],
+    [
+        "lancedb",
+        "chroma",
+        "qdrant_local",
+        "qdrant_cloud",
+        "weaviate_cloud",
+        "pinecone_serverless",
+    ],
     indirect=True,
 )
 def test_vector_stores_access(vecdb):
@@ -277,13 +303,20 @@ def test_vector_stores_access(vecdb):
     assert len(docs_and_scores) == 1
     assert docs_and_scores[0][0].content == "cow"
 
-    coll_names = [f"Test_junk_{i}" for i in range(3)]
+    # test collections: create, list, clear
+    if isinstance(vecdb, PineconeDB):
+        # pinecone only allows lowercase alphanumeric with "-" characters
+        coll_names = [f"test-junk-{i}" for i in range(3)]
+        test_prefix = "test-junk"
+    else:
+        coll_names = [f"Test_junk_{i}" for i in range(3)]
+        test_prefix = "Test_junk"
     for coll in coll_names:
         vecdb.create_collection(collection_name=coll)
     n_colls = len(
-        [c for c in vecdb.list_collections(empty=True) if c.startswith("Test_junk")]
+        [c for c in vecdb.list_collections(empty=True) if c.startswith(test_prefix)]
     )
-    n_dels = vecdb.clear_all_collections(really=True, prefix="Test_junk")
+    n_dels = vecdb.clear_all_collections(really=True, prefix=test_prefix)
     # LanceDB.create_collection() does nothing, since we can't create a table
     # without a schema or data.
     assert n_colls == n_dels == (0 if isinstance(vecdb, LanceDB) else len(coll_names))
@@ -294,7 +327,14 @@ def test_vector_stores_access(vecdb):
 
 @pytest.mark.parametrize(
     "vecdb",
-    ["lancedb", "chroma", "qdrant_cloud", "qdrant_local", "weaviate_cloud"],
+    [
+        "lancedb",
+        "chroma",
+        "qdrant_cloud",
+        "qdrant_local",
+        "weaviate_cloud",
+        "pinecone_serverless",
+    ],
     indirect=True,
 )
 def test_vector_stores_context_window(vecdb):
@@ -322,13 +362,11 @@ def test_vector_stores_context_window(vecdb):
     parser = Parser(cfg)
     splits = parser.split([doc])
 
-    vecdb.create_collection(collection_name="test_context_window", replace=True)
+    vecdb.create_collection(collection_name="test-context-window", replace=True)
     vecdb.add_documents(splits)
 
     # Test context window retrieval
-
     docs_scores = vecdb.similar_texts_with_scores("What are Giraffes like?", k=1)
-
     docs_scores = vecdb.add_context_window(docs_scores, neighbors=2)
 
     assert len(docs_scores) == 1
@@ -354,7 +392,14 @@ def test_vector_stores_context_window(vecdb):
 
 @pytest.mark.parametrize(
     "vecdb",
-    ["chroma", "lancedb", "qdrant_cloud", "qdrant_local", "weaviate_cloud"],
+    [
+        "chroma",
+        "lancedb",
+        "qdrant_cloud",
+        "qdrant_local",
+        "weaviate_cloud",
+        "pinecone_serverless",
+    ],
     indirect=True,
 )
 def test_vector_stores_overlapping_matches(vecdb):
@@ -394,7 +439,7 @@ def test_vector_stores_overlapping_matches(vecdb):
     parser = Parser(cfg)
     splits = parser.split([doc])
 
-    vecdb.create_collection(collection_name="test_context_window", replace=True)
+    vecdb.create_collection(collection_name="test-context-window", replace=True)
     vecdb.add_documents(splits)
 
     # Test context window retrieval
