@@ -187,12 +187,12 @@ def vecdb(request) -> VectorStore:
 @pytest.mark.parametrize(
     "vecdb",
     [
+        "pinecone_serverless",
         "qdrant_cloud",
         "chroma",
         "weaviate_cloud",
         "lancedb",
         "qdrant_local",
-        "pinecone_serverless",
     ],
     indirect=True,
 )

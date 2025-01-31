@@ -70,7 +70,7 @@ class PineconeDB(VectorStore):
             Number of Pinecone indexes that were deleted
 
         Args:
-            really: Optional[bool] - whether to delete empty Pinecone indexes
+            really: Optional[bool] - whether to really delete all Pinecone collections
             prefix: Optional[str] - string to match potential Pinecone
                 indexes for deletion
         """
@@ -119,7 +119,7 @@ class PineconeDB(VectorStore):
     def _list_index_metas(self, empty: bool = False) -> List[IndexMeta]:
         """
         Returns:
-            List of objects describing Pinecone indices that have at least one vector.
+            List of objects describing Pinecone indices
 
         Args:
             empty: Optional[bool] - whether to include empty collections
@@ -248,9 +248,11 @@ class PineconeDB(VectorStore):
         for i in range(0, len(documents), batch_size):
             try:
                 if namespace:
-                    index.upsert(vectors=vectors[i:batch_size], namespace=namespace)
+                    index.upsert(
+                        vectors=vectors[i : i + batch_size], namespace=namespace
+                    )
                 else:
-                    index.upsert(vectors=vectors[i:batch_size])
+                    index.upsert(vectors=vectors[i : i + batch_size])
             except PineconeApiException as e:
                 logger.error(
                     f"Unable to add of docs between indices {i} and {batch_size}"
