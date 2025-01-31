@@ -58,7 +58,7 @@ class PostgresDB(VectorStore):
     def _create_engine(self) -> Engine:
         """Creates a SQLAlchemy engine based on the configuration."""
 
-        connection_string = None  # Ensure variable is always defined
+        connection_string:str = None  # Ensure variable is always defined
 
         if self.config.docker:
             username = os.getenv("POSTGRES_USER", "postgres")
@@ -66,15 +66,13 @@ class PostgresDB(VectorStore):
             database = os.getenv("POSTGRES_DB", "langroid")
 
             if not (
-                self.config.host
-                and self.config.port
-                and username
+                username
                 and password
                 and database
             ):
                 raise ValueError(
                     "Provide POSTGRES_USER, POSTGRES_PASSWORD, "
-                    "POSTGRES_DB, host, and port."
+                    "POSTGRES_DB. "
                 )
 
             connection_string = (
@@ -119,7 +117,14 @@ class PostgresDB(VectorStore):
         self.metadata.create_all(self.engine)
         self.metadata.reflect(bind=self.engine, only=[self.config.collection_name])
 
-        # Create HNSW index if it doesn't exist
+        # Create HNSW index for embeddings column if it doesn't exist. 
+        # This index enables efficient nearest-neighbor search using cosine similarity.
+        # PostgreSQL automatically builds the index after creation; 
+        # no manual step required. 
+        # Read more about pgvector hnsw index here: 
+        # https://github.com/pgvector/pgvector?tab=readme-ov-file#hnsw
+
+
         index_name = f"hnsw_index_{self.config.collection_name}_embedding"
         with self.engine.connect() as connection:
             if not self.index_exists(connection, index_name):
@@ -147,8 +152,14 @@ class PostgresDB(VectorStore):
 
     @staticmethod
     def _create_vector_extension(conn: Engine) -> None:
+
         with conn.connect() as connection:
             with connection.begin():
+            # The number is a unique identifier used to lock a specific resource during 
+            # transaction. Any 64-bit integer can be used for advisory locks. 
+            # Acquire advisory lock to ensure atomic, isolated setup 
+            # and prevent race conditions.
+
                 statement = text(
                     "SELECT pg_advisory_xact_lock(1573678846307946496);"
                     "CREATE EXTENSION IF NOT EXISTS vector;"
