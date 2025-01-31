@@ -24,6 +24,7 @@ from langroid.embedding_models.base import (
     EmbeddingModelsConfig,
 )
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
+from langroid.exceptions import LangroidImportError
 from langroid.mytypes import DocMetaData, Document
 from langroid.vector_store.base import VectorStore, VectorStoreConfig
 
@@ -76,7 +77,6 @@ class PostgresDB(VectorStore):
                     "POSTGRES_DB, host, and port."
                 )
 
-
             connection_string = (
                 f"postgresql+psycopg2://{username}:{password}@"
                 f"{self.config.host}:{self.config.port}/{database}"
@@ -100,10 +100,8 @@ class PostgresDB(VectorStore):
     def _setup_table(self) -> None:
         try:
             from pgvector.sqlalchemy import Vector
-        except ImportError:
-            raise ImportError(
-                "pgvector is not installed. Install with `pip install pgvector`."
-            )
+        except ImportError as e:
+            raise LangroidImportError(extra="postgres", error=str(e))
 
         if self.config.replace_collection:
             self.delete_collection(self.config.collection_name)
