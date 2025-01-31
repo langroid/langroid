@@ -13,6 +13,8 @@ from .models import (
     SentenceTransformerEmbeddingsConfig,
     LlamaCppServerEmbeddings,
     LlamaCppServerEmbeddingsConfig,
+    GeminiEmbeddings,
+    GeminiEmbeddingsConfig,
     embedding_model,
 )
 from .remote_embeds import (
@@ -33,6 +35,8 @@ __all__ = [
     "SentenceTransformerEmbeddingsConfig",
     "LlamaCppServerEmbeddings",
     "LlamaCppServerEmbeddingsConfig",
+    "GeminiEmbeddings",
+    "GeminiEmbeddingsConfig",
     "embedding_model",
     "RemoteEmbeddingsConfig",
     "RemoteEmbeddings",

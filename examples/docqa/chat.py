@@ -125,6 +125,10 @@ def main(
                 api_base=embed_config,
                 dims=768,  # Change this to match the dimensions of your embedding model
             )
+        case "gemini":
+            embed_cfg = lr.embedding_models.GeminiEmbeddingsConfig(
+                model_type="gemini", dims=768
+            )
         case _:
             embed_cfg = lr.embedding_models.OpenAIEmbeddingsConfig()
 
