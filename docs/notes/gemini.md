@@ -1,4 +1,4 @@
-# Gemini LLMs via OpenAI client, without LiteLLM and Embeddings
+# Gemini LLMs & Embeddings via OpenAI client (without LiteLLM)
 
 As of Langroid v0.21.0 you can use Langroid with Gemini LLMs directly 
 via the OpenAI client, without using adapter libraries like LiteLLM.
@@ -15,7 +15,11 @@ from langroid.agent.special import DocChatAgent, DocChatAgentConfig
 from langroid.embedding_models import GeminiEmbeddingsConfig
 
 # Configure Gemini embeddings
-embed_cfg = GeminiEmbeddingsConfig(model_type="gemini",dims=768)
+embed_cfg = GeminiEmbeddingsConfig(
+    model_type="gemini",
+    model_name="models/text-embedding-004",
+    dims=768,
+)
 
 # Configure the DocChatAgent 
 config = DocChatAgentConfig(
