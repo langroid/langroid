@@ -1023,7 +1023,7 @@ class ChatAgent(Agent):
         all_tools: bool = False,
     ) -> List[ToolMessage]:
         """
-        Extracts messages and tracks whether any errors occured. If strict mode
+        Extracts messages and tracks whether any errors occurred. If strict mode
         was enabled, disables it for the tool, else triggers strict recovery.
         """
         self.tool_error = False

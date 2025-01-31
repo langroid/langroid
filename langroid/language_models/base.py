@@ -78,6 +78,7 @@ class LLMConfig(BaseSettings):
     # TODO: we could have a `stream_reasoning` flag here to control whether to show
     # reasoning output from reasoning models
     cache_config: None | CacheDBConfig = RedisCacheConfig()
+    thought_delimiters: Tuple[str, str] = ("<think>", "</think>")
 
     # Dict of model -> (input/prompt cost, output/completion cost)
     chat_cost_per_1k_tokens: Tuple[float, float] = (0.0, 0.0)
@@ -645,6 +646,26 @@ class LanguageModel(ABC):
             total_tokens += counter.total_tokens
             total_cost += counter.cost
         return total_tokens, total_cost
+
+    def get_reasoning_final(self, message: str) -> Tuple[str, str]:
+        """Extract "reasoning" and "final answer" from an LLM response, if the
+        reasoning is found within configured delimiters, like <think>, </think>.
+        E.g.,
+        '<think> Okay, let's see, the user wants... </think> 2 + 3 = 5'
+
+        Args:
+            message (str): message from LLM
+
+        Returns:
+            Tuple[str, str]: reasoning, final answer
+        """
+        start, end = self.config.thought_delimiters
+        if start in message and end in message:
+            parts = message.split(start)
+            if len(parts) > 1:
+                reasoning, final = parts[1].split(end)
+                return reasoning, final
+        return "", message
 
     def followup_to_standalone(
         self, chat_history: List[Tuple[str, str]], question: str

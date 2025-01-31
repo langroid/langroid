@@ -1,5 +1,5 @@
 """
-Function-calling example using a local LLM, with ollama.
+Function-calling example using a local/remote open LLM.
 
 "Function-calling" refers to the ability of the LLM to generate
 a structured response, typically a JSON object, instead of a plain text response,

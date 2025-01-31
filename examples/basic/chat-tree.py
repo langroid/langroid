@@ -80,10 +80,10 @@ class AddNumTool(ToolMessage):
         return str(int(MyGlobalState.get_value("number")) + int(self.number))
 
 
-def chat() -> None:
+def chat(model: str = "") -> None:
     config = ChatAgentConfig(
         llm=OpenAIGPTConfig(
-            chat_model=OpenAIChatModel.GPT4,
+            chat_model=model or OpenAIChatModel.GPT4o,
         ),
         vecdb=None,
     )
@@ -216,6 +216,7 @@ def chat() -> None:
 
 @app.command()
 def main(
+    model: str = typer.Option("", "--model", "-m", help="model to use"),
     debug: bool = typer.Option(False, "--debug", "-d", help="debug mode"),
     no_stream: bool = typer.Option(False, "--nostream", "-ns", help="no streaming"),
     nocache: bool = typer.Option(False, "--nocache", "-nc", help="don't use cache"),
@@ -227,7 +228,7 @@ def main(
             stream=not no_stream,
         )
     )
-    chat()
+    chat(model)
 
 
 if __name__ == "__main__":
