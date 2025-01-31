@@ -1368,6 +1368,11 @@ class OpenAIGPT(LanguageModel):
             choices=[msg],
             usage=dict(total_tokens=0),
         )
+        if reasoning == "":
+            # some LLM APIs may not return a separate reasoning field,
+            # and the reasoning may be included in the message content
+            # within delimiters like <think> ... </think>
+            reasoning, completion = self.get_reasoning_final(completion)
         return (
             LLMResponse(
                 message=completion,
@@ -1897,9 +1902,19 @@ class OpenAIGPT(LanguageModel):
             }
         }
         """
-        message = response["choices"][0]["message"]
+        if response.get("choices") is None:
+            message = {}
+        else:
+            message = response["choices"][0].get("message", {})
+        if message is None:
+            message = {}
         msg = message.get("content", "")
         reasoning = message.get("reasoning_content", "")
+        if reasoning == "" and msg is not None:
+            # some LLM APIs may not return a separate reasoning field,
+            # and the reasoning may be included in the message content
+            # within delimiters like <think> ... </think>
+            reasoning, msg = self.get_reasoning_final(msg)
 
         if message.get("function_call") is None:
             fun_call = None

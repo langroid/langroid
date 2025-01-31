@@ -83,8 +83,9 @@ def main(model: str = ""):
     agent = lr.ChatAgent(
         lr.ChatAgentConfig(
             llm=llm_config,
-            system_message="""
-            Use the `company_info` tool to extract company information from a passage
+            system_message=f"""
+            Use the TOOL `{CompanyInfoTool.name()}` 
+            tool to extract company information from a passage
             and compute market-capitalization.
             """,
         )
@@ -118,7 +119,9 @@ def main(model: str = ""):
             """,
         )
         result = task.run(statement)
-
+        if result is None:
+            print("Tool-call failed, try again.")
+            continue
         # note the result.tool_messages will be a list containing
         # an obj of type FinalResultTool, so we can extract fields from it.
         company_result = result.tool_messages[0]
