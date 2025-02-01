@@ -39,6 +39,8 @@ class PostgresDBConfig(VectorStoreConfig):
     port: int = 5432
     replace_collection: bool = False
     embedding: EmbeddingModelsConfig = OpenAIEmbeddingsConfig()
+    pool_size:int = 10
+    max_overflow:int = 20
     hnsw_m: int = 16
     hnsw_ef_construction: int = 200
 
@@ -91,7 +93,10 @@ class PostgresDB(VectorStore):
                 "Provide either Docker or Cloud config to connect to the database."
             )
 
-        return create_engine(connection_string, pool_size=10, max_overflow=20)
+        return create_engine(
+            connection_string,
+            pool_size=self.config.pool_size,
+            max_overflow=self.config.max_overflow)
 
     def _setup_table(self) -> None:
         try:

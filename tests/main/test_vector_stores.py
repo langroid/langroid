@@ -128,6 +128,7 @@ def vecdb(request) -> VectorStore:
         pg_cfg = PostgresDBConfig(
             collection_name="test_" + embed_cfg.model_type,
             embedding=embed_cfg,
+            cloud=True,
             replace_collection=True,
         )
         pg = PostgresDB(pg_cfg)
@@ -521,6 +522,8 @@ def test_lance_metadata():
 )
 def test_postgres_get_all_documents_where(vecdb: PostgresDB):
     """Test the where clause in get_all_documents in PostgresDB"""
+def test_postgres_where_clause(vecdb: PostgresDB):
+    """Test the where clause in get_all_documents,get_similar_texts in PostgresDB"""
     vecdb.create_collection(
         collection_name="test_get_all_documents_where", replace=True
     )
