@@ -15,7 +15,7 @@ docker run --name pgvector -e POSTGRES_USER=your_postgres_user -e POSTGRES_PASSW
 
 This will pull the `ankane/pgvector` image and run it as a PostgreSQL container on your local machine. The database will be accessible at `localhost:5432`. 
 
-### **2. Create a `.env` file for PostgreSQL credentials**
+### **2. Include `.env` file with PostgreSQL credentials**
 
 These environment variables should be same which were set while spinning up docker container.
 Add the following environment variables to a `.env` file for configuring your PostgreSQL connection:
@@ -24,6 +24,12 @@ Add the following environment variables to a `.env` file for configuring your Po
 POSTGRES_USER=your_postgres_user
 POSTGRES_PASSWORD=your_postgres_password
 POSTGRES_DB=your_database_name
+```
+## **If you have connection string with your cloud configuration**
+### **1. If you have connection string, no need to setup the docker**
+
+```dotenv
+POSTGRES_CONNECTION_STRING=your-connection-string
 ```
 
 ---
