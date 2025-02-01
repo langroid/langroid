@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 class PostgresDBConfig(VectorStoreConfig):
     collection_name: str = "embeddings"
     cloud: bool = False
-    docker: bool = True
+    docker: bool = True 
     host: str = "127.0.0.1"
     port: int = 5432
     replace_collection: bool = False
@@ -60,7 +60,17 @@ class PostgresDB(VectorStore):
 
         connection_string: str = None  # Ensure variable is always defined
 
-        if self.config.docker:
+        if self.config.cloud:
+            connection_string = os.getenv("POSTGRES_CONNECTION_STRING")
+
+            if connection_string and connection_string.startswith("postgres://"):
+                connection_string = connection_string.replace(
+                    "postgres://", "postgresql+psycopg2://", 1
+                )
+            elif not connection_string:
+                raise ValueError("Provide the POSTGRES_CONNECTION_STRING.")
+
+        elif self.config.docker:
             username = os.getenv("POSTGRES_USER", "postgres")
             password = os.getenv("POSTGRES_PASSWORD", "postgres")
             database = os.getenv("POSTGRES_DB", "langroid")
@@ -75,13 +85,6 @@ class PostgresDB(VectorStore):
                 f"{self.config.host}:{self.config.port}/{database}"
             )
             self.config.cloud = False  # Ensures cloud is disabled if using Docker
-
-        elif self.config.cloud:
-            connection_string = os.getenv("POSTGRES_CONNECTION_STRING")
-            if not connection_string:
-                raise ValueError(
-                    "Provide the POSTGRES_CONNECTION_STRING for cloud config."
-                )
 
         else:
             raise ValueError(
