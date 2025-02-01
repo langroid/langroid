@@ -5,8 +5,19 @@
 
 To quickly get a PostgreSQL instance with pgvector running, the easiest method is to use Docker. Follow the steps below:
 
-### **1. Create a `.env` file for PostgreSQL credentials**
+### **1. Run PostgreSQL with Docker**
 
+Use the official `ankane/pgvector` Docker image to set up PostgreSQL with the pgvector extension. Run the following command:
+
+```bash
+docker run --name pgvector -e POSTGRES_USER=your_postgres_user -e POSTGRES_PASSWORD=your_postgres_password -e POSTGRES_DB=your_database_name -p 5432:5432 ankane/pgvector
+```
+
+This will pull the `ankane/pgvector` image and run it as a PostgreSQL container on your local machine. The database will be accessible at `localhost:5432`. 
+
+### **2. Create a `.env` file for PostgreSQL credentials**
+
+These environment variables should be same which were set while spinning up docker container.
 Add the following environment variables to a `.env` file for configuring your PostgreSQL connection:
 
 ```dotenv
@@ -15,21 +26,11 @@ POSTGRES_PASSWORD=your_postgres_password
 POSTGRES_DB=your_database_name
 ```
 
-### **2. Run PostgreSQL with Docker**
-
-Use the official `ankane/pgvector` Docker image to set up PostgreSQL with the pgvector extension. Run the following command:
-
-```bash
-docker run --name pgvector -e POSTGRES_USER=your_postgres_user -e POSTGRES_PASSWORD=your_postgres_password -e POSTGRES_DB=your_database_name -p 5432:5432 ankane/pgvector
-```
-
-This will pull the `ankane/pgvector` image and run it as a PostgreSQL container on your local machine. The database will be accessible at `localhost:5432` with the credentials provided in your `.env` file.
-
 ---
 
 ## **Installation**
 
-If you are using `uv` or `pip` for package management, install Langroid with PostgreSQL extra:
+If you are using `uv` or `pip` for package management, install Langroid with postgres extra:
 
 ```bash
 uv add langroid[postgres]  # or

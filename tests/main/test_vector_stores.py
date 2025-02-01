@@ -1,3 +1,4 @@
+import json
 from types import SimpleNamespace
 from typing import List
 
@@ -509,3 +510,46 @@ def test_lance_metadata():
 
     all_docs = vecdb.get_all_documents()
     assert len(all_docs) == 3
+
+
+@pytest.mark.parametrize(
+    "vecdb",
+    ["postgres"],
+    indirect=True,
+)
+def test_postgres_get_all_documents_where(vecdb: PostgresDB):
+    """Test the where clause in get_all_documents in PostgresDB"""
+    vecdb.create_collection(
+        collection_name="test_get_all_documents_where", replace=True
+    )
+    docs = [
+        Document(
+            content="xyz",
+            metadata=DocMetaData(
+                id=str(i),
+                source="wiki" if i % 2 == 0 else "web",
+                category="other" if i < 3 else "news",
+            ),
+        )
+        for i in range(5)
+    ]
+    vecdb.add_documents(docs)
+
+    all_docs = vecdb.get_all_documents(where=json.dumps({"category": "other"}))
+    assert len(all_docs) == 3
+
+    all_docs = vecdb.get_all_documents(where=json.dumps({"source": "web"}))
+    assert len(all_docs) == 2
+
+    all_docs = vecdb.get_all_documents(
+        where=json.dumps({"category": "other", "source": "web"})
+    )
+    assert len(all_docs) == 1
+
+    all_docs = vecdb.get_all_documents(where=json.dumps({"category": "news"}))
+    assert len(all_docs) == 2
+
+    all_docs = vecdb.get_all_documents(where=json.dumps({"source": "wiki"}))
+    assert len(all_docs) == 3
+
+    vecdb.delete_collection("test_get_all_documents_where")
