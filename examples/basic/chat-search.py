@@ -10,7 +10,11 @@ question.
 
 Run like this:
 
-python3 examples/basic/chat-search.py
+    python3 examples/basic/chat-search.py
+
+or
+
+    uv run examples/basic/chat-search.py -m groq/deepseek-r1-distill-llama-70b
 
 There are optional args, especially note these:
 
