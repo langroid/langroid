@@ -50,6 +50,13 @@ except ImportError:
     pass
 
 try:
+    from . import postgres
+    from .postgres import PostgresDB, PostgresDBConfig
+
+    postgres  # silence linters
+    PostgresDB
+    PostgresDBConfig
+    __all__.extend(["postgres", "PostgresDB", "PostgresDBConfig"])
     from . import weaviatedb
     from .weaviatedb import WeaviateDBConfig, WeaviateDB
 

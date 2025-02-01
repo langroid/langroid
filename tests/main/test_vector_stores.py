@@ -1,3 +1,4 @@
+import json
 from types import SimpleNamespace
 from typing import List
 
@@ -12,6 +13,7 @@ from langroid.vector_store.base import VectorStore
 from langroid.vector_store.lancedb import LanceDB, LanceDBConfig
 from langroid.vector_store.meilisearch import MeiliSearch, MeiliSearchConfig
 from langroid.vector_store.momento import MomentoVI, MomentoVIConfig
+from langroid.vector_store.postgres import PostgresDB, PostgresDBConfig
 from langroid.vector_store.qdrantdb import QdrantDB, QdrantDBConfig
 from langroid.vector_store.weaviatedb import WeaviateDB, WeaviateDBConfig
 
@@ -122,6 +124,18 @@ def vecdb(request) -> VectorStore:
         rmdir(cd_dir)
         return
 
+    if request.param == "postgres":
+        pg_cfg = PostgresDBConfig(
+            collection_name="test_" + embed_cfg.model_type,
+            embedding=embed_cfg,
+            cloud=True,
+            replace_collection=True,
+        )
+        pg = PostgresDB(pg_cfg)
+        pg.add_documents(stored_docs)
+        yield pg
+        return
+
     if request.param == "meilisearch":
         ms_cfg = MeiliSearchConfig(
             collection_name="test-meilisearch",
@@ -174,7 +188,7 @@ def vecdb(request) -> VectorStore:
 # add "momento" when their API docs are ready
 @pytest.mark.parametrize(
     "vecdb",
-    ["qdrant_cloud", "chroma", "weaviate_cloud", "lancedb", "qdrant_local"],
+    ["lancedb", "chroma", "qdrant_cloud", "qdrant_local", "postgres", "weaviate_cloud"],
     indirect=True,
 )
 def test_vector_stores_search(
@@ -223,7 +237,7 @@ def test_hybrid_vector_search(
 
 @pytest.mark.parametrize(
     "vecdb",
-    ["lancedb", "chroma", "qdrant_local", "qdrant_cloud", "weaviate_cloud"],
+    ["lancedb", "chroma", "qdrant_local", "qdrant_cloud", "postgres", "weaviate_cloud"],
     indirect=True,
 )
 def test_vector_stores_access(vecdb):
@@ -276,14 +290,24 @@ def test_vector_stores_access(vecdb):
     docs_and_scores = vecdb.similar_texts_with_scores("cow", k=1)
     assert len(docs_and_scores) == 1
     assert docs_and_scores[0][0].content == "cow"
-
-    coll_names = [f"Test_junk_{i}" for i in range(3)]
-    for coll in coll_names:
-        vecdb.create_collection(collection_name=coll)
-    n_colls = len(
-        [c for c in vecdb.list_collections(empty=True) if c.startswith("Test_junk")]
-    )
-    n_dels = vecdb.clear_all_collections(really=True, prefix="Test_junk")
+    if isinstance(vecdb, WeaviateDB):
+        # Weaviate enforces capitalized collection names; 
+        # verifying adherence.
+        coll_names = [f"Test_junk_{i}" for i in range(3)]
+        for coll in coll_names:
+            vecdb.create_collection(collection_name=coll)
+        n_colls = len(
+            [c for c in vecdb.list_collections(empty=True) if c.startswith("Test_junk")]
+        )
+        n_dels = vecdb.clear_all_collections(really=True, prefix="Test_junk")
+    else:
+        coll_names = [f"test_junk_{i}" for i in range(3)]
+        for coll in coll_names:
+            vecdb.create_collection(collection_name=coll)
+        n_colls = len(
+            [c for c in vecdb.list_collections(empty=True) if c.startswith("test_junk")]
+        )
+        n_dels = vecdb.clear_all_collections(really=True, prefix="test_junk")
     # LanceDB.create_collection() does nothing, since we can't create a table
     # without a schema or data.
     assert n_colls == n_dels == (0 if isinstance(vecdb, LanceDB) else len(coll_names))
@@ -294,7 +318,7 @@ def test_vector_stores_access(vecdb):
 
 @pytest.mark.parametrize(
     "vecdb",
-    ["lancedb", "chroma", "qdrant_cloud", "qdrant_local", "weaviate_cloud"],
+    ["lancedb", "chroma", "qdrant_cloud", "qdrant_local", "postgres", "weaviate_cloud"],
     indirect=True,
 )
 def test_vector_stores_context_window(vecdb):
@@ -354,7 +378,7 @@ def test_vector_stores_context_window(vecdb):
 
 @pytest.mark.parametrize(
     "vecdb",
-    ["chroma", "lancedb", "qdrant_cloud", "qdrant_local", "weaviate_cloud"],
+    ["chroma", "lancedb", "qdrant_cloud", "qdrant_local", "postgres", "weaviate_cloud"],
     indirect=True,
 )
 def test_vector_stores_overlapping_matches(vecdb):
@@ -489,3 +513,48 @@ def test_lance_metadata():
 
     all_docs = vecdb.get_all_documents()
     assert len(all_docs) == 3
+
+
+@pytest.mark.parametrize(
+    "vecdb",
+    ["postgres"],
+    indirect=True,
+)
+def test_postgres_get_all_documents_where(vecdb: PostgresDB):
+    """Test the where clause in get_all_documents in PostgresDB"""
+def test_postgres_where_clause(vecdb: PostgresDB):
+    """Test the where clause in get_all_documents,get_similar_texts in PostgresDB"""
+    vecdb.create_collection(
+        collection_name="test_get_all_documents_where", replace=True
+    )
+    docs = [
+        Document(
+            content="xyz",
+            metadata=DocMetaData(
+                id=str(i),
+                source="wiki" if i % 2 == 0 else "web",
+                category="other" if i < 3 else "news",
+            ),
+        )
+        for i in range(5)
+    ]
+    vecdb.add_documents(docs)
+
+    all_docs = vecdb.get_all_documents(where=json.dumps({"category": "other"}))
+    assert len(all_docs) == 3
+
+    all_docs = vecdb.get_all_documents(where=json.dumps({"source": "web"}))
+    assert len(all_docs) == 2
+
+    all_docs = vecdb.get_all_documents(
+        where=json.dumps({"category": "other", "source": "web"})
+    )
+    assert len(all_docs) == 1
+
+    all_docs = vecdb.get_all_documents(where=json.dumps({"category": "news"}))
+    assert len(all_docs) == 2
+
+    all_docs = vecdb.get_all_documents(where=json.dumps({"source": "wiki"}))
+    assert len(all_docs) == 3
+
+    vecdb.delete_collection("test_get_all_documents_where")

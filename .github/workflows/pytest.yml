@@ -122,6 +122,7 @@ jobs:
           --extra docling \
           --extra pymupdf4llm \
           --extra weaviate \
+          --extra postgres\
           --extra hf-embeddings \
           --extra unstructured \
           --extra pdf-parsers \
