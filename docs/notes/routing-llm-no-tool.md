@@ -38,8 +38,8 @@ To handle such `non-tool` LLM responses, we can override the `ChatAgent`'s
 this [FAQ](https://langroid.github.io/langroid/FAQ/#how-can-i-handle-an-llm-forgetting-to-generate-a-toolmessage).
 But in many cases we can be pretty certain that the only possibilities are (2) or (3).
 For such cases Langroid provides a simpler way to specify which of those "routing"
-actions to take, instead of having to define a `handle_message_fallback` method. 
-In the `ChatAgentConfig` you can specify a `non_tool_routing` attribute, which
+actions to take, instead of having to explicitly define a `handle_message_fallback` 
+method. In the `ChatAgentConfig` you can specify a `non_tool_routing` attribute, which
 (currently) can be either "user" or "done", e.g.,
 
 ```python
@@ -58,3 +58,5 @@ A simple example is in the [`chat-search.py`](https://github.com/langroid/langro
 script, and a in the `test_non_tool_routing` test in   
 [`test_tool_messages.py`](https://github.com/langroid/langroid/blob/main/tests/main/test_tool_messages.py).
 
+Behind the scenes, Langroid uses this `non_tool_routing` attribute to define
+the appropriate actions in the agent's `handle_message_fallback` method.
