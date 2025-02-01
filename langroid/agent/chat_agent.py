@@ -5,7 +5,7 @@ import logging
 import textwrap
 from contextlib import ExitStack
 from inspect import isclass
-from typing import Dict, List, Optional, Self, Set, Tuple, Type, Union, cast
+from typing import Any, Dict, List, Optional, Self, Set, Tuple, Type, Union, cast
 
 import openai
 from rich import print
@@ -31,6 +31,7 @@ from langroid.language_models.base import (
     ToolChoiceTypes,
 )
 from langroid.language_models.openai_gpt import OpenAIGPT
+from langroid.mytypes import Entity, Routing
 from langroid.pydantic_v1 import BaseModel, ValidationError
 from langroid.utils.configuration import settings
 from langroid.utils.object_registry import ObjectRegistry
@@ -52,6 +53,7 @@ class ChatAgentConfig(AgentConfig):
         user_message: user message to include in message sequence.
              Used only if `task` is not specified in the constructor.
         use_tools: whether to use our own ToolMessages mechanism
+        non_tool_routing (Routing|str): routing when LLM generates non-tool msg.
         use_functions_api: whether to use functions/tools native to the LLM API
                 (e.g. OpenAI's `function_call` or `tool_call` mechanism)
         use_tools_api: When `use_functions_api` is True, if this is also True,
@@ -84,6 +86,7 @@ class ChatAgentConfig(AgentConfig):
 
     system_message: str = "You are a helpful assistant."
     user_message: Optional[str] = None
+    non_tool_routing: Routing | None = None
     use_tools: bool = False
     use_functions_api: bool = True
     use_tools_api: bool = False
@@ -578,6 +581,31 @@ class ChatAgent(Agent):
 
         # remove leading and trailing newlines and other whitespace
         return LLMMessage(role=Role.SYSTEM, content=content.strip())
+
+    def handle_message_fallback(self, msg: str | ChatDocument) -> Any:
+        """
+        Fallback method for the "no-tools" scenario.
+        Users the self.config.non_tool_routing to determine the action to take.
+
+        This method can be overridden by subclasses, e.g.,
+        to create a "reminder" message when a tool is expected but the LLM "forgot"
+        to generate one.
+
+        Args:
+            msg (str | ChatDocument): The input msg to handle
+        Returns:
+            Any: The result of the handler method
+        """
+        if self.config.non_tool_routing is None:
+            return None
+        if isinstance(msg, ChatDocument) and msg.metadata.sender == Entity.LLM:
+            from langroid.agent.tools.orchestration import AgentDoneTool, ForwardTool
+
+            match self.config.non_tool_routing:
+                case Routing.FORWARD_USER:
+                    return ForwardTool(agent="User")
+                case Routing.DONE:
+                    return AgentDoneTool(content=msg.content, tools=msg.tool_messages)
 
     def unhandled_tools(self) -> set[str]:
         """The set of tools that are known but not handled.

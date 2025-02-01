@@ -93,3 +93,12 @@ class Document(BaseModel):
         SOURCE:{self.metadata.source}
         """
         )
+
+
+class Routing(str, Enum):
+    """
+    Possible Routing options. Mainly used to handle non-tool msgs from LLM.
+    """
+
+    FORWARD_USER = "user"  # forward msg to user
+    DONE = "done"  # task done

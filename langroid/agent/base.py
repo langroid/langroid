@@ -333,6 +333,11 @@ class Agent(ABC):
         if hasattr(message_class, "handle_message_fallback") and (
             inspect.isfunction(message_class.handle_message_fallback)
         ):
+            # When a ToolMessage has a `handle_message_fallback` method,
+            # we inject it into the agent as a method, overriding the default
+            # `handle_message_fallback` method (which does nothing).
+            # It's possible multiple tool messages have a `handle_message_fallback`,
+            # in which case, the last one inserted will be used.
             setattr(
                 self,
                 "handle_message_fallback",
