@@ -45,13 +45,15 @@ In the `ChatAgentConfig` you can specify a `non_tool_routing` attribute, which
 ```python
 config = lr.ChatAgentConfig(
     ...
-    non_tool_routing="user",
+    non_tool_routing="user", # or "done", or None (default)
 )
 ```
-If this config attribute is set to "user", then whenever the LLM's response has no 
+
+- If this config attribute is set to `"user"`, then whenever the LLM's response has no 
 tool-call, the message is forwarded to the user, awaiting their response.
-When it is set to "done", then the task is ended, with the content of the result
+- When it is set to `"done"`, then the task is ended, with the content of the result
 set to the content of the last LLM response. 
+
 A simple example is in the [`chat-search.py`](https://github.com/langroid/langroid/blob/main/examples/basic/chat-search.py) 
 script, and a in the `test_non_tool_routing` test in   
 [`test_tool_messages.py`](https://github.com/langroid/langroid/blob/main/tests/main/test_tool_messages.py).
