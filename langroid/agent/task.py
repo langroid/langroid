@@ -990,7 +990,7 @@ class Task:
         if not settings.quiet:
             print(
                 f"[bold magenta]{self._enter} Starting Agent "
-                f"{self.name} ({self.message_history_idx+1}) "
+                f"{self.name} ({self.message_history_idx + 1}) "
                 f"{llm_model} [/bold magenta]"
             )
 

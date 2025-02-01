@@ -252,7 +252,7 @@ def read_file(path: str, line_numbers: bool = False) -> str:
     content = file.read_text()
     if line_numbers:
         lines = content.splitlines()
-        numbered_lines = [f"{i+1}: {line}" for i, line in enumerate(lines)]
+        numbered_lines = [f"{i + 1}: {line}" for i, line in enumerate(lines)]
         return "\n".join(numbered_lines)
     return content
 

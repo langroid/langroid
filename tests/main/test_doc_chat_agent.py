@@ -1238,7 +1238,7 @@ def test_doc_chat_agent_ingest_paths(test_settings: Settings, vecdb):
     # Create sets of expected and actual metadata
     expected_categories = {"file", "bytes"}
     expected_sources = {
-        _append_metadata_source(s, f"src{i+1}") for i, s in enumerate(orig_sources)
+        _append_metadata_source(s, f"src{i + 1}") for i, s in enumerate(orig_sources)
     }
 
     actual_categories = {d.metadata.category for d in stored}

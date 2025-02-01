@@ -267,7 +267,11 @@ def number_kg_agent(setup_arango, test_database):
 
     # Add plus4 edges:
     plus4_edges = [
-        {"_key": f"plus4_{i}_{i+4}", "_from": f"numbers/n{i}", "_to": f"numbers/n{i+4}"}
+        {
+            "_key": f"plus4_{i}_{i + 4}",
+            "_from": f"numbers/n{i}",
+            "_to": f"numbers/n{i + 4}",
+        }
         for i in number_list
         if i + 4 in number_list
     ]
