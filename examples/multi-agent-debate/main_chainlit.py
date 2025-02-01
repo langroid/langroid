@@ -4,6 +4,7 @@ import chainlit as cl
 import os
 
 import langroid as lr
+from langroid.agent.chat_agent import ChatAgent
 from langroid.language_models import OpenAIGPTConfig
 from langroid.agent.chat_agent import ChatAgentConfig
 from langroid.agent.task import Task
@@ -11,13 +12,15 @@ from langroid.agent.tools.metaphor_search_tool import MetaphorSearchTool
 from langroid.utils.logging import setup_logger
 from langroid.agent.tools.orchestration import DoneTool
 from langroid.utils.configuration import settings
-from langroid.agent.callbacks.chainlit import ChainlitTaskCallbacks
+from langroid.agent.callbacks.chainlit import (
+    ChainlitTaskCallbacks,
+    ChainlitCallbackConfig,
+)
 from langroid.agent.callbacks.chainlit import add_instructions
 
 from config import get_base_llm_config, get_global_settings, get_questions_agent_config
 from models import SystemMessages, load_system_messages
 from main import (
-    create_chat_agent,
     parse_and_format_message_history,
     MetaphorSearchChatAgent,
 )
@@ -41,6 +44,72 @@ from chainlit_utils import (
     is_metaphor_search_key_set,
     is_url_ask_question,
 )
+
+
+class CustomChainlitTaskCallbacks(ChainlitTaskCallbacks):
+    """
+    Custom subclass of ChainlitTaskCallbacks with adjusted behavior for task integration.
+    """
+
+    def __init__(
+        self,
+        task: lr.Task,
+        config: ChainlitCallbackConfig = ChainlitCallbackConfig(),
+    ):
+        """
+        Initialize the custom task callbacks and recursively inject them.
+        """
+        # Pass the task directly instead of task.agent
+        super().__init__(task, config)
+        # Inject callbacks recursively
+        self._inject_callbacks(task)
+        self.task = task
+        if config.show_subtask_response:
+            self.task.callbacks.show_subtask_response = self.show_subtask_response
+
+    def show_subtask_response(
+        self, task: lr.Task, content: str, is_tool: bool = False
+    ) -> None:
+        """
+        Override the display format for subtask responses.
+        """
+
+    @classmethod
+    def _inject_callbacks(
+        cls, task: lr.Task, config: ChainlitCallbackConfig = ChainlitCallbackConfig()
+    ) -> None:
+        """
+        Recursively apply CustomChainlitTaskCallbacks to agents of sub-tasks.
+        """
+        for sub_task in task.sub_tasks:
+            CustomChainlitTaskCallbacks(sub_task, config=config)
+
+
+def create_chat_agent(
+    name: str, llm_config: OpenAIGPTConfig, system_message: str
+) -> ChatAgent:
+    """creates a ChatAgent with the given parameters.
+
+    Args:
+        name (str): The name of the agent.
+        llm_config (OpenAIGPTConfig): The LLM configuration for the agent.
+        system_message (str): The system message to guide the agent's LLM.
+
+    Returns:
+        ChatAgent: A configured ChatAgent instance.
+    """
+    # Modify the system message to include instructions for the agent
+    system_message = f"""
+        You are {name}. Start your response with '{name}: '
+        {system_message}
+        """
+    return ChatAgent(
+        ChatAgentConfig(
+            llm=llm_config,
+            name=name,
+            system_message=system_message,
+        )
+    )
 
 
 @cl.on_chat_start
@@ -200,11 +269,12 @@ async def on_chat_start(
     ai_task = Task(ai_agent, interactive=False, single_round=True)
 
     user_task.add_sub_task(ai_task)
+
     if not llm_delegate:
         ChainlitTaskCallbacks(user_task)
         await user_task.run_async(user_agent.user_message, turns=max_turns)
     else:
-        ChainlitTaskCallbacks(user_task)
+        CustomChainlitTaskCallbacks(user_task)
         await user_task.run_async("get started", turns=max_turns)
 
     # Determine the last agent based on turn count and alternation
