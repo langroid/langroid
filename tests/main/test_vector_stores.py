@@ -290,6 +290,8 @@ def test_vector_stores_access(vecdb):
     assert len(docs_and_scores) == 1
     assert docs_and_scores[0][0].content == "cow"
     if isinstance(vecdb, WeaviateDB):
+        # Weaviate enforces capitalized collection names; 
+        # verifying adherence.
         coll_names = [f"Test_junk_{i}" for i in range(3)]
         for coll in coll_names:
             vecdb.create_collection(collection_name=coll)
