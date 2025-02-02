@@ -197,6 +197,7 @@ class OpenAICallParams(BaseModel):
     logit_bias: Dict[int, float] | None = None  # token_id -> bias
     logprobs: bool = False
     top_p: float | None = 1.0
+    reasoning_effort: str|None = None # or "low" or "high" or "medium"
     top_logprobs: int | None = None  # if int, requires logprobs=True
     n: int = 1  # how many completions to generate (n > 1 is NOT handled now)
     stop: str | List[str] | None = None  # (list of) stop sequence(s)

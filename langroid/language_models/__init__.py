@@ -21,7 +21,7 @@ from .model_info import (
     GeminiModel,
     OpenAICompletionModel,
 )
-from .openai_gpt import OpenAIGPTConfig, OpenAIGPT
+from .openai_gpt import OpenAIGPTConfig, OpenAIGPT, OpenAICallParams
 from .mock_lm import MockLM, MockLMConfig
 from .azure_openai import AzureConfig, AzureGPT
 
@@ -48,6 +48,7 @@ __all__ = [
     "OpenAICompletionModel",
     "OpenAIGPTConfig",
     "OpenAIGPT",
+    "OpenAICallParams",
     "AzureConfig",
     "AzureGPT",
     "MockLM",
