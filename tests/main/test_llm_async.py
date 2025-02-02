@@ -34,7 +34,7 @@ async def test_openai_gpt_async(
         type="openai",
         max_output_tokens=100,
         min_output_tokens=10,
-        completion_model=OpenAICompletionModel.GPT3_5_TURBO_INSTRUCT,
+        completion_model=OpenAICompletionModel.DAVINCI,
         cache_config=RedisCacheConfig(fake=False),
         async_stream_quiet=stream_quiet,
     )
@@ -90,7 +90,7 @@ async def test_llm_async_concurrent(test_settings: Settings):
         type="openai",
         max_output_tokens=100,
         min_output_tokens=10,
-        completion_model=OpenAICompletionModel.GPT3_5_TURBO_INSTRUCT,
+        completion_model=OpenAICompletionModel.DAVINCI,
         cache_config=RedisCacheConfig(fake=False),
     )
 

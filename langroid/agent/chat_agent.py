@@ -1488,11 +1488,11 @@ class ChatAgent(Agent):
                 self.message_history.extend(llm_msgs)
 
         hist = self.message_history
-        output_len = self.config.llm.max_output_tokens
+        output_len = self.config.llm.model_max_output_tokens
         if (
             truncate
             and self.chat_num_tokens(hist)
-            > self.llm.chat_context_length() - self.config.llm.max_output_tokens
+            > self.llm.chat_context_length() - self.config.llm.model_max_output_tokens
         ):
             # chat + output > max context length,
             # so first try to shorten requested output len to fit.
@@ -1517,7 +1517,7 @@ class ChatAgent(Agent):
                         The message history is longer than the max chat context 
                         length allowed, and we have run out of messages to drop.
                         HINT: In your `OpenAIGPTConfig` object, try increasing
-                        `chat_context_length` or decreasing `max_output_tokens`.
+                        `chat_context_length` or decreasing `model_max_output_tokens`.
                         """
                         )
                     # drop the second message, i.e. first msg after the sys msg
@@ -1666,12 +1666,12 @@ class ChatAgent(Agent):
         Args:
             messages: seq of messages (with role, content fields) sent to LLM
             output_len: max number of tokens expected in response.
-                    If None, use the LLM's default max_output_tokens.
+                    If None, use the LLM's default model_max_output_tokens.
         Returns:
             Document (i.e. with fields "content", "metadata")
         """
         assert self.config.llm is not None and self.llm is not None
-        output_len = output_len or self.config.llm.max_output_tokens
+        output_len = output_len or self.config.llm.model_max_output_tokens
         streamer = noop_fn
         if self.llm.get_stream():
             streamer = self.callbacks.start_llm_stream()
@@ -1741,7 +1741,7 @@ class ChatAgent(Agent):
         Async version of `llm_response_messages`. See there for details.
         """
         assert self.config.llm is not None and self.llm is not None
-        output_len = output_len or self.config.llm.max_output_tokens
+        output_len = output_len or self.config.llm.model_max_output_tokens
         functions, fun_call, tools, force_tool, output_format = self._function_args()
         assert self.llm is not None
 

@@ -19,6 +19,7 @@ from typing import (
 
 from langroid.cachedb.base import CacheDBConfig
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
+from langroid.language_models.model_info import get_model_info
 from langroid.parsing.agent_chats import parse_message
 from langroid.parsing.parse_json import parse_imperfect_json, top_level_json_field
 from langroid.prompts.dialog import collate_chat_history
@@ -60,6 +61,7 @@ class LLMConfig(BaseSettings):
     streamer_async: Optional[Callable[..., Awaitable[None]]] = async_noop_fn
     api_base: str | None = None
     formatter: None | str = None
+    max_output_tokens: int | None = None
     timeout: int = 20  # timeout for API requests
     chat_model: str = ""
     completion_model: str = ""
@@ -67,7 +69,6 @@ class LLMConfig(BaseSettings):
     chat_context_length: int = 8000
     async_stream_quiet: bool = True  # suppress streaming output in async mode?
     completion_context_length: int = 8000
-    max_output_tokens: int = 1024  # generate at most this many tokens
     # if input length + max_output_tokens > context length of model,
     # we will try shortening requested output
     min_output_tokens: int = 64
@@ -83,6 +84,12 @@ class LLMConfig(BaseSettings):
     # Dict of model -> (input/prompt cost, output/completion cost)
     chat_cost_per_1k_tokens: Tuple[float, float] = (0.0, 0.0)
     completion_cost_per_1k_tokens: Tuple[float, float] = (0.0, 0.0)
+
+    @property
+    def model_max_output_tokens(self) -> int:
+        return (
+            self.max_output_tokens or get_model_info(self.chat_model).max_output_tokens
+        )
 
 
 class LLMFunctionCall(BaseModel):
