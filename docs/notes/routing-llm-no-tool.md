@@ -15,9 +15,8 @@ task = lr.Task(agent, interactive=False)
 task.run("Hello")
 ```
 
-Consider how the `task.run()` might look like. 
-When the agent's `llm_response` returns a valid tool-call,
-the sequence of steps looks like this:
+Consider the steps involved in `task.run()`. When the agent's `llm_response` 
+returns a valid tool-call, the sequence of steps looks like this:
 
 - `llm_response` -> tool $T$
 - `aggent_response` handles $T$ -> returns results $R$

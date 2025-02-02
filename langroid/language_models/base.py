@@ -61,7 +61,7 @@ class LLMConfig(BaseSettings):
     streamer_async: Optional[Callable[..., Awaitable[None]]] = async_noop_fn
     api_base: str | None = None
     formatter: None | str = None
-    max_output_tokens: int | None = None
+    max_output_tokens: int | None = 8192  # specify None to use model_max_output_tokens
     timeout: int = 20  # timeout for API requests
     chat_model: str = ""
     completion_model: str = ""
