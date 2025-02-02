@@ -31,7 +31,7 @@ from langroid.language_models.base import (
     ToolChoiceTypes,
 )
 from langroid.language_models.openai_gpt import OpenAIGPT
-from langroid.mytypes import Entity, Routing
+from langroid.mytypes import Entity, NonToolAction
 from langroid.pydantic_v1 import BaseModel, ValidationError
 from langroid.utils.configuration import settings
 from langroid.utils.object_registry import ObjectRegistry
@@ -53,7 +53,7 @@ class ChatAgentConfig(AgentConfig):
         user_message: user message to include in message sequence.
              Used only if `task` is not specified in the constructor.
         use_tools: whether to use our own ToolMessages mechanism
-        non_tool_routing (Routing|str): routing when LLM generates non-tool msg.
+        handle_llm_no_tool (NonToolAction|str): routing when LLM generates non-tool msg.
         use_functions_api: whether to use functions/tools native to the LLM API
                 (e.g. OpenAI's `function_call` or `tool_call` mechanism)
         use_tools_api: When `use_functions_api` is True, if this is also True,
@@ -86,7 +86,7 @@ class ChatAgentConfig(AgentConfig):
 
     system_message: str = "You are a helpful assistant."
     user_message: Optional[str] = None
-    non_tool_routing: Routing | None = None
+    handle_llm_no_tool: NonToolAction | None = None
     use_tools: bool = False
     use_functions_api: bool = True
     use_tools_api: bool = False
@@ -596,15 +596,15 @@ class ChatAgent(Agent):
         Returns:
             Any: The result of the handler method
         """
-        if self.config.non_tool_routing is None:
+        if self.config.handle_llm_no_tool is None:
             return None
         if isinstance(msg, ChatDocument) and msg.metadata.sender == Entity.LLM:
             from langroid.agent.tools.orchestration import AgentDoneTool, ForwardTool
 
-            match self.config.non_tool_routing:
-                case Routing.FORWARD_USER:
+            match self.config.handle_llm_no_tool:
+                case NonToolAction.FORWARD_USER:
                     return ForwardTool(agent="User")
-                case Routing.DONE:
+                case NonToolAction.DONE:
                     return AgentDoneTool(content=msg.content, tools=msg.tool_messages)
 
     def unhandled_tools(self) -> set[str]:

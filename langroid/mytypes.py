@@ -95,7 +95,7 @@ class Document(BaseModel):
         )
 
 
-class Routing(str, Enum):
+class NonToolAction(str, Enum):
     """
     Possible Routing options. Mainly used to handle non-tool msgs from LLM.
     """

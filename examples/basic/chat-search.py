@@ -112,7 +112,7 @@ def main(
     search_tool_handler_method = search_tool_class.name()
     config = lr.ChatAgentConfig(
         name="Seeker",
-        non_tool_routing="user",  # fwd to user when LLM sends non-tool msg
+        handle_llm_no_tool="user",  # fwd to user when LLM sends non-tool msg
         llm=llm_config,
         vecdb=None,
         system_message=f"""

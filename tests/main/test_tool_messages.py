@@ -1790,7 +1790,7 @@ def test_valid_structured_recovery():
 
 
 @pytest.mark.parametrize("routing", [None, "user", "done"])
-def test_non_tool_routing(routing: str):
+def test_handle_llm_no_tool(routing: str):
     """Verify that ChatAgentConfig.non_tool_routing works as expected"""
 
     def mock_llm_response(x: str) -> str:
@@ -1803,7 +1803,7 @@ def test_non_tool_routing(routing: str):
                 return "DONE"
 
     config = ChatAgentConfig(
-        non_tool_routing=routing,
+        handle_llm_no_tool=routing,
         llm=MockLMConfig(response_fn=mock_llm_response),
     )
     agent = ChatAgent(config)
@@ -1824,6 +1824,6 @@ def test_non_tool_routing(routing: str):
     # test that using an invalid routing string raises an error
     with pytest.raises(ValueError):
         config = ChatAgentConfig(
-            non_tool_routing="invalid",
+            handle_llm_no_tool="invalid",
             llm=MockLMConfig(response_fn=mock_llm_response),
         )
