@@ -1565,7 +1565,7 @@ class DocChatAgent(ChatAgent):
         tot_tokens = self.parser.num_tokens(full_text)
         MAX_INPUT_TOKENS = (
             self.llm.completion_context_length()
-            - self.config.llm.max_output_tokens
+            - self.config.llm.model_max_output_tokens
             - 100
         )
         if tot_tokens > MAX_INPUT_TOKENS:

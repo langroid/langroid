@@ -114,7 +114,7 @@ nav:
       - Enriching Chunks for Retrieval: notes/enriching-for-retrieval.md
       - Reasoning Content: notes/reasoning-content.md
       - Weaviate: notes/weaviate.md
-      - Routing No-Tool Messages: notes/routing-llm-no-tool.md
+      - Handling LLM Non-Tool Messages: notes/routing-llm-no-tool.md
 
   - Examples:
     - Guide: examples/guide.md

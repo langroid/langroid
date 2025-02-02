@@ -15,9 +15,8 @@ task = lr.Task(agent, interactive=False)
 task.run("Hello")
 ```
 
-Consider how the `task.run()` might look like. 
-When the agent's `llm_response` returns a valid tool-call,
-the sequence of steps looks like this:
+Consider the steps involved in `task.run()`. When the agent's `llm_response` 
+returns a valid tool-call, the sequence of steps looks like this:
 
 - `llm_response` -> tool $T$
 - `aggent_response` handles $T$ -> returns results $R$
@@ -37,15 +36,15 @@ To handle such `non-tool` LLM responses, we can override the `ChatAgent`'s
 `handle_message_fallback` method, as described in  
 this [FAQ](https://langroid.github.io/langroid/FAQ/#how-can-i-handle-an-llm-forgetting-to-generate-a-toolmessage).
 But in many cases we can be pretty certain that the only possibilities are (2) or (3).
-For such cases Langroid provides a simpler way to specify which of those "routing"
+For such cases Langroid provides a simpler way to specify which of those 
 actions to take, instead of having to explicitly define a `handle_message_fallback` 
-method. In the `ChatAgentConfig` you can specify a `non_tool_routing` attribute, which
+method. In the `ChatAgentConfig` you can specify a `handle_llm_no_tool` attribute, which
 (currently) can be either "user" or "done", e.g.,
 
 ```python
 config = lr.ChatAgentConfig(
     ...
-    non_tool_routing="user", # or "done", or None (default)
+    handle_llm_no_tool="user", # or "done", or None (default)
 )
 ```
 
@@ -55,8 +54,8 @@ tool-call, the message is forwarded to the user, awaiting their response.
 set to the content of the last LLM response. 
 
 A simple example is in the [`chat-search.py`](https://github.com/langroid/langroid/blob/main/examples/basic/chat-search.py) 
-script, and a in the `test_non_tool_routing` test in   
+script, and a in the `test_handle_llm_no_tool` test in   
 [`test_tool_messages.py`](https://github.com/langroid/langroid/blob/main/tests/main/test_tool_messages.py).
 
-Behind the scenes, Langroid uses this `non_tool_routing` attribute to define
+Behind the scenes, Langroid uses this `handle_llm_no_tool` attribute to define
 the appropriate actions in the agent's `handle_message_fallback` method.

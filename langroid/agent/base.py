@@ -917,7 +917,7 @@ class Agent(ABC):
         else:
             prompt = message
 
-        output_len = self.config.llm.max_output_tokens
+        output_len = self.config.llm.model_max_output_tokens
         if self.num_tokens(prompt) + output_len > self.llm.completion_context_length():
             output_len = self.llm.completion_context_length() - self.num_tokens(prompt)
             if output_len < self.config.llm.min_output_tokens:
@@ -986,7 +986,7 @@ class Agent(ABC):
                 # show rich spinner only if not streaming!
                 cm = status("LLM responding to message...")
                 stack.enter_context(cm)
-            output_len = self.config.llm.max_output_tokens
+            output_len = self.config.llm.model_max_output_tokens
             if (
                 self.num_tokens(prompt) + output_len
                 > self.llm.completion_context_length()
@@ -1871,7 +1871,7 @@ class Agent(ABC):
             cumul_cost = format(tot_cost, ".4f")
             assert isinstance(self.llm, LanguageModel)
             context_length = self.llm.chat_context_length()
-            max_out = self.config.llm.max_output_tokens
+            max_out = self.config.llm.model_max_output_tokens
 
             llm_model = (
                 "no-LLM" if self.config.llm is None else self.llm.config.chat_model
