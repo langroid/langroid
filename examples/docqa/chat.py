@@ -157,7 +157,7 @@ def main(
             )
         case "postgres" | "postgresdb":
             config.vecdb = lr.vector_store.PostgresDBConfig(
-                embedding=embed_cfg,
+                embedding=embed_cfg, cloud=True
             )
 
     set_global(

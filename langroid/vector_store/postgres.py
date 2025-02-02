@@ -34,13 +34,13 @@ logger = logging.getLogger(__name__)
 class PostgresDBConfig(VectorStoreConfig):
     collection_name: str = "embeddings"
     cloud: bool = False
-    docker: bool = True 
+    docker: bool = True
     host: str = "127.0.0.1"
     port: int = 5432
     replace_collection: bool = False
     embedding: EmbeddingModelsConfig = OpenAIEmbeddingsConfig()
-    pool_size:int = 10
-    max_overflow:int = 20
+    pool_size: int = 10
+    max_overflow: int = 20
     hnsw_m: int = 16
     hnsw_ef_construction: int = 200
 
@@ -96,7 +96,8 @@ class PostgresDB(VectorStore):
         return create_engine(
             connection_string,
             pool_size=self.config.pool_size,
-            max_overflow=self.config.max_overflow)
+            max_overflow=self.config.max_overflow,
+        )
 
     def _setup_table(self) -> None:
         try:
