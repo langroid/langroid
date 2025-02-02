@@ -21,7 +21,7 @@ from fire import Fire
 def main(model: str = ""):
     llm_config = lm.OpenAIGPTConfig(
         chat_model=model or "deepseek/deepseek-reasoner",
-        params=lm.OpenAICallParams(reasoning_effort="low"), #only o1, o3-mini?
+        params=lm.OpenAICallParams(reasoning_effort="low"),  # only o1, o3-mini?
     )
 
     # (1) Direct LLM interaction
