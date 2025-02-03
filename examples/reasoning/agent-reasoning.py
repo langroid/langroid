@@ -9,6 +9,8 @@ Run like this (omit the model argument to default to the deepseek-reasoner model
 
 or
     uv run examples/reasoning/agent-reasoning.py
+
+Other reasoning models to try: o1, o1-mini, o3-mini
 """
 
 import langroid as lr
@@ -19,12 +21,13 @@ from fire import Fire
 def main(model: str = ""):
     llm_config = lm.OpenAIGPTConfig(
         chat_model=model or "deepseek/deepseek-reasoner",
+        params=lm.OpenAICallParams(reasoning_effort="low"),  # only o1, o3-mini?
     )
 
     # (1) Direct LLM interaction
     llm = lm.OpenAIGPT(llm_config)
 
-    response = llm.chat("Is 9.8 bigger than 9.11?", max_tokens=1000)
+    response = llm.chat("Is 9.7 bigger than 9.11?", max_tokens=1000)
 
     # extract reasoning
     print(response.reasoning)

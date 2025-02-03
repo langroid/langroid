@@ -15,14 +15,13 @@ from .base import (
     LLMTokenUsage,
     LLMResponse,
 )
-from .openai_gpt import (
+from .model_info import (
     OpenAIChatModel,
     AnthropicModel,
     GeminiModel,
     OpenAICompletionModel,
-    OpenAIGPTConfig,
-    OpenAIGPT,
 )
+from .openai_gpt import OpenAIGPTConfig, OpenAIGPT, OpenAICallParams
 from .mock_lm import MockLM, MockLMConfig
 from .azure_openai import AzureConfig, AzureGPT
 
@@ -32,6 +31,7 @@ __all__ = [
     "config",
     "base",
     "openai_gpt",
+    "model_info",
     "azure_openai",
     "prompt_formatter",
     "StreamEventType",
@@ -48,6 +48,7 @@ __all__ = [
     "OpenAICompletionModel",
     "OpenAIGPTConfig",
     "OpenAIGPT",
+    "OpenAICallParams",
     "AzureConfig",
     "AzureGPT",
     "MockLM",

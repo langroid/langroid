@@ -1787,3 +1787,43 @@ def test_valid_structured_recovery():
     task = Task(agent, interactive=False)
     result = task.run("3", turns=4)
     assert "No" in result.content
+
+
+@pytest.mark.parametrize("routing", [None, "user", "done"])
+def test_handle_llm_no_tool(routing: str):
+    """Verify that ChatAgentConfig.non_tool_routing works as expected"""
+
+    def mock_llm_response(x: str) -> str:
+        match x:
+            case "1":
+                return SumTool(x=1, y=2).json()
+            case "3":
+                return "4"
+            case "4":
+                return "DONE"
+
+    config = ChatAgentConfig(
+        handle_llm_no_tool=routing,
+        llm=MockLMConfig(response_fn=mock_llm_response),
+    )
+    agent = ChatAgent(config)
+    agent.enable_message(SumTool)
+    task = Task(agent, interactive=False, default_human_response="q")
+    result = task.run("1")
+    match routing:
+        case "user":
+            # LLM(1) -> SumTool(1,2) -> 3 -> LLM(3) -> 4 -> User(4) -> q
+            assert result.content == "q"
+        case "done":
+            # LLM(1) -> SumTool(1,2) -> 3 -> LLM(3) -> 4 -> Done(4)
+            assert result.content == "4"
+        case None:
+            # task gets stuck and returns None
+            assert result is None
+
+    # test that using an invalid routing string raises an error
+    with pytest.raises(ValueError):
+        config = ChatAgentConfig(
+            handle_llm_no_tool="invalid",
+            llm=MockLMConfig(response_fn=mock_llm_response),
+        )
