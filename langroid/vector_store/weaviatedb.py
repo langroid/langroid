@@ -45,7 +45,6 @@ class WeaviateDB(VectorStore):
             self.client = weaviate.connect_to_embedded(
                 version="latest", persistence_data_path=self.config.storage_path
             )
-            self.config.cloud = False
         else:  # Cloud mode
             key = os.getenv("WEAVIATE_API_KEY")
             url = os.getenv("WEAVIATE_API_URL")
