@@ -154,3 +154,50 @@ def duckduckgo_search(query: str, num_results: int = 5) -> List[WebSearchResult]
         )
         for result in search_results
     ]
+
+
+def tavily_search(query: str, num_results: int = 5) -> List[WebSearchResult]:
+    """
+    Method that makes an API call to Tavily API that queries
+    the top `num_results` links that match the query. Returns a list
+    of WebSearchResult objects.
+
+    Args:
+        query (str): The query body that users wants to make.
+        num_results (int): Number of top matching results that we want
+            to grab
+    """
+
+    load_dotenv()
+
+    api_key = os.getenv("TAVILY_API_KEY")
+    if not api_key:
+        raise ValueError(
+            "TAVILY_API_KEY environment variable is not set. "
+            "Please set it to your API key and try again."
+        )
+
+    try:
+        from tavily import TavilyClient
+    except ImportError:
+        raise ImportError(
+            "You are attempting to use the `tavily` library. "
+            "To use it, please install the tavily package using: "
+            "`uv add tavily-python` or "
+            "`pip install tavily-python` or "
+            "`poetry add tavily-python`"
+        )
+
+    client = TavilyClient(api_key=api_key)
+    response = client.search(query=query, max_results=num_results)
+    search_results = response["results"]
+
+    return [
+        WebSearchResult(
+            title=result["title"],
+            link=result["url"],
+            max_content_length=3500,
+            max_summary_length=300,
+        )
+        for result in search_results
+    ]

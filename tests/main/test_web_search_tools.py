@@ -7,11 +7,13 @@ environment variables in your `.env` file, as explained in the
 
 import pytest
 from duckduckgo_search.exceptions import DuckDuckGoSearchException
+from tavily.exceptions import TavilyError
 
 import langroid as lr
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.tools.duckduckgo_search_tool import DuckduckgoSearchTool
 from langroid.agent.tools.google_search_tool import GoogleSearchTool
+from langroid.agent.tools.tavily_search_tool import TavilySearchTool
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
 from langroid.language_models.openai_gpt import OpenAIGPTConfig
 from langroid.parsing.parser import ParsingConfig
@@ -33,7 +35,7 @@ cfg = ChatAgentConfig(
 agent = ChatAgent(cfg)
 
 # Define the range of values each variable can have
-search_tools = [GoogleSearchTool, DuckduckgoSearchTool]
+search_tools = [GoogleSearchTool, DuckduckgoSearchTool, TavilySearchTool]
 
 
 @pytest.mark.parametrize("search_tool_cls", search_tools)
@@ -68,6 +70,8 @@ def test_agent_google_search_tool(
     try:
         agent_result = agent.handle_message(llm_msg).content
     except DuckDuckGoSearchException as e:
+        pytest.skip(f"Skipping test: {e}")
+    except TavilyError as e:
         pytest.skip(f"Skipping test: {e}")
     assert len(agent_result.split("\n\n")) == 3
     assert all(
