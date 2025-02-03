@@ -1,4 +1,4 @@
-# Routing a non-tool LLM message
+# Handling a non-tool LLM message
 
 A common scenario is to define a `ChatAgent`, enable it to use some tools
 (i.e. `ToolMessages`s), wrap it in a Task, and call `task.run()`, e.g. 
@@ -41,9 +41,9 @@ in this fallback method, you would
 typically have code that checks whether the message is a `ChatDocument`
 and whether it came from the LLM, and if so, you would have the method return 
 an appropriate message or tool (e.g. a reminder to the LLM, or an orchestration tool
-such as [`AgentDoneTool`][langroid.agent.tools.orchestration.AgentDoneTool].
+such as [`AgentDoneTool`][langroid.agent.tools.orchestration.AgentDoneTool]).
 
-To simplify the developer experience, as of version 0.39.2 Langroid also provides a 
+To simplify the developer experience, as of version 0.39.2 Langroid also provides an
 easier way to specify what this fallback method should return, via the
 `ChatAgentConfig.handle_llm_no_tool` parameter, which can be set to one of
 the following possible values:
