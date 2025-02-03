@@ -32,42 +32,6 @@ phrases = SimpleNamespace(
     BELGIUM="which city is Belgium's capital?",
 )
 
-context_window_phrases = SimpleNamespace(
-    CATS="Cats are quiet and clean.",
-    DOGS="Dogs are noisy and messy.",
-    GIRAFFES="Giraffes are tall and quiet.",
-    ELEPHANTS="Elephants are big and noisy.",
-    OWLS="Owls are quiet and nocturnal.",
-    BATS="Bats are nocturnal and noisy.",
-)
-
-overlapping_phrases = SimpleNamespace(
-    CATS="Cats are quiet and clean.",
-    DOGS="Dogs are noisy and messy.",
-    GIRAFFES="Giraffes are tall and quiet.",
-    ELEPHANTS="Elephants are big and noisy.",
-    OWLS="Owls are quiet and nocturnal.",
-    GIRAFFES1="Giraffes eat a lot of leaves.",
-    COWS="Cows are quiet and gentle.",
-    BULLS="Bulls are noisy and aggressive.",
-    TIGERS="Tigers are big and noisy.",
-    LIONS="Lions are nocturnal and noisy.",
-    CHICKENS="Chickens are quiet and gentle.",
-    ROOSTERS="Roosters are noisy and aggressive.",
-    GIRAFFES3="Giraffes are really strange animals.",
-    MICE="Mice are puny and gentle.",
-    RATS="Rats are noisy and destructive.",
-)
-
-parsing_cfg = ParsingConfig(
-    splitter=Splitter.SIMPLE,
-    n_neighbor_ids=2,
-    chunk_size=1,
-    max_chunks=20,
-    min_chunk_chars=3,
-    discard_chunk_chars=1,
-)
-
 
 class MyDocMetaData(DocMetaData):
     id: str
@@ -93,7 +57,6 @@ def vecdb(request) -> VectorStore:
             collection_name="test-" + embed_cfg.model_type,
             storage_path=qd_dir,
             embedding=embed_cfg,
-            batch_size=10,
         )
         qd = QdrantDB(qd_cfg)
         qd.add_documents(stored_docs)
@@ -107,7 +70,6 @@ def vecdb(request) -> VectorStore:
             collection_name="test-" + embed_cfg.model_type,
             storage_path=qd_dir,
             embedding=embed_cfg,
-            batch_size=10,
         )
         qd_cloud = QdrantDB(qd_cfg_cloud)
         qd_cloud.add_documents(stored_docs)
@@ -118,7 +80,6 @@ def vecdb(request) -> VectorStore:
         wv_cfg_cloud = WeaviateDBConfig(
             collection_name="test_" + embed_cfg.model_type,
             embedding=embed_cfg,
-            batch_size=10,
         )
         weaviate_cloud = WeaviateDB(wv_cfg_cloud)
         weaviate_cloud.add_documents(stored_docs)
@@ -155,7 +116,6 @@ def vecdb(request) -> VectorStore:
             collection_name="test-" + embed_cfg.model_type,
             storage_path=cd_dir,
             embedding=embed_cfg,
-            batch_size=10,
         )
         cd = ChromaDB(cd_cfg)
         cd.add_documents(stored_docs)
@@ -190,13 +150,23 @@ def vecdb(request) -> VectorStore:
             collection_name="test-" + embed_cfg.model_type,
             storage_path=ldb_dir,
             embedding=embed_cfg,
-            batch_size=10,
             # document_class=MyDoc,  # IMPORTANT, to ensure table has full schema!
         )
         ldb = LanceDB(ldb_cfg)
         ldb.add_documents(stored_docs)
         yield ldb
         rmdir(ldb_dir)
+        return
+
+    if request.param == "pinecone_serverless":
+        cfg = PineconeDBConfig(
+            collection_name="pinecone-serverless-test",
+            embedding=embed_cfg,
+        )
+        pinecone_serverless = PineconeDB(config=cfg)
+        pinecone_serverless.add_documents(stored_docs)
+        yield pinecone_serverless
+        pinecone_serverless.delete_collection(collection_name=cfg.collection_name)
         return
 
 
@@ -217,6 +187,7 @@ def vecdb(request) -> VectorStore:
 @pytest.mark.parametrize(
     "vecdb",
     [
+        "pinecone_serverless",
         "qdrant_cloud",
         "chroma",
         "weaviate_cloud",
@@ -277,6 +248,7 @@ def test_hybrid_vector_search(
         "qdrant_local",
         "qdrant_cloud",
         "weaviate_cloud",
+        "pinecone_serverless",
     ],
     indirect=True,
 )
@@ -332,13 +304,19 @@ def test_vector_stores_access(vecdb):
     assert docs_and_scores[0][0].content == "cow"
 
     # test collections: create, list, clear
-    coll_names = [f"Test_junk_{i}" for i in range(3)]
+    if isinstance(vecdb, PineconeDB):
+        # pinecone only allows lowercase alphanumeric with "-" characters
+        coll_names = [f"test-junk-{i}" for i in range(3)]
+        test_prefix = "test-junk"
+    else:
+        coll_names = [f"Test_junk_{i}" for i in range(3)]
+        test_prefix = "Test_junk"
     for coll in coll_names:
         vecdb.create_collection(collection_name=coll)
     n_colls = len(
-        [c for c in vecdb.list_collections(empty=True) if c.startswith("Test_junk")]
+        [c for c in vecdb.list_collections(empty=True) if c.startswith(test_prefix)]
     )
-    n_dels = vecdb.clear_all_collections(really=True, prefix="Test_junk")
+    n_dels = vecdb.clear_all_collections(really=True, prefix=test_prefix)
     # LanceDB.create_collection() does nothing, since we can't create a table
     # without a schema or data.
     assert n_colls == n_dels == (0 if isinstance(vecdb, LanceDB) else len(coll_names))
@@ -355,15 +333,33 @@ def test_vector_stores_access(vecdb):
         "qdrant_cloud",
         "qdrant_local",
         "weaviate_cloud",
+        "pinecone_serverless",
     ],
     indirect=True,
 )
 def test_vector_stores_context_window(vecdb):
     """Test whether retrieving context-window around matches is working."""
-    text = "\n\n".join(vars(context_window_phrases).values())
-    doc = Document(content=text, metadata=DocMetaData(id="0"))
 
-    parser = Parser(parsing_cfg)
+    phrases = SimpleNamespace(
+        CATS="Cats are quiet and clean.",
+        DOGS="Dogs are noisy and messy.",
+        GIRAFFES="Giraffes are tall and quiet.",
+        ELEPHANTS="Elephants are big and noisy.",
+        OWLS="Owls are quiet and nocturnal.",
+        BATS="Bats are nocturnal and noisy.",
+    )
+    text = "\n\n".join(vars(phrases).values())
+    doc = Document(content=text, metadata=DocMetaData(id="0"))
+    cfg = ParsingConfig(
+        splitter=Splitter.SIMPLE,
+        n_neighbor_ids=2,
+        chunk_size=1,
+        max_chunks=20,
+        min_chunk_chars=3,
+        discard_chunk_chars=1,
+    )
+
+    parser = Parser(cfg)
     splits = parser.split([doc])
 
     vecdb.create_collection(collection_name="test-context-window", replace=True)
@@ -378,11 +374,11 @@ def test_vector_stores_context_window(vecdb):
     assert all(
         p in giraffes.content
         for p in [
-            context_window_phrases.CATS,
-            context_window_phrases.DOGS,
-            context_window_phrases.GIRAFFES,
-            context_window_phrases.ELEPHANTS,
-            context_window_phrases.OWLS,
+            phrases.CATS,
+            phrases.DOGS,
+            phrases.GIRAFFES,
+            phrases.ELEPHANTS,
+            phrases.OWLS,
         ]
     )
     # check they are in the right sequence
@@ -402,6 +398,7 @@ def test_vector_stores_context_window(vecdb):
         "qdrant_cloud",
         "qdrant_local",
         "weaviate_cloud",
+        "pinecone_serverless",
     ],
     indirect=True,
 )
@@ -410,10 +407,36 @@ def test_vector_stores_overlapping_matches(vecdb):
 
     # The windows around the first two giraffe matches should overlap.
     # The third giraffe match should be in a separate window.
-    text = "\n\n".join(vars(overlapping_phrases).values())
+    phrases = SimpleNamespace(
+        CATS="Cats are quiet and clean.",
+        DOGS="Dogs are noisy and messy.",
+        GIRAFFES="Giraffes are tall and quiet.",
+        ELEPHANTS="Elephants are big and noisy.",
+        OWLS="Owls are quiet and nocturnal.",
+        GIRAFFES1="Giraffes eat a lot of leaves.",
+        COWS="Cows are quiet and gentle.",
+        BULLS="Bulls are noisy and aggressive.",
+        TIGERS="Tigers are big and noisy.",
+        LIONS="Lions are nocturnal and noisy.",
+        CHICKENS="Chickens are quiet and gentle.",
+        ROOSTERS="Roosters are noisy and aggressive.",
+        GIRAFFES3="Giraffes are really strange animals.",
+        MICE="Mice are puny and gentle.",
+        RATS="Rats are noisy and destructive.",
+    )
+    text = "\n\n".join(vars(phrases).values())
     doc = Document(content=text, metadata=DocMetaData(id="0"))
 
-    parser = Parser(parsing_cfg)
+    cfg = ParsingConfig(
+        splitter=Splitter.SIMPLE,
+        n_neighbor_ids=2,
+        chunk_size=1,
+        max_chunks=20,
+        min_chunk_chars=3,
+        discard_chunk_chars=1,
+    )
+
+    parser = Parser(cfg)
     splits = parser.split([doc])
 
     vecdb.create_collection(collection_name="test-context-window", replace=True)
@@ -511,231 +534,3 @@ def test_lance_metadata():
 
     all_docs = vecdb.get_all_documents()
     assert len(all_docs) == 3
-
-
-@pytest.fixture(scope="module")
-def pinecone_serverless_vecdb():
-    cfg = PineconeDBConfig(
-        collection_name="pinecone-serverless-test",
-        embedding=embed_cfg,
-        batch_size=10,
-    )
-    pinecone_serverless = PineconeDB(config=cfg)
-    pinecone_serverless.add_documents(stored_docs)
-    document_ids = [doc.id() for doc in stored_docs]
-    pinecone_serverless.vectors_resolvable(document_ids=document_ids)
-    yield pinecone_serverless
-    pinecone_serverless.delete_collection(collection_name=cfg.collection_name)
-    return
-
-
-@pytest.mark.usefixtures("pinecone_serverless_vecdb")
-class TestPineconeServerless:
-    def reset_doc_defs(self, pinecone_serverless_vecdb):
-        pinecone_serverless_vecdb.config.document_class = Document
-        pinecone_serverless_vecdb.config.metadata_class = DocMetaData
-
-    @pytest.mark.parametrize(
-        "query,results",
-        [
-            (
-                "which city is Belgium's capital?",
-                [phrases.BELGIUM],
-            ),
-            (
-                "capital of France",
-                [phrases.FRANCE],
-            ),
-            (
-                "hello",
-                [phrases.HELLO],
-            ),
-            (
-                "hi there",
-                [phrases.HI_THERE],
-            ),
-            (
-                "men and women over 40",
-                [phrases.OVER_40],
-            ),
-            (
-                "people aged less than 40",
-                [phrases.UNDER_40],
-            ),
-            (
-                "Canadian residents",
-                [phrases.CANADA],
-            ),
-            (
-                "people outside Canada",
-                [phrases.NOT_CANADA],
-            ),
-        ],
-    )
-    def test_vector_store_search(
-        self, pinecone_serverless_vecdb, query: str, results: List[str]
-    ):
-        docs_and_scores = pinecone_serverless_vecdb.similar_texts_with_scores(
-            query, k=len(vars(phrases))
-        )
-        matching_docs = [doc.content for doc, score in docs_and_scores if score > 0.7]
-        assert set(results).issubset(set(matching_docs))
-
-    def test_vector_store_access(self, pinecone_serverless_vecdb):
-        class MyDocMeta(DocMetaData):
-            category: str  # an extra field
-
-        class MyDocument(Document):
-            content: str
-            metadata: MyDocMeta
-
-        pinecone_serverless_vecdb.config.document_class = MyDocument
-        pinecone_serverless_vecdb.config.metadata_class = MyDocMeta
-        coll_name = pinecone_serverless_vecdb.config.collection_name
-        assert coll_name is not None
-
-        pinecone_serverless_vecdb.delete_collection(collection_name=coll_name)
-        pinecone_serverless_vecdb.create_collection(collection_name=coll_name)
-
-        # create random string of 10 arbitrary characters, not necessarily ascii
-        import random
-
-        # Generate a random string of 10 characters
-        ingested_docs = [
-            Document(
-                content=random.choice(["cow", "goat", "mouse"]),
-                metadata=MyDocMeta(id=str(i), category=random.choice(["a", "b"])),
-            )
-            for i in range(20)
-        ]
-
-        pinecone_serverless_vecdb.add_documents(ingested_docs)
-
-        # enforce that we can find all of these vectors
-        pinecone_serverless_vecdb.vectors_resolvable(
-            document_ids=[doc.id() for doc in ingested_docs]
-        )
-
-        all_docs = pinecone_serverless_vecdb.get_all_documents()
-        ids = [doc.id() for doc in all_docs]
-        assert len(set(ids)) == len(ids)
-        assert len(all_docs) == len(ingested_docs)
-
-        # test get docs by ids
-        docs = pinecone_serverless_vecdb.get_documents_by_ids(ids)
-        assert len(docs) == len(ingested_docs)
-
-        # test similarity search
-        docs_and_scores = pinecone_serverless_vecdb.similar_texts_with_scores(
-            "cow", k=1
-        )
-        assert len(docs_and_scores) == 1
-        assert docs_and_scores[0][0].content == "cow"
-
-        # test collections: create, list, clear
-        coll_names = [f"test-junk-{i}" for i in range(3)]
-        test_prefix = "test-junk"
-
-        for coll in coll_names:
-            pinecone_serverless_vecdb.create_collection(collection_name=coll)
-        n_colls = len(
-            [
-                c
-                for c in pinecone_serverless_vecdb.list_collections(empty=True)
-                if c.startswith(test_prefix)
-            ]
-        )
-        n_dels = pinecone_serverless_vecdb.clear_all_collections(
-            really=True, prefix=test_prefix
-        )
-        assert n_colls == n_dels == len(coll_names)
-        pinecone_serverless_vecdb.set_collection(coll_name, replace=True)
-        assert pinecone_serverless_vecdb.config.collection_name == coll_name
-        assert pinecone_serverless_vecdb.get_all_documents() == []
-
-        self.reset_doc_defs(pinecone_serverless_vecdb=pinecone_serverless_vecdb)
-
-    def test_vector_stores_context_window(self, pinecone_serverless_vecdb):
-        text = "\n\n".join(vars(context_window_phrases).values())
-        doc = Document(content=text, metadata=DocMetaData(id="0"))
-
-        parser = Parser(parsing_cfg)
-        splits = parser.split([doc])
-
-        pinecone_serverless_vecdb.create_collection(
-            collection_name="test-context-window", replace=True
-        )
-        pinecone_serverless_vecdb.add_documents(splits)
-
-        # enforce that we can find all of these vectors
-        pinecone_serverless_vecdb.vectors_resolvable(
-            document_ids=[doc.id() for doc in splits]
-        )
-
-        # Test context window retrieval
-        docs_scores = pinecone_serverless_vecdb.similar_texts_with_scores(
-            "What are Giraffes like?", k=1
-        )
-        docs_scores = pinecone_serverless_vecdb.add_context_window(
-            docs_scores, neighbors=2
-        )
-
-        assert len(docs_scores) == 1
-        giraffes, score = docs_scores[0]
-        assert all(
-            p in giraffes.content
-            for p in [
-                context_window_phrases.CATS,
-                context_window_phrases.DOGS,
-                context_window_phrases.GIRAFFES,
-                context_window_phrases.ELEPHANTS,
-                context_window_phrases.OWLS,
-            ]
-        )
-        # check they are in the right sequence
-        indices = [
-            giraffes.content.index(p)
-            for p in ["Cats", "Dogs", "Giraffes", "Elephants", "Owls"]
-        ]
-
-        assert indices == sorted(indices)
-
-    def test_vector_stores_overlapping_matches(self, pinecone_serverless_vecdb):
-        text = "\n\n".join(vars(overlapping_phrases).values())
-        doc = Document(content=text, metadata=DocMetaData(id="0"))
-
-        parser = Parser(parsing_cfg)
-        splits = parser.split([doc])
-
-        pinecone_serverless_vecdb.create_collection(
-            collection_name="test-context-window", replace=True
-        )
-        pinecone_serverless_vecdb.add_documents(splits)
-
-        # enforce that we can find all of these vectors
-        pinecone_serverless_vecdb.vectors_resolvable(
-            document_ids=[doc.id() for doc in splits]
-        )
-
-        docs_scores = pinecone_serverless_vecdb.similar_texts_with_scores(
-            "What are Giraffes like?", k=3
-        )
-        docs_scores = pinecone_serverless_vecdb.add_context_window(
-            docs_scores, neighbors=2
-        )
-
-        assert len(docs_scores) == 2
-        # verify no overlap in d.metadata.window_ids for d in docs
-        all_window_ids = [id for d, _ in docs_scores for id in d.metadata.window_ids]
-        assert len(all_window_ids) == len(set(all_window_ids))
-
-        # verify giraffe occurs in each /match
-        assert all("Giraffes" in d.content for d, _ in docs_scores)
-
-        # verify correct sequence of chunks in each match
-        sentences = vars(phrases).values()
-        for d, _ in docs_scores:
-            content = d.content
-            indices = [content.find(p) for p in sentences]
-            indices = [i for i in indices if i >= 0]
-            assert indices == sorted(indices)
