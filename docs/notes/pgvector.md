@@ -37,10 +37,11 @@ Follow this [quickstart guide](https://tembo.io/docs/getting-started/getting_sta
 3. Click on **Deploy Free**.  
 4. Wait until your database is fully provisioned.  
 5. Click on **Show Connection String** to get your connection string.  
-6. Make sure your connnection string starts with `postgres://` or `postgresql://`
 
 ### **If you have connection string, no need to setup the docker**
+Make sure your connnection string starts with `postgres://` or `postgresql://`
 
+Add this to your `.env`
 ```dotenv
 POSTGRES_CONNECTION_STRING=your-connection-string
 ```
