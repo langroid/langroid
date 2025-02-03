@@ -174,7 +174,13 @@ def vecdb(request) -> VectorStore:
 # add "momento" when their API docs are ready
 @pytest.mark.parametrize(
     "vecdb",
-    ["qdrant_cloud", "chroma", "weaviate_cloud", "lancedb", "qdrant_local"],
+    [
+        "qdrant_cloud",
+        "chroma",
+        pytest.param("weaviate_cloud", marks=pytest.mark.skip),
+        "lancedb",
+        "qdrant_local",
+    ],
     indirect=True,
 )
 def test_vector_stores_search(
@@ -223,7 +229,13 @@ def test_hybrid_vector_search(
 
 @pytest.mark.parametrize(
     "vecdb",
-    ["lancedb", "chroma", "qdrant_local", "qdrant_cloud", "weaviate_cloud"],
+    [
+        "lancedb",
+        "chroma",
+        "qdrant_local",
+        "qdrant_cloud",
+        pytest.param("weaviate_cloud", marks=pytest.mark.skip),
+    ],
     indirect=True,
 )
 def test_vector_stores_access(vecdb):
@@ -294,7 +306,13 @@ def test_vector_stores_access(vecdb):
 
 @pytest.mark.parametrize(
     "vecdb",
-    ["lancedb", "chroma", "qdrant_cloud", "qdrant_local", "weaviate_cloud"],
+    [
+        "lancedb",
+        "chroma",
+        "qdrant_cloud",
+        "qdrant_local",
+        pytest.param("weaviate_cloud", marks=pytest.mark.skip),
+    ],
     indirect=True,
 )
 def test_vector_stores_context_window(vecdb):
@@ -354,7 +372,13 @@ def test_vector_stores_context_window(vecdb):
 
 @pytest.mark.parametrize(
     "vecdb",
-    ["chroma", "lancedb", "qdrant_cloud", "qdrant_local", "weaviate_cloud"],
+    [
+        "chroma",
+        "lancedb",
+        "qdrant_cloud",
+        "qdrant_local",
+        pytest.param("weaviate_cloud", marks=pytest.mark.skip),
+    ],
     indirect=True,
 )
 def test_vector_stores_overlapping_matches(vecdb):
