@@ -5,7 +5,7 @@ import logging
 import textwrap
 from contextlib import ExitStack
 from inspect import isclass
-from typing import Dict, List, Optional, Self, Set, Tuple, Type, Union, cast
+from typing import Any, Dict, List, Optional, Self, Set, Tuple, Type, Union, cast
 
 import openai
 from rich import print
@@ -31,6 +31,7 @@ from langroid.language_models.base import (
     ToolChoiceTypes,
 )
 from langroid.language_models.openai_gpt import OpenAIGPT
+from langroid.mytypes import Entity, NonToolAction
 from langroid.pydantic_v1 import BaseModel, ValidationError
 from langroid.utils.configuration import settings
 from langroid.utils.object_registry import ObjectRegistry
@@ -52,6 +53,7 @@ class ChatAgentConfig(AgentConfig):
         user_message: user message to include in message sequence.
              Used only if `task` is not specified in the constructor.
         use_tools: whether to use our own ToolMessages mechanism
+        handle_llm_no_tool (NonToolAction|str): routing when LLM generates non-tool msg.
         use_functions_api: whether to use functions/tools native to the LLM API
                 (e.g. OpenAI's `function_call` or `tool_call` mechanism)
         use_tools_api: When `use_functions_api` is True, if this is also True,
@@ -84,6 +86,7 @@ class ChatAgentConfig(AgentConfig):
 
     system_message: str = "You are a helpful assistant."
     user_message: Optional[str] = None
+    handle_llm_no_tool: NonToolAction | None = None
     use_tools: bool = False
     use_functions_api: bool = True
     use_tools_api: bool = False
@@ -578,6 +581,31 @@ class ChatAgent(Agent):
 
         # remove leading and trailing newlines and other whitespace
         return LLMMessage(role=Role.SYSTEM, content=content.strip())
+
+    def handle_message_fallback(self, msg: str | ChatDocument) -> Any:
+        """
+        Fallback method for the "no-tools" scenario.
+        Users the self.config.non_tool_routing to determine the action to take.
+
+        This method can be overridden by subclasses, e.g.,
+        to create a "reminder" message when a tool is expected but the LLM "forgot"
+        to generate one.
+
+        Args:
+            msg (str | ChatDocument): The input msg to handle
+        Returns:
+            Any: The result of the handler method
+        """
+        if self.config.handle_llm_no_tool is None:
+            return None
+        if isinstance(msg, ChatDocument) and msg.metadata.sender == Entity.LLM:
+            from langroid.agent.tools.orchestration import AgentDoneTool, ForwardTool
+
+            match self.config.handle_llm_no_tool:
+                case NonToolAction.FORWARD_USER:
+                    return ForwardTool(agent="User")
+                case NonToolAction.DONE:
+                    return AgentDoneTool(content=msg.content, tools=msg.tool_messages)
 
     def unhandled_tools(self) -> set[str]:
         """The set of tools that are known but not handled.
@@ -1460,11 +1488,11 @@ class ChatAgent(Agent):
                 self.message_history.extend(llm_msgs)
 
         hist = self.message_history
-        output_len = self.config.llm.max_output_tokens
+        output_len = self.config.llm.model_max_output_tokens
         if (
             truncate
             and self.chat_num_tokens(hist)
-            > self.llm.chat_context_length() - self.config.llm.max_output_tokens
+            > self.llm.chat_context_length() - self.config.llm.model_max_output_tokens
         ):
             # chat + output > max context length,
             # so first try to shorten requested output len to fit.
@@ -1489,7 +1517,7 @@ class ChatAgent(Agent):
                         The message history is longer than the max chat context 
                         length allowed, and we have run out of messages to drop.
                         HINT: In your `OpenAIGPTConfig` object, try increasing
-                        `chat_context_length` or decreasing `max_output_tokens`.
+                        `chat_context_length` or decreasing `model_max_output_tokens`.
                         """
                         )
                     # drop the second message, i.e. first msg after the sys msg
@@ -1638,12 +1666,12 @@ class ChatAgent(Agent):
         Args:
             messages: seq of messages (with role, content fields) sent to LLM
             output_len: max number of tokens expected in response.
-                    If None, use the LLM's default max_output_tokens.
+                    If None, use the LLM's default model_max_output_tokens.
         Returns:
             Document (i.e. with fields "content", "metadata")
         """
         assert self.config.llm is not None and self.llm is not None
-        output_len = output_len or self.config.llm.max_output_tokens
+        output_len = output_len or self.config.llm.model_max_output_tokens
         streamer = noop_fn
         if self.llm.get_stream():
             streamer = self.callbacks.start_llm_stream()
@@ -1713,7 +1741,7 @@ class ChatAgent(Agent):
         Async version of `llm_response_messages`. See there for details.
         """
         assert self.config.llm is not None and self.llm is not None
-        output_len = output_len or self.config.llm.max_output_tokens
+        output_len = output_len or self.config.llm.model_max_output_tokens
         functions, fun_call, tools, force_tool, output_format = self._function_args()
         assert self.llm is not None
 

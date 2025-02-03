@@ -154,6 +154,7 @@ jobs:
           -n auto --timeout=300 \
           --first-test-file=tests/main/sql_chat/test_sql_chat_agent.py \
           --first-test-file=tests/extras/test_hf_embeddings.py \
+          --first-test-file=tests/extras/test_gemini_embeddings.py \
           --first-test-file=tests/extras/test_fastembed_embeddings.py \
           --first-test-file=tests/main/test_llm.py \
           --first-test-file=tests/main/test_task.py \

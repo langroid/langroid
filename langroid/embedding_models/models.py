@@ -77,6 +77,14 @@ class LlamaCppServerEmbeddingsConfig(EmbeddingModelsConfig):
     batch_size: int = 2048
 
 
+class GeminiEmbeddingsConfig(EmbeddingModelsConfig):
+    model_type: str = "gemini"
+    model_name: str = "models/text-embedding-004"
+    api_key: str = ""
+    dims: int = 768
+    batch_size: int = 512
+
+
 class EmbeddingFunctionCallable:
     """
     A callable class designed to generate embeddings for a list of texts using
@@ -160,6 +168,8 @@ class EmbeddingFunctionCallable:
                         self.embed_model.detokenize_string(list(token_batch))
                     )
                     embeds.append(gen_embedding)
+        elif isinstance(self.embed_model, GeminiEmbeddings):
+            embeds = self.embed_model.generate_embeddings(input)
         return embeds
 
 
@@ -437,6 +447,54 @@ class LlamaCppServerEmbeddings(EmbeddingModel):
         return self.config.dims
 
 
+class GeminiEmbeddings(EmbeddingModel):
+    def __init__(self, config: GeminiEmbeddingsConfig = GeminiEmbeddingsConfig()):
+        try:
+            import google.generativeai as genai
+        except ImportError as e:
+            raise LangroidImportError(extra="google-generativeai", error=str(e))
+        super().__init__()
+        self.config = config
+        load_dotenv()
+        self.config.api_key = os.getenv("GEMINI_API_KEY", "")
+
+        if self.config.api_key == "":
+            raise ValueError(
+                """
+                GEMINI_API_KEY env variable must be set to use GeminiEmbeddings.
+                """
+            )
+        genai.configure(api_key=self.config.api_key)  # type: ignore[attr-defined]
+        self.client = genai
+
+    def embedding_fn(self) -> Callable[[List[str]], Embeddings]:
+        return EmbeddingFunctionCallable(self, self.config.batch_size)
+
+    def generate_embeddings(self, texts: List[str]) -> Embeddings:
+        all_embeddings = []  # More precise type hint
+        for batch in batched(texts, self.config.batch_size):
+            result = self.client.embed_content(  # type: ignore[attr-defined]
+                model=self.config.model_name,
+                content=batch,
+                task_type="RETRIEVAL_DOCUMENT",
+            )
+
+            embeddings = result["embedding"]
+            if not isinstance(embeddings, list):
+                raise ValueError("Unexpected format for embeddings: not a list")
+
+            if embeddings and isinstance(embeddings[0], list):
+                all_embeddings.extend(embeddings)
+            else:
+                all_embeddings.append(embeddings)
+
+        return all_embeddings
+
+    @property
+    def embedding_dims(self) -> int:
+        return self.config.dims
+
+
 def embedding_model(embedding_fn_type: str = "openai") -> EmbeddingModel:
     """
     Args:
@@ -457,5 +515,7 @@ def embedding_model(embedding_fn_type: str = "openai") -> EmbeddingModel:
         return FastEmbedEmbeddings  # type: ignore
     elif embedding_fn_type == "llamacppserver":
         return LlamaCppServerEmbeddings  # type: ignore
+    elif embedding_fn_type == "gemini":
+        return GeminiEmbeddings  # type: ignore
     else:  # default sentence transformer
         return SentenceTransformerEmbeddings  # type: ignore

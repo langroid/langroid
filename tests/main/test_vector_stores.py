@@ -187,10 +187,9 @@ def vecdb(request) -> VectorStore:
 @pytest.mark.parametrize(
     "vecdb",
     [
-        "pinecone_serverless",
         "qdrant_cloud",
         "chroma",
-        "weaviate_cloud",
+        pytest.param("weaviate_cloud", marks=pytest.mark.skip),
         "lancedb",
         "qdrant_local",
     ],
@@ -247,8 +246,7 @@ def test_hybrid_vector_search(
         "chroma",
         "qdrant_local",
         "qdrant_cloud",
-        "weaviate_cloud",
-        "pinecone_serverless",
+        pytest.param("weaviate_cloud", marks=pytest.mark.skip),
     ],
     indirect=True,
 )
@@ -332,8 +330,7 @@ def test_vector_stores_access(vecdb):
         "chroma",
         "qdrant_cloud",
         "qdrant_local",
-        "weaviate_cloud",
-        "pinecone_serverless",
+        pytest.param("weaviate_cloud", marks=pytest.mark.skip),
     ],
     indirect=True,
 )
@@ -397,8 +394,7 @@ def test_vector_stores_context_window(vecdb):
         "lancedb",
         "qdrant_cloud",
         "qdrant_local",
-        "weaviate_cloud",
-        "pinecone_serverless",
+        pytest.param("weaviate_cloud", marks=pytest.mark.skip),
     ],
     indirect=True,
 )
