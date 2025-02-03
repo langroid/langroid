@@ -32,8 +32,7 @@ class WeaviateDBConfig(VectorStoreConfig):
     collection_name: str | None = "temp"
     embedding: EmbeddingModelsConfig = OpenAIEmbeddingsConfig()
     distance: str = VectorDistances.COSINE
-    cloud: bool = True  # Default to cloud mode
-    embedded: bool = False
+    cloud: bool = False
     storage_path: str = ".weaviate_embedded/data"
 
 
@@ -42,7 +41,7 @@ class WeaviateDB(VectorStore):
         super().__init__(config)
         self.config: WeaviateDBConfig = config
         load_dotenv()
-        if self.config.embedded:
+        if not self.config.cloud:
             self.client = weaviate.connect_to_embedded(
                 version="latest", persistence_data_path=self.config.storage_path
             )
@@ -279,5 +278,5 @@ class WeaviateDB(VectorStore):
         return formatted_name
 
     def __del__(self) -> None:
-        if self.config.embedded:
+        if not self.config.cloud:
             self.client.close()

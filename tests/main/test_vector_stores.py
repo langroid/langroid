@@ -95,7 +95,7 @@ def vecdb(request) -> VectorStore:
         wv_cfg_local = WeaviateDBConfig(
             collection_name="test_" + embed_cfg.model_type,
             embedding=embed_cfg,
-            embedded=True,
+            cloud=False,
             storage_path=wv_dir,
         )
         weaviate_local = WeaviateDB(wv_cfg_local)
