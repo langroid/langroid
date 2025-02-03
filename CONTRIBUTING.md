@@ -231,7 +231,7 @@ cooperation!
 ## Submitting a PR
 
 To check for issues locally, run `make check`, it runs linters `black`, `ruff`,
-`flake8` and type-checker `mypy`. It also installs a pre-commit hook, 
+and type-checker `mypy`. It also installs a pre-commit hook, 
 so that commits are blocked if there are style/type issues. The linting attempts to
 auto-fix issues, and warns about those it can't fix.
 (There is a separate `make lint` you could do, but that is already part of `make check`).
@@ -240,10 +240,11 @@ direct imports from pydantic, and replaces them with importing from `langroid.py
 (this is needed to enable dual-compatibility with Pydantic v1 and v2).
 
 So, typically when submitting a PR, you would do this sequence:
-- run `make tests` or `pytest tests/main` (if needed use `-nc` means "no cache", i.e. to prevent
-  using cached LLM API call responses)
+- run `make tests` or `pytest -xvs tests/main/my-specific-test.py` 
+  - if needed use `-nc` means "no cache", i.e. to prevent using cached LLM API call responses
+  - the `-xvs` option means "exit on first failure, verbose, show output"
 - fix things so tests pass, then proceed to lint/style/type checks below.
-- `make check` to see what issues there are
+- `make check` to see what issues there are (typically lints and mypy)
 - manually fix any lint or type issues
 - `make check` again to see what issues remain
 - repeat if needed, until all clean.
