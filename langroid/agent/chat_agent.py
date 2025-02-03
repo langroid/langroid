@@ -46,6 +46,7 @@ logger = logging.getLogger(__name__)
 class ChatAgentConfig(AgentConfig):
     """
     Configuration for ChatAgent
+
     Attributes:
         system_message: system message to include in message sequence
              (typically defines role and task of agent).
@@ -53,7 +54,8 @@ class ChatAgentConfig(AgentConfig):
         user_message: user message to include in message sequence.
              Used only if `task` is not specified in the constructor.
         use_tools: whether to use our own ToolMessages mechanism
-        handle_llm_no_tool (NonToolAction|str): routing when LLM generates non-tool msg.
+        handle_llm_no_tool (Any): desired agent_response when
+            LLM generates non-tool msg.
         use_functions_api: whether to use functions/tools native to the LLM API
                 (e.g. OpenAI's `function_call` or `tool_call` mechanism)
         use_tools_api: When `use_functions_api` is True, if this is also True,
@@ -86,7 +88,7 @@ class ChatAgentConfig(AgentConfig):
 
     system_message: str = "You are a helpful assistant."
     user_message: Optional[str] = None
-    handle_llm_no_tool: NonToolAction | None = None
+    handle_llm_no_tool: Any = None
     use_tools: bool = False
     use_functions_api: bool = True
     use_tools_api: bool = False
@@ -601,11 +603,20 @@ class ChatAgent(Agent):
         if isinstance(msg, ChatDocument) and msg.metadata.sender == Entity.LLM:
             from langroid.agent.tools.orchestration import AgentDoneTool, ForwardTool
 
-            match self.config.handle_llm_no_tool:
-                case NonToolAction.FORWARD_USER:
-                    return ForwardTool(agent="User")
-                case NonToolAction.DONE:
-                    return AgentDoneTool(content=msg.content, tools=msg.tool_messages)
+            no_tool_option = self.config.handle_llm_no_tool
+            if no_tool_option in list(NonToolAction):
+                # in case the `no_tool_option` is one of the special NonToolAction vals
+                match self.config.handle_llm_no_tool:
+                    case NonToolAction.FORWARD_USER:
+                        return ForwardTool(agent="User")
+                    case NonToolAction.DONE:
+                        return AgentDoneTool(
+                            content=msg.content, tools=msg.tool_messages
+                        )
+            # Otherwise just return `no_tool_option` as is:
+            # This can be any string, such as a specific nudge/reminder to the LLM,
+            # or even something like ResultTool etc.
+            return no_tool_option
 
     def unhandled_tools(self) -> set[str]:
         """The set of tools that are known but not handled.

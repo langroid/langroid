@@ -296,6 +296,11 @@ feature that leverages **strict decoding** abilities of specific LLM providers
 (e.g. OpenAI, llama.cpp, vllm) that are able to use grammar-constrained decoding
 to force the output to conform to the specified structure.
 
+Langroid also provides a simpler mechanism to specify the action to take
+when an LLM does not generate a tool, via the `ChatAgentConfig.handle_llm_no_tool` 
+config parameter, see the 
+[docs](https://langroid.github.io/langroid/notes/handle-llm-no-tool/).
+
 ## Can I use Langroid to converse with a Knowledge Graph (KG)?
 
 Yes, you can use Langroid to "chat with" either a Neo4j or ArangoDB KG, 
