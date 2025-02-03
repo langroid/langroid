@@ -5,7 +5,9 @@ from typing import List
 import pytest
 from dotenv import load_dotenv
 
-from langroid.embedding_models.models import OpenAIEmbeddingsConfig
+from langroid.embedding_models.models import (
+    OpenAIEmbeddingsConfig,
+)
 from langroid.mytypes import DocMetaData, Document
 from langroid.parsing.parser import Parser, ParsingConfig, Splitter
 from langroid.utils.system import rmdir
@@ -194,6 +196,7 @@ def vecdb(request) -> VectorStore:
         pytest.param("weaviate_cloud", marks=pytest.mark.skip),
         "lancedb",
         "qdrant_local",
+        "postgres",
     ],
     indirect=True,
 )
@@ -249,6 +252,7 @@ def test_hybrid_vector_search(
         "qdrant_local",
         "qdrant_cloud",
         pytest.param("weaviate_cloud", marks=pytest.mark.skip),
+        "postgres",
     ],
     indirect=True,
 )
@@ -325,6 +329,7 @@ def test_vector_stores_access(vecdb):
         "qdrant_cloud",
         "qdrant_local",
         pytest.param("weaviate_cloud", marks=pytest.mark.skip),
+        "postgres",
     ],
     indirect=True,
 )
@@ -391,6 +396,7 @@ def test_vector_stores_context_window(vecdb):
         "qdrant_cloud",
         "qdrant_local",
         pytest.param("weaviate_cloud", marks=pytest.mark.skip),
+        "postgres",
     ],
     indirect=True,
 )
@@ -533,10 +539,6 @@ def test_lance_metadata():
     ["postgres"],
     indirect=True,
 )
-def test_postgres_get_all_documents_where(vecdb: PostgresDB):
-    """Test the where clause in get_all_documents in PostgresDB"""
-
-
 def test_postgres_where_clause(vecdb: PostgresDB):
     """Test the where clause in get_all_documents,get_similar_texts in PostgresDB"""
     vecdb.create_collection(
