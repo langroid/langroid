@@ -5,7 +5,9 @@ from typing import Tuple, Optional
 from config import MODEL_MAP
 from utils import extract_topics
 
+
 DEFAULT_TURN_COUNT = 2
+DEFAULT_TIMEOUT = 100
 
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.INFO)
@@ -60,17 +62,36 @@ async def is_same_llm_for_all_agents() -> bool:
     Returns:
         bool: True if yes, False if no. Timeout or no response is defaulted to False.
     """
-    res = await cl.AskActionMessage(
-        content="Do you want to use the same LLM for all agents?",
+
+    # Create a Chainlit action message with a timeout
+    ask_message = cl.AskActionMessage(
+        content=f"Do you want to use the same LLM for all agents?\n\n(If you do not respond within {DEFAULT_TIMEOUT} "
+        f"seconds, we will default to selecting individual LLMs.)",
         actions=[
             cl.Action(name="yes", payload={"value": "yes"}, label="Yes"),
             cl.Action(name="no", payload={"value": "no"}, label="No"),
         ],
-        timeout=30,
+        timeout=DEFAULT_TIMEOUT,
+    )
+
+    res = await ask_message.send()
+
+    # Override the timeout before Chainlit sends its message
+    if not res:
+        await ask_message.remove()  # Removes the pending action before timeout triggers
+        res = {"payload": {"value": "no"}}  # Auto-select "No"
+
+    user_selection = await handle_boolean_response(res, default=False)
+
+    await cl.Message(
+        content=(
+            "You have chosen to proceed with the same LLM for all agents."
+            if user_selection
+            else "You have chosen to select individual LLMs for each agent."
+        )
     ).send()
 
-    # Use the helper function with the default set to False
-    return await handle_boolean_response(res, default=False)
+    return user_selection
 
 
 async def select_max_debate_turns() -> int:
@@ -79,25 +100,31 @@ async def select_max_debate_turns() -> int:
     Returns:
         int: The number of debate turns.
     """
-    max_turns = await cl.AskUserMessage(
-        content="How many turns should the debates take?", timeout=10
-    ).send()
-    if max_turns:
-        try:
-            turns = int(max_turns["output"].strip())
-            await cl.Message(
-                content=f"You selected {turns} turns for the debate."
-            ).send()
-            return turns
-        except ValueError:
-            await cl.Message(
-                content="Invalid input. Please provide a valid number. Defaulting to 2 turns."
-            ).send()
-            return DEFAULT_TURN_COUNT
-    else:
-        await cl.Message(
-            content="You didn't respond in time. Defaulting to 2 turns."
-        ).send()
+    ask_message = cl.AskActionMessage(
+        content=f"How many turns should the debates take?\n\n(If you do not respond within {DEFAULT_TIMEOUT} "
+        f"seconds, we will default to selecting 2 turns.)",
+        actions=[
+            cl.Action(name="2", payload={"value": "2"}, label="2"),
+            cl.Action(name="4", payload={"value": "4"}, label="4"),
+            cl.Action(name="8", payload={"value": "8"}, label="8"),
+            cl.Action(name="16", payload={"value": "16"}, label="16"),
+        ],
+        timeout=DEFAULT_TIMEOUT,
+    )
+
+    res = await ask_message.send()
+
+    # Prevents Chainlit's default timeout message
+    if not res:
+        await ask_message.remove()
+        res = {"payload": {"value": "2"}}  # Default to 2 turns
+
+    try:
+        turns = int(res["payload"]["value"])
+        await cl.Message(content=f"You selected {turns} turns for the debate.").send()
+        return turns
+    except (ValueError, KeyError):
+        await cl.Message(content="Invalid input. Defaulting to 2 turns.").send()
         return DEFAULT_TURN_COUNT
 
 
@@ -157,19 +184,38 @@ async def select_model(config_agent_name: str) -> str:
 async def is_llm_delegate() -> bool:
     """
     Ask the user if the Pro and Con agents should debate autonomously.
+
     Returns:
         bool: True if yes, False if no.
     """
-    res = await cl.AskActionMessage(
-        content="Should the Pro and Con agents debate autonomously?",
+    # Create the AskActionMessage and send it
+    ask_message = cl.AskActionMessage(
+        content=f"Should the Pro and Con agents debate autonomously?\n\n(If you do not respond within {DEFAULT_TIMEOUT} "
+        f"seconds, we will default to autonomous debate.)",
         actions=[
             cl.Action(name="yes", payload={"value": "yes"}, label="Yes"),
             cl.Action(name="no", payload={"value": "no"}, label="No"),
         ],
-        timeout=10,
+        timeout=DEFAULT_TIMEOUT,
+    )
+
+    res = await ask_message.send()
+
+    # # Prevents Chainlit's default timeout message
+    if not res:
+        await ask_message.remove()
+        res = {"payload": {"value": "no"}}  # Auto-select "No"
+
+    user_selection = await handle_boolean_response(res, default=False)
+
+    await cl.Message(
+        content="You have chosen to proceed with autonomous debate"
+        if user_selection
+        else "You have chosen to engage in debate with an AI agent"
     ).send()
 
-    return await handle_boolean_response(res, default=True)
+    print("The user selected to proceed with the debate")
+    return user_selection
 
 
 async def select_side(topic_name: str) -> str:
@@ -202,7 +248,7 @@ async def select_side(topic_name: str) -> str:
 
 
 async def select_topic_and_setup_side(
-    system_messages: "SystemMessages",
+    LLM_DELEGATE_FLAG, system_messages: "SystemMessages"
 ) -> Tuple[str, str, str, str]:
     """
     Prompt the user to select a debate topic and sets up the respective side.
@@ -227,7 +273,10 @@ async def select_topic_and_setup_side(
         raise ValueError("No topic selected.")
 
     topic_name, pro_key, con_key = selected_topic_tuple
-    side = await select_side(topic_name)
+    if LLM_DELEGATE_FLAG:
+        side = "pro"
+    else:
+        side = await select_side(topic_name)
     return topic_name, pro_key, con_key, side
 
 
@@ -259,7 +308,9 @@ async def select_debate_topic(system_messages: "SystemMessages") -> Optional[tup
     )
 
     # Prompt the user for topic selection
-    response = await cl.AskUserMessage(content=prompt_text, timeout=20).send()
+    response = await cl.AskUserMessage(
+        content=prompt_text, timeout=DEFAULT_TIMEOUT
+    ).send()
     if response:
         try:
             user_input = response["output"].strip()
@@ -267,6 +318,9 @@ async def select_debate_topic(system_messages: "SystemMessages") -> Optional[tup
             if 0 <= topic_index < len(topics):
                 selected_topic = topics[topic_index]
                 logger.info(f"Selected topic: {selected_topic[0]}")
+                await cl.Message(
+                    content=f"You have chosen the following debate topic: {selected_topic[0]}"
+                ).send()
                 return selected_topic
             else:
                 await cl.Message(
@@ -281,29 +335,46 @@ async def select_debate_topic(system_messages: "SystemMessages") -> Optional[tup
             ).send()
             return await select_debate_topic(system_messages)  # Retry on invalid input
     else:
+        selected_topic = topics[0]
         await cl.Message(
-            content="You didn't respond in time. No topic selected."
+            content=f"You didn't respond in time. The system has chosen the following default Topic:  {selected_topic[0]}"
         ).send()
-        return None
+        return selected_topic
 
 
 async def is_metaphor_search_key_set() -> bool:
     """
     Prompt the user for confirmation about Metaphor Search API keys.
+
     Returns:
         bool: True if the user confirms they have an API key, otherwise False.
     """
-    res = await cl.AskActionMessage(
-        content="Do you have an API Key for Metaphor Search?",
+    ask_message = cl.AskActionMessage(
+        content=f"Do you have an API Key for Metaphor Search?,\n\n(If you do not respond within {DEFAULT_TIMEOUT} "
+        f"seconds, we will default to selecting that you don't have the API Key or dont' want to search)",
         actions=[
             cl.Action(name="yes", payload={"value": "yes"}, label="Yes"),
             cl.Action(name="no", payload={"value": "no"}, label="No"),
         ],
-        timeout=20,
+        timeout=DEFAULT_TIMEOUT,
+    )
+
+    res = await ask_message.send()
+
+    # Prevents Chainlit's default timeout message
+    if not res:
+        await ask_message.remove()
+        res = {"payload": {"value": "no"}}  # Auto-select "No"
+
+    user_selection = await handle_boolean_response(res, default=False)
+
+    await cl.Message(
+        content="You have chosen to use the Metaphor Search for Research Agent."
+        if user_selection
+        else "You have chosen that Metaphor Search API key is not available."
     ).send()
 
-    # Use the helper function with the default set to False
-    return await handle_boolean_response(res, default=False)
+    return user_selection
 
 
 async def is_url_ask_question(topic_name: str) -> bool:
@@ -316,14 +387,30 @@ async def is_url_ask_question(topic_name: str) -> bool:
     Returns:
         bool: True if the user confirms for Q/A, otherwise False.
     """
-    res = await cl.AskActionMessage(
-        content=f"Would you like to chat with web searched documents for more information on {topic_name}?",
+    ask_message = cl.AskActionMessage(
+        content=f"Would you like to chat with web searched documents for more information on {topic_name},"
+        f"\n\n(If you do not respond within {DEFAULT_TIMEOUT} "
+        f"seconds, we will default to selecting that you don't want to chat with the documents)",
         actions=[
             cl.Action(name="yes", payload={"value": "yes"}, label="Yes"),
             cl.Action(name="no", payload={"value": "no"}, label="No"),
         ],
-        timeout=20,
+        timeout=DEFAULT_TIMEOUT,
+    )
+
+    res = await ask_message.send()
+
+    # Prevents Chainlit's default timeout message
+    if not res:
+        await ask_message.remove()
+        res = {"payload": {"value": "no"}}  # Auto-select "No"
+
+    user_selection = await handle_boolean_response(res, default=False)
+
+    await cl.Message(
+        content=f"You have chosen to chat with web-searched documents using RAG for {topic_name}."
+        if user_selection
+        else f"You have chosen NOT to chat with web-searched documents for {topic_name}."
     ).send()
 
-    # Use the helper function with the default set to False
-    return await handle_boolean_response(res, default=False)
+    return user_selection

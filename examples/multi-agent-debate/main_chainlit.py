@@ -23,6 +23,7 @@ from models import SystemMessages, load_system_messages
 from main import (
     parse_and_format_message_history,
     MetaphorSearchChatAgent,
+    create_chat_agent,
 )
 from system_messages import (
     DEFAULT_SYSTEM_MESSAGE_ADDITION,
@@ -85,7 +86,7 @@ class CustomChainlitTaskCallbacks(ChainlitTaskCallbacks):
             CustomChainlitTaskCallbacks(sub_task, config=config)
 
 
-def create_chat_agent(
+def create_custom_chat_agent(
     name: str, llm_config: OpenAIGPTConfig, system_message: str
 ) -> ChatAgent:
     """creates a ChatAgent with the given parameters.
@@ -99,9 +100,16 @@ def create_chat_agent(
         ChatAgent: A configured ChatAgent instance.
     """
     # Modify the system message to include instructions for the agent
+    additional_system_message = """**Response format (strictly follow this structure):**  
+    Pro:  
+    - [First key point]  
+    - [Second key point]  
+    - [Third key point]
+    **Limit responses to exactly 3 points expressed as single sentences.**"
+    """
     system_message = f"""
-        You are {name}. Start your response with '{name}: '
-        {system_message}
+       Start your response with '{name}: ' and then follow the instructions below.
+        {system_message} {additional_system_message}
         """
     return ChatAgent(
         ChatAgentConfig(
@@ -119,6 +127,7 @@ async def on_chat_start(
 ):
     settings.debug = debug
     settings.cache = not no_cache
+
     # set info logger
     logger = setup_logger(__name__, level=logging.INFO, terminal=True)
     logger.info("Starting multi-agent-debate")
@@ -183,22 +192,24 @@ async def on_chat_start(
     system_messages: SystemMessages = load_system_messages(
         "examples/multi-agent-debate/system_messages.json"
     )
+    LLM_DELEGATE_FLAG: bool = llm_delegate
 
     topic_name, pro_key, con_key, side = await select_topic_and_setup_side(
-        system_messages
+        LLM_DELEGATE_FLAG, system_messages
     )
 
     # Generate the system message
     metaphor_search_agent_system_message = (
         generate_metaphor_search_agent_system_message(system_messages, pro_key, con_key)
     )
-
-    pro_agent = create_chat_agent(
+    # pro_agent_system_message = "You are Pro. Start your response with 'Pro: "
+    # + system_messages.messages[pro_key].message + DEFAULT_SYSTEM_MESSAGE_ADDITION
+    pro_agent = create_custom_chat_agent(
         "Pro",
         pro_agent_config,
         system_messages.messages[pro_key].message + DEFAULT_SYSTEM_MESSAGE_ADDITION,
     )
-    con_agent = create_chat_agent(
+    con_agent = create_custom_chat_agent(
         "Con",
         con_agent_config,
         system_messages.messages[con_key].message + DEFAULT_SYSTEM_MESSAGE_ADDITION,
@@ -230,7 +241,7 @@ async def on_chat_start(
     logger.info(f"\n{user_side} Agent ({topic_name}):\n")
 
     # Determine if the debate is autonomous or the user input for one side
-    if llm_delegate:
+    if LLM_DELEGATE_FLAG:
         logger.info("Autonomous Debate Selected")
         interactive_setting = False
     else:
@@ -294,7 +305,7 @@ async def on_chat_start(
         single_round=True,
     )
     formatted_history = parse_and_format_message_history(last_agent.message_history)
-    ChainlitTaskCallbacks(feedback_task)
+    CustomChainlitTaskCallbacks(feedback_task)
     await feedback_task.run_async(
         formatted_history
     )  # Pass formatted history to the feedback agent
@@ -309,10 +320,10 @@ async def on_chat_start(
         )
         metaphor_search_agent.enable_message(MetaphorSearchTool)
         metaphor_search_agent.enable_message(DoneTool)
-        ChainlitTaskCallbacks(metaphor_search_task)
+        CustomChainlitTaskCallbacks(metaphor_search_task)
         await metaphor_search_task.run_async("run the search")
 
-        url_docs_ask_questions = is_url_ask_question(topic_name)
+        url_docs_ask_questions = await is_url_ask_question(topic_name)
         if url_docs_ask_questions:
             searched_urls = extract_urls(metaphor_search_agent.message_history)
             logger.info(searched_urls)
@@ -322,5 +333,5 @@ async def on_chat_start(
                 )
             )
             ask_questions_task = lr.Task(ask_questions_agent)
-            ChainlitTaskCallbacks(ask_questions_task)
+            CustomChainlitTaskCallbacks(ask_questions_task)
             await ask_questions_task.run_async()
