@@ -49,10 +49,10 @@ easier way to specify what this fallback method should return, via the
 the following possible values:
 
 - A special value from the [`NonToolAction`][langroid.mytypes.NonToolAction] Enum, e.g.:
-  - `"user"` or `NonToolAction.USER` - this is interpreted by langroid to return 
+    - `"user"` or `NonToolAction.USER` - this is interpreted by langroid to return 
      `ForwardTool(agent="user")`, meaning the message is passed to the user to await
      their next input.
-  - `"done"` or `NonToolAction.DONE` - this is interpreted by langroid to return 
+    - `"done"` or `NonToolAction.DONE` - this is interpreted by langroid to return 
      `AgentDoneTool(content=msg.content, tools=msg.tool_messages)`, 
      meaning the task is ended, and any content and tools in the current message will
      appear in the returned `ChatDocument`.
