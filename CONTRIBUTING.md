@@ -167,6 +167,16 @@ You are welcome to submit a PR to support other API-based or local models.
 ## Run tests
 To verify your env is correctly setup, run all tests using `make tests`.
 
+## IMPORTANT: Please include tests, docs and possibly examples.
+
+For any new features, please include:
+- Tests in the `tests` directory (first check if there is a suitable test file to add to)
+- A note in `docs/notes` folder, e.g. `docs/notes/weaviate.md` that is a
+  (relatively) self-contained guide to using the feature, including any instructions
+  on how to set up the environment or keys if needed. 
+  See the [weaviate](https://langroid.github.io/langroid/notes/weaviate/) note as an example.
+- Where possible and meaningful, add a simple example in the `examples` directory.
+
 ## Generate docs
 
 Generate docs: `make docs`, then go to the IP address shown at the end, like
