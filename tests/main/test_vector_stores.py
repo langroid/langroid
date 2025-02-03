@@ -302,26 +302,13 @@ def test_vector_stores_access(vecdb):
     docs_and_scores = vecdb.similar_texts_with_scores("cow", k=1)
     assert len(docs_and_scores) == 1
     assert docs_and_scores[0][0].content == "cow"
-    if isinstance(vecdb, WeaviateDB):
-        # Weaviate enforces capitalized collection names; 
-        # Weaviate enforces capitalized collection names;
-        # verifying adherence.
-
-        coll_names = [f"Test_junk_{i}" for i in range(3)]
-        for coll in coll_names:
-            vecdb.create_collection(collection_name=coll)
-        n_colls = len(
-            [c for c in vecdb.list_collections(empty=True) if c.startswith("Test_junk")]
-        )
-        n_dels = vecdb.clear_all_collections(really=True, prefix="Test_junk")
-    else:
-        coll_names = [f"test_junk_{i}" for i in range(3)]
-        for coll in coll_names:
-            vecdb.create_collection(collection_name=coll)
-        n_colls = len(
-            [c for c in vecdb.list_collections(empty=True) if c.startswith("test_junk")]
-        )
-        n_dels = vecdb.clear_all_collections(really=True, prefix="test_junk")
+    coll_names = [f"test_junk_{i}" for i in range(3)]
+    for coll in coll_names:
+        vecdb.create_collection(collection_name=coll)
+    n_colls = len(
+        [c for c in vecdb.list_collections(empty=True) if c.startswith("test_junk")]
+    )
+    n_dels = vecdb.clear_all_collections(really=True, prefix="test_junk")
     # LanceDB.create_collection() does nothing, since we can't create a table
     # without a schema or data.
     assert n_colls == n_dels == (0 if isinstance(vecdb, LanceDB) else len(coll_names))
@@ -548,6 +535,8 @@ def test_lance_metadata():
 )
 def test_postgres_get_all_documents_where(vecdb: PostgresDB):
     """Test the where clause in get_all_documents in PostgresDB"""
+
+
 def test_postgres_where_clause(vecdb: PostgresDB):
     """Test the where clause in get_all_documents,get_similar_texts in PostgresDB"""
     vecdb.create_collection(

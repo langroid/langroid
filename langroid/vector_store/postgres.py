@@ -60,7 +60,7 @@ class PostgresDB(VectorStore):
     def _create_engine(self) -> Engine:
         """Creates a SQLAlchemy engine based on the configuration."""
 
-        connection_string: str = None  # Ensure variable is always defined
+        connection_string: str | None = None  # Ensure variable is always defined
 
         if self.config.cloud:
             connection_string = os.getenv("POSTGRES_CONNECTION_STRING")
