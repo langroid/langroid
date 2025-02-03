@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import re
+import time
 from dataclasses import dataclass
 from typing import Any, Dict, List, Literal, Optional, Sequence, Tuple, Union
 
@@ -258,6 +259,36 @@ class PineconeDB(VectorStore):
                     f"Unable to add of docs between indices {i} and {batch_size}"
                 )
                 logger.error(e)
+
+    def vectors_resolvable(
+        self,
+        document_ids: List[str],
+        namespace: str = "",
+        short_circuit_duration: int = 300,
+    ) -> bool:
+        """
+        Warning: Depending on the size of vectors, this function would poll
+        for quite some time. It is therefore recommended that a user of this
+        function reduce the search space by batching the list of vector ids
+        """
+        if self.config.collection_name is None:
+            raise ValueError("No collection name set, cannot search for docs")
+        start = time.perf_counter()
+        index = self.client.Index(name=self.config.collection_name)
+        while True:
+            if namespace:
+                vector_response = index.fetch(ids=document_ids, namespace=namespace)
+            else:
+                vector_response = index.fetch(ids=document_ids)
+
+            if len(vector_response.get("vectors", [])) == len(document_ids):
+                return True
+
+            now = time.perf_counter()
+            if now - start > short_circuit_duration:
+                break
+            time.sleep(10)
+        return False
 
     def get_all_documents(
         self, prefix: str = "", namespace: str = ""
