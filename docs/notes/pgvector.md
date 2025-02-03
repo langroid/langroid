@@ -25,8 +25,21 @@ POSTGRES_USER=your_postgres_user
 POSTGRES_PASSWORD=your_postgres_password
 POSTGRES_DB=your_database_name
 ```
-## **If you have connection string with your cloud configuration**
-### **1. If you have connection string, no need to setup the docker**
+## **If you want to use one of many cloud offerings of postgres**
+
+We are using **Tembo** for demonstrative purposes here.  
+
+### **Steps to Set Up Tembo**  
+Follow this [quickstart guide](https://tembo.io/docs/getting-started/getting_started) to get your Tembo credentials.  
+
+1. Sign up at [Tembo.io](https://cloud.tembo.io/).  
+2. While selecting a stack, choose **VectorDB** as your option.  
+3. Click on **Deploy Free**.  
+4. Wait until your database is fully provisioned.  
+5. Click on **Show Connection String** to get your connection string.  
+6. Make sure your connnection string starts with `postgres://` or `postgresql://`
+
+### **If you have connection string, no need to setup the docker**
 
 ```dotenv
 POSTGRES_CONNECTION_STRING=your-connection-string
