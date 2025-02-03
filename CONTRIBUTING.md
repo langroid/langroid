@@ -170,7 +170,9 @@ To verify your env is correctly setup, run all tests using `make tests`.
 ## IMPORTANT: Please include tests, docs and possibly examples.
 
 For any new features, please include:
-- Tests in the `tests` directory (first check if there is a suitable test file to add to)
+- Tests in the `tests` directory (first check if there is a suitable test file to add to).
+  _If fixing a bug, please add a regression test, i.e., 
+   one which would have failed without your fix_
 - A note in `docs/notes` folder, e.g. `docs/notes/weaviate.md` that is a
   (relatively) self-contained guide to using the feature, including any instructions
   on how to set up the environment or keys if needed. 
