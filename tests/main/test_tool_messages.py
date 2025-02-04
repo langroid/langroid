@@ -9,7 +9,7 @@ from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.chat_document import ChatDocMetaData, ChatDocument
 from langroid.agent.task import Task
 from langroid.agent.tool_message import ToolMessage
-from langroid.agent.tools import DoneTool
+from langroid.agent.tools import DonePassTool, DoneTool
 from langroid.agent.tools.orchestration import (
     AgentDoneTool,
     FinalResultTool,
@@ -1789,9 +1789,19 @@ def test_valid_structured_recovery():
     assert "No" in result.content
 
 
-@pytest.mark.parametrize("routing", [None, "user", "done"])
-def test_handle_llm_no_tool(routing: str):
-    """Verify that ChatAgentConfig.non_tool_routing works as expected"""
+@pytest.mark.parametrize(
+    "handle_no_tool",
+    [
+        None,
+        "user",
+        "done",
+        "are you finished?",
+        ResultTool(answer=42),
+        DonePassTool(),
+    ],
+)
+def test_handle_llm_no_tool(handle_no_tool: Any):
+    """Verify that ChatAgentConfig.handle_llm_no_tool works as expected"""
 
     def mock_llm_response(x: str) -> str:
         match x:
@@ -1799,31 +1809,38 @@ def test_handle_llm_no_tool(routing: str):
                 return SumTool(x=1, y=2).json()
             case "3":
                 return "4"
-            case "4":
-                return "DONE"
+            case "are you finished?":
+                return "DONE 5"
 
     config = ChatAgentConfig(
-        handle_llm_no_tool=routing,
+        handle_llm_no_tool=handle_no_tool,
         llm=MockLMConfig(response_fn=mock_llm_response),
     )
     agent = ChatAgent(config)
     agent.enable_message(SumTool)
     task = Task(agent, interactive=False, default_human_response="q")
     result = task.run("1")
-    match routing:
-        case "user":
-            # LLM(1) -> SumTool(1,2) -> 3 -> LLM(3) -> 4 -> User(4) -> q
-            assert result.content == "q"
-        case "done":
-            # LLM(1) -> SumTool(1,2) -> 3 -> LLM(3) -> 4 -> Done(4)
-            assert result.content == "4"
-        case None:
-            # task gets stuck and returns None
-            assert result is None
+    if handle_no_tool is None:
+        # task gets stuck and returns None
+        assert result is None
 
-    # test that using an invalid routing string raises an error
-    with pytest.raises(ValueError):
-        config = ChatAgentConfig(
-            handle_llm_no_tool="invalid",
-            llm=MockLMConfig(response_fn=mock_llm_response),
-        )
+    if isinstance(handle_no_tool, str):
+        match handle_no_tool:
+            case "user":
+                # LLM(1) -> SumTool(1,2) -> 3 -> LLM(3) -> 4 -> User(4) -> q
+                assert result.content == "q"
+            case "done":
+                # LLM(1) -> SumTool(1,2) -> 3 -> LLM(3) -> 4 -> Done(4)
+                assert result.content == "4"
+            case "are you finished?":
+                # LLM(1) -> SumTool(1,2) -> 3 -> LLM(3) -> 4 -> LLM(DONE)
+                assert result.content == "5"
+
+    if isinstance(handle_no_tool, ResultTool):
+        # LLM(1) -> SumTool(1,2) -> 3 -> LLM(3) -> 4 -> ResultTool(4)
+        assert isinstance(result.tool_messages[0], ResultTool)
+        assert result.tool_messages[0].answer == 42
+
+    if isinstance(handle_no_tool, DonePassTool):
+        # LLM(1) -> SumTool(1,2) -> 3 -> LLM(3) -> 4 -> DonePass
+        assert result.content == "4"
