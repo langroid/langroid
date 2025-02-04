@@ -51,14 +51,14 @@ ingesting their content into the vector-store involves the following steps:
 
 1. Split the document into shards (in a configurable way)
 2. Map each shard to an embedding vector using an embedding model. The default
-  embedding model is OpenAI's `text-embedding-ada-002` model, but users can 
+  embedding model is OpenAI's `text-embedding-3-small` model, but users can 
   instead use `all-MiniLM-L6-v2` from HuggingFace `sentence-transformers` library.[^1]
 3. Store embedding vectors in the vector-store, along with the shard's content and 
   any document-level meta-data (this ensures Langroid knows which document a shard
   came from when it retrieves it augment an LLM query)
 
 [^1]: To use this embedding model, install langroid via `pip install langroid[hf-embeddings]`
-Note that this will install `torch` and `sentence-transfoemers` libraries.
+Note that this will install `torch` and `sentence-transformers` libraries.
 
 
 [`DocChatAgent`][langroid.agent.special.doc_chat_agent.DocChatAgent]'s `llm_response` overrides the default [`ChatAgent`][langroid.agent.chat_agent.ChatAgent] method, 
@@ -199,7 +199,7 @@ document question-answering:
 
 - [`examples/docqa/chat.py`](https://github.com/langroid/langroid-examples/blob/main/examples/docqa/chat.py)
   an app that takes a list of URLs or document paths from a user, and answers questions on them.
-- [`examples/docqa/chat_multi.py`](https://github.com/langroid/langroid-examples/blob/main/examples/docqa/chat_multi.py)
+- [`examples/docqa/chat-qa-summarize.py`](https://github.com/langroid/langroid-examples/blob/main/examples/docqa/chat-qa-summarize.py)
   a two-agent app where the `WriterAgent` is tasked with writing 5 key points about a topic, 
   and takes the help of a `DocAgent` that answers its questions based on a given set of documents.
 
