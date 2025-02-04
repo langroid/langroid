@@ -247,7 +247,7 @@ def test_hybrid_vector_search(
 @pytest.mark.parametrize(
     "vecdb",
     [
-        "postgres",        
+        "postgres",
         "lancedb",
         "chroma",
         "qdrant_local",
@@ -324,7 +324,7 @@ def test_vector_stores_access(vecdb):
 @pytest.mark.parametrize(
     "vecdb",
     [
-        "postgres",        
+        "postgres",
         "lancedb",
         "chroma",
         "qdrant_cloud",
@@ -391,7 +391,7 @@ def test_vector_stores_context_window(vecdb):
 @pytest.mark.parametrize(
     "vecdb",
     [
-        "postgres",        
+        "postgres",
         "chroma",
         "lancedb",
         "qdrant_cloud",
