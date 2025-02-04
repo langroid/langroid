@@ -8,9 +8,7 @@ on:
       - ".github/workflows/pytest.yml"
     branches:
       - main
-  pull_request:
-    types:
-      - ready_for_review
+  workflow_dispatch:
 
 jobs:
   cancel:
