@@ -277,5 +277,6 @@ class WeaviateDB(VectorStore):
         return formatted_name
 
     def __del__(self) -> None:
+        # Gracefully close the connection with local client
         if not self.config.cloud:
             self.client.close()
