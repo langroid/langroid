@@ -25,7 +25,7 @@ POSTGRES_USER=your_postgres_user
 POSTGRES_PASSWORD=your_postgres_password
 POSTGRES_DB=your_database_name
 ```
-## **If you want to use one of many cloud offerings of postgres**
+## **If you want to use cloud offerings of postgres**
 
 We are using **Tembo** for demonstrative purposes here.  
 
