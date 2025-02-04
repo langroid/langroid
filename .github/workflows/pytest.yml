@@ -8,7 +8,7 @@ on:
       - ".github/workflows/pytest.yml"
     branches:
       - main
-    pull_request:
+  pull_request:
       branches:
         - main
 
