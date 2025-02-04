@@ -543,4 +543,3 @@ def test_lance_metadata():
 
     all_docs = vecdb.get_all_documents()
     assert len(all_docs) == 3
-
