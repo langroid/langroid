@@ -176,7 +176,7 @@ For any new features, please include:
 - A note in `docs/notes` folder, e.g. `docs/notes/weaviate.md` that is a
   (relatively) self-contained guide to using the feature, including any instructions
   on how to set up the environment or keys if needed. 
-  See the [weaviate](https://langroid.github.io/langroid/notes/weaviate/) note as an example.
+  See the [weaviate](https://langroid.github.io/langroid/notes/weaviate/) note as an example. Make sure you link to this note in the `mkdocs.yml` file under the `nav` section.
 - Where possible and meaningful, add a simple example in the `examples` directory.
 
 ## Generate docs
