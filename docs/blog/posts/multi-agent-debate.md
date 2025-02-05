@@ -20,6 +20,8 @@ this imagination to reality, leveraging diverse LLMs and the Langroid multi-agen
 Agents are prompt-engineered and role-tuned to align with their assigned ethical stance, 
 ensuring thoughtful and structured debates. 
 
+<!-- more -->
+
 My motivations for creating this platform included: 
 
   - A debate coach for underserved students without access to traditional resources. 
