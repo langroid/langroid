@@ -54,6 +54,7 @@ class DeepSeekModel(ModelName):
 
     DEEPSEEK = "deepseek/deepseek-chat"
     DEEPSEEK_R1 = "deepseek/deepseek-reasoner"
+    OPENROUTER_DEEPSEEK_R1 = "openrouter/deepseek/deepseek-r1"
 
 
 class GeminiModel(ModelName):
@@ -64,6 +65,23 @@ class GeminiModel(ModelName):
     GEMINI_1_5_PRO = "gemini/gemini-1.5-pro"
     GEMINI_2_FLASH = "gemini/gemini-2.0-flash-exp"
     GEMINI_2_FLASH_THINKING = "gemini/gemini-2.0-flash-thinking-exp"
+
+
+class OpenAI_API_ParamInfo(BaseModel):
+    """
+    Parameters exclusive to some models, when using OpenAI API
+    """
+
+    params: Dict[str, List[str]] = dict(
+        reasoning_effort=[
+            OpenAIChatModel.O3_MINI.value,
+        ],
+    )
+    extra_parameters: Dict[str, List[str]] = dict(
+        include_reasoning=[
+            DeepSeekModel.OPENROUTER_DEEPSEEK_R1.value,
+        ]
+    )
 
 
 class ModelInfo(BaseModel):

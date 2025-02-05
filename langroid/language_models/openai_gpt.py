@@ -49,6 +49,7 @@ from langroid.language_models.config import HFPromptFormatterConfig
 from langroid.language_models.model_info import (
     DeepSeekModel,
     GeminiModel,
+    OpenAI_API_ParamInfo,
     get_model_info,
 )
 from langroid.language_models.model_info import (
@@ -203,6 +204,7 @@ class OpenAICallParams(BaseModel):
     stop: str | List[str] | None = None  # (list of) stop sequence(s)
     seed: int | None = 42
     user: str | None = None  # user id for tracking
+    extra_body: Dict[str, Any] | None = None  # additional params for API request body
 
     def to_dict_exclude_none(self) -> Dict[str, Any]:
         return {k: v for k, v in self.dict().items() if v is not None}
@@ -642,7 +644,15 @@ class OpenAIGPT(LanguageModel):
         """
         List of params that are not supported by the current model
         """
-        return get_model_info(self.config.chat_model).unsupported_params
+        model_info = get_model_info(self.config.chat_model)
+        unsupported = set(model_info.unsupported_params)
+        for param, model_list in OpenAI_API_ParamInfo().params.items():
+            if (
+                self.config.chat_model not in model_list
+                and self.chat_model_orig not in model_list
+            ):
+                unsupported.add(param)
+        return list(unsupported)
 
     def rename_params(self) -> Dict[str, str]:
         """
@@ -739,7 +749,10 @@ class OpenAIGPT(LanguageModel):
             delta = choices[0].get("delta", {})
             # capture both content and reasoning_content
             event_text = delta.get("content", "")
-            event_reasoning = delta.get("reasoning_content", "")
+            event_reasoning = delta.get(
+                "reasoning_content",
+                delta.get("reasoning", ""),
+            )
             if "function_call" in delta and delta["function_call"] is not None:
                 if "name" in delta["function_call"]:
                     event_fn_name = delta["function_call"]["name"]
@@ -861,7 +874,10 @@ class OpenAIGPT(LanguageModel):
         if chat:
             delta = choices[0].get("delta", {})
             event_text = delta.get("content", "")
-            event_reasoning = delta.get("reasoning_content", "")
+            event_reasoning = delta.get(
+                "reasoning_content",
+                delta.get("reasoning", ""),
+            )
             if "function_call" in delta and delta["function_call"] is not None:
                 if "name" in delta["function_call"]:
                     event_fn_name = delta["function_call"]["name"]
@@ -1757,6 +1773,18 @@ class OpenAIGPT(LanguageModel):
         for old_param, new_param in param_rename_map.items():
             if old_param in args:
                 args[new_param] = args.pop(old_param)
+
+        # finally, get rid of extra_body params exclusive to certain models
+        extra_params = args.get("extra_body", {})
+        if extra_params:
+            for param, model_list in OpenAI_API_ParamInfo().extra_parameters.items():
+                if (
+                    self.config.chat_model not in model_list
+                    and self.chat_model_orig not in model_list
+                ):
+                    extra_params.pop(param, None)
+            if extra_params:
+                args["extra_body"] = extra_params
         return args
 
     def _process_chat_completion_response(
