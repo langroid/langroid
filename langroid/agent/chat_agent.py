@@ -5,7 +5,7 @@ import logging
 import textwrap
 from contextlib import ExitStack
 from inspect import isclass
-from typing import Dict, List, Optional, Self, Set, Tuple, Type, Union, cast
+from typing import Any, Dict, List, Optional, Self, Set, Tuple, Type, Union, cast
 
 import openai
 from rich import print
@@ -31,6 +31,7 @@ from langroid.language_models.base import (
     ToolChoiceTypes,
 )
 from langroid.language_models.openai_gpt import OpenAIGPT
+from langroid.mytypes import Entity, NonToolAction
 from langroid.pydantic_v1 import BaseModel, ValidationError
 from langroid.utils.configuration import settings
 from langroid.utils.object_registry import ObjectRegistry
@@ -45,6 +46,7 @@ logger = logging.getLogger(__name__)
 class ChatAgentConfig(AgentConfig):
     """
     Configuration for ChatAgent
+
     Attributes:
         system_message: system message to include in message sequence
              (typically defines role and task of agent).
@@ -52,6 +54,8 @@ class ChatAgentConfig(AgentConfig):
         user_message: user message to include in message sequence.
              Used only if `task` is not specified in the constructor.
         use_tools: whether to use our own ToolMessages mechanism
+        handle_llm_no_tool (Any): desired agent_response when
+            LLM generates non-tool msg.
         use_functions_api: whether to use functions/tools native to the LLM API
                 (e.g. OpenAI's `function_call` or `tool_call` mechanism)
         use_tools_api: When `use_functions_api` is True, if this is also True,
@@ -84,6 +88,7 @@ class ChatAgentConfig(AgentConfig):
 
     system_message: str = "You are a helpful assistant."
     user_message: Optional[str] = None
+    handle_llm_no_tool: Any = None
     use_tools: bool = False
     use_functions_api: bool = True
     use_tools_api: bool = False
@@ -416,7 +421,7 @@ class ChatAgent(Agent):
         ]
 
         if len(usable_tool_classes) == 0:
-            return "You can ask questions in natural language."
+            return ""
         format_instructions = "\n\n".join(
             [
                 msg_cls.format_instructions(tool=self.config.use_tools)
@@ -539,6 +544,20 @@ class ChatAgent(Agent):
                 self.message_history[i].content = message
                 break
 
+    def delete_last_message(self, role: str = Role.USER) -> None:
+        """
+        Delete the last message that has role `role` from the message history.
+        Args:
+            role (str): role of message to delete
+        """
+        if len(self.message_history) == 0:
+            return
+        # find last message in self.message_history with role `role`
+        for i in range(len(self.message_history) - 1, -1, -1):
+            if self.message_history[i].role == role:
+                self.message_history.pop(i)
+                break
+
     def _create_system_and_tools_message(self) -> LLMMessage:
         """
         (Re-)Create the system message for the LLM of the agent,
@@ -554,19 +573,50 @@ class ChatAgent(Agent):
         Returns:
             LLMMessage object
         """
-        content = textwrap.dedent(
-            f"""
-            {self.system_message}
-            
-            {self.system_tool_instructions}
-            
-            {self.system_tool_format_instructions}
+        content = self.system_message
+        if self.system_tool_instructions != "":
+            content += "\n\n" + self.system_tool_instructions
+        if self.system_tool_format_instructions != "":
+            content += "\n\n" + self.system_tool_format_instructions
+        if self.output_format_instructions != "":
+            content += "\n\n" + self.output_format_instructions
 
-            {self.output_format_instructions}
-            """
-        )
         # remove leading and trailing newlines and other whitespace
         return LLMMessage(role=Role.SYSTEM, content=content.strip())
+
+    def handle_message_fallback(self, msg: str | ChatDocument) -> Any:
+        """
+        Fallback method for the "no-tools" scenario.
+        Users the self.config.non_tool_routing to determine the action to take.
+
+        This method can be overridden by subclasses, e.g.,
+        to create a "reminder" message when a tool is expected but the LLM "forgot"
+        to generate one.
+
+        Args:
+            msg (str | ChatDocument): The input msg to handle
+        Returns:
+            Any: The result of the handler method
+        """
+        if self.config.handle_llm_no_tool is None:
+            return None
+        if isinstance(msg, ChatDocument) and msg.metadata.sender == Entity.LLM:
+            from langroid.agent.tools.orchestration import AgentDoneTool, ForwardTool
+
+            no_tool_option = self.config.handle_llm_no_tool
+            if no_tool_option in list(NonToolAction):
+                # in case the `no_tool_option` is one of the special NonToolAction vals
+                match self.config.handle_llm_no_tool:
+                    case NonToolAction.FORWARD_USER:
+                        return ForwardTool(agent="User")
+                    case NonToolAction.DONE:
+                        return AgentDoneTool(
+                            content=msg.content, tools=msg.tool_messages
+                        )
+            # Otherwise just return `no_tool_option` as is:
+            # This can be any string, such as a specific nudge/reminder to the LLM,
+            # or even something like ResultTool etc.
+            return no_tool_option
 
     def unhandled_tools(self) -> set[str]:
         """The set of tools that are known but not handled.
@@ -1012,7 +1062,7 @@ class ChatAgent(Agent):
         all_tools: bool = False,
     ) -> List[ToolMessage]:
         """
-        Extracts messages and tracks whether any errors occured. If strict mode
+        Extracts messages and tracks whether any errors occurred. If strict mode
         was enabled, disables it for the tool, else triggers strict recovery.
         """
         self.tool_error = False
@@ -1049,18 +1099,20 @@ class ChatAgent(Agent):
 
         return tools
 
-    def _get_any_tool_message(self, optional: bool = True) -> type[ToolMessage]:
+    def _get_any_tool_message(self, optional: bool = True) -> type[ToolMessage] | None:
         """
         Returns a `ToolMessage` which wraps all enabled tools, excluding those
         where strict recovery is disabled. Used in strict recovery.
         """
-        any_tool_type = Union[  # type: ignore
-            *(
-                self.llm_tools_map[t]
-                for t in self.llm_tools_usable
-                if t not in self.disable_strict_tools_set
-            )
-        ]
+        possible_tools = tuple(
+            self.llm_tools_map[t]
+            for t in self.llm_tools_usable
+            if t not in self.disable_strict_tools_set
+        )
+        if len(possible_tools) == 0:
+            return None
+        any_tool_type = Union.__getitem__(possible_tools)  # type ignore
+
         maybe_optional_type = Optional[any_tool_type] if optional else any_tool_type
 
         class AnyTool(ToolMessage):
@@ -1211,6 +1263,8 @@ class ChatAgent(Agent):
             and self.config.strict_recovery
         ):
             AnyTool = self._get_any_tool_message()
+            if AnyTool is None:
+                return None
             self.set_output_format(
                 AnyTool,
                 force_tools=True,
@@ -1219,15 +1273,25 @@ class ChatAgent(Agent):
                 instructions=True,
             )
             recovery_message = self._strict_recovery_instructions(AnyTool)
-
-            if message is None:
-                message = recovery_message
-            elif isinstance(message, str):
-                message = message + recovery_message
+            augmented_message = message
+            if augmented_message is None:
+                augmented_message = recovery_message
+            elif isinstance(augmented_message, str):
+                augmented_message = augmented_message + recovery_message
             else:
-                message.content = message.content + recovery_message
+                augmented_message.content = augmented_message.content + recovery_message
 
-            return self.llm_response(message)
+            # only use the augmented message for this one response...
+            result = self.llm_response(augmented_message)
+            # ... restore the original user message so that the AnyTool recover
+            # instructions don't persist in the message history
+            # (this can cause the LLM to use the AnyTool directly as a tool)
+            if message is None:
+                self.delete_last_message(role=Role.USER)
+            else:
+                msg = message if isinstance(message, str) else message.content
+                self.update_last_message(msg, role=Role.USER)
+            return result
 
         hist, output_len = self._prep_llm_messages(message)
         if len(hist) == 0:
@@ -1294,15 +1358,25 @@ class ChatAgent(Agent):
                 instructions=True,
             )
             recovery_message = self._strict_recovery_instructions(AnyTool)
-
-            if message is None:
-                message = recovery_message
-            elif isinstance(message, str):
-                message = message + recovery_message
+            augmented_message = message
+            if augmented_message is None:
+                augmented_message = recovery_message
+            elif isinstance(augmented_message, str):
+                augmented_message = augmented_message + recovery_message
             else:
-                message.content = message.content + recovery_message
+                augmented_message.content = augmented_message.content + recovery_message
 
-            return self.llm_response(message)
+            # only use the augmented message for this one response...
+            result = self.llm_response(augmented_message)
+            # ... restore the original user message so that the AnyTool recover
+            # instructions don't persist in the message history
+            # (this can cause the LLM to use the AnyTool directly as a tool)
+            if message is None:
+                self.delete_last_message(role=Role.USER)
+            else:
+                msg = message if isinstance(message, str) else message.content
+                self.update_last_message(msg, role=Role.USER)
+            return result
 
         hist, output_len = self._prep_llm_messages(message)
         if len(hist) == 0:
@@ -1425,11 +1499,11 @@ class ChatAgent(Agent):
                 self.message_history.extend(llm_msgs)
 
         hist = self.message_history
-        output_len = self.config.llm.max_output_tokens
+        output_len = self.config.llm.model_max_output_tokens
         if (
             truncate
             and self.chat_num_tokens(hist)
-            > self.llm.chat_context_length() - self.config.llm.max_output_tokens
+            > self.llm.chat_context_length() - self.config.llm.model_max_output_tokens
         ):
             # chat + output > max context length,
             # so first try to shorten requested output len to fit.
@@ -1454,7 +1528,7 @@ class ChatAgent(Agent):
                         The message history is longer than the max chat context 
                         length allowed, and we have run out of messages to drop.
                         HINT: In your `OpenAIGPTConfig` object, try increasing
-                        `chat_context_length` or decreasing `max_output_tokens`.
+                        `chat_context_length` or decreasing `model_max_output_tokens`.
                         """
                         )
                     # drop the second message, i.e. first msg after the sys msg
@@ -1603,12 +1677,12 @@ class ChatAgent(Agent):
         Args:
             messages: seq of messages (with role, content fields) sent to LLM
             output_len: max number of tokens expected in response.
-                    If None, use the LLM's default max_output_tokens.
+                    If None, use the LLM's default model_max_output_tokens.
         Returns:
             Document (i.e. with fields "content", "metadata")
         """
         assert self.config.llm is not None and self.llm is not None
-        output_len = output_len or self.config.llm.max_output_tokens
+        output_len = output_len or self.config.llm.model_max_output_tokens
         streamer = noop_fn
         if self.llm.get_stream():
             streamer = self.callbacks.start_llm_stream()
@@ -1678,7 +1752,7 @@ class ChatAgent(Agent):
         Async version of `llm_response_messages`. See there for details.
         """
         assert self.config.llm is not None and self.llm is not None
-        output_len = output_len or self.config.llm.max_output_tokens
+        output_len = output_len or self.config.llm.model_max_output_tokens
         functions, fun_call, tools, force_tool, output_format = self._function_args()
         assert self.llm is not None
 
@@ -1807,14 +1881,16 @@ class ChatAgent(Agent):
         self.update_last_message(message, role=Role.USER)
         return answer_doc
 
-    def llm_response_forget(self, message: str) -> ChatDocument:
+    def llm_response_forget(
+        self, message: Optional[str | ChatDocument] = None
+    ) -> ChatDocument:
         """
         LLM Response to single message, and restore message_history.
         In effect a "one-off" message & response that leaves agent
         message history state intact.
 
         Args:
-            message (str): user message
+            message (str|ChatDocument): message to respond to.
 
         Returns:
             A Document object with the response.
@@ -1841,7 +1917,9 @@ class ChatAgent(Agent):
 
         return response
 
-    async def llm_response_forget_async(self, message: str) -> ChatDocument:
+    async def llm_response_forget_async(
+        self, message: Optional[str | ChatDocument] = None
+    ) -> ChatDocument:
         """
         Async version of `llm_response_forget`. See there for details.
         """

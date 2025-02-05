@@ -7,10 +7,11 @@ on:
       - "tests/**"
       - ".github/workflows/pytest.yml"
     branches:
-      - main  # Replace with your default branch name 
+      - main
   pull_request:
-    branches:
-      - main  # Replace with your default branch name
+      branches:
+        - main
+
 
 jobs:
   cancel:
@@ -61,6 +62,8 @@ jobs:
       CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
       GOOGLE_API_KEY: ${{ secrets.GOOGLE_API_KEY }}
       GOOGLE_CSE_ID: ${{ secrets.GOOGLE_CSE_ID }}
+      WEAVIATE_API_KEY: ${{ secrets.WEAVIATE_API_KEY }}
+      WEAVIATE_API_URL: ${{ secrets.WEAVIATE_API_URL }}
 
       # Azure OpenAI env vars
       AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
@@ -69,6 +72,7 @@ jobs:
       AZURE_OPENAI_DEPLOYMENT_NAME: ${{ secrets.AZURE_OPENAI_DEPLOYMENT_NAME }}
       AZURE_OPENAI_MODEL_NAME: ${{ secrets.AZURE_GPT_MODEL_NAME }} 
       AZURE_OPENAI_MODEL_VERSION: ${{ secrets.AZURE_OPENAI_MODEL_VERSION }}
+      
     steps:
     - name: Check out repository
       uses: actions/checkout@v3
@@ -84,43 +88,55 @@ jobs:
         sudo apt-get update
         sudo apt-get install -y libmagic1
         sudo apt-get install -y poppler-utils tesseract-ocr
+    # - name: Restore uv cache
+    #   uses: actions/cache@v4
+    #   with:
+    #     path: ~/.local
+    #     key: uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+    #     restore-keys: |
+    #       uv-${{ runner.os }}-${{ hashFiles('uv.lock') }}
+    #       uv-${{ runner.os }}
 
-    - name: Load cached Poetry installation
-      uses: actions/cache@v4
-      with:
-        path: ~/.local
-        key: poetry-${{ runner.os }}-${{ hashFiles('**/poetry.lock') }}
+    - name: Setup uv
+      uses: astral-sh/setup-uv@v5
+      with: 
+        enable-cache: true
+        cache-dependency-glob: "uv.lock"
 
-    - name: Install and configure Poetry
-      uses: snok/install-poetry@v1
-      with:
-        virtualenvs-create: true
-        virtualenvs-in-project: true
-        installer-parallel: true
-
-    - name: Load cached venv
-      id: cached-poetry-dependencies
-      uses: actions/cache@v4
-      with:
-        path: .venv
-        key: venv-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('**/poetry.lock') }}
-
-    - name: Install Poetry dependencies, if not found in cache
-      if: steps.cached-poetry-dependencies.outputs.cache-hit != 'true'
+    # - name: Load cached venv
+    #   id: cached-uv-dependencies
+    #   uses: actions/cache@v4
+    #   with:
+    #       path: .venv
+    #       key: venv-${{ runner.os }}-${{ steps.setup-python.outputs.python-version }}-${{ hashFiles('uv.lock') }}
+    
+    - name: Install project dependencies with uv
+      # if: steps.cached-uv-dependencies.outputs.cache-hit != 'true'
       run: |
-        poetry --version
-        echo "$HOME/.local/bin" >> $GITHUB_PATH
-        python -m pip install --upgrade pip
-        
-        poetry install --no-root --sync \
-          -E "neo4j arango lancedb momento meilisearch chromadb hf-embeddings unstructured pdf-parsers docx sql fastembed" \
-          --with dev
+        uv sync --dev \
+          --extra neo4j \
+          --extra arango \
+          --extra lancedb \
+          --extra momento \
+          --extra meilisearch \
+          --extra chromadb \
+          --extra docling \
+          --extra pymupdf4llm \
+          --extra weaviate \
+          --extra hf-embeddings \
+          --extra unstructured \
+          --extra pdf-parsers \
+          --extra docx \
+          --extra sql \
+          --extra fastembed
+      
+    
 
-    - name: Download NLTK data
-      run: poetry run python -c "import nltk; nltk.download('punkt_tab')"
+    - name: Download ALL NLTK data (needed by unstructured and others)
+      run: uv run python -c "import nltk; nltk.download('all')"
 
     - name: Dump dependencies to file
-      run: pip freeze > requirements_github.txt
+      run: uv pip freeze > requirements_github.txt
 
     - name: Upload dependencies file
       uses: actions/upload-artifact@v4
@@ -134,15 +150,19 @@ jobs:
       env:
         PYTEST_ADDOPTS: "-p no:logging"
       run: |
-        poetry run pytest --m gpt-4o-mini --cov langroid --cov-config .coveragerc \
+        uv run pytest --m gpt-4o-mini --cov langroid --cov-config .coveragerc \
           -rf -vv --log-cli-level=INFO --show-capture=no \
           -n auto --timeout=300 \
+          --first-test-file=tests/main/sql_chat/test_sql_chat_agent.py \
+          --first-test-file=tests/extras/test_hf_embeddings.py \
+          --first-test-file=tests/extras/test_gemini_embeddings.py \
+          --first-test-file=tests/extras/test_fastembed_embeddings.py \
           --first-test-file=tests/main/test_llm.py \
           --first-test-file=tests/main/test_task.py \
           --first-test-file=tests/main/test_llm_async.py \
           --first-test-file=tests/main/test_task_inf_loop.py \
           --first-test-file=tests/main/test_lance_doc_chat_agent.py \
-          tests/main tests/extras/test_hf_embeddings.py tests/extras/test_fastembed_embeddings.py
+          tests/main
       continue-on-error: true
 
     - name: Retry FAILED tests ONLY with GPT-4o instead of GPT-4o-mini
@@ -151,16 +171,18 @@ jobs:
       env:
         PYTEST_ADDOPTS: "-p no:logging"
       run: |
-        poetry run pytest --cov langroid --cov-append --cov-config .coveragerc \
+        uv run pytest --cov langroid --cov-append --cov-config .coveragerc \
           -rf -vv --log-cli-level=INFO --show-capture=no \
           -n auto --timeout=300 \
+          --first-test-file=tests/main/sql_chat/test_sql_chat_agent.py \
           --first-test-file=tests/main/test_llm.py \
           --first-test-file=tests/main/test_task.py \
           --first-test-file=tests/main/test_llm_async.py \
           --first-test-file=tests/main/test_task_inf_loop.py \
           --first-test-file=tests/main/test_lance_doc_chat_agent.py \
           --lf --last-failed-no-failures none \
-          tests/main tests/extras/test_hf_embeddings.py tests/extras/test_fastembed_embeddings.py
+          tests/main tests/extras/test_hf_embeddings.py \
+          tests/extras/test_fastembed_embeddings.py
       continue-on-error: true
 
     - name: Retry FAILED tests ONLY without cache (GPT-4o)
@@ -169,21 +191,22 @@ jobs:
       env:
         PYTEST_ADDOPTS: "-p no:logging"
       run: |
-        poetry run pytest --nc --cov langroid --cov-append --cov-config .coveragerc \
+        uv run pytest --nc --cov langroid --cov-append --cov-config .coveragerc \
           -rf --show-capture=no --timeout=300 -n auto \
+          --first-test-file=tests/main/sql_chat/test_sql_chat_agent.py \
           --first-test-file=tests/main/test_llm.py \
           --first-test-file=tests/main/test_llm_async.py \
           --first-test-file=tests/main/test_task_inf_loop.py \
           --first-test-file=tests/main/test_task.py \
           --first-test-file=tests/main/test_lance_doc_chat_agent.py \
           --lf --last-failed-no-failures none \
-          tests/main tests/extras/test_hf_embeddings.py tests/extras/test_fastembed_embeddings.py
-
+          tests/main tests/extras/test_hf_embeddings.py \
+          tests/extras/test_fastembed_embeddings.py
     - name: Generate final coverage report from all runs
-      run: poetry run coverage report
+      run: uv run coverage report
 
     - name: Generate XML coverage report
-      run: poetry run coverage xml
+      run: uv run coverage xml
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4
       with:
@@ -193,5 +216,3 @@ jobs:
         fail_ci_if_error: false
       env:
         CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
-
-

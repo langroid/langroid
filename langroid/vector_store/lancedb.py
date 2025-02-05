@@ -26,7 +26,7 @@ from langroid.embedding_models.base import (
 )
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
 from langroid.exceptions import LangroidImportError
-from langroid.mytypes import Document, EmbeddingFunction
+from langroid.mytypes import Document
 from langroid.utils.configuration import settings
 from langroid.utils.pydantic_utils import (
     dataframe_to_document_model,
@@ -60,8 +60,6 @@ class LanceDB(VectorStore):
             raise LangroidImportError("lancedb", "lancedb")
 
         self.config: LanceDBConfig = config
-        self.embedding_fn: EmbeddingFunction = self.embedding_model.embedding_fn()
-        self.embedding_dim = self.embedding_model.embedding_dims
         self.host = config.host
         self.port = config.port
         self.is_from_dataframe = False  # were docs ingested from a dataframe?
@@ -191,6 +189,9 @@ class LanceDB(VectorStore):
 
     def create_collection(self, collection_name: str, replace: bool = False) -> None:
         self.config.replace_collection = replace
+        self.config.collection_name = collection_name
+        if replace:
+            self.delete_collection(collection_name)
 
     def add_documents(self, documents: Sequence[Document]) -> None:
         super().maybe_add_ids(documents)
@@ -353,6 +354,8 @@ class LanceDB(VectorStore):
     def get_all_documents(self, where: str = "") -> List[Document]:
         if self.config.collection_name is None:
             raise ValueError("No collection name set, cannot retrieve docs")
+        if self.config.collection_name not in self.list_collections(empty=True):
+            return []
         tbl = self.client.open_table(self.config.collection_name)
         pre_result = tbl.search(None).where(where or None).limit(None)
         return self._lance_result_to_docs(pre_result)

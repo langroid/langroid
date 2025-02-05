@@ -6,6 +6,8 @@ class Colors(BaseModel):
     RED: str = "\033[31m"
     BLUE: str = "\033[34m"
     GREEN: str = "\033[32m"
+    GREEN_DIMMER: str = "\033[38;5;22m"  # very dark green
+    GREEN_DIM: str = "\033[38;5;28m"  # medium-dim green
     ORANGE: str = "\033[33m"  # no standard ANSI color for orange; using yellow
     CYAN: str = "\033[36m"
     MAGENTA: str = "\033[35m"

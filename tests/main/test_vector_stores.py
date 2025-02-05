@@ -13,6 +13,7 @@ from langroid.vector_store.lancedb import LanceDB, LanceDBConfig
 from langroid.vector_store.meilisearch import MeiliSearch, MeiliSearchConfig
 from langroid.vector_store.momento import MomentoVI, MomentoVIConfig
 from langroid.vector_store.qdrantdb import QdrantDB, QdrantDBConfig
+from langroid.vector_store.weaviatedb import WeaviateDB, WeaviateDBConfig
 
 load_dotenv()
 embed_cfg = OpenAIEmbeddingsConfig(
@@ -73,6 +74,16 @@ def vecdb(request) -> VectorStore:
         qd_cloud.add_documents(stored_docs)
         yield qd_cloud
         qd_cloud.delete_collection(collection_name=qd_cfg_cloud.collection_name)
+        return
+    if request.param == "weaviate_cloud":
+        wv_cfg_cloud = WeaviateDBConfig(
+            collection_name="test_" + embed_cfg.model_type,
+            embedding=embed_cfg,
+        )
+        weaviate_cloud = WeaviateDB(wv_cfg_cloud)
+        weaviate_cloud.add_documents(stored_docs)
+        yield weaviate_cloud
+        weaviate_cloud.delete_collection(collection_name=wv_cfg_cloud.collection_name)
         return
 
     if request.param == "qdrant_hybrid_cloud":
@@ -163,7 +174,13 @@ def vecdb(request) -> VectorStore:
 # add "momento" when their API docs are ready
 @pytest.mark.parametrize(
     "vecdb",
-    ["lancedb", "chroma", "qdrant_cloud", "qdrant_local"],
+    [
+        "qdrant_cloud",
+        "chroma",
+        pytest.param("weaviate_cloud", marks=pytest.mark.skip),
+        "lancedb",
+        "qdrant_local",
+    ],
     indirect=True,
 )
 def test_vector_stores_search(
@@ -212,7 +229,13 @@ def test_hybrid_vector_search(
 
 @pytest.mark.parametrize(
     "vecdb",
-    ["lancedb", "chroma", "qdrant_local", "qdrant_cloud"],
+    [
+        "lancedb",
+        "chroma",
+        "qdrant_local",
+        "qdrant_cloud",
+        pytest.param("weaviate_cloud", marks=pytest.mark.skip),
+    ],
     indirect=True,
 )
 def test_vector_stores_access(vecdb):
@@ -266,22 +289,30 @@ def test_vector_stores_access(vecdb):
     assert len(docs_and_scores) == 1
     assert docs_and_scores[0][0].content == "cow"
 
-    # test collections: create, list, clear
-    coll_names = [f"test_junk_{i}" for i in range(3)]
+    coll_names = [f"Test_junk_{i}" for i in range(3)]
     for coll in coll_names:
         vecdb.create_collection(collection_name=coll)
     n_colls = len(
-        [c for c in vecdb.list_collections(empty=True) if c.startswith("test_junk")]
+        [c for c in vecdb.list_collections(empty=True) if c.startswith("Test_junk")]
     )
-    n_dels = vecdb.clear_all_collections(really=True, prefix="test_junk")
+    n_dels = vecdb.clear_all_collections(really=True, prefix="Test_junk")
     # LanceDB.create_collection() does nothing, since we can't create a table
     # without a schema or data.
     assert n_colls == n_dels == (0 if isinstance(vecdb, LanceDB) else len(coll_names))
+    vecdb.set_collection(coll_name, replace=True)
+    assert vecdb.config.collection_name == coll_name
+    assert vecdb.get_all_documents() == []
 
 
 @pytest.mark.parametrize(
     "vecdb",
-    ["lancedb", "chroma", "qdrant_cloud", "qdrant_local"],
+    [
+        "lancedb",
+        "chroma",
+        "qdrant_cloud",
+        "qdrant_local",
+        pytest.param("weaviate_cloud", marks=pytest.mark.skip),
+    ],
     indirect=True,
 )
 def test_vector_stores_context_window(vecdb):
@@ -297,7 +328,6 @@ def test_vector_stores_context_window(vecdb):
     )
     text = "\n\n".join(vars(phrases).values())
     doc = Document(content=text, metadata=DocMetaData(id="0"))
-
     cfg = ParsingConfig(
         splitter=Splitter.SIMPLE,
         n_neighbor_ids=2,
@@ -310,11 +340,13 @@ def test_vector_stores_context_window(vecdb):
     parser = Parser(cfg)
     splits = parser.split([doc])
 
-    vecdb.create_collection(collection_name="test-context-window", replace=True)
+    vecdb.create_collection(collection_name="test_context_window", replace=True)
     vecdb.add_documents(splits)
 
     # Test context window retrieval
+
     docs_scores = vecdb.similar_texts_with_scores("What are Giraffes like?", k=1)
+
     docs_scores = vecdb.add_context_window(docs_scores, neighbors=2)
 
     assert len(docs_scores) == 1
@@ -334,12 +366,19 @@ def test_vector_stores_context_window(vecdb):
         giraffes.content.index(p)
         for p in ["Cats", "Dogs", "Giraffes", "Elephants", "Owls"]
     ]
+
     assert indices == sorted(indices)
 
 
 @pytest.mark.parametrize(
     "vecdb",
-    ["chroma", "lancedb", "qdrant_cloud", "qdrant_local"],
+    [
+        "chroma",
+        "lancedb",
+        "qdrant_cloud",
+        "qdrant_local",
+        pytest.param("weaviate_cloud", marks=pytest.mark.skip),
+    ],
     indirect=True,
 )
 def test_vector_stores_overlapping_matches(vecdb):
@@ -379,7 +418,7 @@ def test_vector_stores_overlapping_matches(vecdb):
     parser = Parser(cfg)
     splits = parser.split([doc])
 
-    vecdb.create_collection(collection_name="test-context-window", replace=True)
+    vecdb.create_collection(collection_name="test_context_window", replace=True)
     vecdb.add_documents(splits)
 
     # Test context window retrieval

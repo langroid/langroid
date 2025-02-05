@@ -10,7 +10,11 @@ question.
 
 Run like this:
 
-python3 examples/basic/chat-search.py
+    python3 examples/basic/chat-search.py
+
+or
+
+    uv run examples/basic/chat-search.py -m groq/deepseek-r1-distill-llama-70b
 
 There are optional args, especially note these:
 
@@ -32,7 +36,8 @@ environment variables in your `.env` file, as explained in the
 * set the METAPHOR_API_KEY environment variables in
 your `.env` file, e.g. `METAPHOR_API_KEY=your_api_key_here`
 * install langroid with the `metaphor` extra, e.g.
-`pip install langroid[metaphor]` or `poetry add langroid[metaphor]`
+`pip install langroid[metaphor]` or `uv pip install langroid[metaphor]` 
+or `poetry add langroid[metaphor]`  or `uv add langroid[metaphor]`
 (it installs the `metaphor-python` package from pypi).
 For more information, please refer to the official docs:
 https://metaphor.systems/
@@ -42,11 +47,9 @@ https://metaphor.systems/
 import typer
 from dotenv import load_dotenv
 from rich import print
-from rich.prompt import Prompt
 
+import langroid as lr
 import langroid.language_models as lm
-from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
-from langroid.agent.task import Task
 from langroid.agent.tools.google_search_tool import GoogleSearchTool
 from langroid.agent.tools.duckduckgo_search_tool import DuckduckgoSearchTool
 from langroid.utils.configuration import Settings, set_global
@@ -78,32 +81,21 @@ def main(
         """
         [blue]Welcome to the Web Search chatbot!
         I will try to answer your questions, relying on (summaries of links from) 
-        Search when needed.
+        Web-Search when needed.
         
         Enter x or q to quit at any point.
         """
-    )
-    sys_msg = Prompt.ask(
-        "[blue]Tell me who I am. Hit Enter for default, or type your own\n",
-        default="Default: 'You are a helpful assistant'",
     )
 
     load_dotenv()
 
     llm_config = lm.OpenAIGPTConfig(
         chat_model=model or lm.OpenAIChatModel.GPT4o,
-        chat_context_length=8_000,
-        temperature=0,
-        max_output_tokens=200,
+        chat_context_length=32_000,
+        temperature=0.15,
+        max_output_tokens=1000,
         timeout=45,
     )
-
-    config = ChatAgentConfig(
-        system_message=sys_msg,
-        llm=llm_config,
-        vecdb=None,
-    )
-    agent = ChatAgent(config)
 
     match provider:
         case "google":
@@ -117,11 +109,12 @@ def main(
         case _:
             raise ValueError(f"Unsupported provider {provider} specified.")
 
-    agent.enable_message(search_tool_class)
-    search_tool_handler_method = search_tool_class.default_value("request")
-
-    task = Task(
-        agent,
+    search_tool_handler_method = search_tool_class.name()
+    config = lr.ChatAgentConfig(
+        name="Seeker",
+        handle_llm_no_tool="user",  # fwd to user when LLM sends non-tool msg
+        llm=llm_config,
+        vecdb=None,
         system_message=f"""
         You are a helpful assistant. You will try your best to answer my questions.
         Here is how you should answer my questions:
@@ -134,7 +127,11 @@ def main(
             `{search_tool_handler_method}` tool/function-call to get up to 5 results
             from a web-search, to help you answer the question.
 
-        Be very CONCISE in your responses, use no more than 1-2 sentences.
+
+        In case you use the TOOL `{search_tool_handler_method}`, you MUST WAIT
+        for results from this tool; do not make up results!
+        
+        Be very CONCISE in your answers, use no more than 1-2 sentences.
         When you answer based on a web search, First show me your answer, 
         and then show me the SOURCE(s) and EXTRACT(s) to justify your answer,
         in this format:
@@ -150,6 +147,12 @@ def main(
         DO NOT MAKE UP YOUR OWN SOURCES; ONLY USE SOURCES YOU FIND FROM A WEB SEARCH.
         """,
     )
+    agent = lr.ChatAgent(config)
+
+    agent.enable_message(search_tool_class)
+
+    task = lr.Task(agent, interactive=False)
+
     # local models do not like the first message to be empty
     user_message = "Can you help me with some questions?"
     task.run(user_message)

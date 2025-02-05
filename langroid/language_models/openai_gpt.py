@@ -5,7 +5,6 @@ import os
 import sys
 import warnings
 from collections import defaultdict
-from enum import Enum
 from functools import cache
 from itertools import chain
 from typing import (
@@ -43,9 +42,21 @@ from langroid.language_models.base import (
     OpenAIToolCall,
     OpenAIToolSpec,
     Role,
+    StreamEventType,
     ToolChoiceTypes,
 )
 from langroid.language_models.config import HFPromptFormatterConfig
+from langroid.language_models.model_info import (
+    DeepSeekModel,
+    GeminiModel,
+    get_model_info,
+)
+from langroid.language_models.model_info import (
+    OpenAIChatModel as OpenAIChatModel,
+)
+from langroid.language_models.model_info import (
+    OpenAICompletionModel as OpenAICompletionModel,
+)
 from langroid.language_models.prompt_formatter.hf_formatter import (
     HFFormatter,
     find_hf_formatter,
@@ -78,118 +89,19 @@ VLLM_API_KEY = os.environ.get("VLLM_API_KEY", DUMMY_API_KEY)
 LLAMACPP_API_KEY = os.environ.get("LLAMA_API_KEY", DUMMY_API_KEY)
 
 
-class DeepSeekModel(str, Enum):
-    DEEPSEEK = "deepseek/deepseek-chat"
-
-
-class AnthropicModel(str, Enum):
-    """Enum for Anthropic models"""
-
-    CLAUDE_3_5_SONNET = "claude-3-5-sonnet-latest"
-    CLAUDE_3_OPUS = "claude-3-opus-20240229"
-    CLAUDE_3_SONNET = "claude-3-sonnet-20240229"
-    CLAUDE_3_HAIKU = "claude-3-turbo-20240307"
-
-
-class OpenAIChatModel(str, Enum):
-    """Enum for OpenAI Chat models"""
-
-    GPT3_5_TURBO = "gpt-3.5-turbo-1106"
-    GPT4 = "gpt-4"
-    GPT4_32K = "gpt-4-32k"
-    GPT4_TURBO = "gpt-4-turbo"
-    GPT4o = "gpt-4o"
-    GPT4o_MINI = "gpt-4o-mini"
-    O1_PREVIEW = "o1-preview"
-    O1_MINI = "o1-mini"
-
-
-class GeminiModel(str, Enum):
-    """Enum for Gemini models"""
-
-    GEMINI_1_5_FLASH = "gemini/gemini-1.5-flash"
-    GEMINI_1_5_FLASH_8B = "gemini/gemini-1.5-flash-8b"
-    GEMINI_1_5_PRO = "gemini/gemini-1.5-pro"
-    GEMINI_2_FLASH = "gemini/gemini-2.0-flash-exp"
-
-
-class OpenAICompletionModel(str, Enum):
-    """Enum for OpenAI Completion models"""
-
-    TEXT_DA_VINCI_003 = "text-davinci-003"  # deprecated
-    GPT3_5_TURBO_INSTRUCT = "gpt-3.5-turbo-instruct"
-
-
-_context_length: Dict[str, int] = {
-    # can add other non-openAI models here
-    OpenAIChatModel.GPT3_5_TURBO: 16_385,
-    OpenAIChatModel.GPT4: 8192,
-    OpenAIChatModel.GPT4_32K: 32_768,
-    OpenAIChatModel.GPT4_TURBO: 128_000,
-    OpenAIChatModel.GPT4o: 128_000,
-    OpenAIChatModel.GPT4o_MINI: 128_000,
-    OpenAIChatModel.O1_PREVIEW: 128_000,
-    OpenAIChatModel.O1_MINI: 128_000,
-    OpenAICompletionModel.TEXT_DA_VINCI_003: 4096,
-    AnthropicModel.CLAUDE_3_5_SONNET: 200_000,
-    AnthropicModel.CLAUDE_3_OPUS: 200_000,
-    AnthropicModel.CLAUDE_3_SONNET: 200_000,
-    AnthropicModel.CLAUDE_3_HAIKU: 200_000,
-    DeepSeekModel.DEEPSEEK: 64_000,
-    GeminiModel.GEMINI_2_FLASH: 1_000_000,
-    GeminiModel.GEMINI_1_5_FLASH: 1_000_000,
-    GeminiModel.GEMINI_1_5_FLASH_8B: 1_000_000,
-    GeminiModel.GEMINI_1_5_PRO: 2_000_000,
-}
-
-_cost_per_1k_tokens: Dict[str, Tuple[float, float]] = {
-    # can add other non-openAI models here.
-    # model => (prompt cost, generation cost) in USD
-    OpenAIChatModel.GPT3_5_TURBO: (0.001, 0.002),
-    OpenAIChatModel.GPT4: (0.03, 0.06),  # 8K context
-    OpenAIChatModel.GPT4_TURBO: (0.01, 0.03),  # 128K context
-    OpenAIChatModel.GPT4o: (0.0025, 0.010),  # 128K context
-    OpenAIChatModel.GPT4o_MINI: (0.00015, 0.0006),  # 128K context
-    OpenAIChatModel.O1_PREVIEW: (0.015, 0.060),  # 128K context
-    OpenAIChatModel.O1_MINI: (0.003, 0.012),  # 128K context
-    AnthropicModel.CLAUDE_3_5_SONNET: (0.003, 0.015),
-    AnthropicModel.CLAUDE_3_OPUS: (0.015, 0.075),
-    AnthropicModel.CLAUDE_3_SONNET: (0.003, 0.015),
-    AnthropicModel.CLAUDE_3_HAIKU: (0.00025, 0.00125),
-    DeepSeekModel.DEEPSEEK: (0.00014, 0.00028),
-    # Gemini models have complex pricing based on input-len
-}
-
-
-openAIChatModelPreferenceList = [
+openai_chat_model_pref_list = [
     OpenAIChatModel.GPT4o,
-    OpenAIChatModel.GPT4_TURBO,
-    OpenAIChatModel.GPT4,
     OpenAIChatModel.GPT4o_MINI,
     OpenAIChatModel.O1_MINI,
-    OpenAIChatModel.O1_PREVIEW,
+    OpenAIChatModel.O1,
     OpenAIChatModel.GPT3_5_TURBO,
 ]
 
-openAICompletionModelPreferenceList = [
-    OpenAICompletionModel.GPT3_5_TURBO_INSTRUCT,
-    OpenAICompletionModel.TEXT_DA_VINCI_003,
+openai_completion_model_pref_list = [
+    OpenAICompletionModel.DAVINCI,
+    OpenAICompletionModel.BABBAGE,
 ]
 
-openAIStructuredOutputList = [
-    OpenAIChatModel.GPT4o_MINI,
-    OpenAIChatModel.GPT4o,
-]
-
-NON_STREAMING_MODELS = [
-    OpenAIChatModel.O1_MINI,
-    OpenAIChatModel.O1_PREVIEW,
-]
-
-NON_SYSTEM_MESSAGE_MODELS = [
-    OpenAIChatModel.O1_MINI,
-    OpenAIChatModel.O1_PREVIEW,
-]
 
 if "OPENAI_API_KEY" in os.environ:
     try:
@@ -217,22 +129,22 @@ if "OPENAI_API_KEY" in os.environ:
 else:
     available_models = set()
 
-defaultOpenAIChatModel = next(
+default_openai_chat_model = next(
     chain(
         filter(
             lambda m: m.value in available_models,
-            openAIChatModelPreferenceList,
+            openai_chat_model_pref_list,
         ),
-        [OpenAIChatModel.GPT4_TURBO],
+        [OpenAIChatModel.GPT4o],
     )
 )
-defaultOpenAICompletionModel = next(
+default_openai_completion_model = next(
     chain(
         filter(
             lambda m: m.value in available_models,
-            openAICompletionModelPreferenceList,
+            openai_completion_model_pref_list,
         ),
-        [OpenAICompletionModel.GPT3_5_TURBO_INSTRUCT],
+        [OpenAICompletionModel.DAVINCI],
     )
 )
 
@@ -244,8 +156,9 @@ class AccessWarning(Warning):
 @cache
 def gpt_3_5_warning() -> None:
     warnings.warn(
-        """
-        GPT-4 is not available, falling back to GPT-3.5.
+        f"""
+        {OpenAIChatModel.GPT4o} is not available, 
+        falling back to {OpenAIChatModel.GPT3_5_TURBO}.
         Examples may not work properly and unexpected behavior may occur.
         Adjustments to prompts may be necessary.
         """,
@@ -284,6 +197,7 @@ class OpenAICallParams(BaseModel):
     logit_bias: Dict[int, float] | None = None  # token_id -> bias
     logprobs: bool = False
     top_p: float | None = 1.0
+    reasoning_effort: str | None = None  # or "low" or "high" or "medium"
     top_logprobs: int | None = None  # if int, requires logprobs=True
     n: int = 1  # how many completions to generate (n > 1 is NOT handled now)
     stop: str | List[str] | None = None  # (list of) stop sequence(s)
@@ -309,7 +223,6 @@ class OpenAIGPTConfig(LLMConfig):
     api_base: str | None = None  # used for local or other non-OpenAI models
     litellm: bool = False  # use litellm api?
     ollama: bool = False  # use ollama's OpenAI-compatible endpoint?
-    max_output_tokens: int = 1024
     min_output_tokens: int = 1
     use_chat_for_completion = True  # do not change this, for OpenAI models!
     timeout: int = 20
@@ -317,8 +230,8 @@ class OpenAIGPTConfig(LLMConfig):
     seed: int | None = 42
     params: OpenAICallParams | None = None
     # these can be any model name that is served at an OpenAI-compatible API end point
-    chat_model: str = defaultOpenAIChatModel
-    completion_model: str = defaultOpenAICompletionModel
+    chat_model: str = default_openai_chat_model
+    completion_model: str = default_openai_completion_model
     run_on_first_use: Callable[[], None] = noop
     parallel_tool_calls: Optional[bool] = None
     # Supports constrained decoding which enforces that the output of the LLM
@@ -344,7 +257,7 @@ class OpenAIGPTConfig(LLMConfig):
         warn_gpt_3_5 = (
             "chat_model" not in kwargs.keys()
             and not local_model
-            and defaultOpenAIChatModel == OpenAIChatModel.GPT3_5_TURBO
+            and default_openai_chat_model == OpenAIChatModel.GPT3_5_TURBO
         )
 
         if warn_gpt_3_5:
@@ -553,7 +466,7 @@ class OpenAIGPT(LanguageModel):
             self.supports_strict_tools = self.api_base is None
             self.supports_json_schema = (
                 self.api_base is None
-                and self.config.chat_model in openAIStructuredOutputList
+                and get_model_info(self.config.chat_model).has_structured_output
             )
 
         if settings.chat_model != "":
@@ -703,10 +616,10 @@ class OpenAIGPT(LanguageModel):
         return self.config.chat_model in openai_chat_models
 
     def supports_functions_or_tools(self) -> bool:
-        return self.is_openai_chat_model() and self.config.chat_model not in [
-            OpenAIChatModel.O1_MINI,
-            OpenAIChatModel.O1_PREVIEW,
-        ]
+        return (
+            self.is_openai_chat_model()
+            and get_model_info(self.config.chat_model).has_tools
+        )
 
     def is_openai_completion_model(self) -> bool:
         openai_completion_models = [e.value for e in OpenAICompletionModel]
@@ -725,40 +638,18 @@ class OpenAIGPT(LanguageModel):
             or self.chat_model_orig.startswith("deepseek/")
         )
 
-    def requires_first_user_message(self) -> bool:
-        """
-        Does the chat_model require a non-empty first user message?
-        TODO: Add other models here; we know gemini requires a non-empty
-        user message, after the system message.
-        """
-        return self.is_gemini_model()
-
     def unsupported_params(self) -> List[str]:
         """
         List of params that are not supported by the current model
         """
-        match self.chat_model_orig:
-            case OpenAIChatModel.O1_MINI | OpenAIChatModel.O1_PREVIEW:
-                return ["temperature", "stream"]
-            case _:
-                return []
+        return get_model_info(self.config.chat_model).unsupported_params
 
     def rename_params(self) -> Dict[str, str]:
         """
         Map of param name -> new name for specific models.
         Currently main troublemaker is o1* series.
         """
-        match self.config.chat_model:
-            case (
-                OpenAIChatModel.O1_MINI
-                | OpenAIChatModel.O1_PREVIEW
-                | GeminiModel.GEMINI_1_5_FLASH
-                | GeminiModel.GEMINI_1_5_FLASH_8B
-                | GeminiModel.GEMINI_1_5_PRO
-            ):
-                return {"max_tokens": "max_completion_tokens"}
-            case _:
-                return {}
+        return get_model_info(self.config.chat_model).rename_params
 
     def chat_context_length(self) -> int:
         """
@@ -770,7 +661,7 @@ class OpenAIGPT(LanguageModel):
             if self.config.use_completion_for_chat
             else self.config.chat_model
         )
-        return _context_length.get(model, super().chat_context_length())
+        return get_model_info(model).context_length
 
     def completion_context_length(self) -> int:
         """
@@ -782,7 +673,7 @@ class OpenAIGPT(LanguageModel):
             if self.config.use_chat_for_completion
             else self.config.completion_model
         )
-        return _context_length.get(model, super().completion_context_length())
+        return get_model_info(model).context_length
 
     def chat_cost(self) -> Tuple[float, float]:
         """
@@ -790,7 +681,8 @@ class OpenAIGPT(LanguageModel):
         models/endpoints.
         Get it from the dict, otherwise fail-over to general method
         """
-        return _cost_per_1k_tokens.get(self.chat_model_orig, super().chat_cost())
+        info = get_model_info(self.config.chat_model)
+        return (info.input_cost_per_million / 1000, info.output_cost_per_million / 1000)
 
     def set_stream(self, stream: bool) -> bool:
         """Enable or disable streaming output from API.
@@ -807,7 +699,7 @@ class OpenAIGPT(LanguageModel):
         return (
             self.config.stream
             and settings.stream
-            and self.config.chat_model not in NON_STREAMING_MODELS
+            and get_model_info(self.config.chat_model).allows_streaming
             and not settings.quiet
         )
 
@@ -819,6 +711,7 @@ class OpenAIGPT(LanguageModel):
         tool_deltas: List[Dict[str, Any]] = [],
         has_function: bool = False,
         completion: str = "",
+        reasoning: str = "",
         function_args: str = "",
         function_name: str = "",
     ) -> Tuple[bool, bool, str, str]:
@@ -844,7 +737,9 @@ class OpenAIGPT(LanguageModel):
         # In the 1st: choices list is empty, in the 2nd: the dict delta has null content
         if chat:
             delta = choices[0].get("delta", {})
+            # capture both content and reasoning_content
             event_text = delta.get("content", "")
+            event_reasoning = delta.get("reasoning_content", "")
             if "function_call" in delta and delta["function_call"] is not None:
                 if "name" in delta["function_call"]:
                     event_fn_name = delta["function_call"]["name"]
@@ -856,6 +751,7 @@ class OpenAIGPT(LanguageModel):
                 tool_deltas += event_tool_deltas
         else:
             event_text = choices[0]["text"]
+            event_reasoning = ""  # TODO: Ignoring reasoning for non-chat models
 
         finish_reason = choices[0].get("finish_reason", "")
         if not event_text and finish_reason == "content_filter":
@@ -875,19 +771,24 @@ class OpenAIGPT(LanguageModel):
             completion += event_text
             sys.stdout.write(Colors().GREEN + event_text)
             sys.stdout.flush()
-            self.config.streamer(event_text)
+            self.config.streamer(event_text, StreamEventType.TEXT)
+        if event_reasoning:
+            reasoning += event_reasoning
+            sys.stdout.write(Colors().GREEN_DIM + event_reasoning)
+            sys.stdout.flush()
+            self.config.streamer(event_reasoning, StreamEventType.TEXT)
         if event_fn_name:
             function_name = event_fn_name
             has_function = True
             sys.stdout.write(Colors().GREEN + "FUNC: " + event_fn_name + ": ")
             sys.stdout.flush()
-            self.config.streamer(event_fn_name)
+            self.config.streamer(event_fn_name, StreamEventType.FUNC_NAME)
 
         if event_args:
             function_args += event_args
             sys.stdout.write(Colors().GREEN + event_args)
             sys.stdout.flush()
-            self.config.streamer(event_args)
+            self.config.streamer(event_args, StreamEventType.FUNC_ARGS)
 
         if event_tool_deltas is not None:
             # print out streaming tool calls, if not async
@@ -898,12 +799,12 @@ class OpenAIGPT(LanguageModel):
                         Colors().GREEN + "OAI-TOOL: " + tool_fn_name + ": "
                     )
                     sys.stdout.flush()
-                    self.config.streamer(tool_fn_name)
+                    self.config.streamer(tool_fn_name, StreamEventType.TOOL_NAME)
                 if td["function"]["arguments"] != "":
                     tool_fn_args = td["function"]["arguments"]
                     sys.stdout.write(Colors().GREEN + tool_fn_args)
                     sys.stdout.flush()
-                    self.config.streamer(tool_fn_args)
+                    self.config.streamer(tool_fn_args, StreamEventType.TOOL_ARGS)
 
         # show this delta in the stream
         if finish_reason in [
@@ -914,8 +815,15 @@ class OpenAIGPT(LanguageModel):
             # for function_call, finish_reason does not necessarily
             # contain "function_call" as mentioned in the docs.
             # So we check for "stop" or "function_call" here.
-            return True, has_function, function_name, function_args, completion
-        return False, has_function, function_name, function_args, completion
+            return (
+                True,
+                has_function,
+                function_name,
+                function_args,
+                completion,
+                reasoning,
+            )
+        return False, has_function, function_name, function_args, completion, reasoning
 
     @no_type_check
     async def _process_stream_event_async(
@@ -925,6 +833,7 @@ class OpenAIGPT(LanguageModel):
         tool_deltas: List[Dict[str, Any]] = [],
         has_function: bool = False,
         completion: str = "",
+        reasoning: str = "",
         function_args: str = "",
         function_name: str = "",
     ) -> Tuple[bool, bool, str, str]:
@@ -952,6 +861,7 @@ class OpenAIGPT(LanguageModel):
         if chat:
             delta = choices[0].get("delta", {})
             event_text = delta.get("content", "")
+            event_reasoning = delta.get("reasoning_content", "")
             if "function_call" in delta and delta["function_call"] is not None:
                 if "name" in delta["function_call"]:
                     event_fn_name = delta["function_call"]["name"]
@@ -963,26 +873,35 @@ class OpenAIGPT(LanguageModel):
                 tool_deltas += event_tool_deltas
         else:
             event_text = choices[0]["text"]
+            event_reasoning = ""  # TODO: Ignoring reasoning for non-chat models
         if event_text:
             completion += event_text
             if not silent:
                 sys.stdout.write(Colors().GREEN + event_text)
                 sys.stdout.flush()
-                await self.config.streamer_async(event_text)
+                await self.config.streamer_async(event_text, StreamEventType.TEXT)
+        if event_reasoning:
+            reasoning += event_reasoning
+            if not silent:
+                sys.stdout.write(Colors().GREEN + event_reasoning)
+                sys.stdout.flush()
+                await self.config.streamer_async(event_reasoning, StreamEventType.TEXT)
         if event_fn_name:
             function_name = event_fn_name
             has_function = True
             if not silent:
                 sys.stdout.write(Colors().GREEN + "FUNC: " + event_fn_name + ": ")
                 sys.stdout.flush()
-                await self.config.streamer_async(event_fn_name)
+                await self.config.streamer_async(
+                    event_fn_name, StreamEventType.FUNC_NAME
+                )
 
         if event_args:
             function_args += event_args
             if not silent:
                 sys.stdout.write(Colors().GREEN + event_args)
                 sys.stdout.flush()
-                await self.config.streamer_async(event_args)
+                await self.config.streamer_async(event_args, StreamEventType.FUNC_ARGS)
 
         if event_tool_deltas is not None and not silent:
             # print out streaming tool calls, if not async
@@ -993,12 +912,16 @@ class OpenAIGPT(LanguageModel):
                         Colors().GREEN + "OAI-TOOL: " + tool_fn_name + ": "
                     )
                     sys.stdout.flush()
-                    await self.config.streamer_async(tool_fn_name)
+                    await self.config.streamer_async(
+                        tool_fn_name, StreamEventType.TOOL_NAME
+                    )
                 if td["function"]["arguments"] != "":
                     tool_fn_args = td["function"]["arguments"]
                     sys.stdout.write(Colors().GREEN + tool_fn_args)
                     sys.stdout.flush()
-                    await self.config.streamer_async(tool_fn_args)
+                    await self.config.streamer_async(
+                        tool_fn_args, StreamEventType.TOOL_ARGS
+                    )
 
         # show this delta in the stream
         if choices[0].get("finish_reason", "") in [
@@ -1009,8 +932,15 @@ class OpenAIGPT(LanguageModel):
             # for function_call, finish_reason does not necessarily
             # contain "function_call" as mentioned in the docs.
             # So we check for "stop" or "function_call" here.
-            return True, has_function, function_name, function_args, completion
-        return False, has_function, function_name, function_args, completion
+            return (
+                True,
+                has_function,
+                function_name,
+                function_args,
+                completion,
+                reasoning,
+            )
+        return False, has_function, function_name, function_args, completion, reasoning
 
     @retry_with_exponential_backoff
     def _stream_response(  # type: ignore
@@ -1028,6 +958,7 @@ class OpenAIGPT(LanguageModel):
 
         """
         completion = ""
+        reasoning = ""
         function_args = ""
         function_name = ""
 
@@ -1043,12 +974,14 @@ class OpenAIGPT(LanguageModel):
                     function_name,
                     function_args,
                     completion,
+                    reasoning,
                 ) = self._process_stream_event(
                     event,
                     chat=chat,
                     tool_deltas=tool_deltas,
                     has_function=has_function,
                     completion=completion,
+                    reasoning=reasoning,
                     function_args=function_args,
                     function_name=function_name,
                 )
@@ -1065,6 +998,7 @@ class OpenAIGPT(LanguageModel):
             tool_deltas=tool_deltas,
             has_function=has_function,
             completion=completion,
+            reasoning=reasoning,
             function_args=function_args,
             function_name=function_name,
         )
@@ -1085,6 +1019,7 @@ class OpenAIGPT(LanguageModel):
 
         """
         completion = ""
+        reasoning = ""
         function_args = ""
         function_name = ""
 
@@ -1100,12 +1035,14 @@ class OpenAIGPT(LanguageModel):
                     function_name,
                     function_args,
                     completion,
+                    reasoning,
                 ) = await self._process_stream_event_async(
                     event,
                     chat=chat,
                     tool_deltas=tool_deltas,
                     has_function=has_function,
                     completion=completion,
+                    reasoning=reasoning,
                     function_args=function_args,
                     function_name=function_name,
                 )
@@ -1122,6 +1059,7 @@ class OpenAIGPT(LanguageModel):
             tool_deltas=tool_deltas,
             has_function=has_function,
             completion=completion,
+            reasoning=reasoning,
             function_args=function_args,
             function_name=function_name,
         )
@@ -1256,6 +1194,7 @@ class OpenAIGPT(LanguageModel):
         tool_deltas: List[Dict[str, Any]] = [],
         has_function: bool = False,
         completion: str = "",
+        reasoning: str = "",
         function_args: str = "",
         function_name: str = "",
     ) -> Tuple[LLMResponse, Dict[str, Any]]:
@@ -1291,7 +1230,12 @@ class OpenAIGPT(LanguageModel):
                 tool_deltas,
             )
             completion = completion + "\n" + failed_content
-            msg: Dict[str, Any] = dict(message=dict(content=completion))
+            msg: Dict[str, Any] = dict(
+                message=dict(
+                    content=completion,
+                    reasoning_content=reasoning,
+                ),
+            )
             if len(tool_dicts) > 0:
                 msg["message"]["tool_calls"] = tool_dicts
 
@@ -1307,6 +1251,7 @@ class OpenAIGPT(LanguageModel):
         else:
             # non-chat mode has no function_call
             msg = dict(text=completion)
+            # TODO: Ignoring reasoning content for non-chat models
 
         # create an OpenAIResponse object so we can cache it as if it were
         # a non-streaming response
@@ -1314,9 +1259,15 @@ class OpenAIGPT(LanguageModel):
             choices=[msg],
             usage=dict(total_tokens=0),
         )
+        if reasoning == "":
+            # some LLM APIs may not return a separate reasoning field,
+            # and the reasoning may be included in the message content
+            # within delimiters like <think> ... </think>
+            reasoning, completion = self.get_reasoning_final(completion)
         return (
             LLMResponse(
                 message=completion,
+                reasoning=reasoning,
                 cached=False,
                 # don't allow empty list [] here
                 oai_tool_calls=tool_calls or None if len(tool_deltas) > 0 else None,
@@ -1454,6 +1405,7 @@ class OpenAIGPT(LanguageModel):
         )
         args = self._openai_api_call_params(args)
         cached, hashed_key, response = completions_with_backoff(**args)
+        # assume response is an actual response rather than a streaming event
         if not isinstance(response, dict):
             response = response.dict()
         if "message" in response["choices"][0]:
@@ -1527,6 +1479,7 @@ class OpenAIGPT(LanguageModel):
             max_tokens=max_tokens,
             stream=False,
         )
+        # assume response is an actual response rather than a streaming event
         if not isinstance(response, dict):
             response = response.dict()
         if "message" in response["choices"][0]:
@@ -1731,7 +1684,9 @@ class OpenAIGPT(LanguageModel):
             if (
                 len(llm_messages) == 1
                 and llm_messages[0].role == Role.SYSTEM
-                and self.requires_first_user_message()
+                # TODO: we will unconditionally insert a dummy user msg
+                # if the only msg is a system msg.
+                # We could make this conditional on ModelInfo.needs_first_user_message
             ):
                 # some LLMs, notable Gemini as of 12/11/24,
                 # require the first message to be from the user,
@@ -1749,8 +1704,9 @@ class OpenAIGPT(LanguageModel):
             model=chat_model,
             messages=[
                 m.api_dict(
-                    has_system_role=self.config.chat_model
-                    not in NON_SYSTEM_MESSAGE_MODELS
+                    has_system_role=get_model_info(
+                        self.config.chat_model
+                    ).allows_system_message
                 )
                 for m in (llm_messages)
             ],
@@ -1820,6 +1776,7 @@ class OpenAIGPT(LanguageModel):
                     "role": "assistant",
                     "name": "",
                     "content": "\n\nHello there, how may I help you?",
+                    "reasoning_content": "Okay, let's see here, hmmm...",
                     "function_call": {
                         "name": "fun_name",
                         "arguments: {
@@ -1837,8 +1794,19 @@ class OpenAIGPT(LanguageModel):
             }
         }
         """
-        message = response["choices"][0]["message"]
-        msg = message["content"] or ""
+        if response.get("choices") is None:
+            message = {}
+        else:
+            message = response["choices"][0].get("message", {})
+        if message is None:
+            message = {}
+        msg = message.get("content", "")
+        reasoning = message.get("reasoning_content", "")
+        if reasoning == "" and msg is not None:
+            # some LLM APIs may not return a separate reasoning field,
+            # and the reasoning may be included in the message content
+            # within delimiters like <think> ... </think>
+            reasoning, msg = self.get_reasoning_final(msg)
 
         if message.get("function_call") is None:
             fun_call = None
@@ -1872,6 +1840,7 @@ class OpenAIGPT(LanguageModel):
                     msg = msg + "\n" + json.dumps(tool_call_dict)
         return LLMResponse(
             message=msg.strip() if msg is not None else "",
+            reasoning=reasoning.strip() if reasoning is not None else "",
             function_call=fun_call,
             oai_tool_calls=oai_tool_calls or None,  # don't allow empty list [] here
             cached=cached,

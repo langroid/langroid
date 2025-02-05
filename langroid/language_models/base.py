@@ -19,6 +19,7 @@ from typing import (
 
 from langroid.cachedb.base import CacheDBConfig
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
+from langroid.language_models.model_info import get_model_info
 from langroid.parsing.agent_chats import parse_message
 from langroid.parsing.parse_json import parse_imperfect_json, top_level_json_field
 from langroid.prompts.dialog import collate_chat_history
@@ -42,6 +43,14 @@ ToolChoiceTypes = Literal["none", "auto", "required"]
 ToolTypes = Literal["function"]
 
 
+class StreamEventType(Enum):
+    TEXT = 1
+    FUNC_NAME = 2
+    FUNC_ARGS = 3
+    TOOL_NAME = 4
+    TOOL_ARGS = 5
+
+
 class LLMConfig(BaseSettings):
     """
     Common configuration for all language models.
@@ -52,6 +61,7 @@ class LLMConfig(BaseSettings):
     streamer_async: Optional[Callable[..., Awaitable[None]]] = async_noop_fn
     api_base: str | None = None
     formatter: None | str = None
+    max_output_tokens: int | None = 8192  # specify None to use model_max_output_tokens
     timeout: int = 20  # timeout for API requests
     chat_model: str = ""
     completion_model: str = ""
@@ -59,7 +69,6 @@ class LLMConfig(BaseSettings):
     chat_context_length: int = 8000
     async_stream_quiet: bool = True  # suppress streaming output in async mode?
     completion_context_length: int = 8000
-    max_output_tokens: int = 1024  # generate at most this many tokens
     # if input length + max_output_tokens > context length of model,
     # we will try shortening requested output
     min_output_tokens: int = 64
@@ -67,11 +76,20 @@ class LLMConfig(BaseSettings):
     # use chat model for completion? For OpenAI models, this MUST be set to True!
     use_chat_for_completion: bool = True
     stream: bool = True  # stream output from API?
+    # TODO: we could have a `stream_reasoning` flag here to control whether to show
+    # reasoning output from reasoning models
     cache_config: None | CacheDBConfig = RedisCacheConfig()
+    thought_delimiters: Tuple[str, str] = ("<think>", "</think>")
 
     # Dict of model -> (input/prompt cost, output/completion cost)
     chat_cost_per_1k_tokens: Tuple[float, float] = (0.0, 0.0)
     completion_cost_per_1k_tokens: Tuple[float, float] = (0.0, 0.0)
+
+    @property
+    def model_max_output_tokens(self) -> int:
+        return (
+            self.max_output_tokens or get_model_info(self.chat_model).max_output_tokens
+        )
 
 
 class LLMFunctionCall(BaseModel):
@@ -309,6 +327,7 @@ class LLMResponse(BaseModel):
     """
 
     message: str
+    reasoning: str = ""  # optional reasoning text from reasoning models
     # TODO tool_id needs to generalize to multi-tool calls
     tool_id: str = ""  # used by OpenAIAssistant
     oai_tool_calls: Optional[List[OpenAIToolCall]] = None
@@ -634,6 +653,26 @@ class LanguageModel(ABC):
             total_tokens += counter.total_tokens
             total_cost += counter.cost
         return total_tokens, total_cost
+
+    def get_reasoning_final(self, message: str) -> Tuple[str, str]:
+        """Extract "reasoning" and "final answer" from an LLM response, if the
+        reasoning is found within configured delimiters, like <think>, </think>.
+        E.g.,
+        '<think> Okay, let's see, the user wants... </think> 2 + 3 = 5'
+
+        Args:
+            message (str): message from LLM
+
+        Returns:
+            Tuple[str, str]: reasoning, final answer
+        """
+        start, end = self.config.thought_delimiters
+        if start in message and end in message:
+            parts = message.split(start)
+            if len(parts) > 1:
+                reasoning, final = parts[1].split(end)
+                return reasoning, final
+        return "", message
 
     def followup_to_standalone(
         self, chat_history: List[Tuple[str, str]], question: str

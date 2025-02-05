@@ -32,7 +32,8 @@ environment variables in your `.env` file, as explained in the
 * set the METAPHOR_API_KEY environment variables in
 your `.env` file, e.g. `METAPHOR_API_KEY=your_api_key_here`
 * install langroid with the `metaphor` extra, e.g.
-`pip install langroid[metaphor]` or `poetry add langroid[metaphor]`
+`pip install langroid[metaphor]` or `uv pip install langroid[metaphor]`
+`poetry add langroid[metaphor]` or `uv add langroid[metaphor]`
 (it installs the `metaphor-python` package from pypi).
 For more information, please refer to the official docs:
 https://metaphor.systems/
@@ -116,21 +117,23 @@ def main(
         case _:
             raise ValueError(f"Unsupported provider {provider} specified.")
 
-    search_tool_handler_method = search_tool_class.default_value("request")
+    search_tool_handler_method = search_tool_class.name()
 
     search_agent_config = lr.ChatAgentConfig(
         llm=llm_config,
         vecdb=None,
         system_message=f"""
-        You are a web-searcher. For any question you get, you must use the
-        `{search_tool_handler_method}` tool/function-call to get up to 5 results.
+        You are a web-searcher. For any question you get, you must use the TOOL
+        `{search_tool_handler_method}`  to get up to 5 results.
         I WILL SEND YOU THE RESULTS; DO NOT MAKE UP THE RESULTS!!
         Once you receive the results, you must compose a CONCISE answer 
         based on the search results and say {DONE} and show the answer to me,
         in this format:
         {DONE} [... your CONCISE answer here ...]
-        IMPORTANT: YOU MUST WAIT FOR ME TO SEND YOU THE 
-        SEARCH RESULTS BEFORE saying  {DONE}.
+        IMPORTANT:
+        * YOU MUST WAIT FOR ME TO SEND YOU THE SEARCH RESULTS BEFORE saying  {DONE}.
+        * YOU Can only use the TOOL `{search_tool_handler_method}` 
+            ONE AT A TIME, even if you get multiple questions!
         """,
     )
     search_agent = lr.ChatAgent(search_agent_config)

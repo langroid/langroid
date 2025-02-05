@@ -7,9 +7,9 @@ try:
     from pydispatch import dispatcher
     from scrapy import signals
     from scrapy.crawler import CrawlerRunner
-    from scrapy.http import Response
-    from scrapy.linkextractors import LinkExtractor
-    from scrapy.spiders import CrawlSpider, Rule
+    from scrapy.http.response.text import TextResponse
+    from scrapy.linkextractors.lxmlhtml import LxmlLinkExtractor
+    from scrapy.spiders import CrawlSpider, Rule  # type: ignore
     from twisted.internet import defer, reactor
 except ImportError:
     raise LangroidImportError("scrapy", "scrapy")
@@ -21,7 +21,7 @@ class DomainSpecificSpider(CrawlSpider):  # type: ignore
 
     custom_settings = {"DEPTH_LIMIT": 1, "CLOSESPIDER_ITEMCOUNT": 20}
 
-    rules = (Rule(LinkExtractor(), callback="parse_item", follow=True),)
+    rules = (Rule(LxmlLinkExtractor(), callback="parse_item", follow=True),)
 
     def __init__(self, start_url: str, k: int = 20, *args, **kwargs):  # type: ignore
         """Initialize the spider with start_url and k.
@@ -36,13 +36,13 @@ class DomainSpecificSpider(CrawlSpider):  # type: ignore
         self.k = k
         self.visited_urls: Set[str] = set()
 
-    def parse_item(self, response: Response):  # type: ignore
+    def parse_item(self, response: TextResponse):  # type: ignore
         """Extracts URLs that are within the same domain.
 
         Args:
             response: The scrapy response object.
         """
-        for link in LinkExtractor(allow_domains=self.allowed_domains).extract_links(
+        for link in LxmlLinkExtractor(allow_domains=self.allowed_domains).extract_links(
             response
         ):
             if len(self.visited_urls) < self.k:

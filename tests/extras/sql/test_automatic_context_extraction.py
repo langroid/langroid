@@ -7,7 +7,7 @@ Pre-requisites:
     brew install postgresql
 
 (b) Install extras
-    poetry install -E "mysql postgres"
+    uv sync --dev --extra mysql --extra postgres
 """
 
 from functools import partial

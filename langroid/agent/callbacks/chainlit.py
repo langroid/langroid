@@ -20,6 +20,7 @@ from chainlit.logger import logger
 
 import langroid as lr
 import langroid.language_models as lm
+from langroid.language_models import StreamEventType
 from langroid.utils.configuration import settings
 from langroid.utils.constants import NO_ANSWER
 
@@ -276,7 +277,7 @@ class ChainlitAgentCallbacks:
     def get_last_step(self) -> Optional[cl.Step]:
         return self.last_step
 
-    def start_llm_stream(self) -> Callable[[str], None]:
+    def start_llm_stream(self) -> Callable[[str, StreamEventType], None]:
         """Returns a streaming fn that can be passed to the LLM class"""
         self.stream = cl.Message(
             content="",
@@ -295,14 +296,14 @@ class ChainlitAgentCallbacks:
         """
         )
 
-        def stream_token(t: str) -> None:
+        def stream_token(t: str, e: StreamEventType) -> None:
             if self.stream is None:
                 raise ValueError("Stream not initialized")
             run_sync(self.stream.stream_token(t))
 
         return stream_token
 
-    async def start_llm_stream_async(self) -> Callable[[str], None]:
+    async def start_llm_stream_async(self) -> Callable[[str, StreamEventType], None]:
         """Returns a streaming fn that can be passed to the LLM class"""
         self.stream = cl.Message(
             content="",
@@ -321,7 +322,7 @@ class ChainlitAgentCallbacks:
             """
         )
 
-        async def stream_token(t: str) -> None:
+        async def stream_token(t: str, e: StreamEventType) -> None:
             if self.stream is None:
                 raise ValueError("Stream not initialized")
             await self.stream.stream_token(t)

@@ -156,7 +156,7 @@ class PassTool(ToolMessage):
     def response(self, agent: ChatAgent, chat_doc: ChatDocument) -> ChatDocument:
         """When this tool is enabled for an Agent, this will result in a method
         added to the Agent with signature:
-        `forward_tool(self, tool: PassTool, chat_doc: ChatDocument) -> ChatDocument:`
+        `pass_tool(self, tool: PassTool, chat_doc: ChatDocument) -> ChatDocument:`
         """
         # if PassTool is in chat_doc, pass its parent, else pass chat_doc itself
         doc = chat_doc

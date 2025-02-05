@@ -1,7 +1,7 @@
 """
 Test vector stores using HuggingFace embeddings.
 This depends on sentence-transformers being installed:
- poetry install -E hf-embeddings
+ uv sync --dev --extra hf-embeddings
 """
 
 from typing import Union
