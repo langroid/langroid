@@ -161,7 +161,6 @@ async def select_model(config_agent_name: str) -> str:
         try:
             selected_option = response["output"].strip()
             if selected_option in MODEL_MAP:
-                selected_model = MODEL_MAP[selected_option]
                 await cl.Message(
                     content=f"You selected: {llm_options[selected_option]}"
                 ).send()
@@ -209,9 +208,11 @@ async def is_llm_delegate() -> bool:
     user_selection = await handle_boolean_response(res, default=False)
 
     await cl.Message(
-        content="You have chosen to proceed with autonomous debate"
-        if user_selection
-        else "You have chosen to engage in debate with an AI agent"
+        content=(
+            "You have chosen to proceed with autonomous debate"
+            if user_selection
+            else "You have chosen to engage in debate with an AI agent"
+        )
     ).send()
 
     print("The user selected to proceed with the debate")
@@ -369,9 +370,11 @@ async def is_metaphor_search_key_set() -> bool:
     user_selection = await handle_boolean_response(res, default=False)
 
     await cl.Message(
-        content="You have chosen to use the Metaphor Search for Research Agent."
-        if user_selection
-        else "You have chosen that Metaphor Search API key is not available."
+        content=(
+            "You have chosen to use the Metaphor Search for Research Agent."
+            if user_selection
+            else "You have chosen that Metaphor Search API key is not available."
+        )
     ).send()
 
     return user_selection
@@ -408,9 +411,11 @@ async def is_url_ask_question(topic_name: str) -> bool:
     user_selection = await handle_boolean_response(res, default=False)
 
     await cl.Message(
-        content=f"You have chosen to chat with web-searched documents using RAG for {topic_name}."
-        if user_selection
-        else f"You have chosen NOT to chat with web-searched documents for {topic_name}."
+        content=(
+            f"You have chosen to chat with web-searched documents using RAG for {topic_name}."
+            if user_selection
+            else f"You have chosen NOT to chat with web-searched documents for {topic_name}."
+        )
     ).send()
 
     return user_selection
