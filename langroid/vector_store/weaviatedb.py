@@ -32,6 +32,8 @@ class WeaviateDBConfig(VectorStoreConfig):
     collection_name: str | None = "temp"
     embedding: EmbeddingModelsConfig = OpenAIEmbeddingsConfig()
     distance: str = VectorDistances.COSINE
+    cloud: bool = False
+    storage_path: str = ".weaviate_embedded/data"
 
 
 class WeaviateDB(VectorStore):
@@ -39,19 +41,25 @@ class WeaviateDB(VectorStore):
         super().__init__(config)
         self.config: WeaviateDBConfig = config
         load_dotenv()
-        key = os.getenv("WEAVIATE_API_KEY")
-        url = os.getenv("WEAVIATE_API_URL")
-        if url is None or key is None:
-            raise ValueError(
-                """WEAVIATE_API_KEY, WEAVIATE_API_URL env variable must be set to use
-                WeaviateDB in cloud mode. Please set these values
-                in your .env file.
-                """
+        if not self.config.cloud:
+            self.client = weaviate.connect_to_embedded(
+                version="latest", persistence_data_path=self.config.storage_path
             )
-        self.client = weaviate.connect_to_weaviate_cloud(
-            cluster_url=url,
-            auth_credentials=Auth.api_key(key),
-        )
+        else:  # Cloud mode
+            key = os.getenv("WEAVIATE_API_KEY")
+            url = os.getenv("WEAVIATE_API_URL")
+            if url is None or key is None:
+                raise ValueError(
+                    """WEAVIATE_API_KEY, WEAVIATE_API_URL env variables must be set to 
+                    use WeaviateDB in cloud mode. Please set these values
+                    in your .env file.
+                    """
+                )
+            self.client = weaviate.connect_to_weaviate_cloud(
+                cluster_url=url,
+                auth_credentials=Auth.api_key(key),
+            )
+
         if config.collection_name is not None:
             WeaviateDB.validate_and_format_collection_name(config.collection_name)
 
@@ -267,3 +275,8 @@ class WeaviateDB(VectorStore):
             )
 
         return formatted_name
+
+    def __del__(self) -> None:
+        # Gracefully close the connection with local client
+        if not self.config.cloud:
+            self.client.close()
