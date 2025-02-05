@@ -9,7 +9,14 @@ or OpenAI `o1` etc):
 - when using a `ChatAgent.llm_response`, extract the reasoning text from the `ChatDocument` object's `reasoning` field
   (in addition to extracting final answer as usual from the `content` field)
 
-Here's a simple example, also in this [script](https://github.com/langroid/langroid/blob/main/examples/reasoning/agent-reasoning.py):
+Below is a simple example, also in this [script](https://github.com/langroid/langroid/blob/main/examples/reasoning/agent-reasoning.py):
+
+Some notes: 
+
+- To get reasoning trace from Deepseek-R1 via OpenRouter, you must include
+the `extra_body` parameter with `include_reasoning` as shown below.
+- When using the OpenAI `o3-mini` model, you can set the `resoning_effort` parameter
+  to "high", "medium" or "low" to control the reasoning effort.
 
 ```python
 import langroid as lr
