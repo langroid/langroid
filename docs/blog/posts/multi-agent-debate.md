@@ -1,7 +1,7 @@
 ---
 title: 'Multi Agent Debate and Education Platform'
 draft: false
-date: 2025-01-17
+date: 2025-02-04
 authors: 
   - adamshams
 categories:
@@ -15,7 +15,7 @@ comments: true
 ## Introduction
 Have you ever imagined a world where we can debate complex issues with Generative AI agents taking a distinct 
 stance and backing their arguments with evidence? Some will change your mind, and some will reveal the societal biases 
-on which each distinctive Large Language Model (LLM) is trained on.   Introducing an AI-powered debate platform that brings 
+on which each distinctive Large Language Model (LLM) is trained on. Introducing an [AI-powered debate platform](https://github.com/langroid/langroid/tree/main/examples/multi-agent-debate) that brings 
 this imagination to reality, leveraging diverse LLMs and the Langroid multi-agent programming framework. The system enables users to engage in structured debates with an AI taking the opposite stance (or even two AIs debating each other), using a multi-agent architecture with Langroid's powerful framework, where each agent embodies a specific ethical perspective, creating realistic and dynamic interactions. 
 Agents are prompt-engineered and role-tuned to align with their assigned ethical stance, 
 ensuring thoughtful and structured debates. 
@@ -32,13 +32,13 @@ My motivations for creating this platform included:
 
 ## Platform Features:
 ### Dynamic Agent Generation:
-The platform features five types of agents: Pro, Con, Feedback, and Research. Each agent is dynamically generated
-    using role-tuned and engineered prompts, ensuring diverse and engaging interactions.
+The platform features five types of agents: Pro, Con, Feedback, Research, and Retrieval Augmented Generation (RAG) Q&A. 
+Each agent is dynamically generated using role-tuned and engineered prompts, ensuring diverse and engaging interactions.
 #### Pro and Con Agents: 
 These agents engage in the core debate, arguing for and against the chosen topic. 
 Their prompts are carefully engineered to ensure they stay true to their assigned ethical stance.
 #### Feedback Agent: 
-This agent provides real-time feedback on the arguments and declares a winner. The evaluation criteria are based on the well-known <XYZ> debate format, and include:
+This agent provides real-time feedback on the arguments and declares a winner. The evaluation criteria are based on the well-known Lincoln–Douglas debate format, and include:
 
   - Clash of Values 
   - Argumentation 
@@ -55,10 +55,11 @@ This agent has the following functionalities:
 Retrieval Augmented Generation (RAG) to relevant web references for user education about the selected topic. 
   - Produces a summary of arguments for and against the topic.
   - RAG-based document chat with the resources identified through Web Search. 
-#### Relevance based Retrieval for Q&A Agent:
+#### RAG Q&A Agent:
 
-  - Provides Q&A capability using a RAG-based chat interaction with the resources identified through Web Search.
+  - Provides Q&A capability using a RAG based chat interaction with the resources identified through Web Search.
 The agent utilizes `DocChatAgent` that is part of Langroid framework which orchestrates all LLM interactions. 
+  - Rich chunking parameters allows the user to get optimized relevance results. Check out `config.py`for details.
 
 ### Topic Adaptability:
 Easily adaptable to any subject by simply adding pro and con system messages. This makes it a versatile tool for
@@ -97,7 +98,7 @@ Reusable code and modularized for other LLM applications.
 7. Decide if you want the Metaphor Search to run to find Topic relevant web links
    and summarize them. 
 8. Decide if you want to chat with the documents extracted from URLs found to learn more about the Topic.
-9. End the debate manually by typing "done". If you decide to chat with the documents, you can end session
+9. End the debate manually by typing `done`. If you decide to chat with the documents, you can end session
 by typing `x`
 
 ## Why was Langroid chosen?
@@ -131,8 +132,8 @@ easily create agents, tasks, and attach sub-tasks.
     
 ```
 The `Task` mechanism in Langroid provides a robust mechanism for managing complex interactions within multi-agent 
-systems. 'Task' serves as a container for managing the flow of interactions between different agents
-(such as chat agents) and attached sub-tasks. `Task` also helps with turn-taking, handling responses, 
+systems. `Task` serves as a container for managing the flow of interactions between different agents
+(such as chat agents) and attached sub-tasks.`Task` also helps with turn-taking, handling responses, 
 and ensuring smooth transitions between dialogue states. Each Task object is responsible for coordinating responses 
 from its assigned agent, deciding the sequence of responder methods (llm_response, user_response, agent_response), 
 and managing transitions between different stages of a conversation or debate. Each agent can focus on its specific 
@@ -170,5 +171,5 @@ for use in medicine and hoping to contribute more soon.
 ### Bio
 
 I'm a high school senior at Khan Lab School located in Mountain View, CA where I host a student-run Podcast known as the
-Khan-Cast. I also enjoy tinkering with interdisciplinary STEM projects. You can reach me on [LinkedIn](https://www.linkedin.com/in/adamshams/) 
+Khan-Cast. I also enjoy tinkering with interdisciplinary STEM projects. You can reach me on [LinkedIn](https://www.linkedin.com/in/adamshams/).
 
