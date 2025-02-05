@@ -66,6 +66,3 @@ class ExaSearchTool(ToolMessage):
                 num_results=3,
             ),
         ]
-
-if __name__ == "__main__":
-    print(ExaSearchTool().examples())

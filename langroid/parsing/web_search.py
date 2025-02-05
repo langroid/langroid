@@ -129,6 +129,7 @@ def metaphor_search(query: str, num_results: int = 5) -> List[WebSearchResult]:
         WebSearchResult(result.title, result.url, 3500, 300) for result in raw_results
     ]
 
+
 def exa_search(query: str, num_results: int = 5) -> List[WebSearchResult]:
     """
     Method that makes an API call by Exa client that queries
@@ -157,10 +158,10 @@ def exa_search(query: str, num_results: int = 5) -> List[WebSearchResult]:
     except ImportError:
         raise ImportError(
             "You are attempting to use the `exa_py` library;"
-            "To use it, please install langroid with the `metaphor` extra, e.g. "
-            "`pip install langroid[metaphor]` or `poetry add langroid[metaphor]` "
-            "or `uv add langroid[metaphor]`"
-            "(it installs the `metaphor_python` package from pypi)."
+            "To use it, please install langroid with the `exa-py` extra, e.g. "
+            "`pip install langroid[exa-py]` or `poetry add langroid[exa-py]` "
+            "or `uv add langroid[exa-py]`"
+            "(it installs the `exa-py` package from pypi)."
         )
 
     client = Exa(api_key=api_key)
@@ -172,7 +173,13 @@ def exa_search(query: str, num_results: int = 5) -> List[WebSearchResult]:
     raw_results = response.results
 
     return [
-        WebSearchResult(result.title, result.url, 3500, 300) for result in raw_results
+        WebSearchResult(
+            title=result.title or "",
+            link=result.url,
+            max_content_length=3500,
+            max_summary_length=300,
+        )
+        for result in raw_results
     ]
 
 
