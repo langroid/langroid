@@ -184,7 +184,7 @@ class OpenAICallParams(BaseModel):
     """
     Various params that can be sent to an OpenAI API chat-completion call.
     When specified, any param here overrides the one with same name in the
-    OpenAIGPTConfig.
+    OpenAIGPTConfig. 
     See OpenAI API Reference for details on the params:
     https://platform.openai.com/docs/api-reference/chat
     """
@@ -203,6 +203,7 @@ class OpenAICallParams(BaseModel):
     stop: str | List[str] | None = None  # (list of) stop sequence(s)
     seed: int | None = 42
     user: str | None = None  # user id for tracking
+    extra_body: Dict[str, Any] | None = None  # additional params for API request body
 
     def to_dict_exclude_none(self) -> Dict[str, Any]:
         return {k: v for k, v in self.dict().items() if v is not None}
@@ -739,7 +740,10 @@ class OpenAIGPT(LanguageModel):
             delta = choices[0].get("delta", {})
             # capture both content and reasoning_content
             event_text = delta.get("content", "")
-            event_reasoning = delta.get("reasoning_content", "")
+            event_reasoning = delta.get(
+                "reasoning_content",
+                delta.get("reasoning", ""),
+            )
             if "function_call" in delta and delta["function_call"] is not None:
                 if "name" in delta["function_call"]:
                     event_fn_name = delta["function_call"]["name"]
@@ -861,7 +865,10 @@ class OpenAIGPT(LanguageModel):
         if chat:
             delta = choices[0].get("delta", {})
             event_text = delta.get("content", "")
-            event_reasoning = delta.get("reasoning_content", "")
+            event_reasoning = delta.get(
+                "reasoning_content",
+                delta.get("reasoning", ""),
+            )
             if "function_call" in delta and delta["function_call"] is not None:
                 if "name" in delta["function_call"]:
                     event_fn_name = delta["function_call"]["name"]

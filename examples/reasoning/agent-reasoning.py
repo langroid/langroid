@@ -15,24 +15,32 @@ Other reasoning models to try: o1, o1-mini, o3-mini
 
 import langroid as lr
 import langroid.language_models as lm
+from langroid.utils.configuration import settings
 from fire import Fire
 
+#settings.cache = False
 
 def main(model: str = ""):
     llm_config = lm.OpenAIGPTConfig(
         chat_model=model or "deepseek/deepseek-reasoner",
-        params=lm.OpenAICallParams(reasoning_effort="low"),  # only o1, o3-mini?
+        params=lm.OpenAICallParams(
+            reasoning_effort="low",
+            extra_body = dict(include_reasoning=True),
+        ),
     )
 
     # (1) Direct LLM interaction
     llm = lm.OpenAIGPT(llm_config)
 
-    response = llm.chat("Is 9.7 bigger than 9.11?", max_tokens=1000)
+    response = llm.chat("Is 9.3 bigger than 9.11?", max_tokens=1000)
 
-    # extract reasoning
-    print(response.reasoning)
-    # extract answer
-    print(response.message)
+    if response.cached:
+        # if we got it from cache, we haven't shown anything, so print here
+
+        # extract reasoning
+        print(response.reasoning)
+        # extract answer
+        print(response.message)
 
     # (2) Agent interaction
     agent = lr.ChatAgent(
@@ -50,10 +58,13 @@ def main(model: str = ""):
         """
     )
 
-    # extract reasoning
-    print(response.reasoning)
-    # extract answer
-    print(response.content)
+    if response.metadata.cached:
+        # if we got it from cache, we haven't shown anything, so print here
+
+        # extract reasoning
+        print(response.reasoning)
+        # extract answer
+        print(response.content)
 
 
 if __name__ == "__main__":
