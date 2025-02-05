@@ -200,7 +200,11 @@ class Task:
                 control of task termination.
             system_message (str): if not empty, overrides agent's system_message
             user_message (str): if not empty, overrides agent's user_message
-            restart (bool): if true, resets the agent's message history *at every run*.
+            restart (bool): if true (default), resets the agent's message history
+                *at every run* when it is the top-level task. Ignored when
+                the task is a subtask of another task. Restart behavior of a subtask's
+                `run()` can be controlled via the `TaskConfig.restart_as_subtask`
+                setting.
             default_human_response (str|None): default response from user; useful for
                 testing, to avoid interactive input from user.
                 [Instead of this, setting `interactive` usually suffices]
@@ -1425,8 +1429,15 @@ class Task:
         else:
             response_fn = self._entity_responder_map[cast(Entity, e)]
             result = response_fn(self.pending_message)
-            # update result.tool_messages if any
-            if isinstance(result, ChatDocument):
+            # update result.tool_messages if any.
+            # Do this only if sender is LLM, since this could be
+            # a tool-call result from the Agent responder, which may
+            # contain strings that look like tools, and we don't want to
+            # trigger strict tool recovery due to that.
+            if (
+                isinstance(result, ChatDocument)
+                and result.metadata.sender == Entity.LLM
+            ):
                 self.agent.try_get_tool_messages(result)
 
         result_chat_doc = self.agent.to_ChatDocument(

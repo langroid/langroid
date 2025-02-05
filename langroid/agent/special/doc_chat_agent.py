@@ -1,3 +1,4 @@
+# # langroid/agent/special/doc_chat_agent.py
 """
 Agent that supports asking queries about a set of documents, using
 retrieval-augmented generation (RAG).
@@ -16,14 +17,14 @@ pip install "langroid[hf-embeddings]"
 import logging
 from collections import OrderedDict
 from functools import cache
-from typing import Any, Dict, List, Optional, Set, Tuple, no_type_check
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, no_type_check
 
 import nest_asyncio
 import numpy as np
 import pandas as pd
 from rich.prompt import Prompt
 
-from langroid.agent.batch import run_batch_tasks
+from langroid.agent.batch import run_batch_agent_method, run_batch_tasks
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.chat_document import ChatDocMetaData, ChatDocument
 from langroid.agent.special.relevance_extractor_agent import (
@@ -57,7 +58,7 @@ from langroid.utils.object_registry import ObjectRegistry
 from langroid.utils.output import show_if_debug, status
 from langroid.utils.output.citations import (
     extract_markdown_references,
-    format_footnote_text,
+    format_cited_references,
 )
 from langroid.utils.pydantic_utils import dataframe_to_documents, extract_fields
 from langroid.vector_store.base import VectorStore, VectorStoreConfig
@@ -71,15 +72,16 @@ def apply_nest_asyncio() -> None:
 
 logger = logging.getLogger(__name__)
 
-DEFAULT_DOC_CHAT_INSTRUCTIONS = """
-Your task is to answer questions about various documents.
+
+DEFAULT_DOC_CHAT_SYSTEM_MESSAGE = """
+You are a helpful assistant, helping me understand a collection of documents.
+
+Your TASK is to answer questions about various documents.
 You will be given various passages from these documents, and asked to answer questions
 about them, or summarize them into coherent answers.
 """
 
-DEFAULT_DOC_CHAT_SYSTEM_MESSAGE = """
-You are a helpful assistant, helping me understand a collection of documents.
-"""
+CHUNK_ENRICHMENT_DELIMITER = "\n<##-##-##>\n"
 
 has_sentence_transformers = False
 try:
@@ -97,14 +99,19 @@ hf_embed_config = SentenceTransformerEmbeddingsConfig(
 
 oai_embed_config = OpenAIEmbeddingsConfig(
     model_type="openai",
-    model_name="text-embedding-ada-002",
+    model_name="text-embedding-3-small",
     dims=1536,
 )
 
 
+class ChunkEnrichmentAgentConfig(ChatAgentConfig):
+    batch_size: int = 50
+    delimiter: str = CHUNK_ENRICHMENT_DELIMITER
+    enrichment_prompt_fn: Callable[[str], str] = lambda x: x
+
+
 class DocChatAgentConfig(ChatAgentConfig):
     system_message: str = DEFAULT_DOC_CHAT_SYSTEM_MESSAGE
-    user_message: str = DEFAULT_DOC_CHAT_INSTRUCTIONS
     summarize_prompt: str = SUMMARY_ANSWER_PROMPT_GPT4
     # extra fields to include in content as key=value pairs
     # (helps retrieval for table-like data)
@@ -126,6 +133,12 @@ class DocChatAgentConfig(ChatAgentConfig):
     # https://arxiv.org/pdf/2212.10496.pdf
     # It is False by default; its benefits depends on the context.
     hypothetical_answer: bool = False
+    # Optional config for chunk enrichment agent, e.g. to enrich
+    # chunks with hypothetical questions, or keywords to increase
+    # the "semantic surface area" of the chunks, which may help
+    # improve retrieval.
+    chunk_enrichment_config: Optional[ChunkEnrichmentAgentConfig] = None
+
     n_query_rephrases: int = 0
     n_neighbor_chunks: int = 0  # how many neighbors on either side of match to retrieve
     n_fuzzy_neighbor_words: int = 100  # num neighbor words to retrieve for fuzzy match
@@ -175,8 +188,8 @@ class DocChatAgentConfig(ChatAgentConfig):
             # NOTE: PDF parsing is extremely challenging, and each library
             # has its own strengths and weaknesses.
             # Try one that works for your use case.
-            # or "unstructured", "pdfplumber", "fitz", "pypdf"
-            library="pdfplumber",
+            # or "unstructured", "fitz", "pymupdf4llm", "pypdf"
+            library="pymupdf4llm",
         ),
     )
 
@@ -197,6 +210,12 @@ class DocChatAgentConfig(ChatAgentConfig):
     prompts: PromptsConfig = PromptsConfig(
         max_tokens=1000,
     )
+
+
+def _append_metadata_source(orig_source: str, source: str) -> str:
+    if orig_source != source and source != "" and orig_source != "":
+        return f"{orig_source.strip()}; {source.strip()}"
+    return orig_source.strip() + source.strip()
 
 
 class DocChatAgent(ChatAgent):
@@ -324,7 +343,11 @@ class DocChatAgent(ChatAgent):
                 url_docs = loader.load()
                 # update metadata of each doc with meta
                 for d in url_docs:
+                    orig_source = d.metadata.source
                     d.metadata = d.metadata.copy(update=meta)
+                    d.metadata.source = _append_metadata_source(
+                        orig_source, meta.get("source", "")
+                    )
                 docs.extend(url_docs)
         if len(paths) > 0:  # paths OR bytes are handled similarly
             for pi in path_idxs:
@@ -337,7 +360,11 @@ class DocChatAgent(ChatAgent):
                 )
                 # update metadata of each doc with meta
                 for d in path_docs:
+                    orig_source = d.metadata.source
                     d.metadata = d.metadata.copy(update=meta)
+                    d.metadata.source = _append_metadata_source(
+                        orig_source, meta.get("source", "")
+                    )
                 docs.extend(path_docs)
         n_docs = len(docs)
         n_splits = self.ingest_docs(docs, split=self.config.split)
@@ -378,15 +405,26 @@ class DocChatAgent(ChatAgent):
         """
         if isinstance(metadata, list) and len(metadata) > 0:
             for d, m in zip(docs, metadata):
-                d.metadata = d.metadata.copy(
-                    update=m if isinstance(m, dict) else m.dict()  # type: ignore
+                orig_source = d.metadata.source
+                m_dict = m if isinstance(m, dict) else m.dict()  # type: ignore
+                d.metadata = d.metadata.copy(update=m_dict)  # type: ignore
+                d.metadata.source = _append_metadata_source(
+                    orig_source, m_dict.get("source", "")
                 )
         elif isinstance(metadata, dict):
             for d in docs:
+                orig_source = d.metadata.source
                 d.metadata = d.metadata.copy(update=metadata)
+                d.metadata.source = _append_metadata_source(
+                    orig_source, metadata.get("source", "")
+                )
         elif isinstance(metadata, DocMetaData):
             for d in docs:
+                orig_source = d.metadata.source
                 d.metadata = d.metadata.copy(update=metadata.dict())
+                d.metadata.source = _append_metadata_source(
+                    orig_source, metadata.source
+                )
 
         self.original_docs.extend(docs)
         if self.parser is None:
@@ -404,6 +442,8 @@ class DocChatAgent(ChatAgent):
                 d.metadata.is_chunk = True
         if self.vecdb is None:
             raise ValueError("VecDB not set")
+        if self.config.chunk_enrichment_config is not None:
+            docs = self.enrich_chunks(docs)
 
         # If any additional fields need to be added to content,
         # add them as key=value pairs for all docs, before batching.
@@ -764,15 +804,17 @@ class DocChatAgent(ChatAgent):
         Returns:
             str: string representation
         """
-        contents = [f"Extract: {d.content}" for d in docs]
+        contents = [d.content for d in docs]
         sources = [d.metadata.source for d in docs]
-        sources = [f"Source: {s}" if s is not None else "" for s in sources]
+        sources = [f"SOURCE: {s}" if s is not None else "" for s in sources]
         return "\n".join(
             [
                 f"""
-                [{i+1}]
+                -----[EXTRACT #{i+1}]----------
                 {content}
                 {source}
+                -----END OF EXTRACT------------
+                
                 """
                 for i, (content, source) in enumerate(zip(contents, sources))
             ]
@@ -817,18 +859,10 @@ class DocChatAgent(ChatAgent):
         final_answer = answer_doc.content.strip()
         show_if_debug(final_answer, "SUMMARIZE_RESPONSE= ")
 
+        # extract references like [^2], [^3], etc. from the final answer
         citations = extract_markdown_references(final_answer)
-
-        citations_str = ""
-        if len(citations) > 0:
-            # append [i] source, content for each citation
-            citations_str = "\n".join(
-                [
-                    f"[^{c}] {passages[c-1].metadata.source}"
-                    f"\n{format_footnote_text(passages[c-1].content)}"
-                    for c in citations
-                ]
-            )
+        # format the cited references as a string suitable for markdown footnote
+        citations_str = format_cited_references(citations, passages)
 
         return ChatDocument(
             content=final_answer,  # does not contain citations
@@ -859,6 +893,69 @@ class DocChatAgent(ChatAgent):
                     """
                 ).content
         return answer
+
+    def enrich_chunks(self, docs: List[Document]) -> List[Document]:
+        """
+        Enrich chunks using Agent configured with self.config.chunk_enrichment_config.
+
+        We assume that the system message of the agent is set in such a way
+        that when we run
+        ```
+        prompt = self.config.chunk_enrichment_config.enrichment_prompt_fn(text)
+        result = await agent.llm_response_forget_async(prompt)
+        ```
+
+        then `result.content` will contain the augmentation to the text.
+
+        Args:
+            docs: List of document chunks to enrich
+
+        Returns:
+            List[Document]: Documents (chunks) enriched with additional text,
+                separated by a delimiter.
+        """
+        if self.config.chunk_enrichment_config is None:
+            return docs
+        enrichment_config = self.config.chunk_enrichment_config
+        agent = ChatAgent(enrichment_config)
+        if agent.llm is None:
+            raise ValueError("LLM not set")
+
+        with status("[cyan]Augmenting chunks..."):
+            # Process chunks in parallel using run_batch_agent_method
+            questions_batch = run_batch_agent_method(
+                agent=agent,
+                method=agent.llm_response_forget_async,
+                items=docs,
+                input_map=lambda doc: (
+                    enrichment_config.enrichment_prompt_fn(doc.content)
+                ),
+                output_map=lambda response: response.content if response else "",
+                sequential=False,
+                batch_size=enrichment_config.batch_size,
+            )
+
+            # Combine original content with generated questions
+            augmented_docs = []
+            for doc, enrichment in zip(docs, questions_batch):
+                if not enrichment:
+                    augmented_docs.append(doc)
+                    continue
+
+                # Combine original content with questions in a structured way
+                combined_content = (
+                    f"{doc.content}{enrichment_config.delimiter}{enrichment}"
+                )
+
+                new_doc = doc.copy(
+                    update={
+                        "content": combined_content,
+                        "metadata": doc.metadata.copy(update={"has_enrichment": True}),
+                    }
+                )
+                augmented_docs.append(new_doc)
+
+            return augmented_docs
 
     def llm_rephrase_query(self, query: str) -> List[str]:
         if self.llm is None:
@@ -1143,20 +1240,22 @@ class DocChatAgent(ChatAgent):
         id2_rank_semantic = {d.id(): i for i, (d, _) in enumerate(docs_and_scores)}
         id2doc = {d.id(): d for d, _ in docs_and_scores}
         # make sure we get unique docs
-        passages = [id2doc[id] for id, _ in id2_rank_semantic.items()]
+        passages = [id2doc[id] for id in id2_rank_semantic.keys()]
 
         id2_rank_bm25 = {}
         if self.config.use_bm25_search:
             # TODO: Add score threshold in config
             docs_scores = self.get_similar_chunks_bm25(query, retrieval_multiple)
+            id2doc.update({d.id(): d for d, _ in docs_scores})
             if self.config.cross_encoder_reranking_model == "":
                 # only if we're not re-ranking with a cross-encoder,
                 # we collect these ranks for Reciprocal Rank Fusion down below.
                 docs_scores = sorted(docs_scores, key=lambda x: x[1], reverse=True)
                 id2_rank_bm25 = {d.id(): i for i, (d, _) in enumerate(docs_scores)}
-                id2doc.update({d.id(): d for d, _ in docs_scores})
             else:
                 passages += [d for (d, _) in docs_scores]
+                # eliminate duplicate ids
+                passages = [id2doc[id] for id in id2doc.keys()]
 
         id2_rank_fuzzy = {}
         if self.config.use_fuzzy_match:
@@ -1174,6 +1273,8 @@ class DocChatAgent(ChatAgent):
                 id2doc.update({d.id(): d for d, _ in fuzzy_match_doc_scores})
             else:
                 passages += [d for (d, _) in fuzzy_match_doc_scores]
+                # eliminate duplicate ids
+                passages = [id2doc[id] for id in id2doc.keys()]
 
         if (
             self.config.cross_encoder_reranking_model == ""
@@ -1301,7 +1402,6 @@ class DocChatAgent(ChatAgent):
         if self.config.n_query_rephrases > 0:
             rephrases = self.llm_rephrase_query(query)
             proxies += rephrases
-
         passages = self.get_relevant_chunks(query, proxies)  # no LLM involved
 
         if len(passages) == 0:
@@ -1314,6 +1414,29 @@ class DocChatAgent(ChatAgent):
                 extracts = [e for e in extracts if e.content != NO_ANSWER]
 
         return query, extracts
+
+    def remove_chunk_enrichments(self, passages: List[Document]) -> List[Document]:
+        """Remove any enrichments (like hypothetical questions, or keywords)
+        from documents.
+        Only cleans if enrichment was enabled in config.
+
+        Args:
+            passages: List of documents to clean
+
+        Returns:
+            List of documents with only original content
+        """
+        if self.config.chunk_enrichment_config is None:
+            return passages
+        delimiter = self.config.chunk_enrichment_config.delimiter
+        return [
+            (
+                doc.copy(update={"content": doc.content.split(delimiter)[0]})
+                if doc.content and getattr(doc.metadata, "has_enrichment", False)
+                else doc
+            )
+            for doc in passages
+        ]
 
     def get_verbatim_extracts(
         self,
@@ -1330,6 +1453,8 @@ class DocChatAgent(ChatAgent):
         Returns:
             List[Document]: list of Documents containing extracts and metadata.
         """
+        passages = self.remove_chunk_enrichments(passages)
+
         agent_cfg = self.config.relevance_extractor_config
         if agent_cfg is None:
             # no relevance extraction: simply return passages
@@ -1432,7 +1557,7 @@ class DocChatAgent(ChatAgent):
         tot_tokens = self.parser.num_tokens(full_text)
         MAX_INPUT_TOKENS = (
             self.llm.completion_context_length()
-            - self.config.llm.max_output_tokens
+            - self.config.llm.model_max_output_tokens
             - 100
         )
         if tot_tokens > MAX_INPUT_TOKENS:

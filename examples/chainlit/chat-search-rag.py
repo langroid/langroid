@@ -203,8 +203,8 @@ async def setup_agent_task():
             # NOTE: PDF parsing is extremely challenging, each library has its own
             # strengths and weaknesses. Try one that works for your use case.
             pdf=PdfParsingConfig(
-                # alternatives: "unstructured", "pdfplumber", "fitz"
-                library="pdfplumber",
+                # alternatives: "unstructured", "docling", "fitz"
+                library="pymupdf4llm",
             ),
         ),
     )

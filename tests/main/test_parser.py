@@ -32,7 +32,7 @@ def test_parser(
         separators=["."],
         min_chunk_chars=min_chunk_chars,
         discard_chunk_chars=discard_chunk_chars,
-        token_encoding_model="text-embedding-ada-002",
+        token_encoding_model="text-embedding-3-small",
     )
 
     parser = Parser(cfg)
@@ -76,7 +76,7 @@ def test_text_token_chunking(
         max_chunks=max_chunks,
         min_chunk_chars=min_chunk_chars,
         discard_chunk_chars=discard_chunk_chars,
-        token_encoding_model="text-embedding-ada-002",
+        token_encoding_model="text-embedding-3-small",
     )
 
     parser = Parser(cfg)

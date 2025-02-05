@@ -1,8 +1,11 @@
-from typing import Optional
+from typing import Optional, List
+import langroid as lr
 import langroid.language_models as lm
 import langroid.utils.configuration
 from langroid.language_models import OpenAIGPTConfig
 from langroid.utils.configuration import Settings
+from langroid.agent.special import DocChatAgentConfig
+from langroid.parsing.parser import ParsingConfig, PdfParsingConfig, Splitter
 from generation_config_models import load_generation_config, GenerationConfig
 
 # Constants
@@ -108,3 +111,57 @@ def get_base_llm_config(
     if temperature is not None:
         return create_llm_config(chat_model_option, temperature)
     return create_llm_config(chat_model_option)
+
+
+def get_questions_agent_config(
+    searched_urls: List[str], chat_model: str
+) -> DocChatAgentConfig:
+    """
+    Configure a document-centric Langroid document chat agent based on a
+    list of URLs and a chat model.
+
+    Args:
+        searched_urls (List[str]): URLs of the documents to be included in the agent's database.
+        chat_model (str): The name of the chat model to be used for generating responses.
+
+    Returns:
+        DocChatAgentConfig: The configuration for the document-centric chat agent.
+    """
+
+    config = DocChatAgentConfig(
+        llm=lr.language_models.OpenAIGPTConfig(
+            chat_model=chat_model,  # The specific chat model configuration
+        ),
+        vecdb=lr.vector_store.QdrantDBConfig(
+            collection_name="AI_debate",  # Name of the collection in the vector database
+            replace_collection=True,  # Whether to replace the collection if it already exists
+        ),
+        conversation_mode=False,  # Whether the agent is in conversation mode
+        n_query_rephrases=0,  # Number of times to rephrase queries
+        hypothetical_answer=False,  # Whether to generate hypothetical answers
+        extraction_granularity=5,  # Level of detail for extraction granularity
+        n_neighbor_chunks=2,  # Number of neighboring chunks to consider in responses
+        n_fuzzy_neighbor_words=50,  # Number of words to consider in fuzzy neighbor matching
+        use_fuzzy_match=True,  # Whether to use fuzzy matching for text queries
+        use_bm25_search=True,  # Whether to use BM25 for search ranking
+        cache=True,  # Whether to cache results
+        debug=False,  # Debug mode enabled
+        stream=True,  # Whether to stream data continuously
+        split=True,  # Whether to split documents into manageable chunks
+        parsing=ParsingConfig(
+            splitter=Splitter.TOKENS,  # Method to split documents
+            chunk_size=200,  # Size of each chunk
+            overlap=50,  # Overlap between chunks
+            max_chunks=10_000,  # Maximum number of chunks
+            n_neighbor_ids=4,  # Number of neighbor IDs to consider in vector space
+            min_chunk_chars=200,  # Minimum number of characters in a chunk
+            discard_chunk_chars=4,  # Number of characters to discard from chunk boundaries
+            n_similar_docs=5,  # Number of similar documents to retrieve
+            pdf=PdfParsingConfig(
+                library="fitz",  # Library used for PDF parsing
+            ),
+        ),
+        doc_paths=searched_urls,  # Document paths from searched URLs
+    )
+
+    return config

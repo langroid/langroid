@@ -29,11 +29,13 @@ automatically extracting schemas from the database.
 (mainly, install `langroid` into your virtual env, and set up suitable values in 
 the `.env` file). Note that to use the SQLChatAgent with a PostgreSQL database,
 you need to install the `langroid[postgres]` extra, e.g.:
-    - `pip install langroid[postgres]` or 
-    - `poetry add langroid[postgres]` or 
-    - `poetry install -E postgres`.
 
-    If this gives you an error, try `pip install psycopg2-binary` in your virtualenv.
+    - `pip install "langroid[postgres]"` or 
+    - `poetry add "langroid[postgres]"` or `uv add "langroid[postgres]"`
+    - `poetry install -E postgres` or `uv pip install --extra postgres -r pyproject.toml`
+
+
+If this gives you an error, try `pip install psycopg2-binary` in your virtualenv.
 
 
 ## Initialize the agent

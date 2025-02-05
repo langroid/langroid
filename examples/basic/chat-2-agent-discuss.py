@@ -6,7 +6,7 @@
 # ///
 
 """
-Give a problem statement, and 2-agents Alice and Bob will discuss it,
+Give a problem statement, two agents Alice and Bob will discuss it,
 and EITHER of them may return a final result via MyFinalResultTool.
 
 Run like this (Omit model to default to GPT4o):
