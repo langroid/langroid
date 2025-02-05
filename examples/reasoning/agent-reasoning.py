@@ -18,14 +18,20 @@ import langroid.language_models as lm
 from langroid.utils.configuration import settings
 from fire import Fire
 
-#settings.cache = False
 
-def main(model: str = ""):
+def main(
+    model: str = "",
+    nc: bool = False,  # turn off caching? (i.e. get fresh streaming response)
+):
+    settings.cache = not nc
+    model = model or "deepseek/deepseek-reasoner"
     llm_config = lm.OpenAIGPTConfig(
-        chat_model=model or "deepseek/deepseek-reasoner",
+        chat_model=model,
+        # inapplicable params are automatically removed by Langroid
         params=lm.OpenAICallParams(
-            reasoning_effort="low",
-            extra_body = dict(include_reasoning=True),
+            reasoning_effort="low",  # only supported by o3-mini
+            # below lets you get reasoning when using openrouter/deepseek/deepseek-r1
+            extra_body=dict(include_reasoning=True),
         ),
     )
 
@@ -38,7 +44,10 @@ def main(model: str = ""):
         # if we got it from cache, we haven't shown anything, so print here
 
         # extract reasoning
-        print(response.reasoning)
+        if response.reasoning:
+            print(response.reasoning)
+        else:
+            print(f"NO REASONING AVAILABLE for {model}!")
         # extract answer
         print(response.message)
 
@@ -62,7 +71,11 @@ def main(model: str = ""):
         # if we got it from cache, we haven't shown anything, so print here
 
         # extract reasoning
-        print(response.reasoning)
+        if response.reasoning:
+            print(response.reasoning)
+        else:
+            print(f"NO REASONING AVAILABLE for {model}!")
+
         # extract answer
         print(response.content)
 
