@@ -10,7 +10,13 @@ Run like this (omit the model argument to default to the deepseek-reasoner model
 or
     uv run examples/reasoning/agent-reasoning.py
 
-Other reasoning models to try: o1, o1-mini, o3-mini
+Other reasoning models to try:
+openrouter/deepseek/deepseek-r1
+o1
+o1-mini
+o3-mini
+ollama/deepseek-r1:8b
+
 """
 
 import langroid as lr

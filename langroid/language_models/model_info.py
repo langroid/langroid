@@ -72,11 +72,13 @@ class OpenAI_API_ParamInfo(BaseModel):
     Parameters exclusive to some models, when using OpenAI API
     """
 
+    # model-specific params at top level
     params: Dict[str, List[str]] = dict(
         reasoning_effort=[
             OpenAIChatModel.O3_MINI.value,
         ],
     )
+    # model-specific params in extra_body
     extra_parameters: Dict[str, List[str]] = dict(
         include_reasoning=[
             DeepSeekModel.OPENROUTER_DEEPSEEK_R1.value,
