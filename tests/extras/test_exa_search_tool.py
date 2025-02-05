@@ -15,7 +15,7 @@ import itertools
 import pytest
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
-from langroid.agent.tools.metaphor_search_tool import MetaphorSearchTool
+from langroid.agent.tools.exa_search_tool import ExaSearchTool
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
 from langroid.language_models.openai_gpt import (
     OpenAIChatModel,
@@ -44,18 +44,18 @@ agent = ChatAgent(cfg)
 use_vals = [True, False]
 handle_vals = [True, False]
 force_vals = [True, False]
-message_classes = [None, MetaphorSearchTool]
+message_classes = [None, ExaSearchTool]
 
 # Get the cartesian product
 cartesian_product = list(
     itertools.product(message_classes, use_vals, handle_vals, force_vals)
 )
 
-agent.enable_message(MetaphorSearchTool)
+agent.enable_message(ExaSearchTool)
 
 
 @pytest.mark.parametrize("use_functions_api", [True, False])
-def test_agent_metaphor_search_tool(
+def test_agent_exa_search_tool(
     test_settings: Settings,
     use_functions_api: bool,
 ):
@@ -71,18 +71,18 @@ def test_agent_metaphor_search_tool(
     agent = ChatAgent(cfg)
     agent.config.use_functions_api = use_functions_api
     agent.config.use_tools = not use_functions_api
-    agent.enable_message(MetaphorSearchTool)
+    agent.enable_message(ExaSearchTool)
 
     llm_msg = agent.llm_response_forget(
         "Find 3 results on the internet about the LK-99 superconducting material."
     )
-    tool_name = MetaphorSearchTool.default_value("request")
+    tool_name = ExaSearchTool.default_value("request")
     if use_functions_api:
         assert llm_msg.function_call.name == tool_name
     else:
         tools = agent.get_tool_messages(llm_msg)
         assert len(tools) == 1
-        assert isinstance(tools[0], MetaphorSearchTool)
+        assert isinstance(tools[0], ExaSearchTool)
 
     agent_result = agent.handle_message(llm_msg)
     assert len(agent_result.split("\n\n")) == 3
