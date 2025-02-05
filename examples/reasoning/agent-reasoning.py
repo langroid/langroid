@@ -16,7 +16,7 @@ o1
 o1-mini
 o3-mini
 ollama/deepseek-r1:8b
-
+gemini/gemini-2.0-flash-thinking-exp
 """
 
 import langroid as lr

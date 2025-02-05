@@ -63,7 +63,7 @@ class GeminiModel(ModelName):
     GEMINI_1_5_FLASH = "gemini/gemini-1.5-flash"
     GEMINI_1_5_FLASH_8B = "gemini/gemini-1.5-flash-8b"
     GEMINI_1_5_PRO = "gemini/gemini-1.5-pro"
-    GEMINI_2_FLASH = "gemini/gemini-2.0-flash-exp"
+    GEMINI_2_FLASH = "gemini/gemini-2.0-flash"
     GEMINI_2_FLASH_THINKING = "gemini/gemini-2.0-flash-thinking-exp"
 
 

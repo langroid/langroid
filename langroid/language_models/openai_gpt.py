@@ -192,17 +192,17 @@ class OpenAICallParams(BaseModel):
 
     max_tokens: int = 1024
     temperature: float = 0.2
-    frequency_penalty: float | None = 0.0  # between -2 and 2
-    presence_penalty: float | None = 0.0  # between -2 and 2
+    frequency_penalty: float | None = None  # between -2 and 2
+    presence_penalty: float | None = None  # between -2 and 2
     response_format: Dict[str, str] | None = None
     logit_bias: Dict[int, float] | None = None  # token_id -> bias
-    logprobs: bool = False
-    top_p: float | None = 1.0
+    logprobs: bool | None = None
+    top_p: float | None = None
     reasoning_effort: str | None = None  # or "low" or "high" or "medium"
     top_logprobs: int | None = None  # if int, requires logprobs=True
     n: int = 1  # how many completions to generate (n > 1 is NOT handled now)
     stop: str | List[str] | None = None  # (list of) stop sequence(s)
-    seed: int | None = 42
+    seed: int | None = None
     user: str | None = None  # user id for tracking
     extra_body: Dict[str, Any] | None = None  # additional params for API request body
 
