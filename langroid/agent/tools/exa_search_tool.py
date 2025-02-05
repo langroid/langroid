@@ -37,8 +37,8 @@ class ExaSearchTool(ToolMessage):
             Wait for the results of the web search, and then use them to
             compose your response.
             """
-    query: str = "What is 1+1"
-    num_results: int = 1
+    query: str
+    num_results: int
 
     def handle(self) -> str:
         """
