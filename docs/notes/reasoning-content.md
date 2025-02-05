@@ -15,7 +15,15 @@ Here's a simple example, also in this [script](https://github.com/langroid/langr
 import langroid as lr
 import langroid.language_models as lm
 
-llm_config = lm.OpenAIGPTConfig(chat_model="deepseek/deepseek-reasoner")
+llm_config = lm.OpenAIGPTConfig(
+  chat_model="deepseek/deepseek-reasoner",
+  # inapplicable params are automatically removed by Langroid
+  params=lm.OpenAICallParams(
+    reasoning_effort="low",  # only supported by o3-mini
+    # below lets you get reasoning when using openrouter/deepseek/deepseek-r1
+    extra_body=dict(include_reasoning=True),
+  ),
+)
 
 # (1) Direct LLM interaction
 llm = lm.OpenAIGPT(llm_config)
