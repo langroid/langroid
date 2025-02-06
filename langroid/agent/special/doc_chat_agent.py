@@ -58,7 +58,7 @@ from langroid.utils.object_registry import ObjectRegistry
 from langroid.utils.output import show_if_debug, status
 from langroid.utils.output.citations import (
     extract_markdown_references,
-    format_footnote_text,
+    format_cited_references,
 )
 from langroid.utils.pydantic_utils import dataframe_to_documents, extract_fields
 from langroid.vector_store.base import VectorStore, VectorStoreConfig
@@ -859,18 +859,10 @@ class DocChatAgent(ChatAgent):
         final_answer = answer_doc.content.strip()
         show_if_debug(final_answer, "SUMMARIZE_RESPONSE= ")
 
+        # extract references like [^2], [^3], etc. from the final answer
         citations = extract_markdown_references(final_answer)
-
-        citations_str = ""
-        if len(citations) > 0:
-            # append [i] source, content for each citation
-            citations_str = "\n".join(
-                [
-                    f"[^{c}] {passages[c-1].metadata.source}"
-                    f"\n{format_footnote_text(passages[c-1].content)}"
-                    for c in citations
-                ]
-            )
+        # format the cited references as a string suitable for markdown footnote
+        citations_str = format_cited_references(citations, passages)
 
         return ChatDocument(
             content=final_answer,  # does not contain citations

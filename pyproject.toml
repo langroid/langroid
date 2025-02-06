@@ -1,6 +1,6 @@
 [project]
 name = "langroid"
-version = "0.39.2"
+version = "0.39.5"
 authors = [
     {name = "Prasad Chalasani", email = "pchalasani@gmail.com"},
 ]
@@ -33,7 +33,7 @@ dependencies = [
     "nest-asyncio<2.0.0,>=1.6.0",
     "nltk<4.0.0,>=3.8.2",
     "onnxruntime<2.0.0,>=1.16.1",
-    "openai<2.0.0,>=1.45.0",
+    "openai<2.0.0,>=1.61.1",
     "pandas<3.0.0,>=2.0.3",
     "prettytable<4.0.0,>=3.8.0",
     "pydantic<3.0.0,>=1",
