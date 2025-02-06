@@ -115,6 +115,7 @@ nav:
       - Reasoning Content: notes/reasoning-content.md
       - Weaviate: notes/weaviate.md
       - Handling LLM Non-Tool Messages: notes/handle-llm-no-tool.md
+      - PGVector: notes/pgvector.md
 
   - Examples:
     - Guide: examples/guide.md
