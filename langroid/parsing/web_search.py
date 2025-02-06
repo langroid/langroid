@@ -16,6 +16,8 @@ from duckduckgo_search import DDGS
 from googleapiclient.discovery import Resource, build
 from requests.models import Response
 
+from langroid.exceptions import LangroidImportError
+
 
 class WebSearchResult:
     """
@@ -180,13 +182,7 @@ def tavily_search(query: str, num_results: int = 5) -> List[WebSearchResult]:
     try:
         from tavily import TavilyClient
     except ImportError:
-        raise ImportError(
-            "You are attempting to use the `tavily` library. "
-            "To use it, please install the tavily package using: "
-            "`uv add tavily-python` or "
-            "`pip install tavily-python` or "
-            "`poetry add tavily-python`"
-        )
+        raise LangroidImportError("tavily-python", "tavily")
 
     client = TavilyClient(api_key=api_key)
     response = client.search(query=query, max_results=num_results)

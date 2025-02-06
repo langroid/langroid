@@ -2636,6 +2636,7 @@ dependencies = [
     { name = "requests" },
     { name = "requests-oauthlib" },
     { name = "rich" },
+    { name = "tavily-python" },
     { name = "thefuzz" },
     { name = "tiktoken" },
     { name = "trafilatura" },
@@ -2763,6 +2764,9 @@ sql = [
     { name = "psycopg2" },
     { name = "pymysql" },
     { name = "sqlalchemy" },
+]
+tavily = [
+    { name = "tavily-python" },
 ]
 transformers = [
     { name = "huggingface-hub" },
@@ -2933,6 +2937,8 @@ requires-dist = [
     { name = "sqlalchemy", marker = "extra == 'sql'", specifier = ">=2.0.19,<3.0.0" },
     { name = "tantivy", marker = "extra == 'lancedb'", specifier = ">=0.21.0,<0.22.0" },
     { name = "tantivy", marker = "extra == 'vecdbs'", specifier = ">=0.21.0,<0.22.0" },
+    { name = "tavily-python", specifier = ">=0.5.0" },
+    { name = "tavily-python", marker = "extra == 'tavily'", specifier = ">=0.5.0" },
     { name = "thefuzz", specifier = ">=0.20.0,<1.0.0" },
     { name = "tiktoken", specifier = ">=0.7.0,<1.0.0" },
     { name = "torch", marker = "extra == 'all'", specifier = ">=2.0.0,<3.0.0" },
@@ -6826,6 +6832,20 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/f8/7f/fd968b5b59b3cc46621e3d11d2b4099bbcff7f32a6b4b98fe6e828e0c279/tantivy-0.21.0-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:521a61248b97c22adf67c06a02b344bb2b231ecf287d2451a76585fbf52d1225", size = 4034754 },
     { url = "https://files.pythonhosted.org/packages/30/bf/939b9dd9e3107efb54e9458979df09b1a15861e045c722ebdb0ec377851d/tantivy-0.21.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:1050546130ff92618191477e4dea8a8b3a02fb6db83226b21efd2059b153d9fc", size = 4161455 },
     { url = "https://files.pythonhosted.org/packages/2d/2b/6f42b93f61ef105964f75acb67266782cd7d5ae77c8840bf2c7b8562ddd5/tantivy-0.21.0-cp312-none-win_amd64.whl", hash = "sha256:7aacd0c96b681e6933e276c81cc822b0259c6414088287a4b62c263d529c7109", size = 2295921 },
+]
+
+[[package]]
+name = "tavily-python"
+version = "0.5.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "httpx" },
+    { name = "requests" },
+    { name = "tiktoken" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/ca/50/7f4acafe72ffd10d3578ddec76f993af5af81504bc7315ea54862f2705b9/tavily_python-0.5.0.tar.gz", hash = "sha256:2c60b88203b630e1b37fc711913a1090ced6719b3f21089f25ec06e9e1602822", size = 16455 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/90/99/05776f7150a5b3f8d853377144a3a634131964c0fce38307537674a9a674/tavily_python-0.5.0-py3-none-any.whl", hash = "sha256:e874f6a04a56cdda80a505fe0b4f5d61d25372bd52a83e6773926fb297dcaa29", size = 14361 },
 ]
 
 [[package]]
