@@ -63,6 +63,8 @@ jobs:
       GOOGLE_CSE_ID: ${{ secrets.GOOGLE_CSE_ID }}
       WEAVIATE_API_KEY: ${{ secrets.WEAVIATE_API_KEY }}
       WEAVIATE_API_URL: ${{ secrets.WEAVIATE_API_URL }}
+      EXA_API_KEY: ${{ secrets.EXA_API_KEY }}
+      TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
 
       # Azure OpenAI env vars
       AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
