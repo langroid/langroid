@@ -221,10 +221,15 @@ def find_urls(
         response = requests.get(url, timeout=5)
         response.raise_for_status()
         soup = BeautifulSoup(response.text, "html.parser")
-        links = [urljoin(url, a["href"]) for a in soup.find_all("a", href=True)]
+        links = [
+            urljoin(url, a["href"])  # type: ignore
+            for a in soup.find_all("a", href=True)
+        ]
 
         # Defrag links: discard links that are to portions of same page
-        defragged_links = list(set(urldefrag(link).url for link in links))
+        defragged_links = list(
+            set(urldefrag(link).url for link in links)  # type: ignore
+        )
 
         # Filter links based on domain matching requirement
         domain_matching_links = [

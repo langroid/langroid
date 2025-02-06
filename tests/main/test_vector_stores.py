@@ -1,10 +1,13 @@
+import json
 from types import SimpleNamespace
 from typing import List
 
 import pytest
 from dotenv import load_dotenv
 
-from langroid.embedding_models.models import OpenAIEmbeddingsConfig
+from langroid.embedding_models.models import (
+    OpenAIEmbeddingsConfig,
+)
 from langroid.mytypes import DocMetaData, Document
 from langroid.parsing.parser import Parser, ParsingConfig, Splitter
 from langroid.utils.system import rmdir
@@ -13,6 +16,7 @@ from langroid.vector_store.lancedb import LanceDB, LanceDBConfig
 from langroid.vector_store.meilisearch import MeiliSearch, MeiliSearchConfig
 from langroid.vector_store.momento import MomentoVI, MomentoVIConfig
 from langroid.vector_store.pineconedb import PineconeDB, PineconeDBConfig
+from langroid.vector_store.postgres import PostgresDB, PostgresDBConfig
 from langroid.vector_store.qdrantdb import QdrantDB, QdrantDBConfig
 from langroid.vector_store.weaviatedb import WeaviateDB, WeaviateDBConfig
 
@@ -80,11 +84,28 @@ def vecdb(request) -> VectorStore:
         wv_cfg_cloud = WeaviateDBConfig(
             collection_name="test_" + embed_cfg.model_type,
             embedding=embed_cfg,
+            cloud=True,
         )
         weaviate_cloud = WeaviateDB(wv_cfg_cloud)
         weaviate_cloud.add_documents(stored_docs)
         yield weaviate_cloud
         weaviate_cloud.delete_collection(collection_name=wv_cfg_cloud.collection_name)
+        return
+    if request.param == "weaviate_local":
+        wv_dir = ".weaviate/" + embed_cfg.model_type
+        rmdir(wv_dir)
+
+        wv_cfg_local = WeaviateDBConfig(
+            collection_name="test_" + embed_cfg.model_type,
+            embedding=embed_cfg,
+            cloud=False,
+            storage_path=wv_dir,
+        )
+        weaviate_local = WeaviateDB(wv_cfg_local)
+        weaviate_local.add_documents(stored_docs)
+        yield weaviate_local
+        weaviate_local.delete_collection(collection_name=wv_cfg_local.collection_name)
+        rmdir(wv_dir)
         return
 
     if request.param == "qdrant_hybrid_cloud":
@@ -121,6 +142,18 @@ def vecdb(request) -> VectorStore:
         cd.add_documents(stored_docs)
         yield cd
         rmdir(cd_dir)
+        return
+
+    if request.param == "postgres":
+        pg_cfg = PostgresDBConfig(
+            collection_name="test_" + embed_cfg.model_type,
+            embedding=embed_cfg,
+            cloud=True,
+            replace_collection=True,
+        )
+        pg = PostgresDB(pg_cfg)
+        pg.add_documents(stored_docs)
+        yield pg
         return
 
     if request.param == "meilisearch":
@@ -187,12 +220,13 @@ def vecdb(request) -> VectorStore:
 @pytest.mark.parametrize(
     "vecdb",
     [
-        "qdrant_cloud",
-        "chroma",
-        pytest.param("weaviate_cloud", marks=pytest.mark.skip),
+        "postgres",
         "lancedb",
+        "chroma",
+        "qdrant_cloud",
         "qdrant_local",
         pytest.param("pinecone_serverless", marks=pytest.mark.skip),
+        "weaviate_local",
     ],
     indirect=True,
 )
@@ -243,12 +277,13 @@ def test_hybrid_vector_search(
 @pytest.mark.parametrize(
     "vecdb",
     [
+        "postgres",
         "lancedb",
         "chroma",
         "qdrant_local",
         "qdrant_cloud",
-        pytest.param("weaviate_cloud", marks=pytest.mark.skip),
         pytest.param("pinecone_serverless", marks=pytest.mark.skip),
+        "weaviate_local",
     ],
     indirect=True,
 )
@@ -307,16 +342,26 @@ def test_vector_stores_access(vecdb):
     if isinstance(vecdb, PineconeDB):
         # pinecone only allows lowercase alphanumeric with "-" characters
         coll_names = [f"test-junk-{i}" for i in range(3)]
-        test_prefix = "test-junk"
-    else:
+    elif isinstance(vecdb, WeaviateDB):
+        # Weaviate enforces capitalized collection names;
+        # verifying adherence.
+
         coll_names = [f"Test_junk_{i}" for i in range(3)]
-        test_prefix = "Test_junk"
-    for coll in coll_names:
-        vecdb.create_collection(collection_name=coll)
-    n_colls = len(
-        [c for c in vecdb.list_collections(empty=True) if c.startswith(test_prefix)]
-    )
-    n_dels = vecdb.clear_all_collections(really=True, prefix=test_prefix)
+        for coll in coll_names:
+            vecdb.create_collection(collection_name=coll)
+        n_colls = len(
+            [c for c in vecdb.list_collections(empty=True) if c.startswith("Test_junk")]
+        )
+        n_dels = vecdb.clear_all_collections(really=True, prefix="Test_junk")
+    else:
+        coll_names = [f"test_junk_{i}" for i in range(3)]
+        for coll in coll_names:
+            vecdb.create_collection(collection_name=coll)
+        n_colls = len(
+            [c for c in vecdb.list_collections(empty=True) if c.startswith("test_junk")]
+        )
+        n_dels = vecdb.clear_all_collections(really=True, prefix="test_junk")
+
     # LanceDB.create_collection() does nothing, since we can't create a table
     # without a schema or data.
     assert n_colls == n_dels == (0 if isinstance(vecdb, LanceDB) else len(coll_names))
@@ -328,12 +373,13 @@ def test_vector_stores_access(vecdb):
 @pytest.mark.parametrize(
     "vecdb",
     [
+        "postgres",
         "lancedb",
         "chroma",
         "qdrant_cloud",
         "qdrant_local",
-        pytest.param("weaviate_cloud", marks=pytest.mark.skip),
         pytest.param("pinecone_serverless", marks=pytest.mark.skip),
+        "weaviate_local",
     ],
     indirect=True,
 )
@@ -393,12 +439,13 @@ def test_vector_stores_context_window(vecdb):
 @pytest.mark.parametrize(
     "vecdb",
     [
+        "postgres",
         "chroma",
         "lancedb",
         "qdrant_cloud",
         "qdrant_local",
-        pytest.param("weaviate_cloud", marks=pytest.mark.skip),
         pytest.param("pinecone_serverless", marks=pytest.mark.skip),
+        "weaviate_local",
     ],
     indirect=True,
 )
@@ -534,3 +581,46 @@ def test_lance_metadata():
 
     all_docs = vecdb.get_all_documents()
     assert len(all_docs) == 3
+
+
+@pytest.mark.parametrize(
+    "vecdb",
+    ["postgres"],
+    indirect=True,
+)
+def test_postgres_where_clause(vecdb: PostgresDB):
+    """Test the where clause in get_all_documents,get_similar_texts in PostgresDB"""
+    vecdb.create_collection(
+        collection_name="test_get_all_documents_where", replace=True
+    )
+    docs = [
+        Document(
+            content="xyz",
+            metadata=DocMetaData(
+                id=str(i),
+                source="wiki" if i % 2 == 0 else "web",
+                category="other" if i < 3 else "news",
+            ),
+        )
+        for i in range(5)
+    ]
+    vecdb.add_documents(docs)
+
+    all_docs = vecdb.get_all_documents(where=json.dumps({"category": "other"}))
+    assert len(all_docs) == 3
+
+    all_docs = vecdb.get_all_documents(where=json.dumps({"source": "web"}))
+    assert len(all_docs) == 2
+
+    all_docs = vecdb.get_all_documents(
+        where=json.dumps({"category": "other", "source": "web"})
+    )
+    assert len(all_docs) == 1
+
+    all_docs = vecdb.get_all_documents(where=json.dumps({"category": "news"}))
+    assert len(all_docs) == 2
+
+    all_docs = vecdb.get_all_documents(where=json.dumps({"source": "wiki"}))
+    assert len(all_docs) == 3
+
+    vecdb.delete_collection("test_get_all_documents_where")
