@@ -16,6 +16,8 @@ from duckduckgo_search import DDGS
 from googleapiclient.discovery import Resource, build
 from requests.models import Response
 
+from langroid.exceptions import LangroidImportError
+
 
 class WebSearchResult:
     """
@@ -109,13 +111,7 @@ def metaphor_search(query: str, num_results: int = 5) -> List[WebSearchResult]:
     try:
         from metaphor_python import Metaphor
     except ImportError:
-        raise ImportError(
-            "You are attempting to use the `metaphor_python` library;"
-            "To use it, please install langroid with the `metaphor` extra, e.g. "
-            "`pip install langroid[metaphor]` or `poetry add langroid[metaphor]` "
-            "or `uv add langroid[metaphor]`"
-            "(it installs the `metaphor_python` package from pypi)."
-        )
+        raise LangroidImportError("metaphor-python", "metaphor")
 
     client = Metaphor(api_key=api_key)
 
@@ -156,13 +152,7 @@ def exa_search(query: str, num_results: int = 5) -> List[WebSearchResult]:
     try:
         from exa_py import Exa
     except ImportError:
-        raise ImportError(
-            "You are attempting to use the `exa_py` library;"
-            "To use it, please install langroid with the `exa-py` extra, e.g. "
-            "`pip install langroid[exa-py]` or `poetry add langroid[exa-py]` "
-            "or `uv add langroid[exa-py]`"
-            "(it installs the `exa-py` package from pypi)."
-        )
+        raise LangroidImportError("exa-py", "exa")
 
     client = Exa(api_key=api_key)
 

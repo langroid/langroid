@@ -128,7 +128,9 @@ jobs:
           --extra pdf-parsers \
           --extra docx \
           --extra sql \
+          --extra exa \
           --extra fastembed
+        
       
     
 
