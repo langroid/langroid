@@ -320,8 +320,15 @@ MODEL_INFO: Dict[str, ModelInfo] = {
 }
 
 
-def get_model_info(model: str | ModelName) -> ModelInfo:
+def get_model_info(
+    model: str | ModelName,
+    fallback_model: str | ModelName = "",
+) -> ModelInfo:
     """Get model information by name or enum value"""
+    return _get_model_info(model) or _get_model_info(fallback_model) or ModelInfo()
+
+
+def _get_model_info(model: str | ModelName) -> ModelInfo | None:
     if isinstance(model, str):
-        return MODEL_INFO.get(model) or ModelInfo()
-    return MODEL_INFO.get(model.value) or ModelInfo()
+        return MODEL_INFO.get(model)
+    return MODEL_INFO.get(model.value)

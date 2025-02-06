@@ -468,7 +468,10 @@ class OpenAIGPT(LanguageModel):
             self.supports_strict_tools = self.api_base is None
             self.supports_json_schema = (
                 self.api_base is None
-                and get_model_info(self.config.chat_model).has_structured_output
+                and get_model_info(  # look for family/provider-specific then generic
+                    self.chat_model_orig,  # e.g. "gemini/gemini-2.0-flash"
+                    self.config.chat_model,  # e.g. "gemini-2.0-flash"
+                ).has_structured_output
             )
 
         if settings.chat_model != "":
@@ -620,7 +623,10 @@ class OpenAIGPT(LanguageModel):
     def supports_functions_or_tools(self) -> bool:
         return (
             self.is_openai_chat_model()
-            and get_model_info(self.config.chat_model).has_tools
+            and get_model_info(
+                self.chat_model_orig,
+                self.config.chat_model,
+            ).has_tools
         )
 
     def is_openai_completion_model(self) -> bool:
@@ -644,7 +650,10 @@ class OpenAIGPT(LanguageModel):
         """
         List of params that are not supported by the current model
         """
-        model_info = get_model_info(self.config.chat_model)
+        model_info = get_model_info(
+            self.chat_model_orig,
+            self.config.chat_model,
+        )
         unsupported = set(model_info.unsupported_params)
         for param, model_list in OpenAI_API_ParamInfo().params.items():
             if (
@@ -659,7 +668,10 @@ class OpenAIGPT(LanguageModel):
         Map of param name -> new name for specific models.
         Currently main troublemaker is o1* series.
         """
-        return get_model_info(self.config.chat_model).rename_params
+        return get_model_info(
+            self.chat_model_orig,
+            self.config.chat_model,
+        ).rename_params
 
     def chat_context_length(self) -> int:
         """
@@ -671,7 +683,12 @@ class OpenAIGPT(LanguageModel):
             if self.config.use_completion_for_chat
             else self.config.chat_model
         )
-        return get_model_info(model).context_length
+        orig_model = (
+            self.config.completion_model
+            if self.config.use_completion_for_chat
+            else self.chat_model_orig
+        )
+        return get_model_info(orig_model, model).context_length
 
     def completion_context_length(self) -> int:
         """
@@ -683,7 +700,12 @@ class OpenAIGPT(LanguageModel):
             if self.config.use_chat_for_completion
             else self.config.completion_model
         )
-        return get_model_info(model).context_length
+        orig_model = (
+            self.chat_model_orig
+            if self.config.use_chat_for_completion
+            else self.config.completion_model
+        )
+        return get_model_info(orig_model, model).context_length
 
     def chat_cost(self) -> Tuple[float, float]:
         """
@@ -709,7 +731,10 @@ class OpenAIGPT(LanguageModel):
         return (
             self.config.stream
             and settings.stream
-            and get_model_info(self.config.chat_model).allows_streaming
+            and get_model_info(
+                self.chat_model_orig,
+                self.config.chat_model,
+            ).allows_streaming
             and not settings.quiet
         )
 
