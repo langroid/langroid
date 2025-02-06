@@ -323,7 +323,7 @@ def test_vector_stores_access(vecdb):
     docs_and_scores = vecdb.similar_texts_with_scores("cow", k=1)
     assert len(docs_and_scores) == 1
     assert docs_and_scores[0][0].content == "cow"
-    
+
     if isinstance(vecdb, WeaviateDB):
         # Weaviate enforces capitalized collection names;
         # verifying adherence.
