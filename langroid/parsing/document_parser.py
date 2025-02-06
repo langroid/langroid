@@ -56,6 +56,10 @@ class DocumentType(str, Enum):
     DOCX = "docx"
     DOC = "doc"
     TXT = "txt"
+    XLSX = "xlsx"
+    XLS = "xls"
+    PPTX = "pptx"
+    MD = "md"  # Added Markdown
 
 
 def find_last_full_char(possible_unicode: bytes) -> int:
@@ -160,6 +164,8 @@ class DocumentParser(Parser):
                 return UnstructuredPDFParser(source, config)
             elif config.pdf.library == "pdf2image":
                 return ImagePdfParser(source, config)
+            elif config.pdf.library == "markitdown":
+                return MarkItDownParser(source, config, doc_type=DocumentType.PDF)
             else:
                 raise ValueError(
                     f"Unsupported PDF library specified: {config.pdf.library}"
@@ -175,6 +181,14 @@ class DocumentParser(Parser):
                 )
         elif inferred_doc_type == DocumentType.DOC:
             return UnstructuredDocParser(source, config)
+        elif inferred_doc_type in [
+            DocumentType.PPTX,
+            DocumentType.XLS,
+            DocumentType.XLSX,
+            DocumentType.MD,
+        ]:
+            # Handle MD like other text formats
+            return MarkItDownParser(source, config, doc_type=inferred_doc_type)
         else:
             source_name = source if isinstance(source, str) else "bytes"
             raise ValueError(f"Unsupported document type: {source_name}")
@@ -223,6 +237,12 @@ class DocumentParser(Parser):
                 return DocumentType.DOCX
             elif source.lower().endswith(".doc"):
                 return DocumentType.DOC
+            elif source.lower().endswith(".xlsx"):
+                return DocumentType.XLSX
+            elif source.lower().endswith(".xls"):
+                return DocumentType.XLS
+            elif source.lower().endswith(".md"):  # Handle Markdown extension
+                return DocumentType.MD
             else:
                 raise ValueError(f"Unsupported document type: {source}")
         else:
@@ -236,13 +256,19 @@ class DocumentParser(Parser):
             elif mime_type in [
                 "application/vnd.openxmlformats-officedocument"
                 ".wordprocessingml.document",
-                "application/zip",
             ]:
-                # DOCX files are essentially ZIP files,
-                # but this might catch other ZIP-based formats too!
                 return DocumentType.DOCX
             elif mime_type == "application/msword":
                 return DocumentType.DOC
+            elif (
+                mime_type
+                == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            ):
+                return DocumentType.XLSX
+            elif mime_type == "application/vnd.ms-excel":
+                return DocumentType.XLS
+            elif mime_type == "text/markdown" or mime_type == "text/x-markdown":
+                return DocumentType.MD
             else:
                 raise ValueError("Unsupported document type from bytes")
 
@@ -281,7 +307,15 @@ class DocumentParser(Parser):
                 chunking and splitting settings in the parser config.
         """
         dtype: DocumentType = DocumentParser._document_type(source, doc_type)
-        if dtype in [DocumentType.PDF, DocumentType.DOC, DocumentType.DOCX]:
+        if dtype in [
+            DocumentType.PDF,
+            DocumentType.DOC,
+            DocumentType.DOCX,
+            DocumentType.MD,
+            DocumentType.PPTX,
+            DocumentType.XLS,
+            DocumentType.XLSX,
+        ]:
             doc_parser = DocumentParser.create(
                 source,
                 parser.config,
@@ -623,6 +657,57 @@ class PyPDFParser(DocumentParser):
         """
         return Document(
             content=self.fix_text(page.extract_text()),
+            metadata=DocMetaData(source=self.source),
+        )
+
+
+class MarkItDownParser(DocumentParser):
+    def __init__(
+        self,
+        source: str | bytes,
+        config: ParsingConfig,
+        doc_type: str | DocumentType | None = None,
+    ):
+        super().__init__(source, config)
+        self.doc_type = doc_type  # Store the document type
+
+    def iterate_pages(self) -> Generator[Tuple[int, Any], None, None]:
+        try:
+            from markitdown import MarkItDown
+        except ImportError:
+            raise LangroidImportError("markitdown ", "markitdown")
+
+        md = MarkItDown()
+
+        if self.doc_type:
+            # Ensure doc_type is always a string
+            file_extension = (
+                f".{self.doc_type.value}"
+                if isinstance(self.doc_type, DocumentType)
+                else f".{self.doc_type}"
+            )
+            result = md.convert_stream(self.doc_bytes, file_extension=file_extension)
+        else:
+            logger.warning(
+                "Markdown conversion from bytes without file extension "
+                "does not work with markitdown."
+            )
+            return
+
+        yield 1, result.text_content
+
+    def get_document_from_page(self, md_file: str) -> Document:
+        """
+        Get Document object from a given `pypdf` page.
+
+        Args:
+            page (pypdf.pdf.PageObject): The `pypdf` page object.
+
+        Returns:
+            Document: Document object, with content and possible metadata.
+        """
+        return Document(
+            content=self.fix_text(md_file),
             metadata=DocMetaData(source=self.source),
         )
 
