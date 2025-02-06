@@ -127,6 +127,7 @@ jobs:
           --extra docling \
           --extra pymupdf4llm \
           --extra weaviate \
+          --extra pinecone \
           --extra postgres\
           --extra hf-embeddings \
           --extra unstructured \

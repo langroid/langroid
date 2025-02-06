@@ -3,21 +3,49 @@ import logging
 import os
 import re
 from dataclasses import dataclass
-from typing import Any, Dict, List, Literal, Optional, Sequence, Tuple, Union
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Dict,
+    List,
+    Literal,
+    Optional,
+    Sequence,
+    Tuple,
+    Union,
+)
 
 from dotenv import load_dotenv
 
 from langroid import LangroidImportError
 from langroid.mytypes import Document
+
+# import dataclass
+from langroid.pydantic_v1 import BaseModel
 from langroid.utils.configuration import settings
 from langroid.vector_store.base import VectorStore, VectorStoreConfig
 
 logger = logging.getLogger(__name__)
 
+
+has_pinecone: bool = True
 try:
     from pinecone import Pinecone, PineconeApiException, ServerlessSpec
 except ImportError:
-    raise LangroidImportError("pinecone", "pinecone")
+
+    if not TYPE_CHECKING:
+
+        class ServerlessSpec(BaseModel):
+            """
+            Fallback Serverless specification configuration to avoid import errors.
+            """
+
+            cloud: str
+            region: str
+
+        PineconeApiException = Any  # type: ignore
+        Pinecone = Any  # type: ignore
+        has_pinecone = False
 
 
 @dataclass(frozen=True)
@@ -38,6 +66,8 @@ class PineconeDBConfig(VectorStoreConfig):
 class PineconeDB(VectorStore):
     def __init__(self, config: PineconeDBConfig = PineconeDBConfig()):
         super().__init__(config)
+        if not has_pinecone:
+            raise LangroidImportError("pinecone", "pinecone")
         self.config: PineconeDBConfig = config
         load_dotenv()
         key = os.getenv("PINECONE_API_KEY")

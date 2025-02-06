@@ -1,7 +1,7 @@
 import logging
 import os
 import re
-from typing import Any, List, Optional, Sequence, Tuple
+from typing import TYPE_CHECKING, Any, List, Optional, Sequence, Tuple
 
 from dotenv import load_dotenv
 
@@ -15,6 +15,7 @@ from langroid.utils.configuration import settings
 from langroid.vector_store.base import VectorStore, VectorStoreConfig
 
 logger = logging.getLogger(__name__)
+has_weaviate: bool = True
 try:
     import weaviate
     from weaviate.classes.config import (
@@ -25,7 +26,18 @@ try:
     from weaviate.classes.query import Filter, MetadataQuery
     from weaviate.util import generate_uuid5, get_valid_uuid
 except ImportError:
-    raise LangroidImportError("weaviate", "weaviate")
+    has_weaviate = False
+
+    if not TYPE_CHECKING:
+
+        class VectorDistances:
+            """
+            Fallback class when weaviate is not installed, to avoid import errors.
+            """
+
+            COSINE: str = "cosine"
+            DOTPRODUCT: str = "dot"
+            L2: str = "l2"
 
 
 class WeaviateDBConfig(VectorStoreConfig):
@@ -39,6 +51,8 @@ class WeaviateDBConfig(VectorStoreConfig):
 class WeaviateDB(VectorStore):
     def __init__(self, config: WeaviateDBConfig = WeaviateDBConfig()):
         super().__init__(config)
+        if not has_weaviate:
+            raise LangroidImportError("weaviate", "weaviate")
         self.config: WeaviateDBConfig = config
         load_dotenv()
         if not self.config.cloud:
