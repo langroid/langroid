@@ -59,7 +59,6 @@ class DocumentType(str, Enum):
     XLSX = "xlsx"
     XLS = "xls"
     PPTX = "pptx"
-    MD = "md"  # Added Markdown
 
 
 def find_last_full_char(possible_unicode: bytes) -> int:
@@ -185,7 +184,6 @@ class DocumentParser(Parser):
             DocumentType.PPTX,
             DocumentType.XLS,
             DocumentType.XLSX,
-            DocumentType.MD,
         ]:
             # Handle MD like other text formats
             return MarkItDownParser(source, config, doc_type=inferred_doc_type)
@@ -241,8 +239,6 @@ class DocumentParser(Parser):
                 return DocumentType.XLSX
             elif source.lower().endswith(".xls"):
                 return DocumentType.XLS
-            elif source.lower().endswith(".md"):  # Handle Markdown extension
-                return DocumentType.MD
             else:
                 raise ValueError(f"Unsupported document type: {source}")
         else:
@@ -267,8 +263,6 @@ class DocumentParser(Parser):
                 return DocumentType.XLSX
             elif mime_type == "application/vnd.ms-excel":
                 return DocumentType.XLS
-            elif mime_type == "text/markdown" or mime_type == "text/x-markdown":
-                return DocumentType.MD
             else:
                 raise ValueError("Unsupported document type from bytes")
 
@@ -311,7 +305,6 @@ class DocumentParser(Parser):
             DocumentType.PDF,
             DocumentType.DOC,
             DocumentType.DOCX,
-            DocumentType.MD,
             DocumentType.PPTX,
             DocumentType.XLS,
             DocumentType.XLSX,

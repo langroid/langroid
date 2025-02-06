@@ -3,11 +3,10 @@ import os
 from langroid.parsing.document_parser import DocumentParser
 from langroid.parsing.parser import MarkitDownParsingConfig, ParsingConfig
 
-url1 = "tests/main/dummy.pdf"
-url2 = "tests/main/iris.xls"
-url3 = "tests/main/doc-test-file.doc"
-url4 = "docs/notes/weaviate.md"
-url5 = "tests/main/sample.pptx"
+url1 = "tests/main/data/dummy.pdf"
+url2 = "tests/main/data/iris.xls"
+url3 = "tests/main/data/doc-test-file.doc"
+url4 = "tests/main/data/sample.pptx"
 
 
 def test_markitdown():
@@ -38,7 +37,7 @@ def test_markitdown():
     print(doc)
     print("_" * 40)
 
-    for url in [url3, url4, url5]:
+    for url in [url3, url4 ]:
         ext = os.path.splitext(url)[1].lower()[1:]
         parser = DocumentParser.create(
             url,
