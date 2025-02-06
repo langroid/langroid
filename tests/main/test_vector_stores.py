@@ -154,6 +154,7 @@ def vecdb(request) -> VectorStore:
         pg = PostgresDB(pg_cfg)
         pg.add_documents(stored_docs)
         yield pg
+        pg.delete_collection(collection_name=pg_cfg.collection_name)
         return
 
     if request.param == "meilisearch":
@@ -408,7 +409,7 @@ def test_vector_stores_context_window(vecdb):
     parser = Parser(cfg)
     splits = parser.split([doc])
 
-    vecdb.create_collection(collection_name="test-context-window", replace=True)
+    vecdb.create_collection(collection_name="testcw", replace=True)
     vecdb.add_documents(splits)
 
     # Test context window retrieval
@@ -486,7 +487,7 @@ def test_vector_stores_overlapping_matches(vecdb):
     parser = Parser(cfg)
     splits = parser.split([doc])
 
-    vecdb.create_collection(collection_name="test-context-window", replace=True)
+    vecdb.create_collection(collection_name="testcw", replace=True)
     vecdb.add_documents(splits)
 
     # Test context window retrieval
