@@ -97,7 +97,7 @@ class Document(BaseModel):
 
 class NonToolAction(str, Enum):
     """
-    Possible Routing options. Mainly used to handle non-tool msgs from LLM.
+    Possible options to handle non-tool msgs from LLM.
     """
 
     FORWARD_USER = "user"  # forward msg to user

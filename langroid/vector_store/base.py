@@ -59,6 +59,8 @@ class VectorStore(ABC):
         from langroid.vector_store.lancedb import LanceDB, LanceDBConfig
         from langroid.vector_store.meilisearch import MeiliSearch, MeiliSearchConfig
         from langroid.vector_store.momento import MomentoVI, MomentoVIConfig
+        from langroid.vector_store.pineconedb import PineconeDB, PineconeDBConfig
+        from langroid.vector_store.postgres import PostgresDB, PostgresDBConfig
         from langroid.vector_store.qdrantdb import QdrantDB, QdrantDBConfig
         from langroid.vector_store.weaviatedb import WeaviateDB, WeaviateDBConfig
 
@@ -72,8 +74,12 @@ class VectorStore(ABC):
             return LanceDB(config)
         elif isinstance(config, MeiliSearchConfig):
             return MeiliSearch(config)
+        elif isinstance(config, PostgresDBConfig):
+            return PostgresDB(config)
         elif isinstance(config, WeaviateDBConfig):
             return WeaviateDB(config)
+        elif isinstance(config, PineconeDBConfig):
+            return PineconeDB(config)
 
         else:
             logger.warning(

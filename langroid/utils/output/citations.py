@@ -1,4 +1,9 @@
-def extract_markdown_references(md_string: str) -> list[int]:
+from typing import List
+
+from langroid.mytypes import Document
+
+
+def extract_markdown_references(md_string: str) -> List[int]:
     """
     Extracts markdown references (e.g., [^1], [^2]) from a string and returns
     them as a sorted list of integers.
@@ -59,3 +64,28 @@ def format_footnote_text(content: str, width: int = 0) -> str:
 
     # Join them with newline so we preserve the paragraph/blank line structure
     return "\n".join(output_lines)
+
+
+def format_cited_references(citations: List[int], passages: list[Document]) -> str:
+    """
+    Given a list of (integer) citations, and a list of passages, return a string
+    that can be added as a footer to the main text, to show sources cited.
+
+    Args:
+        citations (list[int]): list of citations, presumably from main text
+        passages (list[Document]): list of passages (Document objects)
+
+    Returns:
+        str: formatted string of citations for footnote in markdown
+    """
+    citations_str = ""
+    if len(citations) > 0:
+        # append [i] source, content for each citation
+        citations_str = "\n".join(
+            [
+                f"[^{c}] {passages[c-1].metadata.source}"
+                f"\n{format_footnote_text(passages[c-1].content)}"
+                for c in citations
+            ]
+        )
+    return citations_str
