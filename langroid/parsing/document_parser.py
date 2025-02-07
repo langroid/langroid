@@ -903,10 +903,10 @@ class MarkitdownXLSXParser(DocumentParser):
 
     def get_document_from_page(self, md_file: str) -> Document:
         """
-        Get Document object from a given `pypdf` page.
+        Get Document object from a given 1-page markdown file,
 
         Args:
-            page (pypdf.pdf.PageObject): The `pypdf` page object.
+            md_file (str): The markdown file path for the page.
 
         Returns:
             Document: Document object, with content and possible metadata.
@@ -947,10 +947,10 @@ class MarkitdownPPTXParser(DocumentParser):
 
     def get_document_from_page(self, md_file: str) -> Document:
         """
-        Get Document object from a given `pypdf` page.
+        Get Document object from a given 1-page markdown file,
 
         Args:
-            page (pypdf.pdf.PageObject): The `pypdf` page object.
+            md_file (str): The markdown file path for the page.
 
         Returns:
             Document: Document object, with content and possible metadata.
