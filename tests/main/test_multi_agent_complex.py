@@ -102,10 +102,10 @@ def test_agents_with_recipient(
                 From "Master", you will receive an exponential to compute, 
                 but you do not know how to multiply. You have a helper called 
                 "Multiplier" who can compute multiplications. So to calculate the
-                exponential you receive from "Master", you have to ask a sequence of
+                exponential you receive from "Master", you have to ask a SEQUENCE of
                 multiplication questions to "Multiplier", to figure out the 
                 exponential, remember to use the the TOOL/Function `recipient_message` 
-                to ADDRESS the Multipler.
+                to ADDRESS the Multiplier.
                 
                 When you have your final answer, report your answer
                 back to "Master", ADDRESSING them using the TOOL/Function 

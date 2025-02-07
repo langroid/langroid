@@ -1,6 +1,6 @@
 [project]
 name = "langroid"
-version = "0.39.5"
+version = "0.41.1"
 authors = [
     {name = "Prasad Chalasani", email = "pchalasani@gmail.com"},
 ]
@@ -18,6 +18,7 @@ dependencies = [
     "docling<3.0.0,>=2.16.0",
     "docstring-parser<1.0,>=0.16",
     "duckduckgo-search<7.0.0,>=6.0.0",
+    "exa-py>=1.8.7",
     "faker<19.0.0,>=18.9.0",
     "fakeredis<3.0.0,>=2.12.1",
     "fire<1.0.0,>=0.5.0",
@@ -51,6 +52,7 @@ dependencies = [
     "requests<3.0.0,>=2.31.0",
     "requests-oauthlib<2.0.0,>=1.3.1",
     "rich<14.0.0,>=13.3.4",
+    "tavily-python>=0.5.0",
     "thefuzz<1.0.0,>=0.20.0",
     "tiktoken<1.0.0,>=0.7.0",
     "trafilatura<2.0.0,>=1.5.0",
@@ -83,6 +85,7 @@ vecdbs = [
     "pyarrow<16.0.0,>=15.0.0",
     "chromadb<=0.4.23,>=0.4.21",
     "weaviate-client>=4.9.6",
+    "pinecone-client>=5.0.1",
 ]
 
 db = [
@@ -117,6 +120,8 @@ all = [
     "chainlit<3.0.0,>=2.0.1",
     "python-socketio<6.0.0,>=5.11.0",
     "fastembed<0.4.0,>=0.3.1",
+    "pgvector>=0.3.6",
+    "psycopg2-binary>=2.9.10",
 ]
 
 # More granular groupings
@@ -168,7 +173,10 @@ unstructured = [
 ]
 
 postgres = [
+    "pgvector>=0.3.6",
     "psycopg2<3.0.0,>=2.9.7",
+    "psycopg2-binary>=2.9.10",
+    "sqlalchemy<3.0.0,>=2.0.19",
 ]
 
 mysql = [
@@ -196,6 +204,14 @@ arango = [
 
 metaphor = [
     "metaphor-python<0.2.0,>=0.1.23",
+]
+
+exa = [
+    "exa-py>=1.8.7",
+]
+
+tavily = [
+    "tavily-python>=0.5.0",
 ]
 
 chainlit = [
@@ -232,10 +248,14 @@ doc-parsers = [
     "xlrd>=2.0.1",
 ]
 
+pinecone = [
+    "pinecone-client>=5.0.1"
+]
+
 
 [dependency-groups]
 dev = [
-    "black[jupyter]<25.0.0,>=24.3.0",
+    "black[jupyter]>=24.3.0,<25.0.0",
     "flake8<7.0.0,>=6.0.0",
     "mypy<2.0.0,>=1.11.2",
     "ruff<1.0.0,>=0.8.4",
