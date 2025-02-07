@@ -1,55 +1,42 @@
 import os
 
 from langroid.parsing.document_parser import DocumentParser
-from langroid.parsing.parser import MarkitDownParsingConfig, ParsingConfig
+from langroid.parsing.parser import (
+    MarkitdownPPTXParsingConfig,
+    MarkitdownXLSParsingConfig,
+    ParsingConfig,
+)
 
-url1 = "tests/main/data/dummy.pdf"
-url2 = "tests/main/data/iris.xls"
-url3 = "tests/main/data/doc-test-file.doc"
-url4 = "tests/main/data/sample.pptx"
+current_dir = os.path.dirname(os.path.abspath(__file__))
+tests_root = os.path.abspath(os.path.join(current_dir, ".."))
+path1 = os.path.join(tests_root, "main", "data", "iris.xls")
+path2 = os.path.join(tests_root, "main", "data", "sample.pptx")
 
 
 def test_markitdown():
-    pdf_parser = DocumentParser.create(
-        url1,
+    xls_parser = DocumentParser.create(
+        path1,
         ParsingConfig(
             n_neighbor_ids=2,
-            pdf=MarkitDownParsingConfig(),
+            xls=MarkitdownXLSParsingConfig(),
         ),
-        doc_type="pdf",
-    )
-    doc = pdf_parser.get_doc()
-    print(doc)
-    print("_" * 40)
-    # little hack to set doc_type of xls to xlsx as markitdown has problems with xls
-    # since markitdown processes many types we have to set the doc_type so that
-    # it processes the stream reliably
-    xlsx_parser = DocumentParser.create(
-        url2,
-        ParsingConfig(
-            n_neighbor_ids=2,
-            markitdown=MarkitDownParsingConfig(),
-        ),
-        doc_type="xlsx",
     )
 
-    doc = xlsx_parser.get_doc()
+    doc = xls_parser.get_doc()
     print(doc)
     print("_" * 40)
 
-    for url in [url3, url4 ]:
-        ext = os.path.splitext(url)[1].lower()[1:]
-        parser = DocumentParser.create(
-            url,
-            ParsingConfig(
-                n_neighbor_ids=2,
-                markitdown=MarkitDownParsingConfig(),
-            ),
-            doc_type=ext,
-        )
-        doc = parser.get_doc()
-        print(doc)
-        print("_" * 40)
+    pptx_parser = DocumentParser.create(
+        path2,
+        ParsingConfig(
+            n_neighbor_ids=2,
+            pptx=MarkitdownPPTXParsingConfig(),
+        ),
+    )
+
+    doc = pptx_parser.get_doc()
+    print(doc)
+    print("_" * 40)
 
 
 test_markitdown()

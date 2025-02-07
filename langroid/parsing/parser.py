@@ -40,7 +40,15 @@ class DocParsingConfig(BaseSettings):
     library: Literal["unstructured"] = "unstructured"
 
 
-class MarkitDownParsingConfig(BaseSettings):
+class MarkitdownPPTXParsingConfig(BaseSettings):
+    library: Literal["markitdown"] = "markitdown"
+
+
+class MarkitdownXLSXParsingConfig(BaseSettings):
+    library: Literal["markitdown"] = "markitdown"
+
+
+class MarkitdownXLSParsingConfig(BaseSettings):
     library: Literal["markitdown"] = "markitdown"
 
 
@@ -60,7 +68,9 @@ class ParsingConfig(BaseSettings):
     pdf: PdfParsingConfig = PdfParsingConfig()
     docx: DocxParsingConfig = DocxParsingConfig()
     doc: DocParsingConfig = DocParsingConfig()
-    markitdown: MarkitDownParsingConfig = MarkitDownParsingConfig()
+    pptx: MarkitdownPPTXParsingConfig = MarkitdownPPTXParsingConfig()
+    xls: MarkitdownXLSParsingConfig = MarkitdownXLSParsingConfig()
+    xlsx: MarkitdownXLSXParsingConfig = MarkitdownXLSXParsingConfig()
 
 
 class Parser:

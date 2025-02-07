@@ -163,8 +163,6 @@ class DocumentParser(Parser):
                 return UnstructuredPDFParser(source, config)
             elif config.pdf.library == "pdf2image":
                 return ImagePdfParser(source, config)
-            elif config.pdf.library == "markitdown":
-                return MarkItDownParser(source, config, doc_type=DocumentType.PDF)
             else:
                 raise ValueError(
                     f"Unsupported PDF library specified: {config.pdf.library}"
@@ -180,13 +178,12 @@ class DocumentParser(Parser):
                 )
         elif inferred_doc_type == DocumentType.DOC:
             return UnstructuredDocParser(source, config)
-        elif inferred_doc_type in [
-            DocumentType.PPTX,
-            DocumentType.XLS,
-            DocumentType.XLSX,
-        ]:
-            # Handle MD like other text formats
-            return MarkItDownParser(source, config, doc_type=inferred_doc_type)
+        elif inferred_doc_type == DocumentType.XLS:
+            return MarkitdownXLSXParser(source, config)
+        elif inferred_doc_type == DocumentType.XLSX:
+            return MarkitdownXLSXParser(source, config)
+        elif inferred_doc_type == DocumentType.PPTX:
+            return MarkitdownPPTXParser(source, config)
         else:
             source_name = source if isinstance(source, str) else "bytes"
             raise ValueError(f"Unsupported document type: {source_name}")
@@ -239,6 +236,8 @@ class DocumentParser(Parser):
                 return DocumentType.XLSX
             elif source.lower().endswith(".xls"):
                 return DocumentType.XLS
+            elif source.lower().endswith(".pptx"):
+                return DocumentType.PPTX
             else:
                 raise ValueError(f"Unsupported document type: {source}")
         else:
@@ -654,57 +653,6 @@ class PyPDFParser(DocumentParser):
         )
 
 
-class MarkItDownParser(DocumentParser):
-    def __init__(
-        self,
-        source: str | bytes,
-        config: ParsingConfig,
-        doc_type: str | DocumentType | None = None,
-    ):
-        super().__init__(source, config)
-        self.doc_type = doc_type  # Store the document type
-
-    def iterate_pages(self) -> Generator[Tuple[int, Any], None, None]:
-        try:
-            from markitdown import MarkItDown
-        except ImportError:
-            raise LangroidImportError("markitdown ", "markitdown")
-
-        md = MarkItDown()
-
-        if self.doc_type:
-            # Ensure doc_type is always a string
-            file_extension = (
-                f".{self.doc_type.value}"
-                if isinstance(self.doc_type, DocumentType)
-                else f".{self.doc_type}"
-            )
-            result = md.convert_stream(self.doc_bytes, file_extension=file_extension)
-        else:
-            logger.warning(
-                "Markdown conversion from bytes without file extension "
-                "does not work with markitdown."
-            )
-            return
-
-        yield 1, result.text_content
-
-    def get_document_from_page(self, md_file: str) -> Document:
-        """
-        Get Document object from a given `pypdf` page.
-
-        Args:
-            page (pypdf.pdf.PageObject): The `pypdf` page object.
-
-        Returns:
-            Document: Document object, with content and possible metadata.
-        """
-        return Document(
-            content=self.fix_text(md_file),
-            metadata=DocMetaData(source=self.source),
-        )
-
-
 class ImagePdfParser(DocumentParser):
     """
     Parser for processing PDFs that are images, i.e. not "true" PDFs.
@@ -933,5 +881,81 @@ class PythonDocxParser(DocumentParser):
         paragraph = page[0]
         return Document(
             content=self.fix_text(paragraph.text),
+            metadata=DocMetaData(source=self.source),
+        )
+
+
+class MarkitdownXLSXParser(DocumentParser):
+    def iterate_pages(self) -> Generator[Tuple[int, Any], None, None]:
+        try:
+            import pandas as pd
+            from markitdown import MarkItDown
+        except ImportError:
+            LangroidImportError("doc-parsers", "doc-parsers")
+        sheets = pd.read_excel(self.doc_bytes, sheet_name=None)
+        md = MarkItDown()
+        for i, (sheet_name, df) in enumerate(sheets.items(), start=1):
+            with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=True) as temp_file:
+                df.to_excel(temp_file.name, index=False, engine="openpyxl")
+                result = md.convert(temp_file.name)
+            page = result.text_content.replace("## Sheet1", f"\n## Sheet {i}")
+            yield i, page
+
+    def get_document_from_page(self, md_file: str) -> Document:
+        """
+        Get Document object from a given `pypdf` page.
+
+        Args:
+            page (pypdf.pdf.PageObject): The `pypdf` page object.
+
+        Returns:
+            Document: Document object, with content and possible metadata.
+        """
+        return Document(
+            content=self.fix_text(md_file),
+            metadata=DocMetaData(source=self.source),
+        )
+
+
+class MarkitdownPPTXParser(DocumentParser):
+    def iterate_pages(self) -> Generator[Tuple[int, Any], None, None]:
+        try:
+            from markitdown import MarkItDown
+            from pptx import Presentation
+        except ImportError:
+            LangroidImportError("doc-parsers", "doc-parsers")
+
+        prs = Presentation(self.doc_bytes)
+        md = MarkItDown()
+
+        for i, slide in enumerate(prs.slides, start=1):
+            new_prs = Presentation()
+            new_slide_layout = new_prs.slide_layouts[5]
+            new_slide = new_prs.slides.add_slide(new_slide_layout)
+
+            for shape in slide.shapes:
+                el = shape._element
+                new_slide.shapes._spTree.insert_element_before(el, "p:extLst")
+
+            with tempfile.NamedTemporaryFile(suffix=".pptx", delete=True) as temp_file:
+                new_prs.save(temp_file.name)
+                result = md.convert(temp_file.name)
+            page = result.text_content.replace(
+                "<!-- Slide number: 1 -->", f"\n<!-- Slide number: {i} -->"
+            )
+            yield i, page
+
+    def get_document_from_page(self, md_file: str) -> Document:
+        """
+        Get Document object from a given `pypdf` page.
+
+        Args:
+            page (pypdf.pdf.PageObject): The `pypdf` page object.
+
+        Returns:
+            Document: Document object, with content and possible metadata.
+        """
+        return Document(
+            content=self.fix_text(md_file),
             metadata=DocMetaData(source=self.source),
         )
