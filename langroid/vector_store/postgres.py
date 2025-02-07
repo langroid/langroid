@@ -5,21 +5,6 @@ import os
 import uuid
 from typing import Any, Dict, List, Optional, Sequence, Tuple
 
-from sqlalchemy import (
-    Column,
-    MetaData,
-    String,
-    Table,
-    case,
-    create_engine,
-    inspect,
-    text,
-)
-from sqlalchemy.dialects.postgresql import JSONB
-from sqlalchemy.engine import Connection, Engine
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.sql.expression import insert
-
 from langroid.embedding_models.base import (
     EmbeddingModelsConfig,
 )
@@ -27,6 +12,27 @@ from langroid.embedding_models.models import OpenAIEmbeddingsConfig
 from langroid.exceptions import LangroidImportError
 from langroid.mytypes import DocMetaData, Document
 from langroid.vector_store.base import VectorStore, VectorStoreConfig
+
+has_postgres: bool = True
+try:
+    from sqlalchemy import (
+        Column,
+        MetaData,
+        String,
+        Table,
+        case,
+        create_engine,
+        inspect,
+        text,
+    )
+    from sqlalchemy.dialects.postgresql import JSONB
+    from sqlalchemy.engine import Connection, Engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.sql.expression import insert
+except ImportError:
+    Engine = Any  # type: ignore
+    Connection = Any  # type: ignore
+    has_postgres = False
 
 logger = logging.getLogger(__name__)
 
@@ -48,6 +54,8 @@ class PostgresDBConfig(VectorStoreConfig):
 class PostgresDB(VectorStore):
     def __init__(self, config: PostgresDBConfig = PostgresDBConfig()):
         super().__init__(config)
+        if not has_postgres:
+            raise LangroidImportError("pgvector", "postgres")
         self.config: PostgresDBConfig = config
         self.engine = self._create_engine()
         PostgresDB._create_vector_extension(self.engine)

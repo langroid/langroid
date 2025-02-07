@@ -15,6 +15,7 @@ from langroid.vector_store.base import VectorStore
 from langroid.vector_store.lancedb import LanceDB, LanceDBConfig
 from langroid.vector_store.meilisearch import MeiliSearch, MeiliSearchConfig
 from langroid.vector_store.momento import MomentoVI, MomentoVIConfig
+from langroid.vector_store.pineconedb import PineconeDB, PineconeDBConfig
 from langroid.vector_store.postgres import PostgresDB, PostgresDBConfig
 from langroid.vector_store.qdrantdb import QdrantDB, QdrantDBConfig
 from langroid.vector_store.weaviatedb import WeaviateDB, WeaviateDBConfig
@@ -153,6 +154,7 @@ def vecdb(request) -> VectorStore:
         pg = PostgresDB(pg_cfg)
         pg.add_documents(stored_docs)
         yield pg
+        pg.delete_collection(collection_name=pg_cfg.collection_name)
         return
 
     if request.param == "meilisearch":
@@ -190,6 +192,17 @@ def vecdb(request) -> VectorStore:
         rmdir(ldb_dir)
         return
 
+    if request.param == "pinecone_serverless":
+        cfg = PineconeDBConfig(
+            collection_name="pinecone-serverless-test",
+            embedding=embed_cfg,
+        )
+        pinecone_serverless = PineconeDB(config=cfg)
+        pinecone_serverless.add_documents(stored_docs)
+        yield pinecone_serverless
+        pinecone_serverless.delete_collection(collection_name=cfg.collection_name)
+        return
+
 
 @pytest.mark.parametrize(
     "query,results,exceptions",
@@ -213,6 +226,7 @@ def vecdb(request) -> VectorStore:
         "chroma",
         "qdrant_cloud",
         "qdrant_local",
+        pytest.param("pinecone_serverless", marks=pytest.mark.skip),
         "weaviate_local",
     ],
     indirect=True,
@@ -269,6 +283,7 @@ def test_hybrid_vector_search(
         "chroma",
         "qdrant_local",
         "qdrant_cloud",
+        pytest.param("pinecone_serverless", marks=pytest.mark.skip),
         "weaviate_local",
     ],
     indirect=True,
@@ -324,7 +339,11 @@ def test_vector_stores_access(vecdb):
     assert len(docs_and_scores) == 1
     assert docs_and_scores[0][0].content == "cow"
 
-    if isinstance(vecdb, WeaviateDB):
+    # test collections: create, list, clear
+    if isinstance(vecdb, PineconeDB):
+        # pinecone only allows lowercase alphanumeric with "-" characters
+        coll_names = [f"test-junk-{i}" for i in range(3)]
+    elif isinstance(vecdb, WeaviateDB):
         # Weaviate enforces capitalized collection names;
         # verifying adherence.
 
@@ -360,6 +379,7 @@ def test_vector_stores_access(vecdb):
         "chroma",
         "qdrant_cloud",
         "qdrant_local",
+        pytest.param("pinecone_serverless", marks=pytest.mark.skip),
         "weaviate_local",
     ],
     indirect=True,
@@ -389,13 +409,11 @@ def test_vector_stores_context_window(vecdb):
     parser = Parser(cfg)
     splits = parser.split([doc])
 
-    vecdb.create_collection(collection_name="test_context_window", replace=True)
+    vecdb.create_collection(collection_name="testcw", replace=True)
     vecdb.add_documents(splits)
 
     # Test context window retrieval
-
     docs_scores = vecdb.similar_texts_with_scores("What are Giraffes like?", k=1)
-
     docs_scores = vecdb.add_context_window(docs_scores, neighbors=2)
 
     assert len(docs_scores) == 1
@@ -427,6 +445,7 @@ def test_vector_stores_context_window(vecdb):
         "lancedb",
         "qdrant_cloud",
         "qdrant_local",
+        pytest.param("pinecone_serverless", marks=pytest.mark.skip),
         "weaviate_local",
     ],
     indirect=True,
@@ -468,7 +487,7 @@ def test_vector_stores_overlapping_matches(vecdb):
     parser = Parser(cfg)
     splits = parser.split([doc])
 
-    vecdb.create_collection(collection_name="test_context_window", replace=True)
+    vecdb.create_collection(collection_name="testcw", replace=True)
     vecdb.add_documents(splits)
 
     # Test context window retrieval
