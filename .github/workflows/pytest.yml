@@ -9,8 +9,11 @@ on:
     branches:
       - main
   pull_request:
-      branches:
-        - main
+
+    types:
+      - ready_for_review
+    branches:
+      - main
 
 
 jobs:
@@ -64,6 +67,9 @@ jobs:
       GOOGLE_CSE_ID: ${{ secrets.GOOGLE_CSE_ID }}
       WEAVIATE_API_KEY: ${{ secrets.WEAVIATE_API_KEY }}
       WEAVIATE_API_URL: ${{ secrets.WEAVIATE_API_URL }}
+      EXA_API_KEY: ${{ secrets.EXA_API_KEY }}
+      TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
+      POSTGRES_CONNECTION_STRING: ${{ secrets.POSTGRES_CONNECTION_STRING }}
 
       # Azure OpenAI env vars
       AZURE_OPENAI_API_KEY: ${{ secrets.AZURE_OPENAI_API_KEY }}
@@ -123,12 +129,15 @@ jobs:
           --extra docling \
           --extra pymupdf4llm \
           --extra weaviate \
+          --extra pinecone \
+          --extra postgres\
           --extra hf-embeddings \
           --extra unstructured \
           --extra pdf-parsers \
           --extra docx \
           --extra sql \
           --extra exa \
+          --extra tavily \
           --extra fastembed
         
       
