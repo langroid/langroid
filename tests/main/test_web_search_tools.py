@@ -33,14 +33,10 @@ cfg = ChatAgentConfig(
 )
 agent = ChatAgent(cfg)
 
+
 @pytest.mark.parametrize(
     "search_tool_cls",
-    [
-        ExaSearchTool,
-        TavilySearchTool,
-        GoogleSearchTool,
-        DuckduckgoSearchTool
-    ]
+    [ExaSearchTool, TavilySearchTool, GoogleSearchTool, DuckduckgoSearchTool],
 )
 @pytest.mark.parametrize("use_functions_api", [True, False])
 @pytest.mark.parametrize("use_tools_api", [True, False])
