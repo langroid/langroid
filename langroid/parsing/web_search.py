@@ -111,13 +111,7 @@ def metaphor_search(query: str, num_results: int = 5) -> List[WebSearchResult]:
     try:
         from metaphor_python import Metaphor
     except ImportError:
-        raise ImportError(
-            "You are attempting to use the `metaphor_python` library;"
-            "To use it, please install langroid with the `metaphor` extra, e.g. "
-            "`pip install langroid[metaphor]` or `poetry add langroid[metaphor]` "
-            "or `uv add langroid[metaphor]`"
-            "(it installs the `metaphor_python` package from pypi)."
-        )
+        raise LangroidImportError("metaphor-python", "metaphor")
 
     client = Metaphor(api_key=api_key)
 
@@ -129,6 +123,53 @@ def metaphor_search(query: str, num_results: int = 5) -> List[WebSearchResult]:
 
     return [
         WebSearchResult(result.title, result.url, 3500, 300) for result in raw_results
+    ]
+
+
+def exa_search(query: str, num_results: int = 5) -> List[WebSearchResult]:
+    """
+    Method that makes an API call by Exa client that queries
+    the top num_results links that matches the query. Returns a list
+    of WebSearchResult objects.
+
+    Args:
+        query (str): The query body that users wants to make.
+        num_results (int): Number of top matching results that we want
+            to grab
+    """
+
+    load_dotenv()
+
+    api_key = os.getenv("EXA_API_KEY")
+    if not api_key:
+        raise ValueError(
+            """
+            EXA_API_KEY environment variables are not set. 
+            Please set one of them to your API key, and try again.
+            """
+        )
+
+    try:
+        from exa_py import Exa
+    except ImportError:
+        raise LangroidImportError("exa-py", "exa")
+
+    client = Exa(api_key=api_key)
+
+    response = client.search(
+        query=query,
+        num_results=num_results,
+    )
+    raw_results = response.results
+
+    return [
+        WebSearchResult(
+            title=result.title or "",
+            link=result.url,
+            max_content_length=3500,
+            max_summary_length=300,
+        )
+        for result in raw_results
     ]
 
 

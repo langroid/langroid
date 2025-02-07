@@ -10,6 +10,7 @@ import pytest
 import langroid as lr
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.tools.duckduckgo_search_tool import DuckduckgoSearchTool
+from langroid.agent.tools.exa_search_tool import ExaSearchTool
 from langroid.agent.tools.google_search_tool import GoogleSearchTool
 from langroid.agent.tools.tavily_search_tool import TavilySearchTool
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
@@ -32,11 +33,11 @@ cfg = ChatAgentConfig(
 )
 agent = ChatAgent(cfg)
 
-# Define the range of values each variable can have
-search_tools = [GoogleSearchTool, DuckduckgoSearchTool, TavilySearchTool]
 
-
-@pytest.mark.parametrize("search_tool_cls", search_tools)
+@pytest.mark.parametrize(
+    "search_tool_cls",
+    [ExaSearchTool, TavilySearchTool, GoogleSearchTool, DuckduckgoSearchTool],
+)
 @pytest.mark.parametrize("use_functions_api", [True, False])
 @pytest.mark.parametrize("use_tools_api", [True, False])
 def test_agent_web_search_tool(
