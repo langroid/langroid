@@ -446,7 +446,7 @@ For many practical scenarios, you may need additional optional dependencies:
 - For "chat with databases", use the `db` extra:
     ```bash
     pip install "langroid[db]"
-    ``
+    ```
 - You can specify multiple extras by separating them with commas, e.g.:
     ```bash
     pip install "langroid[doc-chat,db]"
