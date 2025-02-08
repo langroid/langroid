@@ -336,15 +336,14 @@ wheels = [
 
 [[package]]
 name = "beautifulsoup4"
-version = "4.13.3"
+version = "4.12.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "soupsieve" },
-    { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/f0/3c/adaf39ce1fb4afdd21b611e3d530b183bb7759c9b673d60db0e347fd4439/beautifulsoup4-4.13.3.tar.gz", hash = "sha256:1bd32405dacc920b42b83ba01644747ed77456a65760e285fbc47633ceddaf8b", size = 619516 }
+sdist = { url = "https://files.pythonhosted.org/packages/b3/ca/824b1195773ce6166d388573fc106ce56d4a805bd7427b624e063596ec58/beautifulsoup4-4.12.3.tar.gz", hash = "sha256:74e3d1928edc070d21748185c46e3fb33490f22f52a3addee9aee0f4f7781051", size = 581181 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/f9/49/6abb616eb3cbab6a7cca303dc02fdf3836de2e0b834bf966a7f5271a34d8/beautifulsoup4-4.13.3-py3-none-any.whl", hash = "sha256:99045d7d3f08f91f0d656bc9b7efbae189426cd913d830294a15eefa0ea4df16", size = 186015 },
+    { url = "https://files.pythonhosted.org/packages/b1/fe/e8c672695b37eecc5cbf43e1d0638d88d66ba3a44c4d321c796f4e59167f/beautifulsoup4-4.12.3-py3-none-any.whl", hash = "sha256:b80878c9f40111313e55da8ba20bdba06d8fa3969fc68304167741bbf9e082ed", size = 147925 },
 ]
 
 [[package]]
@@ -1149,7 +1148,7 @@ wheels = [
 
 [[package]]
 name = "docling"
-version = "2.18.0"
+version = "2.20.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "beautifulsoup4" },
@@ -1174,11 +1173,12 @@ dependencies = [
     { name = "requests" },
     { name = "rtree" },
     { name = "scipy" },
+    { name = "tqdm" },
     { name = "typer" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/6b/ee/0529abed684acb91efc1a92477cbd53ead059248ea28e24a598ee1e711b9/docling-2.18.0.tar.gz", hash = "sha256:1b652f43d652db01dd49432dd142cec8358d2e2a43746cac902a5dbaa7a8840d", size = 95752 }
+sdist = { url = "https://files.pythonhosted.org/packages/c4/47/5b592b52b13ea797ecb4b829354ee049d67ea96075bb5614712d8bc82fb1/docling-2.20.0.tar.gz", hash = "sha256:aeec56cf9af4eeed3f0f2fd63f2f6ade66e9d84ba595a6a71237b9b430f0452e", size = 102141 }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/41/64/319163f92c12d2705d29d2c26131a8033628ba603a95ceed5874fecc2248/docling-2.18.0-py3-none-any.whl", hash = "sha256:ae5221f5a799b6d3bc00ca97c74da14cf3e5d4ccc05c9551926394f5116ac04d", size = 123202 },
+    { url = "https://files.pythonhosted.org/packages/f5/0b/d3f2b939853e66d76c10709f8fe9e891e759615bf7d70ba21b80393935bc/docling-2.20.0-py3-none-any.whl", hash = "sha256:6d43a0745a79e64b3fc15a3ad6037c9962c01e4e8aa707ea62312af792d98ef3", size = 132307 },
 ]
 
 [[package]]
@@ -2610,7 +2610,7 @@ sdist = { url = "https://files.pythonhosted.org/packages/0e/72/a3add0e4eec4eb9e2
 
 [[package]]
 name = "langroid"
-version = "0.40.0"
+version = "0.41.1"
 source = { editable = "." }
 dependencies = [
     { name = "adb-cloud-connector" },
@@ -2871,9 +2871,9 @@ requires-dist = [
     { name = "chromadb", marker = "extra == 'chromadb'", specifier = ">=0.4.21,<=0.4.23" },
     { name = "chromadb", marker = "extra == 'vecdbs'", specifier = ">=0.4.21,<=0.4.23" },
     { name = "colorlog", specifier = ">=6.7.0,<7.0.0" },
-    { name = "docling", specifier = ">=2.16.0,<3.0.0" },
+    { name = "docling", specifier = ">=2.20.0,<3.0.0" },
     { name = "docling", marker = "extra == 'all'", specifier = ">=2.16.0,<3.0.0" },
-    { name = "docling", marker = "extra == 'doc-chat'", specifier = ">=2.16.0,<3.0.0" },
+    { name = "docling", marker = "extra == 'doc-chat'", specifier = ">=2.20.0,<3.0.0" },
     { name = "docling", marker = "extra == 'docling'", specifier = ">=2.16.0,<3.0.0" },
     { name = "docling", marker = "extra == 'pdf-parsers'", specifier = ">=2.16.0,<3.0.0" },
     { name = "docstring-parser", specifier = ">=0.16,<1.0" },
@@ -4079,7 +4079,7 @@ name = "nvidia-cudnn-cu12"
 version = "9.1.0.70"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-cublas-cu12", marker = "python_full_version >= '3.11' or platform_machine != 'x86_64' or sys_platform != 'darwin'" },
+    { name = "nvidia-cublas-cu12", marker = "(platform_machine != 'aarch64' and platform_machine != 'x86_64' and platform_system == 'Linux') or (platform_machine != 'x86_64' and platform_system != 'Darwin' and platform_system != 'Linux') or (platform_machine != 'aarch64' and platform_system == 'Linux' and sys_platform != 'darwin') or (platform_system != 'Darwin' and platform_system != 'Linux' and sys_platform != 'darwin')" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/9f/fd/713452cd72343f682b1c7b9321e23829f00b842ceaedcda96e742ea0b0b3/nvidia_cudnn_cu12-9.1.0.70-py3-none-manylinux2014_x86_64.whl", hash = "sha256:165764f44ef8c61fcdfdfdbe769d687e06374059fbb388b6c89ecb0e28793a6f", size = 664752741 },
@@ -4106,9 +4106,9 @@ name = "nvidia-cusolver-cu12"
 version = "11.4.5.107"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-cublas-cu12", marker = "python_full_version >= '3.11' or platform_machine != 'x86_64' or sys_platform != 'darwin'" },
-    { name = "nvidia-cusparse-cu12", marker = "python_full_version >= '3.11' or platform_machine != 'x86_64' or sys_platform != 'darwin'" },
-    { name = "nvidia-nvjitlink-cu12", marker = "python_full_version >= '3.11' or platform_machine != 'x86_64' or sys_platform != 'darwin'" },
+    { name = "nvidia-cublas-cu12", marker = "(platform_machine != 'aarch64' and platform_machine != 'x86_64' and platform_system == 'Linux') or (platform_machine != 'x86_64' and platform_system != 'Darwin' and platform_system != 'Linux') or (platform_machine != 'aarch64' and platform_system == 'Linux' and sys_platform != 'darwin') or (platform_system != 'Darwin' and platform_system != 'Linux' and sys_platform != 'darwin')" },
+    { name = "nvidia-cusparse-cu12", marker = "(platform_machine != 'aarch64' and platform_machine != 'x86_64' and platform_system == 'Linux') or (platform_machine != 'x86_64' and platform_system != 'Darwin' and platform_system != 'Linux') or (platform_machine != 'aarch64' and platform_system == 'Linux' and sys_platform != 'darwin') or (platform_system != 'Darwin' and platform_system != 'Linux' and sys_platform != 'darwin')" },
+    { name = "nvidia-nvjitlink-cu12", marker = "(platform_machine != 'aarch64' and platform_machine != 'x86_64' and platform_system == 'Linux') or (platform_machine != 'x86_64' and platform_system != 'Darwin' and platform_system != 'Linux') or (platform_machine != 'aarch64' and platform_system == 'Linux' and sys_platform != 'darwin') or (platform_system != 'Darwin' and platform_system != 'Linux' and sys_platform != 'darwin')" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/bc/1d/8de1e5c67099015c834315e333911273a8c6aaba78923dd1d1e25fc5f217/nvidia_cusolver_cu12-11.4.5.107-py3-none-manylinux1_x86_64.whl", hash = "sha256:8a7ec542f0412294b15072fa7dab71d31334014a69f953004ea7a118206fe0dd", size = 124161928 },
@@ -4119,7 +4119,7 @@ name = "nvidia-cusparse-cu12"
 version = "12.1.0.106"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "nvidia-nvjitlink-cu12", marker = "python_full_version >= '3.11' or platform_machine != 'x86_64' or sys_platform != 'darwin'" },
+    { name = "nvidia-nvjitlink-cu12", marker = "(platform_machine != 'aarch64' and platform_machine != 'x86_64' and platform_system == 'Linux') or (platform_machine != 'x86_64' and platform_system != 'Darwin' and platform_system != 'Linux') or (platform_machine != 'aarch64' and platform_system == 'Linux' and sys_platform != 'darwin') or (platform_system != 'Darwin' and platform_system != 'Linux' and sys_platform != 'darwin')" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/65/5b/cfaeebf25cd9fdec14338ccb16f6b2c4c7fa9163aefcf057d86b9cc248bb/nvidia_cusparse_cu12-12.1.0.106-py3-none-manylinux1_x86_64.whl", hash = "sha256:f3b50f42cf363f86ab21f720998517a659a48131e8d538dc02f8768237bd884c", size = 195958278 },
@@ -7362,7 +7362,7 @@ name = "triton"
 version = "3.0.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "filelock", marker = "python_full_version >= '3.11' or platform_machine != 'x86_64' or sys_platform != 'darwin'" },
+    { name = "filelock", marker = "(platform_machine != 'aarch64' and platform_machine != 'x86_64' and platform_system == 'Linux') or (platform_machine != 'x86_64' and platform_system != 'Darwin' and platform_system != 'Linux') or (platform_machine != 'aarch64' and platform_system == 'Linux' and sys_platform != 'darwin') or (platform_system != 'Darwin' and platform_system != 'Linux' and sys_platform != 'darwin')" },
 ]
 wheels = [
     { url = "https://files.pythonhosted.org/packages/45/27/14cc3101409b9b4b9241d2ba7deaa93535a217a211c86c4cc7151fb12181/triton-3.0.0-1-cp310-cp310-manylinux2014_x86_64.manylinux_2_17_x86_64.whl", hash = "sha256:e1efef76935b2febc365bfadf74bcb65a6f959a9872e5bddf44cc9e0adce1e1a", size = 209376304 },
