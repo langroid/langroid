@@ -19,7 +19,7 @@ from typing import (
 
 from langroid.cachedb.base import CacheDBConfig
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
-from langroid.language_models.model_info import get_model_info
+from langroid.language_models.model_info import ModelInfo, get_model_info
 from langroid.parsing.agent_chats import parse_message
 from langroid.parsing.parse_json import parse_imperfect_json, top_level_json_field
 from langroid.prompts.dialog import collate_chat_history
@@ -425,6 +425,7 @@ class LanguageModel(ABC):
 
     def __init__(self, config: LLMConfig = LLMConfig()):
         self.config = config
+        self.chat_model_orig = config.chat_model
 
     @staticmethod
     def create(config: Optional[LLMConfig]) -> Optional["LanguageModel"]:
@@ -594,6 +595,34 @@ class LanguageModel(ABC):
 
     def __call__(self, prompt: str, max_tokens: int) -> LLMResponse:
         return self.generate(prompt, max_tokens)
+
+    def info(self) -> ModelInfo:
+        """Info of relevant chat model"""
+        model = (
+            self.config.completion_model
+            if self.config.use_completion_for_chat
+            else self.config.chat_model
+        )
+        orig_model = (
+            self.config.completion_model
+            if self.config.use_completion_for_chat
+            else self.chat_model_orig
+        )
+        return get_model_info(orig_model, model)
+
+    def completion_info(self) -> ModelInfo:
+        """Info of relevant completion model"""
+        model = (
+            self.config.chat_model
+            if self.config.use_chat_for_completion
+            else self.config.completion_model
+        )
+        orig_model = (
+            self.chat_model_orig
+            if self.config.use_chat_for_completion
+            else self.config.completion_model
+        )
+        return get_model_info(orig_model, model)
 
     def chat_context_length(self) -> int:
         return self.config.chat_context_length
