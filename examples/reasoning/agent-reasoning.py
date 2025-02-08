@@ -11,7 +11,8 @@ or
     uv run examples/reasoning/agent-reasoning.py
 
 Other reasoning models to try:
-openrouter/deepseek/deepseek-r1
+deepseek/deepseek-reasoner           # direct deepseek-r1 API
+openrouter/deepseek/deepseek-r1      # via OpenRouter
 o1
 o1-mini
 o3-mini
