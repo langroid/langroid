@@ -22,8 +22,16 @@ RUN git clone https://github.com/langroid/langroid.git
 WORKDIR /langroid
 RUN mv .env-template .env
 
-# Install the langroid package via pip
-RUN pip install --no-cache-dir langroid
+RUN mkdir -p /root/.cache/uv
+
+# install uv then langroid
+# Install uv and use it with cache mount
+RUN --mount=type=cache,target=/root/.cache/uv,id=uv_cache \
+    curl -LsSf https://astral.sh/uv/install.sh | sh && \
+    export PATH="/root/.local/bin:$PATH" && \
+    uv venv && \
+    . .venv/bin/activate && \
+    uv pip install --no-cache-dir .
 
 # Install oh-my-zsh and set up zsh configurations
 RUN sh -c "$(wget https://raw.githubusercontent.com/robbyrussell/oh-my-zsh/master/tools/install.sh -O -)" || true && \

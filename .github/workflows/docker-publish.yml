@@ -1,5 +1,7 @@
 name: Docker Publish
-
+env: 
+  DOCKER_BUILDKIT: 1
+  
 on:
   push:
     paths:
@@ -45,6 +47,8 @@ jobs:
           tags: |
             langroid/langroid:latest-amd64
             langroid/langroid:${{ env.DOCKER_TAG }}-amd64
+          build-args: |
+              BUILDKIT_INLINE_CACHE=1            
 
   build_arm64:
     name: Build Docker image for arm64
@@ -81,3 +85,5 @@ jobs:
           tags: |
             langroid/langroid:latest-arm64
             langroid/langroid:${{ env.DOCKER_TAG }}-arm64
+          build-args: |
+              BUILDKIT_INLINE_CACHE=1            
