@@ -27,6 +27,9 @@ RUN mkdir -p /root/.cache/uv
 # workaround for pymupdf build error?
 ENV MAKEFLAGS="-j1"
 
+# detect arch to customize pymupdf version
+ARG TARGETARCH
+
 # install uv then langroid
 # Install uv and use it with cache mount
 RUN --mount=type=cache,target=/root/.cache/uv,id=uv_cache \
@@ -34,6 +37,11 @@ RUN --mount=type=cache,target=/root/.cache/uv,id=uv_cache \
     export PATH="/root/.local/bin:$PATH" && \
     uv venv && \
     . .venv/bin/activate && \
+    if [ "$TARGETARCH" = "arm64" ]; then \
+         uv pip install --no-cache-dir "pymupdf==1.24.5"; \
+     else \
+         uv pip install --no-cache-dir "pymupdf>=1.25.3"; \
+     fi && \
     uv pip install --no-cache-dir .
 
 # Install oh-my-zsh and set up zsh configurations

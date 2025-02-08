@@ -5,7 +5,8 @@ env:
 on:
   push:
     paths:
-      - "langroid/**"
+      - "Dockerfile"
+      - ".github/workflows/docker-publish.yml"
     branches:
       - main
     tags:

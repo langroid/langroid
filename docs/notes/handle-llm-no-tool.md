@@ -45,8 +45,14 @@ such as [`AgentDoneTool`][langroid.agent.tools.orchestration.AgentDoneTool]).
 
 To simplify the developer experience, as of version 0.39.2 Langroid also provides an
 easier way to specify what this fallback method should return, via the
-`ChatAgentConfig.handle_llm_no_tool` parameter, which can be set to one of
-the following possible values:
+`ChatAgentConfig.handle_llm_no_tool` parameter, for example:
+```python
+config = lr.ChatAgentConfig(
+    # ... other params
+    handle_llm_no_tool="done", # terminate task if LLM sends non-tool msg
+)
+```
+The `handle_llm_no_tool` parameter can have the following possible values:
 
 - A special value from the [`NonToolAction`][langroid.mytypes.NonToolAction] Enum, e.g.:
     - `"user"` or `NonToolAction.USER` - this is interpreted by langroid to return 
@@ -56,6 +62,11 @@ the following possible values:
      `AgentDoneTool(content=msg.content, tools=msg.tool_messages)`, 
      meaning the task is ended, and any content and tools in the current message will
      appear in the returned `ChatDocument`.
+- A callable, specifically a function that takes a `ChatDocument` and returns any value. 
+  This can be useful when you want the fallback action to return a value 
+  based on the current message, e.g. 
+  `lambda msg: AgentDoneTool(content=msg.content)`, or it could a more 
+  elaborate function, or a prompt that contains the content of the current message.
 - Any `ToolMessage` (typically an [Orchestration](https://github.com/langroid/langroid/blob/main/langroid/agent/tools/orchestration.py) tool like 
   `AgentDoneTool` or `ResultTool`)
 - Any string, meant to be handled by the LLM. 

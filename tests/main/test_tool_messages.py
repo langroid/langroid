@@ -35,6 +35,7 @@ from langroid.prompts.prompts_config import PromptsConfig
 from langroid.pydantic_v1 import BaseModel, Field
 from langroid.utils.configuration import Settings, set_global
 from langroid.utils.constants import DONE
+from langroid.utils.types import is_callable
 
 
 class CountryCapitalMessage(ToolMessage):
@@ -1798,6 +1799,7 @@ def test_valid_structured_recovery():
         "are you finished?",
         ResultTool(answer=42),
         DonePassTool(),
+        lambda msg: AgentDoneTool(content=msg.content),
     ],
 )
 def test_handle_llm_no_tool(handle_no_tool: Any):
@@ -1840,7 +1842,9 @@ def test_handle_llm_no_tool(handle_no_tool: Any):
         # LLM(1) -> SumTool(1,2) -> 3 -> LLM(3) -> 4 -> ResultTool(4)
         assert isinstance(result.tool_messages[0], ResultTool)
         assert result.tool_messages[0].answer == 42
-
+    if is_callable(handle_no_tool):
+        # LLM(1) -> SumTool(1,2) -> 3 -> LLM(3) -> 4 -> AgentDoneTool(4) -> 4
+        assert result.content == "4"
     if isinstance(handle_no_tool, DonePassTool):
         # LLM(1) -> SumTool(1,2) -> 3 -> LLM(3) -> 4 -> DonePass
         assert result.content == "4"
