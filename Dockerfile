@@ -8,13 +8,13 @@ ENV DEBIAN_FRONTEND=non-interactive \
 
 # Install necessary tools, zsh, and set up locale
 RUN apt-get update && \
-    apt-get install --no-install-recommends -y zsh wget git curl locales && \
-    sed -i -e 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen && \
-    locale-gen && \
+    apt-get install --no-install-recommends -y zsh wget git curl locales \
     libfreetype6-dev \
     libjpeg-dev \
     libopenjp2-7-dev \
-    libssl-dev \
+    libssl-dev && \
+    sed -i -e 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen && \
+    locale-gen && \
     # Cleanup apt cache
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
