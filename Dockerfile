@@ -11,6 +11,10 @@ RUN apt-get update && \
     apt-get install --no-install-recommends -y zsh wget git curl locales && \
     sed -i -e 's/# en_US.UTF-8 UTF-8/en_US.UTF-8 UTF-8/' /etc/locale.gen && \
     locale-gen && \
+    libfreetype6-dev \
+    libjpeg-dev \
+    libopenjp2-7-dev \
+    libssl-dev \
     # Cleanup apt cache
     apt-get clean && \
     rm -rf /var/lib/apt/lists/*
@@ -26,6 +30,7 @@ RUN mkdir -p /root/.cache/uv
 
 # workaround for pymupdf build error?
 ENV MAKEFLAGS="-j1"
+ENV PYTHONPYCACHEPREFIX="/tmp/pycache"
 
 # detect arch to customize pymupdf version
 ARG TARGETARCH
@@ -39,9 +44,9 @@ RUN --mount=type=cache,target=/root/.cache/uv,id=uv_cache \
     . .venv/bin/activate && \
     pip install --upgrade pip && \
     if [ "$TARGETARCH" = "arm64" ]; then \
-         pip install --no-cache-dir "pymupdf==1.24.5"; \
+         uv pip install --no-cache-dir "pymupdf==1.24.14"; \
      else \
-         pip install --no-cache-dir "pymupdf>=1.25.3"; \
+         uv pip install --no-cache-dir "pymupdf>=1.25.3"; \
      fi && \
     uv pip install --no-cache-dir .
 
