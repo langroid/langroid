@@ -157,7 +157,7 @@ class Agent(ABC):
         self.default_human_response: Optional[str] = None
         self._indent = ""
         self.llm = LanguageModel.create(config.llm)
-        self.vecdb = VectorStore.create(config.vecdb) if config.vecdb else None
+        self.vecdb = VectorStore.create(config.vecdb) if config.vecdb else None 
         self.tool_error = False
         if config.parsing is not None and self.config.llm is not None:
             # token_encoding_model is used to obtain the tokenizer,
