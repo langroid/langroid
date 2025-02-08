@@ -24,6 +24,9 @@ RUN mv .env-template .env
 
 RUN mkdir -p /root/.cache/uv
 
+# workaround for pymupdf build error?
+ENV MAKEFLAGS="-j1"
+
 # install uv then langroid
 # Install uv and use it with cache mount
 RUN --mount=type=cache,target=/root/.cache/uv,id=uv_cache \
