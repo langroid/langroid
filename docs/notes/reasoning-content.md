@@ -1,7 +1,6 @@
 # Stream and capture reasoning content in addition to final answer, from Reasoning LLMs
 
-As of v0.35.0, when using Reasoning LLM APIs (e.g. `deepseek/deepseek-reasoner`
-or OpenAI `o1` etc):
+As of v0.35.0, when using certain Reasoning LLM APIs (e.g. `deepseek/deepseek-reasoner`):
 
 - You can see both the reasoning (dim green) and final answer (bright green) text in the streamed output.
 - When directly calling the LLM (without using an Agent), the `LLMResponse` object will now contain a `reasoning` field,
@@ -17,7 +16,9 @@ Some notes:
 the `extra_body` parameter with `include_reasoning` as shown below.
 - When using the OpenAI `o3-mini` model, you can set the `resoning_effort` parameter
   to "high", "medium" or "low" to control the reasoning effort.
-
+- As of Feb 9, 2025, OpenAI reasoning models (o1, o1-mini, o3-mini) 
+  do *not* expose reasoning trace in the API response.
+  
 ```python
 import langroid as lr
 import langroid.language_models as lm
