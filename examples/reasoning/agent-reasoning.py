@@ -45,10 +45,11 @@ def main(
     # (1) Direct LLM interaction
     llm = lm.OpenAIGPT(llm_config)
 
-    response = llm.chat("Is 9.3 bigger than 9.11?", max_tokens=1000)
+    response = llm.chat("Is 4.3 bigger than 4.11?", max_tokens=1000)
 
-    if response.cached:
-        # if we got it from cache, we haven't shown anything, so print here
+    if response.cached or not llm.get_stream():
+        # if we got it from cache, or streaming disabled/disallowed,
+        # we haven't shown anything, so print here
 
         # extract reasoning
         if response.reasoning:
@@ -74,17 +75,16 @@ def main(
         """
     )
 
-    if response.metadata.cached:
-        # if we got it from cache, we haven't shown anything, so print here
-
-        # extract reasoning
-        if response.reasoning:
-            print(response.reasoning)
-        else:
-            print(f"NO REASONING AVAILABLE for {model}!")
-
-        # extract answer
-        print(response.content)
+    # extract reasoning
+    if response.reasoning:
+        print(
+            f"""
+            REASONING:
+            {response.reasoning}
+            """
+        )
+    else:
+        print(f"NO REASONING AVAILABLE for {model}!")
 
 
 if __name__ == "__main__":
