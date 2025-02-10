@@ -99,6 +99,7 @@ def vecdb(request) -> VectorStore:
             collection_name="test_" + embed_cfg.model_type,
             embedding=embed_cfg,
             cloud=False,
+            docker=False,
             storage_path=wv_dir,
         )
         weaviate_local = WeaviateDB(wv_cfg_local)
@@ -106,6 +107,17 @@ def vecdb(request) -> VectorStore:
         yield weaviate_local
         weaviate_local.delete_collection(collection_name=wv_cfg_local.collection_name)
         rmdir(wv_dir)
+        return
+    if request.param == "weaviate_docker":
+        wv_cfg_docker = WeaviateDBConfig(
+            collection_name="test_" + embed_cfg.model_type,
+            embedding=embed_cfg,
+            docker=True,
+        )
+        weaviate_docker = WeaviateDB(wv_cfg_docker)
+        weaviate_docker.add_documents(stored_docs)
+        yield weaviate_docker
+        weaviate_docker.delete_collection(collection_name=wv_cfg_docker.collection_name)
         return
 
     if request.param == "qdrant_hybrid_cloud":
@@ -227,7 +239,7 @@ def vecdb(request) -> VectorStore:
         "qdrant_cloud",
         "qdrant_local",
         pytest.param("pinecone_serverless", marks=pytest.mark.skip),
-        "weaviate_local",
+        "weaviate_docker",
     ],
     indirect=True,
 )
@@ -284,7 +296,7 @@ def test_hybrid_vector_search(
         "qdrant_local",
         "qdrant_cloud",
         pytest.param("pinecone_serverless", marks=pytest.mark.skip),
-        "weaviate_local",
+        "weaviate_docker",
     ],
     indirect=True,
 )
@@ -380,7 +392,7 @@ def test_vector_stores_access(vecdb):
         "qdrant_cloud",
         "qdrant_local",
         pytest.param("pinecone_serverless", marks=pytest.mark.skip),
-        "weaviate_local",
+        "weaviate_docker",
     ],
     indirect=True,
 )
@@ -446,7 +458,7 @@ def test_vector_stores_context_window(vecdb):
         "qdrant_cloud",
         "qdrant_local",
         pytest.param("pinecone_serverless", marks=pytest.mark.skip),
-        "weaviate_local",
+        "weaviate_docker",
     ],
     indirect=True,
 )

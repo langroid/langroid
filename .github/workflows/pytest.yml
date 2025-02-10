@@ -49,6 +49,18 @@ jobs:
           - 7474:7474
         env:
           NEO4J_AUTH: neo4j/password
+      weaviate:
+        image: semitechnologies/weaviate:latest
+        ports:
+          - "8080:8080"
+          - "50051:50051"  # Add gRPC port
+        env:
+          WEAVIATE_IN_MEMORY: "true"
+          QUERY_DEFAULTS_LIMIT: "25"
+          AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: "true"
+          ENABLE_MODULES: "text2vec-openai"
+          CLUSTER_HOSTNAME: "node1"
+
 
     env:
       CI: true # allows conditional skipping of tests based on this env var
