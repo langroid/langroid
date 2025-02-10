@@ -240,6 +240,10 @@ google-genai = [
     "google-genai>=1.0.0",
 ]
 
+google-generativeai = [
+    "google-genai>=1.0.0",
+]
+
 pinecone = [
     "pinecone-client>=5.0.1"
 ]
