@@ -147,8 +147,7 @@ class Agent(ABC):
         self.llm_tools_usable: Set[str] = set()
         self.llm_tools_known: Set[str] = set()  # all known tools, handled/used or not
         # Indicates which tool-names are allowed to be inferred when
-        # the LLM "forgets" to include the request field in its
-        # tool-call.
+        # the LLM "forgets" to include the request field in its tool-call.
         self.enabled_requests_for_inference: Optional[Set[str]] = (
             None  # If None, we allow all
         )

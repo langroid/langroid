@@ -50,7 +50,6 @@ from langroid.language_models.model_info import (
     DeepSeekModel,
     GeminiModel,
     OpenAI_API_ParamInfo,
-    get_model_info,
 )
 from langroid.language_models.model_info import (
     OpenAIChatModel as OpenAIChatModel,
@@ -233,6 +232,7 @@ class OpenAIGPTConfig(LLMConfig):
     params: OpenAICallParams | None = None
     # these can be any model name that is served at an OpenAI-compatible API end point
     chat_model: str = default_openai_chat_model
+    chat_model_orig: str = default_openai_chat_model
     completion_model: str = default_openai_completion_model
     run_on_first_use: Callable[[], None] = noop
     parallel_tool_calls: Optional[bool] = None
@@ -372,7 +372,8 @@ class OpenAIGPT(LanguageModel):
         super().__init__(config)
         self.config: OpenAIGPTConfig = config
         # save original model name such as `provider/model` before
-        # we strip out the `provider`
+        # we strip out the `provider` - we retain the original in
+        # case some params are specific to a provider.
         self.chat_model_orig = self.config.chat_model
 
         # Run the first time the model is used
@@ -467,11 +468,7 @@ class OpenAIGPT(LanguageModel):
             # these features (with JSON schema restricted to a limited set of models)
             self.supports_strict_tools = self.api_base is None
             self.supports_json_schema = (
-                self.api_base is None
-                and get_model_info(  # look for family/provider-specific then generic
-                    self.chat_model_orig,  # e.g. "gemini/gemini-2.0-flash"
-                    self.config.chat_model,  # e.g. "gemini-2.0-flash"
-                ).has_structured_output
+                self.api_base is None and self.info().has_structured_output
             )
 
         if settings.chat_model != "":
@@ -621,13 +618,7 @@ class OpenAIGPT(LanguageModel):
         return self.config.chat_model in openai_chat_models
 
     def supports_functions_or_tools(self) -> bool:
-        return (
-            self.is_openai_chat_model()
-            and get_model_info(
-                self.chat_model_orig,
-                self.config.chat_model,
-            ).has_tools
-        )
+        return self.is_openai_chat_model() and self.info().has_tools
 
     def is_openai_completion_model(self) -> bool:
         openai_completion_models = [e.value for e in OpenAICompletionModel]
@@ -650,11 +641,7 @@ class OpenAIGPT(LanguageModel):
         """
         List of params that are not supported by the current model
         """
-        model_info = get_model_info(
-            self.chat_model_orig,
-            self.config.chat_model,
-        )
-        unsupported = set(model_info.unsupported_params)
+        unsupported = set(self.info().unsupported_params)
         for param, model_list in OpenAI_API_ParamInfo().params.items():
             if (
                 self.config.chat_model not in model_list
@@ -668,44 +655,21 @@ class OpenAIGPT(LanguageModel):
         Map of param name -> new name for specific models.
         Currently main troublemaker is o1* series.
         """
-        return get_model_info(
-            self.chat_model_orig,
-            self.config.chat_model,
-        ).rename_params
+        return self.info().rename_params
 
     def chat_context_length(self) -> int:
         """
         Context-length for chat-completion models/endpoints
         Get it from the dict, otherwise fail-over to general method
         """
-        model = (
-            self.config.completion_model
-            if self.config.use_completion_for_chat
-            else self.config.chat_model
-        )
-        orig_model = (
-            self.config.completion_model
-            if self.config.use_completion_for_chat
-            else self.chat_model_orig
-        )
-        return get_model_info(orig_model, model).context_length
+        return self.info().context_length
 
     def completion_context_length(self) -> int:
         """
         Context-length for completion models/endpoints
         Get it from the dict, otherwise fail-over to general method
         """
-        model = (
-            self.config.chat_model
-            if self.config.use_chat_for_completion
-            else self.config.completion_model
-        )
-        orig_model = (
-            self.chat_model_orig
-            if self.config.use_chat_for_completion
-            else self.config.completion_model
-        )
-        return get_model_info(orig_model, model).context_length
+        return self.completion_info().context_length
 
     def chat_cost(self) -> Tuple[float, float]:
         """
@@ -713,7 +677,7 @@ class OpenAIGPT(LanguageModel):
         models/endpoints.
         Get it from the dict, otherwise fail-over to general method
         """
-        info = get_model_info(self.config.chat_model)
+        info = self.info()
         return (info.input_cost_per_million / 1000, info.output_cost_per_million / 1000)
 
     def set_stream(self, stream: bool) -> bool:
@@ -731,10 +695,7 @@ class OpenAIGPT(LanguageModel):
         return (
             self.config.stream
             and settings.stream
-            and get_model_info(
-                self.chat_model_orig,
-                self.config.chat_model,
-            ).allows_streaming
+            and self.info().allows_streaming
             and not settings.quiet
         )
 
@@ -1744,11 +1705,7 @@ class OpenAIGPT(LanguageModel):
         args: Dict[str, Any] = dict(
             model=chat_model,
             messages=[
-                m.api_dict(
-                    has_system_role=get_model_info(
-                        self.config.chat_model
-                    ).allows_system_message
-                )
+                m.api_dict(has_system_role=self.info().allows_system_message)
                 for m in (llm_messages)
             ],
             max_tokens=max_tokens,

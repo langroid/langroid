@@ -1,6 +1,6 @@
 [project]
 name = "langroid"
-version = "0.41.1"
+version = "0.41.3"
 authors = [
     {name = "Prasad Chalasani", email = "pchalasani@gmail.com"},
 ]
@@ -15,7 +15,7 @@ dependencies = [
     "bs4<1.0.0,>=0.0.1",
     "cerebras-cloud-sdk<2.0.0,>=1.1.0",
     "colorlog<7.0.0,>=6.7.0",
-    "docling<3.0.0,>=2.16.0",
+    "docling<3.0.0,>=2.20.0",
     "docstring-parser<1.0,>=0.16",
     "duckduckgo-search<7.0.0,>=6.0.0",
     "exa-py>=1.8.7",
@@ -62,7 +62,7 @@ dependencies = [
 
 [project.optional-dependencies]
 doc-chat = [
-    "docling<3.0.0,>=2.16.0",
+    "docling<3.0.0,>=2.20.0",
     "pdf2image<2.0.0,>=1.17.0",
     "pymupdf4llm<0.1.0,>=0.0.17",
     "pymupdf<2.0.0,>=1.23.3",

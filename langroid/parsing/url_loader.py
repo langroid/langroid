@@ -68,7 +68,11 @@ class URLLoader:
                     docs.extend(new_chunks)
                 else:
                     # Try to detect content type and handle accordingly
-                    headers = requests.head(url).headers
+                    try:
+                        headers = requests.head(url).headers
+                    except Exception as e:
+                        logging.warning(f"Error getting headers for {url}: {e}")
+                        headers = {}
                     content_type = headers.get("Content-Type", "").lower()
                     temp_file_suffix = None
                     if "application/pdf" in content_type:

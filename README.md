@@ -138,7 +138,7 @@ teacher_task.run()
 - **Jan 2025:**
   - [0.36.0](https://github.com/langroid/langroid/releases/tag/0.36.0): Weaviate vector-db support (thanks @abab-dev).
   - [0.35.0](https://github.com/langroid/langroid/releases/tag/0.35.0): Capture/Stream reasoning content from 
-    Reasoning LLMs (e.g. DeepSeek, OpenAI o1) in addition to final answer.
+    Reasoning LLMs (e.g. DeepSeek-R1, OpenAI o1) in addition to final answer.
   - [0.34.0](https://github.com/langroid/langroid/releases/tag/0.34.0): DocChatAgent 
     chunk enrichment to improve retrieval. (collaboration with @dfm88). 
   - [0.33.0](https://github.com/langroid/langroid/releases/tag/0.33.3) Move from Poetry to uv! (thanks @abab-dev).
@@ -446,7 +446,7 @@ For many practical scenarios, you may need additional optional dependencies:
 - For "chat with databases", use the `db` extra:
     ```bash
     pip install "langroid[db]"
-    ``
+    ```
 - You can specify multiple extras by separating them with commas, e.g.:
     ```bash
     pip install "langroid[doc-chat,db]"

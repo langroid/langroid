@@ -37,6 +37,7 @@ from langroid.utils.configuration import settings
 from langroid.utils.object_registry import ObjectRegistry
 from langroid.utils.output import status
 from langroid.utils.pydantic_utils import PydanticWrapper, get_pydantic_wrapper
+from langroid.utils.types import is_callable
 
 console = Console()
 
@@ -613,6 +614,8 @@ class ChatAgent(Agent):
                         return AgentDoneTool(
                             content=msg.content, tools=msg.tool_messages
                         )
+            elif is_callable(no_tool_option):
+                return no_tool_option(msg)
             # Otherwise just return `no_tool_option` as is:
             # This can be any string, such as a specific nudge/reminder to the LLM,
             # or even something like ResultTool etc.
