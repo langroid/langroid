@@ -452,7 +452,7 @@ class GeminiEmbeddings(EmbeddingModel):
         try:
             from google import genai
         except ImportError as e:
-            raise LangroidImportError(extra="google-generativeai", error=str(e))
+            raise LangroidImportError(extra="google-genai", error=str(e))
         super().__init__()
         self.config = config
         load_dotenv()

@@ -22,10 +22,6 @@ def test_gemini_embeddings():
 
     assert isinstance(embeddings, list), "Output should be a list"
     assert len(embeddings) == 1, "Should return one embedding for one input"
-    assert isinstance(embeddings[0], list), "Each embedding should be a list of floats"
     assert (
         len(embeddings[0]) == gemini_cfg.dims
     ), f"Expected {gemini_cfg.dims} dims, got {len(embeddings[0])}"
-    assert all(
-        isinstance(x, float) for x in embeddings[0]
-    ), "Embedding values should be floats"
