@@ -61,7 +61,6 @@ jobs:
           CLUSTER_HOSTNAME: "node1"
       postgres:
         image: ankane/pgvector:latest
-        restart: always
         env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
