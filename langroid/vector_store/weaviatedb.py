@@ -45,6 +45,9 @@ class WeaviateDBConfig(VectorStoreConfig):
     embedding: EmbeddingModelsConfig = OpenAIEmbeddingsConfig()
     distance: str = VectorDistances.COSINE
     cloud: bool = False
+    docker: bool = False
+    host: str = "127.0.0.1"
+    port: int = 8080
     storage_path: str = ".weaviate_embedded/data"
 
 
@@ -55,11 +58,13 @@ class WeaviateDB(VectorStore):
             raise LangroidImportError("weaviate", "weaviate")
         self.config: WeaviateDBConfig = config
         load_dotenv()
-        if not self.config.cloud:
-            self.client = weaviate.connect_to_embedded(
-                version="latest", persistence_data_path=self.config.storage_path
+        if self.config.docker:
+            self.client = weaviate.connect_to_local(
+                host=self.config.host,
+                port=self.config.port,
             )
-        else:  # Cloud mode
+            self.config.cloud = False
+        elif self.config.cloud:
             key = os.getenv("WEAVIATE_API_KEY")
             url = os.getenv("WEAVIATE_API_URL")
             if url is None or key is None:
@@ -72,6 +77,10 @@ class WeaviateDB(VectorStore):
             self.client = weaviate.connect_to_weaviate_cloud(
                 cluster_url=url,
                 auth_credentials=Auth.api_key(key),
+            )
+        else:
+            self.client = weaviate.connect_to_embedded(
+                version="latest", persistence_data_path=self.config.storage_path
             )
 
         if config.collection_name is not None:

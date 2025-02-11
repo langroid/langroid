@@ -1,0 +1,13 @@
+version: "3.8"
+services:
+  weaviate:
+    image: semitechnologies/weaviate:latest
+    ports:
+      - "8080:8080"
+      - "50051:50051"  # Add gRPC port
+    environment:
+      WEAVIATE_IN_MEMORY: "true"
+      QUERY_DEFAULTS_LIMIT: "25"
+      AUTHENTICATION_ANONYMOUS_ACCESS_ENABLED: "true"
+      ENABLE_MODULES: "text2vec-openai"
+      CLUSTER_HOSTNAME: "node1"
