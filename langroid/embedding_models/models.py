@@ -450,9 +450,9 @@ class LlamaCppServerEmbeddings(EmbeddingModel):
 class GeminiEmbeddings(EmbeddingModel):
     def __init__(self, config: GeminiEmbeddingsConfig = GeminiEmbeddingsConfig()):
         try:
-            import google.generativeai as genai
+            from google import genai
         except ImportError as e:
-            raise LangroidImportError(extra="google-generativeai", error=str(e))
+            raise LangroidImportError(extra="google-genai", error=str(e))
         super().__init__()
         self.config = config
         load_dotenv()
@@ -464,29 +464,30 @@ class GeminiEmbeddings(EmbeddingModel):
                 GEMINI_API_KEY env variable must be set to use GeminiEmbeddings.
                 """
             )
-        genai.configure(api_key=self.config.api_key)  # type: ignore[attr-defined]
-        self.client = genai
+        self.client = genai.Client(api_key=self.config.api_key)
 
     def embedding_fn(self) -> Callable[[List[str]], Embeddings]:
         return EmbeddingFunctionCallable(self, self.config.batch_size)
 
-    def generate_embeddings(self, texts: List[str]) -> Embeddings:
-        all_embeddings = []  # More precise type hint
+    def generate_embeddings(self, texts: List[str]) -> List[List[float]]:
+        """Generates embeddings for a list of input texts."""
+        all_embeddings: List[List[float]] = []
+
         for batch in batched(texts, self.config.batch_size):
-            result = self.client.embed_content(  # type: ignore[attr-defined]
+            result = self.client.models.embed_content(  # type: ignore[attr-defined]
                 model=self.config.model_name,
-                content=batch,
-                task_type="RETRIEVAL_DOCUMENT",
+                contents=batch,
             )
 
-            embeddings = result["embedding"]
-            if not isinstance(embeddings, list):
-                raise ValueError("Unexpected format for embeddings: not a list")
+            if not hasattr(result, "embeddings") or not isinstance(
+                result.embeddings, list
+            ):
+                raise ValueError(
+                    "Unexpected format for embeddings: missing or incorrect type"
+                )
 
-            if embeddings and isinstance(embeddings[0], list):
-                all_embeddings.extend(embeddings)
-            else:
-                all_embeddings.append(embeddings)
+            # Extract .values from ContentEmbedding objects
+            all_embeddings.extend([emb.values for emb in result.embeddings])
 
         return all_embeddings
 

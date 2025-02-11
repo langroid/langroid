@@ -1643,21 +1643,6 @@ wheels = [
 ]
 
 [[package]]
-name = "google-ai-generativelanguage"
-version = "0.6.15"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "google-api-core", extra = ["grpc"] },
-    { name = "google-auth" },
-    { name = "proto-plus" },
-    { name = "protobuf" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/11/d1/48fe5d7a43d278e9f6b5ada810b0a3530bbeac7ed7fcbcd366f932f05316/google_ai_generativelanguage-0.6.15.tar.gz", hash = "sha256:8f6d9dc4c12b065fe2d0289026171acea5183ebf2d0b11cefe12f3821e159ec3", size = 1375443 }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/7c/a3/67b8a6ff5001a1d8864922f2d6488dc2a14367ceb651bc3f09a947f2f306/google_ai_generativelanguage-0.6.15-py3-none-any.whl", hash = "sha256:5a03ef86377aa184ffef3662ca28f19eeee158733e45d7947982eb953c6ebb6c", size = 1327356 },
-]
-
-[[package]]
 name = "google-api-core"
 version = "2.24.1"
 source = { registry = "https://pypi.org/simple" }
@@ -1738,21 +1723,17 @@ wheels = [
 ]
 
 [[package]]
-name = "google-generativeai"
-version = "0.8.4"
+name = "google-genai"
+version = "1.1.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
-    { name = "google-ai-generativelanguage" },
-    { name = "google-api-core" },
-    { name = "google-api-python-client" },
     { name = "google-auth" },
-    { name = "protobuf" },
     { name = "pydantic" },
-    { name = "tqdm" },
-    { name = "typing-extensions" },
+    { name = "requests" },
+    { name = "websockets" },
 ]
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/9b/b0/6c6af327a8a6ef3be6fe79be1d6f1e2914d6c363aa6b081b93396f4460a7/google_generativeai-0.8.4-py3-none-any.whl", hash = "sha256:e987b33ea6decde1e69191ddcaec6ef974458864d243de7191db50c21a7c5b82", size = 175409 },
+    { url = "https://files.pythonhosted.org/packages/6b/30/25443d2dec5fe4efd9f05440e13735ae68b19de2dea043b3b83a91a4e14b/google_genai-1.1.0-py3-none-any.whl", hash = "sha256:c48ac44612ad6aadc0bf96b12fa4314756baa16382c890fff793bcb53e9a9cc8", size = 130299 },
 ]
 
 [[package]]
@@ -2610,7 +2591,7 @@ sdist = { url = "https://files.pythonhosted.org/packages/0e/72/a3add0e4eec4eb9e2
 
 [[package]]
 name = "langroid"
-version = "0.41.3"
+version = "0.41.4"
 source = { editable = "." }
 dependencies = [
     { name = "adb-cloud-connector" },
@@ -2628,7 +2609,7 @@ dependencies = [
     { name = "fire" },
     { name = "gitpython" },
     { name = "google-api-python-client" },
-    { name = "google-generativeai" },
+    { name = "google-genai" },
     { name = "groq" },
     { name = "grpcio" },
     { name = "halo" },
@@ -2732,8 +2713,11 @@ exa = [
 fastembed = [
     { name = "fastembed" },
 ]
+google-genai = [
+    { name = "google-genai" },
+]
 google-generativeai = [
-    { name = "google-generativeai" },
+    { name = "google-genai" },
 ]
 hf-embeddings = [
     { name = "sentence-transformers" },
@@ -2887,8 +2871,9 @@ requires-dist = [
     { name = "fire", specifier = ">=0.5.0,<1.0.0" },
     { name = "gitpython", specifier = ">=3.1.43,<4.0.0" },
     { name = "google-api-python-client", specifier = ">=2.95.0,<3.0.0" },
-    { name = "google-generativeai", specifier = ">=0.5.2,<1.0.0" },
-    { name = "google-generativeai", marker = "extra == 'google-generativeai'", specifier = ">=0.8.4" },
+    { name = "google-genai", specifier = ">=1.0.0" },
+    { name = "google-genai", marker = "extra == 'google-genai'", specifier = ">=1.0.0" },
+    { name = "google-genai", marker = "extra == 'google-generativeai'", specifier = ">=1.0.0" },
     { name = "groq", specifier = ">=0.13.0,<1.0.0" },
     { name = "grpcio", specifier = ">=1.62.1,<2.0.0" },
     { name = "halo", specifier = ">=0.0.31,<1.0.0" },

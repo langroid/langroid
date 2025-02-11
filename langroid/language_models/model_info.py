@@ -64,6 +64,7 @@ class GeminiModel(ModelName):
     GEMINI_1_5_FLASH_8B = "gemini/gemini-1.5-flash-8b"
     GEMINI_1_5_PRO = "gemini/gemini-1.5-pro"
     GEMINI_2_FLASH = "gemini/gemini-2.0-flash"
+    GEMINI_2_FLASH_LITE = "gemini/gemini-2.0-flash-lite-preview"
     GEMINI_2_FLASH_THINKING = "gemini/gemini-2.0-flash-thinking-exp"
 
 
@@ -282,8 +283,20 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         provider=ModelProvider.GOOGLE,
         context_length=1_056_768,
         max_output_tokens=8192,
+        input_cost_per_million=0.10,
+        output_cost_per_million=0.40,
         rename_params={"max_tokens": "max_completion_tokens"},
         description="Gemini 2.0 Flash",
+    ),
+    GeminiModel.GEMINI_2_FLASH_LITE.value: ModelInfo(
+        name=GeminiModel.GEMINI_2_FLASH_LITE.value,
+        provider=ModelProvider.GOOGLE,
+        context_length=1_056_768,
+        max_output_tokens=8192,
+        input_cost_per_million=0.075,
+        output_cost_per_million=0.30,
+        rename_params={"max_tokens": "max_completion_tokens"},
+        description="Gemini 2.0 Flash Lite Preview",
     ),
     GeminiModel.GEMINI_1_5_FLASH.value: ModelInfo(
         name=GeminiModel.GEMINI_1_5_FLASH.value,
