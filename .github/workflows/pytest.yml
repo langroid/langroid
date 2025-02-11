@@ -63,7 +63,7 @@ jobs:
       postgres:
         image: ankane/pgvector:latest
         restart: always
-        environment:
+        env:
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
           POSTGRES_DB: langroid 
