@@ -160,7 +160,7 @@ def vecdb(request) -> VectorStore:
         pg_cfg = PostgresDBConfig(
             collection_name="test_" + embed_cfg.model_type,
             embedding=embed_cfg,
-            cloud=True,
+            cloud=False,
             replace_collection=True,
         )
         pg = PostgresDB(pg_cfg)
@@ -238,7 +238,7 @@ def vecdb(request) -> VectorStore:
         "qdrant_cloud",
         "qdrant_local",
         pytest.param("pinecone_serverless", marks=pytest.mark.skip),
-        pytest.param("postgres", marks=pytest.mark.skip),
+        "postgres",
         "weaviate_docker",
     ],
     indirect=True,
@@ -290,7 +290,7 @@ def test_hybrid_vector_search(
 @pytest.mark.parametrize(
     "vecdb",
     [
-        pytest.param("postgres", marks=pytest.mark.skip),
+        "postgres",
         "lancedb",
         "chroma",
         "qdrant_local",
@@ -386,7 +386,7 @@ def test_vector_stores_access(vecdb):
 @pytest.mark.parametrize(
     "vecdb",
     [
-        pytest.param("postgres", marks=pytest.mark.skip),
+        "postgres",
         "lancedb",
         "chroma",
         "qdrant_cloud",
@@ -452,7 +452,7 @@ def test_vector_stores_context_window(vecdb):
 @pytest.mark.parametrize(
     "vecdb",
     [
-        pytest.param("postgres", marks=pytest.mark.skip),
+        "postgres",
         "chroma",
         "lancedb",
         "qdrant_cloud",
@@ -599,7 +599,7 @@ def test_lance_metadata():
 @pytest.mark.parametrize(
     "vecdb",
     [
-        pytest.param("postgres", marks=pytest.mark.skip),
+        "postgres",
     ],
     indirect=True,
 )
