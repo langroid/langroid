@@ -9,7 +9,8 @@ from langroid.parsing.parser import DocParsingConfig, DocxParsingConfig, Parsing
 @pytest.mark.parametrize("docxlib", ["unstructured"])
 def test_get_docx_file(docxlib: str):
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    path = os.path.join(current_dir, "docx-test-file.docx")
+    tests_root = os.path.abspath(os.path.join(current_dir, ".."))
+    path = os.path.join(tests_root, "main", "data", "docx-test-file.docx")
     docx_parser = DocumentParser.create(
         path, ParsingConfig(docx=DocxParsingConfig(library=docxlib))
     )
@@ -36,7 +37,8 @@ def test_get_docx_file(docxlib: str):
 @pytest.mark.parametrize("doclib", ["unstructured"])
 def test_get_doc_file(doclib: str):
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    path = os.path.join(current_dir, "doc-test-file.doc")
+    tests_root = os.path.abspath(os.path.join(current_dir, ".."))
+    path = os.path.join(tests_root, "main", "data", "doc-test-file.doc")
     doc_parser = DocumentParser.create(
         path, ParsingConfig(doc=DocParsingConfig(library=doclib))
     )

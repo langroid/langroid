@@ -28,6 +28,7 @@ class PdfParsingConfig(BaseSettings):
         "pypdf",
         "unstructured",
         "pdf2image",
+        "markitdown",
     ] = "pymupdf4llm"
 
 
@@ -37,6 +38,18 @@ class DocxParsingConfig(BaseSettings):
 
 class DocParsingConfig(BaseSettings):
     library: Literal["unstructured"] = "unstructured"
+
+
+class MarkitdownPPTXParsingConfig(BaseSettings):
+    library: Literal["markitdown"] = "markitdown"
+
+
+class MarkitdownXLSXParsingConfig(BaseSettings):
+    library: Literal["markitdown"] = "markitdown"
+
+
+class MarkitdownXLSParsingConfig(BaseSettings):
+    library: Literal["markitdown"] = "markitdown"
 
 
 class ParsingConfig(BaseSettings):
@@ -55,6 +68,9 @@ class ParsingConfig(BaseSettings):
     pdf: PdfParsingConfig = PdfParsingConfig()
     docx: DocxParsingConfig = DocxParsingConfig()
     doc: DocParsingConfig = DocParsingConfig()
+    pptx: MarkitdownPPTXParsingConfig = MarkitdownPPTXParsingConfig()
+    xls: MarkitdownXLSParsingConfig = MarkitdownXLSParsingConfig()
+    xlsx: MarkitdownXLSXParsingConfig = MarkitdownXLSXParsingConfig()
 
 
 class Parser:

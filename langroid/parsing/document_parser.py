@@ -56,6 +56,9 @@ class DocumentType(str, Enum):
     DOCX = "docx"
     DOC = "doc"
     TXT = "txt"
+    XLSX = "xlsx"
+    XLS = "xls"
+    PPTX = "pptx"
 
 
 def find_last_full_char(possible_unicode: bytes) -> int:
@@ -175,6 +178,12 @@ class DocumentParser(Parser):
                 )
         elif inferred_doc_type == DocumentType.DOC:
             return UnstructuredDocParser(source, config)
+        elif inferred_doc_type == DocumentType.XLS:
+            return MarkitdownXLSXParser(source, config)
+        elif inferred_doc_type == DocumentType.XLSX:
+            return MarkitdownXLSXParser(source, config)
+        elif inferred_doc_type == DocumentType.PPTX:
+            return MarkitdownPPTXParser(source, config)
         else:
             source_name = source if isinstance(source, str) else "bytes"
             raise ValueError(f"Unsupported document type: {source_name}")
@@ -223,6 +232,12 @@ class DocumentParser(Parser):
                 return DocumentType.DOCX
             elif source.lower().endswith(".doc"):
                 return DocumentType.DOC
+            elif source.lower().endswith(".xlsx"):
+                return DocumentType.XLSX
+            elif source.lower().endswith(".xls"):
+                return DocumentType.XLS
+            elif source.lower().endswith(".pptx"):
+                return DocumentType.PPTX
             else:
                 raise ValueError(f"Unsupported document type: {source}")
         else:
@@ -236,13 +251,17 @@ class DocumentParser(Parser):
             elif mime_type in [
                 "application/vnd.openxmlformats-officedocument"
                 ".wordprocessingml.document",
-                "application/zip",
             ]:
-                # DOCX files are essentially ZIP files,
-                # but this might catch other ZIP-based formats too!
                 return DocumentType.DOCX
             elif mime_type == "application/msword":
                 return DocumentType.DOC
+            elif (
+                mime_type
+                == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            ):
+                return DocumentType.XLSX
+            elif mime_type == "application/vnd.ms-excel":
+                return DocumentType.XLS
             else:
                 raise ValueError("Unsupported document type from bytes")
 
@@ -281,7 +300,14 @@ class DocumentParser(Parser):
                 chunking and splitting settings in the parser config.
         """
         dtype: DocumentType = DocumentParser._document_type(source, doc_type)
-        if dtype in [DocumentType.PDF, DocumentType.DOC, DocumentType.DOCX]:
+        if dtype in [
+            DocumentType.PDF,
+            DocumentType.DOC,
+            DocumentType.DOCX,
+            DocumentType.PPTX,
+            DocumentType.XLS,
+            DocumentType.XLSX,
+        ]:
             doc_parser = DocumentParser.create(
                 source,
                 parser.config,
@@ -855,5 +881,74 @@ class PythonDocxParser(DocumentParser):
         paragraph = page[0]
         return Document(
             content=self.fix_text(paragraph.text),
+            metadata=DocMetaData(source=self.source),
+        )
+
+
+class MarkitdownXLSXParser(DocumentParser):
+    def iterate_pages(self) -> Generator[Tuple[int, Any], None, None]:
+        try:
+            from markitdown import MarkItDown
+        except ImportError:
+            LangroidImportError("markitdown", "doc-parsers")
+        md = MarkItDown()
+        self.doc_bytes.seek(0)  # Reset to start
+
+        # Save stream to a temp file since md.convert() expects a path or URL
+        # Temporary workaround until markitdown fixes convert_stream function
+        # for xls and xlsx files
+        # See issue here https://github.com/microsoft/markitdown/issues/321
+        with tempfile.NamedTemporaryFile(delete=True, suffix=".xlsx") as temp_file:
+            temp_file.write(self.doc_bytes.read())
+            temp_file.flush()  # Ensure data is written before reading
+            result = md.convert(temp_file.name)
+
+        sheets = re.split(r"(?=## Sheet\d+)", result.text_content)
+
+        for i, sheet in enumerate(sheets):
+            yield i, sheet
+
+    def get_document_from_page(self, md_content: str) -> Document:
+        """
+        Get Document object from a given 1-page markdown string.
+
+        Args:
+            md_content (str): The markdown content for the page.
+
+        Returns:
+            Document: Document object, with content and possible metadata.
+        """
+        return Document(
+            content=self.fix_text(md_content),
+            metadata=DocMetaData(source=self.source),
+        )
+
+
+class MarkitdownPPTXParser(DocumentParser):
+    def iterate_pages(self) -> Generator[Tuple[int, Any], None, None]:
+        try:
+            from markitdown import MarkItDown
+        except ImportError:
+            LangroidImportError("markitdown", "doc-parsers")
+
+        md = MarkItDown()
+        self.doc_bytes.seek(0)
+        result = md.convert_stream(self.doc_bytes, file_extension=".pptx")
+        slides = re.split(r"(?=<!-- Slide number: \d+ -->)", result.text_content)
+        for i, slide in enumerate(slides):
+            yield i, slide
+
+    def get_document_from_page(self, md_content: str) -> Document:
+        """
+        Get Document object from a given 1-page markdown string.
+
+        Args:
+            md_content (str): The markdown content for the page.
+
+        Returns:
+            Document: Document object, with content and possible metadata.
+        """
+        return Document(
+            content=self.fix_text(md_content),
             metadata=DocMetaData(source=self.source),
         )

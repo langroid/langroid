@@ -10,7 +10,8 @@ from langroid.parsing.parser import DocxParsingConfig, ParsingConfig
 @pytest.mark.parametrize("docxlib", ["python-docx"])
 def test_get_docx_file(source, docxlib: str):
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    path = os.path.join(current_dir, "docx-test-file.docx")
+    tests_root = os.path.abspath(os.path.join(current_dir, ".."))
+    path = os.path.join(tests_root, "main", "data", "docx-test-file.docx")
     docx_parser = DocumentParser.create(
         path, ParsingConfig(docx=DocxParsingConfig(library=docxlib))
     )

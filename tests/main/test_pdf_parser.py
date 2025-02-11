@@ -60,9 +60,9 @@ def test_get_pdf_doc_url(source, pdflib: str):
 )
 def test_get_pdf_doc_path(source, pdflib: str):
     current_dir = os.path.dirname(os.path.abspath(__file__))
+    tests_root = os.path.abspath(os.path.join(current_dir, ".."))
+    path = os.path.join(tests_root, "main", "data", "dummy.pdf")
 
-    # Construct the path to the PDF file
-    path = os.path.join(current_dir, "dummy.pdf")
     pdf_parser = DocumentParser.create(
         path, ParsingConfig(pdf=PdfParsingConfig(library=pdflib))
     )

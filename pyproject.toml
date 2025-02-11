@@ -146,6 +146,7 @@ pdf-parsers = [
     "pymupdf4llm<0.1.0,>=0.0.17",
     "pdf2image<2.0.0,>=1.17.0",
     "pytesseract<0.4.0,>=0.3.10",
+    "markitdown>=0.0.1a3",
 ]
 
 docx = [
@@ -242,6 +243,13 @@ google-genai = [
 
 google-generativeai = [
     "google-genai>=1.0.0",
+]
+doc-parsers = [
+    "markitdown>=0.0.1a3",
+    "openpyxl>=3.1.5",
+    "python-docx>=1.1.2",
+    "python-pptx>=1.0.2",
+    "xlrd>=2.0.1",
 ]
 
 pinecone = [
