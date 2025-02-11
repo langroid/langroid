@@ -890,7 +890,7 @@ class MarkitdownXLSXParser(DocumentParser):
         try:
             from markitdown import MarkItDown
         except ImportError:
-            LangroidImportError("doc-parsers", "doc-parsers")
+            LangroidImportError("markitdown", "doc-parsers")
         md = MarkItDown()
         self.doc_bytes.seek(0)  # Reset to start
 
@@ -908,18 +908,18 @@ class MarkitdownXLSXParser(DocumentParser):
         for i, sheet in enumerate(sheets):
             yield i, sheet
 
-    def get_document_from_page(self, md_file: str) -> Document:
+    def get_document_from_page(self, md_content: str) -> Document:
         """
-        Get Document object from a given 1-page markdown file,
+        Get Document object from a given 1-page markdown string.
 
         Args:
-            md_file (str): The markdown file path for the page.
+            md_content (str): The markdown content for the page.
 
         Returns:
             Document: Document object, with content and possible metadata.
         """
         return Document(
-            content=self.fix_text(md_file),
+            content=self.fix_text(md_content),
             metadata=DocMetaData(source=self.source),
         )
 
@@ -929,7 +929,7 @@ class MarkitdownPPTXParser(DocumentParser):
         try:
             from markitdown import MarkItDown
         except ImportError:
-            LangroidImportError("doc-parsers", "doc-parsers")
+            LangroidImportError("markitdown", "doc-parsers")
 
         md = MarkItDown()
         self.doc_bytes.seek(0)
@@ -938,17 +938,17 @@ class MarkitdownPPTXParser(DocumentParser):
         for i, slide in enumerate(slides):
             yield i, slide
 
-    def get_document_from_page(self, md_file: str) -> Document:
+    def get_document_from_page(self, md_content: str) -> Document:
         """
-        Get Document object from a given 1-page markdown file,
+        Get Document object from a given 1-page markdown string.
 
         Args:
-            md_file (str): The markdown file path for the page.
+            md_content (str): The markdown content for the page.
 
         Returns:
             Document: Document object, with content and possible metadata.
         """
         return Document(
-            content=self.fix_text(md_file),
+            content=self.fix_text(md_content),
             metadata=DocMetaData(source=self.source),
         )

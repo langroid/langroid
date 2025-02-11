@@ -26,6 +26,7 @@ logging.basicConfig(level=logging.INFO)
 
 FILE = "examples/chainlit/chat-transcript.txt"
 
+
 @cl.on_chat_start
 async def on_chat_start():
     config = lr.ChatAgentConfig(
@@ -50,10 +51,17 @@ async def on_message(message: cl.Message):
     if message.content.startswith("/s"):
         content = message.content
         # get transcript of entire conv history as a string
-        history = "\n\n".join(
-            [f"{msg.role.value.upper()}: {msg.content}"
-             for msg in agent.message_history]
-        ) + "\n\n" + "FINAL User Answer: " + content[2:]
+        history = (
+            "\n\n".join(
+                [
+                    f"{msg.role.value.upper()}: {msg.content}"
+                    for msg in agent.message_history
+                ]
+            )
+            + "\n\n"
+            + "FINAL User Answer: "
+            + content[2:]
+        )
 
         # save chat transcript to file
         with open(FILE, "w") as f:
