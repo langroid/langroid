@@ -52,6 +52,11 @@ class MarkitdownXLSParsingConfig(BaseSettings):
     library: Literal["markitdown"] = "markitdown"
 
 
+class GeminiParsingConfig(BaseSettings):
+    library: Literal["google-genai"] = "google-genai"
+    gemini_model_name: str = "gemini-2.0-flash"
+
+
 class ParsingConfig(BaseSettings):
     splitter: str = Splitter.TOKENS
     chunk_by_page: bool = False  # split by page?
@@ -71,6 +76,7 @@ class ParsingConfig(BaseSettings):
     pptx: MarkitdownPPTXParsingConfig = MarkitdownPPTXParsingConfig()
     xls: MarkitdownXLSParsingConfig = MarkitdownXLSParsingConfig()
     xlsx: MarkitdownXLSXParsingConfig = MarkitdownXLSXParsingConfig()
+    gemini: GeminiParsingConfig = GeminiParsingConfig()
 
 
 class Parser:
