@@ -888,18 +888,25 @@ class PythonDocxParser(DocumentParser):
 class MarkitdownXLSXParser(DocumentParser):
     def iterate_pages(self) -> Generator[Tuple[int, Any], None, None]:
         try:
-            import pandas as pd
             from markitdown import MarkItDown
         except ImportError:
             LangroidImportError("doc-parsers", "doc-parsers")
-        sheets = pd.read_excel(self.doc_bytes, sheet_name=None)
         md = MarkItDown()
-        for i, (sheet_name, df) in enumerate(sheets.items(), start=1):
-            with tempfile.NamedTemporaryFile(suffix=".xlsx", delete=True) as temp_file:
-                df.to_excel(temp_file.name, index=False, engine="openpyxl")
-                result = md.convert(temp_file.name)
-            page = result.text_content.replace("## Sheet1", f"\n## Sheet {i}")
-            yield i, page
+        self.doc_bytes.seek(0)  # Reset to start
+
+        # Save stream to a temp file since md.convert() expects a path or URL
+        # Temporary workaround until markitdown fixes convert_stream function
+        # for xls and xlsx files
+        # See issue here https://github.com/microsoft/markitdown/issues/321
+        with tempfile.NamedTemporaryFile(delete=True, suffix=".xlsx") as temp_file:
+            temp_file.write(self.doc_bytes.read())
+            temp_file.flush()  # Ensure data is written before reading
+            result = md.convert(temp_file.name)
+
+        sheets = re.split(r"(?=## Sheet\d+)", result.text_content)
+
+        for i, sheet in enumerate(sheets):
+            yield i, sheet
 
     def get_document_from_page(self, md_file: str) -> Document:
         """
@@ -921,29 +928,15 @@ class MarkitdownPPTXParser(DocumentParser):
     def iterate_pages(self) -> Generator[Tuple[int, Any], None, None]:
         try:
             from markitdown import MarkItDown
-            from pptx import Presentation
         except ImportError:
             LangroidImportError("doc-parsers", "doc-parsers")
 
-        prs = Presentation(self.doc_bytes)
         md = MarkItDown()
-
-        for i, slide in enumerate(prs.slides, start=1):
-            new_prs = Presentation()
-            new_slide_layout = new_prs.slide_layouts[5]
-            new_slide = new_prs.slides.add_slide(new_slide_layout)
-
-            for shape in slide.shapes:
-                el = shape._element
-                new_slide.shapes._spTree.insert_element_before(el, "p:extLst")
-
-            with tempfile.NamedTemporaryFile(suffix=".pptx", delete=True) as temp_file:
-                new_prs.save(temp_file.name)
-                result = md.convert(temp_file.name)
-            page = result.text_content.replace(
-                "<!-- Slide number: 1 -->", f"\n<!-- Slide number: {i} -->"
-            )
-            yield i, page
+        self.doc_bytes.seek(0)
+        result = md.convert_stream(self.doc_bytes, file_extension=".pptx")
+        slides = re.split(r"(?=<!-- Slide number: \d+ -->)", result.text_content)
+        for i, slide in enumerate(slides):
+            yield i, slide
 
     def get_document_from_page(self, md_file: str) -> Document:
         """
