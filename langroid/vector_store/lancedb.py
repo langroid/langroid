@@ -26,7 +26,7 @@ from langroid.embedding_models.base import (
 )
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
 from langroid.exceptions import LangroidImportError
-from langroid.mytypes import Document, EmbeddingFunction
+from langroid.mytypes import Document
 from langroid.utils.configuration import settings
 from langroid.utils.pydantic_utils import (
     dataframe_to_document_model,
@@ -60,8 +60,6 @@ class LanceDB(VectorStore):
             raise LangroidImportError("lancedb", "lancedb")
 
         self.config: LanceDBConfig = config
-        self.embedding_fn: EmbeddingFunction = self.embedding_model.embedding_fn()
-        self.embedding_dim = self.embedding_model.embedding_dims
         self.host = config.host
         self.port = config.port
         self.is_from_dataframe = False  # were docs ingested from a dataframe?

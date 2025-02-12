@@ -135,17 +135,29 @@ teacher_task.run()
 <details>
 <summary> <b>Click to expand</b></summary>
 
+- **Jan 2025:**
+  - [0.36.0](https://github.com/langroid/langroid/releases/tag/0.36.0): Weaviate vector-db support (thanks @abab-dev).
+  - [0.35.0](https://github.com/langroid/langroid/releases/tag/0.35.0): Capture/Stream reasoning content from 
+    Reasoning LLMs (e.g. DeepSeek-R1, OpenAI o1) in addition to final answer.
+  - [0.34.0](https://github.com/langroid/langroid/releases/tag/0.34.0): DocChatAgent 
+    chunk enrichment to improve retrieval. (collaboration with @dfm88). 
+  - [0.33.0](https://github.com/langroid/langroid/releases/tag/0.33.3) Move from Poetry to uv! (thanks @abab-dev).
+  - [0.32.0](https://github.com/langroid/langroid/releases/tag/0.32.0) DeepSeek v3 support.
 - **Dec 2024:**
-  - [0.30.0](https://github.com/langroid/langroid/releases/tag/0.30.0) Llama-cpp embeddings.
-  - [0.29.0](https://github.com/langroid/langroid/releases/tag/0.29.0) Custom Azure OpenAI Client 
+  - [0.31.0](https://github.com/langroid/langroid/releases/tag/0.31.0) Azure OpenAI Embeddings
+  - [0.30.0](https://github.com/langroid/langroid/releases/tag/0.30.0) Llama-cpp embeddings (thanks @Kwigg).
+  - [0.29.0](https://github.com/langroid/langroid/releases/tag/0.29.0) Custom Azure OpenAI Client (thanks 
+    @johannestang).
   - [0.28.0](https://github.com/langroid/langroid/releases/tag/0.28.0) `ToolMessage`: `_handler` field to override 
-default handler method name in `request` field. 
+default handler method name in `request` field (thanks @alexagr).
   - [0.27.0](https://github.com/langroid/langroid/releases/tag/0.27.0) OpenRouter Support.
   - [0.26.0](https://github.com/langroid/langroid/releases/tag/0.26.0) Update to latest Chainlit.
-  - [0.25.0](https://github.com/langroid/langroid/releases/tag/0.25.0) True Async Methods for agent and user-response.
+  - [0.25.0](https://github.com/langroid/langroid/releases/tag/0.25.0) True Async Methods for agent and 
+    user-response (thanks @alexagr).
 - **Nov 2024:**
   - **[0.24.0](https://langroid.github.io/langroid/notes/structured-output/)**: 
      Enables support for `Agent`s with strict JSON schema output format on compatible LLMs and strict mode for the OpenAI tools API.
+    (thanks @nilspalumbo).
   - **[0.23.0](https://langroid.github.io/langroid/tutorials/local-llm-setup/#local-llms-hosted-on-glhfchat)**: 
       support for LLMs (e.g. `Qwen2.5-Coder-32b-Instruct`) hosted on glhf.chat 
   - **[0.22.0](https://langroid.github.io/langroid/notes/large-tool-results/)**: 
@@ -434,7 +446,7 @@ For many practical scenarios, you may need additional optional dependencies:
 - For "chat with databases", use the `db` extra:
     ```bash
     pip install "langroid[db]"
-    ``
+    ```
 - You can specify multiple extras by separating them with commas, e.g.:
     ```bash
     pip install "langroid[doc-chat,db]"

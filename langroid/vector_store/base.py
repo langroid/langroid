@@ -8,7 +8,7 @@ import pandas as pd
 
 from langroid.embedding_models.base import EmbeddingModel, EmbeddingModelsConfig
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
-from langroid.mytypes import DocMetaData, Document
+from langroid.mytypes import DocMetaData, Document, EmbeddingFunction
 from langroid.pydantic_v1 import BaseSettings
 from langroid.utils.algorithms.graph import components, topological_sort
 from langroid.utils.configuration import settings
@@ -51,6 +51,7 @@ class VectorStore(ABC):
             self.embedding_model = EmbeddingModel.create(config.embedding)
         else:
             self.embedding_model = config.embedding_model
+        self.embedding_fn: EmbeddingFunction = self.embedding_model.embedding_fn()
 
     @staticmethod
     def create(config: VectorStoreConfig) -> Optional["VectorStore"]:
@@ -58,7 +59,10 @@ class VectorStore(ABC):
         from langroid.vector_store.lancedb import LanceDB, LanceDBConfig
         from langroid.vector_store.meilisearch import MeiliSearch, MeiliSearchConfig
         from langroid.vector_store.momento import MomentoVI, MomentoVIConfig
+        from langroid.vector_store.pineconedb import PineconeDB, PineconeDBConfig
+        from langroid.vector_store.postgres import PostgresDB, PostgresDBConfig
         from langroid.vector_store.qdrantdb import QdrantDB, QdrantDBConfig
+        from langroid.vector_store.weaviatedb import WeaviateDB, WeaviateDBConfig
 
         if isinstance(config, QdrantDBConfig):
             return QdrantDB(config)
@@ -70,6 +74,12 @@ class VectorStore(ABC):
             return LanceDB(config)
         elif isinstance(config, MeiliSearchConfig):
             return MeiliSearch(config)
+        elif isinstance(config, PostgresDBConfig):
+            return PostgresDB(config)
+        elif isinstance(config, WeaviateDBConfig):
+            return WeaviateDB(config)
+        elif isinstance(config, PineconeDBConfig):
+            return PineconeDB(config)
 
         else:
             logger.warning(
@@ -82,6 +92,10 @@ class VectorStore(ABC):
                 """
             )
             return None
+
+    @property
+    def embedding_dim(self) -> int:
+        return len(self.embedding_fn(["test"])[0])
 
     @abstractmethod
     def clear_empty_collections(self) -> int:
@@ -261,7 +275,7 @@ class VectorStore(ABC):
             metadata = copy.deepcopy(id2metadata[w[0]])
             metadata.window_ids = w
             document = Document(
-                content=" ".join([d.content for d in self.get_documents_by_ids(w)]),
+                content="".join([d.content for d in self.get_documents_by_ids(w)]),
                 metadata=metadata,
             )
             # make a fresh id since content is in general different

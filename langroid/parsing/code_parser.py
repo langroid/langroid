@@ -65,7 +65,7 @@ class CodeParsingConfig(BaseSettings):
         "bash",
     ]
     chunk_size: int = 500  # tokens
-    token_encoding_model: str = "text-embedding-ada-002"
+    token_encoding_model: str = "text-embedding-3-small"
     n_similar_docs: int = 4
 
 

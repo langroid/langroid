@@ -2,10 +2,14 @@ from __future__ import annotations
 
 import itertools
 import logging
+import os
 import re
+import tempfile
 from enum import Enum
 from io import BytesIO
-from typing import TYPE_CHECKING, Any, Generator, List, Tuple
+from itertools import accumulate
+from pathlib import Path
+from typing import TYPE_CHECKING, Any, Dict, Generator, List, Tuple
 
 from langroid.exceptions import LangroidImportError
 from langroid.utils.object_registry import ObjectRegistry
@@ -15,6 +19,17 @@ try:
 except ImportError:
     if not TYPE_CHECKING:
         fitz = None
+try:
+    import pymupdf4llm
+except ImportError:
+    if not TYPE_CHECKING:
+        pymupdf4llm = None
+
+try:
+    import docling
+except ImportError:
+    if not TYPE_CHECKING:
+        docling = None
 
 try:
     import pypdf
@@ -22,11 +37,6 @@ except ImportError:
     if not TYPE_CHECKING:
         pypdf = None
 
-try:
-    import pdfplumber
-except ImportError:
-    if not TYPE_CHECKING:
-        pdfplumber = None
 
 import requests
 from bs4 import BeautifulSoup
@@ -41,10 +51,14 @@ logger = logging.getLogger(__name__)
 
 
 class DocumentType(str, Enum):
+    # TODO add `md` (Markdown) and `html`
     PDF = "pdf"
     DOCX = "docx"
     DOC = "doc"
     TXT = "txt"
+    XLSX = "xlsx"
+    XLS = "xls"
+    PPTX = "pptx"
 
 
 def find_last_full_char(possible_unicode: bytes) -> int:
@@ -139,10 +153,12 @@ class DocumentParser(Parser):
         if inferred_doc_type == DocumentType.PDF:
             if config.pdf.library == "fitz":
                 return FitzPDFParser(source, config)
+            elif config.pdf.library == "pymupdf4llm":
+                return PyMuPDF4LLMParser(source, config)
+            elif config.pdf.library == "docling":
+                return DoclingParser(source, config)
             elif config.pdf.library == "pypdf":
                 return PyPDFParser(source, config)
-            elif config.pdf.library == "pdfplumber":
-                return PDFPlumberParser(source, config)
             elif config.pdf.library == "unstructured":
                 return UnstructuredPDFParser(source, config)
             elif config.pdf.library == "pdf2image":
@@ -162,6 +178,12 @@ class DocumentParser(Parser):
                 )
         elif inferred_doc_type == DocumentType.DOC:
             return UnstructuredDocParser(source, config)
+        elif inferred_doc_type == DocumentType.XLS:
+            return MarkitdownXLSXParser(source, config)
+        elif inferred_doc_type == DocumentType.XLSX:
+            return MarkitdownXLSXParser(source, config)
+        elif inferred_doc_type == DocumentType.PPTX:
+            return MarkitdownPPTXParser(source, config)
         else:
             source_name = source if isinstance(source, str) else "bytes"
             raise ValueError(f"Unsupported document type: {source_name}")
@@ -210,6 +232,12 @@ class DocumentParser(Parser):
                 return DocumentType.DOCX
             elif source.lower().endswith(".doc"):
                 return DocumentType.DOC
+            elif source.lower().endswith(".xlsx"):
+                return DocumentType.XLSX
+            elif source.lower().endswith(".xls"):
+                return DocumentType.XLS
+            elif source.lower().endswith(".pptx"):
+                return DocumentType.PPTX
             else:
                 raise ValueError(f"Unsupported document type: {source}")
         else:
@@ -223,13 +251,17 @@ class DocumentParser(Parser):
             elif mime_type in [
                 "application/vnd.openxmlformats-officedocument"
                 ".wordprocessingml.document",
-                "application/zip",
             ]:
-                # DOCX files are essentially ZIP files,
-                # but this might catch other ZIP-based formats too!
                 return DocumentType.DOCX
             elif mime_type == "application/msword":
                 return DocumentType.DOC
+            elif (
+                mime_type
+                == "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+            ):
+                return DocumentType.XLSX
+            elif mime_type == "application/vnd.ms-excel":
+                return DocumentType.XLS
             else:
                 raise ValueError("Unsupported document type from bytes")
 
@@ -268,7 +300,14 @@ class DocumentParser(Parser):
                 chunking and splitting settings in the parser config.
         """
         dtype: DocumentType = DocumentParser._document_type(source, doc_type)
-        if dtype in [DocumentType.PDF, DocumentType.DOC, DocumentType.DOCX]:
+        if dtype in [
+            DocumentType.PDF,
+            DocumentType.DOC,
+            DocumentType.DOCX,
+            DocumentType.PPTX,
+            DocumentType.XLS,
+            DocumentType.XLSX,
+        ]:
             doc_parser = DocumentParser.create(
                 source,
                 parser.config,
@@ -307,8 +346,11 @@ class DocumentParser(Parser):
         """Yield each page in the PDF."""
         raise NotImplementedError
 
-    def extract_text_from_page(self, page: Any) -> str:
-        """Extract text from a given page."""
+    def get_document_from_page(self, page: Any) -> Document:
+        """
+        Get Langroid Document object (with possible metadata)
+        corresponding to a given page.
+        """
         raise NotImplementedError
 
     def fix_text(self, text: str) -> str:
@@ -335,7 +377,10 @@ class DocumentParser(Parser):
         """
 
         text = "".join(
-            [self.extract_text_from_page(page) for _, page in self.iterate_pages()]
+            [
+                self.get_document_from_page(page).content
+                for _, page in self.iterate_pages()
+            ]
         )
         return Document(content=text, metadata=DocMetaData(source=self.source))
 
@@ -359,7 +404,10 @@ class DocumentParser(Parser):
         common_id = ObjectRegistry.new_id()
         n_chunks = 0  # how many chunk so far
         for i, page in self.iterate_pages():
-            page_text = self.extract_text_from_page(page)
+            # not used but could be useful, esp to blend the
+            # metadata from the pages into the chunks
+            page_doc = self.get_document_from_page(page)
+            page_text = page_doc.content
             split += self.tokenizer.encode(page_text)
             pages.append(str(i + 1))
             # split could be so long it needs to be split
@@ -422,17 +470,153 @@ class FitzPDFParser(DocumentParser):
             yield i, page
         doc.close()
 
-    def extract_text_from_page(self, page: "fitz.Page") -> str:
+    def get_document_from_page(self, page: "fitz.Page") -> Document:
         """
-        Extract text from a given `fitz` page.
+        Get Document object from a given `fitz` page.
 
         Args:
             page (fitz.Page): The `fitz` page object.
 
         Returns:
-            str: Extracted text from the page.
+            Document: Document object, with content and possible metadata.
         """
-        return self.fix_text(page.get_text())
+        return Document(
+            content=self.fix_text(page.get_text()),
+            metadata=DocMetaData(source=self.source),
+        )
+
+
+class PyMuPDF4LLMParser(DocumentParser):
+    """
+    Parser for processing PDFs using the `pymupdf4llm` library.
+    """
+
+    def iterate_pages(self) -> Generator[Tuple[int, "fitz.Page"], None, None]:
+        """
+        Yield each page in the PDF using `fitz`.
+
+        Returns:
+            Generator[fitz.Page]: Generator yielding each page.
+        """
+        if fitz is None:
+            raise LangroidImportError(
+                "pymupdf4llm", ["pymupdf4llm", "all", "pdf-parsers", "doc-chat"]
+            )
+        doc: fitz.Document = fitz.open(stream=self.doc_bytes, filetype="pdf")
+        pages: List[Dict[str, Any]] = pymupdf4llm.to_markdown(doc, page_chunks=True)
+        for i, page in enumerate(pages):
+            yield i, page
+        doc.close()
+
+    def get_document_from_page(self, page: Dict[str, Any]) -> Document:
+        """
+        Get Document object corresponding to a given "page-chunk"
+        dictionary, see:
+         https://pymupdf.readthedocs.io/en/latest/pymupdf4llm/api.html
+
+
+        Args:
+            page (Dict[str,Any]): The "page-chunk" dictionary.
+
+        Returns:
+            Document: Document object, with content and possible metadata.
+        """
+        return Document(
+            content=self.fix_text(page.get("text", "")),
+            # TODO could possible use other metadata from page, see above link.
+            metadata=DocMetaData(source=self.source),
+        )
+
+
+class DoclingParser(DocumentParser):
+    """
+    Parser for processing PDFs using the `docling` library.
+    """
+
+    def iterate_pages(self) -> Generator[Tuple[int, Any], None, None]:
+        """
+        Yield each page in the PDF using `docling`.
+        Code largely from this example:
+        https://github.com/DS4SD/docling/blob/4d41db3f7abb86c8c65386bf94e7eb0bf22bb82b/docs/examples/export_figures.py
+
+        Returns:
+            Generator[docling.Page]: Generator yielding each page.
+        """
+        if docling is None:
+            raise LangroidImportError(
+                "docling", ["docling", "pdf-parsers", "all", "doc-chat"]
+            )
+
+        from docling.datamodel.base_models import InputFormat  # type: ignore
+        from docling.datamodel.pipeline_options import PdfPipelineOptions
+        from docling.document_converter import (  # type: ignore
+            ConversionResult,
+            DocumentConverter,
+            PdfFormatOption,
+        )
+        from docling_core.types.doc import ImageRefMode  # type: ignore
+
+        IMAGE_RESOLUTION_SCALE = 2.0
+        pipeline_options = PdfPipelineOptions()
+        pipeline_options.images_scale = IMAGE_RESOLUTION_SCALE
+        pipeline_options.generate_page_images = True
+        pipeline_options.generate_picture_images = True
+
+        converter = DocumentConverter(
+            format_options={
+                InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)
+            }
+        )
+        doc_path = self.source
+        if doc_path == "bytes":
+            # write to tmp file, then use that path
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_file:
+                temp_file.write(self.doc_bytes.getvalue())
+                doc_path = temp_file.name
+
+        output_dir = Path(str(Path(doc_path).with_suffix("")) + "-pages")
+        os.makedirs(output_dir, exist_ok=True)
+
+        result: ConversionResult = converter.convert(doc_path)
+
+        def n_page_elements(page) -> int:  # type: ignore
+            if page.assembled is None:
+                return 0
+            return 1 + len(page.assembled.elements)
+
+        page_element_count = [n_page_elements(i) for i in result.pages]
+        element_page_cutoff = list(accumulate([1] + page_element_count))
+        for i, page in enumerate(result.pages):
+            page_start = element_page_cutoff[i]
+            page_end = element_page_cutoff[i + 1]
+            md_file = output_dir / f"page_{i}.md"
+            # we could have just directly exported to a markdown string,
+            # but we need to save to a file to force generation of image-files.
+            result.document.save_as_markdown(
+                md_file,
+                image_mode=ImageRefMode.REFERENCED,
+                from_element=page_start,
+                to_element=page_end,
+            )
+            yield i, md_file
+
+    def get_document_from_page(self, md_file: str) -> Document:
+        """
+        Get Document object from a given 1-page markdown file,
+        possibly containing image refs.
+
+        Args:
+            md_file (str): The markdown file path for the page.
+
+        Returns:
+            Document: Document object, with content and possible metadata.
+        """
+        with open(md_file, "r") as f:
+            text = f.read()
+        return Document(
+            content=self.fix_text(text),
+            metadata=DocMetaData(source=self.source),
+        )
 
 
 class PyPDFParser(DocumentParser):
@@ -453,50 +637,20 @@ class PyPDFParser(DocumentParser):
         for i, page in enumerate(reader.pages):
             yield i, page
 
-    def extract_text_from_page(self, page: pypdf.PageObject) -> str:
+    def get_document_from_page(self, page: pypdf.PageObject) -> Document:
         """
-        Extract text from a given `pypdf` page.
+        Get Document object from a given `pypdf` page.
 
         Args:
             page (pypdf.pdf.PageObject): The `pypdf` page object.
 
         Returns:
-            str: Extracted text from the page.
+            Document: Document object, with content and possible metadata.
         """
-        return self.fix_text(page.extract_text())
-
-
-class PDFPlumberParser(DocumentParser):
-    """
-    Parser for processing PDFs using the `pdfplumber` library.
-    """
-
-    def iterate_pages(
-        self,
-    ) -> (Generator)[Tuple[int, pdfplumber.pdf.Page], None, None]:  # type: ignore
-        """
-        Yield each page in the PDF using `pdfplumber`.
-
-        Returns:
-            Generator[pdfplumber.Page]: Generator yielding each page.
-        """
-        if pdfplumber is None:
-            raise LangroidImportError("pdfplumber", "pdf-parsers")
-        with pdfplumber.open(self.doc_bytes) as pdf:
-            for i, page in enumerate(pdf.pages):
-                yield i, page
-
-    def extract_text_from_page(self, page: pdfplumber.pdf.Page) -> str:  # type: ignore
-        """
-        Extract text from a given `pdfplumber` page.
-
-        Args:
-            page (pdfplumber.Page): The `pdfplumber` page object.
-
-        Returns:
-            str: Extracted text from the page.
-        """
-        return self.fix_text(page.extract_text())
+        return Document(
+            content=self.fix_text(page.extract_text()),
+            metadata=DocMetaData(source=self.source),
+        )
 
 
 class ImagePdfParser(DocumentParser):
@@ -516,15 +670,15 @@ class ImagePdfParser(DocumentParser):
         for i, image in enumerate(images):
             yield i, image
 
-    def extract_text_from_page(self, page: "Image") -> str:  # type: ignore
+    def get_document_from_page(self, page: "Image") -> Document:  # type: ignore
         """
-        Extract text from a given `pdf2image` page.
+        Get Document object corresponding to a given `pdf2image` page.
 
         Args:
             page (Image): The PIL Image object.
 
         Returns:
-            str: Extracted text from the image.
+            Document: Document object, with content and possible metadata.
         """
         try:
             import pytesseract
@@ -532,7 +686,10 @@ class ImagePdfParser(DocumentParser):
             raise LangroidImportError("pytesseract", "pdf-parsers")
 
         text = pytesseract.image_to_string(page)
-        return self.fix_text(text)
+        return Document(
+            content=self.fix_text(text),
+            metadata=DocMetaData(source=self.source),
+        )
 
 
 class UnstructuredPDFParser(DocumentParser):
@@ -564,8 +721,8 @@ class UnstructuredPDFParser(DocumentParser):
                 The `unstructured` library failed to parse the pdf.
                 Please try a different library by setting the `library` field
                 in the `pdf` section of the `parsing` field in the config file.
-                Supported libraries are:
-                fitz, pypdf, pdfplumber, unstructured
+                Other supported libraries are:
+                fitz, pymupdf4llm, pypdf
                 """
             )
 
@@ -584,18 +741,21 @@ class UnstructuredPDFParser(DocumentParser):
         if page_elements:
             yield page_number, page_elements
 
-    def extract_text_from_page(self, page: Any) -> str:
+    def get_document_from_page(self, page: Any) -> Document:
         """
-        Extract text from a given `unstructured` element.
+        Get Document object from a given `unstructured` element.
 
         Args:
             page (unstructured element): The `unstructured` element object.
 
         Returns:
-            str: Extracted text from the element.
+            Document: Document object, with content and possible metadata.
         """
         text = " ".join(el.text for el in page)
-        return self.fix_text(text)
+        return Document(
+            content=self.fix_text(text),
+            metadata=DocMetaData(source=self.source),
+        )
 
 
 class UnstructuredDocxParser(DocumentParser):
@@ -632,9 +792,9 @@ class UnstructuredDocxParser(DocumentParser):
         if page_elements:
             yield page_number, page_elements
 
-    def extract_text_from_page(self, page: Any) -> str:
+    def get_document_from_page(self, page: Any) -> Document:
         """
-        Extract text from a given `unstructured` element.
+        Get Document object from a given `unstructured` element.
 
         Note:
             The concept of "pages" doesn't actually exist in the .docx file format in
@@ -647,10 +807,13 @@ class UnstructuredDocxParser(DocumentParser):
             page (unstructured element): The `unstructured` element object.
 
         Returns:
-            str: Extracted text from the element.
+            Document object, with content and possible metadata.
         """
         text = " ".join(el.text for el in page)
-        return self.fix_text(text)
+        return Document(
+            content=self.fix_text(text),
+            metadata=DocMetaData(source=self.source),
+        )
 
 
 class UnstructuredDocParser(UnstructuredDocxParser):
@@ -704,15 +867,88 @@ class PythonDocxParser(DocumentParser):
         for i, para in enumerate(doc.paragraphs, start=1):
             yield i, [para]
 
-    def extract_text_from_page(self, page: Any) -> str:
+    def get_document_from_page(self, page: Any) -> Document:
         """
-        Extract text from a given 'page', which in this case is a single paragraph.
+        Get Document object from a given 'page', which in this case is a single
+        paragraph.
 
         Args:
             page (list): A list containing a single Paragraph object.
 
         Returns:
-            str: Extracted text from the paragraph.
+            Document: Document object, with content and possible metadata.
         """
         paragraph = page[0]
-        return self.fix_text(paragraph.text)
+        return Document(
+            content=self.fix_text(paragraph.text),
+            metadata=DocMetaData(source=self.source),
+        )
+
+
+class MarkitdownXLSXParser(DocumentParser):
+    def iterate_pages(self) -> Generator[Tuple[int, Any], None, None]:
+        try:
+            from markitdown import MarkItDown
+        except ImportError:
+            LangroidImportError("markitdown", "doc-parsers")
+        md = MarkItDown()
+        self.doc_bytes.seek(0)  # Reset to start
+
+        # Save stream to a temp file since md.convert() expects a path or URL
+        # Temporary workaround until markitdown fixes convert_stream function
+        # for xls and xlsx files
+        # See issue here https://github.com/microsoft/markitdown/issues/321
+        with tempfile.NamedTemporaryFile(delete=True, suffix=".xlsx") as temp_file:
+            temp_file.write(self.doc_bytes.read())
+            temp_file.flush()  # Ensure data is written before reading
+            result = md.convert(temp_file.name)
+
+        sheets = re.split(r"(?=## Sheet\d+)", result.text_content)
+
+        for i, sheet in enumerate(sheets):
+            yield i, sheet
+
+    def get_document_from_page(self, md_content: str) -> Document:
+        """
+        Get Document object from a given 1-page markdown string.
+
+        Args:
+            md_content (str): The markdown content for the page.
+
+        Returns:
+            Document: Document object, with content and possible metadata.
+        """
+        return Document(
+            content=self.fix_text(md_content),
+            metadata=DocMetaData(source=self.source),
+        )
+
+
+class MarkitdownPPTXParser(DocumentParser):
+    def iterate_pages(self) -> Generator[Tuple[int, Any], None, None]:
+        try:
+            from markitdown import MarkItDown
+        except ImportError:
+            LangroidImportError("markitdown", "doc-parsers")
+
+        md = MarkItDown()
+        self.doc_bytes.seek(0)
+        result = md.convert_stream(self.doc_bytes, file_extension=".pptx")
+        slides = re.split(r"(?=<!-- Slide number: \d+ -->)", result.text_content)
+        for i, slide in enumerate(slides):
+            yield i, slide
+
+    def get_document_from_page(self, md_content: str) -> Document:
+        """
+        Get Document object from a given 1-page markdown string.
+
+        Args:
+            md_content (str): The markdown content for the page.
+
+        Returns:
+            Document: Document object, with content and possible metadata.
+        """
+        return Document(
+            content=self.fix_text(md_content),
+            metadata=DocMetaData(source=self.source),
+        )

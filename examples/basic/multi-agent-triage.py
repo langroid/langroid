@@ -139,8 +139,9 @@ def main(model: str = ""):
             # NOTE: PDF parsing is extremely challenging, and each library
             # has its own strengths and weaknesses.
             # Try one that works for your use case.
-            # or "unstructured", "pdfplumber", "fitz", "pypdf"
-            library="pdfplumber",
+            # See here for available alternatives:
+            # https://github.com/langroid/langroid/blob/main/langroid/parsing/parser.py
+            library="pymupdf4llm",
         ),
     )
 

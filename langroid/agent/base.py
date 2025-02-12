@@ -147,8 +147,7 @@ class Agent(ABC):
         self.llm_tools_usable: Set[str] = set()
         self.llm_tools_known: Set[str] = set()  # all known tools, handled/used or not
         # Indicates which tool-names are allowed to be inferred when
-        # the LLM "forgets" to include the request field in its
-        # tool-call.
+        # the LLM "forgets" to include the request field in its tool-call.
         self.enabled_requests_for_inference: Optional[Set[str]] = (
             None  # If None, we allow all
         )
@@ -333,6 +332,11 @@ class Agent(ABC):
         if hasattr(message_class, "handle_message_fallback") and (
             inspect.isfunction(message_class.handle_message_fallback)
         ):
+            # When a ToolMessage has a `handle_message_fallback` method,
+            # we inject it into the agent as a method, overriding the default
+            # `handle_message_fallback` method (which does nothing).
+            # It's possible multiple tool messages have a `handle_message_fallback`,
+            # in which case, the last one inserted will be used.
             setattr(
                 self,
                 "handle_message_fallback",
@@ -912,7 +916,7 @@ class Agent(ABC):
         else:
             prompt = message
 
-        output_len = self.config.llm.max_output_tokens
+        output_len = self.config.llm.model_max_output_tokens
         if self.num_tokens(prompt) + output_len > self.llm.completion_context_length():
             output_len = self.llm.completion_context_length() - self.num_tokens(prompt)
             if output_len < self.config.llm.min_output_tokens:
@@ -981,7 +985,7 @@ class Agent(ABC):
                 # show rich spinner only if not streaming!
                 cm = status("LLM responding to message...")
                 stack.enter_context(cm)
-            output_len = self.config.llm.max_output_tokens
+            output_len = self.config.llm.model_max_output_tokens
             if (
                 self.num_tokens(prompt) + output_len
                 > self.llm.completion_context_length()
@@ -1039,6 +1043,11 @@ class Agent(ABC):
         """
         if msg is None:
             return False
+        if isinstance(msg, ChatDocument):
+            if len(msg.tool_messages) > 0:
+                return True
+            if msg.metadata.sender != Entity.LLM:
+                return False
         try:
             tools = self.get_tool_messages(msg)
             return len(tools) > 0
@@ -1861,7 +1870,7 @@ class Agent(ABC):
             cumul_cost = format(tot_cost, ".4f")
             assert isinstance(self.llm, LanguageModel)
             context_length = self.llm.chat_context_length()
-            max_out = self.config.llm.max_output_tokens
+            max_out = self.config.llm.model_max_output_tokens
 
             llm_model = (
                 "no-LLM" if self.config.llm is None else self.llm.config.chat_model

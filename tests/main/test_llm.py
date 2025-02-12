@@ -35,7 +35,7 @@ def test_openai_gpt(test_settings: Settings, streaming, country, capital, use_ca
         type="openai",
         max_output_tokens=100,
         min_output_tokens=10,
-        completion_model=OpenAICompletionModel.GPT3_5_TURBO_INSTRUCT,
+        completion_model=OpenAICompletionModel.DAVINCI,
         cache_config=RedisCacheConfig(fake=True) if use_cache else None,
     )
 
@@ -130,7 +130,7 @@ def _test_context_length_error(test_settings: Settings, mode: str, max_tokens: i
 def test_model_selection(test_settings: Settings):
     set_global(test_settings)
 
-    defaultOpenAIChatModel = lr.language_models.openai_gpt.defaultOpenAIChatModel
+    defaultOpenAIChatModel = lr.language_models.openai_gpt.default_openai_chat_model
 
     def get_response(llm):
         llm.generate(prompt="What is the capital of France?", max_tokens=50)
@@ -161,7 +161,7 @@ def test_model_selection(test_settings: Settings):
                     pass
 
     # Default is GPT4o; we should not generate the warning in this case
-    lr.language_models.openai_gpt.defaultOpenAIChatModel = OpenAIChatModel.GPT4_TURBO
+    lr.language_models.openai_gpt.default_openai_chat_model = OpenAIChatModel.GPT4_TURBO
     llm = OpenAIGPT(config=OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT3_5_TURBO))
     check_warning(llm, False)
 
@@ -169,7 +169,9 @@ def test_model_selection(test_settings: Settings):
     check_warning(llm, False)
 
     # Default is GPT3.5 (simulate GPT 4 inaccessible)
-    lr.language_models.openai_gpt.defaultOpenAIChatModel = OpenAIChatModel.GPT3_5_TURBO
+    lr.language_models.openai_gpt.default_openai_chat_model = (
+        OpenAIChatModel.GPT3_5_TURBO
+    )
 
     # No warnings generated if we specify the model explicitly
     llm = OpenAIGPT(config=OpenAIGPTConfig(chat_model=OpenAIChatModel.GPT3_5_TURBO))
@@ -192,4 +194,4 @@ def test_model_selection(test_settings: Settings):
     llm = OpenAIGPT(config=OpenAIGPTConfig())
     check_warning(llm, False)
 
-    lr.language_models.openai_gpt.defaultOpenAIChatModel = defaultOpenAIChatModel
+    lr.language_models.openai_gpt.default_openai_chat_model = defaultOpenAIChatModel

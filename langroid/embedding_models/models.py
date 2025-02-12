@@ -22,7 +22,7 @@ LANGDB_API_KEY = os.environ.get("LANGDB_API_KEY", DUMMY_API_KEY)
 
 class OpenAIEmbeddingsConfig(EmbeddingModelsConfig):
     model_type: str = "openai"
-    model_name: str = "text-embedding-ada-002"
+    model_name: str = "text-embedding-3-small"
     api_key: str = ""
     api_base: Optional[str] = None
     organization: str = ""
@@ -32,7 +32,7 @@ class OpenAIEmbeddingsConfig(EmbeddingModelsConfig):
 
 class AzureOpenAIEmbeddingsConfig(EmbeddingModelsConfig):
     model_type: str = "azure-openai"
-    model_name: str = "text-embedding-ada-002"
+    model_name: str = "text-embedding-3-small"
     api_key: str = ""
     api_base: str = ""
     deployment_name: Optional[str] = None
@@ -79,6 +79,14 @@ class LlamaCppServerEmbeddingsConfig(EmbeddingModelsConfig):
     api_base: str = ""
     context_length: int = 2048
     batch_size: int = 2048
+
+
+class GeminiEmbeddingsConfig(EmbeddingModelsConfig):
+    model_type: str = "gemini"
+    model_name: str = "models/text-embedding-004"
+    api_key: str = ""
+    dims: int = 768
+    batch_size: int = 512
 
 
 class EmbeddingFunctionCallable:
@@ -164,6 +172,8 @@ class EmbeddingFunctionCallable:
                         self.embed_model.detokenize_string(list(token_batch))
                     )
                     embeds.append(gen_embedding)
+        elif isinstance(self.embed_model, GeminiEmbeddings):
+            embeds = self.embed_model.generate_embeddings(input)
         return embeds
 
 
@@ -451,6 +461,55 @@ class LlamaCppServerEmbeddings(EmbeddingModel):
         return self.config.dims
 
 
+class GeminiEmbeddings(EmbeddingModel):
+    def __init__(self, config: GeminiEmbeddingsConfig = GeminiEmbeddingsConfig()):
+        try:
+            from google import genai
+        except ImportError as e:
+            raise LangroidImportError(extra="google-genai", error=str(e))
+        super().__init__()
+        self.config = config
+        load_dotenv()
+        self.config.api_key = os.getenv("GEMINI_API_KEY", "")
+
+        if self.config.api_key == "":
+            raise ValueError(
+                """
+                GEMINI_API_KEY env variable must be set to use GeminiEmbeddings.
+                """
+            )
+        self.client = genai.Client(api_key=self.config.api_key)
+
+    def embedding_fn(self) -> Callable[[List[str]], Embeddings]:
+        return EmbeddingFunctionCallable(self, self.config.batch_size)
+
+    def generate_embeddings(self, texts: List[str]) -> List[List[float]]:
+        """Generates embeddings for a list of input texts."""
+        all_embeddings: List[List[float]] = []
+
+        for batch in batched(texts, self.config.batch_size):
+            result = self.client.models.embed_content(  # type: ignore[attr-defined]
+                model=self.config.model_name,
+                contents=batch,
+            )
+
+            if not hasattr(result, "embeddings") or not isinstance(
+                result.embeddings, list
+            ):
+                raise ValueError(
+                    "Unexpected format for embeddings: missing or incorrect type"
+                )
+
+            # Extract .values from ContentEmbedding objects
+            all_embeddings.extend([emb.values for emb in result.embeddings])
+
+        return all_embeddings
+
+    @property
+    def embedding_dims(self) -> int:
+        return self.config.dims
+
+
 def embedding_model(embedding_fn_type: str = "openai") -> EmbeddingModel:
     """
     Args:
@@ -471,5 +530,7 @@ def embedding_model(embedding_fn_type: str = "openai") -> EmbeddingModel:
         return FastEmbedEmbeddings  # type: ignore
     elif embedding_fn_type == "llamacppserver":
         return LlamaCppServerEmbeddings  # type: ignore
+    elif embedding_fn_type == "gemini":
+        return GeminiEmbeddings  # type: ignore
     else:  # default sentence transformer
         return SentenceTransformerEmbeddings  # type: ignore

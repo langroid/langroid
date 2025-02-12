@@ -1,5 +1,6 @@
 import json
 import logging
+from inspect import signature
 from typing import Any, Optional, Type, TypeVar, Union, get_args, get_origin
 
 from langroid.pydantic_v1 import BaseModel
@@ -91,3 +92,22 @@ def from_string(
         return s
     else:
         return None
+
+
+def is_callable(obj: Any, k: int = 1) -> bool:
+    """Check if object is callable and accepts exactly k args.
+
+    Args:
+        obj: Object to check
+
+    Returns:
+        bool: True if object is callable with k args, False otherwise
+    """
+    if not callable(obj):
+        return False
+    try:
+        sig = signature(obj)
+        params = list(sig.parameters.values())
+        return len(params) == k
+    except ValueError:
+        return False

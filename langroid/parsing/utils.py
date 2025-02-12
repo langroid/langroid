@@ -28,12 +28,13 @@ def download_nltk_resource(resource: str) -> None:
     try:
         nltk.data.find(resource)
     except LookupError:
-        nltk.download(resource, quiet=True)
+        model = resource.split("/")[-1]
+        nltk.download(model, quiet=True)
 
 
 # Download punkt_tab resource at module import
-download_nltk_resource("punkt_tab")
-download_nltk_resource("gutenberg")
+download_nltk_resource("tokenizers/punkt_tab")
+download_nltk_resource("corpora/gutenberg")
 
 T = TypeVar("T")
 
@@ -310,9 +311,9 @@ def extract_numbered_segments(s: str, specs: str) -> str:
         ]
 
         # If we extracted any segments from this paragraph,
-        # join them and append to results
+        # join them with ellipsis (...) and append to results.
         if extracted_segments:
-            extracted_paragraphs.append(" ".join(extracted_segments))
+            extracted_paragraphs.append("...".join(extracted_segments))
 
     return "\n\n".join(extracted_paragraphs)
 

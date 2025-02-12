@@ -13,6 +13,7 @@ from typing import Any, Dict, List, Optional, Sequence, Union
 from rich.console import Console
 
 from langroid.exceptions import LangroidImportError
+from langroid.mytypes import Entity
 from langroid.utils.constants import SEND_TO
 
 try:
@@ -43,10 +44,12 @@ from langroid.agent.special.sql.utils.tools import (
     RunQueryTool,
 )
 from langroid.agent.tools.orchestration import (
+    DonePassTool,
     DoneTool,
     ForwardTool,
     PassTool,
 )
+from langroid.language_models.base import Role
 from langroid.vector_store.base import VectorStoreConfig
 
 logger = logging.getLogger(__name__)
@@ -111,6 +114,8 @@ class SQLChatAgentConfig(ChatAgentConfig):
     # as opposed to returning a result from the task.run()
     chat_mode: bool = False
     addressing_prefix: str = ""
+    max_result_rows: int | None = None  # limit query results to this
+    max_retained_tokens: int | None = None  # limit history of query results to this
 
     """
     Optional, but strongly recommended, context descriptions for tables, columns, 
@@ -182,6 +187,7 @@ class SQLChatAgent(ChatAgent):
             self.helper_config = self.config.copy()
             self.helper_config.is_helper = True
             self.helper_config.use_helper = False
+            self.helper_config.chat_mode = False
             self.helper_agent = SQLHelperAgent(self.helper_config)
 
     def _validate_config(self, config: "SQLChatAgentConfig") -> None:
@@ -265,11 +271,13 @@ class SQLChatAgent(ChatAgent):
 
     def _init_tools(self) -> None:
         """Initialize sys msg and tools."""
+        RunQueryTool._max_retained_tokens = self.config.max_retained_tokens
         self.enable_message([RunQueryTool, ForwardTool])
         if self.config.use_schema_tools:
             self._enable_schema_tools()
         if not self.config.chat_mode:
             self.enable_message(DoneTool)
+            self.enable_message(DonePassTool)
 
     def _format_message(self) -> str:
         if self.engine is None:
@@ -312,14 +320,11 @@ class SQLChatAgent(ChatAgent):
         """
         if self.config.chat_mode:
             return f"""
-                you must use the `{ForwardTool.name()}` with the `agent` 
+                you must use the TOOL `{ForwardTool.name()}` with the `agent` 
                 parameter set to "User"
                 """
         else:
-            return f"""
-                you must use the `{DoneTool.name()}` with the `content` 
-                set to the answer or result
-                """
+            return f"you must use the TOOL `{DonePassTool.name()}`"
 
     def _clarifying_message(self) -> str:
         tools_instruction = f"""
@@ -344,23 +349,24 @@ class SQLChatAgent(ChatAgent):
         self, message: str | ChatDocument
     ) -> str | ForwardTool | ChatDocument | None:
         """
-        Handle the scenario where current msg is not a tool.
-        Special handling is only needed if the message was from the LLM
-        (as indicated by self.llm_responded).
+        We'd end up here if the current msg has no tool.
+        If this is from LLM, we may need to handle the scenario where
+        it may have "forgotten" to generate a tool.
         """
-        if not self.llm_responded:
+        if (
+            not isinstance(message, ChatDocument)
+            or message.metadata.sender != Entity.LLM
+        ):
             return None
-        if self.interactive:
-            # self.interactive will be set to True by the Task,
-            # when chat_mode=True, so in this case
-            # we send any Non-tool msg to the user
+        if self.config.chat_mode:
+            # send any Non-tool msg to the user
             return ForwardTool(agent="User")
         # Agent intent not clear => use the helper agent to
         # do what this agent should have done, e.g. generate tool, etc.
         # This is likelier to succeed since this agent has no "baggage" of
         # prior conversation, other than the system msg, and special
         # "Intent-interpretation" instructions.
-        if self._json_schema_available():
+        if self._json_schema_available() and self.config.strict_recovery:
             AnyTool = self._get_any_tool_message(optional=False)
             self.set_output_format(
                 AnyTool,
@@ -372,15 +378,18 @@ class SQLChatAgent(ChatAgent):
             recovery_message = self._strict_recovery_instructions(
                 AnyTool, optional=False
             )
-            return self.llm_response(recovery_message)
-        else:
+            result = self.llm_response(recovery_message)
+            # remove the recovery_message (it has User role) from the chat history,
+            # else it may cause the LLM to directly use the AnyTool.
+            self.delete_last_message(role=Role.USER)  # delete last User-role msg
+            return result
+        elif self.config.use_helper:
             response = self.helper_agent.llm_response(message)
             tools = self.try_get_tool_messages(response)
             if tools:
                 return response
-            else:
-                # fall back on the clarification message
-                return self._clarifying_message()
+        # fall back on the clarification message
+        return self._clarifying_message()
 
     def retry_query(self, e: Exception, query: str) -> str:
         """
@@ -418,15 +427,7 @@ class SQLChatAgent(ChatAgent):
         return error_message_template
 
     def _available_tool_names(self) -> str:
-        return ",".join(
-            tool.name()  # type: ignore
-            for tool in [
-                RunQueryTool,
-                GetTableNamesTool,
-                GetTableSchemaTool,
-                GetColumnDescriptionsTool,
-            ]
-        )
+        return ",".join(self.llm_tools_usable)
 
     def _tool_result_llm_answer_prompt(self) -> str:
         """
@@ -467,6 +468,14 @@ class SQLChatAgent(ChatAgent):
             try:
                 # attempt to fetch results: should work for normal SELECT queries
                 rows = query_result.fetchall()
+                n_rows = len(rows)
+                if self.config.max_result_rows and n_rows > self.config.max_result_rows:
+                    rows = rows[: self.config.max_result_rows]
+                    logger.warning(
+                        f"SQL query produced {n_rows} rows, "
+                        f"limiting to {self.config.max_result_rows}"
+                    )
+
                 response_message = self._format_rows(rows)
             except ResourceClosedError:
                 # If we get here, it's a non-SELECT query (UPDATE, INSERT, DELETE)
@@ -493,7 +502,7 @@ class SQLChatAgent(ChatAgent):
         {self._tool_result_llm_answer_prompt()}
         OTHERWISE:
              continue using one of your available TOOLs:
-             {self._available_tool_names()}
+             {",".join(self.llm_tools_usable)}
         """
         return final_message
 

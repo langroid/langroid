@@ -128,14 +128,17 @@ need to be aware of these details. In fact our basic human + LLM chat loop can b
 implemented with a `Task`, in a couple of lines of code:
 ```py
 task = lr.Task(
-    agent, name="Bot", 
-    system_message="You are a helpful assistant", #(1)!
+    agent, 
+    name="Bot", #(1)!
+    system_message="You are a helpful assistant", #(2)!
 )
 ```
+1. If specified, overrides the agent's `name`. 
+   (Note that the agent's name is displayed in the conversation shown in the console.)
+  However, typical practice is to just define the `name` in the `ChatAgentConfig` object, as we did above.
+2. If specified, overrides the agent's `system_message`. Typical practice is to just
+ define the `system_message` in the `ChatAgentConfig` object, as we did above.
 
-1. Overrides the agent's `system_message`
-
-(When a `name` is provided in the `Task` constructor, it overrides the agent's name.) 
 
 We can then run the task:
 ```py

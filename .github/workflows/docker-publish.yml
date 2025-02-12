@@ -1,9 +1,12 @@
 name: Docker Publish
-
+env: 
+  DOCKER_BUILDKIT: 1
+  
 on:
   push:
     paths:
-      - "langroid/**"
+      - "Dockerfile"
+      - ".github/workflows/docker-publish.yml"
     branches:
       - main
     tags:
@@ -45,6 +48,8 @@ jobs:
           tags: |
             langroid/langroid:latest-amd64
             langroid/langroid:${{ env.DOCKER_TAG }}-amd64
+          build-args: |
+              BUILDKIT_INLINE_CACHE=1            
 
   build_arm64:
     name: Build Docker image for arm64
@@ -72,6 +77,11 @@ jobs:
             echo "DOCKER_TAG=latest" >> $GITHUB_ENV
           fi
 
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v2
+        with:
+          platforms: arm64
+
       - name: Build and push arm64
         uses: docker/build-push-action@v2
         with:
@@ -81,3 +91,6 @@ jobs:
           tags: |
             langroid/langroid:latest-arm64
             langroid/langroid:${{ env.DOCKER_TAG }}-arm64
+          build-args: |
+              TARGETARCH=arm64
+              BUILDKIT_INLINE_CACHE=1            

@@ -16,7 +16,7 @@ type-check:
 	@uv run pre-commit autoupdate
 	@uv run pre-commit run --all-files
 	@echo "Running black..."
-	@black --check .
+	@uv run black --check .
 	@echo "Running flake8 on git-tracked files ONLY! ..."
 	@git ls-files | grep '\.py$$' | xargs flake8 --exclude=.git,__pycache__,.venv,langroid/embedding_models/protoc/*
 	@uv run ruff check .
@@ -26,7 +26,7 @@ type-check:
 
 .PHONE: lint
 lint:
-	black .
+	uv run black .
 	uv run ruff check . --fix
 
 .PHONY: stubs
