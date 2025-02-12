@@ -18,6 +18,7 @@ AzureADTokenProvider = Callable[[], str]
 LANGDB_BASE_URL = "https://api.us-east-1.langdb.ai"
 DUMMY_API_KEY = "xxx"
 LANGDB_API_KEY = os.environ.get("LANGDB_API_KEY", DUMMY_API_KEY)
+LANGDB_PROJECT_ID = os.environ.get("LANGDB_PROJECT_ID", "")
 
 
 class OpenAIEmbeddingsConfig(EmbeddingModelsConfig):
@@ -184,7 +185,9 @@ class OpenAIEmbeddings(EmbeddingModel):
         load_dotenv()
         if self.config.model_name.startswith("langdb/"):
             self.config.model_name = self.config.model_name.replace("langdb/", "")
-            if not self.config.api_base:
+            if LANGDB_PROJECT_ID:
+                self.config.api_base = f"{LANGDB_BASE_URL}/{LANGDB_PROJECT_ID}/v1"
+            else:
                 self.config.api_base = LANGDB_BASE_URL
             if not self.config.api_key:
                 self.config.api_key = LANGDB_API_KEY

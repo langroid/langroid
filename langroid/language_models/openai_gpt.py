@@ -86,6 +86,7 @@ LANGDB_BASE_URL = "https://api.us-east-1.langdb.ai"
 OLLAMA_API_KEY = "ollama"
 DUMMY_API_KEY = "xxx"
 LANGDB_API_KEY = os.environ.get("LANGDB_API_KEY", DUMMY_API_KEY)
+LANGDB_PROJECT_ID = os.environ.get("LANGDB_PROJECT_ID", "")
 VLLM_API_KEY = os.environ.get("VLLM_API_KEY", DUMMY_API_KEY)
 LLAMACPP_API_KEY = os.environ.get("LLAMA_API_KEY", DUMMY_API_KEY)
 
@@ -548,7 +549,10 @@ class OpenAIGPT(LanguageModel):
                 self.api_key = os.getenv("DEEPSEEK_API_KEY", DUMMY_API_KEY)
             elif self.is_langdb:
                 self.config.chat_model = self.config.chat_model.replace("langdb/", "")
-                self.api_base = LANGDB_BASE_URL
+                if LANGDB_PROJECT_ID:
+                    self.api_base = f"{LANGDB_BASE_URL}/{LANGDB_PROJECT_ID}/v1"
+                else:
+                    self.api_base = LANGDB_BASE_URL
                 self.api_key = LANGDB_API_KEY
 
             self.client = OpenAI(
@@ -1075,7 +1079,9 @@ class OpenAIGPT(LanguageModel):
         )
 
     @staticmethod
-    def tool_deltas_to_tools(tools: List[Dict[str, Any]]) -> Tuple[
+    def tool_deltas_to_tools(
+        tools: List[Dict[str, Any]],
+    ) -> Tuple[
         str,
         List[OpenAIToolCall],
         List[Dict[str, Any]],
@@ -1692,8 +1698,7 @@ class OpenAIGPT(LanguageModel):
         else:
             llm_messages = messages
             if (
-                len(llm_messages) == 1
-                and llm_messages[0].role == Role.SYSTEM
+                len(llm_messages) == 1 and llm_messages[0].role == Role.SYSTEM
                 # TODO: we will unconditionally insert a dummy user msg
                 # if the only msg is a system msg.
                 # We could make this conditional on ModelInfo.needs_first_user_message
