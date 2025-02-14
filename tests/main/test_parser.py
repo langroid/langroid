@@ -137,6 +137,7 @@ def test_utf8():
     # test that this succeeds
     _ = content.decode("utf-8")
 
+
 def test_chunk_tokens():
     """Tests if Parser.chunk_tokens preserves list structure and line formatting."""
     cfg = ParsingConfig(
@@ -147,7 +148,7 @@ def test_chunk_tokens():
         token_encoding_model="text-embedding-3-small",
     )
     parser = Parser(cfg)
-    
+
     # text with bullet list, redundant extra lines
     text = """fruits
 - apple
@@ -159,14 +160,13 @@ def test_chunk_tokens():
 vegetables
 - tomato
 - cucumber"""
-    
+
     chunks = parser.chunk_tokens(text)
     reconstructed = "".join(chunks)
-    
-    original_lines = [line.strip() for line in text.split('\n') if line.strip()]
-    result_lines = [line.strip() for line in reconstructed.split('\n') if line.strip()]
-    
+
+    original_lines = [line.strip() for line in text.split("\n") if line.strip()]
+    result_lines = [line.strip() for line in reconstructed.split("\n") if line.strip()]
+
     assert original_lines == result_lines
     assert len(original_lines) == 6  # Verify all lines are present
-    assert all(line.startswith('- ') for line in original_lines if '-' in line)
-
+    assert all(line.startswith("- ") for line in original_lines if "-" in line)
