@@ -330,7 +330,7 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         max_output_tokens=8192,
         rename_params={"max_tokens": "max_completion_tokens"},
         description="Gemini 2 Pro Exp 02-05",
-    ),    
+    ),
     GeminiModel.GEMINI_2_FLASH_THINKING.value: ModelInfo(
         name=GeminiModel.GEMINI_2_FLASH_THINKING.value,
         provider=ModelProvider.GOOGLE,
