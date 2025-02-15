@@ -45,7 +45,7 @@ def main(
     # (1) Direct LLM interaction
     llm = lm.OpenAIGPT(llm_config)
 
-    response = llm.chat("Is 4.3 bigger than 4.11?", max_tokens=1000)
+    response = llm.chat("Is 7.2 bigger than 7.11?", max_tokens=1000)
 
     if response.cached or not llm.get_stream():
         # if we got it from cache, or streaming disabled/disallowed,
@@ -71,7 +71,7 @@ def main(
         """
         10 years ago, Jack's dad was 5 times as old as Jack.
         Today, Jack's dad is 40 years older than Jack.
-        How old is Jack today?
+        So how old is Jack now ?
         """
     )
 
