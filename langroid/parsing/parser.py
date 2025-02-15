@@ -88,7 +88,7 @@ class Parser:
             self.tokenizer = tiktoken.encoding_for_model("text-embedding-3-small")
 
     def num_tokens(self, text: str) -> int:
-        tokens = self.tokenizer.encode(text)
+        tokens = self.tokenizer.encode(text, allowed_special={"<|endoftext|>"})
         return len(tokens)
 
     def truncate_tokens(self, text: str, max_tokens: int) -> str:
