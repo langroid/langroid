@@ -37,11 +37,11 @@ You are welcome to take on un-assigned open [issues](https://github.com/langroid
     - [x] Qdrant
     - [x] Chroma
     - [x] LanceDB
-    - [ ] Pinecone 
+    - [x] Pinecone 
+    - [x] PostgresML (pgvector?)
+    - [x] Weaviate
     - [ ] Milvus 
     - [ ] Marqo 
-    - [ ] Weaviate
-    - [ ] PostgresML (pgvector?)
 - Other LLM APIs, e.g.: Claude, Cohere, ... (see below)
 - Local LLMs, e.g.: llama2
 - Data Sources: SQL DBs, NoSQL DBs, Neo4j (Graph DBs), ...
