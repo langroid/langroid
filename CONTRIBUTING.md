@@ -38,7 +38,7 @@ You are welcome to take on un-assigned open [issues](https://github.com/langroid
     - [x] Chroma
     - [x] LanceDB
     - [x] Pinecone 
-    - [x] PostgresML (pgvector?)
+    - [x] PostgresML (pgvector)
     - [x] Weaviate
     - [ ] Milvus 
     - [ ] Marqo 
