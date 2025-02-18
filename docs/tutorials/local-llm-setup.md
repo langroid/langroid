@@ -89,6 +89,22 @@ as the `chat_model` param in the `OpenAIGPTConfig` as in the previous section.
 When a script supports it, you can also pass in the model name via
 `-m ollama/dolphin-mixtral-gguf`
 
+## Local LLMs using LMStudio
+
+LMStudio is one of the simplest ways to download run open-weight LLMs locally.
+See their docs at [lmstudio.ai](https://lmstudio.ai/docs) for installation and usage 
+instructions. Once you download a model, you can use the "server" option to have it 
+served via an OpenAI-compatible API at a local IP like `https://127.0.0.1:1234/v1`.
+As with any other scenario of running a local LLM, you can use this with Langroid by
+setting `chat_model` as follows (note you should not include the `https://` part):
+
+```python
+llm_config = lm.OpenAIGPTConfig(
+    chat_model="local/127.0.0.1234/v1",
+    ...
+)
+```
+
 ## Setup llama.cpp with a GGUF model from HuggingFace
 
 See `llama.cpp`'s [GitHub page](https://github.com/ggerganov/llama.cpp/tree/master) for build and installation instructions.
