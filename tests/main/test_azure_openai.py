@@ -6,7 +6,7 @@ from langroid.language_models.azure_openai import AzureConfig, AzureGPT
 from langroid.language_models.base import LLMMessage, Role
 from langroid.parsing.parser import ParsingConfig
 from langroid.prompts.prompts_config import PromptsConfig
-from langroid.utils.configuration import Settings, set_global
+from langroid.utils.configuration import Settings, set_global, settings
 from langroid.vector_store.base import VectorStoreConfig
 
 set_global(Settings(stream=True))
@@ -15,7 +15,7 @@ cfg = AzureConfig(
     max_output_tokens=100,
     min_output_tokens=10,
     cache_config=RedisCacheConfig(fake=False),
-    model_name="gpt-4o",
+    chat_model="gpt-4o",
 )
 
 
@@ -81,7 +81,28 @@ async def test_azure_openai_async(test_settings: Settings):
 def test_azure_config():
     # Test the AzureConfig class model_name copied into chat_model_orig
     model = "blah"
+    # turn off the `chat_model` coming from test_settings in conftest.
+    settings.chat_model = ""
+
+    # test setting model_name (deprecated; use chat_model instead)
     llm_cfg = AzureConfig(model_name=model)
+    assert llm_cfg.chat_model == model
     mdl = AzureGPT(llm_cfg)
     assert mdl.chat_model_orig == model
     assert mdl.config.chat_model == model
+
+    # test setting chat_model
+    llm_cfg = AzureConfig(chat_model=model)
+    assert llm_cfg.chat_model == model
+    mdl = AzureGPT(llm_cfg)
+    assert mdl.chat_model_orig == model
+    assert mdl.config.chat_model == model
+
+    # test setting chat_model via env var
+    import os
+
+    os.environ["AZURE_OPENAI_CHAT_MODEL"] = model
+    llm_cfg = AzureConfig()
+    mdl = AzureGPT(llm_cfg)
+    assert llm_cfg.chat_model == model
+    assert mdl.chat_model_orig == model

@@ -31,9 +31,13 @@ class AzureConfig(OpenAIGPTConfig):
         deployment_name (str|None): can be optionally set in the ``.env`` file as
             ``AZURE_OPENAI_DEPLOYMENT_NAME`` and should be based the custom name you
             chose for your deployment when you deployed a model.
-        model_name (str): can be set in the ``.env``
+        model_name (str): [DEPRECATED] can be set in the ``.env``
             file as ``AZURE_OPENAI_MODEL_NAME``
             and should be based on the model name chosen during setup.
+        chat_model (str): the chat model name to use. Can be set via
+            the env variable ``AZURE_OPENAI_CHAT_MODEL``.
+            Recommended to use this instead of ``model_name``.
+
     """
 
     api_key: str = ""  # CAUTION: set this ONLY via env var AZURE_OPENAI_API_KEY
@@ -55,17 +59,16 @@ class AzureConfig(OpenAIGPTConfig):
     class Config:
         env_prefix = "AZURE_OPENAI_"
 
+    def __init__(self, **kwargs) -> None:  # type: ignore
+        if "model_name" in kwargs and "chat_model" not in kwargs:
+            kwargs["chat_model"] = kwargs["model_name"]
+        super().__init__(**kwargs)
+
 
 class AzureGPT(OpenAIGPT):
     """
     Class to access OpenAI LLMs via Azure. These env variables can be obtained from the
     file `.azure_env`. Azure OpenAI doesn't support ``completion``
-    Attributes:
-        config (AzureConfig): AzureConfig object
-        api_key (str): Azure API key
-        api_base (str): Azure API base url
-        api_version (str): Azure API version
-        model_name (str): the name of gpt model in your deployment
     """
 
     def __init__(self, config: AzureConfig):
@@ -131,10 +134,6 @@ class AzureGPT(OpenAIGPT):
                 azure_deployment=self.config.deployment_name,
                 timeout=Timeout(self.config.timeout),
             )
-
-        # set the chat model to be the same as the model_name
-        self.config.chat_model = self.config.model_name
-        self.chat_model_orig = self.config.model_name
 
         self.supports_json_schema = (
             self.config.api_version >= azureStructuredOutputAPIMin
