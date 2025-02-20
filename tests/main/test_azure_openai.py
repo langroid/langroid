@@ -15,7 +15,6 @@ cfg = AzureConfig(
     max_output_tokens=100,
     min_output_tokens=10,
     cache_config=RedisCacheConfig(fake=False),
-    deployment_name="langroid-azure-gpt-4o",
     model_name="gpt-4o",
 )
 
