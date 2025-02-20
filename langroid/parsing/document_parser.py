@@ -9,7 +9,9 @@ from enum import Enum
 from io import BytesIO
 from itertools import accumulate
 from pathlib import Path
-from typing import TYPE_CHECKING, Any, Dict, Generator, List, Tuple
+from typing import TYPE_CHECKING, Any, Dict, Generator, List, Optional, Tuple, Union
+
+from dotenv import load_dotenv
 
 from langroid.exceptions import LangroidImportError
 from langroid.utils.object_registry import ObjectRegistry
@@ -150,8 +152,6 @@ class DocumentParser(Parser):
             DocumentParser: An instance of a DocumentParser subclass.
         """
         inferred_doc_type = DocumentParser._document_type(source, doc_type)
-        if config.gemini:
-            return GeminiDocumentParser(source, config)
         if inferred_doc_type == DocumentType.PDF:
             if config.pdf.library == "fitz":
                 return FitzPDFParser(source, config)
@@ -165,6 +165,8 @@ class DocumentParser(Parser):
                 return UnstructuredPDFParser(source, config)
             elif config.pdf.library == "pdf2image":
                 return ImagePdfParser(source, config)
+            elif config.pdf.library == "gemini":
+                return GeminiPdfParser(source, config)
             else:
                 raise ValueError(
                     f"Unsupported PDF library specified: {config.pdf.library}"
@@ -956,96 +958,386 @@ class MarkitdownPPTXParser(DocumentParser):
         )
 
 
-class GeminiDocumentParser(DocumentParser):
-    # def __init__(self, source: str | bytes, config: ParsingConfig):
-    #     super().__init__(source, config)
-    #     self.model_name = self.config.gemini.gemini_model_name
+class GeminiPdfParser(DocumentParser):
+
+    DEFAULT_MAX_TOKENS = 7000
+    OUTPUT_DIR = Path(".gemini_pdfparser")  # Fixed output directory
+
+    GEMINI_SYSTEM_INSTRUCTION = """
+    ### **Convert PDF to Markdown**
+    1. **Text:**
+        * Preserve structure, formatting (**bold**, *italic*), lists, and indentation.
+        * **Remove running heads (page numbers, headers/footers).**
+        * Keep section and chapter titles; discard repeated page headers.
+    2. **Images:** Replace with **detailed, creative descriptions**
+    optimized for clarity and understanding.
+    3. **Tables:** Convert to Markdown tables with proper structure.
+    4. **Math:** Use LaTeX (`...` inline, `$...$` block).
+    5. **Code:** Wrap in fenced blocks without specifying a language:
+
+        ```
+        code
+        ```
+    6. **Clean Output:**
+        * No system messages, metadata, or artifacts or ```markdown``` identifier.
+        * Do **not** include introductory or explanatory messages
+        like "Here is your output."
+        * Ensure formatting is **consistent and structured**
+        for feeding into a markdown parser.
+    """.strip()
+
+    def __init__(
+        self,
+        source: Union[str, bytes],
+        config: ParsingConfig,
+    ):
+        super().__init__(source, config)
+        import asyncio
+
+        if not config.pdf.gemini_config:
+            raise ValueError(
+                "GeminiPdfParser requires a Gemini-based config in pdf parsing config"
+            )
+
+        self.model_name = config.pdf.gemini_config.model_name
+
+        if isinstance(source, bytes):
+            self.doc_bytes = BytesIO(source)  # use BytesIO object to save the bytes
+            self.pdf_path = "bytes"  # a flag to tell it's a bytes object
+
+        elif isinstance(source, str):
+            self.pdf_path = source
+
+        else:
+            raise ValueError("Unsupported source type.  Must be str or bytes.")
+
+        # Ensure output directory exists
+        self.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
+
+        # Generate output filename based on PDF filename
+        self.output_filename = (
+            config.pdf.gemini_config.output_filename or self._generate_output_filename()
+        )
+
+        self.max_tokens = config.pdf.gemini_config.max_tokens or self.DEFAULT_MAX_TOKENS
+        self.split_on_page = config.pdf.gemini_config.split_on_page or False
+
+        # Append page instruction only if split_on_page is False
+        if not self.split_on_page:
+            self.GEMINI_SYSTEM_INSTRUCTION += (
+                " 7. **Pages:** Identify page boundaries using `<!----Page-{n}---->` "
+                "markers added in the PDF at `(10, 10)` coordinates."
+            )
+
+        # Rate limiting parameters
+        self.requests_per_minute = config.pdf.gemini_config.requests_per_minute or 5
+        self.semaphore = asyncio.Semaphore(self.requests_per_minute)
+        self.retry_delay = 5  # seconds, for exponential backoff
+        self.max_retries = 3
+
+    def _generate_output_filename(self) -> Path:
+        """Generate a unique output filename based on the input PDF."""
+        if self.pdf_path == "bytes":
+            return self.OUTPUT_DIR / "output.md"  # Fallback for non-file sources
+
+        base_name = Path(self.pdf_path).stem  # Get filename without extension
+        output_file = self.OUTPUT_DIR / f"{base_name}.md"
+
+        # Ensure uniqueness if file already exists
+        counter = 1
+        while output_file.exists():
+            output_file = self.OUTPUT_DIR / f"{base_name}_{counter}.md"
+            counter += 1
+
+        return output_file
+
+    def _extract_page(
+        self, page_num: int, pdf_document: str
+    ) -> Dict[str, Any]:  # Type hint pdf_document as str
+        """Extracts a single page and estimates token count,
+        handles both path and bytes input"""
+
+        try:
+
+            if pdf_document == "bytes":  # BytesIO
+                doc = fitz.open(stream=self.doc_bytes, filetype="pdf")
+            else:
+                doc = fitz.open(pdf_document)  # Open from path
+
+            new_pdf = fitz.open()
+            new_pdf.insert_pdf(doc, from_page=page_num, to_page=page_num)
+            pdf_bytes = new_pdf.write()
+
+            # Estimate token count efficiently
+            text = doc[page_num].get_text("text")
+            if text:
+                token_count = len(text) // 4  # Fast character-based estimate
+            else:
+                token_count = len(pdf_bytes) // 4  # Fallback for images
+
+            return {
+                "page_numbers": page_num + 1,
+                "pdf_bytes": pdf_bytes,
+                "token_count": token_count,
+            }
+        except Exception as e:
+            raise ValueError(f"Error processing PDF document: {e}") from e
+
+    def _extract_pdf_pages_parallel(
+        self, pdf_document: str, num_workers: Optional[int] = None
+    ) -> List[Dict[str, Any]]:
+        """Parallel PDF page extraction with token estimation.  Handles bytes or path"""
+
+        try:
+            from functools import partial
+            from multiprocessing import Pool, cpu_count
+        except ImportError:
+            raise LangroidImportError("multiprocessing", "multiprocessing")
+
+        try:
+            if pdf_document == "bytes":  # BytesIO
+                doc = fitz.open(stream=self.doc_bytes, filetype="pdf")
+            else:
+                doc = fitz.open(pdf_document)  # Open from path
+            total_pages = len(doc)
+        except Exception as e:
+            raise ValueError(f"Error opening PDF document: {e}") from e
+
+        num_workers = num_workers or cpu_count()  # Use all available cores by default
+
+        # Need to pass the pdf_document to the _extract_page function as this contains
+        # either path or the BytesIO object
+        with Pool(num_workers) as pool:
+            pages = pool.map(
+                partial(self._extract_page, pdf_document=pdf_document),
+                range(total_pages),
+            )
+        return pages
+
+    def _group_pages_by_token_limit(
+        self, pages: List[Dict[str, Any]], max_tokens: int = DEFAULT_MAX_TOKENS
+    ) -> List[List[Dict[str, Any]]]:
+        """Groups pages into chunks where each chunk is approximately `max_tokens`."""
+        chunks: List[List[Dict[str, Any]]] = []
+        current_chunk: List[Dict[str, Any]] = []
+        current_tokens = 0
+
+        for page in pages:
+            if current_tokens + page["token_count"] > max_tokens and current_chunk:
+                chunks.append(current_chunk)
+                current_chunk = []
+                current_tokens = 0
+
+            current_chunk.append(page)
+            current_tokens += page["token_count"]
+
+        if current_chunk:  # Add remaining pages
+            chunks.append(current_chunk)
+
+        return chunks
+
+    def _merge_pages_into_pdf_with_metadata(
+        self, page_group: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """
+        Merges grouped pages into a single PDF binary.
+        Embeds a page marker on each page so that when Gemini converts the chunk,
+        the marker appears at the correct position in the Markdown output.
+        """
+        merged_pdf = fitz.open()
+        page_numbers = []
+
+        for page in page_group:
+            temp_pdf = fitz.open("pdf", page["pdf_bytes"])
+            marker = f"<!----Page-{page['page_numbers']}---->"
+            page_obj = temp_pdf[0]
+            # Insert the marker text at a fixed position (e.g., top-left corner)
+            page_obj.insert_text(
+                (10, 10), marker, fontsize=8, fontname="helv", color=(1, 0, 0)
+            )
+            merged_pdf.insert_pdf(temp_pdf)
+            page_numbers.append(page["page_numbers"])
+
+        return {
+            "pdf_bytes": merged_pdf.write(),  # Binary PDF data
+            "page_numbers": page_numbers,  # List of page numbers in this chunk
+        }
+
+    def _prepare_pdf_chunks_for_gemini(
+        self,
+        pdf_document: str,  # It has to be str because we are passing down 'bytes"
+        num_workers: Optional[int] = None,
+        max_tokens: int = DEFAULT_MAX_TOKENS,
+        split_on_page: bool = False,
+    ) -> List[Dict[str, Any]]:
+        """Extracts, groups, and merges PDF pages into chunks
+        with embedded page markers.  Can handle bytes or path."""
+
+        try:
+            from multiprocessing import Pool
+        except ImportError:
+            raise LangroidImportError("multiprocessing", "multiprocessing")
+        pages = self._extract_pdf_pages_parallel(pdf_document, num_workers)
+
+        if split_on_page:
+            # Each page becomes its own chunk
+            return pages
+        else:
+            # Group pages based on token limit
+            chunks = self._group_pages_by_token_limit(pages, max_tokens)
+
+            with Pool(num_workers) as pool:
+                pdf_chunks = pool.map(self._merge_pages_into_pdf_with_metadata, chunks)
+            return pdf_chunks
+
+    async def _send_chunk_to_gemini(
+        self, chunk: Dict[str, Any], gemini_api_key: str
+    ) -> str:
+        """Sends a PDF chunk (with embedded page markers) to Gemini API."""
+        try:
+            import asyncio
+
+            from google import genai
+            from google.genai import types
+        except ImportError:
+            raise LangroidImportError("google-genai", "google-genai")
+
+        # Rate limiting: Acquire semaphore before making the request
+        async with self.semaphore:
+            for attempt in range(self.max_retries):
+                try:
+                    client = genai.Client(api_key=gemini_api_key)
+                    response = await client.aio.models.generate_content(
+                        model=self.model_name,
+                        contents=[
+                            types.Part.from_bytes(
+                                data=chunk["pdf_bytes"],
+                                mime_type="application/pdf",
+                            ),
+                            self.GEMINI_SYSTEM_INSTRUCTION,
+                        ],
+                    )
+
+                    # Ensure response.text is always a string
+                    return str(response.text) if response.text is not None else ""
+
+                except Exception as e:
+                    logging.error(
+                        "Attempt %d failed for page(s) %s: %s",
+                        attempt + 1,
+                        chunk.get("page_numbers", "Unknown"),
+                        e,
+                    )
+                    if attempt < self.max_retries - 1:
+                        delay = self.retry_delay * (2**attempt)  # Exponential backoff
+                        logging.info("Retrying in %s seconds...", delay)
+                        await asyncio.sleep(delay)
+                    else:
+                        logging.error(
+                            "Max retries reached for page(s) %s",
+                            chunk.get("page_numbers", "Unknown"),
+                        )
+                        break  # Stop retrying
+
+        return ""  # Ensure a string is always returned
 
     def iterate_pages(self) -> Generator[Tuple[int, Any], None, None]:
+        """
+        Iterates over the document pages, extracting content using Gemini API,
+        saves them to a markdown file, and yields page numbers.
+        """
         try:
-            from dotenv import load_dotenv
-            from google import genai
-
             load_dotenv()
             gemini_api_key = os.environ.get("GEMINI_API_KEY")
+            if not gemini_api_key:
+                raise ValueError("GEMINI_API_KEY not found in environment variables.")
         except ImportError:
-            LangroidImportError("google-genai", "google-genai")
-        self.doc_bytes.seek(0)
-        client = genai.Client(api_key=gemini_api_key)
-        document = client.files.upload(
-            file=self.doc_bytes, config=dict(mime_type="application/pdf")
-        )
-        prompt = """
-        Convert this document into Markdown, processing each page separately.
-        Follow these guidelines for accurate representation:
+            raise LangroidImportError("google-genai", "google-genai")
+        try:
+            import asyncio
+        except ImportError:
+            raise LangroidImportError("asyncio", "asyncio")
 
-        1. **Page Separation:**
-        - Each page should be a distinct Markdown section.
-        - Insert a delimiter in the format: `<!----Page-{n}---->` to
-            indicate page breaks.
+        pdf_document = self.pdf_path
 
-        2. **Text Extraction:**
-        - Retain all text content with minimal modifications.
-        - Preserve headings, paragraphs, and lists as they appear in the
-            document.
-        - Maintain **bold, italic, and other text formatting** from the
-            original document.
-        - Keep bullet points, numbered lists, and indentation where
-            applicable.
-
-        3. **Images and Figures:**
-        - Replace images and figures with **detailed textual descriptions**
-            that capture their essential content.
-        - If a caption is present, include it in the description.
-
-        4. **Tables:**
-        - Convert tables into **proper Markdown tables** with correct
-            formatting.
-        - Maintain the structure, headers, and data integrity.
-
-        5. **Mathematical Content:**
-        - Perform OCR on mathematical symbols and equations.
-        - Represent them using **LaTeX-compatible Markdown syntax**
-            (`$...$` for inline math, `$$...$$` for block math).
-        - Maintain correct mathematical formatting and structure.
-        - Make sure no whitespaces around the `$...$` and `$$...$$` blocks
-
-        6. **Code Blocks:**
-        - If any code snippets exist, wrap them in appropriate Markdown
-            fenced code blocks:
-            ```md
-            ```language
-            code snippet
-            ```
-            ```
-        - Detect and retain the programming language if specified.
-
-        7. **No System Messages:**
-        - Do not include system messages, metadata, or parsing-related
-            information.
-        - Output must be **clean and directly usable** for downstream
-            processing.
-        """
-        response = client.models.generate_content(
-            model=self.config.gemini.gemini_model_name, contents=[document, prompt]
-        )
-        markdown_content = response.text
-
-        pages = markdown_content.split("<!----Page-")
-
-        # Remove the first empty string if it exists
-        if pages and pages[0] == "":
-            pages = pages[1:]
-
-        for i, page in enumerate(pages):
-            page_number = i + 1
-
-            # Extract the page content by removing the page number
-            # and the closing delimiter.
-            page_content = (
-                page.split("---->", 1)[1] if len(page.split("---->", 1)) > 1 else page
+        try:
+            pdf_chunks = self._prepare_pdf_chunks_for_gemini(
+                pdf_document,
+                num_workers=8,
+                max_tokens=self.max_tokens,
+                split_on_page=self.split_on_page,
             )
-            yield page_number, page_content
+
+            async def process_chunks(
+                chunks: List[Dict[str, Any]], api_key: str
+            ) -> List[str]:
+                tasks = [self._send_chunk_to_gemini(chunk, api_key) for chunk in chunks]
+                results = []
+                for i, task in enumerate(
+                    asyncio.as_completed(tasks)
+                ):  # process results as they come in
+                    chunk = chunks[i]
+                    try:
+                        markdown = await task
+                        if self.split_on_page:
+                            results.append(
+                                markdown + f"<!----Chunk-{chunk['page_numbers']}---->"
+                            )
+                        else:
+                            results.append(markdown)
+
+                    except Exception as e:
+                        logging.error(
+                            "Failed to process chunk %s: %s",
+                            chunk.get("page_numbers", "Unknown"),
+                            e,
+                        )
+                        results.append(
+                            "<!----Error: Could not process chunk %s---->"
+                            % chunk.get("page_numbers", "Unknown")
+                        )
+
+                return results
+
+            # Use asyncio.run to execute the async function
+            markdown_results = asyncio.run(process_chunks(pdf_chunks, gemini_api_key))
+
+            with open(self.output_filename, "w", encoding="utf-8") as outfile:
+                outfile.write("\n\n".join(markdown_results))
+
+            # Now read the file back to split by page markers.
+            with open(self.output_filename, "r", encoding="utf-8") as infile:
+                full_markdown = infile.read()
+
+            if self.split_on_page:
+                pages = full_markdown.split("<!----Chunk-")
+            else:
+                pages = full_markdown.split("<!----Page-")
+
+            # Remove the first empty string if it exists
+            if pages and pages[0] == "":
+                pages = pages[1:]
+
+            for i, page in enumerate(pages):
+                page_number = i + 1
+
+                # Extract the page content by removing the page number
+                # and the closing delimiter.
+                if "<!----Error:" in page:
+                    page_content = page  # keep the error marker
+                    logging.warning(f"Page {page_number}: Error processing chunk.")
+
+                else:
+                    page_content = (
+                        page.split("---->", 1)[1]
+                        if len(page.split("---->", 1)) > 1
+                        else page
+                    )
+
+                yield page_number, page_content
+
+        except Exception as e:
+            raise ValueError(f"Error processing document: {e}") from e
 
     def get_document_from_page(self, page: str) -> Document:
         """

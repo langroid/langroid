@@ -1,13 +1,13 @@
 import logging
 import re
 from enum import Enum
-from typing import Dict, List, Literal
+from typing import Any, Dict, List, Literal, Optional
 
 import tiktoken
 
 from langroid.mytypes import Document
 from langroid.parsing.para_sentence_split import create_chunks, remove_extra_whitespace
-from langroid.pydantic_v1 import BaseSettings
+from langroid.pydantic_v1 import BaseSettings, root_validator
 from langroid.utils.object_registry import ObjectRegistry
 
 logger = logging.getLogger(__name__)
@@ -20,7 +20,28 @@ class Splitter(str, Enum):
     SIMPLE = "simple"
 
 
-class PdfParsingConfig(BaseSettings):
+class BaseParsingConfig(BaseSettings):
+    """Base class for document parsing configurations."""
+
+    library: str
+
+    class Config:
+        extra = "ignore"  # Ignore unknown settings
+
+
+class GeminiConfig(BaseSettings):
+    """Configuration for Gemini-based parsing."""
+
+    model_name: str = "gemini-2.0-flash"  # Default model
+    max_tokens: Optional[int] = None
+    output_filename: Optional[str] = None
+    split_on_page: Optional[bool] = False
+    requests_per_minute: Optional[int] = 5
+
+
+class PdfParsingConfig(BaseParsingConfig):
+    """Configuration for PDF parsing with different libraries, including Gemini."""
+
     library: Literal[
         "fitz",
         "pymupdf4llm",
@@ -29,7 +50,22 @@ class PdfParsingConfig(BaseSettings):
         "unstructured",
         "pdf2image",
         "markitdown",
+        "gemini",
     ] = "pymupdf4llm"
+    gemini_config: Optional[GeminiConfig] = None
+
+    @root_validator(pre=True)
+    def enable_gemini_config(cls, values: Dict[str, Any]) -> Dict[str, Any]:
+        """Ensure GeminiConfig is set only when library is 'gemini'."""
+        if values.get("library") == "gemini":
+            values["gemini_config"] = values.get("gemini_config") or GeminiConfig()
+        else:
+            values["gemini_config"] = None
+        return values
+
+    @property
+    def is_gemini(self) -> bool:
+        return self.library == "gemini"
 
 
 class DocxParsingConfig(BaseSettings):
@@ -52,11 +88,6 @@ class MarkitdownXLSParsingConfig(BaseSettings):
     library: Literal["markitdown"] = "markitdown"
 
 
-class GeminiParsingConfig(BaseSettings):
-    library: Literal["google-genai"] = "google-genai"
-    gemini_model_name: str = "gemini-2.0-flash"
-
-
 class ParsingConfig(BaseSettings):
     splitter: str = Splitter.TOKENS
     chunk_by_page: bool = False  # split by page?
@@ -76,7 +107,6 @@ class ParsingConfig(BaseSettings):
     pptx: MarkitdownPPTXParsingConfig = MarkitdownPPTXParsingConfig()
     xls: MarkitdownXLSParsingConfig = MarkitdownXLSParsingConfig()
     xlsx: MarkitdownXLSXParsingConfig = MarkitdownXLSXParsingConfig()
-    gemini: GeminiParsingConfig = GeminiParsingConfig()
 
 
 class Parser:
