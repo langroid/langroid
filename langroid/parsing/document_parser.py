@@ -1002,7 +1002,6 @@ class GeminiPdfParser(DocumentParser):
         self.model_name = config.pdf.gemini_config.model_name
 
         if isinstance(source, bytes):
-            self.doc_bytes = BytesIO(source)  # use BytesIO object to save the bytes
             self.pdf_path = "bytes"  # a flag to tell it's a bytes object
 
         elif isinstance(source, str):

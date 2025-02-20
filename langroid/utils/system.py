@@ -19,7 +19,6 @@ DELETION_ALLOWED_PATHS = [
     ".chroma",
     ".lancedb",
     ".weaviate",
-    "parsed_docs.md",
 ]
 
 

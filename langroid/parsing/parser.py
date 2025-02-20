@@ -35,7 +35,7 @@ class GeminiConfig(BaseSettings):
     model_name: str = "gemini-2.0-flash"  # Default model
     max_tokens: Optional[int] = None
     output_filename: Optional[str] = None
-    split_on_page: Optional[bool] = False
+    split_on_page: Optional[bool] = True
     requests_per_minute: Optional[int] = 5
 
 
