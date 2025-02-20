@@ -572,7 +572,11 @@ class Task:
                 self.pending_message.metadata.agent_id = self.agent.id
 
         self._show_pending_message_if_debug()
+        self.init_loggers()
+        self.log_message(Entity.USER, self.pending_message)
+        return self.pending_message
 
+    def init_loggers(self) -> None:
         if self.caller is not None and self.caller.logger is not None:
             self.logger = self.caller.logger
         elif self.logger is None:
@@ -590,9 +594,6 @@ class Task:
             )
             header = ChatDocLoggerFields().tsv_header()
             self.tsv_logger.info(f" \tTask\tResponder\t{header}")
-
-        self.log_message(Entity.USER, self.pending_message)
-        return self.pending_message
 
     def reset_all_sub_tasks(self) -> None:
         """
