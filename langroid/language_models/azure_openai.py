@@ -134,6 +134,7 @@ class AzureGPT(OpenAIGPT):
 
         # set the chat model to be the same as the model_name
         self.config.chat_model = self.config.model_name
+        self.chat_model_orig = self.config.model_name
 
         self.supports_json_schema = (
             self.config.api_version >= azureStructuredOutputAPIMin

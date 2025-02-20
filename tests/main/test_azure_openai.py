@@ -76,3 +76,12 @@ async def test_azure_openai_async(test_settings: Settings):
     llm = AzureGPT(config=cfg)
     response = await llm.achat("What is the capital of Ontario?", max_tokens=10)
     assert "Toronto" in response.message
+
+
+def test_azure_config():
+    # Test the AzureConfig class model_name copied into chat_model_orig
+    model = "blah"
+    llm_cfg = AzureConfig(model_name=model)
+    mdl = AzureGPT(llm_cfg)
+    assert mdl.chat_model_orig == model
+    assert mdl.config.chat_model == model
