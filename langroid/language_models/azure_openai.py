@@ -77,13 +77,6 @@ class AzureGPT(OpenAIGPT):
         super().__init__(config)
         self.config: AzureConfig = config
 
-        if self.config.model_name == "":
-            raise ValueError(
-                """
-                AZURE_OPENAI_MODEL_NAME not set in .env file,
-                please set it to chat model name in your deployment."""
-            )
-
         if (
             self.config.azure_openai_client_provider
             or self.config.azure_openai_async_client_provider
