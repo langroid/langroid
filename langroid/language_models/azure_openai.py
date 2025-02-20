@@ -28,23 +28,23 @@ class AzureConfig(OpenAIGPTConfig):
         type (str): should be ``azure.``
         api_version (str): can be set in the ``.env`` file as
             ``AZURE_OPENAI_API_VERSION.``
-        deployment_name (str): can be set in the ``.env`` file as
+        deployment_name (str|None): can be optionally set in the ``.env`` file as
             ``AZURE_OPENAI_DEPLOYMENT_NAME`` and should be based the custom name you
             chose for your deployment when you deployed a model.
-        model_name (str): can be set in the ``.env``
+        model_name (str): [DEPRECATED] can be set in the ``.env``
             file as ``AZURE_OPENAI_MODEL_NAME``
             and should be based on the model name chosen during setup.
-        model_version (str): can be set in the ``.env`` file as
-            ``AZURE_OPENAI_MODEL_VERSION`` and should be based on the model name
-            chosen during setup.
+        chat_model (str): the chat model name to use. Can be set via
+            the env variable ``AZURE_OPENAI_CHAT_MODEL``.
+            Recommended to use this instead of ``model_name``.
+
     """
 
     api_key: str = ""  # CAUTION: set this ONLY via env var AZURE_OPENAI_API_KEY
     type: str = "azure"
     api_version: str = "2023-05-15"
-    deployment_name: str = ""
+    deployment_name: str | None = None
     model_name: str = ""
-    model_version: str = ""  # is used to determine the cost of using the model
     api_base: str = ""
 
     # Alternatively, bring your own clients:
@@ -59,18 +59,16 @@ class AzureConfig(OpenAIGPTConfig):
     class Config:
         env_prefix = "AZURE_OPENAI_"
 
+    def __init__(self, **kwargs) -> None:  # type: ignore
+        if "model_name" in kwargs and "chat_model" not in kwargs:
+            kwargs["chat_model"] = kwargs["model_name"]
+        super().__init__(**kwargs)
+
 
 class AzureGPT(OpenAIGPT):
     """
     Class to access OpenAI LLMs via Azure. These env variables can be obtained from the
     file `.azure_env`. Azure OpenAI doesn't support ``completion``
-    Attributes:
-        config (AzureConfig): AzureConfig object
-        api_key (str): Azure API key
-        api_base (str): Azure API base url
-        api_version (str): Azure API version
-        model_name (str): the name of gpt model in your deployment
-        model_version (str): the version of gpt model in your deployment
     """
 
     def __init__(self, config: AzureConfig):
@@ -78,13 +76,6 @@ class AzureGPT(OpenAIGPT):
         load_dotenv()
         super().__init__(config)
         self.config: AzureConfig = config
-        if self.config.deployment_name == "":
-            raise ValueError(
-                """
-                AZURE_OPENAI_DEPLOYMENT_NAME not set in .env file,
-                please set it to your Azure openai deployment name."""
-            )
-        self.deployment_name = self.config.deployment_name
 
         if self.config.model_name == "":
             raise ValueError(
@@ -144,10 +135,7 @@ class AzureGPT(OpenAIGPT):
                 timeout=Timeout(self.config.timeout),
             )
 
-        # set the chat model to be the same as the model_name
-        self.config.chat_model = self.config.model_name
-
         self.supports_json_schema = (
             self.config.api_version >= azureStructuredOutputAPIMin
-            and self.config.model_version in azureStructuredOutputList
+            and self.config.api_version in azureStructuredOutputList
         )
