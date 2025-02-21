@@ -40,7 +40,6 @@ class GeminiConfig(BaseSettings):
 
 
 class PdfParsingConfig(BaseParsingConfig):
-    """Configuration for PDF parsing with different libraries, including Gemini."""
 
     library: Literal[
         "fitz",
@@ -62,10 +61,6 @@ class PdfParsingConfig(BaseParsingConfig):
         else:
             values["gemini_config"] = None
         return values
-
-    @property
-    def is_gemini(self) -> bool:
-        return self.library == "gemini"
 
 
 class DocxParsingConfig(BaseSettings):

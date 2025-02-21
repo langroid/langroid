@@ -1,16 +1,14 @@
 # Using the Gemini PDF Parser
 
-## Overview
-The Gemini PDF parser allows extracting structured text and images from PDF documents efficiently. This guide explains how to configure and use the parser in a Python environment.
 
-## Features
 - Converts PDF content into Markdown format.
 - Uses Gemini multimodal models to describe images within PDFs.
 - Supports page-wise or chunk-based processing for optimized performance.
 
-## Setup and Configuration
 
 ### Initializing the Gemini PDF Parser
+
+Make sure you have set up your gemini api key in env as `GEMINI_API_KEY`
 
 You can initialize the Gemini PDF parser as follows:
 
@@ -30,13 +28,14 @@ parsing_config = ParsingConfig(
 )
 ```
 
+
 ## Parameters
 
 ### `model_name`
 Specifies the Gemini model to use for PDF conversion. Default: `gemini-2.0-flash`.
 
 ### `max_tokens`
-Limits the number of tokens in the input. The model's maximum context length is **8192 tokens**.
+Limits the number of tokens in the input. The model's output limit is **8192 tokens**.
 - Default: **7000 tokens** (leaving room for generated captions).
 - Optional parameter.
 
