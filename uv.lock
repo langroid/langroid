@@ -2653,7 +2653,7 @@ sdist = { url = "https://files.pythonhosted.org/packages/0e/72/a3add0e4eec4eb9e2
 
 [[package]]
 name = "langroid"
-version = "0.42.4"
+version = "0.42.6"
 source = { editable = "." }
 dependencies = [
     { name = "adb-cloud-connector" },
