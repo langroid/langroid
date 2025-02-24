@@ -573,12 +573,10 @@ class OpenAIGPT(LanguageModel):
         # Pydantic's BaseSettings will automatically pick it up from the
         # .env file
         # The config.api_key is ignored when not using an OpenAI model
+        self.api_key = config.api_key
         if self.is_openai_completion_model() or self.is_openai_chat_model():
-            self.api_key = config.api_key
             if self.api_key == DUMMY_API_KEY:
                 self.api_key = os.getenv("OPENAI_API_KEY", DUMMY_API_KEY)
-        else:
-            self.api_key = DUMMY_API_KEY
 
         self.is_groq = self.config.chat_model.startswith("groq/")
         self.is_cerebras = self.config.chat_model.startswith("cerebras/")
@@ -590,7 +588,8 @@ class OpenAIGPT(LanguageModel):
         if self.is_groq:
             # use groq-specific client
             self.config.chat_model = self.config.chat_model.replace("groq/", "")
-            self.api_key = os.getenv("GROQ_API_KEY", DUMMY_API_KEY)
+            if self.api_key == DUMMY_API_KEY:
+                self.api_key = os.getenv("GROQ_API_KEY", DUMMY_API_KEY)
             self.client = Groq(
                 api_key=self.api_key,
             )
@@ -600,7 +599,8 @@ class OpenAIGPT(LanguageModel):
         elif self.is_cerebras:
             # use cerebras-specific client
             self.config.chat_model = self.config.chat_model.replace("cerebras/", "")
-            self.api_key = os.getenv("CEREBRAS_API_KEY", DUMMY_API_KEY)
+            if self.api_key == DUMMY_API_KEY:
+                self.api_key = os.getenv("CEREBRAS_API_KEY", DUMMY_API_KEY)
             self.client = Cerebras(
                 api_key=self.api_key,
             )
@@ -612,22 +612,26 @@ class OpenAIGPT(LanguageModel):
             # in these cases, there's no specific client: OpenAI python client suffices
             if self.is_gemini:
                 self.config.chat_model = self.config.chat_model.replace("gemini/", "")
-                self.api_key = os.getenv("GEMINI_API_KEY", DUMMY_API_KEY)
+                if self.api_key == DUMMY_API_KEY:
+                    self.api_key = os.getenv("GEMINI_API_KEY", DUMMY_API_KEY)
                 self.api_base = GEMINI_BASE_URL
             elif self.is_glhf:
                 self.config.chat_model = self.config.chat_model.replace("glhf/", "")
-                self.api_key = os.getenv("GLHF_API_KEY", DUMMY_API_KEY)
+                if self.api_key == DUMMY_API_KEY:
+                    self.api_key = os.getenv("GLHF_API_KEY", DUMMY_API_KEY)
                 self.api_base = GLHF_BASE_URL
             elif self.is_openrouter:
                 self.config.chat_model = self.config.chat_model.replace(
                     "openrouter/", ""
                 )
-                self.api_key = os.getenv("OPENROUTER_API_KEY", DUMMY_API_KEY)
+                if self.api_key == DUMMY_API_KEY:
+                    self.api_key = os.getenv("OPENROUTER_API_KEY", DUMMY_API_KEY)
                 self.api_base = OPENROUTER_BASE_URL
             elif self.is_deepseek:
                 self.config.chat_model = self.config.chat_model.replace("deepseek/", "")
                 self.api_base = DEEPSEEK_BASE_URL
-                self.api_key = os.getenv("DEEPSEEK_API_KEY", DUMMY_API_KEY)
+                if self.api_key == DUMMY_API_KEY:
+                    self.api_key = os.getenv("DEEPSEEK_API_KEY", DUMMY_API_KEY)
 
             self.client = OpenAI(
                 api_key=self.api_key,
