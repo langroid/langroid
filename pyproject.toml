@@ -255,6 +255,9 @@ doc-parsers = [
 pinecone = [
     "pinecone-client>=5.0.1"
 ]
+asyncio = [
+    "asyncio>=3.4.3",
+]
 
 
 [dependency-groups]
