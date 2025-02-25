@@ -2533,6 +2533,7 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/b1/59/93ce612fce25c274efc88ec4d65963ce80fce96b9048e9fc1e430d893a9e/justext-3.0.1.tar.gz", hash = "sha256:b6ed2fb6c5d21618e2e34b2295c4edfc0bcece3bd549ed5c8ef5a8d20f0b3451", size = 828398 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/c4/30/2cd44d6cc7541d5a68848250bf2f12c588631f6ff4461421fee34f9b619e/jusText-3.0.1-py2.py3-none-any.whl", hash = "sha256:e0fb882dd7285415709f4b7466aed23d6b98b7b89404c36e8a2e730facfed02b", size = 837839 },
+    { url = "https://files.pythonhosted.org/packages/f4/b2/298d96f6b33fcb5ae7dbcbaea4e054601a575744de0e3edd98ae2a9d78e8/justext-3.0.1-py2.py3-none-any.whl", hash = "sha256:0a5225c5cd7c5a124fec7bfa9a55110a73135e8b58ce784470af67d051ac9fd3", size = 837939 },
 ]
 
 [[package]]
@@ -2653,7 +2654,7 @@ sdist = { url = "https://files.pythonhosted.org/packages/0e/72/a3add0e4eec4eb9e2
 
 [[package]]
 name = "langroid"
-version = "0.42.8"
+version = "0.42.9"
 source = { editable = "." }
 dependencies = [
     { name = "adb-cloud-connector" },
