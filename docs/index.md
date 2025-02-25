@@ -30,9 +30,9 @@ Langroid allows an intuitive definition of agents, tasks and task-delegation
 among agents. There is a principled mechanism to orchestrate multi-agent 
 collaboration. Agents act as message-transformers, and take turns responding to (and
 transforming) the current message. The architecture is lightweight, transparent, 
-flexible, and allows other types of orchestration to be implemented.
-Besides Agents, Langroid also provides simple ways to directly interact with  
-LLMs and vector-stores.  
+flexible, and allows other types of orchestration to be implemented; see the (WIP) 
+[langroid architecture document](blog/posts/langroid-architecture.md).
+Besides Agents, Langroid also provides simple ways to directly interact with LLMs and vector-stores. See the Langroid [quick-tour](tutorials/langroid-tour.md).
 
 ## Highlights
 - **Agents as first-class citizens:** The `Agent` class encapsulates LLM conversation state,
@@ -49,11 +49,10 @@ LLMs and vector-stores.
   after the agent's own responders.
 - **Modularity, Reusabilily, Loose coupling:** The `Agent` and `Task` abstractions allow users to design
   Agents with specific skills, wrap them in Tasks, and combine tasks in a flexible way.
-- **LLM Support**: Langroid supports OpenAI LLMs including GPT-3.5-Turbo,
-  GPT-4.
+- **LLM Support**: Langroid works with practically any LLM, local/open or remote/proprietary/API-based, via a variety of libraries and providers. See guides to using [local LLMs](tutorials/local-llm-setup.md) and [non-OpenAI LLMs](tutorials/non-openai-llms.md).
 - **Caching of LLM prompts, responses:** Langroid by default uses [Redis](https://redis.com/try-free/) for caching. 
   Caching with [Momento](https://www.gomomento.com/) is also supported.
-- **Vector-stores**: [Qdrant](https://qdrant.tech/) and [Chroma](https://www.trychroma.com/) are currently supported.
+- **Vector-stores**: [Qdrant](https://qdrant.tech/), [Chroma](https://www.trychroma.com/) and [LanceDB](https://www.lancedb.com/) are currently supported.
   Vector stores allow for Retrieval-Augmented-Generation (RAG).
 - **Grounding and source-citation:** Access to external documents via vector-stores
   allows for grounding and source-citation.

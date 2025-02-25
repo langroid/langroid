@@ -8,7 +8,7 @@ def test_code_parser():
     cfg = CodeParsingConfig(
         chunk_size=MAX_CHUNK_SIZE,
         extensions=["py", "sh"],
-        token_encoding_model="text-embedding-ada-002",
+        token_encoding_model="text-embedding-3-small",
     )
 
     parser = CodeParser(cfg)

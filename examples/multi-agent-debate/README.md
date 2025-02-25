@@ -57,6 +57,8 @@ respective pro and con system messages here. The system_messages has a statement
 - utils.py: User Prompts and other helper functions
 - generation_config_models.py: pydantic model for generation_config.json
 - generation_config.json: LLM generation parameters
+- main_chainlit.py: The entry point of the Chainlit version of the application
+- chainlit_utils.py: Relevant chainlit utility functions.
 The system dynamically updates user selection with the topics from this file. 
 
 Getting Started
@@ -85,6 +87,9 @@ Options
 - Disable Caching: Avoid using cached responses for LLM interactions.
   python examples/multi-agent-debate/main.py --nocache
 
+Run the Chainlit App
+chainlit run examples/multi-agent-debate/main_chainlit.py
+
 
 Interaction
 1. Decide if you want to you use same LLM for all agents or different ones
@@ -95,7 +100,9 @@ Interaction
 6. Request feedback at any time by typing `f`.
 7. Decide if you want the Metaphor Search to run to find Topic relevant web links
    and summarize them. 
-8. End the debate manually by typing `done`.
+8. Decide if you want to chat with the documents extracted from URLs found to learn more about the Topic.
+9. End the debate manually by typing "done". If you decide to chat with the documents, you can end session
+by typing `x`
 
 Feedback Criteria
 -----------------
@@ -112,4 +119,3 @@ The feedback mechanism evaluates debates based on:
 License
 -------
 This project is licensed under the MIT License.
-"""

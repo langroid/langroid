@@ -32,7 +32,7 @@ def test_parser(
         separators=["."],
         min_chunk_chars=min_chunk_chars,
         discard_chunk_chars=discard_chunk_chars,
-        token_encoding_model="text-embedding-ada-002",
+        token_encoding_model="text-embedding-3-small",
     )
 
     parser = Parser(cfg)
@@ -76,7 +76,7 @@ def test_text_token_chunking(
         max_chunks=max_chunks,
         min_chunk_chars=min_chunk_chars,
         discard_chunk_chars=discard_chunk_chars,
-        token_encoding_model="text-embedding-ada-002",
+        token_encoding_model="text-embedding-3-small",
     )
 
     parser = Parser(cfg)
@@ -136,3 +136,37 @@ def test_utf8():
 
     # test that this succeeds
     _ = content.decode("utf-8")
+
+
+def test_chunk_tokens():
+    """Tests if Parser.chunk_tokens preserves list structure and line formatting."""
+    cfg = ParsingConfig(
+        chunk_size=10,
+        max_chunks=5,
+        min_chunk_chars=5,
+        discard_chunk_chars=2,
+        token_encoding_model="text-embedding-3-small",
+    )
+    parser = Parser(cfg)
+
+    # text with bullet list, redundant extra lines
+    text = """fruits
+- apple
+
+- orange
+
+
+
+vegetables
+- tomato
+- cucumber"""
+
+    chunks = parser.chunk_tokens(text)
+    reconstructed = "".join(chunks)
+
+    original_lines = [line.strip() for line in text.split("\n") if line.strip()]
+    result_lines = [line.strip() for line in reconstructed.split("\n") if line.strip()]
+
+    assert original_lines == result_lines
+    assert len(original_lines) == 6  # Verify all lines are present
+    assert all(line.startswith("- ") for line in original_lines if "-" in line)

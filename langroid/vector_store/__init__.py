@@ -23,11 +23,7 @@ try:
     MeiliSearch
     MeiliSearchConfig
     __all__.extend(["meilisearch", "MeiliSearch", "MeiliSearchConfig"])
-except ImportError:
-    pass
 
-
-try:
     from . import lancedb
     from .lancedb import LanceDB, LanceDBConfig
 
@@ -35,10 +31,6 @@ try:
     LanceDB
     LanceDBConfig
     __all__.extend(["lancedb", "LanceDB", "LanceDBConfig"])
-except ImportError:
-    pass
-
-try:
     from . import chromadb
     from .chromadb import ChromaDBConfig, ChromaDB
 
@@ -46,5 +38,29 @@ try:
     ChromaDB
     ChromaDBConfig
     __all__.extend(["chromadb", "ChromaDBConfig", "ChromaDB"])
+
+    from . import postgres
+    from .postgres import PostgresDB, PostgresDBConfig
+
+    postgres  # silence linters
+    PostgresDB
+    PostgresDBConfig
+    __all__.extend(["postgres", "PostgresDB", "PostgresDBConfig"])
+
+    from . import weaviatedb
+    from .weaviatedb import WeaviateDBConfig, WeaviateDB
+
+    weaviatedb
+    WeaviateDB
+    WeaviateDBConfig
+    __all__.extend(["weaviatedb", "WeaviateDB", "WeaviateDBConfig"])
+
+    from . import pineconedb
+    from .pineconedb import PineconeDB, PineconeDBConfig
+
+    pineconedb
+    PineconeDB
+    PineconeDBConfig
+    __all__.extend(["pineconedb", "PineconeDB", "PineconeDBConfig"])
 except ImportError:
     pass

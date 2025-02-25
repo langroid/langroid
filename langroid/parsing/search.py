@@ -7,6 +7,7 @@ See tests for examples: tests/main/test_string_search.py
 """
 
 import difflib
+import re
 from typing import List, Tuple
 
 from nltk.corpus import stopwords
@@ -117,7 +118,7 @@ def preprocess_text(text: str) -> str:
         str: The preprocessed text.
     """
     # Ensure the NLTK resources are available
-    for resource in ["punkt", "wordnet", "stopwords"]:
+    for resource in ["tokenizers/punkt", "corpora/wordnet", "corpora/stopwords"]:
         download_nltk_resource(resource)
 
     # Lowercase the text
@@ -195,8 +196,10 @@ def get_context(
 
     Returns:
     str: A string containing b words before, the match, and a words after
-        the best approximate match position of the query in the text. If no
-        match is found, returns empty string.
+        the best approximate match position of the query in the text.
+        The text is extracted from the original `text`, preserving formatting,
+        whitespace, etc, so it does not disturb any downstream processing.
+        If no match is found, returns empty string.
     int: The start position of the match in the text.
     int: The end position of the match in the text.
 
@@ -204,6 +207,8 @@ def get_context(
     >>> get_context("apple", "The quick brown fox jumps over the apple.", 3, 2)
     # 'fox jumps over the apple.'
     """
+
+    # If no word limits specified, return full text
     if words_after is None and words_before is None:
         # return entire text since we're not asked to return a bounded context
         return text, 0, 0
@@ -212,23 +217,35 @@ def get_context(
     if fuzz.partial_ratio(query, text) < 40:
         return "", 0, 0
 
+    # Find best matching position of query in text
     sequence_matcher = difflib.SequenceMatcher(None, text, query)
     match = sequence_matcher.find_longest_match(0, len(text), 0, len(query))
 
     if match.size == 0:
         return "", 0, 0
 
+    # Count words before match point
     segments = text.split()
     n_segs = len(segments)
-
     start_segment_pos = len(text[: match.a].split())
 
+    # Calculate word window boundaries
     words_before = words_before or n_segs
     words_after = words_after or n_segs
     start_pos = max(0, start_segment_pos - words_before)
     end_pos = min(len(segments), start_segment_pos + words_after + len(query.split()))
 
-    return " ".join(segments[start_pos:end_pos]), start_pos, end_pos
+    # Find character positions where words start
+    word_positions = [m.start() for m in re.finditer(r"\S+", text)]
+
+    # Convert word positions to character positions
+    start_char = word_positions[start_pos] if start_pos < len(word_positions) else 0
+    end_char = word_positions[min(end_pos, len(word_positions) - 1)] + len(
+        text.split()[min(end_pos - 1, len(word_positions) - 1)]
+    )
+
+    # return exact substring with original formatting
+    return text[start_char:end_char], start_pos, end_pos
 
 
 def eliminate_near_duplicates(passages: List[str], threshold: float = 0.8) -> List[str]:

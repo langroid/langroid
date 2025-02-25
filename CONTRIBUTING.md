@@ -37,11 +37,11 @@ You are welcome to take on un-assigned open [issues](https://github.com/langroid
     - [x] Qdrant
     - [x] Chroma
     - [x] LanceDB
-    - [ ] Pinecone 
+    - [x] Pinecone 
+    - [x] PostgresML (pgvector)
+    - [x] Weaviate
     - [ ] Milvus 
     - [ ] Marqo 
-    - [ ] Weaviate
-    - [ ] PostgresML (pgvector?)
 - Other LLM APIs, e.g.: Claude, Cohere, ... (see below)
 - Local LLMs, e.g.: llama2
 - Data Sources: SQL DBs, NoSQL DBs, Neo4j (Graph DBs), ...
@@ -115,35 +115,33 @@ Emergent autonomous scientific research capabilities of large language models ht
 
 ## Set up dev env
 
-We use [`poetry`](https://python-poetry.org/docs/#installation)
+We use [`uv`](https://docs.astral.sh/uv/getting-started/installation/)
 to manage dependencies, and `python 3.11` for development.
 
-First install `poetry`, then create virtual env and install dependencies:
+First install `uv`, then create virtual env and install dependencies:
 
 ```bash
 # clone this repo and cd into repo root
 git clone ...
 cd <repo_root>
 # create a virtual env under project root, .venv directory
-python3 -m venv .venv
+uv venv --python 3.11
 
 # activate the virtual env
 . .venv/bin/activate
 
-# specify python version for poetry to use
-poetry env use python3.11
 
-# use poetry to install dependencies (these go into .venv dir)
-poetry install --with dev
+# use uv to install dependencies (these go into .venv dir)
+uv sync --dev 
 ```
 
 Important note about dependencies management:
-> As of version 0.18.3, we are starting to include the `poetry.lock` file as part of 
+> As of version 0.33.0, we are starting to include the `uv.lock` file as part of 
 > the repo. This ensures that all contributors are using the same versions of 
-> dependencies. If you add a new dependency, you should run `poetry update` to update
-> the `poetry.lock` file. This will also update the `pyproject.toml` file.
+> dependencies. If you add a new dependency, `uv add` will automatically update 
+> the `uv.lock` file. This will also update the `pyproject.toml` file.
 
-To add packages, use `poetry add <package-name>`. This will automatically
+To add packages, use `uv add <package-name>`. This will automatically
 find the latest compatible version of the package and add it to `pyproject.
 toml`. _Do not manually edit `pyproject.toml` to add packages._
 
@@ -168,6 +166,18 @@ You are welcome to submit a PR to support other API-based or local models.
 
 ## Run tests
 To verify your env is correctly setup, run all tests using `make tests`.
+
+## IMPORTANT: Please include tests, docs and possibly examples.
+
+For any new features, please include:
+- Tests in the `tests` directory (first check if there is a suitable test file to add to).
+  _If fixing a bug, please add a regression test, i.e., 
+   one which would have failed without your fix_
+- A note in `docs/notes` folder, e.g. `docs/notes/weaviate.md` that is a
+  (relatively) self-contained guide to using the feature, including any instructions
+  on how to set up the environment or keys if needed. 
+  See the [weaviate](https://langroid.github.io/langroid/notes/weaviate/) note as an example. Make sure you link to this note in the `mkdocs.yml` file under the `nav` section.
+- Where possible and meaningful, add a simple example in the `examples` directory.
 
 ## Generate docs
 
@@ -223,7 +233,7 @@ cooperation!
 ## Submitting a PR
 
 To check for issues locally, run `make check`, it runs linters `black`, `ruff`,
-`flake8` and type-checker `mypy`. It also installs a pre-commit hook, 
+and type-checker `mypy`. It also installs a pre-commit hook, 
 so that commits are blocked if there are style/type issues. The linting attempts to
 auto-fix issues, and warns about those it can't fix.
 (There is a separate `make lint` you could do, but that is already part of `make check`).
@@ -232,10 +242,11 @@ direct imports from pydantic, and replaces them with importing from `langroid.py
 (this is needed to enable dual-compatibility with Pydantic v1 and v2).
 
 So, typically when submitting a PR, you would do this sequence:
-- run `make tests` or `pytest tests/main` (if needed use `-nc` means "no cache", i.e. to prevent
-  using cached LLM API call responses)
+- run `make tests` or `pytest -xvs tests/main/my-specific-test.py` 
+  - if needed use `-nc` means "no cache", i.e. to prevent using cached LLM API call responses
+  - the `-xvs` option means "exit on first failure, verbose, show output"
 - fix things so tests pass, then proceed to lint/style/type checks below.
-- `make check` to see what issues there are
+- `make check` to see what issues there are (typically lints and mypy)
 - manually fix any lint or type issues
 - `make check` again to see what issues remain
 - repeat if needed, until all clean.

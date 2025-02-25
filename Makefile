@@ -5,34 +5,34 @@ SHELL := /bin/bash
 .PHONY: setup update
 
 setup: ## Setup the git pre-commit hooks
-	poetry run pre-commit install
+	uv run pre-commit install
 
 update: ## Update the git pre-commit hooks
-	poetry run pre-commit autoupdate
+	uv run pre-commit autoupdate
 
 .PHONY: type-check
 type-check:
-	@poetry run pre-commit install
-	@poetry run pre-commit autoupdate
-	@poetry run pre-commit run --all-files
+	@uv run pre-commit install
+	@uv run pre-commit autoupdate
+	@uv run pre-commit run --all-files
 	@echo "Running black..."
-	@black --check .
+	@uv run black --check .
 	@echo "Running flake8 on git-tracked files ONLY! ..."
 	@git ls-files | grep '\.py$$' | xargs flake8 --exclude=.git,__pycache__,.venv,langroid/embedding_models/protoc/*
-	@poetry run ruff check .
+	@uv run ruff check .
 	@echo "Running mypy...";
-	@poetry run mypy -p langroid
+	@uv run mypy -p langroid
 	@echo "All checks passed!"
 
 .PHONE: lint
 lint:
-	black .
-	poetry run ruff check . --fix
+	uv run black .
+	uv run ruff check . --fix
 
 .PHONY: stubs
 stubs:
 	@echo "Generating Python stubs for the langroid package..."
-	@poetry run stubgen -p langroid -o stubs
+	@uv run stubgen -p langroid -o stubs
 	@echo "Stubs generated in the 'stubs' directory"
 
 .PHONY: fix-pydantic
@@ -71,28 +71,44 @@ loc:
 	@echo "Lines in git-tracked files python files:"
 	@git ls-files | grep '\.py$$' | xargs cat | grep -v '^\s*$$' | wc -l
 
+.PHONY: revert-tag
+revert-tag:
+	@LATEST_TAG=$$(git describe --tags --abbrev=0) && \
+	echo "Deleting tag: $$LATEST_TAG" && \
+	git tag -d $$LATEST_TAG
+
+.PHONY: revert-bump
+revert-bump:
+	@if git log -1 --pretty=%B | grep -q "bump"; then \
+		git reset --hard HEAD~1; \
+		echo "Reverted last commit (bump commit)"; \
+	else \
+		echo "Last commit was not a bump commit"; \
+	fi
+
+.PHONY: revert
+revert: revert-bump revert-tag
+	
 .PHONY: bump-patch
 bump-patch:
-	@poetry version patch
-	@git commit pyproject.toml -m "Bump version"
+	@cz bump --increment PATCH
 
 .PHONY: bump-minor
 bump-minor:
-	@poetry version minor
-	@git commit pyproject.toml -m "Bump version"
+	@cz bump --increment MINOR 
 
 .PHONY: bump-major
 bump-major:
-	@poetry version major
-	@git commit pyproject.toml -m "Bump version"
+	@cz bump --increment MAJOR 
 
 .PHONY: build
 build:
-	@poetry build
+	@uv build
 
 .PHONY: push
 push:
 	@git push origin main
+	@git push origin --tags
 
 .PHONY: clean
 clean:
@@ -100,7 +116,7 @@ clean:
 
 .PHONY: release
 release:
-	@VERSION=$$(poetry version | cut -d' ' -f2) && gh release create $${VERSION} dist/*
+	@VERSION=$$(cz version -p | cut -d' ' -f2) && gh release create $${VERSION} dist/*
 
 .PHONY: all-patch
 all-patch: bump-patch clean build push release
@@ -113,4 +129,4 @@ all-major: bump-major clean build push release
 
 .PHONY: publish
 publish:
-	poetry publish
+	uv publish

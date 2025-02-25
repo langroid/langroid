@@ -1,7 +1,7 @@
 """
 Test for HuggingFace embeddings.
 This depends on sentence-transformers being installed:
- poetry install -E hf-embeddings
+uv sync --dev --extra hf-embeddings
 """
 
 import os

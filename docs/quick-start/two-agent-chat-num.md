@@ -15,26 +15,23 @@ To add pairs of numbers, we set up an `Adder` agent.
 [^1]: Toy numerical examples are perfect to illustrate the ideas without
       incurring too much token cost from LLM API calls.
 
-First define a common `ChatAgentConfig` to use for both agents:
+First define a common `llm_config` to use for both agents:
 ```python
-config = lr.ChatAgentConfig(
-    llm = lr.language_models.OpenAIGPTConfig(
-        chat_model=lr.language_models.OpenAIChatModel.GPT4,
-    ),
-    vecdb = None, #(1)!
+llm_config = lr.language_models.OpenAIGPTConfig(
+    chat_model=lr.language_models.OpenAIChatModel.GPT4o,
+    # or, e.g., "ollama/qwen2.5-coder:latest", or "gemini/gemini-2.0-flash-exp"
 )
 ```
 
-1. We don't need access to external docs so we set `vecdb=None` to avoid 
-   the overhead of loading a vector-store.
 
-Next, set up the student agent and the corresponding task:
+Next, set up a config for the student agent, then create the agent
+and the corresponding task:
 
 ```py
-student_agent = lr.ChatAgent(config)
-student_task = lr.Task(
-    student_agent,
-    name = "Student",
+student_config = lr.ChatAgentConfig(
+    name="Student",
+    llm=llm_config,
+    vecdb=None, #(1)!
     system_message="""
         You will receive a list of numbers from me (the User),
         and your goal is to calculate their sum.
@@ -48,35 +45,48 @@ student_task = lr.Task(
         Once you have added all the numbers in the list, 
         say DONE and give me the final sum. 
         Start by asking me for the list of numbers.
-    """,
-    llm_delegate = True, #(1)!
-    single_round=False,  # (2)! 
+    """,    
+)
+student_agent = lr.ChatAgent(student_config)
+student_task = lr.Task(
+    student_agent,
+    name = "Student",
+    llm_delegate = True, #(2)!
+    single_round=False,  # (3)! 
 )
 ```
 
-1. Whenever we "flip roles" and assign the LLM the role of generating questions, 
+1. We don't need access to external docs so we set `vecdb=None` to avoid 
+   the overhead of loading a vector-store.
+2. Whenever we "flip roles" and assign the LLM the role of generating questions, 
    we set `llm_delegate=True`. In effect this ensures that the LLM "decides" when
    the task is done.
-2. This setting means the task is not a single-round task, i.e. it is _not_ done
+3. This setting means the task is not a single-round task, i.e. it is _not_ done
    after one `step()` with a valid response.
 
-Next, set up the adder agent and task:
+Next, set up the Adder agent config, create the Adder agent
+and the corresponding Task:
 
 ```py
-adder_agent = lr.ChatAgent(config)
-adder_task = lr.Task(
-    adder_agent,
+adder_config = lr.ChatAgentConfig(
     name = "Adder", #(1)!
+    llm=llm_config,
+    vecdb=None,
     system_message="""
         You are an expert on addition of numbers. 
         When given numbers to add, simply return their sum, say nothing else
-        """,
-    single_round=True,  # task done after 1 step() with valid response (2)!
+        """,     
+)
+adder_agent = lr.ChatAgent(adder_config)
+adder_task = lr.Task(
+    adder_agent,
+    interactive=False, #(2)!
+    single_round=True,  # task done after 1 step() with valid response (3)!
 )
 ```
-
-1. The Task name is used when displaying the conversation in the console.
-2. We set `single_round=True` to ensure that the expert task is done after 
+1. The Agent name is displayed in the conversation shown in the console.
+2. Does not wait for user input.
+3. We set `single_round=True` to ensure that the expert task is done after 
    one step() with a valid response. 
 
 Finally, we add the `adder_task` as a sub-task of the `student_task`, 

@@ -11,14 +11,17 @@ python3 -m venv .venv
 . ./.venv/bin/activate
 ```
 To see how to use Langroid in your own repo, you can take a look at the
-[`langroid-examples`](https://github.com/langroid/langroid-examples) repo, which can be a good starting point for your own repo.
-The `langroid-examples` repo already contains a `pyproject.toml` file so that you can 
-use `Poetry` to manage your virtual environment and dependencies. 
-For example you can do 
+[`langroid-examples`](https://github.com/langroid/langroid-examples) repo, which can be a good starting point for your own repo, 
+or use the [`langroid-template`](https://github.com/langroid/langroid-template) repo.
+These repos contain a `pyproject.toml` file suitable for use with the [`uv`](https://docs.astral.sh/uv/) dependency manager. After installing `uv` you can 
+set up your virtual env, activate it, and install langroid into your venv like this:
 
 ```bash
-poetry install # installs latest version of langroid
+uv venv --python 3.11
+. ./.venv/bin/activate 
+uv sync
 ```
+
 Alternatively, use `pip` to install `langroid` into your virtual environment:
 ```bash
 pip install langroid
@@ -57,8 +60,9 @@ For many practical scenarios, you may need additional optional dependencies:
         - `sudo apt-get install libpq-dev` on Ubuntu,
         - `brew install postgresql` on Mac, etc.
     - Install langroid with the postgres extra, e.g. `pip install langroid[postgres]`
-      or `poetry add langroid[postgres]` or `poetry install -E postgres`.
-      If this gives you an error, try `pip install psycopg2-binary` in your virtualenv.
+      or `uv add "langroid[postgres]"` or `uv pip install --extra postgres -r pyproject.toml`.
+      If this gives you an error, try 
+      `uv pip install psycopg2-binary` in your virtualenv.
 
 
 !!! tip "Work in a nice terminal, such as Iterm2, rather than a notebook"
@@ -157,11 +161,13 @@ This page [Microsoft Azure OpenAI](https://learn.microsoft.com/en-us/azure/ai-se
 provides more information, and you can set each environment variable as follows:
 
 - `AZURE_OPENAI_API_KEY`, from the value of `API_KEY`
-- `AZURE_OPENAI_API_BASE` from the value of `ENDPOINT`, typically looks like `https://your.domain.azure.com`.
+- `AZURE_OPENAI_API_BASE` from the value of `ENDPOINT`, typically looks like `https://your_resource.openai.azure.com`.
 - For `AZURE_OPENAI_API_VERSION`, you can use the default value in `.env-template`, and latest version can be found [here](https://learn.microsoft.com/en-us/azure/ai-services/openai/whats-new#azure-openai-chat-completion-general-availability-ga)
-- `AZURE_OPENAI_DEPLOYMENT_NAME` is the name of the deployed model, which is defined by the user during the model setup
-- `AZURE_OPENAI_MODEL_NAME` Azure OpenAI allows specific model names when you select the model for your deployment. You need to put precisly the exact model name that was selected. For example, GPT-3.5 (should be `gpt-35-turbo-16k` or `gpt-35-turbo`) or GPT-4 (should be `gpt-4-32k` or `gpt-4`).
-- `AZURE_OPENAI_MODEL_VERSION` is required if `AZURE_OPENAI_MODEL_NAME = gpt=4`, which will assist Langroid to determine the cost of the model
+- `AZURE_OPENAI_DEPLOYMENT_NAME` is an OPTIONAL deployment name which may be 
+   defined by the user during the model setup.
+- `AZURE_OPENAI_CHAT_MODEL` Azure OpenAI allows specific model names when you select the model for your deployment. You need to put precisely the exact model name that was selected. For example, GPT-3.5 (should be `gpt-35-turbo-16k` or `gpt-35-turbo`) or GPT-4 (should be `gpt-4-32k` or `gpt-4`).
+- `AZURE_OPENAI_MODEL_NAME` (Deprecated, use `AZURE_OPENAI_CHAT_MODEL` instead).
+  
 
 
 ## Next steps

@@ -89,6 +89,22 @@ as the `chat_model` param in the `OpenAIGPTConfig` as in the previous section.
 When a script supports it, you can also pass in the model name via
 `-m ollama/dolphin-mixtral-gguf`
 
+## Local LLMs using LMStudio
+
+LMStudio is one of the simplest ways to download run open-weight LLMs locally.
+See their docs at [lmstudio.ai](https://lmstudio.ai/docs) for installation and usage 
+instructions. Once you download a model, you can use the "server" option to have it 
+served via an OpenAI-compatible API at a local IP like `https://127.0.0.1:1234/v1`.
+As with any other scenario of running a local LLM, you can use this with Langroid by
+setting `chat_model` as follows (note you should not include the `https://` part):
+
+```python
+llm_config = lm.OpenAIGPTConfig(
+    chat_model="local/127.0.0.1234/v1",
+    ...
+)
+```
+
 ## Setup llama.cpp with a GGUF model from HuggingFace
 
 See `llama.cpp`'s [GitHub page](https://github.com/ggerganov/llama.cpp/tree/master) for build and installation instructions.
@@ -163,12 +179,18 @@ path, e.g. `Qwen/Qwen2.5-Coder-32B-Instruct`, so the full `chat_model` would be
 
 ## DeepSeek LLMs
 
-As of 26-Dec-2024, DeepSeek-v3 is available via their [api](https://platform.deepseek.com).
+As of 26-Dec-2024, DeepSeek models are available via their [api](https://platform.deepseek.com).
 To use it with Langroid:
 
 - set up your `DEEPSEEK_API_KEY` environment variable in the `.env` file or as
  an explicit export in your shell
-- set the `chat_model` in the `OpenAIGPTConfig` to `deepseek/deepseek-chat`
+- set the `chat_model` in the `OpenAIGPTConfig` to `deepseek/deepseek-chat` to use the 
+`DeepSeek-V3` model, or `deepseek/deepseek-reasoner` to use the full (i.e. non-distilled) `DeepSeek-R1` "reasoning" model.
+
+The DeepSeek models are also available via OpenRouter (see the corresponding 
+in the OpenRouter section here) or ollama (see those instructions). E.g. you
+can use the DeepSeek R1 or its distilled variants by setting `chat_model` to 
+`openrouter/deepseek/deepseek-r1` or `ollama/deepseek-r1:8b`.
 
 ## Other non-OpenAI LLMs supported by LiteLLM
 

@@ -14,6 +14,9 @@ from . import web_search
 
 from .parser import (
     Splitter,
+    MarkitdownXLSParsingConfig,
+    MarkitdownXLSXParsingConfig,
+    MarkitdownPPTXParsingConfig,
     PdfParsingConfig,
     DocxParsingConfig,
     DocParsingConfig,
@@ -40,6 +43,9 @@ __all__ = [
     "DocxParsingConfig",
     "DocParsingConfig",
     "ParsingConfig",
+    "MarkitdownXLSXParsingConfig",
+    "MarkitdownXLSParsingConfig",
+    "MarkitdownPPTXParsingConfig",
     "Parser",
 ]
 

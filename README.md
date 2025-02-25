@@ -135,17 +135,29 @@ teacher_task.run()
 <details>
 <summary> <b>Click to expand</b></summary>
 
+- **Jan 2025:**
+  - [0.36.0](https://github.com/langroid/langroid/releases/tag/0.36.0): Weaviate vector-db support (thanks @abab-dev).
+  - [0.35.0](https://github.com/langroid/langroid/releases/tag/0.35.0): Capture/Stream reasoning content from 
+    Reasoning LLMs (e.g. DeepSeek-R1, OpenAI o1) in addition to final answer.
+  - [0.34.0](https://github.com/langroid/langroid/releases/tag/0.34.0): DocChatAgent 
+    chunk enrichment to improve retrieval. (collaboration with @dfm88). 
+  - [0.33.0](https://github.com/langroid/langroid/releases/tag/0.33.3) Move from Poetry to uv! (thanks @abab-dev).
+  - [0.32.0](https://github.com/langroid/langroid/releases/tag/0.32.0) DeepSeek v3 support.
 - **Dec 2024:**
-  - [0.30.0](https://github.com/langroid/langroid/releases/tag/0.30.0) Llama-cpp embeddings.
-  - [0.29.0](https://github.com/langroid/langroid/releases/tag/0.29.0) Custom Azure OpenAI Client 
+  - [0.31.0](https://github.com/langroid/langroid/releases/tag/0.31.0) Azure OpenAI Embeddings
+  - [0.30.0](https://github.com/langroid/langroid/releases/tag/0.30.0) Llama-cpp embeddings (thanks @Kwigg).
+  - [0.29.0](https://github.com/langroid/langroid/releases/tag/0.29.0) Custom Azure OpenAI Client (thanks 
+    @johannestang).
   - [0.28.0](https://github.com/langroid/langroid/releases/tag/0.28.0) `ToolMessage`: `_handler` field to override 
-default handler method name in `request` field. 
+default handler method name in `request` field (thanks @alexagr).
   - [0.27.0](https://github.com/langroid/langroid/releases/tag/0.27.0) OpenRouter Support.
   - [0.26.0](https://github.com/langroid/langroid/releases/tag/0.26.0) Update to latest Chainlit.
-  - [0.25.0](https://github.com/langroid/langroid/releases/tag/0.25.0) True Async Methods for agent and user-response.
+  - [0.25.0](https://github.com/langroid/langroid/releases/tag/0.25.0) True Async Methods for agent and 
+    user-response (thanks @alexagr).
 - **Nov 2024:**
   - **[0.24.0](https://langroid.github.io/langroid/notes/structured-output/)**: 
      Enables support for `Agent`s with strict JSON schema output format on compatible LLMs and strict mode for the OpenAI tools API.
+    (thanks @nilspalumbo).
   - **[0.23.0](https://langroid.github.io/langroid/tutorials/local-llm-setup/#local-llms-hosted-on-glhfchat)**: 
       support for LLMs (e.g. `Qwen2.5-Coder-32b-Instruct`) hosted on glhf.chat 
   - **[0.22.0](https://langroid.github.io/langroid/notes/large-tool-results/)**: 
@@ -434,7 +446,7 @@ For many practical scenarios, you may need additional optional dependencies:
 - For "chat with databases", use the `db` extra:
     ```bash
     pip install "langroid[db]"
-    ``
+    ```
 - You can specify multiple extras by separating them with commas, e.g.:
     ```bash
     pip install "langroid[doc-chat,db]"
@@ -454,7 +466,9 @@ with a postgres db, you will need to:
   - `sudo apt-get install libpq-dev` on Ubuntu,
   - `brew install postgresql` on Mac, etc.
 - Install langroid with the postgres extra, e.g. `pip install langroid[postgres]`
-  or `poetry add langroid[postgres]` or `poetry install -E postgres`.
+  or `poetry add "langroid[postgres]"` or `poetry install -E postgres`,
+  (or the corresponding `uv` versions, e.g. `uv add "langroid[postgres]"`
+  or `uv pip install langroid[postgres]`).
   If this gives you an error, try `pip install psycopg2-binary` in your virtualenv.
 </details>
 
@@ -608,12 +622,16 @@ All of these can be run in a Colab notebook:
 [![Open in Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/langroid/langroid/blob/main/examples/Langroid_quick_start.ipynb)
 
 <details>
-<summary> <b> Direct interaction with OpenAI LLM </b> </summary>
+<summary> <b> Direct interaction with LLM </b> </summary>
 
 ```python
 import langroid.language_models as lm
 
-mdl = lm.OpenAIGPT()
+mdl = lm.OpenAIGPT(
+    lm.OpenAIGPTConfig(
+        chat_model=lm.OpenAIChatModel.GPT4, # or, e.g.  "ollama/qwen2.5"
+    ),
+)
 
 messages = [
   lm.LLMMessage(content="You are a helpful assistant",  role=lm.Role.SYSTEM), 
@@ -623,6 +641,8 @@ messages = [
 response = mdl.chat(messages, max_tokens=200)
 print(response.message)
 ```
+See the guides to use
+([local/open LLMs](https://langroid.github.io/langroid/tutorials/local-llm-setup/) or [remote/commercial LLMs](https://langroid.github.io/langroid/tutorials/non-openai-llms/)).
 </details>
 
 <details>
@@ -636,24 +656,6 @@ cfg = lm.OpenAIGPTConfig(
 )
 mdl = lm.OpenAIGPT(cfg)
 # now interact with it as above, or create an Agent + Task as shown below.
-```
-
-If the model is [supported by `liteLLM`](https://docs.litellm.ai/docs/providers), 
-then no need to launch the proxy server.
-Just set the `chat_model` param above to `litellm/[provider]/[model]`, e.g. 
-`litellm/anthropic/claude-instant-1` and use the config object as above.
-Note that to use `litellm` you need to install langroid with the `litellm` extra:
-`poetry install -E litellm` or `pip install langroid[litellm]`.
-For remote models, you will typically need to set API Keys etc as environment variables.
-You can set those based on the LiteLLM docs. 
-If any required environment variables are missing, Langroid gives a helpful error
-message indicating which ones are needed.
-Note that to use `langroid` with `litellm` you need to install the `litellm` 
-extra, i.e. either `pip install langroid[litellm]` in your virtual env,
-or if you are developing within the `langroid` repo, 
-`poetry install -E litellm`.
-```bash
-pip install langroid[litellm]
 ```
 </details>
 

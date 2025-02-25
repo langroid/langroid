@@ -9,6 +9,10 @@ or
 
 python3 examples/basic/chat-tool-function.py -m ollama/mistral:7b-instruct-v0.2-q8_0
 
+or 
+
+uv run examples/basic/chat-tool-function.py -m deepseek/deepseek-reasoner
+
 """
 
 import langroid as lr
@@ -117,13 +121,14 @@ def run(model: str = ""):  # or, e.g., "ollama/mistral:7b-instruct-v0.2-q8_0"
         The earnings per share is $5.68.
         """
 
+    # test 1:
     # see that the LLM extracts the company information and presents it using the tool
     response = agent.llm_response(paragraph)
 
     print(response.content)
 
-    # wrap the agent in a Task, so that the ToolMessage is handled
-
+    # test 2:
+    # wrap the agent in a Task, so that the ToolMessage is handled by the handle method
     task = lr.Task(agent, interactive=False)
     result = task[FinalResultTool].run(paragraph)
     assert result.market_cap > 0

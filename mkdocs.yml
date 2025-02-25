@@ -111,6 +111,13 @@ nav:
       - Tool Handler Name: notes/tool-message-handler.md
       - Llama.cpp Embeddings: notes/llama-cpp-embeddings.md
       - Custom Azure OpenAI client: notes/custom-azure-client.md
+      - Enriching Chunks for Retrieval: notes/enriching-for-retrieval.md
+      - Reasoning Content: notes/reasoning-content.md
+      - Weaviate: notes/weaviate.md
+      - Handling LLM Non-Tool Messages: notes/handle-llm-no-tool.md
+      - PGVector: notes/pgvector.md
+      - Pinecone: notes/pinecone.md
+      - Tavily Search Tool: notes/tavily_search.md
 
   - Examples:
     - Guide: examples/guide.md
