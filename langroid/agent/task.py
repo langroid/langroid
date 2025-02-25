@@ -391,6 +391,7 @@ class Task:
             max_stalled_steps=self.max_stalled_steps,
             done_if_no_response=[Entity(s) for s in self.done_if_no_response],
             done_if_response=[Entity(s) for s in self.done_if_response],
+            default_return_type=self.default_return_type,
             config=self.config,
         )
 

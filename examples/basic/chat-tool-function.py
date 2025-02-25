@@ -121,7 +121,7 @@ def run(model: str = ""):  # or, e.g., "ollama/mistral:7b-instruct-v0.2-q8_0"
         The earnings per share is $5.68.
         """
 
-    # test 1: 
+    # test 1:
     # see that the LLM extracts the company information and presents it using the tool
     response = agent.llm_response(paragraph)
 
