@@ -215,11 +215,20 @@ class OpenAIGPTConfig(LLMConfig):
     (a) locally-served models behind an OpenAI-compatible API
     (b) non-local models, using a proxy adaptor lib like litellm that provides
         an OpenAI-compatible API.
-    We could rename this class to OpenAILikeConfig.
+    (We could rename this class to OpenAILikeConfig, but we keep it as-is for now)
+
+    Important Note:
+    Due to the `env_prefix = "OPENAI_"` defined below,
+    all of the fields below can be set AND OVERRIDDEN via env vars,
+    # by upper-casing the name and prefixing with OPENAI_, e.g.
+    # OPENAI_MAX_OUTPUT_TOKENS=1000.
+    # If any of these is defined in this way in the environment
+    # (either via explicit setenv or export or via .env file + load_dotenv()),
+    # the environment variable takes precedence over the value in the config.
     """
 
     type: str = "openai"
-    api_key: str = DUMMY_API_KEY  # CAUTION: set this ONLY via env var OPENAI_API_KEY
+    api_key: str = DUMMY_API_KEY
     organization: str = ""
     api_base: str | None = None  # used for local or other non-OpenAI models
     litellm: bool = False  # use litellm api?
@@ -273,11 +282,7 @@ class OpenAIGPTConfig(LLMConfig):
 
         super().__init__(**kwargs)
 
-    # all of the vars above can be set via env vars,
-    # by upper-casing the name and prefixing with OPENAI_, e.g.
-    # OPENAI_MAX_OUTPUT_TOKENS=1000.
-    # This is either done in the .env file, or via an explicit
-    # `export OPENAI_MAX_OUTPUT_TOKENS=1000` or `setenv OPENAI_MAX_OUTPUT_TOKENS 1000`
+
     class Config:
         env_prefix = "OPENAI_"
 
@@ -483,11 +488,7 @@ class OpenAIGPT(LanguageModel):
         if self.config.use_completion_for_chat:
             self.config.use_chat_for_completion = False
 
-        # NOTE: The api_key should be set in the .env file, or via
-        # an explicit `export OPENAI_API_KEY=xxx` or `setenv OPENAI_API_KEY xxx`
-        # Pydantic's BaseSettings will automatically pick it up from the
-        # .env file
-        # The config.api_key is ignored when not using an OpenAI model
+
         self.api_key = config.api_key
         if self.is_openai_completion_model() or self.is_openai_chat_model():
             if self.api_key == DUMMY_API_KEY:
