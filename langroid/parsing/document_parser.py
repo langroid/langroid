@@ -419,13 +419,15 @@ class DocumentParser(Parser):
             # that it needs to be combined with the next chunk.
             while len(split) > self.config.chunk_size:
                 # pretty formatting of pages (e.g. 1-3, 4, 5-7)
-                pg = "-".join([pages[0], pages[-1]])
+                p_0 = int(pages[0])
+                p_n = int(pages[-1])
+                page_str = f"pages {p_0}-{p_n}" if p_0 != p_n else f"page {p_0}"
                 text = self.tokenizer.decode(split[: self.config.chunk_size])
                 docs.append(
                     Document(
                         content=text,
                         metadata=DocMetaData(
-                            source=f"{self.source} pages {pg}",
+                            source=f"{self.source} {page_str}",
                             is_chunk=True,
                             id=common_id,
                         ),
