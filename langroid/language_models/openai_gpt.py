@@ -282,7 +282,6 @@ class OpenAIGPTConfig(LLMConfig):
 
         super().__init__(**kwargs)
 
-
     class Config:
         env_prefix = "OPENAI_"
 
@@ -487,7 +486,6 @@ class OpenAIGPT(LanguageModel):
 
         if self.config.use_completion_for_chat:
             self.config.use_chat_for_completion = False
-
 
         self.api_key = config.api_key
         if self.is_openai_completion_model() or self.is_openai_chat_model():
