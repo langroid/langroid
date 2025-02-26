@@ -1096,7 +1096,10 @@ class ChatAgent(Agent):
                 else:
                     # We will trigger the strict recovery mechanism to force
                     # the LLM to correct its output, allowing us to parse
-                    self.tool_error = True
+                    if isinstance(msg, ChatDocument):
+                        self.tool_error = msg.metadata.sender == Entity.LLM
+                    else:
+                        self.tool_error = True
 
             raise ve
 
@@ -1265,6 +1268,7 @@ class ChatAgent(Agent):
             and self._json_schema_available()
             and self.config.strict_recovery
         ):
+            self.tool_error = False
             AnyTool = self._get_any_tool_message()
             if AnyTool is None:
                 return None
@@ -1352,6 +1356,8 @@ class ChatAgent(Agent):
             and self._json_schema_available()
             and self.config.strict_recovery
         ):
+            print("Got here")
+            self.tool_error = False
             AnyTool = self._get_any_tool_message()
             self.set_output_format(
                 AnyTool,
@@ -1391,6 +1397,7 @@ class ChatAgent(Agent):
         )
         with StreamingIfAllowed(self.llm, self.llm.get_stream()):
             try:
+                print(f'"{hist}"', output_len, f'"{tool_choice}"')
                 response = await self.llm_response_messages_async(
                     hist, output_len, tool_choice
                 )

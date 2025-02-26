@@ -7,6 +7,7 @@ import pytest
 
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.chat_document import ChatDocMetaData, ChatDocument
+from langroid.agent.task import Task
 from langroid.agent.tool_message import ToolMessage
 from langroid.agent.xml_tool_message import XMLToolMessage
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
@@ -706,3 +707,92 @@ async def test_strict_schema_mismatch_async(
     strict_agent = agent[StrTool]
     await strict_agent.llm_response_forget_async("Who is the president of France?")
     assert strict_agent.disable_strict
+
+
+class GetTimeTool(ToolMessage):
+    purpose: str = "Get current time"
+    request: str = "get_time"
+
+    def response(self, agent: ChatAgent) -> ChatDocument:
+        return agent.create_agent_response(
+            content=json.dumps(
+                {
+                    "time": "11:59:59",
+                    "date": "1999-12-31",
+                    "day_of_week": "Friday",
+                    "week_number": "52",
+                    "tzname": "America/New York",
+                }
+            ),
+            recipient=Entity.LLM,
+        )
+
+
+@pytest.mark.parametrize("use_fn_api", [True, False])
+@pytest.mark.parametrize("use_tools_api", [True, False])
+@pytest.mark.asyncio
+async def test_strict_recovery_only_from_LLM_async(
+    use_fn_api: bool,
+    use_tools_api: bool,
+):
+    """
+    Test that structured fallback only occurs on messages
+    sent by the LLM.
+    """
+    was_tool_error = False
+
+    class TrackToolError(ChatAgent):
+        def llm_response(
+            self, message: Optional[str | ChatDocument] = None
+        ) -> Optional[ChatDocument]:
+            nonlocal was_tool_error
+            if self.tool_error:
+                was_tool_error = True
+            return super().llm_response(message)
+
+        async def llm_response_async(
+            self, message: Optional[str | ChatDocument] = None
+        ) -> Optional[ChatDocument]:
+            nonlocal was_tool_error
+            if self.tool_error:
+                was_tool_error = True
+            return await super().llm_response_async(message)
+
+    agent = TrackToolError(
+        ChatAgentConfig(
+            use_functions_api=use_fn_api,
+            use_tools_api=use_tools_api,
+            use_tools=not use_fn_api,
+            strict_recovery=True,
+            llm=OpenAIGPTConfig(
+                supports_json_schema=True,
+                supports_strict_tools=True,
+            ),
+            system_message="""
+            You are a helpful assistant.  Start by calling the
+            get_time tool. Then greet the user according to the time
+            of the day.
+            """,
+        )
+    )
+    agent.enable_message(GetTimeTool)
+    task = Task(agent, interactive=False)
+    await task.run_async(turns=6)
+    assert not was_tool_error
+
+    content = json.dumps(
+        {
+            "time": "11:59:59",
+            "date": "1999-12-31",
+            "day_of_week": "Friday",
+            "week_number": "52",
+            "tzname": "America/New York",
+        }
+    )
+    user_message = agent.create_user_response(content=content, recipient=Entity.LLM)
+    agent.get_tool_messages(user_message)
+    assert not agent.tool_error
+
+    agent_message = agent.create_agent_response(content=content, recipient=Entity.LLM)
+    agent.get_tool_messages(agent_message)
+    assert not agent.tool_error
