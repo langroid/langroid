@@ -20,7 +20,6 @@ parsing_config = ParsingConfig(
         gemini_config=GeminiConfig(
             model_name="gemini-2.0-flash",
             split_on_page=True,
-            output_filename=output_file_name,
             max_tokens=7000,
             requests_per_minute=5,
         ),
@@ -48,14 +47,9 @@ Determines whether to process the document **page by page**.
   - Reduces API calls to the LLM.
   - Lowers token usage since system prompts are not repeated per page.
 - **Disadvantages of `False`:**
-  - Delegates the task of page boundary management to the LLM by adding page boundary marker while splitting pages.
-  - Hence output might not maintain strict per-page formatting.
+  - You will not get per page splitting but group of pages as a page.
 - If your use case does **not** require strict page-by-page parsing, consider setting this to `False`.
 
-### `output_filename`
-Defines where to save the parsed document.
-- When directly passing the bytes, ensure an output filename is specified.
-- By default, everything is saved in the directory `.gemini-pdfparser`.
 
 ### `requests_per_minute`
 Limits API request frequency to avoid rate limits.

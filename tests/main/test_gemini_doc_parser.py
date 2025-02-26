@@ -6,11 +6,11 @@ from langroid.parsing.document_parser import DocumentParser
 from langroid.parsing.parser import GeminiConfig, ParsingConfig, PdfParsingConfig
 
 
+@pytest.mark.parametrize("split_on_page", [True, False])
 @pytest.mark.parametrize("pdf_file", ["imagenet.pdf"])
-def test_gemini_doc_parser(tmp_path, pdf_file):
+def test_gemini_doc_parser(pdf_file, split_on_page):
     current_dir = Path(__file__).resolve().parent
     path = current_dir.parent / "main" / "data" / pdf_file
-    output_file = tmp_path / "parsed_docs.md"  # Use temporary path
 
     parsing_config = ParsingConfig(
         n_neighbor_ids=2,
@@ -18,8 +18,7 @@ def test_gemini_doc_parser(tmp_path, pdf_file):
             library="gemini",
             gemini_config=GeminiConfig(
                 model_name="gemini-2.0-flash",
-                split_on_page=True,
-                output_filename=output_file.as_posix(),
+                split_on_page=split_on_page,
             ),
         ),
     )
@@ -29,10 +28,23 @@ def test_gemini_doc_parser(tmp_path, pdf_file):
         parsing_config,
     )
     doc = gemini_parser.get_doc()
+    pages = [page for page in gemini_parser.iterate_pages()]
 
-    # Assertions
     assert isinstance(doc.content, str)
     assert len(doc.content) > 0  # assuming the PDF is not empty
+
+    assert (
+        "with magnitudes proportional to the corresponding eigenvalues"
+        in pages[0][1][:70].strip()
+    )
+    if split_on_page:
+        assert "obvious in static images." in pages[2][1][-50:].replace(
+            "\n", ""
+        ).replace("8", "")
+    else:
+        assert "obvious in static images." in pages[0][1][-50:].replace(
+            "\n", ""
+        ).replace("8", "")
     assert doc.metadata.source == str(path)
 
     docs = gemini_parser.get_doc_chunks()
