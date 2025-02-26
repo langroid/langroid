@@ -1231,7 +1231,7 @@ class GeminiPdfParser(DocumentParser):
                 a PDF chunk and contains the PDF data and page numbers.
             api_key: The Gemini API key.
         """
-        #To show nice progress bar
+        # To show nice progress bar
         from tqdm.asyncio import tqdm_asyncio
 
         # Create a list of asynchronous tasks to send each chunk to Gemini.
