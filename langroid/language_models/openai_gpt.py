@@ -215,11 +215,20 @@ class OpenAIGPTConfig(LLMConfig):
     (a) locally-served models behind an OpenAI-compatible API
     (b) non-local models, using a proxy adaptor lib like litellm that provides
         an OpenAI-compatible API.
-    We could rename this class to OpenAILikeConfig.
+    (We could rename this class to OpenAILikeConfig, but we keep it as-is for now)
+
+    Important Note:
+    Due to the `env_prefix = "OPENAI_"` defined below,
+    all of the fields below can be set AND OVERRIDDEN via env vars,
+    # by upper-casing the name and prefixing with OPENAI_, e.g.
+    # OPENAI_MAX_OUTPUT_TOKENS=1000.
+    # If any of these is defined in this way in the environment
+    # (either via explicit setenv or export or via .env file + load_dotenv()),
+    # the environment variable takes precedence over the value in the config.
     """
 
     type: str = "openai"
-    api_key: str = DUMMY_API_KEY  # CAUTION: set this ONLY via env var OPENAI_API_KEY
+    api_key: str = DUMMY_API_KEY
     organization: str = ""
     api_base: str | None = None  # used for local or other non-OpenAI models
     litellm: bool = False  # use litellm api?
@@ -273,11 +282,6 @@ class OpenAIGPTConfig(LLMConfig):
 
         super().__init__(**kwargs)
 
-    # all of the vars above can be set via env vars,
-    # by upper-casing the name and prefixing with OPENAI_, e.g.
-    # OPENAI_MAX_OUTPUT_TOKENS=1000.
-    # This is either done in the .env file, or via an explicit
-    # `export OPENAI_MAX_OUTPUT_TOKENS=1000` or `setenv OPENAI_MAX_OUTPUT_TOKENS 1000`
     class Config:
         env_prefix = "OPENAI_"
 
@@ -483,17 +487,10 @@ class OpenAIGPT(LanguageModel):
         if self.config.use_completion_for_chat:
             self.config.use_chat_for_completion = False
 
-        # NOTE: The api_key should be set in the .env file, or via
-        # an explicit `export OPENAI_API_KEY=xxx` or `setenv OPENAI_API_KEY xxx`
-        # Pydantic's BaseSettings will automatically pick it up from the
-        # .env file
-        # The config.api_key is ignored when not using an OpenAI model
+        self.api_key = config.api_key
         if self.is_openai_completion_model() or self.is_openai_chat_model():
-            self.api_key = config.api_key
             if self.api_key == DUMMY_API_KEY:
                 self.api_key = os.getenv("OPENAI_API_KEY", DUMMY_API_KEY)
-        else:
-            self.api_key = DUMMY_API_KEY
 
         self.is_groq = self.config.chat_model.startswith("groq/")
         self.is_cerebras = self.config.chat_model.startswith("cerebras/")
@@ -505,7 +502,8 @@ class OpenAIGPT(LanguageModel):
         if self.is_groq:
             # use groq-specific client
             self.config.chat_model = self.config.chat_model.replace("groq/", "")
-            self.api_key = os.getenv("GROQ_API_KEY", DUMMY_API_KEY)
+            if self.api_key == DUMMY_API_KEY:
+                self.api_key = os.getenv("GROQ_API_KEY", DUMMY_API_KEY)
             self.client = Groq(
                 api_key=self.api_key,
             )
@@ -515,7 +513,8 @@ class OpenAIGPT(LanguageModel):
         elif self.is_cerebras:
             # use cerebras-specific client
             self.config.chat_model = self.config.chat_model.replace("cerebras/", "")
-            self.api_key = os.getenv("CEREBRAS_API_KEY", DUMMY_API_KEY)
+            if self.api_key == DUMMY_API_KEY:
+                self.api_key = os.getenv("CEREBRAS_API_KEY", DUMMY_API_KEY)
             self.client = Cerebras(
                 api_key=self.api_key,
             )
@@ -527,22 +526,26 @@ class OpenAIGPT(LanguageModel):
             # in these cases, there's no specific client: OpenAI python client suffices
             if self.is_gemini:
                 self.config.chat_model = self.config.chat_model.replace("gemini/", "")
-                self.api_key = os.getenv("GEMINI_API_KEY", DUMMY_API_KEY)
+                if self.api_key == DUMMY_API_KEY:
+                    self.api_key = os.getenv("GEMINI_API_KEY", DUMMY_API_KEY)
                 self.api_base = GEMINI_BASE_URL
             elif self.is_glhf:
                 self.config.chat_model = self.config.chat_model.replace("glhf/", "")
-                self.api_key = os.getenv("GLHF_API_KEY", DUMMY_API_KEY)
+                if self.api_key == DUMMY_API_KEY:
+                    self.api_key = os.getenv("GLHF_API_KEY", DUMMY_API_KEY)
                 self.api_base = GLHF_BASE_URL
             elif self.is_openrouter:
                 self.config.chat_model = self.config.chat_model.replace(
                     "openrouter/", ""
                 )
-                self.api_key = os.getenv("OPENROUTER_API_KEY", DUMMY_API_KEY)
+                if self.api_key == DUMMY_API_KEY:
+                    self.api_key = os.getenv("OPENROUTER_API_KEY", DUMMY_API_KEY)
                 self.api_base = OPENROUTER_BASE_URL
             elif self.is_deepseek:
                 self.config.chat_model = self.config.chat_model.replace("deepseek/", "")
                 self.api_base = DEEPSEEK_BASE_URL
-                self.api_key = os.getenv("DEEPSEEK_API_KEY", DUMMY_API_KEY)
+                if self.api_key == DUMMY_API_KEY:
+                    self.api_key = os.getenv("DEEPSEEK_API_KEY", DUMMY_API_KEY)
 
             self.client = OpenAI(
                 api_key=self.api_key,
