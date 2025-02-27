@@ -43,11 +43,13 @@ class _TestChatAgentConfig(ChatAgentConfig):
 @pytest.mark.parametrize("batch_size", [1, 2, 3, None])
 @pytest.mark.parametrize("sequential", [True, False])
 @pytest.mark.parametrize("stop_on_first", [True, False])
+@pytest.mark.parametrize("return_type", [True, False])
 def test_task_batch(
     test_settings: Settings,
     sequential: bool,
     batch_size: Optional[int],
     stop_on_first: bool,
+    return_type: bool,
 ):
     set_global(test_settings)
     cfg = _TestChatAgentConfig()
@@ -60,6 +62,10 @@ def test_task_batch(
         done_if_response=[Entity.LLM],
         done_if_no_response=[Entity.LLM],
     )
+
+    if return_type:
+        # specialized to return str
+        task = task[str]
 
     # run clones of this task on these inputs
     N = 3
@@ -81,10 +87,14 @@ def test_task_batch(
         # only the task with input 0 succeeds since it's fastest
         non_null_answer = [a for a in answers if a is not None][0]
         assert non_null_answer is not None
-        assert non_null_answer.content == str(expected_answers[0])
+        answer = non_null_answer if return_type else non_null_answer.content
+        assert answer == str(expected_answers[0])
     else:
         for e in expected_answers:
-            assert any(str(e) in a.content.lower() for a in answers)
+            if return_type:
+                assert any(str(e) in a.lower() for a in answers)
+            else:
+                assert any(str(e) in a.content.lower() for a in answers)
 
 
 @pytest.mark.parametrize("batch_size", [1, 2, 3, None])

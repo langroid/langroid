@@ -14,7 +14,6 @@ from langroid.utils.system import rmdir
 from langroid.vector_store.base import VectorStore
 from langroid.vector_store.lancedb import LanceDB, LanceDBConfig
 from langroid.vector_store.meilisearch import MeiliSearch, MeiliSearchConfig
-from langroid.vector_store.momento import MomentoVI, MomentoVIConfig
 from langroid.vector_store.pineconedb import PineconeDB, PineconeDBConfig
 from langroid.vector_store.postgres import PostgresDB, PostgresDBConfig
 from langroid.vector_store.qdrantdb import QdrantDB, QdrantDBConfig
@@ -179,15 +178,6 @@ def vecdb(request) -> VectorStore:
         ms.delete_collection(collection_name=ms_cfg.collection_name)
         return
 
-    if request.param == "momento":
-        cfg = MomentoVIConfig(
-            collection_name="test-momento",
-        )
-        vdb = MomentoVI(cfg)
-        vdb.add_documents(stored_docs)
-        yield vdb
-        vdb.delete_collection(collection_name=cfg.collection_name)
-
     if request.param == "lancedb":
         ldb_dir = ".lancedb/data/" + embed_cfg.model_type
         rmdir(ldb_dir)
@@ -229,7 +219,6 @@ def vecdb(request) -> VectorStore:
         ("people outside Canada", [phrases.NOT_CANADA], ["meilisearch"]),
     ],
 )
-# add "momento" when their API docs are ready
 @pytest.mark.parametrize(
     "vecdb",
     [

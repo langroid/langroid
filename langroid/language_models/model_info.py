@@ -63,6 +63,7 @@ class GeminiModel(ModelName):
     GEMINI_1_5_FLASH = "gemini/gemini-1.5-flash"
     GEMINI_1_5_FLASH_8B = "gemini/gemini-1.5-flash-8b"
     GEMINI_1_5_PRO = "gemini/gemini-1.5-pro"
+    GEMINI_2_PRO = "gemini/gemini-2.0-pro-exp-02-05"
     GEMINI_2_FLASH = "gemini/gemini-2.0-flash"
     GEMINI_2_FLASH_LITE = "gemini/gemini-2.0-flash-lite-preview"
     GEMINI_2_FLASH_THINKING = "gemini/gemini-2.0-flash-thinking-exp"
@@ -186,9 +187,9 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         max_output_tokens=100_000,
         input_cost_per_million=15.0,
         output_cost_per_million=60.0,
-        allows_streaming=False,
+        allows_streaming=True,
         allows_system_message=False,
-        unsupported_params=["temperature", "stream"],
+        unsupported_params=["temperature"],
         rename_params={"max_tokens": "max_completion_tokens"},
         has_tools=False,
         description="O1 Reasoning LM",
@@ -321,6 +322,14 @@ MODEL_INFO: Dict[str, ModelInfo] = {
         max_output_tokens=8192,
         rename_params={"max_tokens": "max_completion_tokens"},
         description="Gemini 1.5 Pro",
+    ),
+    GeminiModel.GEMINI_2_PRO.value: ModelInfo(
+        name=GeminiModel.GEMINI_2_PRO.value,
+        provider=ModelProvider.GOOGLE,
+        context_length=2_000_000,
+        max_output_tokens=8192,
+        rename_params={"max_tokens": "max_completion_tokens"},
+        description="Gemini 2 Pro Exp 02-05",
     ),
     GeminiModel.GEMINI_2_FLASH_THINKING.value: ModelInfo(
         name=GeminiModel.GEMINI_2_FLASH_THINKING.value,
