@@ -14,7 +14,12 @@ from typing import Any, Literal
 
 logger = logging.getLogger(__name__)
 
-DELETION_ALLOWED_PATHS = [".qdrant", ".chroma", ".lancedb", ".weaviate"]
+DELETION_ALLOWED_PATHS = [
+    ".qdrant",
+    ".chroma",
+    ".lancedb",
+    ".weaviate",
+]
 
 
 def pydantic_major_version() -> int:

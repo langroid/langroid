@@ -194,6 +194,7 @@ jobs:
           --first-test-file=tests/main/test_llm_async.py \
           --first-test-file=tests/main/test_task_inf_loop.py \
           --first-test-file=tests/main/test_lance_doc_chat_agent.py \
+          --first-test-file=tests/main/test_gemini_doc_parser.py \
           tests/main
       continue-on-error: true
 
