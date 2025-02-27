@@ -10,9 +10,6 @@ import difflib
 import re
 from typing import List, Tuple
 
-from nltk.corpus import stopwords
-from nltk.stem import WordNetLemmatizer
-from nltk.tokenize import RegexpTokenizer
 from rank_bm25 import BM25Okapi
 from thefuzz import fuzz, process
 
@@ -120,6 +117,12 @@ def preprocess_text(text: str) -> str:
     # Ensure the NLTK resources are available
     for resource in ["tokenizers/punkt", "corpora/wordnet", "corpora/stopwords"]:
         download_nltk_resource(resource)
+    try:
+        from nltk.corpus import stopwords
+        from nltk.stem import WordNetLemmatizer
+        from nltk.tokenize import RegexpTokenizer
+    except ImportError:
+        pass
 
     # Lowercase the text
     text = text.lower()

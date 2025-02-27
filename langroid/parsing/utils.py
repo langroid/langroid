@@ -6,7 +6,6 @@ from functools import cache
 from itertools import islice
 from typing import Iterable, List, Sequence, TypeVar
 
-import nltk
 from faker import Faker
 
 from langroid.mytypes import Document
@@ -22,19 +21,19 @@ random.seed(43)
 logger = logging.getLogger(__name__)
 
 
-# Ensures the NLTK resource is available
-@cache
 def download_nltk_resource(resource: str) -> None:
-    try:
-        nltk.data.find(resource)
-    except LookupError:
-        model = resource.split("/")[-1]
-        nltk.download(model, quiet=True)
+    import nltk
 
+    @cache
+    def _download() -> None:
+        try:
+            nltk.data.find(resource)
+        except LookupError:
+            model = resource.split("/")[-1]
+            nltk.download(model, quiet=True)
 
-# Download punkt_tab resource at module import
-download_nltk_resource("tokenizers/punkt_tab")
-download_nltk_resource("corpora/gutenberg")
+    _download()
+
 
 T = TypeVar("T")
 
@@ -51,8 +50,11 @@ def batched(iterable: Iterable[T], n: int) -> Iterable[Sequence[T]]:
 
 def generate_random_sentences(k: int) -> str:
     # Load the sample text
-
+    import nltk
     from nltk.corpus import gutenberg
+
+    download_nltk_resource("corpora/gutenberg")
+    download_nltk_resource("tokenizers/punkt")
 
     text = gutenberg.raw("austen-emma.txt")
 
@@ -155,6 +157,8 @@ def number_segments(s: str, granularity: int = 1) -> str:
         >>> number_segments("Hello world! How are you? Have a good day.")
         '<#1#> Hello world! <#2#> How are you? <#3#> Have a good day.'
     """
+    import nltk
+
     if granularity < 0:
         return "<#1#> " + s
     numbered_text = []
