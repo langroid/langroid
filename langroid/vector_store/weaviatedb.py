@@ -1,7 +1,7 @@
 import logging
 import os
 import re
-from typing import TYPE_CHECKING, Any, List, Optional, Sequence, Tuple
+from typing import Any, List, Optional, Sequence, Tuple
 
 from dotenv import load_dotenv
 
@@ -15,6 +15,7 @@ from langroid.utils.configuration import settings
 from langroid.vector_store.base import VectorStore, VectorStoreConfig
 
 logger = logging.getLogger(__name__)
+
 
 class VectorDistances:
     """
@@ -133,8 +134,8 @@ class WeaviateDB(VectorStore):
     def create_collection(self, collection_name: str, replace: bool = False) -> None:
         try:
             from weaviate.classes.config import (
-            Configure,
-            VectorDistances,
+                Configure,
+                VectorDistances,
             )
         except ImportError:
             pass
@@ -232,7 +233,7 @@ class WeaviateDB(VectorStore):
         self, text: str, k: int = 1, where: Optional[str] = None
     ) -> List[Tuple[Document, float]]:
         try:
-            from weaviate.classes.query import  MetadataQuery
+            from weaviate.classes.query import MetadataQuery
         except ImportError:
             pass
         embedding = self.embedding_fn([text])[0]

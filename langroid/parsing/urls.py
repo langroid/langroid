@@ -149,7 +149,7 @@ def crawl_url(url: str, max_urls: int = 1) -> List[str]:
     up to a maximum of `max_urls`.
     This has not been tested to work as intended. Ignore.
     """
-    try :
+    try:
         from trafilatura.spider import focused_crawler
     except ImportError:
         pass

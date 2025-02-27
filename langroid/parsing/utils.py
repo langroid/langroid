@@ -23,13 +23,15 @@ logger = logging.getLogger(__name__)
 
 def download_nltk_resource(resource: str) -> None:
     import nltk
+
     @cache
-    def _download():
+    def _download() -> None:
         try:
             nltk.data.find(resource)
         except LookupError:
             model = resource.split("/")[-1]
             nltk.download(model, quiet=True)
+
     _download()
 
 
@@ -48,8 +50,9 @@ def batched(iterable: Iterable[T], n: int) -> Iterable[Sequence[T]]:
 
 def generate_random_sentences(k: int) -> str:
     # Load the sample text
-    import nltk 
+    import nltk
     from nltk.corpus import gutenberg
+
     download_nltk_resource("corpora/gutenberg")
     download_nltk_resource("tokenizers/punkt")
 
@@ -155,6 +158,7 @@ def number_segments(s: str, granularity: int = 1) -> str:
         '<#1#> Hello world! <#2#> How are you? <#3#> Have a good day.'
     """
     import nltk
+
     if granularity < 0:
         return "<#1#> " + s
     numbered_text = []

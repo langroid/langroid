@@ -4,7 +4,7 @@ import logging
 import os
 import time
 import uuid
-from typing import Dict, List, Optional, Sequence, Tuple, TypeVar,TYPE_CHECKING
+from typing import TYPE_CHECKING, Dict, List, Optional, Sequence, Tuple, TypeVar
 
 from dotenv import load_dotenv
 
@@ -58,8 +58,6 @@ class QdrantDBConfig(VectorStoreConfig):
     sparse_embedding_model: str = "naver/splade-v3-distilbert"
     sparse_limit: int = 3
     distance: str = "cosine"
-
-
 
 
 class QdrantDB(VectorStore):
@@ -195,7 +193,7 @@ class QdrantDB(VectorStore):
         Args:
             empty (bool, optional): Whether to include empty collections.
         """
-        
+
         colls = list(self.client.get_collections())[0][1]
         if empty:
             return [coll.name for coll in colls]
@@ -225,12 +223,13 @@ class QdrantDB(VectorStore):
                 with the same name. Defaults to False.
         """
         from qdrant_client.http.models import (
-        Distance,
-        CollectionStatus,
-        SparseIndexParams,
-        SparseVectorParams,
-        VectorParams,
-            )
+            CollectionStatus,
+            Distance,
+            SparseIndexParams,
+            SparseVectorParams,
+            VectorParams,
+        )
+
         self.config.collection_name = collection_name
         if self.client.collection_exists(collection_name=collection_name):
             coll = self.client.get_collection(collection_name=collection_name)
@@ -273,6 +272,7 @@ class QdrantDB(VectorStore):
 
     def get_sparse_embeddings(self, inputs: List[str]) -> List["SparseVector"]:
         from qdrant_client.http.models import SparseVector
+
         if not self.config.use_sparse_embeddings:
             return []
         import torch
@@ -300,10 +300,11 @@ class QdrantDB(VectorStore):
 
     def add_documents(self, documents: Sequence[Document]) -> None:
         from qdrant_client.http.models import (
-        Batch,
-        CollectionStatus,
-        SparseVector,
-            )
+            Batch,
+            CollectionStatus,
+            SparseVector,
+        )
+
         # Add id to metadata if not already present
         super().maybe_add_ids(documents)
         # Fix the ids due to qdrant finickiness
@@ -393,8 +394,9 @@ class QdrantDB(VectorStore):
 
     def get_all_documents(self, where: str = "") -> List[Document]:
         from qdrant_client.http.models import (
-        Filter,
-            )
+            Filter,
+        )
+
         if self.config.collection_name is None:
             raise ValueError("No collection name set, cannot retrieve docs")
         docs = []
@@ -443,13 +445,14 @@ class QdrantDB(VectorStore):
         where: Optional[str] = None,
         neighbors: int = 0,
     ) -> List[Tuple[Document, float]]:
-        from qdrant_client.http.models import (
-        Filter,
-        NamedSparseVector,
-        NamedVector,
-        SearchRequest,
-            )
         from qdrant_client.conversions.common_types import ScoredPoint
+        from qdrant_client.http.models import (
+            Filter,
+            NamedSparseVector,
+            NamedVector,
+            SearchRequest,
+        )
+
         embedding = self.embedding_fn([text])[0]
         # TODO filter may not work yet
         if where is None or where == "":

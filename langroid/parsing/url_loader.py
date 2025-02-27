@@ -30,7 +30,7 @@ class URLLoader:
 
     @no_type_check
     def load(self) -> List[Document]:
-        try :
+        try:
             import trafilatura
             from trafilatura.downloads import (
                 add_to_compressed_dict,

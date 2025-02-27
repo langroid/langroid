@@ -118,12 +118,11 @@ def preprocess_text(text: str) -> str:
     for resource in ["tokenizers/punkt", "corpora/wordnet", "corpora/stopwords"]:
         download_nltk_resource(resource)
     try:
+        from nltk.corpus import stopwords
         from nltk.stem import WordNetLemmatizer
         from nltk.tokenize import RegexpTokenizer
-        from nltk.corpus import stopwords
     except ImportError:
         pass
-
 
     # Lowercase the text
     text = text.lower()

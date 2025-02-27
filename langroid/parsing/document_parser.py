@@ -15,12 +15,10 @@ from langroid.exceptions import LangroidImportError
 from langroid.utils.object_registry import ObjectRegistry
 
 if TYPE_CHECKING:
+    import docling  # noqa
     import fitz
-    import pymupdf4llm #noqa
-    import docling #noqa
+    import pymupdf4llm  # noqa
     import pypdf
-
-
 
 
 import requests
@@ -453,7 +451,7 @@ class FitzPDFParser(DocumentParser):
         try:
             import fitz
         except ImportError:
-            LangroidImportError("fitz","doc-chat")
+            LangroidImportError("fitz", "doc-chat")
         doc = fitz.open(stream=self.doc_bytes, filetype="pdf")
         for i, page in enumerate(doc):
             yield i, page
@@ -488,7 +486,7 @@ class PyMuPDF4LLMParser(DocumentParser):
             Generator[fitz.Page]: Generator yielding each page.
         """
         try:
-            import pymupdf4llm
+            import pymupdf4llm  # noqa
         except ImportError:
             raise LangroidImportError(
                 "pymupdf4llm", ["pymupdf4llm", "all", "pdf-parsers", "doc-chat"]
@@ -534,7 +532,7 @@ class DoclingParser(DocumentParser):
             Generator[docling.Page]: Generator yielding each page.
         """
         try:
-            import docling # noqa
+            import docling  # noqa
         except ImportError:
             raise LangroidImportError(
                 "docling", ["docling", "pdf-parsers", "all", "doc-chat"]

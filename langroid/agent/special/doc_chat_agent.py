@@ -223,7 +223,10 @@ class DocChatAgent(ChatAgent):
         self.config: DocChatAgentConfig = config
         try:
             from sentence_transformers import SentenceTransformer  # noqa: F401
-            self.config.cross_encoder_reranking_model = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+
+            self.config.cross_encoder_reranking_model = (
+                "cross-encoder/ms-marco-MiniLM-L-6-v2"
+            )
         except ImportError:
             self.config.cross_encoder_reranking_model = ""
         self.original_docs: List[Document] = []
