@@ -1,9 +1,12 @@
+import os
+import random
 import warnings
 
 import openai
 import pytest
 
 import langroid as lr
+import langroid.language_models as lm
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
 from langroid.language_models.base import LLMMessage, Role
 from langroid.language_models.openai_gpt import (
@@ -15,7 +18,7 @@ from langroid.language_models.openai_gpt import (
 )
 from langroid.parsing.parser import Parser, ParsingConfig
 from langroid.parsing.utils import generate_random_sentences
-from langroid.utils.configuration import Settings, set_global
+from langroid.utils.configuration import Settings, set_global, settings
 
 # allow streaming globally, but can be turned off by individual models
 set_global(Settings(stream=True))
@@ -195,3 +198,44 @@ def test_model_selection(test_settings: Settings):
     check_warning(llm, False)
 
     lr.language_models.openai_gpt.default_openai_chat_model = defaultOpenAIChatModel
+
+
+def test_keys():
+    # Do not override the explicit settings below
+    settings.chat_model = ""
+
+    providers = [
+        "vllm",
+        "ollama",
+        "llamacpp",
+        "openai",
+        "groq",
+        "gemini",
+        "glhf",
+        "openrouter",
+        "deepseek",
+        "cerebras",
+    ]
+    key_dict = {p: f"{p.upper()}_API_KEY" for p in providers}
+    key_dict["llamacpp"] = "LLAMA_API_KEY"
+
+    for p, var in key_dict.items():
+        os.environ[var] = p
+
+    for p in providers:
+        config = lm.OpenAIGPTConfig(
+            chat_model=f"{p}/model",
+        )
+
+        llm = lm.OpenAIGPT(config)
+
+        assert llm.api_key == p
+
+        rand_key = str(random.randint(0, 10**9))
+        config = lm.OpenAIGPTConfig(
+            chat_model=f"{p}/model",
+            api_key=rand_key,
+        )
+
+        llm = lm.OpenAIGPT(config)
+        assert llm.api_key == rand_key

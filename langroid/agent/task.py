@@ -1572,7 +1572,10 @@ class Task:
             response_fn = self._entity_responder_async_map[cast(Entity, e)]
             result = await response_fn(self.pending_message)
             # update result.tool_messages if any
-            if isinstance(result, ChatDocument):
+            if (
+                isinstance(result, ChatDocument)
+                and result.metadata.sender == Entity.LLM
+            ):
                 self.agent.try_get_tool_messages(result)
 
         result_chat_doc = self.agent.to_ChatDocument(
