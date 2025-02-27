@@ -84,12 +84,6 @@ about them, or summarize them into coherent answers.
 CHUNK_ENRICHMENT_DELIMITER = "\n<##-##-##>\n"
 
 has_sentence_transformers = False
-try:
-    from sentence_transformers import SentenceTransformer  # noqa: F401
-
-    has_sentence_transformers = True
-except ImportError:
-    pass
 
 
 hf_embed_config = SentenceTransformerEmbeddingsConfig(
@@ -145,9 +139,7 @@ class DocChatAgentConfig(ChatAgentConfig):
     use_fuzzy_match: bool = True
     use_bm25_search: bool = True
     use_reciprocal_rank_fusion: bool = True  # ignored if using cross-encoder reranking
-    cross_encoder_reranking_model: str = (
-        "cross-encoder/ms-marco-MiniLM-L-6-v2" if has_sentence_transformers else ""
-    )
+    cross_encoder_reranking_model: str = ""
     rerank_diversity: bool = True  # rerank to maximize diversity?
     rerank_periphery: bool = True  # rerank to avoid Lost In the Middle effect?
     rerank_after_adding_context: bool = True  # rerank after adding context window?
@@ -229,6 +221,11 @@ class DocChatAgent(ChatAgent):
     ):
         super().__init__(config)
         self.config: DocChatAgentConfig = config
+        try:
+            from sentence_transformers import SentenceTransformer  # noqa: F401
+            self.config.cross_encoder_reranking_model = "cross-encoder/ms-marco-MiniLM-L-6-v2"
+        except ImportError:
+            self.config.cross_encoder_reranking_model = ""
         self.original_docs: List[Document] = []
         self.original_docs_length = 0
         self.from_dataframe = False
@@ -236,6 +233,7 @@ class DocChatAgent(ChatAgent):
         self.chunked_docs: List[Document] = []
         self.chunked_docs_clean: List[Document] = []
         self.response: None | Document = None
+
         if len(config.doc_paths) > 0:
             self.ingest()
 

@@ -11,7 +11,6 @@ import requests
 from bs4 import BeautifulSoup
 from rich import print
 from rich.prompt import Prompt
-from trafilatura.spider import focused_crawler
 
 from langroid.pydantic_v1 import BaseModel, HttpUrl, ValidationError, parse_obj_as
 
@@ -150,6 +149,11 @@ def crawl_url(url: str, max_urls: int = 1) -> List[str]:
     up to a maximum of `max_urls`.
     This has not been tested to work as intended. Ignore.
     """
+    try :
+        from trafilatura.spider import focused_crawler
+    except ImportError:
+        pass
+
     if max_urls == 1:
         # no need to crawl, just return the original list
         return [url]
