@@ -214,6 +214,7 @@ def test_keys():
         "glhf",
         "openrouter",
         "deepseek",
+        "cerebras",
     ]
     key_dict = {p: f"{p.upper()}_API_KEY" for p in providers}
     key_dict["llamacpp"] = "LLAMA_API_KEY"
