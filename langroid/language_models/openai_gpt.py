@@ -85,9 +85,6 @@ GLHF_BASE_URL = "https://glhf.chat/api/openai/v1"
 OLLAMA_API_KEY = "ollama"
 DUMMY_API_KEY = "xxx"
 
-VLLM_API_KEY = os.environ.get("VLLM_API_KEY", DUMMY_API_KEY)
-LLAMACPP_API_KEY = os.environ.get("LLAMA_API_KEY", DUMMY_API_KEY)
-
 
 openai_chat_model_pref_list = [
     OpenAIChatModel.GPT4o,
@@ -421,6 +418,9 @@ class OpenAIGPT(LanguageModel):
         self.supports_json_schema: bool = self.config.supports_json_schema or False
         self.supports_strict_tools: bool = self.config.supports_strict_tools or False
 
+        OPENAI_API_KEY = os.getenv("OPENAI_API_KEY", DUMMY_API_KEY)
+        self.api_key = config.api_key
+
         # if model name starts with "litellm",
         # set the actual model name by stripping the "litellm/" prefix
         # and set the litellm flag to True
@@ -449,12 +449,14 @@ class OpenAIGPT(LanguageModel):
 
             # use api_base from config if set, else fall back on OLLAMA_BASE_URL
             self.api_base = self.config.api_base or OLLAMA_BASE_URL
-            self.api_key = OLLAMA_API_KEY
+            if self.api_key == OPENAI_API_KEY:
+                self.api_key = OLLAMA_API_KEY
             self.config.chat_model = self.config.chat_model.replace("ollama/", "")
         elif self.config.chat_model.startswith("vllm/"):
             self.supports_json_schema = True
             self.config.chat_model = self.config.chat_model.replace("vllm/", "")
-            self.api_key = VLLM_API_KEY
+            if self.api_key == OPENAI_API_KEY:
+                self.api_key = os.environ.get("VLLM_API_KEY", DUMMY_API_KEY)
             self.api_base = self.config.api_base or "http://localhost:8000/v1"
             if not self.api_base.startswith("http"):
                 self.api_base = "http://" + self.api_base
@@ -465,7 +467,8 @@ class OpenAIGPT(LanguageModel):
             self.api_base = self.config.chat_model.split("/", 1)[1]
             if not self.api_base.startswith("http"):
                 self.api_base = "http://" + self.api_base
-            self.api_key = LLAMACPP_API_KEY
+            if self.api_key == OPENAI_API_KEY:
+                self.api_key = os.environ.get("LLAMA_API_KEY", DUMMY_API_KEY)
         else:
             self.api_base = self.config.api_base
             # If api_base is unset we use OpenAI's endpoint, which supports
@@ -487,11 +490,6 @@ class OpenAIGPT(LanguageModel):
         if self.config.use_completion_for_chat:
             self.config.use_chat_for_completion = False
 
-        self.api_key = config.api_key
-        if self.is_openai_completion_model() or self.is_openai_chat_model():
-            if self.api_key == DUMMY_API_KEY:
-                self.api_key = os.getenv("OPENAI_API_KEY", DUMMY_API_KEY)
-
         self.is_groq = self.config.chat_model.startswith("groq/")
         self.is_cerebras = self.config.chat_model.startswith("cerebras/")
         self.is_gemini = self.is_gemini_model()
@@ -502,7 +500,7 @@ class OpenAIGPT(LanguageModel):
         if self.is_groq:
             # use groq-specific client
             self.config.chat_model = self.config.chat_model.replace("groq/", "")
-            if self.api_key == DUMMY_API_KEY:
+            if self.api_key == OPENAI_API_KEY:
                 self.api_key = os.getenv("GROQ_API_KEY", DUMMY_API_KEY)
             self.client = Groq(
                 api_key=self.api_key,
@@ -513,7 +511,7 @@ class OpenAIGPT(LanguageModel):
         elif self.is_cerebras:
             # use cerebras-specific client
             self.config.chat_model = self.config.chat_model.replace("cerebras/", "")
-            if self.api_key == DUMMY_API_KEY:
+            if self.api_key == OPENAI_API_KEY:
                 self.api_key = os.getenv("CEREBRAS_API_KEY", DUMMY_API_KEY)
             self.client = Cerebras(
                 api_key=self.api_key,
@@ -526,25 +524,25 @@ class OpenAIGPT(LanguageModel):
             # in these cases, there's no specific client: OpenAI python client suffices
             if self.is_gemini:
                 self.config.chat_model = self.config.chat_model.replace("gemini/", "")
-                if self.api_key == DUMMY_API_KEY:
+                if self.api_key == OPENAI_API_KEY:
                     self.api_key = os.getenv("GEMINI_API_KEY", DUMMY_API_KEY)
                 self.api_base = GEMINI_BASE_URL
             elif self.is_glhf:
                 self.config.chat_model = self.config.chat_model.replace("glhf/", "")
-                if self.api_key == DUMMY_API_KEY:
+                if self.api_key == OPENAI_API_KEY:
                     self.api_key = os.getenv("GLHF_API_KEY", DUMMY_API_KEY)
                 self.api_base = GLHF_BASE_URL
             elif self.is_openrouter:
                 self.config.chat_model = self.config.chat_model.replace(
                     "openrouter/", ""
                 )
-                if self.api_key == DUMMY_API_KEY:
+                if self.api_key == OPENAI_API_KEY:
                     self.api_key = os.getenv("OPENROUTER_API_KEY", DUMMY_API_KEY)
                 self.api_base = OPENROUTER_BASE_URL
             elif self.is_deepseek:
                 self.config.chat_model = self.config.chat_model.replace("deepseek/", "")
                 self.api_base = DEEPSEEK_BASE_URL
-                if self.api_key == DUMMY_API_KEY:
+                if self.api_key == OPENAI_API_KEY:
                     self.api_key = os.getenv("DEEPSEEK_API_KEY", DUMMY_API_KEY)
 
             self.client = OpenAI(

@@ -135,6 +135,8 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
+# Chainlit
+.chainlit/
 
 .vscode
 
