@@ -136,9 +136,11 @@ class EmbeddingFunctionCallable:
         """
         embeds = []
         if isinstance(self.embed_model, (OpenAIEmbeddings, AzureOpenAIEmbeddings)):
-            tokenized_texts = self.embed_model.truncate_texts(input)
-
-            for batch in batched(tokenized_texts, self.batch_size):
+            # Truncate texts to context length while preserving text format
+            truncated_texts = self.embed_model.truncate_texts(input)
+            
+            # Process in batches
+            for batch in batched(truncated_texts, self.batch_size):
                 result = self.embed_model.client.embeddings.create(
                     input=batch, model=self.embed_model.config.model_name
                 )
@@ -183,39 +185,56 @@ class OpenAIEmbeddings(EmbeddingModel):
         super().__init__()
         self.config = config
         load_dotenv()
-        if self.config.model_name.startswith("langdb/"):
+        
+        # Check if using LangDB
+        is_langdb = self.config.model_name.startswith("langdb/")
+        
+        if is_langdb:
             self.config.model_name = self.config.model_name.replace("langdb/", "")
+            
             if LANGDB_PROJECT_ID:
                 self.config.api_base = f"{LANGDB_BASE_URL}/{LANGDB_PROJECT_ID}/v1"
             else:
                 self.config.api_base = LANGDB_BASE_URL
             if not self.config.api_key:
                 self.config.api_key = LANGDB_API_KEY
+        
         if not self.config.api_key:
             self.config.api_key = os.getenv("OPENAI_API_KEY", "")
+        
         self.config.organization = os.getenv("OPENAI_ORGANIZATION", "")
 
         if self.config.api_key == "":
-            raise ValueError(
-                """OPENAI_API_KEY (or LANGDB_API_KEY if using "langdb/") 
-                must be set in .env or your environment to use OpenAIEmbeddings."""
-            )
+            if is_langdb:
+                raise ValueError(
+                    """LANGDB_API_KEY must be set in .env or your environment to use LangDB embeddings."""
+                )
+            else:
+                raise ValueError(
+                    """OPENAI_API_KEY must be set in .env or your environment to use OpenAIEmbeddings."""
+                )
+                
         self.client = OpenAI(
             base_url=self.config.api_base,
             api_key=self.config.api_key,
             organization=self.config.organization,
         )
+        model_for_tokenizer = self.config.model_name
+        if model_for_tokenizer.startswith("openai/"):
+            self.config.model_name = model_for_tokenizer.replace("openai/", "")
         self.tokenizer = tiktoken.encoding_for_model(self.config.model_name)
 
-    def truncate_texts(self, texts: List[str]) -> List[List[int]]:
+    def truncate_texts(self, texts: List[str]) -> List[str]:
         """
         Truncate texts to the embedding model's context length.
         TODO: Maybe we should show warning, and consider doing T5 summarization?
         """
         return [
-            self.tokenizer.encode(text, disallowed_special=())[
-                : self.config.context_length
-            ]
+            self.tokenizer.decode(
+                self.tokenizer.encode(text, disallowed_special=())[
+                    : self.config.context_length
+                ]
+            )
             for text in texts
         ]
 

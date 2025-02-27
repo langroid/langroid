@@ -70,7 +70,7 @@ from langroid.pydantic_v1 import BaseModel
 from langroid.utils.configuration import settings
 from langroid.utils.constants import Colors
 from langroid.utils.system import friendly_error
-from uuid import uuid4
+
 logging.getLogger("openai").setLevel(logging.ERROR)
 
 if "OLLAMA_HOST" in os.environ:
@@ -258,6 +258,7 @@ class OpenAIGPTConfig(LLMConfig):
     # e.g. "mistral-instruct-v0.2 (a fuzzy search is done to find the closest match)
     formatter: str | None = None
     hf_formatter: HFFormatter | None = None
+    project_name: Optional[str] = None
     label: Optional[str] = None
     run_id: Optional[str] = None
     thread_id: Optional[str] = None
@@ -1455,6 +1456,10 @@ class OpenAIGPT(LanguageModel):
             raise e
 
     async def _agenerate(self, prompt: str, max_tokens: int) -> LLMResponse:
+        # note we typically will not have self.config.stream = True
+        # when issuing several api calls concurrently/asynchronously.
+        # The calling fn should use the context `with Streaming(..., False)` to
+        # disable streaming.
         if self.config.use_chat_for_completion:
             return await self.achat(messages=prompt, max_tokens=max_tokens)
 
