@@ -70,7 +70,7 @@ from langroid.pydantic_v1 import BaseModel
 from langroid.utils.configuration import settings
 from langroid.utils.constants import Colors
 from langroid.utils.system import friendly_error
-
+from uuid import uuid4
 logging.getLogger("openai").setLevel(logging.ERROR)
 
 if "OLLAMA_HOST" in os.environ:
@@ -258,6 +258,9 @@ class OpenAIGPTConfig(LLMConfig):
     # e.g. "mistral-instruct-v0.2 (a fuzzy search is done to find the closest match)
     formatter: str | None = None
     hf_formatter: HFFormatter | None = None
+    label: Optional[str] = None
+    run_id: Optional[str] = None
+    thread_id: Optional[str] = None
     headers: Dict[str, str] = {}
 
     def __init__(self, **kwargs) -> None:  # type: ignore
@@ -556,6 +559,13 @@ class OpenAIGPT(LanguageModel):
                 else:
                     self.api_base = LANGDB_BASE_URL
                 self.api_key = LANGDB_API_KEY
+        
+                if self.config.label:
+                    self.config.headers["x-label"] = self.config.label
+                if self.config.run_id:
+                    self.config.headers["x-run-id"] = self.config.run_id
+                if self.config.thread_id:
+                    self.config.headers["x-thread-id"] = self.config.thread_id
 
             self.client = OpenAI(
                 api_key=self.api_key,
@@ -569,6 +579,7 @@ class OpenAIGPT(LanguageModel):
                 organization=self.config.organization,
                 base_url=self.api_base,
                 timeout=Timeout(self.config.timeout),
+                default_headers=self.config.headers,
             )
 
         self.cache: CacheDB | None = None
@@ -1034,6 +1045,7 @@ class OpenAIGPT(LanguageModel):
                 OpenAIResponse object (with choices, usage)
 
         """
+
         completion = ""
         reasoning = ""
         function_args = ""
@@ -1443,10 +1455,6 @@ class OpenAIGPT(LanguageModel):
             raise e
 
     async def _agenerate(self, prompt: str, max_tokens: int) -> LLMResponse:
-        # note we typically will not have self.config.stream = True
-        # when issuing several api calls concurrently/asynchronously.
-        # The calling fn should use the context `with Streaming(..., False)` to
-        # disable streaming.
         if self.config.use_chat_for_completion:
             return await self.achat(messages=prompt, max_tokens=max_tokens)
 
