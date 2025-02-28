@@ -1039,7 +1039,7 @@ class GeminiPdfParser(DocumentParser):
         import asyncio
 
         self.requests_per_minute = config.pdf.gemini_config.requests_per_minute or 5
-        
+
         """
         A semaphore to control the number of concurrent requests to the LLM,
         preventing rate limit errors.  A semaphore slot is acquired before
