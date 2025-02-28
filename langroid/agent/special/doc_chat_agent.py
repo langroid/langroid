@@ -233,21 +233,6 @@ class DocChatAgent(ChatAgent):
     ):
         super().__init__(config)
         self.config: DocChatAgentConfig = config
-        try:
-            spec = importlib.util.find_spec("sentence_transformers")
-            if spec is not None:
-                # The module exists, so set the config.
-                self.config.cross_encoder_reranking_model = (
-                    "cross-encoder/ms-marco-MiniLM-L-6-v2"
-                )
-            else:
-                logger.warning(
-                    "sentence_transformers not found. Cross-encoder will not be used."
-                )
-                self.config.cross_encoder_reranking_model = ""
-        except Exception as e:
-            logger.warning(f"Error checking sentence_transformers: {e}")
-            self.config.cross_encoder_reranking_model = ""  # Ensure a default value
         self.original_docs: List[Document] = []
         self.original_docs_length = 0
         self.from_dataframe = False
