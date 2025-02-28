@@ -1920,6 +1920,8 @@ def test_strict_recovery_only_from_LLM(
     task.run(turns=6)
     assert not was_tool_error
 
+    agent.init_message_history()
+
     content = json.dumps(
         {
             "time": "11:59:59",
@@ -1929,10 +1931,22 @@ def test_strict_recovery_only_from_LLM(
             "tzname": "America/New York",
         }
     )
+
+    agent.get_tool_messages(content)
+    assert not agent.tool_error
+
     user_message = agent.create_user_response(content=content, recipient=Entity.LLM)
     agent.get_tool_messages(user_message)
     assert not agent.tool_error
 
     agent_message = agent.create_agent_response(content=content, recipient=Entity.LLM)
     agent.get_tool_messages(agent_message)
+    assert not agent.tool_error
+
+    agent.message_history.extend(ChatDocument.to_LLMMessage(agent_message))
+    agent.get_tool_messages(content)
+    assert not agent.tool_error
+
+    agent.message_history.extend(ChatDocument.to_LLMMessage(user_message))
+    agent.get_tool_messages(content)
     assert not agent.tool_error
