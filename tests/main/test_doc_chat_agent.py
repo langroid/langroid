@@ -699,6 +699,7 @@ def test_doc_chat_incremental_ingest(
         Document(content=s, metadata=dict(source="animals")) for s in sentences[4:]
     ]
     agent.ingest_docs(docs1)
+    assert agent.vecdb.config.collection_name in agent.vecdb.list_collections(True)
     agent.ingest_docs(docs2)
     results = agent.get_relevant_chunks("What do we know about Pigs?")
     assert any("fly" in r.content for r in results)
@@ -848,6 +849,7 @@ def test_doc_chat_ingest_path_metadata(
             [a["metadata"] for a in animals] if metadata_dict else animal_metadata_list
         ),
     )
+    assert agent.vecdb.config.collection_name in agent.vecdb.list_collections(True)
 
     results = agent.get_relevant_chunks("What do we know about Pigs?")
     assert any("fly" in r.content for r in results)
@@ -866,6 +868,7 @@ def test_doc_chat_ingest_path_metadata(
             else DocMetaData(type="animal", category="living")
         ),
     )
+    assert agent.vecdb.config.collection_name in agent.vecdb.list_collections(True)
 
     results = agent.get_relevant_chunks("What do we know about dogs?")
     assert any("messy" in r.content for r in results)
