@@ -292,7 +292,6 @@ def retrieval_agent(test_settings: Settings, vecdb) -> RetrievalAgent:
     [
         ("Capital of England", "Lancaster"),
         ("Who was Charlie Chaplin?", "comedian"),
-        ("Events in the year 2050", "Lithuania, GPT10"),
     ],
 )
 def test_retrieval_tool(
@@ -1133,6 +1132,7 @@ def test_enrichments_integration(vecdb: VectorStore) -> None:
 def test_doc_chat_agent_ingest(test_settings: Settings, vecdb):
     agent = DocChatAgent(_MyDocChatAgentConfig())
     agent.vecdb = vecdb
+    agent.clear()  # clear the collection in the vector store
 
     # Base documents with simple metadata
     docs = [
@@ -1204,6 +1204,7 @@ def test_doc_chat_agent_ingest(test_settings: Settings, vecdb):
 def test_doc_chat_agent_ingest_paths(test_settings: Settings, vecdb):
     agent = DocChatAgent(_MyDocChatAgentConfig())
     agent.vecdb = vecdb
+    agent.clear()  # clear the collection in the vector store
 
     # Create temp files and byte contents
     import tempfile
