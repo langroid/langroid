@@ -1026,18 +1026,20 @@ class GeminiPdfParser(DocumentParser):
         self.output_filename = Path(temp_file.name)
 
         self.max_tokens = config.pdf.gemini_config.max_tokens or self.DEFAULT_MAX_TOKENS
+
         """
-            If True, each PDF page is processed as a separate chunk,
-            resulting in one LLM request per page. If False, pages are
-            grouped into chunks based on `max_token_limit` before being sent
-            to the LLM.
-            """
+        If True, each PDF page is processed as a separate chunk,
+        resulting in one LLM request per page. If False, pages are
+        grouped into chunks based on `max_token_limit` before being sent
+        to the LLM.
+        """
         self.split_on_page = config.pdf.gemini_config.split_on_page or False
 
         # Rate limiting parameters
         import asyncio
 
         self.requests_per_minute = config.pdf.gemini_config.requests_per_minute or 5
+        
         """
         A semaphore to control the number of concurrent requests to the LLM,
         preventing rate limit errors.  A semaphore slot is acquired before
