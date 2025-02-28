@@ -571,12 +571,10 @@ class OpenAIGPT(LanguageModel):
                 if self.api_key == OPENAI_API_KEY:
                     self.api_key = os.environ.get("LANGDB_API_KEY", DUMMY_API_KEY)
 
-                if self.config.langdb_params.project_id:
-                    project_id = self.config.langdb_params.project_id
-                    self.config.headers["x-project-id"] = project_id
-
                 if self.config.langdb_params:
                     params = self.config.langdb_params
+                    if params.project_id:
+                        self.config.headers["x-project-id"] = params.project_id
                     if params.label:
                         self.config.headers["x-label"] = params.label
                     if params.run_id:
