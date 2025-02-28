@@ -27,7 +27,6 @@ try:
     )
     from sqlalchemy.dialects.postgresql import JSONB
     from sqlalchemy.engine import Connection, Engine
-    from sqlalchemy.orm import sessionmaker
     from sqlalchemy.sql.expression import insert
 except ImportError:
     Engine = Any  # type: ignore
@@ -56,6 +55,11 @@ class PostgresDB(VectorStore):
         super().__init__(config)
         if not has_postgres:
             raise LangroidImportError("pgvector", "postgres")
+        try:
+            from sqlalchemy.orm import sessionmaker
+        except ImportError:
+            raise LangroidImportError("sqlalchemy", "postgres")
+
         self.config: PostgresDBConfig = config
         self.engine = self._create_engine()
         PostgresDB._create_vector_extension(self.engine)

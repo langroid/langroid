@@ -7,14 +7,16 @@ import tempfile
 import time
 from collections import deque
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import TYPE_CHECKING, Any, Dict, List, Optional, Tuple, Union
 from urllib.parse import urlparse
 
 from dotenv import load_dotenv
-from github import Github
-from github.ContentFile import ContentFile
-from github.Label import Label
-from github.Repository import Repository
+
+if TYPE_CHECKING:
+    from github import Github
+    from github.ContentFile import ContentFile
+    from github.Label import Label
+    from github.Repository import Repository
 
 from langroid.mytypes import DocMetaData, Document
 from langroid.parsing.document_parser import DocumentParser, DocumentType
@@ -24,7 +26,7 @@ from langroid.pydantic_v1 import BaseModel, BaseSettings, Field
 logger = logging.getLogger(__name__)
 
 
-def _get_decoded_content(content_file: ContentFile) -> str:
+def _get_decoded_content(content_file: "ContentFile") -> str:
     if content_file.encoding == "base64":
         return content_file.decoded_content.decode("utf-8") or ""
     elif content_file.encoding == "none":
@@ -54,7 +56,7 @@ class IssueData(BaseModel):
     text: str = Field(..., description="Text of issue, i.e. description body")
 
 
-def get_issue_size(labels: List[Label]) -> str | None:
+def get_issue_size(labels: List["Label"]) -> str | None:
     sizes = ["XS", "S", "M", "L", "XL", "XXL"]
     return next((label.name for label in labels if label.name in sizes), None)
 
@@ -117,6 +119,9 @@ class RepoLoader:
         self.config = config
         self.clone_path: Optional[str] = None
         self.log_file = ".logs/repo_loader/download_log.json"
+        self.github_enabled = True  # Initially assume GitHub is enabled
+        self.repo: Optional["Repository"] = None  # Initialize repo as Optional
+
         os.makedirs(os.path.dirname(self.log_file), exist_ok=True)
         if not os.path.exists(self.log_file):
             with open(self.log_file, "w") as f:
@@ -126,21 +131,33 @@ class RepoLoader:
         if self.url in log and os.path.exists(log[self.url]):
             logger.info(f"Repo Already downloaded in {log[self.url]}")
             self.clone_path = log[self.url]
+            return  # Early return if clone path already exists
+
+        try:
+            from github import Github  # Late import
+
+        except ImportError:
+            logger.warning(" Install it with `pip install PyGithub`.")
+            self.github_enabled = False
+            return  # important to return to prevent further errors
+
+        load_dotenv()
+        # authenticated calls to github api have higher rate limit
+        token = os.getenv("GITHUB_ACCESS_TOKEN")
 
         if "github.com" in self.url:
             repo_name = self.url.split("github.com/")[1]
         else:
             repo_name = self.url
-        load_dotenv()
-        # authenticated calls to github api have higher rate limit
-        token = os.getenv("GITHUB_ACCESS_TOKEN")
-        g = Github(token)
-        self.repo = self._get_repo_with_retry(g, repo_name)
+
+        if self.github_enabled:
+            g = Github(token)
+            self.repo = self._get_repo_with_retry(g, repo_name)
 
     @staticmethod
     def _get_repo_with_retry(
-        g: Github, repo_name: str, max_retries: int = 5
-    ) -> Repository:
+        g: "Github", repo_name: str, max_retries: int = 5
+    ) -> "Repository":
         """
         Get a repo from the GitHub API, retrying if the request fails,
         with exponential backoff.
@@ -173,6 +190,12 @@ class RepoLoader:
 
     def get_issues(self, k: int | None = 100) -> List[IssueData]:
         """Get up to k issues from the GitHub repo."""
+        if not self.github_enabled:
+            raise RuntimeError("Install Github library `pip install pygithub`.")
+        if self.repo is None:
+            logger.warning("No repo found. Ensure the URL is correct.")
+            return []  # Return an empty list rather than raise an error in this case
+
         if k is None:
             issues = self.repo.get_issues(state="all")
         else:
@@ -224,7 +247,7 @@ class RepoLoader:
         """
         return file_type not in self.config.non_code_types
 
-    def _is_allowed(self, content: ContentFile) -> bool:
+    def _is_allowed(self, content: "ContentFile") -> bool:
         """
         Check if a file or directory content is allowed to be included.
 
@@ -301,6 +324,12 @@ class RepoLoader:
             Dict[str, Union[str, List[Dict]]]:
             A dictionary containing file and directory names, with file contents.
         """
+        if not self.github_enabled:
+            raise RuntimeError("Install Github library `pip install pygithub`.")
+        if self.repo is None:
+            logger.warning("No repo found. Ensure the URL is correct.")
+            return {}  # Return an empty dict rather than raise an error in this case
+
         root_contents = self.repo.get_contents("")
         if not isinstance(root_contents, list):
             root_contents = [root_contents]
@@ -519,8 +548,7 @@ class RepoLoader:
                 which includes all depths.
             lines (int, optional): Number of lines to read from each file.
                 Defaults to None, which reads all lines.
-            doc_type (str|DocumentType, optional): The type of document to parse.
-
+            doc_type (str|DocumentType | None, optional): The type of document to parse.
         Returns:
             List[Document]: List of Document objects representing files.
 
@@ -584,6 +612,12 @@ class RepoLoader:
             list of Document objects, each has fields `content` and `metadata`,
             and `metadata` has fields `url`, `filename`, `extension`, `language`
         """
+        if not self.github_enabled:
+            raise RuntimeError("Install Github library `pip install pygithub`.")
+        if self.repo is None:
+            logger.warning("No repo found. Ensure the URL is correct.")
+            return []  # Return an empty list rather than raise an error
+
         contents = self.repo.get_contents("")
         if not isinstance(contents, list):
             contents = [contents]
