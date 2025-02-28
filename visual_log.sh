@@ -12,14 +12,21 @@ echo "Generating log file: ${LOG_FILE}"
 mkdir -p import_logs
 echo "Created/verified 'import_logs' directory."
 
-# Langroid import (with logging)
-echo "Profiling imports using Python's -X importtime..."
-python -X importtime -c "import langroid" >> "${LOG_FILE}" 2>&1
-echo "Langroid import profiling completed."
+# Check for command-line argument (Python script path)
+if [ -n "$1" ]; then
+  PYTHON_SCRIPT="$1"
+  echo "Profiling imports for script: ${PYTHON_SCRIPT}"
+else
+  # Default import statement (if no script provided)
+  PYTHON_SCRIPT="-c 'import langroid'"
+  echo "No script provided.  Profiling default 'import langroid'."
+fi
 
-# If you have the script you want to test just add it here like
-# and uncomment this line
-# python -X importtime <path_to_your_script.py>  >> "${LOG_FILE}" 2>&1
+# Langroid import (or script execution) with logging
+echo "Profiling imports using Python's -X importtime..."
+python -X importtime "$PYTHON_SCRIPT" >> "${LOG_FILE}" 2>&1
+echo "Import profiling completed."
+
 
 # Tuna check and execution
 if python -c "import tuna" 2>/dev/null; then
@@ -32,4 +39,3 @@ else
 fi
 
 echo "Import profiling process completed."
-
