@@ -154,16 +154,27 @@ Hope you can tell me!
 """
 
 
-def test_handle_bad_tool_message():
+@pytest.mark.parametrize("as_string", [False, True])
+def test_handle_bad_tool_message(as_string: bool):
     """
     Test that a correct tool name with bad/missing args is
             handled correctly, i.e. the agent returns a clear
             error message to the LLM so it can try to fix it.
+
+    as_string: whether to pass the bad tool message as a string or as an LLM msg
     """
     agent.enable_message(SquareTool)
     assert agent.handle_message(NONE_MSG) is None
-    bad_tool_from_llm = agent.create_llm_response(BAD_SQUARE_MSG)
-    result = agent.handle_message(bad_tool_from_llm)
+    if as_string:
+        # set up a prior LLM-originated msg, to mock a scenario
+        # where the last msg was from LLM, prior to calling
+        # handle_message with the bad tool message -- we are trying to
+        # test that the error is raised correctly in this case
+        agent.llm_response("3+4=")
+        result = agent.handle_message(BAD_SQUARE_MSG)
+    else:
+        bad_tool_from_llm = agent.create_llm_response(BAD_SQUARE_MSG)
+        result = agent.handle_message(bad_tool_from_llm)
     assert all([x in result for x in ["square", "number", "required"]])
 
 

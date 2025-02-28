@@ -263,16 +263,27 @@ Hope you can tell me!
 """
 
 
-def test_handle_bad_tool_message():
+@pytest.mark.parametrize("as_string", [False, True])
+def test_handle_bad_tool_message(as_string: bool):
     """
     Test that a correct tool name with bad/missing args is
             handled correctly, i.e. the agent returns a clear
             error message to the LLM so it can try to fix it.
+
+    as_string: whether to pass the bad tool message as a string or as an LLM msg
     """
     agent.enable_message(FileExistsMessage)
     assert agent.handle_message(NONE_MSG) is None
-    bad_tool_from_llm = agent.create_llm_response(BAD_FILE_EXISTS_MSG)
-    result = agent.handle_message(bad_tool_from_llm)
+    if as_string:
+        # set up a prior LLM-originated msg, to mock a scenario
+        # where the last msg was from LLM, prior to calling
+        # handle_message with the bad tool message -- we are trying to
+        # test that the error is raised correctly in this case
+        agent.llm_response("3+4=")
+        result = agent.handle_message(BAD_FILE_EXISTS_MSG)
+    else:
+        bad_tool_from_llm = agent.create_llm_response(BAD_FILE_EXISTS_MSG)
+        result = agent.handle_message(bad_tool_from_llm)
     assert "file_exists" in result and "filename" in result and "required" in result
 
 
@@ -418,12 +429,14 @@ wrong_nabroski_tool = """
 @pytest.mark.parametrize("use_functions_api", [True, False])
 @pytest.mark.parametrize("stream", [True, False])
 @pytest.mark.parametrize("strict_recovery", [True, False])
+@pytest.mark.parametrize("as_string", [True, False])
 def test_agent_malformed_tool(
     test_settings: Settings,
     use_tools_api: bool,
     use_functions_api: bool,
     stream: bool,
     strict_recovery: bool,
+    as_string: bool,
 ):
     set_global(test_settings)
     cfg = ChatAgentConfig(
@@ -435,8 +448,16 @@ def test_agent_malformed_tool(
     cfg.llm.stream = stream
     agent = ChatAgent(cfg)
     agent.enable_message(NabroskiTool)
-    wrong_nabroski_tool_from_llm = agent.create_llm_response(wrong_nabroski_tool)
-    response = agent.agent_response(wrong_nabroski_tool_from_llm)
+    if as_string:
+        # set up a prior LLM-originated msg, to mock a scenario
+        # where the last msg was from LLM, prior to calling
+        # handle_message with the bad tool message -- we are trying to
+        # test that the error is raised correctly in this case
+        agent.llm_response("3+4=")
+        response = agent.agent_response(wrong_nabroski_tool)
+    else:
+        bad_tool_from_llm = agent.create_llm_response(wrong_nabroski_tool)
+        response = agent.agent_response(bad_tool_from_llm)
     # We expect an error msg containing certain specific field names
     assert "num_pair" in response.content and "yval" in response.content
 
