@@ -271,7 +271,8 @@ def test_handle_bad_tool_message():
     """
     agent.enable_message(FileExistsMessage)
     assert agent.handle_message(NONE_MSG) is None
-    result = agent.handle_message(BAD_FILE_EXISTS_MSG)
+    bad_tool_from_llm = agent.create_llm_response(BAD_FILE_EXISTS_MSG)
+    result = agent.handle_message(bad_tool_from_llm)
     assert "file_exists" in result and "filename" in result and "required" in result
 
 
@@ -416,19 +417,26 @@ wrong_nabroski_tool = """
 @pytest.mark.parametrize("use_tools_api", [True, False])
 @pytest.mark.parametrize("use_functions_api", [True, False])
 @pytest.mark.parametrize("stream", [True, False])
+@pytest.mark.parametrize("strict_recovery", [True, False])
 def test_agent_malformed_tool(
-    test_settings: Settings, use_tools_api: bool, use_functions_api: bool, stream: bool
+    test_settings: Settings,
+    use_tools_api: bool,
+    use_functions_api: bool,
+    stream: bool,
+    strict_recovery: bool,
 ):
     set_global(test_settings)
     cfg = ChatAgentConfig(
         use_tools=not use_functions_api,
         use_functions_api=use_functions_api,
         use_tools_api=use_tools_api,
+        strict_recovery=strict_recovery,
     )
     cfg.llm.stream = stream
     agent = ChatAgent(cfg)
     agent.enable_message(NabroskiTool)
-    response = agent.agent_response(wrong_nabroski_tool)
+    wrong_nabroski_tool_from_llm = agent.create_llm_response(wrong_nabroski_tool)
+    response = agent.agent_response(wrong_nabroski_tool_from_llm)
     # We expect an error msg containing certain specific field names
     assert "num_pair" in response.content and "yval" in response.content
 

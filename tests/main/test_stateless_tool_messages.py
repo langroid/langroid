@@ -162,7 +162,8 @@ def test_handle_bad_tool_message():
     """
     agent.enable_message(SquareTool)
     assert agent.handle_message(NONE_MSG) is None
-    result = agent.handle_message(BAD_SQUARE_MSG)
+    bad_tool_from_llm = agent.create_llm_response(BAD_SQUARE_MSG)
+    result = agent.handle_message(bad_tool_from_llm)
     assert all([x in result for x in ["square", "number", "required"]])
 
 
