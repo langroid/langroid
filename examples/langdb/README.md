@@ -73,11 +73,17 @@ from langroid.language_models.openai_gpt import OpenAIGPTConfig
 from langroid.vector_store.qdrant import QdrantDBConfig
 
 # Configure LLM
+from langroid.language_models.openai_gpt import LangDBParams
+
 llm_config = OpenAIGPTConfig(
     chat_model="langdb/openai/gpt-4",  # LangDB model prefix
-    label='my-app',
-    thread_id=thread_id,  # For conversation tracking
-    run_id=run_id        # For request grouping
+    api_key=os.getenv("LANGDB_API_KEY"),
+    langdb_params=LangDBParams(
+        label='my-app',
+        thread_id=thread_id,  # For conversation tracking
+        run_id=run_id,        # For request grouping
+        project_id=os.getenv("LANGDB_PROJECT_ID")
+    )
 )
 
 # Configure embeddings

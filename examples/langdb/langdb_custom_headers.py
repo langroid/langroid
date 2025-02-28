@@ -6,15 +6,10 @@ when using LangDB. These headers are specific to LangDB and won't have any effec
 """
 
 import os
-import sys
-import uuid
-
-# Add the parent directory to sys.path to import langroid locally
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-
 from langroid.language_models.openai_gpt import OpenAIGPTConfig
 from langroid.language_models.openai_gpt import OpenAIGPT
 from langroid.utils.configuration import Settings, set_global
+from langroid.language_models.openai_gpt import LangDBParams
 
 # Set up settings
 settings = Settings(debug=True)
@@ -31,17 +26,16 @@ def main():
     langdb_config = OpenAIGPTConfig(
         chat_model="langdb/openai/gpt-4o-mini",
         api_key=os.environ.get("LANGDB_API_KEY", ""),
-        label = 'langroid',
-        run_id = run_id,
-        thread_id = thread_id
+        langdb_params=LangDBParams(
+            label='langroid',
+            run_id=run_id,
+            thread_id=thread_id
+        )
     )
-    
-    # Generate a proper UUID for thread-id
-    thread_id = str(uuid.uuid4())
 
-    print(f"Using model: langdb/claude-3-opus-20240229")
-    print(f"Headers: {langdb_config.headers}")
-    
+
+    print(f"Using model: langdb/openai/gpt-4o-mini")
+
     # Create the model
     langdb_model = OpenAIGPT(langdb_config)
     

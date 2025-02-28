@@ -27,6 +27,8 @@ from langroid.pydantic_v1 import BaseSettings
 
 import langroid as lr
 from langroid.language_models.openai_gpt import OpenAIGPTConfig
+from langroid.language_models.openai_gpt import LangDBParams
+
 
 app = typer.Typer()
 
@@ -72,11 +74,16 @@ def chat(opts: CLIOptions) -> None:
     
     # Create a LangDB model configuration
     # Make sure LANGDB_API_KEY and LANGDB_PROJECT_ID are set in your environment
+
     langdb_config = OpenAIGPTConfig(
         chat_model="langdb/openai/gpt-4o-mini",  # Using LangDB model
-        label='langroid-agent-tool',
-        run_id=run_id,
-        thread_id=thread_id
+        api_key=os.environ.get("LANGDB_API_KEY", ""),
+        langdb_params=LangDBParams(
+            label='langroid-agent-tool',
+            run_id=run_id,
+            thread_id=thread_id,
+            project_id=os.environ.get("LANGDB_PROJECT_ID", "")
+        )
     )
     
     print(f"Using model: {langdb_config.chat_model}")

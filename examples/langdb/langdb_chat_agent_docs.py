@@ -20,11 +20,9 @@ import os
 import uuid
 import typer
 from rich import print
-import sys
-
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 import langroid as lr
 from langroid.language_models.openai_gpt import OpenAIGPTConfig
+from langroid.language_models.openai_gpt import LangDBParams
 
 app = typer.Typer()
 
@@ -81,9 +79,12 @@ def chat() -> None:
     langdb_config = OpenAIGPTConfig(
         chat_model="langdb/openai/gpt-4o-mini",  # Using LangDB model
         api_key=os.environ.get("LANGDB_API_KEY", ""),
-        label='langroid-agent-docs',
-        run_id=run_id,
-        thread_id=thread_id
+        langdb_params=LangDBParams(
+            label='langroid-agent-docs',
+            run_id=run_id,
+            thread_id=thread_id,
+            project_id=os.environ.get("LANGDB_PROJECT_ID", "")
+        )
     )
 
     config = lr.agent.special.DocChatAgentConfig(

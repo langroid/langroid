@@ -182,6 +182,16 @@ def noop() -> None:
     return None
 
 
+class LangDBParams(BaseModel):
+    """
+    Parameters specific to LangDB integration.
+    """
+    project_id: Optional[str] = None
+    label: Optional[str] = None
+    run_id: Optional[str] = None
+    thread_id: Optional[str] = None
+
+
 class OpenAICallParams(BaseModel):
     """
     Various params that can be sent to an OpenAI API chat-completion call.
@@ -258,10 +268,7 @@ class OpenAIGPTConfig(LLMConfig):
     # e.g. "mistral-instruct-v0.2 (a fuzzy search is done to find the closest match)
     formatter: str | None = None
     hf_formatter: HFFormatter | None = None
-    project_name: Optional[str] = None
-    label: Optional[str] = None
-    run_id: Optional[str] = None
-    thread_id: Optional[str] = None
+    langdb_params: Optional[LangDBParams] = None
     headers: Dict[str, str] = {}
 
     def __init__(self, **kwargs) -> None:  # type: ignore
@@ -563,13 +570,19 @@ class OpenAIGPT(LanguageModel):
                     self.api_base = LANGDB_BASE_URL
                 if self.api_key == OPENAI_API_KEY:
                     self.api_key = os.environ.get("LANGDB_API_KEY", DUMMY_API_KEY)
-        
-                if self.config.label:
-                    self.config.headers["x-label"] = self.config.label
-                if self.config.run_id:
-                    self.config.headers["x-run-id"] = self.config.run_id
-                if self.config.thread_id:
-                    self.config.headers["x-thread-id"] = self.config.thread_id
+
+                if self.config.langdb_params.project_id:
+                    project_id = self.config.langdb_params.project_id
+                    self.config.headers["x-project-id"] = project_id
+
+                if self.config.langdb_params:
+                    params = self.config.langdb_params
+                    if params.label:
+                        self.config.headers["x-label"] = params.label
+                    if params.run_id:
+                        self.config.headers["x-run-id"] = params.run_id
+                    if params.thread_id:
+                        self.config.headers["x-thread-id"] = params.thread_id
 
             self.client = OpenAI(
                 api_key=self.api_key,
