@@ -10,13 +10,22 @@ Langroid supports a wide range of Language Model providers through its
     This includes both local and remote models.
 
 You would typically set up the `OpenAIGPTConfig` class with the `chat_model`
-parameter, which specifies the model you want to use:
+parameter, which specifies the model you want to use, and other 
+parameters such as `max_output_tokens`, `temperature`, etc
+(see the 
+[`OpenAIGPTConfig`][langroid.language_models.openai_gpt.OpenAIGPTConfig] class
+and its parent class 
+[`LLModelConfig`][langroid.language_models.language_model.base.LLMConfig] for
+full parameter details):
+
+
 
 ```python
 import langroid.language_models as lm
 llm_config = lm.OpenAIGPTConfig(
     chat_model="<model-name>", # possibly includes a <provider-name> prefix
-    api_key="your-open
+    api_key="api-key", # optional, prefer setting in environment variables
+    # ... other params such as max_tokens, temperature, etc.
 )
 ```
 

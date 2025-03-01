@@ -47,7 +47,10 @@ This Multi-Agent paradigm is inspired by the
 into simplifying the developer experience; 
 it does not use `Langchain`, or any other LLM framework.
 
-:fire: Read the (WIP) [overview of the langroid architecture](https://langroid.github.io/langroid/blog/2024/08/15/overview-of-langroids-multi-agent-architecture-prelim/) and a [quick tour of Langroid](https://langroid.github.io/langroid/tutorials/langroid-tour/)
+:fire: Read the (WIP) [overview of the langroid architecture](https://langroid.github.
+io/langroid/blog/2024/08/15/overview-of-langroids-multi-agent-architecture-prelim/), 
+ a [quick tour of Langroid](https://langroid.github.io/langroid/tutorials/langroid-tour/), and list of 
+[supported LLMs/Providers](https://langroid.github.io/langroid/tutorials/supported-models/).
 
 📢 Companies are using/adapting Langroid in **production**. Here is a quote:
 
@@ -135,6 +138,20 @@ teacher_task.run()
 <details>
 <summary> <b>Click to expand</b></summary>
 
+- **Feb 2025:**
+  - [0.43.0](https://github.com/langroid/langroid/releases/tag/0.43.0): `GeminiPdfParser` for parsing PDF using 
+    Gemini LLMs - Thanks @abab-dev.
+  - [0.42.0](https://github.com/langroid/langroid/releases/tag/0.42.0): `markitdown` parser for `pptx,xlsx,xls` files 
+    Thanks @abab-dev.
+  - [0.41.0](https://github.com/langroid/langroid/releases/tag/0.41.0): `pinecone` vector-db (Thanks @coretado), 
+    `Tavily` web-search (Thanks @Sozhan308), `Exa` web-search (Thanks @MuddyHope).
+  - [0.40.0](https://github.com/langroid/langroid/releases/tag/0.40.0): `pgvector` vector-db. Thanks @abab-dev.
+    handle_llm_no_tool` 
+    for 
+  - [0.39.0](https://github.com/langroid/langroid/releases/tag/0.39.0): `ChatAgentConfig.handle_llm_no_tool` for 
+    handling LLM "forgetting" to use a tool.
+  - [0.38.0](https://github.com/langroid/langroid/releases/tag/0.38.0): Gemini embeddings - Thanks @abab-dev)
+  - [0.37.0](https://github.com/langroid/langroid/releases/tag/0.37.0): New PDF Parsers: `docling`, `pymupdf4llm`
 - **Jan 2025:**
   - [0.36.0](https://github.com/langroid/langroid/releases/tag/0.36.0): Weaviate vector-db support (thanks @abab-dev).
   - [0.35.0](https://github.com/langroid/langroid/releases/tag/0.35.0): Capture/Stream reasoning content from 
@@ -399,7 +416,8 @@ section above)
   Agents with specific skills, wrap them in Tasks, and combine tasks in a flexible way.
 - **LLM Support**: Langroid supports OpenAI LLMs as well as LLMs from hundreds of 
 providers ([local/open](https://langroid.github.io/langroid/tutorials/local-llm-setup/) or [remote/commercial](https://langroid.github.io/langroid/tutorials/non-openai-llms/)) via proxy libraries and local model servers
-such as [ollama](https://github.com/ollama), [oobabooga](https://github.com/oobabooga/text-generation-webui), [LiteLLM](https://docs.litellm.ai/docs/providers) that in effect mimic the OpenAI API. 
+such as [ollama](https://github.com/ollama), [oobabooga](https://github.com/oobabooga/text-generation-webui), 
+  [LiteLLM](https://docs.litellm.ai/docs/providers) that in effect mimic the OpenAI API. See the [supported LLMs](https://langroid.github.io/langroid/tutorials/supported-models/). 
 - **Caching of LLM responses:** Langroid supports [Redis](https://redis.com/try-free/) and 
   [Momento](https://www.gomomento.com/) to cache LLM responses.
 - **Vector-stores**: [LanceDB](https://github.com/lancedb/lancedb), [Qdrant](https://qdrant.tech/), [Chroma](https://www.trychroma.com/) are currently supported.
