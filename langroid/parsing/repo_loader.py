@@ -119,7 +119,6 @@ class RepoLoader:
         self.config = config
         self.clone_path: Optional[str] = None
         self.log_file = ".logs/repo_loader/download_log.json"
-        self.github_enabled = True  # Initially assume GitHub is enabled
         self.repo: Optional["Repository"] = None  # Initialize repo as Optional
 
         os.makedirs(os.path.dirname(self.log_file), exist_ok=True)
@@ -133,13 +132,8 @@ class RepoLoader:
             self.clone_path = log[self.url]
             return  # Early return if clone path already exists
 
-        try:
-            from github import Github  # Late import
-
-        except ImportError:
-            logger.warning(" Install it with `pip install PyGithub`.")
-            self.github_enabled = False
-            return  # important to return to prevent further errors
+        # it's a core dependency, so we don't need to enclose in try/except
+        from github import Github  # Late import
 
         load_dotenv()
         # authenticated calls to github api have higher rate limit
@@ -150,9 +144,8 @@ class RepoLoader:
         else:
             repo_name = self.url
 
-        if self.github_enabled:
-            g = Github(token)
-            self.repo = self._get_repo_with_retry(g, repo_name)
+        g = Github(token)
+        self.repo = self._get_repo_with_retry(g, repo_name)
 
     @staticmethod
     def _get_repo_with_retry(
@@ -190,8 +183,6 @@ class RepoLoader:
 
     def get_issues(self, k: int | None = 100) -> List[IssueData]:
         """Get up to k issues from the GitHub repo."""
-        if not self.github_enabled:
-            raise RuntimeError("Install Github library `pip install pygithub`.")
         if self.repo is None:
             logger.warning("No repo found. Ensure the URL is correct.")
             return []  # Return an empty list rather than raise an error in this case
@@ -324,8 +315,6 @@ class RepoLoader:
             Dict[str, Union[str, List[Dict]]]:
             A dictionary containing file and directory names, with file contents.
         """
-        if not self.github_enabled:
-            raise RuntimeError("Install Github library `pip install pygithub`.")
         if self.repo is None:
             logger.warning("No repo found. Ensure the URL is correct.")
             return {}  # Return an empty dict rather than raise an error in this case
@@ -612,8 +601,6 @@ class RepoLoader:
             list of Document objects, each has fields `content` and `metadata`,
             and `metadata` has fields `url`, `filename`, `extension`, `language`
         """
-        if not self.github_enabled:
-            raise RuntimeError("Install Github library `pip install pygithub`.")
         if self.repo is None:
             logger.warning("No repo found. Ensure the URL is correct.")
             return []  # Return an empty list rather than raise an error
