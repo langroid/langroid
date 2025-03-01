@@ -648,6 +648,7 @@ def test_doc_chat_add_content_fields(
     else:
         agent = DocChatAgent(agent_cfg)
     agent.vecdb = vecdb
+    agent.clear()
     agent.ingest_dataframe(df, content="summary", metadata=metadata)
     response = agent.llm_response(
         """

@@ -239,6 +239,7 @@ def test_vector_stores_search(
         # we don't expect some of these to work,
         # e.g. MeiliSearch is a text search engine, not a vector store
         return
+    assert vecdb.config.collection_name in vecdb.list_collections(True)
     docs_and_scores = vecdb.similar_texts_with_scores(query, k=len(vars(phrases)))
     # first doc should be best match
     # scores are cosine similarities, so high means close
