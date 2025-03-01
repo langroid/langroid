@@ -15,7 +15,7 @@ parameters such as `max_output_tokens`, `temperature`, etc
 (see the 
 [`OpenAIGPTConfig`][langroid.language_models.openai_gpt.OpenAIGPTConfig] class
 and its parent class 
-[`LLModelConfig`][langroid.language_models.language_model.base.LLMConfig] for
+[`LLModelConfig`][langroid.language_models.base.LLMConfig] for
 full parameter details):
 
 
