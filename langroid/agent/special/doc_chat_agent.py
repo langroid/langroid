@@ -86,11 +86,7 @@ CHUNK_ENRICHMENT_DELIMITER = "\n<##-##-##>\n"
 try:
     # Check if  module exists in sys.path
     spec = importlib.util.find_spec("sentence_transformers")
-    if spec is not None:
-        has_sentence_transformers = True
-    else:
-        logger.warning("sentence_transformers not found.")
-        has_sentence_transformers = False
+    has_sentence_transformers = spec is not None
 except Exception as e:
     logger.warning(f"Error checking sentence_transformers: {e}")
     has_sentence_transformers = False
