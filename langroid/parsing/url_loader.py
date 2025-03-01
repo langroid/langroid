@@ -30,15 +30,12 @@ class URLLoader:
 
     @no_type_check
     def load(self) -> List[Document]:
-        try:
-            import trafilatura
-            from trafilatura.downloads import (
-                add_to_compressed_dict,
-                buffered_downloads,
-                load_download_buffer,
-            )
-        except ImportError:
-            pass
+        import trafilatura
+        from trafilatura.downloads import (
+            add_to_compressed_dict,
+            buffered_downloads,
+            load_download_buffer,
+        )
 
         docs = []
         threads = 4

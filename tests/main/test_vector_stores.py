@@ -222,13 +222,13 @@ def vecdb(request) -> VectorStore:
 @pytest.mark.parametrize(
     "vecdb",
     [
-        "lancedb",
-        "chroma",
+        "weaviate_docker",
+        "postgres",
         "qdrant_cloud",
         "qdrant_local",
         pytest.param("pinecone_serverless", marks=pytest.mark.skip),
-        "postgres",
-        "weaviate_docker",
+        "lancedb",
+        "chroma",
     ],
     indirect=True,
 )

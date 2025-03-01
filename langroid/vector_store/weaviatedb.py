@@ -138,7 +138,7 @@ class WeaviateDB(VectorStore):
                 VectorDistances,
             )
         except ImportError:
-            pass
+            raise LangroidImportError("weaviate", "weaviate")
         collection_name = WeaviateDB.validate_and_format_collection_name(
             collection_name
         )
@@ -205,10 +205,8 @@ class WeaviateDB(VectorStore):
         return [self.weaviate_obj_to_doc(item) for item in coll.iterator()]
 
     def get_documents_by_ids(self, ids: List[str]) -> List[Document]:
-        try:
-            from weaviate.classes.query import Filter
-        except ImportError:
-            pass
+        from weaviate.classes.query import Filter
+
         if self.config.collection_name is None:
             raise ValueError("No collection name set, cannot retrieve docs")
 
@@ -232,10 +230,8 @@ class WeaviateDB(VectorStore):
     def similar_texts_with_scores(
         self, text: str, k: int = 1, where: Optional[str] = None
     ) -> List[Tuple[Document, float]]:
-        try:
-            from weaviate.classes.query import MetadataQuery
-        except ImportError:
-            pass
+        from weaviate.classes.query import MetadataQuery
+
         embedding = self.embedding_fn([text])[0]
         if self.config.collection_name is None:
             raise ValueError("No collections name set,cannot search")
@@ -252,10 +248,8 @@ class WeaviateDB(VectorStore):
         return list(zip(docs, similarities))
 
     def _create_valid_uuid_id(self, id: str) -> Any:
-        try:
-            from weaviate.util import generate_uuid5, get_valid_uuid
-        except ImportError:
-            pass
+        from weaviate.util import generate_uuid5, get_valid_uuid
+
         try:
             id = get_valid_uuid(id)
             return id
@@ -263,10 +257,8 @@ class WeaviateDB(VectorStore):
             return generate_uuid5(id)
 
     def weaviate_obj_to_doc(self, input_object: Any) -> Document:
-        try:
-            from weaviate.util import get_valid_uuid
-        except ImportError:
-            pass
+        from weaviate.util import get_valid_uuid
+
         content = input_object.properties.get("content", "")
         metadata_dict = input_object.properties.get("metadata", {})
 

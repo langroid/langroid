@@ -64,10 +64,7 @@ class QdrantDB(VectorStore):
     def __init__(self, config: QdrantDBConfig = QdrantDBConfig()):
         super().__init__(config)
         self.config: QdrantDBConfig = config
-        try:
-            from qdrant_client import QdrantClient
-        except ImportError:
-            pass
+        from qdrant_client import QdrantClient
 
         if self.config.use_sparse_embeddings:
             try:
