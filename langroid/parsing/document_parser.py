@@ -491,6 +491,7 @@ class PyMuPDF4LLMParser(DocumentParser):
         """
         try:
             import pymupdf4llm  # noqa
+            import fitz
         except ImportError:
             raise LangroidImportError(
                 "pymupdf4llm", ["pymupdf4llm", "all", "pdf-parsers", "doc-chat"]

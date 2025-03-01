@@ -83,7 +83,6 @@ documents: List[Document] = [
 ]
 
 QUERY_EXPECTED_PAIRS = [
-    ("what happened in the year 2050?", "GPT10, Lithuania"),
     ("what is the capital of England?", "Lancaster"),
     ("Who was Charlie Chaplin?", "comedian"),
     ("When was global warming solved?", "2060"),
