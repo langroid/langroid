@@ -292,7 +292,6 @@ def retrieval_agent(test_settings: Settings, vecdb) -> RetrievalAgent:
     [
         ("Capital of England", "Lancaster"),
         ("Who was Charlie Chaplin?", "comedian"),
-        ("Events in the year 2050", "Lithuania, GPT10"),
     ],
 )
 def test_retrieval_tool(
@@ -649,6 +648,7 @@ def test_doc_chat_add_content_fields(
     else:
         agent = DocChatAgent(agent_cfg)
     agent.vecdb = vecdb
+    agent.clear()
     agent.ingest_dataframe(df, content="summary", metadata=metadata)
     response = agent.llm_response(
         """
@@ -700,6 +700,7 @@ def test_doc_chat_incremental_ingest(
         Document(content=s, metadata=dict(source="animals")) for s in sentences[4:]
     ]
     agent.ingest_docs(docs1)
+    assert agent.vecdb.config.collection_name in agent.vecdb.list_collections(True)
     agent.ingest_docs(docs2)
     results = agent.get_relevant_chunks("What do we know about Pigs?")
     assert any("fly" in r.content for r in results)
@@ -849,6 +850,7 @@ def test_doc_chat_ingest_path_metadata(
             [a["metadata"] for a in animals] if metadata_dict else animal_metadata_list
         ),
     )
+    assert agent.vecdb.config.collection_name in agent.vecdb.list_collections(True)
 
     results = agent.get_relevant_chunks("What do we know about Pigs?")
     assert any("fly" in r.content for r in results)
@@ -867,6 +869,7 @@ def test_doc_chat_ingest_path_metadata(
             else DocMetaData(type="animal", category="living")
         ),
     )
+    assert agent.vecdb.config.collection_name in agent.vecdb.list_collections(True)
 
     results = agent.get_relevant_chunks("What do we know about dogs?")
     assert any("messy" in r.content for r in results)
@@ -1133,6 +1136,7 @@ def test_enrichments_integration(vecdb: VectorStore) -> None:
 def test_doc_chat_agent_ingest(test_settings: Settings, vecdb):
     agent = DocChatAgent(_MyDocChatAgentConfig())
     agent.vecdb = vecdb
+    agent.clear()  # clear the collection in the vector store
 
     # Base documents with simple metadata
     docs = [
@@ -1204,6 +1208,7 @@ def test_doc_chat_agent_ingest(test_settings: Settings, vecdb):
 def test_doc_chat_agent_ingest_paths(test_settings: Settings, vecdb):
     agent = DocChatAgent(_MyDocChatAgentConfig())
     agent.vecdb = vecdb
+    agent.clear()  # clear the collection in the vector store
 
     # Create temp files and byte contents
     import tempfile

@@ -1069,6 +1069,13 @@ class ChatAgent(Agent):
         was enabled, disables it for the tool, else triggers strict recovery.
         """
         self.tool_error = False
+        most_recent_sent_by_llm = (
+            len(self.message_history) > 0
+            and self.message_history[-1].role == Role.ASSISTANT
+        )
+        was_llm = most_recent_sent_by_llm or (
+            isinstance(msg, ChatDocument) and msg.metadata.sender == Entity.LLM
+        )
         try:
             tools = super().get_tool_messages(msg, all_tools)
         except ValidationError as ve:
@@ -1099,9 +1106,16 @@ class ChatAgent(Agent):
                     if isinstance(msg, ChatDocument):
                         self.tool_error = msg.metadata.sender == Entity.LLM
                     else:
-                        self.tool_error = True
+                        self.tool_error = most_recent_sent_by_llm
 
-            raise ve
+            if was_llm:
+                raise ve
+            else:
+                self.tool_error = False
+                return []
+
+        if not was_llm:
+            self.tool_error = False
 
         return tools
 

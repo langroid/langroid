@@ -779,20 +779,3 @@ async def test_strict_recovery_only_from_LLM_async(
     task = Task(agent, interactive=False)
     await task.run_async(turns=6)
     assert not was_tool_error
-
-    content = json.dumps(
-        {
-            "time": "11:59:59",
-            "date": "1999-12-31",
-            "day_of_week": "Friday",
-            "week_number": "52",
-            "tzname": "America/New York",
-        }
-    )
-    user_message = agent.create_user_response(content=content, recipient=Entity.LLM)
-    agent.get_tool_messages(user_message)
-    assert not agent.tool_error
-
-    agent_message = agent.create_agent_response(content=content, recipient=Entity.LLM)
-    agent.get_tool_messages(agent_message)
-    assert not agent.tool_error
