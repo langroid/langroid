@@ -49,7 +49,7 @@ it does not use `Langchain`, or any other LLM framework,
 and works with [practically any LLM](https://langroid.github.io/langroid/tutorials/supported-models/).
 
 :fire: Read the (WIP) [overview of the langroid architecture](https://langroid.github.io/langroid/blog/2024/08/15/overview-of-langroids-multi-agent-architecture-prelim/), 
- a [quick tour of Langroid](https://langroid.github.io/langroid/tutorials/langroid-tour/).
+ and a [quick tour of Langroid](https://langroid.github.io/langroid/tutorials/langroid-tour/).
 
 📢 Companies are using/adapting Langroid in **production**. Here is a quote:
 
