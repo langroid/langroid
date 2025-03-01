@@ -146,8 +146,6 @@ teacher_task.run()
   - [0.41.0](https://github.com/langroid/langroid/releases/tag/0.41.0): `pinecone` vector-db (Thanks @coretado), 
     `Tavily` web-search (Thanks @Sozhan308), `Exa` web-search (Thanks @MuddyHope).
   - [0.40.0](https://github.com/langroid/langroid/releases/tag/0.40.0): `pgvector` vector-db. Thanks @abab-dev.
-    handle_llm_no_tool` 
-    for 
   - [0.39.0](https://github.com/langroid/langroid/releases/tag/0.39.0): `ChatAgentConfig.handle_llm_no_tool` for 
     handling LLM "forgetting" to use a tool.
   - [0.38.0](https://github.com/langroid/langroid/releases/tag/0.38.0): Gemini embeddings - Thanks @abab-dev)
