@@ -130,7 +130,6 @@ class RepoLoader:
         if self.url in log and os.path.exists(log[self.url]):
             logger.info(f"Repo Already downloaded in {log[self.url]}")
             self.clone_path = log[self.url]
-            return  # Early return if clone path already exists
 
         # it's a core dependency, so we don't need to enclose in try/except
         from github import Github  # Late import
