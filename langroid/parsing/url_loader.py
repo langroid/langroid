@@ -4,12 +4,6 @@ from tempfile import NamedTemporaryFile
 from typing import List, no_type_check
 
 import requests
-import trafilatura
-from trafilatura.downloads import (
-    add_to_compressed_dict,
-    buffered_downloads,
-    load_download_buffer,
-)
 
 from langroid.mytypes import DocMetaData, Document
 from langroid.parsing.document_parser import DocumentParser, ImagePdfParser
@@ -36,6 +30,13 @@ class URLLoader:
 
     @no_type_check
     def load(self) -> List[Document]:
+        import trafilatura
+        from trafilatura.downloads import (
+            add_to_compressed_dict,
+            buffered_downloads,
+            load_download_buffer,
+        )
+
         docs = []
         threads = 4
         # converted the input list to an internal format

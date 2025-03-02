@@ -1,7 +1,7 @@
 import logging
 import os
 import re
-from typing import TYPE_CHECKING, Any, List, Optional, Sequence, Tuple
+from typing import Any, List, Optional, Sequence, Tuple
 
 from dotenv import load_dotenv
 
@@ -15,29 +15,16 @@ from langroid.utils.configuration import settings
 from langroid.vector_store.base import VectorStore, VectorStoreConfig
 
 logger = logging.getLogger(__name__)
-has_weaviate: bool = True
-try:
-    import weaviate
-    from weaviate.classes.config import (
-        Configure,
-        VectorDistances,
-    )
-    from weaviate.classes.init import Auth
-    from weaviate.classes.query import Filter, MetadataQuery
-    from weaviate.util import generate_uuid5, get_valid_uuid
-except ImportError:
-    has_weaviate = False
 
-    if not TYPE_CHECKING:
 
-        class VectorDistances:
-            """
-            Fallback class when weaviate is not installed, to avoid import errors.
-            """
+class VectorDistances:
+    """
+    Fallback class when weaviate is not installed, to avoid import errors.
+    """
 
-            COSINE: str = "cosine"
-            DOTPRODUCT: str = "dot"
-            L2: str = "l2"
+    COSINE: str = "cosine"
+    DOTPRODUCT: str = "dot"
+    L2: str = "l2"
 
 
 class WeaviateDBConfig(VectorStoreConfig):
@@ -54,8 +41,12 @@ class WeaviateDBConfig(VectorStoreConfig):
 class WeaviateDB(VectorStore):
     def __init__(self, config: WeaviateDBConfig = WeaviateDBConfig()):
         super().__init__(config)
-        if not has_weaviate:
+        try:
+            import weaviate
+            from weaviate.classes.init import Auth
+        except ImportError:
             raise LangroidImportError("weaviate", "weaviate")
+
         self.config: WeaviateDBConfig = config
         load_dotenv()
         if self.config.docker:
@@ -141,6 +132,13 @@ class WeaviateDB(VectorStore):
         self.client.collections.delete(name=collection_name)
 
     def create_collection(self, collection_name: str, replace: bool = False) -> None:
+        try:
+            from weaviate.classes.config import (
+                Configure,
+                VectorDistances,
+            )
+        except ImportError:
+            raise LangroidImportError("weaviate", "weaviate")
         collection_name = WeaviateDB.validate_and_format_collection_name(
             collection_name
         )
@@ -207,6 +205,8 @@ class WeaviateDB(VectorStore):
         return [self.weaviate_obj_to_doc(item) for item in coll.iterator()]
 
     def get_documents_by_ids(self, ids: List[str]) -> List[Document]:
+        from weaviate.classes.query import Filter
+
         if self.config.collection_name is None:
             raise ValueError("No collection name set, cannot retrieve docs")
 
@@ -230,6 +230,8 @@ class WeaviateDB(VectorStore):
     def similar_texts_with_scores(
         self, text: str, k: int = 1, where: Optional[str] = None
     ) -> List[Tuple[Document, float]]:
+        from weaviate.classes.query import MetadataQuery
+
         embedding = self.embedding_fn([text])[0]
         if self.config.collection_name is None:
             raise ValueError("No collections name set,cannot search")
@@ -246,6 +248,8 @@ class WeaviateDB(VectorStore):
         return list(zip(docs, similarities))
 
     def _create_valid_uuid_id(self, id: str) -> Any:
+        from weaviate.util import generate_uuid5, get_valid_uuid
+
         try:
             id = get_valid_uuid(id)
             return id
@@ -253,6 +257,8 @@ class WeaviateDB(VectorStore):
             return generate_uuid5(id)
 
     def weaviate_obj_to_doc(self, input_object: Any) -> Document:
+        from weaviate.util import get_valid_uuid
+
         content = input_object.properties.get("content", "")
         metadata_dict = input_object.properties.get("metadata", {})
 

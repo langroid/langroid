@@ -5,7 +5,16 @@ Callbacks for Chainlit integration.
 import json
 import logging
 import textwrap
-from typing import Any, Callable, Dict, List, Literal, Optional, no_type_check
+from typing import (
+    TYPE_CHECKING,
+    Any,
+    Callable,
+    Dict,
+    List,
+    Literal,
+    Optional,
+    no_type_check,
+)
 
 from langroid.exceptions import LangroidImportError
 from langroid.pydantic_v1 import BaseSettings
@@ -18,7 +27,8 @@ except ImportError:
 from chainlit import run_sync
 from chainlit.logger import logger
 
-import langroid as lr
+if TYPE_CHECKING:
+    from langroid import Agent, Task
 import langroid.language_models as lm
 from langroid.language_models import StreamEventType
 from langroid.utils.configuration import settings
@@ -222,11 +232,11 @@ class ChainlitAgentCallbacks:
     last_step: Optional[cl.Step] = None  # used to display sub-steps under this
     curr_step: Optional[cl.Step] = None  # used to update an initiated step
     stream: Optional[cl.Step] = None  # pushed into openai_gpt.py to stream tokens
-    parent_agent: Optional[lr.Agent] = None  # used to get parent id, for step nesting
+    parent_agent: Optional["Agent"] = None  # used to get parent id, for step nesting
 
     def __init__(
         self,
-        agent: lr.Agent,
+        agent: "Agent",
         config: ChainlitCallbackConfig = ChainlitCallbackConfig(),
     ):
         """Add callbacks to the agent, and save the initial message,
@@ -245,7 +255,7 @@ class ChainlitAgentCallbacks:
         agent.callbacks.show_error_message = self.show_error_message
         agent.callbacks.show_start_response = self.show_start_response
         self.config = config
-        self.agent: lr.Agent = agent
+        self.agent: "Agent" = agent
         if self.agent.llm is not None:
             # We don't want to suppress LLM output in async + streaming,
             # since we often use chainlit async callbacks to display LLM output
@@ -271,7 +281,7 @@ class ChainlitAgentCallbacks:
         )
         return last_step.id  # type: ignore
 
-    def set_parent_agent(self, parent: lr.Agent) -> None:
+    def set_parent_agent(self, parent: "Agent") -> None:
         self.parent_agent = parent
 
     def get_last_step(self) -> Optional[cl.Step]:
@@ -559,7 +569,7 @@ class ChainlitTaskCallbacks(ChainlitAgentCallbacks):
 
     def __init__(
         self,
-        task: lr.Task,
+        task: "Task",
         config: ChainlitCallbackConfig = ChainlitCallbackConfig(),
     ):
         """Inject callbacks recursively, ensuring msg is passed to the
@@ -573,7 +583,7 @@ class ChainlitTaskCallbacks(ChainlitAgentCallbacks):
 
     @classmethod
     def _inject_callbacks(
-        cls, task: lr.Task, config: ChainlitCallbackConfig = ChainlitCallbackConfig()
+        cls, task: "Task", config: ChainlitCallbackConfig = ChainlitCallbackConfig()
     ) -> None:
         # recursively apply ChainlitAgentCallbacks to agents of sub-tasks
         for t in task.sub_tasks:
@@ -581,7 +591,7 @@ class ChainlitTaskCallbacks(ChainlitAgentCallbacks):
             # ChainlitTaskCallbacks(t, config=config)
 
     def show_subtask_response(
-        self, task: lr.Task, content: str, is_tool: bool = False
+        self, task: "Task", content: str, is_tool: bool = False
     ) -> None:
         """Show sub-task response as a step, nested at the right level."""
 

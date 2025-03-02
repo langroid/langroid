@@ -16,28 +16,11 @@ from dotenv import load_dotenv
 from langroid.exceptions import LangroidImportError
 from langroid.utils.object_registry import ObjectRegistry
 
-try:
+if TYPE_CHECKING:
+    import docling  # noqa
     import fitz
-except ImportError:
-    if not TYPE_CHECKING:
-        fitz = None
-try:
-    import pymupdf4llm
-except ImportError:
-    if not TYPE_CHECKING:
-        pymupdf4llm = None
-
-try:
-    import docling
-except ImportError:
-    if not TYPE_CHECKING:
-        docling = None
-
-try:
+    import pymupdf4llm  # noqa
     import pypdf
-except ImportError:
-    if not TYPE_CHECKING:
-        pypdf = None
 
 
 import requests
@@ -469,8 +452,10 @@ class FitzPDFParser(DocumentParser):
         Returns:
             Generator[fitz.Page]: Generator yielding each page.
         """
-        if fitz is None:
-            raise LangroidImportError("fitz", "pdf-parsers")
+        try:
+            import fitz
+        except ImportError:
+            LangroidImportError("fitz", "doc-chat")
         doc = fitz.open(stream=self.doc_bytes, filetype="pdf")
         for i, page in enumerate(doc):
             yield i, page
@@ -504,7 +489,10 @@ class PyMuPDF4LLMParser(DocumentParser):
         Returns:
             Generator[fitz.Page]: Generator yielding each page.
         """
-        if fitz is None:
+        try:
+            import pymupdf4llm  # noqa
+            import fitz
+        except ImportError:
             raise LangroidImportError(
                 "pymupdf4llm", ["pymupdf4llm", "all", "pdf-parsers", "doc-chat"]
             )
@@ -548,7 +536,9 @@ class DoclingParser(DocumentParser):
         Returns:
             Generator[docling.Page]: Generator yielding each page.
         """
-        if docling is None:
+        try:
+            import docling  # noqa
+        except ImportError:
             raise LangroidImportError(
                 "docling", ["docling", "pdf-parsers", "all", "doc-chat"]
             )
@@ -637,7 +627,9 @@ class PyPDFParser(DocumentParser):
         Returns:
             Generator[pypdf.pdf.PageObject]: Generator yielding each page.
         """
-        if pypdf is None:
+        try:
+            import pypdf
+        except ImportError:
             raise LangroidImportError("pypdf", "pdf-parsers")
         reader = pypdf.PdfReader(self.doc_bytes)
         for i, page in enumerate(reader.pages):
