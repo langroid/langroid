@@ -5,10 +5,10 @@ Enter vague, unstructured info like:
 
 M-F 8-3pm at home or Tue/Wed 9-1030am at daycare
 
-Run like this --
+Run like this -- (omit the -m arg for default gpt-4o-mini LLM)
 
 ```bash
-uv run examples/basic/schedule-extract.py -m
+uv run examples/basic/schedule-extract.py -m gpt-4o
 """
 
 import langroid as lr
