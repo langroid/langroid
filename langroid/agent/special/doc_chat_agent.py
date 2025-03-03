@@ -14,6 +14,7 @@ pip install "langroid[hf-embeddings]"
 
 """
 
+import importlib
 import logging
 from collections import OrderedDict
 from functools import cache
@@ -82,14 +83,13 @@ about them, or summarize them into coherent answers.
 """
 
 CHUNK_ENRICHMENT_DELIMITER = "\n<##-##-##>\n"
-
-has_sentence_transformers = False
 try:
-    from sentence_transformers import SentenceTransformer  # noqa: F401
-
-    has_sentence_transformers = True
-except ImportError:
-    pass
+    # Check if  module exists in sys.path
+    spec = importlib.util.find_spec("sentence_transformers")
+    has_sentence_transformers = spec is not None
+except Exception as e:
+    logger.warning(f"Error checking sentence_transformers: {e}")
+    has_sentence_transformers = False
 
 
 hf_embed_config = SentenceTransformerEmbeddingsConfig(
@@ -236,6 +236,7 @@ class DocChatAgent(ChatAgent):
         self.chunked_docs: List[Document] = []
         self.chunked_docs_clean: List[Document] = []
         self.response: None | Document = None
+
         if len(config.doc_paths) > 0:
             self.ingest()
 

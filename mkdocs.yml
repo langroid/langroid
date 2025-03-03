@@ -105,6 +105,7 @@ nav:
       - Async Streaming: notes/async-streaming.md
       - Knowledge Graphs: notes/knowledge-graphs.md
       - Gemini LLMs: notes/gemini.md
+      - Gemini LLMs Pdf Parsing: notes/gemini-pdf-parser.md  
       - Large Tool Results: notes/large-tool-results.md
       - GLHF.chat Support: notes/glhf-chat.md
       - Structured Output: notes/structured-output.md
@@ -126,6 +127,7 @@ nav:
       - Audience Targeting: demos/targeting/audience-targeting.md
   - Tutorials:
     - Langroid Tour: tutorials/langroid-tour.md
+    - Supported LLMs: tutorials/supported-models.md
     - Local LLM Setup: tutorials/local-llm-setup.md
     - Non-OpenAI LLMs: tutorials/non-openai-llms.md
     - SQLChatAgent: tutorials/postgresql-agent.md
