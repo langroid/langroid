@@ -13,9 +13,8 @@ uv run examples/basic/schedule-extract.py -m
 
 import langroid as lr
 import langroid.language_models as lm
-from enum import Enum
 from langroid.agent.tools.orchestration import FinalResultTool
-from typing import List, Dict, Tuple
+from typing import List, Dict, Literal, Tuple
 from langroid.pydantic_v1 import BaseModel, Field
 from rich.prompt import Prompt
 from fire import Fire
@@ -35,16 +34,7 @@ class DaySchedule(BaseModel):
     slots: List[Slot] = Field(..., description="List of time slots for the day")
 
 
-class Weekday(int, Enum):
-    """
-    A class to represent a weekday.
-    """
-
-    MON = 0
-    TUE = 1
-    WED = 2
-    THU = 3
-    FRI = 4
+Weekday = Literal["Mon", "Tue", "Wed", "Thu", "Fri"]
 
 
 class Availability(BaseModel):
@@ -52,11 +42,11 @@ class Availability(BaseModel):
     A class to represent schedule information.
     """
 
-    week_availability: Dict[int, DaySchedule] = Field(
+    week_availability: Dict[Weekday, DaySchedule] = Field(
         ...,
         description="""
         Dictionary mapping weekday to DaySchedule,
-        where 0 = Monday, 1 = Tuesday, ... 4 = Friday
+        where weekday is one of "Mon", "Tue", "Wed", "Thu", "Fri"
         """,
     )
 
@@ -82,7 +72,7 @@ class AvailabilityTool(lr.ToolMessage):
                 cls(
                     availabilities=Availability(
                         week_availability={
-                            Weekday.MON: DaySchedule(
+                            "Mon": DaySchedule(
                                 slots=[
                                     Slot(
                                         start_time="10:00",
@@ -96,7 +86,7 @@ class AvailabilityTool(lr.ToolMessage):
                                     ),
                                 ]
                             ),
-                            Weekday.WED: DaySchedule(
+                            "Wed": DaySchedule(
                                 slots=[
                                     Slot(
                                         start_time="10:00",
