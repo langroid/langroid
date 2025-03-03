@@ -69,12 +69,16 @@ LangDB can be used for both chat completions and embeddings:
 
 ```python
 from langroid.embedding_models.models import OpenAIEmbeddingsConfig
-from langroid.language_models.openai_gpt import OpenAIGPTConfig
+from langroid.language_models.openai_gpt import OpenAIGPTConfig, LangDBParams
 from langroid.vector_store.qdrant import QdrantDBConfig
+import os
+import uuid
 
-# Configure LLM
-from langroid.language_models.openai_gpt import LangDBParams
+# Generate IDs for request tracking
+run_id = str(uuid.uuid4())
+thread_id = str(uuid.uuid4())
 
+# Configure LLM with LangDBParams
 llm_config = OpenAIGPTConfig(
     chat_model="langdb/openai/gpt-4",  # LangDB model prefix
     api_key=os.getenv("LANGDB_API_KEY"),
@@ -98,18 +102,28 @@ vecdb_config = QdrantDBConfig(
 
 ### Custom Headers
 
-LangDB provides special headers for request tracking:
+LangDB provides special headers for request tracking through the LangDBParams class:
 
 ```python
 # Generate a thread ID
 import uuid
-thread_id = str(uuid.uuid4())
+import os
+from langroid.language_models.openai_gpt import OpenAIGPTConfig, LangDBParams
 
-# Configure with headers
+# Generate tracking IDs using UUID
+thread_id = str(uuid.uuid4())
+run_id = str(uuid.uuid4())  # Use UUID for run_id as well
+
+# Configure with LangDBParams
 config = OpenAIGPTConfig(
-    label="my-experiment",
-    thread_id=thread_id,
-    run_id="test-run-1"
+    chat_model="langdb/openai/gpt-4o-mini",
+    api_key=os.getenv("LANGDB_API_KEY"),
+    langdb_params=LangDBParams(
+        label="my-label",
+        thread_id=thread_id,
+        run_id=run_id,
+        project_id=os.getenv("LANGDB_PROJECT_ID")
+    )
 )
 ```
 
@@ -150,20 +164,28 @@ For more help, visit the [LangDB Documentation](https://docs.langdb.com).
 
 ```python
 # Generate a proper UUID for thread-id
-thread_id = str(uuid.uuid4())
+import uuid
+import os
+from langroid.language_models.openai_gpt import OpenAIGPTConfig, LangDBParams
 
-# Create a LangDB model configuration with custom headers
+thread_id = str(uuid.uuid4())
+run_id = str(uuid.uuid4())
+
+# Create a LangDB model configuration with LangDBParams
 langdb_config = OpenAIGPTConfig(
     chat_model="langdb/openai/gpt-4o-mini",
     api_key=os.environ.get("LANGDB_API_KEY", ""),
-    label='langroid',
-    run_id=run_id,
-    thread_id=thread_id
+    langdb_params=LangDBParams(
+        label='langroid',
+        run_id=run_id,
+        thread_id=thread_id,
+        project_id=os.environ.get("LANGDB_PROJECT_ID", "")
+    )
 )
 
-print(f"Headers: {langdb_config.headers}")
+# The headers will be automatically added to requests
 ```
 
-These headers allow you to track and organize your LangDB requests. While these headers can be used with any model provider, they are only meaningful when used with LangDB.
+These parameters allow you to track and organize your LangDB requests. While these parameters can be used with any model provider, they are only meaningful when used with LangDB.
 
-**Note**: The `thread_id` header must be a valid UUID format. The examples use `uuid.uuid4()` to generate a proper UUID.
+**Note**: The `thread_id` and `run_id` parameters must be a valid UUID format. The examples use `uuid.uuid4()` to generate a proper UUID.
