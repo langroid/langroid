@@ -4,6 +4,11 @@ Extract schedule/availability information from unstructured text.
 Enter vague, unstructured info like:
 
 M-F 8-3pm at home or Tue/Wed 9-1030am at daycare
+
+Run like this --
+
+```bash
+uv run examples/basic/schedule-extract.py -m
 """
 
 import langroid as lr
@@ -17,8 +22,8 @@ from fire import Fire
 
 
 class Slot(BaseModel):
-    start_time: float = Field(..., description="start time of the slot, e.g. 11:30AM")
-    duration: float = Field(..., description="duration of the slot in MINUTES")
+    start_time: str = Field(..., description="start time of the slot, e.g. 11:30AM")
+    end_time: str = Field(..., description="end time of the slot, e.g. 12:30PM")
     location: str = Field(..., description="location of the slot or UNKNOWN")
 
 
@@ -79,15 +84,25 @@ class AvailabilityTool(lr.ToolMessage):
                         week_availability={
                             Weekday.MON: DaySchedule(
                                 slots=[
-                                    Slot(start_time=10, duration=360, location="home"),
                                     Slot(
-                                        start_time=15, duration=60, location="daycare"
+                                        start_time="10:00",
+                                        end_time="16:00",
+                                        location="home",
+                                    ),
+                                    Slot(
+                                        start_time="15:00",
+                                        end_time="16:00",
+                                        location="daycare",
                                     ),
                                 ]
                             ),
                             Weekday.WED: DaySchedule(
                                 slots=[
-                                    Slot(start_time=10, duration=360, location="home")
+                                    Slot(
+                                        start_time="10:00",
+                                        end_time="16:00",
+                                        location="home",
+                                    )
                                 ]
                             ),
                         }
@@ -110,7 +125,7 @@ class AvailabilityTool(lr.ToolMessage):
 
 def make_schedule_task(model: str = ""):
     llm_config = lm.OpenAIGPTConfig(
-        chat_model=model or lm.GeminiModel.GEMINI_2_FLASH_LITE,
+        chat_model=model or lm.OpenAIChatModel.GPT4o_MINI,
     )
     agent = lr.ChatAgent(
         lr.ChatAgentConfig(
