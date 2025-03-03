@@ -5,6 +5,7 @@ Enter vague, unstructured info like:
 
 M-F 8-3pm at home or Tue/Wed 9-1030am at daycare
 """
+
 import langroid as lr
 import langroid.language_models as lm
 from enum import Enum
@@ -14,10 +15,12 @@ from langroid.pydantic_v1 import BaseModel, Field
 from rich.prompt import Prompt
 from fire import Fire
 
+
 class Slot(BaseModel):
     start_time: float = Field(..., description="start time of the slot, e.g. 11:30AM")
     duration: float = Field(..., description="duration of the slot in MINUTES")
     location: str = Field(..., description="location of the slot or UNKNOWN")
+
 
 class DaySchedule(BaseModel):
     """
@@ -26,16 +29,17 @@ class DaySchedule(BaseModel):
 
     slots: List[Slot] = Field(..., description="List of time slots for the day")
 
+
 class Weekday(int, Enum):
     """
     A class to represent a weekday.
     """
+
     MON = 0
     TUE = 1
     WED = 2
     THU = 3
     FRI = 4
-
 
 
 class Availability(BaseModel):
@@ -48,8 +52,9 @@ class Availability(BaseModel):
         description="""
         Dictionary mapping weekday to DaySchedule,
         where 0 = Monday, 1 = Tuesday, ... 4 = Friday
-        """
+        """,
     )
+
 
 class AvailabilityTool(lr.ToolMessage):
     request: str = "availability_tool"
@@ -59,7 +64,7 @@ class AvailabilityTool(lr.ToolMessage):
     availabilities: Availability
 
     @classmethod
-    def examples(cls) -> List["ToolMessage" | Tuple[str, "ToolMessage"]]:
+    def examples(cls) -> List["lr.ToolMessage" | Tuple[str, "lr.ToolMessage"]]:
         """
         Example of how to use the tool.
         """
@@ -75,11 +80,15 @@ class AvailabilityTool(lr.ToolMessage):
                             Weekday.MON: DaySchedule(
                                 slots=[
                                     Slot(start_time=10, duration=360, location="home"),
-                                    Slot(start_time=15, duration=60, location="daycare"),
+                                    Slot(
+                                        start_time=15, duration=60, location="daycare"
+                                    ),
                                 ]
                             ),
                             Weekday.WED: DaySchedule(
-                                slots=[Slot(start_time=10, duration=360, location="home")]
+                                slots=[
+                                    Slot(start_time=10, duration=360, location="home")
+                                ]
                             ),
                         }
                     )
@@ -98,7 +107,8 @@ class AvailabilityTool(lr.ToolMessage):
         print(self.availabilities.json(indent=2))
         return FinalResultTool(avails=self.availabilities)
 
-def make_schedule_task(model:str=""):
+
+def make_schedule_task(model: str = ""):
     llm_config = lm.OpenAIGPTConfig(
         chat_model=model or lm.GeminiModel.GEMINI_2_FLASH_LITE,
     )
@@ -118,14 +128,15 @@ def make_schedule_task(model:str=""):
             the day of the week to a DaySchedule object, which is a list of
             Slot objects. The Slot object contains the start time of the slot,
             the duration of the slot in minutes, and the location of the slot.
-            """
+            """,
         )
     )
     agent.enable_message(AvailabilityTool)
     task = lr.Task(agent, interactive=False, restart=True)[Availability]
     return task
 
-def main(model:str=""):
+
+def main(model: str = ""):
     task = make_schedule_task(model)
     while True:
         sched = Prompt.ask("Enter your schedule text")
