@@ -106,6 +106,15 @@ jobs:
             username: ${{ secrets.DOCKERHUB_USERNAME }}
             password: ${{ secrets.DOCKERHUB_TOKEN }}
   
+        - name: Determine Docker tag
+          id: docker_tag
+          run: |
+            if [ "${{ github.ref_type }}" == "tag" ]; then
+              echo "DOCKER_TAG=${GITHUB_REF#refs/tags/}" >> $GITHUB_ENV
+            else
+              echo "DOCKER_TAG=latest" >> $GITHUB_ENV
+            fi
+             
         - name: Create and push manifest
           run: |
             docker manifest create langroid/langroid:${{ env.DOCKER_TAG }} \
