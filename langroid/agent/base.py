@@ -1016,7 +1016,7 @@ class Agent(ABC):
             # we would have already displayed the msg "live" ONLY if
             # streaming was enabled, AND we did not find a cached response
             # If we are here, it means the response has not yet been displayed.
-            cached = f"[red]{self.indent}(cached)[/red]" if response.cached else ""
+            cached = "[red](cached)[/red]" if response.cached else ""
             console.print(f"[green]{self.indent}", end="")
             print(cached + "[green]" + escape(response.message))
         self.update_token_usage(
