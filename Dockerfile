@@ -32,7 +32,7 @@ RUN mkdir -p /root/.cache/uv
 ENV MAKEFLAGS="-j1"
 ENV PYTHONPYCACHEPREFIX="/tmp/pycache"
 ENV DEBIAN_FRONTEND=non-interactive \
-     LANG=en_US.UTF-8 \
+     LANG=en_US.UTF-8
 
 # detect arch to customize pymupdf version
 ARG TARGETPLATFORM
