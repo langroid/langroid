@@ -111,6 +111,7 @@ nav:
       - Structured Output: notes/structured-output.md
       - Tool Handler Name: notes/tool-message-handler.md
       - Llama.cpp Embeddings: notes/llama-cpp-embeddings.md
+      - Azure OpenAI models: notes/azure-openai-models.md
       - Custom Azure OpenAI client: notes/custom-azure-client.md
       - Enriching Chunks for Retrieval: notes/enriching-for-retrieval.md
       - Reasoning Content: notes/reasoning-content.md
