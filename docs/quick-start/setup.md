@@ -70,12 +70,6 @@ For many practical scenarios, you may need additional optional dependencies:
     For the best experience we recommend you work in a nice terminal that supports 
     colored outputs, such as [Iterm2](https://iterm2.com/).    
 
-!!! note "OpenAI GPT-4/GPT-4o is required"
-    The various LLM prompts and instructions in Langroid 
-    have been tested to work well with GPT-4 (and to some extent GPT-4o).
-    Switching to other LLMs (local/open and proprietary) is easy (see guides mentioned below),
-    and may suffice for some applications, but in general you may see inferior results
-    unless you adjust the prompts and/or the multi-agent setup.
 
 !!! note "mysqlclient errors"
     If you get strange errors involving `mysqlclient`, try doing `pip uninstall mysqlclient` followed by `pip install mysqlclient` 
