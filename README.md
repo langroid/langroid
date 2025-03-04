@@ -599,10 +599,8 @@ wget -O .env https://raw.githubusercontent.com/langroid/langroid/main/.env-templ
 # Edit the .env file with your favorite editor (here nano), and remove any un-used settings. E.g. there are "dummy" values like "your-redis-port" etc -- if you are not using them, you MUST remove them.
 nano .env
 
-# launch the container, for arm64 architecture:
-docker run -it --rm  -v ./.env:/langroid/.env langroid/langroid:latest-arm64
-# or for amd64 architecture:
-docker run -it --rm  -v ./.env:/langroid/.env langroid/langroid:latest-amd64
+# launch the container (the appropriate image for your architecture will be pulled automatically)
+docker run -it --rm  -v ./.env:/langroid/.env langroid/langroid:latest
 
 # Use this command to run any of the scripts in the `examples` directory
 python examples/<Path/To/Example.py> 

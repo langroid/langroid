@@ -162,6 +162,9 @@ provides more information, and you can set each environment variable as follows:
 - `AZURE_OPENAI_CHAT_MODEL` Azure OpenAI allows specific model names when you select the model for your deployment. You need to put precisely the exact model name that was selected. For example, GPT-3.5 (should be `gpt-35-turbo-16k` or `gpt-35-turbo`) or GPT-4 (should be `gpt-4-32k` or `gpt-4`).
 - `AZURE_OPENAI_MODEL_NAME` (Deprecated, use `AZURE_OPENAI_CHAT_MODEL` instead).
   
+!!! note "For Azure-based models use `AzureConfig` instead of `OpenAIGPTConfig`"
+    In most of the docs you will see that LLMs are configured using `OpenAIGPTConfig`.
+    However if you want to use Azure-deployed models, you should replace `OpenAIGPTConfig` with `AzureConfig`.
 
 
 ## Next steps
