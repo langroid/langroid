@@ -71,6 +71,7 @@ def main(
     load_dotenv()
 
     # use the appropriate config instance depending on model name
+    # NOTE: when using Azure, change this to `lm.AzureConfig`
     llm_config = lm.OpenAIGPTConfig(
         chat_model=model or lm.OpenAIChatModel.GPT4o,
         chat_context_length=4096,
