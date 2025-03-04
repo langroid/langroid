@@ -1,4 +1,5 @@
 name: Docker Publish
+
 env: 
   DOCKER_BUILDKIT: 1
   
@@ -49,7 +50,7 @@ jobs:
             langroid/langroid:latest-amd64
             langroid/langroid:${{ env.DOCKER_TAG }}-amd64
           build-args: |
-              BUILDKIT_INLINE_CACHE=1            
+            BUILDKIT_INLINE_CACHE=1
 
   build_arm64:
     name: Build Docker image for arm64
@@ -57,13 +58,13 @@ jobs:
 
     steps:
       - name: Check out the repo
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
       - name: Setup Docker Buildx
-        uses: docker/setup-buildx-action@v1
+        uses: docker/setup-buildx-action@v3
 
       - name: Login to Docker Hub
-        uses: docker/login-action@v1
+        uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
@@ -83,7 +84,7 @@ jobs:
           platforms: arm64
 
       - name: Build and push arm64
-        uses: docker/build-push-action@v2
+        uses: docker/build-push-action@v5
         with:
           context: .
           push: true
@@ -92,8 +93,8 @@ jobs:
             langroid/langroid:latest-arm64
             langroid/langroid:${{ env.DOCKER_TAG }}-arm64
           build-args: |
-              TARGETARCH=arm64
-              BUILDKIT_INLINE_CACHE=1            
+            TARGETARCH=arm64
+            BUILDKIT_INLINE_CACHE=1
 
   create_manifest:
     name: Create and push multi-arch manifest
@@ -105,15 +106,19 @@ jobs:
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
-  
+
       - name: Create and push latest manifest
         run: |
-          # Remove existing manifest if it exists
           docker manifest rm langroid/langroid:latest || true
-          
-          # Create and push latest manifest
           docker manifest create langroid/langroid:latest \
             langroid/langroid:latest-amd64 \
             langroid/langroid:latest-arm64
-          
           docker manifest push langroid/langroid:latest
+
+          # If the build is triggered by a git tag (e.g., 1.2.3), also create/push that manifest
+          if [ "${{ env.DOCKER_TAG }}" != "latest" ]; then
+            docker manifest rm langroid/langroid:${{ env.DOCKER_TAG }} || true
+            docker manifest create langroid/langroid:${{ env.DOCKER_TAG }} \
+              langroid/langroid:${{ env.DOCKER_TAG }}-amd64 \
+              langroid/langroid:${{ env.DOCKER_TAG }}-arm64
+            docker manifest push langroid/langroid:${{ env.DOCKER_TAG }}
