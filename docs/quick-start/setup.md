@@ -164,7 +164,9 @@ provides more information, and you can set each environment variable as follows:
   
 !!! note "For Azure-based models use `AzureConfig` instead of `OpenAIGPTConfig`"
     In most of the docs you will see that LLMs are configured using `OpenAIGPTConfig`.
-    However if you want to use Azure-deployed models, you should replace `OpenAIGPTConfig` with `AzureConfig`.
+    However if you want to use Azure-deployed models, you should replace `OpenAIGPTConfig` with `AzureConfig`. See 
+    the [`test_azure_openai.py`](https://github.com/langroid/langroid/blob/main/tests/main/test_azure_openai.py) and 
+    [`example/basic/chat.py`](https://github.com/langroid/langroid/blob/main/examples/basic/chat.py)
 
 
 ## Next steps
