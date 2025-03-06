@@ -157,7 +157,8 @@ docx = [
 ]
 
 marker-pdf = [
-    "marker-pdf[full]>=1.6.0; sys_platform != 'darwin' or platform_machine != 'x86_64'"
+    "marker-pdf[full]>=1.6.0; sys_platform != 'darwin' or platform_machine != 'x86_64'",
+    "opencv-python>=4.11.0.86",
 ]
 
 scrapy = [
