@@ -38,8 +38,13 @@ class GeminiConfig(BaseSettings):
     requests_per_minute: Optional[int] = 5
 
 
-class PdfParsingConfig(BaseParsingConfig):
+class MarkerConfig(BaseSettings):
+    """Configuration for Markitdown-based parsing."""
 
+    config_dict: Dict[str, Any] = {}
+
+
+class PdfParsingConfig(BaseParsingConfig):
     library: Literal[
         "fitz",
         "pymupdf4llm",
@@ -49,16 +54,26 @@ class PdfParsingConfig(BaseParsingConfig):
         "pdf2image",
         "markitdown",
         "gemini",
+        "marker",
     ] = "pymupdf4llm"
     gemini_config: Optional[GeminiConfig] = None
+    marker_config: Optional[MarkerConfig] = None
 
     @root_validator(pre=True)
-    def enable_gemini_config(cls, values: Dict[str, Any]) -> Dict[str, Any]:
-        """Ensure GeminiConfig is set only when library is 'gemini'."""
-        if values.get("library") == "gemini":
-            values["gemini_config"] = values.get("gemini_config") or GeminiConfig()
+    def enable_configs(cls, values: Dict[str, Any]) -> Dict[str, Any]:
+        """Ensure correct config is set based on library selection."""
+        library = values.get("library")
+
+        if library == "gemini":
+            values.setdefault("gemini_config", GeminiConfig())
         else:
             values["gemini_config"] = None
+
+        if library == "marker":
+            values.setdefault("marker_config", MarkerConfig())
+        else:
+            values["marker_config"] = None
+
         return values
 
 

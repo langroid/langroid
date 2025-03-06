@@ -150,6 +150,8 @@ class DocumentParser(Parser):
                 return ImagePdfParser(source, config)
             elif config.pdf.library == "gemini":
                 return GeminiPdfParser(source, config)
+            elif config.pdf.library == "marker":
+                return MarkerPdfParser(source, config)
             else:
                 raise ValueError(
                     f"Unsupported PDF library specified: {config.pdf.library}"
@@ -1354,5 +1356,87 @@ class GeminiPdfParser(DocumentParser):
         """
         return Document(
             content=page,
+            metadata=DocMetaData(source=self.source),
+        )
+
+
+class MarkerPdfParser(DocumentParser):
+    DEFAULT_CONFIG = {"paginate_output": True, "output_format": "markdown"}
+
+    def __init__(self, source: Union[str, bytes], config: ParsingConfig):
+        super().__init__(source, config)
+        user_config = (
+            config.pdf.marker_config.config_dict if config.pdf.marker_config else {}
+        )
+
+        self.config_dict = {**MarkerPdfParser.DEFAULT_CONFIG, **user_config}
+
+    def iterate_pages(self) -> Generator[Tuple[int, Any], None, None]:
+        """
+        Yield each page in the PDF using `marker`.
+        """
+        try:
+            from marker.converters.pdf import PdfConverter
+        except ImportError:
+            raise LangroidImportError(
+                "marker-pdf", ["marker-pdf", "pdf-parsers", "all", "doc-chat"]
+            )
+
+        import re
+
+        from marker.config.parser import ConfigParser
+        from marker.models import create_model_dict
+        from marker.output import save_output
+
+        config_parser = ConfigParser(self.config_dict)
+        converter = PdfConverter(
+            config=config_parser.generate_config_dict(),
+            artifact_dict=create_model_dict(),
+            processor_list=config_parser.get_processors(),
+            renderer=config_parser.get_renderer(),
+            llm_service=config_parser.get_llm_service(),
+        )
+        doc_path = self.source
+        if doc_path == "bytes":
+            # write to tmp file, then use that path
+            with tempfile.NamedTemporaryFile(delete=False, suffix=".pdf") as temp_file:
+                temp_file.write(self.doc_bytes.getvalue())
+                doc_path = temp_file.name
+
+        output_dir = Path(str(Path(doc_path).with_suffix("")) + "-pages")
+        os.makedirs(output_dir, exist_ok=True)
+        filename = Path(doc_path).stem + "_converted"
+
+        rendered = converter(doc_path)
+        save_output(rendered, output_dir=output_dir, fname_base=filename)
+        file_path = output_dir / f"{filename}.md"
+
+        with open(file_path, "r", encoding="utf-8") as f:
+            full_markdown = f.read()
+
+        # Corrected regex for splitting pages
+        pages = re.split(r"\{\d+\}----+", full_markdown)
+
+        # Remove leading/trailing empty pages
+        pages = [page.strip() for page in pages if page.strip()]
+
+        # Yield each page with its index
+        for i, page in enumerate(pages):
+            yield i, page
+
+    def get_document_from_page(self, page: str) -> Document:
+        """
+        Get Document object from a given 1-page markdown file,
+        possibly containing image refs.
+
+        Args:
+            page (str): The page we get by splitting large md file from
+            marker
+
+        Returns:
+            Document: Document object, with content and possible metadata.
+        """
+        return Document(
+            content=self.fix_text(page),
             metadata=DocMetaData(source=self.source),
         )
