@@ -1376,7 +1376,7 @@ class MarkerPdfParser(DocumentParser):
         Yield each page in the PDF using `marker`.
         """
         try:
-            from marker.converters.pdf import PdfConverter
+            import marker  # noqa
         except ImportError:
             raise LangroidImportError(
                 "marker-pdf", ["marker-pdf", "pdf-parsers", "all", "doc-chat"]
@@ -1385,6 +1385,7 @@ class MarkerPdfParser(DocumentParser):
         import re
 
         from marker.config.parser import ConfigParser
+        from marker.converters.pdf import PdfConverter
         from marker.models import create_model_dict
         from marker.output import save_output
 
