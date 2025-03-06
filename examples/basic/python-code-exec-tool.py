@@ -19,7 +19,6 @@ from langroid.pydantic_v1 import Field
 from langroid.agent.tools.orchestration import ResultTool
 import langroid as lr
 import langroid.language_models as lm
-from langroid.mytypes import NonToolAction
 
 
 def execute_code(code_string):
@@ -61,7 +60,7 @@ class PyCodeTool(lr.ToolMessage):
             Syntactically valid Python code that can be placed in file to 
             be run by the Python interpreter. MUST NOT CONTAIN any CODE-BLOCK
             delimiters like triple-backticks.
-            """
+            """,
     )
 
     def handle(self):
@@ -86,7 +85,8 @@ def main(model: str = ""):
             llm=llm_config,
             # handle LLM non-tool msg
             handle_llm_no_tool=lambda msg: ResultTool(
-                output=msg.content, success=True,
+                output=msg.content,
+                success=True,
             ),
             system_message=f"""
             You are an expert python coder. When you get a user's message, 
