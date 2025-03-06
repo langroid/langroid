@@ -1,5 +1,5 @@
 """
-Agent that uses a python code execution tool to execute code.
+Agent that uses a Tool to execute python code.
 
 CAUTION - this is a security risk, as it allows arbitrary code execution.
 This is a bare-bones example. For a real application, you would want to restrict
@@ -15,6 +15,7 @@ import io
 import contextlib
 from fire import Fire
 from rich.prompt import Prompt
+from langroid.pydantic_v1 import Field
 from langroid.agent.tools.orchestration import ResultTool
 import langroid as lr
 import langroid.language_models as lm
@@ -52,12 +53,19 @@ def execute_code(code_string):
 
 class PyCodeTool(lr.ToolMessage):
     request: str = "py_code_tool"
-    purpose: str = "To execute a python <code_block> and return results"
+    purpose: str = "To execute python <code> and return results"
 
-    code_block: str
+    code: str = Field(
+        ...,
+        description="""
+            Syntactically valid Python code that can be placed in file to 
+            be run by the Python interpreter. MUST NOT CONTAIN any CODE-BLOCK
+            delimiters like triple-backticks.
+            """
+    )
 
     def handle(self):
-        output, local_vars, success = execute_code(self.code_block)
+        output, local_vars, success = execute_code(self.code)
         if success:
             print("Successfully ran code. Results:")
             print(output)
@@ -74,21 +82,25 @@ def main(model: str = ""):
     )
     agent = lr.ChatAgent(
         lr.ChatAgentConfig(
+            name="Coder",
             llm=llm_config,
-            # LLM non-tool msg -> treat as task done
-            handle_llm_no_tool=NonToolAction.DONE,
+            # handle LLM non-tool msg
+            handle_llm_no_tool=lambda msg: ResultTool(
+                output=msg.content, success=True,
+            ),
             system_message=f"""
             You are an expert python coder. When you get a user's message, 
             respond as follows:
-            - if you think the user's message requires you to write code,
-                then use the TOOL `{PyCodeTool.name()}` to perform the task.
+            - if you think you need to run Python code,
+                use the TOOL `{PyCodeTool.name()}` to perform the task.
             - otherwise simply respond to the user's message.
             """,
         )
     )
     agent.enable_message(PyCodeTool)
     # task specialized to return ResultTool
-    task = lr.Task(agent, interactive=False)[ResultTool]
+    # set restart to False to maintain conv history across `run` calls
+    task = lr.Task(agent, interactive=False, restart=False)[ResultTool]
 
     while True:
         user_input = Prompt.ask("User")
