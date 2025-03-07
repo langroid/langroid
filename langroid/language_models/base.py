@@ -3,6 +3,7 @@ import logging
 from abc import ABC, abstractmethod
 from datetime import datetime
 from enum import Enum
+from itertools import chain
 from typing import (
     Any,
     Awaitable,
@@ -19,7 +20,18 @@ from typing import (
 
 from langroid.cachedb.base import CacheDBConfig
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
-from langroid.language_models.model_info import ModelInfo, get_model_info
+from langroid.language_models.anthropic import (
+    AnthropicToolCall,
+    AnthropicToolSpec,
+)
+from langroid.language_models.model_info import (
+    AnthropicModel,
+    ModelInfo,
+    ModelName,
+    OpenAIChatModel,
+    OpenAICompletionModel,
+    get_model_info,
+)
 from langroid.parsing.agent_chats import parse_message
 from langroid.parsing.parse_json import parse_imperfect_json, top_level_json_field
 from langroid.prompts.dialog import collate_chat_history
@@ -38,9 +50,30 @@ async def async_noop_fn(*args: List[Any], **kwargs: Dict[str, Any]) -> None:
     pass
 
 
+def filter_default_model(
+    preferred_models: (
+        List[ModelName]
+        | List[OpenAIChatModel]
+        | List[OpenAICompletionModel]
+        | List[AnthropicModel]
+    ),
+    available_models: set[str],
+    default: (
+        List[ModelName]
+        | List[OpenAIChatModel]
+        | List[OpenAICompletionModel]
+        | List[AnthropicModel]
+    ),
+) -> str:
+    return next(
+        chain(filter(lambda m: m.value in available_models, preferred_models), default)
+    )
+
+
 FunctionCallTypes = Literal["none", "auto"]
 ToolChoiceTypes = Literal["none", "auto", "required"]
 ToolTypes = Literal["function"]
+ToolVariants = Literal["OpenAI", "Anthropic"]
 
 
 class StreamEventType(Enum):
@@ -49,6 +82,20 @@ class StreamEventType(Enum):
     FUNC_ARGS = 3
     TOOL_NAME = 4
     TOOL_ARGS = 5
+
+
+class LLMCallConfig(BaseModel):
+    """
+    Class commodifying common model API call parameters
+    to reduce duplication.
+    """
+
+    max_tokens: int = 1024
+    temperature: float = 0.2
+    top_p: float | None = None
+
+    def to_dict_exclude_none(self) -> Dict[str, Any]:
+        return {k: v for k, v in self.dict().items() if v is not None}
 
 
 class LLMConfig(BaseSettings):
@@ -80,6 +127,8 @@ class LLMConfig(BaseSettings):
     # reasoning output from reasoning models
     cache_config: None | CacheDBConfig = RedisCacheConfig()
     thought_delimiters: Tuple[str, str] = ("<think>", "</think>")
+    litellm: bool = True
+    ollama: bool = True
 
     # Dict of model -> (input/prompt cost, output/completion cost)
     chat_cost_per_1k_tokens: Tuple[float, float] = (0.0, 0.0)
@@ -179,6 +228,11 @@ class OpenAIToolCall(BaseModel):
         if self.function is None:
             return ""
         return "OAI-TOOL: " + json.dumps(self.function.dict(), indent=2)
+
+
+class ToolVariantSelector(BaseModel):
+    open_ai: Optional[List[OpenAIToolCall]] = None
+    anthropic: Optional[List[AnthropicToolSpec]] = None
 
 
 class OpenAIToolSpec(BaseModel):
@@ -331,6 +385,7 @@ class LLMResponse(BaseModel):
     # TODO tool_id needs to generalize to multi-tool calls
     tool_id: str = ""  # used by OpenAIAssistant
     oai_tool_calls: Optional[List[OpenAIToolCall]] = None
+    anthropic_tool_calls: Optional[List[AnthropicToolCall]] = None
     function_call: Optional[LLMFunctionCall] = None
     usage: Optional[LLMTokenUsage] = None
     cached: bool = False
@@ -559,6 +614,9 @@ class LanguageModel(ABC):
         max_tokens: int = 200,
         tools: Optional[List[OpenAIToolSpec]] = None,
         tool_choice: ToolChoiceTypes | Dict[str, str | Dict[str, str]] = "auto",
+        tool_variants: ToolVariantSelector = ToolVariantSelector(
+            open_ai=[], anthropic=[]
+        ),
         functions: Optional[List[LLMFunctionSpec]] = None,
         function_call: str | Dict[str, str] = "auto",
         response_format: Optional[OpenAIJsonSchemaSpec] = None,
