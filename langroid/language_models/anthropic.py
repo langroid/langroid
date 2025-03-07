@@ -2,7 +2,7 @@ import logging
 import os
 import sys
 from enum import Enum
-from typing import Any, Dict, List, Optional, Union
+from typing import Any, Dict, List, Optional, Union, no_type_check
 
 import anthropic.types
 from anthropic import (
@@ -16,7 +16,7 @@ from anthropic import (
     Timeout,
     UnprocessableEntityError,
 )
-from anthropic.types import Message, RawMessageStreamEvent
+from anthropic.types import RawMessageStreamEvent
 from rich import print
 
 from langroid.language_models import (
@@ -30,8 +30,11 @@ from langroid.language_models import (
 from langroid.language_models.base import (
     LanguageModel,
     LLMCallConfig,
+    OpenAIJsonSchemaSpec,
+    OpenAIToolSpec,
     Role,
     ToolChoiceTypes,
+    ToolVariantSelector,
     filter_default_model,
 )
 from langroid.language_models.model_info import (
@@ -116,25 +119,14 @@ class AnthropicSystemMessage(BaseModel):
     cache_control: Optional[AnthropicSystemCacheControl] = None
     citation: Optional[AnthropicCitationBase] = None
 
-    def to_dict(self):
-        res = {
-            "type": self.type,
-            "text": self.text,
-        }
-        if self.cache_control:
-            res["cache_control"] = self.cache_control.model_dump()
-        if self.citation:
-            res["citation"] = self.citation.model_dump()
-        return res
-
 
 class AnthropicSystemConfig(BaseModel):
-    system_prompts: str | List[AnthropicSystemMessage] | None = None
+    system_prompts: str | List[AnthropicSystemMessage] = "You are a helpful assistant."
 
     def prepare_system_prompt(self) -> Union[str, list[Dict[str, Any]]]:
         if isinstance(self.system_prompts, list):
-            return [prompt.model_dump() for prompt in self.system_prompts]
-        return self.text
+            return [prompt.dict() for prompt in self.system_prompts]
+        return self.system_prompts
 
 
 class AnthropicToolChoice(BaseModel):
@@ -149,7 +141,7 @@ class AnthropicToolChoice(BaseModel):
     disable_parallel_tool_use: bool = False
 
 
-class AnthropicToolDefinition(BaseModel):
+class AnthropicToolSpec(BaseModel):
     """
     Class defining an available tool
     that Anthropic can potentially leverage.
@@ -232,7 +224,7 @@ class AnthropicLLMConfig(LLMConfig):
     completion_model = default_anthropic_completion_model
     system_config: AnthropicSystemConfig | None = None
 
-    def __init__(self, **kwargs):
+    def __init__(self, **kwargs) -> None:  # type: ignore
         super().__init__(**kwargs)
 
 
@@ -281,21 +273,24 @@ class AnthropicLLM(LanguageModel):
         )
 
     def generate(self, prompt: str, max_tokens: int = 200) -> LLMResponse:
-        pass
+        return LLMResponse(message="TODO")
 
-    def agenerate(self, prompt: str, max_tokens: int = 200) -> LLMResponse:
-        pass
+    async def agenerate(self, prompt: str, max_tokens: int = 200) -> LLMResponse:
+        return LLMResponse(message="TODO")
 
     def chat(
         self,
         messages: Union[str, List[LLMMessage]],
         max_tokens: int = 200,
-        tools: Optional[List[AnthropicToolDefinition]] = None,
+        tools: Optional[List[OpenAIToolSpec]] = None,
         tool_choice: ToolChoiceTypes | Dict[str, str | Dict[str, str]] = "auto",
-        functions=None,
-        function_call=None,
-        response_format=None,
-    ):
+        tool_variants: ToolVariantSelector = ToolVariantSelector(
+            open_ai=[], anthropic=[]
+        ),
+        functions: list[LLMFunctionSpec] | None = None,
+        function_call: str | dict[str, str] = "",
+        response_format: OpenAIJsonSchemaSpec | None = None,
+    ) -> LLMResponse:
         """
         Get chat-completion response from an Anthropic API call
 
@@ -332,30 +327,35 @@ class AnthropicLLM(LanguageModel):
             return self._chat_helper(
                 messages=messages,
                 max_tokens=max_tokens,
-                tools=tools,
+                tools=tool_variants.anthropic,
                 tool_choice=tool_choice,
             )
         except Exception as e:
             logging.error("Error in AnthropicLLM::chat")
             raise e
 
-    def achat(
+    async def achat(
         self,
         messages: Union[str, List[LLMMessage]],
         max_tokens: int = 200,
-        tools: Optional[List[AnthropicToolDefinition]] = None,
+        tools: Optional[List[OpenAIToolSpec]] = None,
         tool_choice: ToolChoiceTypes | Dict[str, str | Dict[str, str]] = "auto",
-        functions=None,
-        function_call=None,
-        response_format=None,
+        functions: list[LLMFunctionSpec] | None = None,
+        function_call: str | dict[str, str] = "",
+        response_format: OpenAIJsonSchemaSpec | None = None,
     ) -> LLMResponse:
-        pass
+        return LLMResponse(message="TODO")
 
     @retry_with_exponential_backoff(
         retryable_errors=retryable_anthropic_errors,
         terminal_errors=terminal_anthropic_errors,
     )
-    def _chat_completion_with_retry_backoff(self, **kwargs):
+    def _chat_completion_with_retry_backoff(self, **kwargs):  # type: ignore
+        try:
+            assert self.client
+        except AssertionError as e:
+            logging.error("Anthropic client is not defined on message call.")
+            raise e
         messages_call = self.client.messages.create
         return messages_call(**kwargs)
 
@@ -363,8 +363,8 @@ class AnthropicLLM(LanguageModel):
         self,
         messages: Union[str, List[LLMMessage]],
         max_tokens: int,
-        tools: Optional[List[AnthropicToolDefinition]],
-        tool_choice: ToolChoiceTypes | Dict[str, str | Dict[str, str]] = "auto",
+        tools: Optional[List[AnthropicToolSpec]],
+        tool_choice: ToolChoiceTypes | Dict[str, str | Dict[str, str]],
     ) -> LLMResponse:
         """
         Chat completion API calls to Anthropic
@@ -375,7 +375,10 @@ class AnthropicLLM(LanguageModel):
         response = self._chat_completion_with_retry_backoff(**args)
         # we need to check if its a stream response
         if self.get_stream():
-            return self._stream_response(response=response, chat=True)
+            stream_response: LLMResponse = self._stream_response(
+                response=response, chat=True
+            )
+            return stream_response
         # else we parse the response and return it
         if isinstance(response, dict):
             response_dict = response
@@ -436,7 +439,7 @@ class AnthropicLLM(LanguageModel):
         tools = []
         for block in content:
             if block.get("type") == AnthropicStopReason.TOOL_USE.value:
-                tools.append(AnthropicToolCall.from_dict(block))
+                tools.append(AnthropicToolCall.parse_obj(block))
         return tools
 
     def _parse_usage_from_response(
@@ -458,7 +461,13 @@ class AnthropicLLM(LanguageModel):
         prompt, generation = self.chat_cost()
         return (prompt * input_tokens + generation * output_tokens) / 1000
 
-    def _prep_chat_args(self, messages, max_tokens, tools, tool_choice):
+    def _prep_chat_args(
+        self,
+        messages: str | List[LLMMessage],
+        max_tokens: int,
+        tools: Optional[List[AnthropicToolSpec]],
+        tool_choice: ToolChoiceTypes | Dict[str, str | Dict[str, str]],
+    ) -> Dict[str, Any]:
         """
         Helper function to prepare payload to send to Anthropic's chat model API.
         """
@@ -480,11 +489,10 @@ class AnthropicLLM(LanguageModel):
         # Instead of a system role, Anthropic has an option to define
         # the system behavior separately in the API call; if a user
         # has set up the system config option, we populate it here
-        if self.config.system_config.system_prompts:
+        if self.config.system_config and self.config.system_config.system_prompts:
             args["system"] = self.config.system_config.prepare_system_prompt()
 
-        if tool_choice is not None:
-            args["tool_choice"] = tool_choice.dict()
+        args["tool_choice"] = tool_choice
 
         if tools is not None:
             args["tools"] = [t.dict() for t in tools]
@@ -497,7 +505,7 @@ class AnthropicLLM(LanguageModel):
         retryable_errors=retryable_anthropic_errors,
         terminal_errors=terminal_anthropic_errors,
     )
-    def _stream_response(self, response, chat: bool = False):
+    def _stream_response(self, response, chat: bool = False) -> LLMResponse:  # type: ignore
         """
         Grab and print streaming response from Anthropic Messages API
         with server sent events (https://docs.anthropic.com/en/api/messages-streaming).
@@ -506,15 +514,15 @@ class AnthropicLLM(LanguageModel):
         """
         completion = ""
         reasoning = ""
-        tool_usage = {}
-        tool_partials = {}
+        tool_usage: Dict[int, AnthropicToolCall] = {}
+        tool_partials: Dict[int, List[str]] = {}
 
-        sys.stdout.write(Colors().Green)
+        sys.stdout.write(Colors().GREEN)
         sys.stdout.flush()
 
         try:
             for event in response:
-                synchronous_stream = self._process_stream_event(
+                synchronous_stream = self._process_stream_event(  # type: ignore
                     event=event,
                     tool_usage=tool_usage,
                     tool_partials=tool_partials,
@@ -533,6 +541,7 @@ class AnthropicLLM(LanguageModel):
             tool_usage=tool_usage, completion=completion, reasoning=reasoning
         )
 
+    @no_type_check
     def _process_stream_event(
         self,
         event: RawMessageStreamEvent,
@@ -658,9 +667,9 @@ class AnthropicLLM(LanguageModel):
 
     def _create_stream_response(
         self,
-        tool_usage,
-        completion,
-        reasoning,
+        tool_usage: Dict[int, AnthropicToolCall],
+        completion: str,
+        reasoning: str,
     ) -> LLMResponse:
         """
         Create an LLMResponse object from the Messages API streaming response.
@@ -669,5 +678,5 @@ class AnthropicLLM(LanguageModel):
             message=completion,
             reasoning=reasoning,
             cached=False,
-            anthropic_tool_calls=tool_usage.keys() if tool_usage else None,
+            anthropic_tool_calls=list(tool_usage.values()) if tool_usage else None,
         )

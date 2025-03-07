@@ -20,7 +20,10 @@ from typing import (
 
 from langroid.cachedb.base import CacheDBConfig
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
-from langroid.language_models.anthropic import AnthropicToolCall
+from langroid.language_models.anthropic import (
+    AnthropicToolCall,
+    AnthropicToolSpec,
+)
 from langroid.language_models.model_info import (
     AnthropicModel,
     ModelInfo,
@@ -70,6 +73,7 @@ def filter_default_model(
 FunctionCallTypes = Literal["none", "auto"]
 ToolChoiceTypes = Literal["none", "auto", "required"]
 ToolTypes = Literal["function"]
+ToolVariants = Literal["OpenAI", "Anthropic"]
 
 
 class StreamEventType(Enum):
@@ -224,6 +228,11 @@ class OpenAIToolCall(BaseModel):
         if self.function is None:
             return ""
         return "OAI-TOOL: " + json.dumps(self.function.dict(), indent=2)
+
+
+class ToolVariantSelector(BaseModel):
+    open_ai: Optional[List[OpenAIToolCall]] = None
+    anthropic: Optional[List[AnthropicToolSpec]] = None
 
 
 class OpenAIToolSpec(BaseModel):
@@ -605,6 +614,9 @@ class LanguageModel(ABC):
         max_tokens: int = 200,
         tools: Optional[List[OpenAIToolSpec]] = None,
         tool_choice: ToolChoiceTypes | Dict[str, str | Dict[str, str]] = "auto",
+        tool_variants: ToolVariantSelector = ToolVariantSelector(
+            open_ai=[], anthropic=[]
+        ),
         functions: Optional[List[LLMFunctionSpec]] = None,
         function_call: str | Dict[str, str] = "auto",
         response_format: Optional[OpenAIJsonSchemaSpec] = None,

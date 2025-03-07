@@ -44,6 +44,7 @@ from langroid.language_models.base import (
     Role,
     StreamEventType,
     ToolChoiceTypes,
+    ToolVariantSelector,
     filter_default_model,
 )
 from langroid.language_models.config import HFPromptFormatterConfig
@@ -1483,6 +1484,9 @@ class OpenAIGPT(LanguageModel):
         max_tokens: int = 200,
         tools: Optional[List[OpenAIToolSpec]] = None,
         tool_choice: ToolChoiceTypes | Dict[str, str | Dict[str, str]] = "auto",
+        tool_variants: ToolVariantSelector = ToolVariantSelector(
+            open_ai=[], anthropic=[]
+        ),
         functions: Optional[List[LLMFunctionSpec]] = None,
         function_call: str | Dict[str, str] = "auto",
         response_format: Optional[OpenAIJsonSchemaSpec] = None,
