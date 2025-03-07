@@ -1415,15 +1415,14 @@ class MarkerPdfParser(DocumentParser):
         with open(file_path, "r", encoding="utf-8") as f:
             full_markdown = f.read()
 
-        # Corrected regex for splitting pages
+        # Regex for splitting pages
         pages = re.split(r"\{\d+\}----+", full_markdown)
 
-        # Remove leading/trailing empty pages
-        pages = [page.strip() for page in pages if page.strip()]
-
-        # Yield each page with its index
-        for i, page in enumerate(pages):
-            yield i, page
+        page_no = 0
+        for page in pages:
+            if page.strip():
+                yield page_no, page
+            page_no += 1
 
     def get_document_from_page(self, page: str) -> Document:
         """
