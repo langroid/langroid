@@ -6,7 +6,8 @@
 ## **Installation**  
 
 ### **Standard Installation**  
-To use `marker` as a PDF parser in `langroid`, install it with:  
+To use [`marker`](https://github.com/VikParuchuri/marker) as a PDF parser in `langroid`, 
+install it with:  
 
 ```bash
 pip install langroid[marker-pdf]
