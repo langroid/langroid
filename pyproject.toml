@@ -70,6 +70,7 @@ doc-chat = [
     "pytesseract<0.4.0,>=0.3.10",
     "python-docx<2.0.0,>=1.1.0",
     "unstructured[docx,pdf,pptx]<1.0.0,>=0.16.15",
+    "marker-pdf"
 ]
 
 hf-transformers = [
@@ -122,6 +123,7 @@ all = [
     "fastembed<0.4.0,>=0.3.1",
     "pgvector>=0.3.6",
     "psycopg2-binary>=2.9.10",
+    "marker-pdf",
 ]
 
 # More granular groupings
@@ -147,10 +149,16 @@ pdf-parsers = [
     "pdf2image<2.0.0,>=1.17.0",
     "pytesseract<0.4.0,>=0.3.10",
     "markitdown>=0.0.1a3",
+    "marker-pdf",
 ]
 
 docx = [
     "python-docx<2.0.0,>=1.1.0",
+]
+
+marker-pdf = [
+    "marker-pdf[full]>=1.6.0; sys_platform != 'darwin' or platform_machine != 'x86_64'",
+    "opencv-python>=4.11.0.86",
 ]
 
 scrapy = [

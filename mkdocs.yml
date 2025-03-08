@@ -120,6 +120,7 @@ nav:
       - PGVector: notes/pgvector.md
       - Pinecone: notes/pinecone.md
       - Tavily Search Tool: notes/tavily_search.md
+      - Marker Pdf Parser: notes/marker-pdf.md
 
   - Examples:
     - Guide: examples/guide.md
