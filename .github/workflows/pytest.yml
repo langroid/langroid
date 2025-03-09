@@ -183,7 +183,6 @@ jobs:
         PYTEST_ADDOPTS: "-p no:logging"
       run: |
         uv run pytest --m gpt-4o-mini --cov langroid --cov-config .coveragerc \
-          --junitxml=test-results-1.xml \
           -rf -vv --log-cli-level=INFO --show-capture=no \
           -n auto --timeout=300 \
           --first-test-file=tests/main/sql_chat/test_sql_chat_agent.py \
@@ -206,7 +205,6 @@ jobs:
         PYTEST_ADDOPTS: "-p no:logging"
       run: |
         uv run pytest --cov langroid --cov-append --cov-config .coveragerc \
-          --junitxml=test-results-2.xml \
           -rf -vv --log-cli-level=INFO --show-capture=no \
           -n auto --timeout=300 \
           --first-test-file=tests/main/sql_chat/test_sql_chat_agent.py \
@@ -227,7 +225,7 @@ jobs:
         PYTEST_ADDOPTS: "-p no:logging"
       run: |
         uv run pytest --nc --cov langroid --cov-append --cov-config .coveragerc \
-          --junitxml=test-results-3.xml \
+          --junitxml=test-results.xml \
           -rf --show-capture=no --timeout=300 -n auto \
           --first-test-file=tests/main/sql_chat/test_sql_chat_agent.py \
           --first-test-file=tests/main/test_llm.py \
@@ -247,7 +245,7 @@ jobs:
       uses: EnricoMi/publish-unit-test-result-action@v2
       if: always()
       with:
-        files: "test-results-*.xml"
+        files: "test-results.xml"
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v4
       with:
