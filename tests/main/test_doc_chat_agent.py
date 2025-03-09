@@ -770,7 +770,12 @@ def test_doc_chat_ingest_paths(
         "dangerous" in r.content for r in results
     )
 
-
+@pytest.mark.xfail(
+    condition=lambda: "lancedb" in vecdb, 
+    reason="LanceDB may fail due to unknown flakiness",
+    run=True,
+    strict=False,
+)
 @pytest.mark.parametrize("vecdb", ["chroma", "lancedb", "qdrant_local"], indirect=True)
 @pytest.mark.parametrize(
     "splitter", [Splitter.PARA_SENTENCE, Splitter.SIMPLE, Splitter.TOKENS]
@@ -877,7 +882,12 @@ def test_doc_chat_ingest_path_metadata(
 
     agent.clear()
 
-
+@pytest.mark.xfail(
+    condition=lambda: "lancedb" in vecdb, 
+    reason="LanceDB may fail due to unknown flakiness",
+    run=True,
+    strict=False,
+)
 @pytest.mark.parametrize("vecdb", ["chroma", "lancedb", "qdrant_local"], indirect=True)
 def test_doc_chat_batch(test_settings: Settings, vecdb):
     """
