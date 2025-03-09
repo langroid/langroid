@@ -85,6 +85,8 @@ class ChatAgentConfig(AgentConfig):
             enabled when such tool calls are not desired.
         output_format_include_defaults: Whether to include fields with default arguments
             in the output schema
+        full_citations: Whether to show source reference citation + content for each
+            citation, or just the main reference citation.
     """
 
     system_message: str = "You are a helpful assistant."

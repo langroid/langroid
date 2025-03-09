@@ -1363,8 +1363,7 @@ class Agent(ABC):
 
         has_orch = any(isinstance(t, ORCHESTRATION_TOOLS) for t in tools)
         if has_orch and len(tools) > 1:
-            err_str = "ERROR: Use ONE tool at a time!"
-            return [err_str for _ in tools]
+            return ["ERROR: Use ONE tool at a time!"] * len(tools)
 
         return []
 
@@ -1499,8 +1498,6 @@ class Agent(ABC):
             # as a response to the tool message even though the tool was not intended
             # for this agent.
             return None
-        if len(tools) > 1 and not self.config.allow_multiple_tools:
-            return self.to_ChatDocument("ERROR: Use ONE tool at a time!")
         if len(tools) == 0:
             fallback_result = self.handle_message_fallback(msg)
             if fallback_result is None:
@@ -1509,10 +1506,14 @@ class Agent(ABC):
                 fallback_result,
                 chat_doc=msg if isinstance(msg, ChatDocument) else None,
             )
-        chat_doc = msg if isinstance(msg, ChatDocument) else None
 
-        results = self._get_multiple_orch_tool_errs(tools)
+        results: List[str | ChatDocument | None] = []
+        if len(tools) > 1 and not self.config.allow_multiple_tools:
+            results = ["ERROR: Use ONE tool at a time!"] * len(tools)
         if not results:
+            results = self._get_multiple_orch_tool_errs(tools)
+        if not results:
+            chat_doc = msg if isinstance(msg, ChatDocument) else None
             results = [self.handle_tool_message(t, chat_doc=chat_doc) for t in tools]
             # if there's a solitary ChatDocument|str result, return it as is
             if len(results) == 1 and isinstance(results[0], (str, ChatDocument)):
