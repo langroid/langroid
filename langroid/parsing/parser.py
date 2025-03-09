@@ -103,6 +103,9 @@ class ParsingConfig(BaseSettings):
     chunk_size: int = 200  # aim for this many tokens per chunk
     overlap: int = 50  # overlap between chunks
     max_chunks: int = 10_000
+    # offset to subtract from page numbers:
+    # e.g. if physical page 12 is displayed as page 1, set page_number_offset = 11
+    page_number_offset: int = 0
     # aim to have at least this many chars per chunk when truncating due to punctuation
     min_chunk_chars: int = 350
     discard_chunk_chars: int = 5  # discard chunks with fewer than this many chars

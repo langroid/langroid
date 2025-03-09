@@ -404,8 +404,8 @@ class DocumentParser(Parser):
             # that it needs to be combined with the next chunk.
             while len(split) > self.config.chunk_size:
                 # pretty formatting of pages (e.g. 1-3, 4, 5-7)
-                p_0 = int(pages[0])
-                p_n = int(pages[-1])
+                p_0 = int(pages[0]) - self.config.page_number_offset
+                p_n = int(pages[-1]) - self.config.page_number_offset
                 page_str = f"pages {p_0}-{p_n}" if p_0 != p_n else f"page {p_0}"
                 text = self.tokenizer.decode(split[: self.config.chunk_size])
                 docs.append(
@@ -426,8 +426,8 @@ class DocumentParser(Parser):
         # since it's already included in the prior chunk;
         # the only exception is if there have been no chunks so far.
         if len(split) > self.config.overlap or n_chunks == 0:
-            p_0 = int(pages[0])
-            p_n = int(pages[-1])
+            p_0 = int(pages[0]) - self.config.page_number_offset
+            p_n = int(pages[-1]) - self.config.page_number_offset
             page_str = f"pages {p_0}-{p_n}" if p_0 != p_n else f"page {p_0}"
             text = self.tokenizer.decode(split[: self.config.chunk_size])
             docs.append(
