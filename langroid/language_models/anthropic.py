@@ -18,6 +18,7 @@ from anthropic import (
 )
 from anthropic.types import RawMessageStreamEvent
 from rich import print
+from rich.markup import escape
 
 from langroid.language_models import (
     LLMConfig,
@@ -28,10 +29,13 @@ from langroid.language_models import (
     StreamEventType,
 )
 from langroid.language_models.base import (
+    AnthropicSystemCacheControl,
+    AnthropicToolSpec,
     LanguageModel,
     LLMCallConfig,
     OpenAIJsonSchemaSpec,
     OpenAIToolSpec,
+    PromptVariants,
     Role,
     ToolChoiceTypes,
     ToolVariantSelector,
@@ -66,11 +70,6 @@ default_anthropic_chat_model = filter_default_model(
     available_models,
     [AnthropicChatModels.CLAUDE_3_5_HAIKU],
 )
-default_anthropic_completion_model = filter_default_model(
-    anthropic_chat_model_pref_list,
-    available_models,
-    [AnthropicChatModels.CLAUDE_3_5_HAIKU],
-)
 
 retryable_anthropic_errors = base_retry_errors + (
     APITimeoutError,
@@ -83,10 +82,6 @@ terminal_anthropic_errors = (
     AuthenticationError,
     UnprocessableEntityError,
 )
-
-
-class AnthropicSystemCacheControl(BaseModel):
-    type: str = "ephemeral"
 
 
 class AnthropicCitationBase(BaseModel):
@@ -139,22 +134,6 @@ class AnthropicToolChoice(BaseModel):
 
     type: str = "auto"
     disable_parallel_tool_use: bool = False
-
-
-class AnthropicToolSpec(BaseModel):
-    """
-    Class defining an available tool
-    that Anthropic can potentially leverage.
-    https://docs.anthropic.com/en/api/messages#body-tools
-    """
-
-    name: str
-    # json object
-    input_schema: Dict[str, Any]
-    # Strongly recommended to fill
-    description: str | None = ""
-    cache_control: AnthropicSystemCacheControl | None = None
-    type: str | None = "custom"
 
 
 class AnthropicToolCall(BaseModel):
@@ -221,7 +200,6 @@ class AnthropicLLMConfig(LLMConfig):
     seed: int | None = 42
     params: AnthropicCallParams | None = None
     chat_model: str = default_anthropic_chat_model
-    completion_model = default_anthropic_completion_model
     system_config: AnthropicSystemConfig | None = None
 
     def __init__(self, **kwargs) -> None:  # type: ignore
@@ -272,8 +250,57 @@ class AnthropicLLM(LanguageModel):
             api_key=self.api_key, timeout=Timeout(timeout=self.config.timeout)
         )
 
-    def generate(self, prompt: str, max_tokens: int = 200) -> LLMResponse:
-        return LLMResponse(message="TODO")
+    def generate(
+        self,
+        prompt: str,
+        prompt_variants: PromptVariants = PromptVariants(),
+        max_tokens: int = 200,
+    ) -> LLMResponse:
+        """
+        Entry function for chat completions. Anthropic used to have an API
+        endpoint for 'Text Completions':
+        https://docs.anthropic.com/en/api/complete
+        However, this has been marked as legacy. They now direct
+        completions via their Messages API in their documentation.
+        The `generate` code path leverages that methodology.
+        """
+        try:
+            return self._generate(prompt_variants, max_tokens)
+        except Exception as e:
+            logging.error("Error in AnthropicLLM::generate: ")
+            logging.error(e)
+            raise e
+
+    def _generate(
+        self, prompt_variants: PromptVariants, max_tokens: int
+    ) -> LLMResponse:
+        if not prompt_variants.anthropic:
+            raise ValueError("Empty prompt list passed into generate")
+
+        messages = [
+            LLMMessage.parse_obj(prompt) for prompt in prompt_variants.anthropic
+        ]
+
+        if settings.debug:
+            # using Claude 3.x+ models, the completion prompt should always be the last
+            # message with a type of "assistant"
+            message: LLMMessage = messages[-1]
+            print(f"[grey37]ROLE: {message.role}[/grey37]")
+            print(f"[grey37]PROMPT: {escape(message.content)}[/grey37]")
+
+        call_dict = dict(
+            model=self.config.completion_model,
+            messages=messages,
+            max_tokens=max_tokens,
+            stream=self.get_stream(),
+        )
+
+        # if user has configured self.config.params, we should
+        # now place those values into the completion call
+        hydrated_call_dict = self._hydrate_completion_call(completion_call=call_dict)
+
+        result: LLMResponse = self._completions_with_backoff(**hydrated_call_dict)
+        return result
 
     async def agenerate(self, prompt: str, max_tokens: int = 200) -> LLMResponse:
         return LLMResponse(message="TODO")
@@ -665,8 +692,8 @@ class AnthropicLLM(LanguageModel):
             terminal_state=False,
         )
 
+    @staticmethod
     def _create_stream_response(
-        self,
         tool_usage: Dict[int, AnthropicToolCall],
         completion: str,
         reasoning: str,
@@ -680,3 +707,28 @@ class AnthropicLLM(LanguageModel):
             cached=False,
             anthropic_tool_calls=list(tool_usage.values()) if tool_usage else None,
         )
+
+    @retry_with_exponential_backoff(
+        retryable_errors=retryable_anthropic_errors,
+        terminal_errors=terminal_anthropic_errors,
+    )
+    def _completions_with_backoff(self, **kwargs) -> LLMResponse:  # type: ignore
+        if self.client is None:
+            raise ValueError("Anthropic chat-completion client is not set")
+        completion_call = self.client.messages.create
+        result = completion_call(**kwargs)
+        if self.get_stream():
+            stream_response: LLMResponse = self._stream_response(result)
+            return stream_response
+        if not isinstance(result, dict):
+            result = result.dict()
+        return self._process_chat_completion_response(result)
+
+    def _hydrate_completion_call(
+        self, completion_call: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        hydrated = {}
+        if self.config.params:
+            hydrated.update(self.config.params.to_dict_exclude_none())
+        hydrated.update(completion_call)
+        return hydrated

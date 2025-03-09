@@ -22,7 +22,6 @@ from langroid.cachedb.base import CacheDBConfig
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
 from langroid.language_models.anthropic import (
     AnthropicToolCall,
-    AnthropicToolSpec,
 )
 from langroid.language_models.model_info import (
     AnthropicModel,
@@ -230,9 +229,33 @@ class OpenAIToolCall(BaseModel):
         return "OAI-TOOL: " + json.dumps(self.function.dict(), indent=2)
 
 
+class AnthropicSystemCacheControl(BaseModel):
+    type: str = "ephemeral"
+
+
+class AnthropicToolSpec(BaseModel):
+    """
+    Class defining an available tool
+    that Anthropic can potentially leverage.
+    https://docs.anthropic.com/en/api/messages#body-tools
+    """
+
+    name: str
+    # json object
+    input_schema: Dict[str, Any]
+    # Strongly recommended to fill
+    description: str | None = ""
+    cache_control: AnthropicSystemCacheControl | None = None
+    type: str | None = "custom"
+
+
 class ToolVariantSelector(BaseModel):
     open_ai: Optional[List[OpenAIToolCall]] = None
     anthropic: Optional[List[AnthropicToolSpec]] = None
+
+
+class PromptVariants(BaseModel):
+    anthropic: List[Dict[Any, Any]] = Field(default_factory=list)
 
 
 class OpenAIToolSpec(BaseModel):
@@ -600,7 +623,12 @@ class LanguageModel(ABC):
         pass
 
     @abstractmethod
-    def generate(self, prompt: str, max_tokens: int = 200) -> LLMResponse:
+    def generate(
+        self,
+        prompt: str,
+        prompt_variant: PromptVariants = PromptVariants(),
+        max_tokens: int = 200,
+    ) -> LLMResponse:
         pass
 
     @abstractmethod
@@ -652,7 +680,7 @@ class LanguageModel(ABC):
         pass
 
     def __call__(self, prompt: str, max_tokens: int) -> LLMResponse:
-        return self.generate(prompt, max_tokens)
+        return self.generate(prompt, PromptVariants(), max_tokens)
 
     def info(self) -> ModelInfo:
         """Info of relevant chat model"""

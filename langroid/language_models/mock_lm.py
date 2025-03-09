@@ -9,6 +9,7 @@ from langroid.language_models.base import (
     LLMConfig,
     OpenAIJsonSchemaSpec,
     OpenAIToolSpec,
+    PromptVariants,
     ToolChoiceTypes,
     ToolVariantSelector,
 )
@@ -109,7 +110,12 @@ class MockLM(LanguageModel):
         last_msg = messages[-1].content if isinstance(messages, list) else messages
         return await self._response_async(last_msg)
 
-    def generate(self, prompt: str, max_tokens: int = 200) -> lm.LLMResponse:
+    def generate(
+        self,
+        prompt: str,
+        prompt_variant: PromptVariants = PromptVariants(),
+        max_tokens: int = 200,
+    ) -> lm.LLMResponse:
         """
         Mock generate function for testing
         """

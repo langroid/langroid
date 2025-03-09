@@ -41,6 +41,7 @@ from langroid.language_models.base import (
     OpenAIJsonSchemaSpec,
     OpenAIToolCall,
     OpenAIToolSpec,
+    PromptVariants,
     Role,
     StreamEventType,
     ToolChoiceTypes,
@@ -1326,7 +1327,12 @@ class OpenAIGPT(LanguageModel):
             prompt_tokens=prompt_tokens, completion_tokens=completion_tokens, cost=cost
         )
 
-    def generate(self, prompt: str, max_tokens: int = 200) -> LLMResponse:
+    def generate(
+        self,
+        prompt: str,
+        prompt_variants: PromptVariants = PromptVariants(),
+        max_tokens: int = 200,
+    ) -> LLMResponse:
         self.run_on_first_use()
 
         try:
