@@ -1366,6 +1366,7 @@ class MarkerPdfParser(DocumentParser):
     """
     Parse PDF files using the `marker` library: https://github.com/VikParuchuri/marker
     """
+
     DEFAULT_CONFIG = {"paginate_output": True, "output_format": "markdown"}
 
     def __init__(self, source: Union[str, bytes], config: ParsingConfig):

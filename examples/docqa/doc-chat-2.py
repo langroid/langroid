@@ -70,7 +70,6 @@ def main(
         embedding=embed_cfg,
     )
 
-
     set_global(
         Settings(
             debug=debug,

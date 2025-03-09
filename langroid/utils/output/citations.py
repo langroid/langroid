@@ -67,9 +67,8 @@ def format_footnote_text(content: str, width: int = 0) -> str:
 
 
 def format_cited_references(
-    citations: List[int],
-    passages: list[Document]
-) -> Tuple[str,str]:
+    citations: List[int], passages: list[Document]
+) -> Tuple[str, str]:
     """
     Given a list of (integer) citations, and a list of passages, return a string
     that can be added as a footer to the main text, to show sources cited.
@@ -97,9 +96,6 @@ def format_cited_references(
         )
         # append [i] source for each citation
         citations_str = "\n".join(
-            [
-                f"[^{c}] {passages[c-1].metadata.source}"
-                for c in citations
-            ]
+            [f"[^{c}] {passages[c-1].metadata.source}" for c in citations]
         )
     return full_citations_str, citations_str

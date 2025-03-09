@@ -1856,15 +1856,12 @@ class ChatAgent(Agent):
             return
         if response.metadata.has_citation:
             citation = (
-                response.metadata.source_content if self.config.full_citations
+                response.metadata.source_content
+                if self.config.full_citations
                 else response.metadata.source
             )
             if not settings.quiet:
-                print(
-                    "[grey37]SOURCES:\n"
-                    + escape(citation)
-                    + "[/grey37]"
-                )
+                print("[grey37]SOURCES:\n" + escape(citation) + "[/grey37]")
             self.callbacks.show_llm_response(
                 content=str(citation),
                 is_tool=False,
