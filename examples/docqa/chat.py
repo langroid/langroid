@@ -85,6 +85,7 @@ def main(
     config = DocChatAgentConfig(
         llm=llm_config,
         n_query_rephrases=0,
+        full_citations=True,
         hypothetical_answer=False,
         # how many sentences in each segment, for relevance-extraction:
         # increase this if you find that relevance extraction is losing context

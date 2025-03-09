@@ -90,6 +90,7 @@ class AgentConfig(BaseSettings):
     parsing: Optional[ParsingConfig] = ParsingConfig()
     prompts: Optional[PromptsConfig] = PromptsConfig()
     show_stats: bool = True  # show token usage/cost stats?
+    hide_agent_response: bool = True  # hide agent response?
     add_to_registry: bool = True  # register agent in ObjectRegistry?
     respond_tools_only: bool = False  # respond only to tool messages (not plain text)?
     # allow multiple tool messages in a single response?
@@ -460,6 +461,28 @@ class Agent(ABC):
             recipient=recipient,
         )
 
+    def render_agent_response(
+        self,
+        results: Optional[str | OrderedDict[str, str] | ChatDocument],
+    ) -> None:
+        """
+        Render the response from the agent, typically from tool-handling.
+        Args:
+            results: results from tool-handling, which may be a string,
+                a dict of tool results, or a ChatDocument.
+        """
+        if self.config.hide_agent_response or results is None:
+            return
+        if isinstance(results, str):
+            results_str = results
+        elif isinstance(results, ChatDocument):
+            results_str = results.content
+        elif isinstance(results, dict):
+            results_str = json.dumps(results, indent=2)
+        if not settings.quiet:
+            console.print(f"[red]{self.indent}", end="")
+            print(f"[red]Agent: {escape(results_str)}")
+
     def _agent_response_final(
         self,
         msg: Optional[str | ChatDocument],
@@ -477,8 +500,7 @@ class Agent(ABC):
         elif isinstance(results, dict):
             results_str = json.dumps(results, indent=2)
         if not settings.quiet:
-            console.print(f"[red]{self.indent}", end="")
-            print(f"[red]Agent: {escape(results_str)}")
+            self.render_agent_response(results)
         maybe_json = len(extract_top_level_json(results_str)) > 0
         self.callbacks.show_agent_response(
             content=results_str,

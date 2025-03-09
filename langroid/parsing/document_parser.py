@@ -426,13 +426,15 @@ class DocumentParser(Parser):
         # since it's already included in the prior chunk;
         # the only exception is if there have been no chunks so far.
         if len(split) > self.config.overlap or n_chunks == 0:
-            pg = "-".join([pages[0], pages[-1]])
+            p_0 = int(pages[0])
+            p_n = int(pages[-1])
+            page_str = f"pages {p_0}-{p_n}" if p_0 != p_n else f"page {p_0}"
             text = self.tokenizer.decode(split[: self.config.chunk_size])
             docs.append(
                 Document(
                     content=text,
                     metadata=DocMetaData(
-                        source=f"{self.source} pages {pg}",
+                        source=f"{self.source} {page_str}",
                         is_chunk=True,
                         id=common_id,
                     ),
@@ -1364,6 +1366,7 @@ class MarkerPdfParser(DocumentParser):
     """
     Parse PDF files using the `marker` library: https://github.com/VikParuchuri/marker
     """
+
     DEFAULT_CONFIG = {"paginate_output": True, "output_format": "markdown"}
 
     def __init__(self, source: Union[str, bytes], config: ParsingConfig):
