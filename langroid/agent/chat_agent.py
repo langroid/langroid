@@ -101,6 +101,7 @@ class ChatAgentConfig(AgentConfig):
     instructions_output_format: bool = True
     output_format_include_defaults: bool = True
     use_tools_on_output_format: bool = True
+    full_citations: bool = True  # show source + content for each citation?
 
     def _set_fn_or_tools(self, fn_available: bool) -> None:
         """
@@ -1854,14 +1855,18 @@ class ChatAgent(Agent):
             # we won't have citations yet, so we're done
             return
         if response.metadata.has_citation:
+            citation = (
+                response.metadata.source_content if self.config.full_citations
+                else response.metadata.source
+            )
             if not settings.quiet:
                 print(
                     "[grey37]SOURCES:\n"
-                    + escape(response.metadata.source)
+                    + escape(citation)
                     + "[/grey37]"
                 )
             self.callbacks.show_llm_response(
-                content=str(response.metadata.source),
+                content=str(citation),
                 is_tool=False,
                 cached=False,
                 language="text",
