@@ -7,14 +7,33 @@
 
 ### **Standard Installation**  
 To use [`marker`](https://github.com/VikParuchuri/marker) as a PDF parser in `langroid`, 
-install it with:  
+install it with the `marker-pdf` extra:
 
 ```bash
 pip install langroid[marker-pdf]
 ```
+or in combination with other extras as needed, e.g.:
+```bash
+pip install "langroid[marker-pdf,hf-embeddings]"
+```
+
+Note, however, that due to an **incompatibility with `docling`**,
+if you install `langroid` using the `all` extra 
+(or another extra such as  `doc-chat` or `pdf-parsers` that 
+also includes `docling`),
+e.g. `pip install "langroid[all]"`, or `pip install "langroid[doc-chat]"`,
+then due to this version-incompatibility with `docling`, you will get an 
+**older** version of `marker-pdf`, which does not work with Langroid.
+This may not matter if you did not intend to specifically use `marker`, 
+but if you do want to use `marker`, you will need to install langroid
+with the `marker-pdf` extra, as shown above, in combination with other
+extras as needed, as shown above.
+
 
 #### **For Intel-Mac Users**  
-If you are on an **Intel Mac**, `docling` and `marker` cannot be used due to a **transformers version conflict**.  
+If you are on an **Intel Mac**, `docling` and `marker` cannot be 
+installed together with langroid as extras, 
+due to a **transformers version conflict**.  
 To resolve this, manually install `marker-pdf` with:  
 
 ```bash
