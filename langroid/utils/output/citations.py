@@ -1,6 +1,9 @@
+import logging
 from typing import List, Tuple
 
 from langroid.mytypes import Document
+
+logger = logging.getLogger(__name__)
 
 
 def extract_markdown_references(md_string: str) -> List[int]:
@@ -87,15 +90,21 @@ def format_cited_references(
     full_citations_str = ""
     if len(citations) > 0:
         # append [i] source, content for each citation
+        good_citations = [c for c in citations if c > 0 and c <= len(passages)]
+        if len(good_citations) < len(citations):
+            logger.warning(f"Invalid citations: {set(citations) - set(good_citations)}")
+
+        # source and content for each citation
         full_citations_str = "\n".join(
             [
                 f"[^{c}] {passages[c-1].metadata.source}"
                 f"\n{format_footnote_text(passages[c-1].content)}"
-                for c in citations
+                for c in good_citations
             ]
         )
-        # append [i] source for each citation
+
+        # source for each citation
         citations_str = "\n".join(
-            [f"[^{c}] {passages[c-1].metadata.source}" for c in citations]
+            [f"[^{c}] {passages[c-1].metadata.source}" for c in good_citations]
         )
     return full_citations_str, citations_str
