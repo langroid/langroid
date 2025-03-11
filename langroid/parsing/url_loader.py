@@ -260,21 +260,3 @@ class URLLoader:
         return self.crawler.crawl(self.urls)
 
 
-if __name__ == "__main__":
-    loader = URLLoader(
-        urls=[
-            # "https://pytorch.org",
-            # "https://www.tensorflow.org",
-            # "https://ai.google.dev/gemini-api/docs",
-            # "https://books.toscrape.com/"
-        ],
-        crawler=FirecrawlCrawler(
-            mode="crawl",
-            params={
-                "limit": 4,
-            },
-        ),
-    )
-
-    docs = loader.load()
-    print(docs)
