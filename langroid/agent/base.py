@@ -90,7 +90,7 @@ class AgentConfig(BaseSettings):
     parsing: Optional[ParsingConfig] = ParsingConfig()
     prompts: Optional[PromptsConfig] = PromptsConfig()
     show_stats: bool = True  # show token usage/cost stats?
-    hide_agent_response: bool = True  # hide agent response?
+    hide_agent_response: bool = False  # hide agent response?
     add_to_registry: bool = True  # register agent in ObjectRegistry?
     respond_tools_only: bool = False  # respond only to tool messages (not plain text)?
     # allow multiple tool messages in a single response?
