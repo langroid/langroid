@@ -1,5 +1,7 @@
 # Firecrawl and Trafilatura Crawlers Documentation
 
+`URLLoader` uses `Trafilatura` if not explicitly specified
+
 ## Overview
 *   **`FirecrawlCrawler`**:  Leverages the Firecrawl API for efficient web scraping and crawling. It offers built-in document processing capabilities.
 *   **`TrafilaturaCrawler`**: Utilizes the Trafilatura library and Langroid's parsing tools for extracting and processing web content.
