@@ -258,5 +258,3 @@ class URLLoader:
     def load(self) -> List[Document]:
         """Load the URLs using the specified crawler."""
         return self.crawler.crawl(self.urls)
-
-
