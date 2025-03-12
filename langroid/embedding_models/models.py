@@ -25,6 +25,10 @@ class OpenAIEmbeddingsConfig(EmbeddingModelsConfig):
     dims: int = 1536
     context_length: int = 8192
 
+    class Config:
+        # enable auto-loading of env vars with OPENAI_ prefix, e.g.
+        # api_base is set from OPENAI_API_BASE env var, in .env or system env
+        env_prefix = "OPENAI_"
 
 class AzureOpenAIEmbeddingsConfig(EmbeddingModelsConfig):
     model_type: str = "azure-openai"
