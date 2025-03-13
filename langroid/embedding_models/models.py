@@ -30,6 +30,7 @@ class OpenAIEmbeddingsConfig(EmbeddingModelsConfig):
         # api_base is set from OPENAI_API_BASE env var, in .env or system env
         env_prefix = "OPENAI_"
 
+
 class AzureOpenAIEmbeddingsConfig(EmbeddingModelsConfig):
     model_type: str = "azure-openai"
     model_name: str = "text-embedding-3-small"
