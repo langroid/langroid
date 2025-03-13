@@ -642,12 +642,12 @@ class LanguageModel(ABC):
         max_tokens: int = 200,
         tools: Optional[List[OpenAIToolSpec]] = None,
         tool_choice: ToolChoiceTypes | Dict[str, str | Dict[str, str]] = "auto",
-        tool_variants: ToolVariantSelector = ToolVariantSelector(
-            open_ai=[], anthropic=[]
-        ),
         functions: Optional[List[LLMFunctionSpec]] = None,
         function_call: str | Dict[str, str] = "auto",
         response_format: Optional[OpenAIJsonSchemaSpec] = None,
+        tool_variants: ToolVariantSelector = ToolVariantSelector(
+            open_ai=[], anthropic=[]
+        ),
     ) -> LLMResponse:
         """
         Get chat-completion response from LLM.
@@ -675,6 +675,9 @@ class LanguageModel(ABC):
         functions: Optional[List[LLMFunctionSpec]] = None,
         function_call: str | Dict[str, str] = "auto",
         response_format: Optional[OpenAIJsonSchemaSpec] = None,
+        tool_variants: ToolVariantSelector = ToolVariantSelector(
+            open_ai=[], anthropic=[]
+        ),
     ) -> LLMResponse:
         """Async version of `chat`. See `chat` for details."""
         pass

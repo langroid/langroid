@@ -81,12 +81,12 @@ class MockLM(LanguageModel):
         max_tokens: int = 200,
         tools: Optional[List[OpenAIToolSpec]] = None,
         tool_choice: ToolChoiceTypes | Dict[str, str | Dict[str, str]] = "auto",
-        tool_variants: ToolVariantSelector = ToolVariantSelector(
-            open_ai=[], anthropic=[]
-        ),
         functions: Optional[List[lm.LLMFunctionSpec]] = None,
         function_call: str | Dict[str, str] = "auto",
         response_format: Optional[OpenAIJsonSchemaSpec] = None,
+        tool_variants: ToolVariantSelector = ToolVariantSelector(
+            open_ai=[], anthropic=[]
+        ),
     ) -> lm.LLMResponse:
         """
         Mock chat function for testing
@@ -103,6 +103,9 @@ class MockLM(LanguageModel):
         functions: Optional[List[lm.LLMFunctionSpec]] = None,
         function_call: str | Dict[str, str] = "auto",
         response_format: Optional[OpenAIJsonSchemaSpec] = None,
+        tool_variants: ToolVariantSelector = ToolVariantSelector(
+            open_ai=[], anthropic=[]
+        ),
     ) -> lm.LLMResponse:
         """
         Mock chat function for testing

@@ -89,65 +89,67 @@ def retry_with_exponential_backoff(
 
 
 def async_retry_with_exponential_backoff(
-    func: Callable[..., Any],
     initial_delay: float = 1,
     exponential_base: float = 1.3,
     jitter: bool = True,
     max_retries: int = 5,
-    errors: tuple = (  # type: ignore
+    retryable_errors: tuple = base_retry_errors  # type: ignore
+    + (  # type: ignore
         openai.APITimeoutError,
         openai.RateLimitError,
-        openai.AuthenticationError,
         openai.APIError,
-        aiohttp.ServerTimeoutError,
-        asyncio.TimeoutError,
+    ),
+    terminal_errors: tuple = (  # type: ignore
+        openai.BadRequestError,
+        openai.AuthenticationError,
+        openai.UnprocessableEntityError,
     ),
 ) -> Callable[..., Any]:
     """Retry a function with exponential backoff."""
 
-    async def wrapper(*args: List[Any], **kwargs: Dict[Any, Any]) -> Any:
-        # Initialize variables
-        num_retries = 0
-        delay = initial_delay
+    async def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
+        async def wrapper(*args: List[Any], **kwargs: Dict[Any, Any]) -> Any:
+            # Initialize variables
+            num_retries = 0
+            delay = initial_delay
 
-        # Loop until a successful response or max_retries is hit or exception is raised
-        while True:
-            try:
-                result = await func(*args, **kwargs)
-                return result
+            # Loop until a successful response or max_retries
+            # is hit or exception is raised
+            while True:
+                try:
+                    result = await func(*args, **kwargs)
+                    return result
 
-            except openai.BadRequestError as e:
-                # do not retry when the request itself is invalid,
-                # e.g. when context is too long
-                logger.error(f"OpenAI API request failed with error: {e}.")
-                raise e
-            except openai.AuthenticationError as e:
-                # do not retry when there's an auth error
-                logger.error(f"OpenAI API request failed with error: {e}.")
-                raise e
-            # Retry on specified errors
-            except errors as e:
-                # Increment retries
-                num_retries += 1
+                # Do not retry for terminal tuple
+                except terminal_errors as terminal_error:
+                    logger.error(f"API request failed with error: {terminal_error}.")
+                    raise terminal_error
 
-                # Check if max retries has been reached
-                if num_retries > max_retries:
-                    raise Exception(
-                        f"Maximum number of retries ({max_retries}) exceeded."
-                        f" Last error: {str(e)}."
+                # Retry on specified errors
+                except retryable_errors as retryable_error:
+                    # Increment retries
+                    num_retries += 1
+
+                    # Check if max retries has been reached
+                    if num_retries > max_retries:
+                        raise Exception(
+                            f"Maximum number of retries ({max_retries}) exceeded."
+                            f" Last error: {str(retryable_error)}."
+                        )
+
+                    # Increment the delay
+                    delay *= exponential_base * (1 + jitter * random.random())
+                    logger.warning(
+                        f"""API request failed with error{retryable_error}. 
+                        Retrying in {delay} seconds..."""
                     )
+                    # Sleep for the delay
+                    time.sleep(delay)
 
-                # Increment the delay
-                delay *= exponential_base * (1 + jitter * random.random())
-                logger.warning(
-                    f"""OpenAI API request failed with error{e}. 
-                    Retrying in {delay} seconds..."""
-                )
-                # Sleep for the delay
-                time.sleep(delay)
+                # Raise exceptions for any errors not specified
+                except Exception as e:
+                    raise e
 
-            # Raise exceptions for any errors not specified
-            except Exception as e:
-                raise e
+        return wrapper
 
-    return wrapper
+    return decorator

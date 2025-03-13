@@ -994,7 +994,7 @@ class OpenAIGPT(LanguageModel):
             function_name=function_name,
         )
 
-    @async_retry_with_exponential_backoff
+    @async_retry_with_exponential_backoff()
     async def _stream_response_async(  # type: ignore
         self, response, chat: bool = False
     ) -> Tuple[LLMResponse, Dict[str, Any]]:
@@ -1437,7 +1437,7 @@ class OpenAIGPT(LanguageModel):
         # WARNING: .Completion.* endpoints are deprecated,
         # and as of Sep 2023 only legacy models will work here,
         # e.g. text-davinci-003, text-ada-001.
-        @async_retry_with_exponential_backoff
+        @async_retry_with_exponential_backoff()
         async def completions_with_backoff(**kwargs):  # type: ignore
             cached = False
             hashed_key, result = self._cache_lookup("AsyncCompletion", **kwargs)
@@ -1490,12 +1490,12 @@ class OpenAIGPT(LanguageModel):
         max_tokens: int = 200,
         tools: Optional[List[OpenAIToolSpec]] = None,
         tool_choice: ToolChoiceTypes | Dict[str, str | Dict[str, str]] = "auto",
-        tool_variants: ToolVariantSelector = ToolVariantSelector(
-            open_ai=[], anthropic=[]
-        ),
         functions: Optional[List[LLMFunctionSpec]] = None,
         function_call: str | Dict[str, str] = "auto",
         response_format: Optional[OpenAIJsonSchemaSpec] = None,
+        tool_variants: ToolVariantSelector = ToolVariantSelector(
+            open_ai=[], anthropic=[]
+        ),
     ) -> LLMResponse:
         self.run_on_first_use()
 
@@ -1551,6 +1551,9 @@ class OpenAIGPT(LanguageModel):
         functions: Optional[List[LLMFunctionSpec]] = None,
         function_call: str | Dict[str, str] = "auto",
         response_format: Optional[OpenAIJsonSchemaSpec] = None,
+        tool_variants: ToolVariantSelector = ToolVariantSelector(
+            open_ai=[], anthropic=[]
+        ),
     ) -> LLMResponse:
         self.run_on_first_use()
 
@@ -1635,7 +1638,7 @@ class OpenAIGPT(LanguageModel):
                 self._cache_store(hashed_key, result.model_dump())
         return cached, hashed_key, result
 
-    @async_retry_with_exponential_backoff
+    @async_retry_with_exponential_backoff()
     async def _achat_completions_with_backoff(self, **kwargs):  # type: ignore
         cached = False
         hashed_key, result = self._cache_lookup("Completion", **kwargs)

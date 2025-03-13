@@ -4,7 +4,6 @@ import sys
 from enum import Enum
 from typing import Any, Dict, List, Optional, Union, no_type_check
 
-import anthropic.types
 from anthropic import (
     Anthropic,
     APIError,
@@ -16,7 +15,14 @@ from anthropic import (
     Timeout,
     UnprocessableEntityError,
 )
-from anthropic.types import RawMessageStreamEvent
+from anthropic.types import (
+    ContentBlockStopEvent,
+    InputJSONDelta,
+    MessageDeltaEvent,
+    TextDelta,
+    ThinkingDelta,
+    ToolUseBlock,
+)
 from rich import print
 from rich.markup import escape
 
@@ -46,6 +52,7 @@ from langroid.language_models.model_info import (
 )
 from langroid.language_models.openai_gpt import available_models
 from langroid.language_models.utils import (
+    async_retry_with_exponential_backoff,
     base_retry_errors,
     retry_with_exponential_backoff,
 )
@@ -166,7 +173,7 @@ class Delta(Enum):
     SIGNATURE = "signature_delta"
 
 
-class SynchronousStreamEnded(BaseModel):
+class StreamState(BaseModel):
     """
     Class defining unpacked values from Anthropic SSE
     for internal stream processing.
@@ -311,12 +318,12 @@ class AnthropicLLM(LanguageModel):
         max_tokens: int = 200,
         tools: Optional[List[OpenAIToolSpec]] = None,
         tool_choice: ToolChoiceTypes | Dict[str, str | Dict[str, str]] = "auto",
-        tool_variants: ToolVariantSelector = ToolVariantSelector(
-            open_ai=[], anthropic=[]
-        ),
         functions: list[LLMFunctionSpec] | None = None,
         function_call: str | dict[str, str] = "",
         response_format: OpenAIJsonSchemaSpec | None = None,
+        tool_variants: ToolVariantSelector = ToolVariantSelector(
+            open_ai=[], anthropic=[]
+        ),
     ) -> LLMResponse:
         """
         Get chat-completion response from an Anthropic API call
@@ -329,26 +336,16 @@ class AnthropicLLM(LanguageModel):
             functions: not available with Anthropic's message API
             function_call: not available with Anthropic's message API
             response_format: not available with Anthropic's message API
+            tool_variants: list of dicts that can be parsed into tool specs
+                for Anthropic
         """
-
-        if functions:
-            logging.warning("Functions are unavailable with Anthropic's Messages API")
-
-        if function_call:
-            logging.warning(
-                "Function calls are unavailable with Anthropic's Messages API"
-            )
 
         if functions or function_call:
             logging.warning(
                 """You might observe an unexpected answer with function usage
-                for Anthropic Message calls."""
+                as they are unavailable for Anthropic SDK calls."""
             )
             logging.warning("Please use the tools and tool_choice parameters instead.")
-
-        if self.config.use_completion_for_chat:
-            # upcoming generate function, subsequent commits
-            pass
 
         try:
             return self._chat_helper(
@@ -370,8 +367,57 @@ class AnthropicLLM(LanguageModel):
         functions: list[LLMFunctionSpec] | None = None,
         function_call: str | dict[str, str] = "",
         response_format: OpenAIJsonSchemaSpec | None = None,
+        tool_variants: ToolVariantSelector = ToolVariantSelector(
+            open_ai=[], anthropic=[]
+        ),
     ) -> LLMResponse:
-        return LLMResponse(message="TODO")
+        if functions or function_call:
+            logging.warning(
+                """You might observe an unexpected answer with function usage
+                as they are unavailable for Anthropic SDK calls."""
+            )
+            logging.warning("Please use the tools and tool_choice parameters instead.")
+
+        try:
+            result = await self._achat_helper(
+                messages=messages,
+                max_tokens=max_tokens,
+                tools=tool_variants.anthropic,
+                tool_choice=tool_choice,
+            )
+            return result
+        except Exception as e:
+            logging.error("Error in AnthropicLLM::achat")
+            raise e
+
+    async def _achat_helper(
+        self,
+        messages: str | List[LLMMessage],
+        max_tokens: int,
+        tools: Optional[List[AnthropicToolSpec]],
+        tool_choice: ToolChoiceTypes | Dict[str, str | Dict[str, str]] = "auto",
+    ) -> LLMResponse:
+        """
+        Asynchronous chat completion API calls to Anthropic
+        """
+        args = self._prep_chat_args(
+            messages=messages,
+            max_tokens=max_tokens,
+            tools=tools,
+            tool_choice=tool_choice,
+        )
+        response = await self._achat_completion_with_retry_backoff(**args)
+        if self.get_stream():
+            anthropic_response: LLMResponse = await self._stream_response_async(
+                response, chat=True
+            )
+            return anthropic_response
+        if isinstance(response, dict):
+            response_dict = response
+        else:
+            response_dict = response.model_dump()
+
+        return self._process_chat_completion_response(response_dict=response_dict)
 
     @retry_with_exponential_backoff(
         retryable_errors=retryable_anthropic_errors,
@@ -400,7 +446,7 @@ class AnthropicLLM(LanguageModel):
             messages, max_tokens, tools=tools, tool_choice=tool_choice
         )
         response = self._chat_completion_with_retry_backoff(**args)
-        # we need to check if its a stream response
+        # we need to check if it's a stream response
         if self.get_stream():
             stream_response: LLMResponse = self._stream_response(
                 response=response, chat=True
@@ -412,6 +458,20 @@ class AnthropicLLM(LanguageModel):
         else:
             response_dict = response.model_dump()
         return self._process_chat_completion_response(response_dict)
+
+    @async_retry_with_exponential_backoff(
+        retryable_errors=retryable_anthropic_errors,
+        terminal_errors=terminal_anthropic_errors,
+    )
+    async def _achat_completion_with_retry_backoff(self, **kwargs):  # type: ignore
+        try:
+            assert self.async_client
+        except AssertionError as e:
+            logging.error("Anthropic async client is not defined on message call.")
+            raise e
+        async_completion_call = self.async_client.messages.create
+        result = await async_completion_call(**kwargs)
+        return result
 
     def _process_chat_completion_response(
         self, response_dict: Dict[str, Any]
@@ -568,16 +628,50 @@ class AnthropicLLM(LanguageModel):
             tool_usage=tool_usage, completion=completion, reasoning=reasoning
         )
 
+    @async_retry_with_exponential_backoff(
+        retryable_errors=retryable_anthropic_errors,
+        terminal_errors=terminal_anthropic_errors,
+    )
+    async def _stream_response_async(self, response, chat: bool = False) -> LLMResponse:  # type: ignore
+        completion = ""
+        reasoning = ""
+        tool_usage: Dict[int, AnthropicToolCall] = {}
+        tool_partials: Dict[int, List[str]] = {}
+
+        sys.stdout.write(Colors().GREEN)
+        sys.stdout.flush()
+
+        try:
+            async for event in response:
+                asynchronous_stream = await self._process_stream_event_async(  # type: ignore
+                    event=event,
+                    tool_usage=tool_usage,
+                    tool_partials=tool_partials,
+                    chat=chat,
+                    completion=completion,
+                    reasoning=reasoning,
+                )
+                if asynchronous_stream.terminal_state:
+                    break
+        except Exception:
+            pass
+
+        print("")
+
+        return self._create_stream_response(
+            tool_usage=tool_usage, completion=completion, reasoning=reasoning
+        )
+
     @no_type_check
     def _process_stream_event(
         self,
-        event: RawMessageStreamEvent,
+        event,
         tool_usage: Dict[int, AnthropicToolCall],
         tool_partials: Dict[int, List[str]],
         chat: bool = False,
         completion: str = "",
         reasoning: str = "",
-    ) -> SynchronousStreamEnded:
+    ) -> StreamState:
         """
         Helper function to process SSE message while communicating with
         Anthropic's Message API with stream = True.
@@ -587,7 +681,7 @@ class AnthropicLLM(LanguageModel):
             StreamTypes.PING.value,
             StreamTypes.MESSAGE_START.value,
         ]:
-            return SynchronousStreamEnded(
+            return StreamState(
                 terminal_state=False,
             )
 
@@ -596,23 +690,23 @@ class AnthropicLLM(LanguageModel):
         # and this is the response they place metadata for tool
         # usage such as tool_id and tool_name
         if event.type == StreamTypes.CONTENT_BLOCK_START.value:
-            if isinstance(event.content_block, anthropic.types.ToolUseBlock):
+            if isinstance(event.content_block, ToolUseBlock):
                 tool_usage[event.index] = AnthropicToolCall(
                     id=event.content_block.id,
                     name=event.content_block.name,
                 )
-                return SynchronousStreamEnded(
+                return StreamState(
                     terminal_state=False,
                 )
             else:
-                return SynchronousStreamEnded(
+                return StreamState(
                     terminal_state=False,
                 )
 
         # corresponds to 529 error codes
         if event.type == StreamTypes.ERROR.value:
             logging.warning("Received error payload while streaming messages")
-            return SynchronousStreamEnded(
+            return StreamState(
                 terminal_state=True,
             )
 
@@ -627,7 +721,7 @@ class AnthropicLLM(LanguageModel):
             # Anthropic Messages API stream does not return entire json argument,
             # it will give it in parts
             # https://docs.anthropic.com/en/api/messages-streaming#input-json-delta
-            if isinstance(delta, anthropic.types.InputJSONDelta):
+            if isinstance(delta, InputJSONDelta):
                 # building tool usage for content index with list
                 # ensure the list exists before we try to append
                 # the partial json string
@@ -635,17 +729,17 @@ class AnthropicLLM(LanguageModel):
                     tool_partials[event.index] = []
 
                 tool_partials[event.index] += delta.partial_json
-            if isinstance(delta, anthropic.types.TextDelta):
+            if isinstance(delta, TextDelta):
                 delta_text = event.delta.text
-            if isinstance(delta, anthropic.types.ThinkingDelta):
+            if isinstance(delta, ThinkingDelta):
                 delta_thinking = event.delta.thinking
         else:
-            if isinstance(delta, anthropic.types.TextDelta):
+            if isinstance(delta, TextDelta):
                 delta_text = event.delta.text
 
         stop_reason = ""
 
-        if isinstance(event, anthropic.types.MessageDeltaEvent):
+        if isinstance(event, MessageDeltaEvent):
             stop_reason = event.delta.stop_reason
 
         if delta_text:
@@ -663,10 +757,7 @@ class AnthropicLLM(LanguageModel):
         # if we've hit the end of a content block, and we find the corresponding index
         # in our tool usage, we have a tool to call, and it's partial json should be
         # entirely present in tool_delta_partials
-        if (
-            isinstance(event, anthropic.types.ContentBlockStopEvent)
-            and event.index in tool_usage
-        ):
+        if isinstance(event, ContentBlockStopEvent) and event.index in tool_usage:
             # try to grab tool by end block index
             tool_call = tool_usage.get(event.index)
             # log out the stored tool name
@@ -684,11 +775,136 @@ class AnthropicLLM(LanguageModel):
                 self.config.streamer(argument, StreamEventType.TOOL_ARGS)
 
         if stop_reason in ["tool_use", "stop_sequence"]:
-            return SynchronousStreamEnded(
+            return StreamState(
                 terminal_state=True,
             )
 
-        return SynchronousStreamEnded(
+        return StreamState(
+            terminal_state=False,
+        )
+
+    @no_type_check
+    async def _process_stream_event_async(
+        self,
+        event,
+        tool_usage: Dict[int, AnthropicToolCall],
+        tool_partials: Dict[int, List[str]],
+        chat: bool = False,
+        completion: str = "",
+        reasoning: str = "",
+    ) -> StreamState:
+        """
+        Helper function to process SSE message while communicating with
+        Anthropic's Message API with stream = True.
+        """
+
+        if event.type in [
+            StreamTypes.PING.value,
+            StreamTypes.MESSAGE_START.value,
+        ]:
+            return StreamState(
+                terminal_state=False,
+            )
+
+        # we need a different check for content_block_start
+        # because Anthropic can have a tool_use call here,
+        # and this is the response they place metadata for tool
+        # usage such as tool_id and tool_name
+        if event.type == StreamTypes.CONTENT_BLOCK_START.value:
+            if isinstance(event.content_block, ToolUseBlock):
+                tool_usage[event.index] = AnthropicToolCall(
+                    id=event.content_block.id,
+                    name=event.content_block.name,
+                )
+                return StreamState(
+                    terminal_state=False,
+                )
+            else:
+                return StreamState(
+                    terminal_state=False,
+                )
+
+        silent = self.config.async_stream_quiet
+
+        # corresponds to 529 error codes
+        if event.type == StreamTypes.ERROR.value:
+            logging.warning("Received error payload while streaming messages")
+            return StreamState(
+                terminal_state=True,
+            )
+
+        delta = (
+            event.delta if event.type == StreamTypes.CONTENT_BLOCK_DELTA.value else None
+        )
+
+        delta_text = ""
+        delta_thinking = ""
+
+        if chat:
+            # Anthropic Messages API stream does not return entire json argument,
+            # it will give it in parts
+            # https://docs.anthropic.com/en/api/messages-streaming#input-json-delta
+            if isinstance(delta, InputJSONDelta):
+                # building tool usage for content index with list
+                # ensure the list exists before we try to append
+                # the partial json string
+                if event.index not in tool_partials:
+                    tool_partials[event.index] = []
+
+                tool_partials[event.index] += delta.partial_json
+            if isinstance(delta, TextDelta):
+                delta_text = event.delta.text
+            if isinstance(delta, ThinkingDelta):
+                delta_thinking = event.delta.thinking
+        else:
+            if isinstance(delta, TextDelta):
+                delta_text = event.delta.text
+
+        stop_reason = ""
+
+        if isinstance(event, MessageDeltaEvent):
+            stop_reason = event.delta.stop_reason
+
+        if delta_text:
+            completion += delta_text
+            if not silent:
+                sys.stdout.write(Colors().GREEN + delta_text)
+                sys.stdout.flush()
+                await self.config.streamer_async(delta_text, StreamEventType.TEXT)
+
+        if delta_thinking:
+            reasoning += delta_thinking
+            if not silent:
+                sys.stdout.write(Colors().GREEN_DIM + delta_thinking)
+                sys.stdout.flush()
+                self.config.streamer_async(delta_thinking, StreamEventType.TEXT)
+
+        if isinstance(event, ContentBlockStopEvent) and event.index in tool_usage:
+            # try to grab tool by end block index
+            tool_call = tool_usage.get(event.index)
+            if not silent:
+                # log out the stored tool name
+                sys.stdout.write(
+                    Colors().GREEN + "ANTHROPIC-TOOL: " + tool_call.name + ": "
+                )
+                sys.stdout.flush()
+                await self.config.streamer_async(
+                    tool_call.name, StreamEventType.TOOL_NAME
+                )
+            # generate the argument string from the partials
+            argument = "".join(tool_partials[event.index])
+            # only write if we have something to show
+            if argument and not silent:
+                sys.stdout.write(Colors().GREEN + argument)
+                sys.stdout.flush()
+                await self.config.streamer_async(argument, StreamEventType.TOOL_ARGS)
+
+        if stop_reason in ["tool_use", "stop_sequence"]:
+            return StreamState(
+                terminal_state=True,
+            )
+
+        return StreamState(
             terminal_state=False,
         )
 
