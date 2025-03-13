@@ -51,8 +51,27 @@ class WebSearchResult:
 
     def get_full_content(self) -> str:
         try:
-            response: Response = requests.get(self.link)
-            soup: BeautifulSoup = BeautifulSoup(response.text, "lxml")
+            # First check headers only to get content length and type
+            head_response: Response = requests.head(self.link, timeout=5)
+            if head_response.status_code != 200:
+                return f"Error: HTTP {head_response.status_code} for {self.link}"
+
+            # Skip large files
+            content_length = int(head_response.headers.get("content-length", 0))
+            if content_length > 5_000_000:  # 5MB limit
+                return (
+                    f"Error: Content too large ({content_length} bytes) for {self.link}"
+                )
+
+            response: Response = requests.get(self.link, timeout=10)
+
+            import warnings
+
+            from bs4 import XMLParsedAsHTMLWarning
+
+            warnings.filterwarnings("ignore", category=XMLParsedAsHTMLWarning)
+
+            soup: BeautifulSoup = BeautifulSoup(response.text, "html.parser")
             text = " ".join(soup.stripped_strings)
             return text[: self.max_content_length]
         except Exception as e:

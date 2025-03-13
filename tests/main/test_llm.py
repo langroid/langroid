@@ -130,6 +130,24 @@ def _test_context_length_error(test_settings: Settings, mode: str, max_tokens: i
     assert "context length" in str(e.value).lower()
 
 
+@pytest.mark.parametrize(
+    "mdl",
+    [
+        lm.OpenAIChatModel.GPT4o,
+        lm.GeminiModel.GEMINI_2_PRO,
+        "gemini/" + lm.GeminiModel.GEMINI_2_PRO.value,
+    ],
+)
+@pytest.mark.parametrize("ctx", [16_000, None])
+def test_llm_config_context_length(mdl: str, ctx: int | None):
+    llm_config = lm.OpenAIGPTConfig(
+        chat_model=mdl,
+        chat_context_length=ctx,  # even if wrong, use if explicitly set
+    )
+    mdl = lm.OpenAIGPT(config=llm_config)
+    assert mdl.chat_context_length() == ctx or mdl.info().context_length
+
+
 def test_model_selection(test_settings: Settings):
     set_global(test_settings)
 
