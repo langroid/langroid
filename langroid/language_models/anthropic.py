@@ -2,7 +2,7 @@ import logging
 import os
 import sys
 from enum import Enum
-from typing import Any, Dict, List, Optional, Union, no_type_check
+from typing import Any, Dict, List, Literal, Optional, Union, no_type_check
 
 from anthropic import (
     Anthropic,
@@ -171,6 +171,12 @@ class Delta(Enum):
     JSON = "input_json_delta"
     THINK = "thinking_delta"
     SIGNATURE = "signature_delta"
+
+
+class AnthropicStreamDeltaEvent(BaseModel):
+    delta: Optional[Literal[StreamTypes.CONTENT_BLOCK_DELTA]]
+    thinking: str
+    text: str
 
 
 class StreamState(BaseModel):
@@ -662,21 +668,8 @@ class AnthropicLLM(LanguageModel):
             tool_usage=tool_usage, completion=completion, reasoning=reasoning
         )
 
-    @no_type_check
-    def _process_stream_event(
-        self,
-        event,
-        tool_usage: Dict[int, AnthropicToolCall],
-        tool_partials: Dict[int, List[str]],
-        chat: bool = False,
-        completion: str = "",
-        reasoning: str = "",
-    ) -> StreamState:
-        """
-        Helper function to process SSE message while communicating with
-        Anthropic's Message API with stream = True.
-        """
-
+    @staticmethod
+    def _handle_early_stream_terminations(event, tool_usage) -> Optional[StreamState]:  # type: ignore
         if event.type in [
             StreamTypes.PING.value,
             StreamTypes.MESSAGE_START.value,
@@ -710,13 +703,17 @@ class AnthropicLLM(LanguageModel):
                 terminal_state=True,
             )
 
+        return None
+
+    @staticmethod
+    def _handle_streaming_delta_event(  # type: ignore
+        event, chat: bool, tool_partials: Dict[int, List[str]]
+    ):
         delta = (
             event.delta if event.type == StreamTypes.CONTENT_BLOCK_DELTA.value else None
         )
-
         delta_text = ""
         delta_thinking = ""
-
         if chat:
             # Anthropic Messages API stream does not return entire json argument,
             # it will give it in parts
@@ -737,22 +734,46 @@ class AnthropicLLM(LanguageModel):
             if isinstance(delta, TextDelta):
                 delta_text = event.delta.text
 
+        return AnthropicStreamDeltaEvent(
+            delta=delta, thinking=delta_thinking, text=delta_text
+        )
+
+    @no_type_check
+    def _process_stream_event(
+        self,
+        event,
+        tool_usage: Dict[int, AnthropicToolCall],
+        tool_partials: Dict[int, List[str]],
+        chat: bool = False,
+        completion: str = "",
+        reasoning: str = "",
+    ) -> StreamState:
+        """
+        Helper function to process SSE message while communicating with
+        Anthropic's Message API with stream = True.
+        """
+
+        if early_exit := self._handle_early_stream_terminations(event, tool_usage):
+            return early_exit
+
+        processed_delta = self._handle_streaming_delta_event(event, chat, tool_partials)
+
         stop_reason = ""
 
         if isinstance(event, MessageDeltaEvent):
             stop_reason = event.delta.stop_reason
 
-        if delta_text:
-            completion += delta_text
-            sys.stdout.write(Colors().GREEN + delta_text)
+        if processed_delta.text:
+            completion += processed_delta.text
+            sys.stdout.write(Colors().GREEN + processed_delta.text)
             sys.stdout.flush()
-            self.config.streamer(delta_text, StreamEventType.TEXT)
+            self.config.streamer(processed_delta.text, StreamEventType.TEXT)
 
-        if delta_thinking:
-            reasoning += delta_thinking
-            sys.stdout.write(Colors().GREEN_DIM + delta_thinking)
+        if processed_delta.thinking:
+            reasoning += processed_delta.thinking
+            sys.stdout.write(Colors().GREEN_DIM + processed_delta.thinking)
             sys.stdout.flush()
-            self.config.streamer(delta_thinking, StreamEventType.TEXT)
+            self.config.streamer(processed_delta.thinking, StreamEventType.TEXT)
 
         # if we've hit the end of a content block, and we find the corresponding index
         # in our tool usage, we have a tool to call, and it's partial json should be
@@ -798,86 +819,35 @@ class AnthropicLLM(LanguageModel):
         Anthropic's Message API with stream = True.
         """
 
-        if event.type in [
-            StreamTypes.PING.value,
-            StreamTypes.MESSAGE_START.value,
-        ]:
-            return StreamState(
-                terminal_state=False,
-            )
-
-        # we need a different check for content_block_start
-        # because Anthropic can have a tool_use call here,
-        # and this is the response they place metadata for tool
-        # usage such as tool_id and tool_name
-        if event.type == StreamTypes.CONTENT_BLOCK_START.value:
-            if isinstance(event.content_block, ToolUseBlock):
-                tool_usage[event.index] = AnthropicToolCall(
-                    id=event.content_block.id,
-                    name=event.content_block.name,
-                )
-                return StreamState(
-                    terminal_state=False,
-                )
-            else:
-                return StreamState(
-                    terminal_state=False,
-                )
+        if early_exit := self._handle_early_stream_terminations(event, tool_usage):
+            return early_exit
 
         silent = self.config.async_stream_quiet
 
-        # corresponds to 529 error codes
-        if event.type == StreamTypes.ERROR.value:
-            logging.warning("Received error payload while streaming messages")
-            return StreamState(
-                terminal_state=True,
-            )
-
-        delta = (
-            event.delta if event.type == StreamTypes.CONTENT_BLOCK_DELTA.value else None
-        )
-
-        delta_text = ""
-        delta_thinking = ""
-
-        if chat:
-            # Anthropic Messages API stream does not return entire json argument,
-            # it will give it in parts
-            # https://docs.anthropic.com/en/api/messages-streaming#input-json-delta
-            if isinstance(delta, InputJSONDelta):
-                # building tool usage for content index with list
-                # ensure the list exists before we try to append
-                # the partial json string
-                if event.index not in tool_partials:
-                    tool_partials[event.index] = []
-
-                tool_partials[event.index] += delta.partial_json
-            if isinstance(delta, TextDelta):
-                delta_text = event.delta.text
-            if isinstance(delta, ThinkingDelta):
-                delta_thinking = event.delta.thinking
-        else:
-            if isinstance(delta, TextDelta):
-                delta_text = event.delta.text
+        processed_delta = self._handle_streaming_delta_event(event, chat, tool_partials)
 
         stop_reason = ""
 
         if isinstance(event, MessageDeltaEvent):
             stop_reason = event.delta.stop_reason
 
-        if delta_text:
-            completion += delta_text
+        if processed_delta.text:
+            completion += processed_delta.text
             if not silent:
-                sys.stdout.write(Colors().GREEN + delta_text)
+                sys.stdout.write(Colors().GREEN + processed_delta.text)
                 sys.stdout.flush()
-                await self.config.streamer_async(delta_text, StreamEventType.TEXT)
+                await self.config.streamer_async(
+                    processed_delta.text, StreamEventType.TEXT
+                )
 
-        if delta_thinking:
-            reasoning += delta_thinking
+        if processed_delta.thinking:
+            reasoning += processed_delta.thinking
             if not silent:
-                sys.stdout.write(Colors().GREEN_DIM + delta_thinking)
+                sys.stdout.write(Colors().GREEN_DIM + processed_delta.thinking)
                 sys.stdout.flush()
-                self.config.streamer_async(delta_thinking, StreamEventType.TEXT)
+                self.config.streamer_async(
+                    processed_delta.thinking, StreamEventType.TEXT
+                )
 
         if isinstance(event, ContentBlockStopEvent) and event.index in tool_usage:
             # try to grab tool by end block index
