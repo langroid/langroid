@@ -266,6 +266,10 @@ asyncio = [
     "asyncio>=3.4.3",
 ]
 
+anthropic = [
+    "anthropic>=0.46.0,<0.47.0"
+]
+
 
 [dependency-groups]
 dev = [

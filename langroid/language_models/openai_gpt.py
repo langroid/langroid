@@ -6,7 +6,6 @@ import sys
 import warnings
 from collections import defaultdict
 from functools import cache
-from itertools import chain
 from typing import (
     Any,
     Callable,
@@ -32,6 +31,7 @@ from langroid.cachedb.redis_cachedb import RedisCache, RedisCacheConfig
 from langroid.exceptions import LangroidImportError
 from langroid.language_models.base import (
     LanguageModel,
+    LLMCallConfig,
     LLMConfig,
     LLMFunctionCall,
     LLMFunctionSpec,
@@ -41,9 +41,12 @@ from langroid.language_models.base import (
     OpenAIJsonSchemaSpec,
     OpenAIToolCall,
     OpenAIToolSpec,
+    PromptVariants,
     Role,
     StreamEventType,
     ToolChoiceTypes,
+    ToolVariantSelector,
+    filter_default_model,
 )
 from langroid.language_models.config import HFPromptFormatterConfig
 from langroid.language_models.model_info import (
@@ -126,23 +129,11 @@ if "OPENAI_API_KEY" in os.environ:
 else:
     available_models = set()
 
-default_openai_chat_model = next(
-    chain(
-        filter(
-            lambda m: m.value in available_models,
-            openai_chat_model_pref_list,
-        ),
-        [OpenAIChatModel.GPT4o],
-    )
+default_openai_chat_model = filter_default_model(
+    openai_chat_model_pref_list, available_models, [OpenAIChatModel.GPT4o]
 )
-default_openai_completion_model = next(
-    chain(
-        filter(
-            lambda m: m.value in available_models,
-            openai_completion_model_pref_list,
-        ),
-        [OpenAICompletionModel.DAVINCI],
-    )
+default_openai_completion_model = filter_default_model(
+    openai_completion_model_pref_list, available_models, [OpenAICompletionModel.DAVINCI]
 )
 
 
@@ -177,7 +168,7 @@ def noop() -> None:
     return None
 
 
-class OpenAICallParams(BaseModel):
+class OpenAICallParams(LLMCallConfig):
     """
     Various params that can be sent to an OpenAI API chat-completion call.
     When specified, any param here overrides the one with same name in the
@@ -186,14 +177,11 @@ class OpenAICallParams(BaseModel):
     https://platform.openai.com/docs/api-reference/chat
     """
 
-    max_tokens: int = 1024
-    temperature: float = 0.2
     frequency_penalty: float | None = None  # between -2 and 2
     presence_penalty: float | None = None  # between -2 and 2
     response_format: Dict[str, str] | None = None
     logit_bias: Dict[int, float] | None = None  # token_id -> bias
     logprobs: bool | None = None
-    top_p: float | None = None
     reasoning_effort: str | None = None  # or "low" or "high" or "medium"
     top_logprobs: int | None = None  # if int, requires logprobs=True
     n: int = 1  # how many completions to generate (n > 1 is NOT handled now)
@@ -952,7 +940,7 @@ class OpenAIGPT(LanguageModel):
             )
         return False, has_function, function_name, function_args, completion, reasoning
 
-    @retry_with_exponential_backoff
+    @retry_with_exponential_backoff()
     def _stream_response(  # type: ignore
         self, response, chat: bool = False
     ) -> Tuple[LLMResponse, Dict[str, Any]]:
@@ -1013,7 +1001,7 @@ class OpenAIGPT(LanguageModel):
             function_name=function_name,
         )
 
-    @async_retry_with_exponential_backoff
+    @async_retry_with_exponential_backoff()
     async def _stream_response_async(  # type: ignore
         self, response, chat: bool = False
     ) -> Tuple[LLMResponse, Dict[str, Any]]:
@@ -1346,7 +1334,12 @@ class OpenAIGPT(LanguageModel):
             prompt_tokens=prompt_tokens, completion_tokens=completion_tokens, cost=cost
         )
 
-    def generate(self, prompt: str, max_tokens: int = 200) -> LLMResponse:
+    def generate(
+        self,
+        prompt: str,
+        max_tokens: int = 200,
+        prompt_variants: PromptVariants = PromptVariants(),
+    ) -> LLMResponse:
         self.run_on_first_use()
 
         try:
@@ -1366,7 +1359,7 @@ class OpenAIGPT(LanguageModel):
         if settings.debug:
             print(f"[grey37]PROMPT: {escape(prompt)}[/grey37]")
 
-        @retry_with_exponential_backoff
+        @retry_with_exponential_backoff()
         def completions_with_backoff(**kwargs):  # type: ignore
             cached = False
             hashed_key, result = self._cache_lookup("Completion", **kwargs)
@@ -1424,7 +1417,12 @@ class OpenAIGPT(LanguageModel):
             msg = response["choices"][0]["text"].strip()
         return LLMResponse(message=msg, cached=cached)
 
-    async def agenerate(self, prompt: str, max_tokens: int = 200) -> LLMResponse:
+    async def agenerate(
+        self,
+        prompt: str,
+        max_tokens: int = 200,
+        prompt_variant: PromptVariants = PromptVariants(),
+    ) -> LLMResponse:
         self.run_on_first_use()
 
         try:
@@ -1451,7 +1449,7 @@ class OpenAIGPT(LanguageModel):
         # WARNING: .Completion.* endpoints are deprecated,
         # and as of Sep 2023 only legacy models will work here,
         # e.g. text-davinci-003, text-ada-001.
-        @async_retry_with_exponential_backoff
+        @async_retry_with_exponential_backoff()
         async def completions_with_backoff(**kwargs):  # type: ignore
             cached = False
             hashed_key, result = self._cache_lookup("AsyncCompletion", **kwargs)
@@ -1507,6 +1505,9 @@ class OpenAIGPT(LanguageModel):
         functions: Optional[List[LLMFunctionSpec]] = None,
         function_call: str | Dict[str, str] = "auto",
         response_format: Optional[OpenAIJsonSchemaSpec] = None,
+        tool_variants: ToolVariantSelector = ToolVariantSelector(
+            open_ai=[], anthropic=[]
+        ),
     ) -> LLMResponse:
         self.run_on_first_use()
 
@@ -1562,6 +1563,9 @@ class OpenAIGPT(LanguageModel):
         functions: Optional[List[LLMFunctionSpec]] = None,
         function_call: str | Dict[str, str] = "auto",
         response_format: Optional[OpenAIJsonSchemaSpec] = None,
+        tool_variants: ToolVariantSelector = ToolVariantSelector(
+            open_ai=[], anthropic=[]
+        ),
     ) -> LLMResponse:
         self.run_on_first_use()
 
@@ -1617,7 +1621,7 @@ class OpenAIGPT(LanguageModel):
             logging.error(friendly_error(e, "Error in OpenAIGPT.achat: "))
             raise e
 
-    @retry_with_exponential_backoff
+    @retry_with_exponential_backoff()
     def _chat_completions_with_backoff(self, **kwargs):  # type: ignore
         cached = False
         hashed_key, result = self._cache_lookup("Completion", **kwargs)
@@ -1646,7 +1650,7 @@ class OpenAIGPT(LanguageModel):
                 self._cache_store(hashed_key, result.model_dump())
         return cached, hashed_key, result
 
-    @async_retry_with_exponential_backoff
+    @async_retry_with_exponential_backoff()
     async def _achat_completions_with_backoff(self, **kwargs):  # type: ignore
         cached = False
         hashed_key, result = self._cache_lookup("Completion", **kwargs)
