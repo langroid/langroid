@@ -2,6 +2,17 @@
 Example showing how to use Langroid with Azure OpenAI and Entra ID
 authentication by providing a custom client.
 
+NOTE: this example is ONLY meant for those who are trying to use a custom
+Azure client, as in this scenario:
+https://langroid.github.io/langroid/notes/custom-azure-client/
+This NOT TYPICAL for most users, and should be ignored if you are not using such a
+custom client.
+
+For typical usage of Azure-deployed models with Langroid, see
+the [`test_azure_openai.py`](https://github.com/langroid/langroid/blob/main/tests/main/test_azure_openai.py) and
+[`example/basic/chat.py`](https://github.com/langroid/langroid/blob/main/examples/basic/chat.py)
+
+
 For an async version of this example, see chat-azure-async-client.py.
 
 For more details see here:

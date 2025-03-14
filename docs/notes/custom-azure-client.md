@@ -1,5 +1,16 @@
 # Custom Azure OpenAI client
 
+!!! warning "This is only for using a Custom Azure OpenAI client"
+    This note **only** meant for those who are trying to use a custom Azure client,
+    and is NOT TYPICAL for most users. For typical usage of Azure-deployed models with Langroid, see
+    the [docs](https://langroid.github.io/langroid/notes/azure-openai-models/), 
+    the [`test_azure_openai.py`](https://github.com/langroid/langroid/blob/main/tests/main/test_azure_openai.py) and
+    [`example/basic/chat.py`](https://github.com/langroid/langroid/blob/main/examples/basic/chat.py)
+
+
+Example showing how to use Langroid with Azure OpenAI and Entra ID
+authentication by providing a custom client.
+
 By default, Langroid manages the configuration and creation 
 of the Azure OpenAI client (see the [Setup guide](https://langroid.github.io/langroid/quick-start/setup/#microsoft-azure-openai-setupoptional)
 for details). In most cases, the available configuration options

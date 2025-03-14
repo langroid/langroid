@@ -648,17 +648,24 @@ class OpenAIGPT(LanguageModel):
 
     def chat_context_length(self) -> int:
         """
-        Context-length for chat-completion models/endpoints
-        Get it from the dict, otherwise fail-over to general method
+        Context-length for chat-completion models/endpoints.
+        Get it from the config if explicitly given,
+         otherwise use model_info based on model name, and fall back to
+         generic model_info if there's no match.
         """
-        return self.info().context_length
+        return self.config.chat_context_length or self.info().context_length
 
     def completion_context_length(self) -> int:
         """
-        Context-length for completion models/endpoints
-        Get it from the dict, otherwise fail-over to general method
+        Context-length for completion models/endpoints.
+        Get it from the config if explicitly given,
+         otherwise use model_info based on model name, and fall back to
+         generic model_info if there's no match.
         """
-        return self.completion_info().context_length
+        return (
+            self.config.completion_context_length
+            or self.completion_info().context_length
+        )
 
     def chat_cost(self) -> Tuple[float, float]:
         """

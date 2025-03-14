@@ -233,6 +233,7 @@ def test_retriever_agent_from_df(
     agent_cfg = _TestRetrieverAgentConfig()
     agent = RetrieverAgent(agent_cfg)
     agent.vecdb = vecdb
+    agent.clear()
     agent.ingest_dataframe(df, content="summary", metadata=metadata)
     response = agent.llm_response(
         """

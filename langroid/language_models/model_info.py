@@ -61,13 +61,13 @@ class DeepSeekModel(ModelName):
 class GeminiModel(ModelName):
     """Enum for Gemini models"""
 
-    GEMINI_1_5_FLASH = "gemini/gemini-1.5-flash"
-    GEMINI_1_5_FLASH_8B = "gemini/gemini-1.5-flash-8b"
-    GEMINI_1_5_PRO = "gemini/gemini-1.5-pro"
-    GEMINI_2_PRO = "gemini/gemini-2.0-pro-exp-02-05"
-    GEMINI_2_FLASH = "gemini/gemini-2.0-flash"
-    GEMINI_2_FLASH_LITE = "gemini/gemini-2.0-flash-lite-preview"
-    GEMINI_2_FLASH_THINKING = "gemini/gemini-2.0-flash-thinking-exp"
+    GEMINI_1_5_FLASH = "gemini-1.5-flash"
+    GEMINI_1_5_FLASH_8B = "gemini-1.5-flash-8b"
+    GEMINI_1_5_PRO = "gemini-1.5-pro"
+    GEMINI_2_PRO = "gemini-2.0-pro-exp-02-05"
+    GEMINI_2_FLASH = "gemini-2.0-flash"
+    GEMINI_2_FLASH_LITE = "gemini-2.0-flash-lite-preview"
+    GEMINI_2_FLASH_THINKING = "gemini-2.0-flash-thinking-exp"
 
 
 class OpenAI_API_ParamInfo(BaseModel):

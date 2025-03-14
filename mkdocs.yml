@@ -104,13 +104,14 @@ nav:
       - XML-based Tools: notes/xml-tools.md
       - Async Streaming: notes/async-streaming.md
       - Knowledge Graphs: notes/knowledge-graphs.md
-      - Gemini LLMs: notes/gemini.md
+      - Gemini LLMs, Embeddings: notes/gemini.md
       - Gemini LLMs Pdf Parsing: notes/gemini-pdf-parser.md  
       - Large Tool Results: notes/large-tool-results.md
       - GLHF.chat Support: notes/glhf-chat.md
       - Structured Output: notes/structured-output.md
       - Tool Handler Name: notes/tool-message-handler.md
       - Llama.cpp Embeddings: notes/llama-cpp-embeddings.md
+      - Azure OpenAI models: notes/azure-openai-models.md
       - Custom Azure OpenAI client: notes/custom-azure-client.md
       - Enriching Chunks for Retrieval: notes/enriching-for-retrieval.md
       - Reasoning Content: notes/reasoning-content.md
@@ -119,6 +120,7 @@ nav:
       - PGVector: notes/pgvector.md
       - Pinecone: notes/pinecone.md
       - Tavily Search Tool: notes/tavily_search.md
+      - Marker Pdf Parser: notes/marker-pdf.md
 
   - Examples:
     - Guide: examples/guide.md
