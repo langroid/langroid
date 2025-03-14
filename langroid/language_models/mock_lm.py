@@ -116,15 +116,20 @@ class MockLM(LanguageModel):
     def generate(
         self,
         prompt: str,
-        prompt_variant: PromptVariants = PromptVariants(),
         max_tokens: int = 200,
+        prompt_variant: PromptVariants = PromptVariants(),
     ) -> lm.LLMResponse:
         """
         Mock generate function for testing
         """
         return self._response(prompt)
 
-    async def agenerate(self, prompt: str, max_tokens: int = 200) -> LLMResponse:
+    async def agenerate(
+        self,
+        prompt: str,
+        max_tokens: int = 200,
+        prompt_variants: PromptVariants = PromptVariants(),
+    ) -> LLMResponse:
         """
         Mock generate function for testing
         """

@@ -628,13 +628,18 @@ class LanguageModel(ABC):
     def generate(
         self,
         prompt: str,
-        prompt_variant: PromptVariants = PromptVariants(),
         max_tokens: int = 200,
+        prompt_variant: PromptVariants = PromptVariants(),
     ) -> LLMResponse:
         pass
 
     @abstractmethod
-    async def agenerate(self, prompt: str, max_tokens: int = 200) -> LLMResponse:
+    async def agenerate(
+        self,
+        prompt: str,
+        max_tokens: int = 200,
+        prompt_variant: PromptVariants = PromptVariants(),
+    ) -> LLMResponse:
         pass
 
     @abstractmethod
@@ -685,7 +690,7 @@ class LanguageModel(ABC):
         pass
 
     def __call__(self, prompt: str, max_tokens: int) -> LLMResponse:
-        return self.generate(prompt, PromptVariants(), max_tokens)
+        return self.generate(prompt, max_tokens, PromptVariants())
 
     def info(self) -> ModelInfo:
         """Info of relevant chat model"""

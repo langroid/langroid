@@ -221,7 +221,11 @@ class AnthropicLLMConfig(LLMConfig):
 
 class AnthropicLLM(LanguageModel):
     """
-    Class for Anthropic LLMs
+    Class for Anthropic LLMs.
+    Important note: the Anthropic models we list within `AnthropicModel`
+    are all versions 3+. As such, we do not use the legacy
+    `TextCompletion` API for chat completion calls, we instead use
+    the `Messages` API to perform chat and chat completion.
     """
 
     client: Anthropic | None
@@ -266,8 +270,8 @@ class AnthropicLLM(LanguageModel):
     def generate(
         self,
         prompt: str,
-        prompt_variants: PromptVariants = PromptVariants(),
         max_tokens: int = 200,
+        prompt_variants: PromptVariants = PromptVariants(),
     ) -> LLMResponse:
         """
         Entry function for chat completions. Anthropic used to have an API
@@ -278,45 +282,52 @@ class AnthropicLLM(LanguageModel):
         The `generate` code path leverages that methodology.
         """
         try:
-            return self._generate(prompt_variants, max_tokens)
+            if not prompt_variants.anthropic:
+                raise ValueError("Empty prompt list passed into generate")
+
+            messages = [
+                LLMMessage.parse_obj(prompt) for prompt in prompt_variants.anthropic
+            ]
+
+            if settings.debug:
+                # using Claude 3.x+ models, the completion prompt should always be
+                # the last message with a type of "assistant"
+                message: LLMMessage = messages[-1]
+                print(f"[grey37]ROLE: {message.role}[/grey37]")
+                print(f"[grey37]PROMPT: {escape(message.content)}[/grey37]")
+
+            return self.chat(messages=messages, max_tokens=max_tokens)
         except Exception as e:
             logging.error("Error in AnthropicLLM::generate: ")
             logging.error(e)
             raise e
 
-    def _generate(
-        self, prompt_variants: PromptVariants, max_tokens: int
+    async def agenerate(
+        self,
+        prompt: str,
+        max_tokens: int = 200,
+        prompt_variants: PromptVariants = PromptVariants(),
     ) -> LLMResponse:
-        if not prompt_variants.anthropic:
-            raise ValueError("Empty prompt list passed into generate")
+        try:
+            if not prompt_variants.anthropic:
+                raise ValueError("Empty prompt list passed into agenerate")
 
-        messages = [
-            LLMMessage.parse_obj(prompt) for prompt in prompt_variants.anthropic
-        ]
+            messages = [
+                LLMMessage.parse_obj(prompt) for prompt in prompt_variants.anthropic
+            ]
 
-        if settings.debug:
-            # using Claude 3.x+ models, the completion prompt should always be the last
-            # message with a type of "assistant"
-            message: LLMMessage = messages[-1]
-            print(f"[grey37]ROLE: {message.role}[/grey37]")
-            print(f"[grey37]PROMPT: {escape(message.content)}[/grey37]")
+            if settings.debug:
+                # using Claude 3.x+ models, the completion prompt should always be
+                # the last message with a type of "assistant"
+                message: LLMMessage = messages[-1]
+                print(f"[grey37]ROLE: {message.role}[/grey37]")
+                print(f"[grey37]PROMPT: {escape(message.content)}[/grey37]")
 
-        call_dict = dict(
-            model=self.config.completion_model,
-            messages=messages,
-            max_tokens=max_tokens,
-            stream=self.get_stream(),
-        )
-
-        # if user has configured self.config.params, we should
-        # now place those values into the completion call
-        hydrated_call_dict = self._hydrate_completion_call(completion_call=call_dict)
-
-        result: LLMResponse = self._completions_with_backoff(**hydrated_call_dict)
-        return result
-
-    async def agenerate(self, prompt: str, max_tokens: int = 200) -> LLMResponse:
-        return LLMResponse(message="TODO")
+            return await self.achat(messages=messages, max_tokens=max_tokens)
+        except Exception as e:
+            logging.error("Error in AnthropicLLM::generate: ")
+            logging.error(e)
+            raise e
 
     def chat(
         self,
@@ -909,12 +920,3 @@ class AnthropicLLM(LanguageModel):
         if not isinstance(result, dict):
             result = result.dict()
         return self._process_chat_completion_response(result)
-
-    def _hydrate_completion_call(
-        self, completion_call: Dict[str, Any]
-    ) -> Dict[str, Any]:
-        hydrated = {}
-        if self.config.params:
-            hydrated.update(self.config.params.to_dict_exclude_none())
-        hydrated.update(completion_call)
-        return hydrated

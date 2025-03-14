@@ -1337,8 +1337,8 @@ class OpenAIGPT(LanguageModel):
     def generate(
         self,
         prompt: str,
-        prompt_variants: PromptVariants = PromptVariants(),
         max_tokens: int = 200,
+        prompt_variants: PromptVariants = PromptVariants(),
     ) -> LLMResponse:
         self.run_on_first_use()
 
@@ -1417,7 +1417,12 @@ class OpenAIGPT(LanguageModel):
             msg = response["choices"][0]["text"].strip()
         return LLMResponse(message=msg, cached=cached)
 
-    async def agenerate(self, prompt: str, max_tokens: int = 200) -> LLMResponse:
+    async def agenerate(
+        self,
+        prompt: str,
+        max_tokens: int = 200,
+        prompt_variant: PromptVariants = PromptVariants(),
+    ) -> LLMResponse:
         self.run_on_first_use()
 
         try:
