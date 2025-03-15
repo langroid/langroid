@@ -265,6 +265,9 @@ pinecone = [
 asyncio = [
     "asyncio>=3.4.3",
 ]
+firecrawl = [
+    "firecrawl-py>=1.13.5",
+]
 
 
 [dependency-groups]
