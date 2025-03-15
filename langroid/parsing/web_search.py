@@ -28,7 +28,7 @@ class WebSearchResult:
     def __init__(
         self,
         title: str,
-        link: str,
+        link: str | None,
         max_content_length: int = 3500,
         max_summary_length: int = 300,
     ):
@@ -50,6 +50,8 @@ class WebSearchResult:
         return self.full_content[: self.max_summary_length]
 
     def get_full_content(self) -> str:
+        if self.link is None:
+            return "Error: No Search Result"
         try:
             # First check headers only to get content length and type
             head_response: Response = requests.head(self.link, timeout=5)
@@ -83,7 +85,7 @@ class WebSearchResult:
     def to_dict(self) -> Dict[str, str]:
         return {
             "title": self.title,
-            "link": self.link,
+            "link": self.link or "",
             "summary": self.summary,
             "full_content": self.full_content,
         }
@@ -175,21 +177,32 @@ def exa_search(query: str, num_results: int = 5) -> List[WebSearchResult]:
 
     client = Exa(api_key=api_key)
 
-    response = client.search(
-        query=query,
-        num_results=num_results,
-    )
-    raw_results = response.results
-
-    return [
-        WebSearchResult(
-            title=result.title or "",
-            link=result.url,
-            max_content_length=3500,
-            max_summary_length=300,
+    try:
+        response = client.search(
+            query=query,
+            num_results=num_results,
         )
-        for result in raw_results
-    ]
+        raw_results = response.results
+
+        return [
+            WebSearchResult(
+                title=result.title or "",
+                link=result.url,
+                max_content_length=3500,
+                max_summary_length=300,
+            )
+            for result in raw_results
+            if result.url is not None
+        ]
+    except Exception:
+        return [
+            WebSearchResult(
+                title="Error",
+                link=None,
+                max_content_length=3500,
+                max_summary_length=300,
+            )
+        ]
 
 
 def duckduckgo_search(query: str, num_results: int = 5) -> List[WebSearchResult]:
