@@ -1682,6 +1682,22 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/6b/b6/82c7e601d6d3c3278c40b7bd35e17e82aa227f050aa9f66cb7b7fce29471/fire-0.7.0.tar.gz", hash = "sha256:961550f07936eaf65ad1dc8360f2b2bf8408fad46abbfa4d2a3794f8d2a95cdf", size = 87189 }
 
 [[package]]
+name = "firecrawl-py"
+version = "1.13.5"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "nest-asyncio" },
+    { name = "pydantic" },
+    { name = "python-dotenv" },
+    { name = "requests" },
+    { name = "websockets" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/b9/cd/c834f5dc51e82beba8ca752446446a097bd68fc5765f9e697581b5238d54/firecrawl_py-1.13.5.tar.gz", hash = "sha256:dd57d5270801222fcdeb019ac7a35dfef16f9a8eb19de446a9666b008473a6c2", size = 20915 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/57/b9/08d730e7a844ee723acbfb14430f8dfa4386b18c086b7d23fcbe7a451568/firecrawl_py-1.13.5-py3-none-any.whl", hash = "sha256:dfb69644da1542d24d90e34a36e3b5733764121f2c992245c869513e2e184547", size = 19837 },
+]
+
+[[package]]
 name = "flake8"
 version = "6.1.0"
 source = { registry = "https://pypi.org/simple" }
@@ -2814,7 +2830,7 @@ sdist = { url = "https://files.pythonhosted.org/packages/0e/72/a3add0e4eec4eb9e2
 
 [[package]]
 name = "langroid"
-version = "0.45.7"
+version = "0.45.8"
 source = { editable = "." }
 dependencies = [
     { name = "adb-cloud-connector" },
@@ -2950,6 +2966,9 @@ exa = [
 ]
 fastembed = [
     { name = "fastembed" },
+]
+firecrawl = [
+    { name = "firecrawl-py" },
 ]
 google-genai = [
     { name = "google-genai" },
@@ -3119,6 +3138,7 @@ requires-dist = [
     { name = "fastembed", marker = "extra == 'all'", specifier = ">=0.3.1,<0.4.0" },
     { name = "fastembed", marker = "extra == 'fastembed'", specifier = ">=0.3.1,<0.4.0" },
     { name = "fire", specifier = ">=0.5.0,<1.0.0" },
+    { name = "firecrawl-py", marker = "extra == 'firecrawl'", specifier = ">=1.13.5" },
     { name = "gitpython", specifier = ">=3.1.43,<4.0.0" },
     { name = "google-api-python-client", specifier = ">=2.95.0,<3.0.0" },
     { name = "google-genai", specifier = ">=1.0.0" },
