@@ -50,7 +50,12 @@ from langroid.parsing.search import (
     preprocess_text,
 )
 from langroid.parsing.table_loader import describe_dataframe
-from langroid.parsing.url_loader import URLLoader
+from langroid.parsing.url_loader import (
+    BaseCrawler,
+    TrafilaturaConfig,
+    TrafilaturaCrawler,
+    URLLoader,
+)
 from langroid.parsing.urls import get_list_from_user, get_urls_paths_bytes_indices
 from langroid.prompts.prompts_config import PromptsConfig
 from langroid.prompts.templates import SUMMARY_ANSWER_PROMPT_GPT4
@@ -192,6 +197,7 @@ class DocChatAgentConfig(ChatAgentConfig):
             library="pymupdf4llm",
         ),
     )
+    crawler: BaseCrawler = TrafilaturaCrawler(TrafilaturaConfig(parsing_config=parsing))
 
     # Allow vecdb to be None in case we want to explicitly set it later
     vecdb: Optional[VectorStoreConfig] = QdrantDBConfig(
@@ -340,7 +346,9 @@ class DocChatAgent(ChatAgent):
         if len(urls) > 0:
             for ui in url_idxs:
                 meta = urls_meta.get(ui, {})
-                loader = URLLoader(urls=[all_paths[ui]], parser=parser)  # type: ignore
+                loader = URLLoader(
+                    urls=[all_paths[ui]], crawler=self.config.crawler
+                )  # type: ignore
                 url_docs = loader.load()
                 # update metadata of each doc with meta
                 for d in url_docs:

@@ -1,3 +1,4 @@
+```python
 # Firecrawl and Trafilatura Crawlers Documentation
 
 `URLLoader` uses `Trafilatura` if not explicitly specified
@@ -29,21 +30,25 @@ want to leverage Langroid's document processing tools.
 
 ### Parameters
 
+*   **config (TrafilaturaConfig)**: A `TrafilaturaConfig` object that defines how to process the extracted text. 
+    *   `parsing_config` (ParsingConfig, optional): A Langroid `ParsingConfig` object that defines how to parse documents once extracted.  If not provided, the default parsing config will be used.
+    *   `threads` (int): The number of threads to use for downloading web pages.
+
 *   **parser (Parser)**: A Langroid `Parser` object that defines how to process the extracted text. 
-See Langroid's documentation on parsing for details.
-*   **threads (int)**: The number of threads to use for downloading web pages.
+See Langroid's documentation on parsing for details. if no parser is defined, a default parser will be created with the `parsing_config`.
 
 ### Usage
 
 ```python
-from langroid.parsing.url_loader import URLLoader,TrafilaturaCrawler
+from langroid.parsing.url_loader import URLLoader, TrafilaturaCrawler, TrafilaturaConfig
 from langroid.parsing.parser import Parser, ParsingConfig
 
 # Define a parsing configuration
 parsing_config = ParsingConfig()
 
-# Create a Parser instance
-parser = Parser(parsing_config)
+# Create a TrafilaturaConfig instance
+trafilatura_config = TrafilaturaConfig(parsing_config=parsing_config, threads=4)
+
 
 loader = URLLoader(
     urls=[
@@ -52,7 +57,7 @@ loader = URLLoader(
         "https://ai.google.dev/gemini-api/docs",
         "https://books.toscrape.com/"
     ],
-    crawler=TrafilaturaCrawler(parser=parser, threads=4),
+    crawler=TrafilaturaCrawler(config=trafilatura_config),
 )
 
 docs = loader.load()
@@ -78,12 +83,14 @@ gathering content from multiple pages, including subdomains, while bypassing blo
 
 ### Parameters
 
-*   **timeout (int, optional)**: Time in milliseconds (ms) to wait for a response. 
-Default is `30000ms` (30 seconds). In crawl mode, this applies per URL.
-*   **limit (int, optional)**: Maximum number of pages to scrape in crawl mode. Helps control API usage.
-*   **params (dict, optional)**: Additional parameters to customize the request. 
-See the [scrape API](https://docs.firecrawl.dev/api-reference/endpoint/scrape) and 
-[crawl API](https://docs.firecrawl.dev/api-reference/endpoint/crawl-post) for details.
+*   **config (FirecrawlConfig)**:  A `FirecrawlConfig` object.
+
+    *   **timeout (int, optional)**: Time in milliseconds (ms) to wait for a response. 
+        Default is `30000ms` (30 seconds). In crawl mode, this applies per URL.
+    *   **limit (int, optional)**: Maximum number of pages to scrape in crawl mode. Helps control API usage.
+    *   **params (dict, optional)**: Additional parameters to customize the request. 
+        See the [scrape API](https://docs.firecrawl.dev/api-reference/endpoint/scrape) and 
+        [crawl API](https://docs.firecrawl.dev/api-reference/endpoint/crawl-post) for details.
 
 ### Usage
 
@@ -92,8 +99,13 @@ See the [scrape API](https://docs.firecrawl.dev/api-reference/endpoint/scrape) a
 Fetch content from multiple URLs:
 
 ```python
-from langroid.parsing.url_loader import URLLoader
-from langroid.crawlers import FirecrawlCrawler
+from langroid.parsing.url_loader import URLLoader, FirecrawlCrawler, FirecrawlConfig
+
+# create a FirecrawlConfig object
+firecrawl_config = FirecrawlConfig(
+    timeout=15000,  # Timeout per request (15 sec)
+    mode="scrape",
+)
 
 loader = URLLoader(
     urls=[
@@ -102,10 +114,7 @@ loader = URLLoader(
         "https://ai.google.dev/gemini-api/docs",
         "https://books.toscrape.com/"
     ],
-    crawler=FirecrawlCrawler(
-        timeout=15000,  # Timeout per request (15 sec)
-        mode="scrape",
-    )
+    crawler=FirecrawlCrawler(config=firecrawl_config)
 )
 
 docs = loader.load()
@@ -117,18 +126,21 @@ print(docs)
 Fetch content from multiple pages starting from a single URL:
 
 ```python
-from langroid.parsing.url_loader import URLLoader
-from langroid.crawlers import FirecrawlCrawler
+from langroid.parsing.url_loader import URLLoader, FirecrawlCrawler, FirecrawlConfig
+
+# create a FirecrawlConfig object
+firecrawl_config = FirecrawlConfig(
+    timeout=10000,  # 10 sec per page
+    mode="crawl",
+    params={
+        "limit": 5,
+    }
+)
+
 
 loader = URLLoader(
     urls=["https://books.toscrape.com/"],
-    crawler=FirecrawlCrawler(
-        timeout=10000,  # 10 sec per page
-        mode="crawl",
-        params={
-            "limit": 5,
-        }
-    ),
+    crawler=FirecrawlCrawler(config=firecrawl_config)
 )
 
 docs = loader.load()
@@ -155,3 +167,4 @@ This reduces the need for complex parsing logic within Langroid.
 *   Use `FirecrawlCrawler` when you need efficient, API-driven scraping with built-in document processing. 
 This is often the simplest and most effective choice.
 *   Use `TrafilaturaCrawler` when you want local non API based scraping (less accurate ) .
+```
