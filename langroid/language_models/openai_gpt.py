@@ -82,8 +82,13 @@ DEEPSEEK_BASE_URL = "https://api.deepseek.com/v1"
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai"
 GLHF_BASE_URL = "https://glhf.chat/api/openai/v1"
+LANGDB_BASE_URL = "https://api.us-east-1.langdb.ai"
 OLLAMA_API_KEY = "ollama"
 DUMMY_API_KEY = "xxx"
+
+LANGDB_PROJECT_ID = os.environ.get("LANGDB_PROJECT_ID", "")
+VLLM_API_KEY = os.environ.get("VLLM_API_KEY", DUMMY_API_KEY)
+LLAMACPP_API_KEY = os.environ.get("LLAMA_API_KEY", DUMMY_API_KEY)
 
 
 openai_chat_model_pref_list = [
@@ -177,6 +182,16 @@ def noop() -> None:
     return None
 
 
+class LangDBParams(BaseModel):
+    """
+    Parameters specific to LangDB integration.
+    """
+    project_id: Optional[str] = None
+    label: Optional[str] = None
+    run_id: Optional[str] = None
+    thread_id: Optional[str] = None
+
+
 class OpenAICallParams(BaseModel):
     """
     Various params that can be sent to an OpenAI API chat-completion call.
@@ -253,6 +268,8 @@ class OpenAIGPTConfig(LLMConfig):
     # e.g. "mistral-instruct-v0.2 (a fuzzy search is done to find the closest match)
     formatter: str | None = None
     hf_formatter: HFFormatter | None = None
+    langdb_params: Optional[LangDBParams] = None
+    headers: Dict[str, str] = {}
 
     def __init__(self, **kwargs) -> None:  # type: ignore
         local_model = "api_base" in kwargs and kwargs["api_base"] is not None
@@ -496,6 +513,7 @@ class OpenAIGPT(LanguageModel):
         self.is_deepseek = self.is_deepseek_model()
         self.is_glhf = self.config.chat_model.startswith("glhf/")
         self.is_openrouter = self.config.chat_model.startswith("openrouter/")
+        self.is_langdb = self.config.chat_model.startswith("langdb/")
 
         if self.is_groq:
             # use groq-specific client
@@ -543,19 +561,40 @@ class OpenAIGPT(LanguageModel):
                 self.config.chat_model = self.config.chat_model.replace("deepseek/", "")
                 self.api_base = DEEPSEEK_BASE_URL
                 if self.api_key == OPENAI_API_KEY:
-                    self.api_key = os.getenv("DEEPSEEK_API_KEY", DUMMY_API_KEY)
+                  self.api_key = os.getenv("DEEPSEEK_API_KEY", DUMMY_API_KEY)
+            elif self.is_langdb:
+                self.config.chat_model = self.config.chat_model.replace("langdb/", "")
+                if LANGDB_PROJECT_ID:
+                    self.api_base = f"{LANGDB_BASE_URL}/{LANGDB_PROJECT_ID}/v1"
+                else:
+                    self.api_base = LANGDB_BASE_URL
+                if self.api_key == OPENAI_API_KEY:
+                    self.api_key = os.environ.get("LANGDB_API_KEY", DUMMY_API_KEY)
+
+                if self.config.langdb_params:
+                    params = self.config.langdb_params
+                    if params.project_id:
+                        self.config.headers["x-project-id"] = params.project_id
+                    if params.label:
+                        self.config.headers["x-label"] = params.label
+                    if params.run_id:
+                        self.config.headers["x-run-id"] = params.run_id
+                    if params.thread_id:
+                        self.config.headers["x-thread-id"] = params.thread_id
 
             self.client = OpenAI(
                 api_key=self.api_key,
                 base_url=self.api_base,
                 organization=self.config.organization,
                 timeout=Timeout(self.config.timeout),
+                default_headers=self.config.headers,
             )
             self.async_client = AsyncOpenAI(
                 api_key=self.api_key,
                 organization=self.config.organization,
                 base_url=self.api_base,
                 timeout=Timeout(self.config.timeout),
+                default_headers=self.config.headers,
             )
 
         self.cache: CacheDB | None = None
@@ -1028,6 +1067,7 @@ class OpenAIGPT(LanguageModel):
                 OpenAIResponse object (with choices, usage)
 
         """
+
         completion = ""
         reasoning = ""
         function_args = ""
@@ -1075,7 +1115,9 @@ class OpenAIGPT(LanguageModel):
         )
 
     @staticmethod
-    def tool_deltas_to_tools(tools: List[Dict[str, Any]]) -> Tuple[
+    def tool_deltas_to_tools(
+        tools: List[Dict[str, Any]],
+    ) -> Tuple[
         str,
         List[OpenAIToolCall],
         List[Dict[str, Any]],
@@ -1692,8 +1734,7 @@ class OpenAIGPT(LanguageModel):
         else:
             llm_messages = messages
             if (
-                len(llm_messages) == 1
-                and llm_messages[0].role == Role.SYSTEM
+                len(llm_messages) == 1 and llm_messages[0].role == Role.SYSTEM
                 # TODO: we will unconditionally insert a dummy user msg
                 # if the only msg is a system msg.
                 # We could make this conditional on ModelInfo.needs_first_user_message
