@@ -1,6 +1,6 @@
 [project]
 name = "langroid"
-version = "0.45.4"
+version = "0.45.8"
 authors = [
     {name = "Prasad Chalasani", email = "pchalasani@gmail.com"},
 ]
@@ -90,6 +90,7 @@ vecdbs = [
 db = [
     "sqlalchemy<3.0.0,>=2.0.19",
     "psycopg2<3.0.0,>=2.9.7",
+    "psycopg2-binary>=2.9.10",
     "pymysql<2.0.0,>=1.1.0",
 ]
 

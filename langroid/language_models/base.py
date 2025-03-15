@@ -42,6 +42,8 @@ FunctionCallTypes = Literal["none", "auto"]
 ToolChoiceTypes = Literal["none", "auto", "required"]
 ToolTypes = Literal["function"]
 
+DEFAULT_CONTEXT_LENGTH = 16_000
+
 
 class StreamEventType(Enum):
     TEXT = 1
@@ -66,9 +68,9 @@ class LLMConfig(BaseSettings):
     chat_model: str = ""
     completion_model: str = ""
     temperature: float = 0.0
-    chat_context_length: int = 8000
+    chat_context_length: int | None = None
     async_stream_quiet: bool = True  # suppress streaming output in async mode?
-    completion_context_length: int = 8000
+    completion_context_length: int | None = None
     # if input length + max_output_tokens > context length of model,
     # we will try shortening requested output
     min_output_tokens: int = 64
@@ -625,10 +627,10 @@ class LanguageModel(ABC):
         return get_model_info(orig_model, model)
 
     def chat_context_length(self) -> int:
-        return self.config.chat_context_length
+        return self.config.chat_context_length or DEFAULT_CONTEXT_LENGTH
 
     def completion_context_length(self) -> int:
-        return self.config.completion_context_length
+        return self.config.completion_context_length or DEFAULT_CONTEXT_LENGTH
 
     def chat_cost(self) -> Tuple[float, float]:
         return self.config.chat_cost_per_1k_tokens
