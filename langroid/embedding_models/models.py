@@ -242,6 +242,7 @@ class OpenAIEmbeddings(EmbeddingModel):
             ]
             for text in texts
         ]
+
         if self.is_langdb:
             # LangDB embedding endpt only works with strings, not tokens
             return [self.tokenizer.decode(tokens) for tokens in truncated_tokens]
