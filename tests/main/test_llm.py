@@ -264,11 +264,22 @@ def test_keys():
     run=True,
     strict=False,
 )
-def test_llm_langdb():
+@pytest.mark.parametrize(
+    "model",
+    [
+        "langdb/gpt-4o-mini",
+        "langdb/openai/gpt-4o-mini",
+        "langdb/anthropic/claude-3-haiku-20240307",
+        "langdb/claude-3-haiku-20240307",
+        "langdb/gemini/gemini-2.0-flash-lite",
+        "langdb/gemini-2.0-flash-lite",
+    ],
+)
+def test_llm_langdb(model: str):
     """Test that LLM access via LangDB works."""
 
     llm_config_langdb = lm.OpenAIGPTConfig(
-        chat_model="langdb/openai/gpt-4o-mini",
+        chat_model=model,
     )
     llm = lm.OpenAIGPT(config=llm_config_langdb)
     result = llm.chat("what is 3+4?")
