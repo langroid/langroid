@@ -285,6 +285,7 @@ def test_llm_langdb(model: str):
     result = llm.chat("what is 3+4?")
     assert "7" in result.message
 
+
 @pytest.mark.parametrize(
     "model",
     [
@@ -293,7 +294,7 @@ def test_llm_langdb(model: str):
         "openrouter/google/gemini-2.0-flash-lite-001",
     ],
 )
-def test_llm_openrouter(model:str):
+def test_llm_openrouter(model: str):
     llm_config = lm.OpenAIGPTConfig(
         chat_model=model,
     )
