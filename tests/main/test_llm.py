@@ -257,3 +257,19 @@ def test_keys():
 
         llm = lm.OpenAIGPT(config)
         assert llm.api_key == rand_key
+
+
+@pytest.mark.xfail(
+    reason="LangDB may fail due to unknown flakiness",
+    run=True,
+    strict=False,
+)
+def test_llm_langdb():
+    """Test that LLM access via LangDB works."""
+
+    llm_config_langdb = lm.OpenAIGPTConfig(
+        chat_model="langdb/openai/gpt-4o-mini",
+    )
+    llm = lm.OpenAIGPT(config=llm_config_langdb)
+    result = llm.chat("what is 3+4?")
+    assert "7" in result.message

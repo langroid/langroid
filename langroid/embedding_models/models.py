@@ -197,8 +197,7 @@ class OpenAIEmbeddings(EmbeddingModel):
             project_id = self.config.langdb_params.project_id
             if project_id:
                 self.config.api_base += "/" + project_id + "/v1"
-            if not self.config.api_key:
-                self.config.api_key = self.config.langdb_params.api_key
+            self.config.api_key = self.config.langdb_params.api_key
 
         if not self.config.api_key:
             self.config.api_key = os.getenv("OPENAI_API_KEY", "")
