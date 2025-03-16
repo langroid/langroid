@@ -85,3 +85,5 @@ Visit the [LangDB Dashboard](https://dashboard.langdb.com) to:
 - Analyze token usage and costs
 
 For more information, visit [LangDB Documentation](https://docs.langdb.com).
+
+See example scripts [here](https://github.com/langroid/langroid/tree/main/examples/langdb)

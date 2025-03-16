@@ -4,26 +4,14 @@ This folder contains examples demonstrating how to use [LangDB](https://langdb.c
 
 ## Prerequisites
 
-Before running any examples, make sure you have:
+Before running any examples, make sure you've installed Langroid as usual.
 
-1. **Environment Setup**:
-   ```bash
-   # Create and activate a virtual environment
-   python -m venv .venv
-   source .venv/bin/activate  # On Windows: .venv\Scripts\activate
-   
-   # Install dependencies
-   pip install -r requirements.txt
-   ```
 
-2. **Environment Variables**:
-   Create a `.env` file in the project root with:
-   ```bash
-   LANGDB_API_KEY=your_api_key_here
-   LANGDB_PROJECT_ID=your_project_id_here
-   ```
-
-## Examples
+At minimum, have these environment variables set up in your `.env` file or environment:
+```bash
+LANGDB_API_KEY=your_api_key_here
+LANGDB_PROJECT_ID=your_project_id_here
+```
 
 ### 1. LangDB Chat Agent with Document RAG (`langdb_chat_agent_docs.py`)
 
@@ -81,12 +69,12 @@ thread_id = str(uuid.uuid4())
 # Configure LLM with LangDBParams
 llm_config = OpenAIGPTConfig(
     chat_model="langdb/openai/gpt-4",  # LangDB model prefix
-    api_key=os.getenv("LANGDB_API_KEY"),
     langdb_params=LangDBParams(
         label='my-app',
         thread_id=thread_id,  # For conversation tracking
         run_id=run_id,        # For request grouping
-        # project_id is taken from the env var LANGDB_PROJECT_ID
+        # project_id, api_key are used from the env vars
+        # LANGDB_API_KEY, LANGDB_PROJECT_ID respectively
     )
 )
 
