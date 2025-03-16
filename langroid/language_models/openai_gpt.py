@@ -1,4 +1,3 @@
-import hashlib
 import json
 import logging
 import os
@@ -74,7 +73,8 @@ from langroid.utils.configuration import settings
 from langroid.utils.constants import Colors
 from langroid.utils.system import friendly_error
 
-logging.getLogger("openai").setLevel(logging.ERROR)
+logger = logging.getLogger("openai")
+logger.setLevel(logging.ERROR)
 
 if "OLLAMA_HOST" in os.environ:
     OLLAMA_BASE_URL = f"http://{os.environ['OLLAMA_HOST']}/v1"
@@ -1274,36 +1274,6 @@ class OpenAIGPT(LanguageModel):
             openai_response.dict(),
         )
 
-    def _cache_store(self, k: str, v: Any) -> None:
-        if self.cache is None:
-            return
-        try:
-            self.cache.store(k, v)
-        except Exception as e:
-            logging.error(f"Error in OpenAIGPT._cache_store: {e}")
-            pass
-
-    def _cache_lookup(self, fn_name: str, **kwargs: Dict[str, Any]) -> Tuple[str, Any]:
-        if self.cache is None:
-            return "", None  # no cache, return empty key and None result
-        # Use the kwargs as the cache key
-        sorted_kwargs_str = str(sorted(kwargs.items()))
-        raw_key = f"{fn_name}:{sorted_kwargs_str}"
-
-        # Hash the key to a fixed length using SHA256
-        hashed_key = hashlib.sha256(raw_key.encode()).hexdigest()
-
-        if not settings.cache:
-            # when caching disabled, return the hashed_key and none result
-            return hashed_key, None
-        # Try to get the result from the cache
-        try:
-            cached_val = self.cache.retrieve(hashed_key)
-        except Exception as e:
-            logging.error(f"Error in OpenAIGPT._cache_lookup: {e}")
-            return hashed_key, None
-        return hashed_key, cached_val
-
     def _cost_chat_model(self, prompt: int, completion: int) -> float:
         price = self.chat_cost()
         return (price[0] * prompt + price[1] * completion) / 1000
@@ -1362,7 +1332,7 @@ class OpenAIGPT(LanguageModel):
         @retry_with_exponential_backoff()
         def completions_with_backoff(**kwargs):  # type: ignore
             cached = False
-            hashed_key, result = self._cache_lookup("Completion", **kwargs)
+            hashed_key, result = self.cache_lookup("Completion", logger, **kwargs)
             if result is not None:
                 cached = True
                 if settings.debug:
@@ -1388,10 +1358,10 @@ class OpenAIGPT(LanguageModel):
                         result,
                         chat=self.config.litellm,
                     )
-                    self._cache_store(hashed_key, openai_response)
+                    self.cache_store(hashed_key, openai_response, logger)
                     return cached, hashed_key, openai_response
                 else:
-                    self._cache_store(hashed_key, result.model_dump())
+                    self.cache_store(hashed_key, result.model_dump(), logger)
             return cached, hashed_key, result
 
         kwargs: Dict[str, Any] = dict(model=self.config.completion_model)
@@ -1452,7 +1422,7 @@ class OpenAIGPT(LanguageModel):
         @async_retry_with_exponential_backoff()
         async def completions_with_backoff(**kwargs):  # type: ignore
             cached = False
-            hashed_key, result = self._cache_lookup("AsyncCompletion", **kwargs)
+            hashed_key, result = self.cache_lookup("AsyncCompletion", logger, **kwargs)
             if result is not None:
                 cached = True
                 if settings.debug:
@@ -1472,7 +1442,7 @@ class OpenAIGPT(LanguageModel):
                     kwargs["logger_fn"] = litellm_logging_fn
                 # If it's not in the cache, call the API
                 result = await acompletion_call(**kwargs)
-                self._cache_store(hashed_key, result.model_dump())
+                self.cache_store(hashed_key, result.model_dump(), logger)
             return cached, hashed_key, result
 
         kwargs: Dict[str, Any] = dict(model=self.config.completion_model)
@@ -1624,7 +1594,7 @@ class OpenAIGPT(LanguageModel):
     @retry_with_exponential_backoff()
     def _chat_completions_with_backoff(self, **kwargs):  # type: ignore
         cached = False
-        hashed_key, result = self._cache_lookup("Completion", **kwargs)
+        hashed_key, result = self.cache_lookup("Completion", logger, **kwargs)
         if result is not None:
             cached = True
             if settings.debug:
@@ -1647,13 +1617,13 @@ class OpenAIGPT(LanguageModel):
                 # since it is a generator. Instead,
                 # we hold on to the hashed_key and
                 # cache the result later
-                self._cache_store(hashed_key, result.model_dump())
+                self.cache_store(hashed_key, result.model_dump(), logger)
         return cached, hashed_key, result
 
     @async_retry_with_exponential_backoff()
     async def _achat_completions_with_backoff(self, **kwargs):  # type: ignore
         cached = False
-        hashed_key, result = self._cache_lookup("Completion", **kwargs)
+        hashed_key, result = self.cache_lookup("Completion", logger, **kwargs)
         if result is not None:
             cached = True
             if settings.debug:
@@ -1674,7 +1644,7 @@ class OpenAIGPT(LanguageModel):
             # If it's not in the cache, call the API
             result = await acompletion_call(**kwargs)
             if not self.get_stream():
-                self._cache_store(hashed_key, result.model_dump())
+                self.cache_store(hashed_key, result.model_dump(), logger)
         return cached, hashed_key, result
 
     def _prep_chat_completion(
@@ -1909,7 +1879,7 @@ class OpenAIGPT(LanguageModel):
         cached, hashed_key, response = self._chat_completions_with_backoff(**args)
         if self.get_stream() and not cached:
             llm_response, openai_response = self._stream_response(response, chat=True)
-            self._cache_store(hashed_key, openai_response)
+            self.cache_store(hashed_key, openai_response, logger)
             return llm_response  # type: ignore
         if isinstance(response, dict):
             response_dict = response
@@ -1946,7 +1916,7 @@ class OpenAIGPT(LanguageModel):
             llm_response, openai_response = await self._stream_response_async(
                 response, chat=True
             )
-            self._cache_store(hashed_key, openai_response)
+            self.cache_store(hashed_key, openai_response, logger)
             return llm_response  # type: ignore
         if isinstance(response, dict):
             response_dict = response

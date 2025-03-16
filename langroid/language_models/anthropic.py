@@ -2,7 +2,7 @@ import logging
 import os
 import sys
 from enum import Enum
-from typing import Any, Dict, List, Literal, Optional, Union, no_type_check
+from typing import Any, Dict, List, Literal, Optional, Tuple, Union, no_type_check
 
 from anthropic import (
     Anthropic,
@@ -26,6 +26,8 @@ from anthropic.types import (
 from rich import print
 from rich.markup import escape
 
+from langroid.cachedb.base import CacheDB
+from langroid.cachedb.redis_cachedb import RedisCache, RedisCacheConfig
 from langroid.language_models import (
     LLMConfig,
     LLMFunctionSpec,
@@ -60,8 +62,8 @@ from langroid.pydantic_v1 import BaseModel
 from langroid.utils.configuration import settings
 from langroid.utils.constants import Colors
 
-logging.getLogger("anthropic").setLevel(logging.ERROR)
-
+logger = logging.getLogger("anthropic")
+logger.setLevel(logging.ERROR)
 
 ANTHROPIC_API_KEY = ""
 DUMMY_API_KEY = ""
@@ -148,6 +150,15 @@ class AnthropicToolCall(BaseModel):
     name: str
 
 
+class AnthropicResponse(BaseModel):
+    """
+    Anthropic Messages Response
+    """
+
+    content: List[Dict[str, Any]]
+    usage: Dict[str, int]
+
+
 class AnthropicStopReason(Enum):
     END_TURN = "end_turn"
     MAX_TOKENS = "max_tokens"
@@ -214,6 +225,8 @@ class AnthropicLLMConfig(LLMConfig):
     params: AnthropicCallParams | None = None
     chat_model: str = default_anthropic_chat_model
     system_config: AnthropicSystemConfig | None = None
+    use_chat_for_completion = True  # always holds, as Langroid supports Claude 3.x+
+    use_completion_for_chat = False  # do not change, see above comment
 
     def __init__(self, **kwargs) -> None:  # type: ignore
         super().__init__(**kwargs)
@@ -230,6 +243,7 @@ class AnthropicLLM(LanguageModel):
 
     client: Anthropic | None
     async_client: AsyncAnthropic | None
+    cache: CacheDB | None
 
     def __init__(self, config: AnthropicLLMConfig = AnthropicLLMConfig()):
         config = config.copy()
@@ -249,13 +263,6 @@ class AnthropicLLM(LanguageModel):
         if settings.chat_model != "":
             self.config.completion_model = self.config.chat_model
 
-        if self.config.formatter is not None:
-            self.config.use_completion_for_chat = True
-            self.config.completion_model = self.config.chat_model
-
-        if self.config.use_completion_for_chat:
-            self.config.use_chat_for_completion = False
-
         self.api_key = config.api_key
         if self.api_key == DUMMY_API_KEY:
             self.api_key = os.getenv("ANTHROPIC_API_KEY", DUMMY_API_KEY)
@@ -266,6 +273,54 @@ class AnthropicLLM(LanguageModel):
         self.async_client = AsyncAnthropic(
             api_key=self.api_key, timeout=Timeout(timeout=self.config.timeout)
         )
+
+        self.cache = None
+        use_cache = self.config.cache_config is not None
+        if settings.cache_type == "momento" and use_cache:
+            from langroid.cachedb.momento_cachedb import (
+                MomentoCache,
+                MomentoCacheConfig,
+            )
+
+            if not config.cache_config or not isinstance(
+                config.cache_config,
+                MomentoCacheConfig,
+            ):
+                logging.warning(
+                    """When instantiating Momento Cache, found a non MomentoCacheConfig
+                    object. Creating cache with default momento cache config.
+                    """
+                )
+                config.cache_config = MomentoCacheConfig()
+
+            self.cache = MomentoCache(config.cache_config)
+
+            logging.info("Momento cache instantiated.")
+        elif "redis" in settings.cache_type and use_cache:
+            if not config.cache_config or not isinstance(
+                config.cache_config,
+                RedisCacheConfig,
+            ):
+                logging.warning(
+                    """When instantiating Redis Cache, found a non RedisCacheConfig
+                    object. Creating cache with default redis cache config.
+                    """
+                )
+                config.cache_config = RedisCacheConfig(
+                    fake="fake" in settings.cache_type
+                )
+
+            config.cache_config.fake = "fake" in settings.cache_type
+
+            self.cache = RedisCache(config.cache_config)
+
+            logging.info("Redis Cache instantiated.")
+        elif settings.cache_type != "none" and use_cache:
+            raise ValueError(
+                f"""Invalid cache type {settings.cache_type}.
+                Valid types are 'momento', 'redis', 'fakeredis', and 'none'
+                """
+            )
 
     def generate(
         self,
@@ -423,18 +478,24 @@ class AnthropicLLM(LanguageModel):
             tools=tools,
             tool_choice=tool_choice,
         )
-        response = await self._achat_completion_with_retry_backoff(**args)
-        if self.get_stream():
-            anthropic_response: LLMResponse = await self._stream_response_async(
-                response, chat=True
+        cached, hashed_key, response = await self._achat_completion_with_retry_backoff(
+            **args
+        )
+        if self.get_stream() and not cached:
+            stream_response: Tuple[LLMResponse, Dict[str, Any]] = (
+                await self._stream_response_async(response, chat=True)
             )
-            return anthropic_response
+            llm_response, anthropic_response = stream_response
+            self.cache_store(hashed_key, anthropic_response, logger)
+            return llm_response
         if isinstance(response, dict):
             response_dict = response
         else:
-            response_dict = response.model_dump()
+            response_dict = response.dict()
 
-        return self._process_chat_completion_response(response_dict=response_dict)
+        return self._process_chat_completion_response(
+            response_dict=response_dict, cached=cached
+        )
 
     @retry_with_exponential_backoff(
         retryable_errors=retryable_anthropic_errors,
@@ -446,8 +507,21 @@ class AnthropicLLM(LanguageModel):
         except AssertionError as e:
             logging.error("Anthropic client is not defined on message call.")
             raise e
-        messages_call = self.client.messages.create
-        return messages_call(**kwargs)
+
+        cached = False
+        hashed_key, result = self.cache_lookup("Completion", logger, **kwargs)
+
+        if result:
+            cached = True
+            if settings.debug:
+                print("[grey37]CACHED[/grey37]")
+        else:
+            messages_call = self.client.messages.create
+            result = messages_call(**kwargs)
+            if not self.get_stream():
+                self.cache_store(hashed_key, result.dict(), logger)
+
+        return cached, hashed_key, result
 
     def _chat_helper(
         self,
@@ -462,19 +536,21 @@ class AnthropicLLM(LanguageModel):
         args = self._prep_chat_args(
             messages, max_tokens, tools=tools, tool_choice=tool_choice
         )
-        response = self._chat_completion_with_retry_backoff(**args)
+        cached, hashed_key, response = self._chat_completion_with_retry_backoff(**args)
         # we need to check if it's a stream response
-        if self.get_stream():
-            stream_response: LLMResponse = self._stream_response(
+        if self.get_stream() and not cached:
+            stream_response: Tuple[LLMResponse, Dict[str, Any]] = self._stream_response(
                 response=response, chat=True
             )
-            return stream_response
+            llm_response, anthropic_response = stream_response
+            self.cache_store(hashed_key, anthropic_response, logger)
+            return llm_response
         # else we parse the response and return it
         if isinstance(response, dict):
             response_dict = response
         else:
-            response_dict = response.model_dump()
-        return self._process_chat_completion_response(response_dict)
+            response_dict = response.dict()
+        return self._process_chat_completion_response(response_dict, cached)
 
     @async_retry_with_exponential_backoff(
         retryable_errors=retryable_anthropic_errors,
@@ -486,12 +562,22 @@ class AnthropicLLM(LanguageModel):
         except AssertionError as e:
             logging.error("Anthropic async client is not defined on message call.")
             raise e
-        async_completion_call = self.async_client.messages.create
-        result = await async_completion_call(**kwargs)
-        return result
+
+        cached = False
+        hashed_key, result = self.cache_lookup("Completion", logger, **kwargs)
+        if result:
+            cached = True
+            if settings.debug:
+                print("[grey37]CACHED[/grey37]")
+        else:
+            async_completion_call = self.async_client.messages.create
+            result = await async_completion_call(**kwargs)
+            if not self.get_stream():
+                self.cache_store(hashed_key, result.dict(), logger)
+        return cached, hashed_key, result
 
     def _process_chat_completion_response(
-        self, response_dict: Dict[str, Any]
+        self, response_dict: Dict[str, Any], cached: bool
     ) -> LLMResponse:
         """
         Example Anthropic Response for Messages API:
@@ -522,7 +608,10 @@ class AnthropicLLM(LanguageModel):
                 response_dict=response_dict
             )
         return LLMResponse(
-            message=message, anthropic_tool_calls=ant_tool_calls or None, usage=usage
+            message=message,
+            anthropic_tool_calls=ant_tool_calls or None,
+            usage=usage,
+            cached=cached,
         )
 
     @staticmethod
@@ -609,7 +698,9 @@ class AnthropicLLM(LanguageModel):
         retryable_errors=retryable_anthropic_errors,
         terminal_errors=terminal_anthropic_errors,
     )
-    def _stream_response(self, response, chat: bool = False) -> LLMResponse:  # type: ignore
+    def _stream_response(  # type: ignore
+        self, response, chat: bool = False
+    ) -> Tuple[LLMResponse, Dict[str, Any]]:
         """
         Grab and print streaming response from Anthropic Messages API
         with server sent events (https://docs.anthropic.com/en/api/messages-streaming).
@@ -649,7 +740,9 @@ class AnthropicLLM(LanguageModel):
         retryable_errors=retryable_anthropic_errors,
         terminal_errors=terminal_anthropic_errors,
     )
-    async def _stream_response_async(self, response, chat: bool = False) -> LLMResponse:  # type: ignore
+    async def _stream_response_async(  # type: ignore
+        self, response, chat: bool = False
+    ) -> Tuple[LLMResponse, Dict[str, Any]]:
         completion = ""
         reasoning = ""
         tool_usage: Dict[int, AnthropicToolCall] = {}
@@ -894,29 +987,27 @@ class AnthropicLLM(LanguageModel):
         tool_usage: Dict[int, AnthropicToolCall],
         completion: str,
         reasoning: str,
-    ) -> LLMResponse:
+    ) -> Tuple[LLMResponse, Dict[str, Any]]:
         """
         Create an LLMResponse object from the Messages API streaming response.
         """
-        return LLMResponse(
-            message=completion,
-            reasoning=reasoning,
-            cached=False,
-            anthropic_tool_calls=list(tool_usage.values()) if tool_usage else None,
+        msg: Dict[str, Any] = dict(
+            message=dict(content=completion, reasoning_content=reasoning)
         )
 
-    @retry_with_exponential_backoff(
-        retryable_errors=retryable_anthropic_errors,
-        terminal_errors=terminal_anthropic_errors,
-    )
-    def _completions_with_backoff(self, **kwargs) -> LLMResponse:  # type: ignore
-        if self.client is None:
-            raise ValueError("Anthropic chat-completion client is not set")
-        completion_call = self.client.messages.create
-        result = completion_call(**kwargs)
-        if self.get_stream():
-            stream_response: LLMResponse = self._stream_response(result)
-            return stream_response
-        if not isinstance(result, dict):
-            result = result.dict()
-        return self._process_chat_completion_response(result)
+        if tool_usage:
+            msg["message"]["tool_calls"] = list(tool_usage.values())
+
+        anthropic_response = AnthropicResponse(
+            content=[msg], usage=dict(total_tokens=0)
+        )
+
+        return (
+            LLMResponse(
+                message=completion,
+                reasoning=reasoning,
+                cached=False,
+                anthropic_tool_calls=list(tool_usage.values()) if tool_usage else None,
+            ),
+            anthropic_response.dict(),
+        )

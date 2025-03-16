@@ -1,9 +1,11 @@
+import hashlib
 import json
 import logging
 from abc import ABC, abstractmethod
 from datetime import datetime
 from enum import Enum
 from itertools import chain
+from logging import Logger
 from typing import (
     Any,
     Awaitable,
@@ -18,7 +20,7 @@ from typing import (
     cast,
 )
 
-from langroid.cachedb.base import CacheDBConfig
+from langroid.cachedb.base import CacheDB, CacheDBConfig
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
 from langroid.language_models.anthropic import (
     AnthropicToolCall,
@@ -502,6 +504,7 @@ class LanguageModel(ABC):
 
     # usage cost by model, accumulates here
     usage_cost_dict: Dict[str, LLMTokenUsage] = {}
+    cache: CacheDB | None
 
     def __init__(self, config: LLMConfig = LLMConfig()):
         self.config = config
@@ -825,6 +828,35 @@ class LanguageModel(ABC):
         standalone = self.generate(prompt=prompt, max_tokens=1024).message.strip()
         show_if_debug(prompt, "FOLLOWUP->STANDALONE-RESPONSE= ")
         return standalone
+
+    def cache_store(self, k: str, v: Any, llm_logger: Logger) -> None:
+        if self.cache is None:
+            return
+        try:
+            self.cache.store(k, v)
+        except Exception as e:
+            llm_logger.error(f"Error in {self.__class__.__name__}::cache_store: {e}")
+            pass
+
+    def cache_lookup(
+        self, fn_name: str, llm_logger: Logger, **kwargs: Dict[str, Any]
+    ) -> Tuple[str, Any]:
+        if self.cache is None:
+            # no cache, return empty key and None result
+            return "", None
+        sorted_kwargs_str = str(sorted(kwargs.items()))
+        raw_key = f"{fn_name}:{sorted_kwargs_str}"
+        hashed_key = hashlib.sha256(raw_key.encode()).hexdigest()
+        if not settings.cache:
+            # when caching disabled, return the hashed_key and none result
+            return hashed_key, None
+
+        try:
+            cached_val = self.cache.retrieve(hashed_key)
+        except Exception as e:
+            llm_logger.error(f"Error in {self.__class__.__name__}::cache_lookup: {e}")
+            return hashed_key, None
+        return hashed_key, cached_val
 
 
 class StreamingIfAllowed:
