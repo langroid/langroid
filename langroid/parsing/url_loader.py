@@ -10,6 +10,7 @@ from langroid.exceptions import LangroidImportError
 from langroid.mytypes import DocMetaData, Document
 from langroid.parsing.document_parser import DocumentParser, ImagePdfParser
 from langroid.parsing.parser import Parser, ParsingConfig
+from langroid.pydantic_v1 import BaseSettings
 
 if TYPE_CHECKING:
     from firecrawl import FirecrawlApp
@@ -19,56 +20,43 @@ load_dotenv()
 logging.getLogger("url_loader").setLevel(logging.WARNING)
 
 
-class BaseCrawlerConfig(ABC):
-    def __init__(self, parsing_config: Optional[ParsingConfig] = None):
-        self.parsing_config = parsing_config
+# Base crawler config and specific configurations
+class BaseCrawlerConfig(BaseSettings):
+    """Base configuration for web crawlers."""
+
+    parser: Optional[Parser] = None
+
+
+class TrafilaturaConfig(BaseCrawlerConfig):
+    """Configuration for Trafilatura crawler."""
+
+    threads: int = 4
+
+
+class FirecrawlConfig(BaseCrawlerConfig):
+    """Configuration for Firecrawl crawler."""
+
+    mode: str = "scrape"
+    params: Dict[str, Any] = {}
+    timeout: Optional[int] = None
+
+
+class BaseCrawler(ABC):
+    """Abstract base class for web crawlers."""
+
+    def __init__(self, config: BaseCrawlerConfig):
+        """Initialize the base crawler.
+
+        Args:
+            config: Configuration for the crawler
+        """
+        self.parser = config.parser if self.needs_parser else None
 
     @property
     @abstractmethod
     def needs_parser(self) -> bool:
         """Indicates whether the crawler requires a parser."""
         pass
-
-
-class TrafilaturaConfig(BaseCrawlerConfig):
-    def __init__(
-        self, parsing_config: Optional[ParsingConfig] = None, threads: int = 4
-    ):
-        super().__init__(parsing_config)
-        self.threads = threads
-
-    @property
-    def needs_parser(self) -> bool:
-        return True
-
-
-class FirecrawlConfig(BaseCrawlerConfig):
-    def __init__(
-        self,
-        mode: Optional[str] = "scrape",
-        params: Optional[Dict[str, Any]] = None,
-        timeout: Optional[int] = None,
-    ):
-        super().__init__(parsing_config=None)
-        self.mode = mode
-        self.params = params or {}
-        self.timeout = timeout
-
-    @property
-    def needs_parser(self) -> bool:
-        return False
-
-
-class BaseCrawler(ABC):
-    """Abstract base class for web crawlers."""
-
-    def __init__(self, config: BaseCrawlerConfig, parser: Optional[Parser] = None):
-        self.config = config
-        self.parser = (
-            parser
-            if parser is not None
-            else (Parser(config.parsing_config) if config.parsing_config else None)
-        )
 
     @abstractmethod
     def crawl(self, urls: List[str]) -> List[Document]:
@@ -133,12 +121,45 @@ class BaseCrawler(ABC):
         return any(url.lower().endswith(ext) for ext in [".pdf", ".docx", ".doc"])
 
 
+class CrawlerFactory:
+    """Factory for creating web crawlers."""
+
+    @staticmethod
+    def create_crawler(config: BaseCrawlerConfig) -> BaseCrawler:
+        """Create a crawler instance based on configuration type.
+
+        Args:
+            config: Configuration for the crawler
+
+        Returns:
+            A BaseCrawler instance
+
+        Raises:
+            ValueError: If config type is not supported
+        """
+        if isinstance(config, TrafilaturaConfig):
+            return TrafilaturaCrawler(config)
+        elif isinstance(config, FirecrawlConfig):
+            return FirecrawlCrawler(config)
+        else:
+            raise ValueError(f"Unsupported crawler configuration type: {type(config)}")
+
+
 class TrafilaturaCrawler(BaseCrawler):
     """Crawler implementation using Trafilatura."""
 
-    def __init__(self, config: TrafilaturaConfig, parser: Optional[Parser] = None):
-        super().__init__(config, parser)
+    def __init__(self, config: TrafilaturaConfig):
+        """Initialize the Trafilatura crawler.
+
+        Args:
+            config: Configuration for the crawler
+        """
+        super().__init__(config)
         self.threads = config.threads
+
+    @property
+    def needs_parser(self) -> bool:
+        return True
 
     def crawl(self, urls: List[str]) -> List[Document]:
         import trafilatura
@@ -172,13 +193,20 @@ class TrafilaturaCrawler(BaseCrawler):
 class FirecrawlCrawler(BaseCrawler):
     """Crawler implementation using Firecrawl."""
 
-    def __init__(
-        self, config: FirecrawlConfig, parser: Optional[Parser] = None
-    ) -> None:
-        super().__init__(config, parser)
+    def __init__(self, config: FirecrawlConfig) -> None:
+        """Initialize the Firecrawl crawler.
+
+        Args:
+            config: Configuration for the crawler
+        """
+        super().__init__(config)
         self.mode = config.mode
         self.params = config.params
         self.timeout = config.timeout
+
+    @property
+    def needs_parser(self) -> bool:
+        return False
 
     def _return_save_incremental_results(
         self, app: "FirecrawlApp", crawl_id: str, output_dir: str = "firecrawl_output"
@@ -275,26 +303,24 @@ class URLLoader:
 
     def __init__(
         self,
-        urls: List[str],
-        parsing_config: Optional[ParsingConfig] = None,
-        crawler: Optional[BaseCrawler] = None,
+        urls: List[Any],
+        parsing_config: ParsingConfig = ParsingConfig(),
+        crawler_config: Optional[BaseCrawlerConfig] = None,
     ):
+        """Initialize the URL loader.
+
+        Args:
+            urls: List of URLs to load
+            parsing_config: Configuration for parsing
+            crawler_config: Configuration for the crawler
+        """
         self.urls = urls
         self.parsing_config = parsing_config
 
-        if crawler is None:
-            trafilatura_config = (
-                TrafilaturaConfig(parsing_config)
-                if parsing_config
-                else TrafilaturaConfig()
-            )
-            self.crawler: BaseCrawler = TrafilaturaCrawler(
-                trafilatura_config, Parser(parsing_config) if parsing_config else None
-            )
-        else:
-            self.crawler = (
-                crawler  # No error now, since self.crawler is declared as BaseCrawler
-            )
+        if crawler_config is None:
+            crawler_config = TrafilaturaConfig(parser=Parser(parsing_config))
+
+        self.crawler = CrawlerFactory.create_crawler(crawler_config)
 
     def load(self) -> List[Document]:
         """Load the URLs using the specified crawler."""
