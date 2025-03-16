@@ -176,4 +176,5 @@ langdb_config = OpenAIGPTConfig(
 
 These parameters allow you to track and organize your LangDB requests. While these parameters can be used with any model provider, they are only meaningful when used with LangDB.
 
-**Note**: The `thread_id` and `run_id` parameters must be a valid UUID format. The examples use `uuid.uuid4()` to generate a proper UUID.
+**Note**: The `thread_id` and `run_id` parameters must be a valid UUID format. 
+The examples use `uuid.uuid4()` to generate a proper UUID.
