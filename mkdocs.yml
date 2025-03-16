@@ -122,6 +122,7 @@ nav:
       - Tavily Search Tool: notes/tavily_search.md
       - Marker Pdf Parser: notes/marker-pdf.md
       - URLLoader : notes/url_loader.md
+      - LangDB AI Gateway: notes/langdb.md
 
   - Examples:
     - Guide: examples/guide.md

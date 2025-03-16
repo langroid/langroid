@@ -257,3 +257,47 @@ def test_keys():
 
         llm = lm.OpenAIGPT(config)
         assert llm.api_key == rand_key
+
+
+@pytest.mark.xfail(
+    reason="LangDB may fail due to unknown flakiness",
+    run=True,
+    strict=False,
+)
+@pytest.mark.parametrize(
+    "model",
+    [
+        "langdb/gpt-4o-mini",
+        "langdb/openai/gpt-4o-mini",
+        "langdb/anthropic/claude-3-haiku-20240307",
+        "langdb/claude-3-haiku-20240307",
+        "langdb/gemini/gemini-2.0-flash-lite",
+        "langdb/gemini-2.0-flash-lite",
+    ],
+)
+def test_llm_langdb(model: str):
+    """Test that LLM access via LangDB works."""
+
+    llm_config_langdb = lm.OpenAIGPTConfig(
+        chat_model=model,
+    )
+    llm = lm.OpenAIGPT(config=llm_config_langdb)
+    result = llm.chat("what is 3+4?")
+    assert "7" in result.message
+
+
+@pytest.mark.parametrize(
+    "model",
+    [
+        "openrouter/anthropic/claude-3.5-haiku-20241022:beta",
+        "openrouter/mistralai/mistral-small-24b-instruct-2501:free",
+        "openrouter/google/gemini-2.0-flash-lite-001",
+    ],
+)
+def test_llm_openrouter(model: str):
+    llm_config = lm.OpenAIGPTConfig(
+        chat_model=model,
+    )
+    llm = lm.OpenAIGPT(config=llm_config)
+    result = llm.chat("what is 3+4?")
+    assert "7" in result.message

@@ -10,6 +10,7 @@ from openai import AzureOpenAI, OpenAI
 
 from langroid.embedding_models.base import EmbeddingModel, EmbeddingModelsConfig
 from langroid.exceptions import LangroidImportError
+from langroid.language_models.openai_gpt import LangDBParams
 from langroid.mytypes import Embeddings
 from langroid.parsing.utils import batched
 
@@ -24,6 +25,7 @@ class OpenAIEmbeddingsConfig(EmbeddingModelsConfig):
     organization: str = ""
     dims: int = 1536
     context_length: int = 8192
+    langdb_params: LangDBParams = LangDBParams()
 
     class Config:
         # enable auto-loading of env vars with OPENAI_ prefix, e.g.
@@ -136,11 +138,13 @@ class EmbeddingFunctionCallable:
         """
         embeds = []
         if isinstance(self.embed_model, (OpenAIEmbeddings, AzureOpenAIEmbeddings)):
-            tokenized_texts = self.embed_model.truncate_texts(input)
+            # Truncate texts to context length while preserving text format
+            truncated_texts = self.embed_model.truncate_texts(input)
 
-            for batch in batched(tokenized_texts, self.batch_size):
+            # Process in batches
+            for batch in batched(truncated_texts, self.batch_size):
                 result = self.embed_model.client.embeddings.create(
-                    input=batch, model=self.embed_model.config.model_name
+                    input=batch, model=self.embed_model.config.model_name  # type: ignore
                 )
                 batch_embeds = [d.embedding for d in result.data]
                 embeds.extend(batch_embeds)
@@ -183,29 +187,65 @@ class OpenAIEmbeddings(EmbeddingModel):
         super().__init__()
         self.config = config
         load_dotenv()
-        self.config.api_key = os.getenv("OPENAI_API_KEY", "")
+
+        # Check if using LangDB
+        self.is_langdb = self.config.model_name.startswith("langdb/")
+
+        if self.is_langdb:
+            self.config.model_name = self.config.model_name.replace("langdb/", "")
+            self.config.api_base = self.config.langdb_params.base_url
+            project_id = self.config.langdb_params.project_id
+            if project_id:
+                self.config.api_base += "/" + project_id + "/v1"
+            self.config.api_key = self.config.langdb_params.api_key
+
+        if not self.config.api_key:
+            self.config.api_key = os.getenv("OPENAI_API_KEY", "")
+
         self.config.organization = os.getenv("OPENAI_ORGANIZATION", "")
+
         if self.config.api_key == "":
-            raise ValueError(
-                """OPENAI_API_KEY env variable must be set to use 
-                OpenAIEmbeddings. Please set the OPENAI_API_KEY value 
-                in your .env file.
-                """
-            )
-        self.client = OpenAI(base_url=self.config.api_base, api_key=self.config.api_key)
+            if self.is_langdb:
+                raise ValueError(
+                    """
+                    LANGDB_API_KEY must be set in .env or your environment 
+                    to use OpenAIEmbeddings via LangDB.
+                    """
+                )
+            else:
+                raise ValueError(
+                    """
+                    OPENAI_API_KEY must be set in .env or your environment 
+                    to use OpenAIEmbeddings.
+                    """
+                )
+
+        self.client = OpenAI(
+            base_url=self.config.api_base,
+            api_key=self.config.api_key,
+            organization=self.config.organization,
+        )
+        model_for_tokenizer = self.config.model_name
+        if model_for_tokenizer.startswith("openai/"):
+            self.config.model_name = model_for_tokenizer.replace("openai/", "")
         self.tokenizer = tiktoken.encoding_for_model(self.config.model_name)
 
-    def truncate_texts(self, texts: List[str]) -> List[List[int]]:
+    def truncate_texts(self, texts: List[str]) -> List[str] | List[List[int]]:
         """
         Truncate texts to the embedding model's context length.
         TODO: Maybe we should show warning, and consider doing T5 summarization?
         """
-        return [
+        truncated_tokens = [
             self.tokenizer.encode(text, disallowed_special=())[
                 : self.config.context_length
             ]
             for text in texts
         ]
+
+        if self.is_langdb:
+            # LangDB embedding endpt only works with strings, not tokens
+            return [self.tokenizer.decode(tokens) for tokens in truncated_tokens]
+        return truncated_tokens
 
     def embedding_fn(self) -> Callable[[List[str]], Embeddings]:
         return EmbeddingFunctionCallable(self, self.config.batch_size)
@@ -256,7 +296,7 @@ class AzureOpenAIEmbeddings(EmbeddingModel):
         )
         self.tokenizer = tiktoken.encoding_for_model(self.config.model_name)
 
-    def truncate_texts(self, texts: List[str]) -> List[List[int]]:
+    def truncate_texts(self, texts: List[str]) -> List[str] | List[List[int]]:
         """
         Truncate texts to the embedding model's context length.
         TODO: Maybe we should show warning, and consider doing T5 summarization?
