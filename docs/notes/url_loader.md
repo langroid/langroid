@@ -169,3 +169,8 @@ This reduces the need for complex parsing logic within Langroid.
 *   Use `FirecrawlCrawler` when you need efficient, API-driven scraping with built-in document processing. 
 This is often the simplest and most effective choice.
 *   Use `TrafilaturaCrawler` when you want local non API based scraping (less accurate ) .
+
+## Example script
+
+See the script [`examples/docqa/chat_search.py`](https://github.com/langroid/langroid/blob/main/examples/docqa/chat_search.py) 
+which shows how to use a Langroid agent to search the web and scrape URLs to answer questions.
