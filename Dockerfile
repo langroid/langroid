@@ -1,4 +1,4 @@
-FROM python:3.11
+FROM --platform=$TARGETPLATFORM python:3.11
 
 # Set environment variables to non-interactive (this prevents some prompts)
 ENV DEBIAN_FRONTEND=non-interactive \
@@ -31,8 +31,11 @@ RUN mkdir -p /root/.cache/uv
 # workaround for pymupdf build error?
 ENV MAKEFLAGS="-j1"
 ENV PYTHONPYCACHEPREFIX="/tmp/pycache"
+ENV DEBIAN_FRONTEND=non-interactive \
+     LANG=en_US.UTF-8
 
 # detect arch to customize pymupdf version
+ARG TARGETPLATFORM
 ARG TARGETARCH
 
 # install uv then langroid

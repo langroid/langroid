@@ -90,6 +90,7 @@ class AgentConfig(BaseSettings):
     parsing: Optional[ParsingConfig] = ParsingConfig()
     prompts: Optional[PromptsConfig] = PromptsConfig()
     show_stats: bool = True  # show token usage/cost stats?
+    hide_agent_response: bool = False  # hide agent response?
     add_to_registry: bool = True  # register agent in ObjectRegistry?
     respond_tools_only: bool = False  # respond only to tool messages (not plain text)?
     # allow multiple tool messages in a single response?
@@ -460,6 +461,28 @@ class Agent(ABC):
             recipient=recipient,
         )
 
+    def render_agent_response(
+        self,
+        results: Optional[str | OrderedDict[str, str] | ChatDocument],
+    ) -> None:
+        """
+        Render the response from the agent, typically from tool-handling.
+        Args:
+            results: results from tool-handling, which may be a string,
+                a dict of tool results, or a ChatDocument.
+        """
+        if self.config.hide_agent_response or results is None:
+            return
+        if isinstance(results, str):
+            results_str = results
+        elif isinstance(results, ChatDocument):
+            results_str = results.content
+        elif isinstance(results, dict):
+            results_str = json.dumps(results, indent=2)
+        if not settings.quiet:
+            console.print(f"[red]{self.indent}", end="")
+            print(f"[red]Agent: {escape(results_str)}")
+
     def _agent_response_final(
         self,
         msg: Optional[str | ChatDocument],
@@ -477,8 +500,7 @@ class Agent(ABC):
         elif isinstance(results, dict):
             results_str = json.dumps(results, indent=2)
         if not settings.quiet:
-            console.print(f"[red]{self.indent}", end="")
-            print(f"[red]Agent: {escape(results_str)}")
+            self.render_agent_response(results)
         maybe_json = len(extract_top_level_json(results_str)) > 0
         self.callbacks.show_agent_response(
             content=results_str,
@@ -1016,7 +1038,7 @@ class Agent(ABC):
             # we would have already displayed the msg "live" ONLY if
             # streaming was enabled, AND we did not find a cached response
             # If we are here, it means the response has not yet been displayed.
-            cached = f"[red]{self.indent}(cached)[/red]" if response.cached else ""
+            cached = "[red](cached)[/red]" if response.cached else ""
             console.print(f"[green]{self.indent}", end="")
             print(cached + "[green]" + escape(response.message))
         self.update_token_usage(
@@ -1341,8 +1363,7 @@ class Agent(ABC):
 
         has_orch = any(isinstance(t, ORCHESTRATION_TOOLS) for t in tools)
         if has_orch and len(tools) > 1:
-            err_str = "ERROR: Use ONE tool at a time!"
-            return [err_str for _ in tools]
+            return ["ERROR: Use ONE tool at a time!"] * len(tools)
 
         return []
 
@@ -1477,8 +1498,6 @@ class Agent(ABC):
             # as a response to the tool message even though the tool was not intended
             # for this agent.
             return None
-        if len(tools) > 1 and not self.config.allow_multiple_tools:
-            return self.to_ChatDocument("ERROR: Use ONE tool at a time!")
         if len(tools) == 0:
             fallback_result = self.handle_message_fallback(msg)
             if fallback_result is None:
@@ -1487,10 +1506,14 @@ class Agent(ABC):
                 fallback_result,
                 chat_doc=msg if isinstance(msg, ChatDocument) else None,
             )
-        chat_doc = msg if isinstance(msg, ChatDocument) else None
 
-        results = self._get_multiple_orch_tool_errs(tools)
+        results: List[str | ChatDocument | None] = []
+        if len(tools) > 1 and not self.config.allow_multiple_tools:
+            results = ["ERROR: Use ONE tool at a time!"] * len(tools)
         if not results:
+            results = self._get_multiple_orch_tool_errs(tools)
+        if not results:
+            chat_doc = msg if isinstance(msg, ChatDocument) else None
             results = [self.handle_tool_message(t, chat_doc=chat_doc) for t in tools]
             # if there's a solitary ChatDocument|str result, return it as is
             if len(results) == 1 and isinstance(results[0], (str, ChatDocument)):

@@ -863,12 +863,13 @@ class DocChatAgent(ChatAgent):
         # extract references like [^2], [^3], etc. from the final answer
         citations = extract_markdown_references(final_answer)
         # format the cited references as a string suitable for markdown footnote
-        citations_str = format_cited_references(citations, passages)
+        full_citations_str, citations_str = format_cited_references(citations, passages)
 
         return ChatDocument(
             content=final_answer,  # does not contain citations
             metadata=ChatDocMetaData(
-                source=citations_str,  # only the citations
+                source=citations_str,  # only the reference headers
+                source_content=full_citations_str,  # reference + content
                 sender=Entity.LLM,
                 has_citation=len(citations) > 0,
                 cached=getattr(answer_doc.metadata, "cached", False),

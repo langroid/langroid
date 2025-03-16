@@ -15,6 +15,7 @@ from langroid.agent.special.doc_chat_agent import (
     DocChatAgent,
     DocChatAgentConfig,
 )
+import langroid as lr
 import langroid.language_models as lm
 from langroid.mytypes import Entity
 from langroid.parsing.parser import ParsingConfig, PdfParsingConfig, Splitter
@@ -38,6 +39,7 @@ def main(
         llm=llm_config,
         n_query_rephrases=0,
         hypothetical_answer=False,
+        full_citations=False,
         assistant_mode=True,
         n_neighbor_chunks=2,
         parsing=ParsingConfig(  # modify as needed
@@ -58,6 +60,14 @@ def main(
                 library="pymupdf4llm",
             ),
         ),
+    )
+
+    embed_cfg = lr.embedding_models.OpenAIEmbeddingsConfig()
+
+    config.vecdb = lr.vector_store.QdrantDBConfig(
+        cloud=False,
+        storage_path=".qdrant/doc-chat",
+        embedding=embed_cfg,
     )
 
     set_global(

@@ -615,6 +615,7 @@ def test_task_2_agent_2_tool(
     requestor_agent = Requestor(
         ChatAgentConfig(
             name="Requestor",
+            allow_multiple_tools=False,
             use_functions_api=use_fn_api,
             use_tools_api=use_tools_api,
             use_tools=not use_fn_api,

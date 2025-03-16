@@ -38,8 +38,13 @@ class GeminiConfig(BaseSettings):
     requests_per_minute: Optional[int] = 5
 
 
-class PdfParsingConfig(BaseParsingConfig):
+class MarkerConfig(BaseSettings):
+    """Configuration for Markitdown-based parsing."""
 
+    config_dict: Dict[str, Any] = {}
+
+
+class PdfParsingConfig(BaseParsingConfig):
     library: Literal[
         "fitz",
         "pymupdf4llm",
@@ -49,16 +54,26 @@ class PdfParsingConfig(BaseParsingConfig):
         "pdf2image",
         "markitdown",
         "gemini",
+        "marker",
     ] = "pymupdf4llm"
     gemini_config: Optional[GeminiConfig] = None
+    marker_config: Optional[MarkerConfig] = None
 
     @root_validator(pre=True)
-    def enable_gemini_config(cls, values: Dict[str, Any]) -> Dict[str, Any]:
-        """Ensure GeminiConfig is set only when library is 'gemini'."""
-        if values.get("library") == "gemini":
-            values["gemini_config"] = values.get("gemini_config") or GeminiConfig()
+    def enable_configs(cls, values: Dict[str, Any]) -> Dict[str, Any]:
+        """Ensure correct config is set based on library selection."""
+        library = values.get("library")
+
+        if library == "gemini":
+            values.setdefault("gemini_config", GeminiConfig())
         else:
             values["gemini_config"] = None
+
+        if library == "marker":
+            values.setdefault("marker_config", MarkerConfig())
+        else:
+            values["marker_config"] = None
+
         return values
 
 
@@ -88,6 +103,9 @@ class ParsingConfig(BaseSettings):
     chunk_size: int = 200  # aim for this many tokens per chunk
     overlap: int = 50  # overlap between chunks
     max_chunks: int = 10_000
+    # offset to subtract from page numbers:
+    # e.g. if physical page 12 is displayed as page 1, set page_number_offset = 11
+    page_number_offset: int = 0
     # aim to have at least this many chars per chunk when truncating due to punctuation
     min_chunk_chars: int = 350
     discard_chunk_chars: int = 5  # discard chunks with fewer than this many chars

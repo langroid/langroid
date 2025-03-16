@@ -1,6 +1,9 @@
-from typing import List
+import logging
+from typing import List, Tuple
 
 from langroid.mytypes import Document
+
+logger = logging.getLogger(__name__)
 
 
 def extract_markdown_references(md_string: str) -> List[int]:
@@ -66,7 +69,9 @@ def format_footnote_text(content: str, width: int = 0) -> str:
     return "\n".join(output_lines)
 
 
-def format_cited_references(citations: List[int], passages: list[Document]) -> str:
+def format_cited_references(
+    citations: List[int], passages: list[Document]
+) -> Tuple[str, str]:
     """
     Given a list of (integer) citations, and a list of passages, return a string
     that can be added as a footer to the main text, to show sources cited.
@@ -76,16 +81,30 @@ def format_cited_references(citations: List[int], passages: list[Document]) -> s
         passages (list[Document]): list of passages (Document objects)
 
     Returns:
-        str: formatted string of citations for footnote in markdown
+        str: formatted string of FULL citations (i.e. reference AND content)
+            for footnote in markdown;
+        str: formatted string of BRIEF citations (i.e. reference only)
+            for footnote in markdown.
     """
     citations_str = ""
+    full_citations_str = ""
     if len(citations) > 0:
         # append [i] source, content for each citation
-        citations_str = "\n".join(
+        good_citations = [c for c in citations if c > 0 and c <= len(passages)]
+        if len(good_citations) < len(citations):
+            logger.warning(f"Invalid citations: {set(citations) - set(good_citations)}")
+
+        # source and content for each citation
+        full_citations_str = "\n".join(
             [
                 f"[^{c}] {passages[c-1].metadata.source}"
                 f"\n{format_footnote_text(passages[c-1].content)}"
-                for c in citations
+                for c in good_citations
             ]
         )
-    return citations_str
+
+        # source for each citation
+        citations_str = "\n".join(
+            [f"[^{c}] {passages[c-1].metadata.source}" for c in good_citations]
+        )
+    return full_citations_str, citations_str

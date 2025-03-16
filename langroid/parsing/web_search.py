@@ -28,7 +28,7 @@ class WebSearchResult:
     def __init__(
         self,
         title: str,
-        link: str,
+        link: str | None,
         max_content_length: int = 3500,
         max_summary_length: int = 300,
     ):
@@ -50,9 +50,30 @@ class WebSearchResult:
         return self.full_content[: self.max_summary_length]
 
     def get_full_content(self) -> str:
+        if self.link is None:
+            return "Error: No Search Result"
         try:
-            response: Response = requests.get(self.link)
-            soup: BeautifulSoup = BeautifulSoup(response.text, "lxml")
+            # First check headers only to get content length and type
+            head_response: Response = requests.head(self.link, timeout=5)
+            if head_response.status_code != 200:
+                return f"Error: HTTP {head_response.status_code} for {self.link}"
+
+            # Skip large files
+            content_length = int(head_response.headers.get("content-length", 0))
+            if content_length > 5_000_000:  # 5MB limit
+                return (
+                    f"Error: Content too large ({content_length} bytes) for {self.link}"
+                )
+
+            response: Response = requests.get(self.link, timeout=10)
+
+            import warnings
+
+            from bs4 import XMLParsedAsHTMLWarning
+
+            warnings.filterwarnings("ignore", category=XMLParsedAsHTMLWarning)
+
+            soup: BeautifulSoup = BeautifulSoup(response.text, "html.parser")
             text = " ".join(soup.stripped_strings)
             return text[: self.max_content_length]
         except Exception as e:
@@ -64,7 +85,7 @@ class WebSearchResult:
     def to_dict(self) -> Dict[str, str]:
         return {
             "title": self.title,
-            "link": self.link,
+            "link": self.link or "",
             "summary": self.summary,
             "full_content": self.full_content,
         }
@@ -156,21 +177,32 @@ def exa_search(query: str, num_results: int = 5) -> List[WebSearchResult]:
 
     client = Exa(api_key=api_key)
 
-    response = client.search(
-        query=query,
-        num_results=num_results,
-    )
-    raw_results = response.results
-
-    return [
-        WebSearchResult(
-            title=result.title or "",
-            link=result.url,
-            max_content_length=3500,
-            max_summary_length=300,
+    try:
+        response = client.search(
+            query=query,
+            num_results=num_results,
         )
-        for result in raw_results
-    ]
+        raw_results = response.results
+
+        return [
+            WebSearchResult(
+                title=result.title or "",
+                link=result.url,
+                max_content_length=3500,
+                max_summary_length=300,
+            )
+            for result in raw_results
+            if result.url is not None
+        ]
+    except Exception:
+        return [
+            WebSearchResult(
+                title="Error",
+                link=None,
+                max_content_length=3500,
+                max_summary_length=300,
+            )
+        ]
 
 
 def duckduckgo_search(query: str, num_results: int = 5) -> List[WebSearchResult]:
