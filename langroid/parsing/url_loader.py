@@ -36,9 +36,16 @@ class TrafilaturaConfig(BaseCrawlerConfig):
 class FirecrawlConfig(BaseCrawlerConfig):
     """Configuration for Firecrawl crawler."""
 
+    api_key: str = ""
     mode: str = "scrape"
     params: Dict[str, Any] = {}
     timeout: Optional[int] = None
+
+    class Config:
+        # Leverage Pydantic's BaseSettings to
+        # allow setting of fields via env vars,
+        # e.g. FIRECRAWL_MODE=scrape and FIRECRAWL_API_KEY=...
+        env_prefix = "FIRECRAWL_"
 
 
 class BaseCrawler(ABC):
@@ -51,6 +58,7 @@ class BaseCrawler(ABC):
             config: Configuration for the crawler
         """
         self.parser = config.parser if self.needs_parser else None
+        self.config: BaseCrawlerConfig = config
 
     @property
     @abstractmethod
@@ -72,6 +80,7 @@ class BaseCrawler(ABC):
                     doc_parser = DocumentParser.create(url, self.parser.config)
                     new_chunks = doc_parser.get_doc_chunks()
                     if not new_chunks:
+                        # If the document is empty, try to extract images
                         img_parser = ImagePdfParser(url, self.parser.config)
                         new_chunks = img_parser.get_doc_chunks()
                     return new_chunks
@@ -155,7 +164,7 @@ class TrafilaturaCrawler(BaseCrawler):
             config: Configuration for the crawler
         """
         super().__init__(config)
-        self.threads = config.threads
+        self.config: TrafilaturaConfig = config
 
     @property
     def needs_parser(self) -> bool:
@@ -174,7 +183,7 @@ class TrafilaturaCrawler(BaseCrawler):
 
         while not dl_dict.done:
             buffer, dl_dict = load_download_buffer(dl_dict, sleep_time=5)
-            for url, result in buffered_downloads(buffer, self.threads):
+            for url, result in buffered_downloads(buffer, self.config.threads):
                 parsed_doc = self._process_document(url)
                 if parsed_doc:
                     docs.extend(parsed_doc)
@@ -182,6 +191,8 @@ class TrafilaturaCrawler(BaseCrawler):
                     text = trafilatura.extract(
                         result, no_fallback=False, favor_recall=True
                     )
+                    if text is None and result is not None and isinstance(result, str):
+                        text = result
                     if text:
                         docs.append(
                             Document(content=text, metadata=DocMetaData(source=url))
@@ -200,9 +211,7 @@ class FirecrawlCrawler(BaseCrawler):
             config: Configuration for the crawler
         """
         super().__init__(config)
-        self.mode = config.mode
-        self.params = config.params
-        self.timeout = config.timeout
+        self.config: FirecrawlConfig = config
 
     @property
     def needs_parser(self) -> bool:
@@ -260,15 +269,14 @@ class FirecrawlCrawler(BaseCrawler):
         except ImportError:
             raise LangroidImportError("firecrawl", "firecrawl")
 
-        api_key = os.environ.get("FIRECRAWL_API_KEY")
-        app = FirecrawlApp(api_key=api_key)
+        app = FirecrawlApp(api_key=self.config.api_key)
         docs = []
-        params = self.params.copy()  # Create a copy of the existing params
+        params = self.config.params.copy()  # Create a copy of the existing params
 
-        if self.timeout is not None:
-            params["timeout"] = self.timeout  # Add/override timeout in params
+        if self.config.timeout is not None:
+            params["timeout"] = self.config.timeout  # Add/override timeout in params
 
-        if self.mode == "scrape":
+        if self.config.mode == "scrape":
             for url in urls:
                 try:
                     result = app.scrape_url(url, params=params)
@@ -289,7 +297,7 @@ class FirecrawlCrawler(BaseCrawler):
                         f"Firecrawl encountered an error for {url}: {e}. "
                         "Skipping but continuing."
                     )
-        elif self.mode == "crawl":
+        elif self.config.mode == "crawl":
             if not isinstance(urls, list) or len(urls) != 1:
                 raise ValueError(
                     "Crawl mode expects 'urls' to be a list containing a single URL."

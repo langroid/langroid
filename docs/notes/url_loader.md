@@ -74,6 +74,12 @@ gathering content from multiple pages, including subdomains, while bypassing blo
 
 ### Parameters
 
+Obtain a Firecrawl API key from [Firecrawl](https://firecrawl.dev/) and set it in 
+your environment variables, e.g. in your `.env` file as
+```env
+FIRECRAWL_API_KEY=your_api_key_here
+```
+
 *   **config (FirecrawlConfig)**:  A `FirecrawlConfig` object.
 
     *   **timeout (int, optional)**: Time in milliseconds (ms) to wait for a response. 
@@ -95,6 +101,10 @@ from langroid.parsing.document_parser import
 
 # create a FirecrawlConfig object
 firecrawl_config = FirecrawlConfig(
+    # typical/best practice is to omit the api_key, and 
+    # we leverage Pydantic BaseSettings to load it from the environment variable
+    # FIRECRAWL_API_KEY in your .env file
+    api_key="your-firecrawl-api-key", 
     timeout=15000,  # Timeout per request (15 sec)
     mode="scrape",
 )
