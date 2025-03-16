@@ -284,3 +284,19 @@ def test_llm_langdb(model: str):
     llm = lm.OpenAIGPT(config=llm_config_langdb)
     result = llm.chat("what is 3+4?")
     assert "7" in result.message
+
+@pytest.mark.parametrize(
+    "model",
+    [
+        "openrouter/anthropic/claude-3.5-haiku-20241022:beta",
+        "openrouter/mistralai/mistral-small-24b-instruct-2501:free",
+        "openrouter/google/gemini-2.0-flash-lite-001",
+    ],
+)
+def test_llm_openrouter(model:str):
+    llm_config = lm.OpenAIGPTConfig(
+        chat_model=model,
+    )
+    llm = lm.OpenAIGPT(config=llm_config)
+    result = llm.chat("what is 3+4?")
+    assert "7" in result.message
