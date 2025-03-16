@@ -18,7 +18,6 @@ For more explanation see
 [the Getting Started guide](https://langroid.github.io/langroid/quick-start/chat-agent-tool/).
 """
 
-import os
 import uuid
 import typer
 from rich import print
@@ -65,30 +64,29 @@ def chat(opts: CLIOptions) -> None:
         Enter x or q to quit
         """
     )
-    
+
     # Generate UUIDs for run_id and thread_id
     run_id = str(uuid.uuid4())
     thread_id = str(uuid.uuid4())
-    
+
     print(f"run_id: {run_id}, thread_id: {thread_id}")
-    
+
     # Create a LangDB model configuration
     # Make sure LANGDB_API_KEY and LANGDB_PROJECT_ID are set in your environment
 
     langdb_config = OpenAIGPTConfig(
         chat_model="langdb/openai/gpt-4o-mini",  # Using LangDB model
-        api_key=os.environ.get("LANGDB_API_KEY", ""),
         langdb_params=LangDBParams(
-            label='langroid-agent-tool',
+            label="langroid-agent-tool",
             run_id=run_id,
             thread_id=thread_id,
-            project_id=os.environ.get("LANGDB_PROJECT_ID", "")
-        )
+            # project_id is set via env var LANGDB_PROJECT_ID
+        ),
     )
-    
+
     print(f"Using model: {langdb_config.chat_model}")
     print(f"Headers: {langdb_config.headers}")
-    
+
     spy_game_agent = SpyGameAgent(
         lr.ChatAgentConfig(
             name="Spy",

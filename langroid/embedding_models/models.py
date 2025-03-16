@@ -10,15 +10,11 @@ from openai import AzureOpenAI, OpenAI
 
 from langroid.embedding_models.base import EmbeddingModel, EmbeddingModelsConfig
 from langroid.exceptions import LangroidImportError
+from langroid.language_models.openai_gpt import LangDBParams
 from langroid.mytypes import Embeddings
 from langroid.parsing.utils import batched
 
 AzureADTokenProvider = Callable[[], str]
-
-LANGDB_BASE_URL = "https://api.us-east-1.langdb.ai"
-DUMMY_API_KEY = "xxx"
-LANGDB_API_KEY = os.environ.get("LANGDB_API_KEY", DUMMY_API_KEY)
-LANGDB_PROJECT_ID = os.environ.get("LANGDB_PROJECT_ID", "")
 
 
 class OpenAIEmbeddingsConfig(EmbeddingModelsConfig):
@@ -29,6 +25,7 @@ class OpenAIEmbeddingsConfig(EmbeddingModelsConfig):
     organization: str = ""
     dims: int = 1536
     context_length: int = 8192
+    langdb_params: LangDBParams = LangDBParams()
 
 
 class AzureOpenAIEmbeddingsConfig(EmbeddingModelsConfig):
@@ -138,7 +135,7 @@ class EmbeddingFunctionCallable:
         if isinstance(self.embed_model, (OpenAIEmbeddings, AzureOpenAIEmbeddings)):
             # Truncate texts to context length while preserving text format
             truncated_texts = self.embed_model.truncate_texts(input)
-            
+
             # Process in batches
             for batch in batched(truncated_texts, self.batch_size):
                 result = self.embed_model.client.embeddings.create(
@@ -185,35 +182,40 @@ class OpenAIEmbeddings(EmbeddingModel):
         super().__init__()
         self.config = config
         load_dotenv()
-        
+
         # Check if using LangDB
         is_langdb = self.config.model_name.startswith("langdb/")
-        
+
         if is_langdb:
             self.config.model_name = self.config.model_name.replace("langdb/", "")
-            
-            if LANGDB_PROJECT_ID:
-                self.config.api_base = f"{LANGDB_BASE_URL}/{LANGDB_PROJECT_ID}/v1"
-            else:
-                self.config.api_base = LANGDB_BASE_URL
+            self.config.api_base = self.config.langdb_params.base_url
+            project_id = self.config.langdb_params.project_id
+            if project_id:
+                self.config.api_base += project_id + "/v1"
             if not self.config.api_key:
-                self.config.api_key = LANGDB_API_KEY
-        
+                self.config.api_key = self.config.langdb_params.api_key
+
         if not self.config.api_key:
             self.config.api_key = os.getenv("OPENAI_API_KEY", "")
-        
+
         self.config.organization = os.getenv("OPENAI_ORGANIZATION", "")
 
         if self.config.api_key == "":
             if is_langdb:
                 raise ValueError(
-                    """LANGDB_API_KEY must be set in .env or your environment to use LangDB embeddings."""
+                    """
+                    LANGDB_API_KEY must be set in .env or your environment 
+                    to use OpenAIEmbeddings via LangDB.
+                    """
                 )
             else:
                 raise ValueError(
-                    """OPENAI_API_KEY must be set in .env or your environment to use OpenAIEmbeddings."""
+                    """
+                    OPENAI_API_KEY must be set in .env or your environment 
+                    to use OpenAIEmbeddings.
+                    """
                 )
-                
+
         self.client = OpenAI(
             base_url=self.config.api_base,
             api_key=self.config.api_key,
@@ -224,17 +226,15 @@ class OpenAIEmbeddings(EmbeddingModel):
             self.config.model_name = model_for_tokenizer.replace("openai/", "")
         self.tokenizer = tiktoken.encoding_for_model(self.config.model_name)
 
-    def truncate_texts(self, texts: List[str]) -> List[str]:
+    def truncate_texts(self, texts: List[str]) -> List[List[int]]:
         """
         Truncate texts to the embedding model's context length.
         TODO: Maybe we should show warning, and consider doing T5 summarization?
         """
         return [
-            self.tokenizer.decode(
-                self.tokenizer.encode(text, disallowed_special=())[
-                    : self.config.context_length
-                ]
-            )
+            self.tokenizer.encode(text, disallowed_special=())[
+                : self.config.context_length
+            ]
             for text in texts
         ]
 

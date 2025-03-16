@@ -86,7 +86,7 @@ llm_config = OpenAIGPTConfig(
         label='my-app',
         thread_id=thread_id,  # For conversation tracking
         run_id=run_id,        # For request grouping
-        project_id=os.getenv("LANGDB_PROJECT_ID")
+        # project_id is taken from the env var LANGDB_PROJECT_ID
     )
 )
 
@@ -95,7 +95,7 @@ vecdb_config = QdrantDBConfig(
     collection_name="my-docs",
     embedding=OpenAIEmbeddingsConfig(
         model_name="langdb/openai/text-embedding-3-small",
-        api_key=os.getenv("LANGDB_API_KEY")
+        # langdb_params will contain api_key from env var LANGDB_API_KEY
     )
 )
 ```
@@ -117,12 +117,12 @@ run_id = str(uuid.uuid4())  # Use UUID for run_id as well
 # Configure with LangDBParams
 config = OpenAIGPTConfig(
     chat_model="langdb/openai/gpt-4o-mini",
-    api_key=os.getenv("LANGDB_API_KEY"),
     langdb_params=LangDBParams(
         label="my-label",
         thread_id=thread_id,
         run_id=run_id,
-        project_id=os.getenv("LANGDB_PROJECT_ID")
+        # project_id is set via env var LANGDB_PROJECT_ID
+        # api_key is set via env var LANGDB_API_KEY
     )
 )
 ```
@@ -174,12 +174,12 @@ run_id = str(uuid.uuid4())
 # Create a LangDB model configuration with LangDBParams
 langdb_config = OpenAIGPTConfig(
     chat_model="langdb/openai/gpt-4o-mini",
-    api_key=os.environ.get("LANGDB_API_KEY", ""),
     langdb_params=LangDBParams(
         label='langroid',
         run_id=run_id,
         thread_id=thread_id,
-        project_id=os.environ.get("LANGDB_PROJECT_ID", "")
+        # project_id is set via env var LANGDB_PROJECT_ID
+        # api_key is set via env var LANGDB_API_KEY
     )
 )
 

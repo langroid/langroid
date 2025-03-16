@@ -16,7 +16,6 @@ For more explanation see
 [the Getting Started guide](https://langroid.github.io/langroid/quick-start/chat-agent-docs/).
 """
 
-import os
 import uuid
 import typer
 from rich import print
@@ -71,20 +70,19 @@ def chat() -> None:
     # Generate UUIDs for run_id and thread_id
     run_id = str(uuid.uuid4())
     thread_id = str(uuid.uuid4())
-    
+
     print(f"run_id: {run_id}, thread_id: {thread_id}")
-    
+
     # Create a LangDB model configuration
     # Make sure LANGDB_API_KEY and LANGDB_PROJECT_ID are set in your environment
     langdb_config = OpenAIGPTConfig(
         chat_model="langdb/openai/gpt-4o-mini",  # Using LangDB model
-        api_key=os.environ.get("LANGDB_API_KEY", ""),
         langdb_params=LangDBParams(
-            label='langroid-agent-docs',
+            label="langroid-agent-docs",
             run_id=run_id,
             thread_id=thread_id,
-            project_id=os.environ.get("LANGDB_PROJECT_ID", "")
-        )
+            # project_id is set via env var LANGDB_PROJECT_ID
+        ),
     )
 
     config = lr.agent.special.DocChatAgentConfig(
@@ -94,8 +92,8 @@ def chat() -> None:
             replace_collection=True,
             embedding=lr.embedding_models.OpenAIEmbeddingsConfig(
                 model_name="langdb/openai/text-embedding-3-small",  # Use LangDB for embeddings
-                api_key=os.environ.get("LANGDB_API_KEY", "")
-            )
+                # langdb_params.api_key is set via env var LANGDB_API_KEY
+            ),
         ),
         parsing=lr.parsing.parser.ParsingConfig(
             separators=["\n\n"],

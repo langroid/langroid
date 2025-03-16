@@ -66,7 +66,7 @@ from langroid.language_models.utils import (
     retry_with_exponential_backoff,
 )
 from langroid.parsing.parse_json import parse_imperfect_json
-from langroid.pydantic_v1 import BaseModel
+from langroid.pydantic_v1 import BaseModel, BaseSettings
 from langroid.utils.configuration import settings
 from langroid.utils.constants import Colors
 from langroid.utils.system import friendly_error
@@ -86,7 +86,6 @@ LANGDB_BASE_URL = "https://api.us-east-1.langdb.ai"
 OLLAMA_API_KEY = "ollama"
 DUMMY_API_KEY = "xxx"
 
-LANGDB_PROJECT_ID = os.environ.get("LANGDB_PROJECT_ID", "")
 VLLM_API_KEY = os.environ.get("VLLM_API_KEY", DUMMY_API_KEY)
 LLAMACPP_API_KEY = os.environ.get("LLAMA_API_KEY", DUMMY_API_KEY)
 
@@ -182,14 +181,22 @@ def noop() -> None:
     return None
 
 
-class LangDBParams(BaseModel):
+class LangDBParams(BaseSettings):
     """
     Parameters specific to LangDB integration.
     """
-    project_id: Optional[str] = None
+
+    api_key: str = DUMMY_API_KEY
+    project_id: str = ""
     label: Optional[str] = None
     run_id: Optional[str] = None
     thread_id: Optional[str] = None
+    base_url: str = LANGDB_BASE_URL
+
+    class Config:
+        # allow setting of fields via env vars,
+        # e.g. LANGDB_PROJECT_ID=1234
+        env_prefix = "LANGDB_"
 
 
 class OpenAICallParams(BaseModel):
@@ -268,7 +275,7 @@ class OpenAIGPTConfig(LLMConfig):
     # e.g. "mistral-instruct-v0.2 (a fuzzy search is done to find the closest match)
     formatter: str | None = None
     hf_formatter: HFFormatter | None = None
-    langdb_params: Optional[LangDBParams] = None
+    langdb_params: LangDBParams = LangDBParams()
     headers: Dict[str, str] = {}
 
     def __init__(self, **kwargs) -> None:  # type: ignore
@@ -561,15 +568,15 @@ class OpenAIGPT(LanguageModel):
                 self.config.chat_model = self.config.chat_model.replace("deepseek/", "")
                 self.api_base = DEEPSEEK_BASE_URL
                 if self.api_key == OPENAI_API_KEY:
-                  self.api_key = os.getenv("DEEPSEEK_API_KEY", DUMMY_API_KEY)
+                    self.api_key = os.getenv("DEEPSEEK_API_KEY", DUMMY_API_KEY)
             elif self.is_langdb:
                 self.config.chat_model = self.config.chat_model.replace("langdb/", "")
-                if LANGDB_PROJECT_ID:
-                    self.api_base = f"{LANGDB_BASE_URL}/{LANGDB_PROJECT_ID}/v1"
-                else:
-                    self.api_base = LANGDB_BASE_URL
+                self.api_base = self.config.langdb_params.base_url
+                project_id = self.config.langdb_params.project_id
+                if project_id:
+                    self.api_base += project_id + "/v1"
                 if self.api_key == OPENAI_API_KEY:
-                    self.api_key = os.environ.get("LANGDB_API_KEY", DUMMY_API_KEY)
+                    self.api_key = self.config.langdb_params.api_key or DUMMY_API_KEY
 
                 if self.config.langdb_params:
                     params = self.config.langdb_params
@@ -1727,7 +1734,8 @@ class OpenAIGPT(LanguageModel):
         else:
             llm_messages = messages
             if (
-                len(llm_messages) == 1 and llm_messages[0].role == Role.SYSTEM
+                len(llm_messages) == 1
+                and llm_messages[0].role == Role.SYSTEM
                 # TODO: we will unconditionally insert a dummy user msg
                 # if the only msg is a system msg.
                 # We could make this conditional on ModelInfo.needs_first_user_message
