@@ -574,7 +574,7 @@ class OpenAIGPT(LanguageModel):
                 self.api_base = self.config.langdb_params.base_url
                 project_id = self.config.langdb_params.project_id
                 if project_id:
-                    self.api_base += project_id + "/v1"
+                    self.api_base += "/" + project_id + "/v1"
                 if self.api_key == OPENAI_API_KEY:
                     self.api_key = self.config.langdb_params.api_key or DUMMY_API_KEY
 

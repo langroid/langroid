@@ -81,6 +81,7 @@ def chat() -> None:
             label="langroid-agent-docs",
             run_id=run_id,
             thread_id=thread_id,
+            # api_key is set via env var LANGDB_API_KEY
             # project_id is set via env var LANGDB_PROJECT_ID
         ),
     )
@@ -91,7 +92,9 @@ def chat() -> None:
             collection_name="langdb-chat-agent-docs",
             replace_collection=True,
             embedding=lr.embedding_models.OpenAIEmbeddingsConfig(
-                model_name="langdb/openai/text-embedding-3-small",  # Use LangDB for embeddings
+                # Use LangDB for embeddings
+                model_name="langdb/openai/text-embedding-3-small",
+                # langdb_params.project_id is set via env var LANGDB_PROJECT_ID
                 # langdb_params.api_key is set via env var LANGDB_API_KEY
             ),
         ),
