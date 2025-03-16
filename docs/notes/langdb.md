@@ -24,7 +24,12 @@ langroid uses the API key, `project_id` and other langDB-specific parameters
 from the `langdb_params` field; if any of these are specified in the `.env` file
 or in the environment explicitly, they will override the values in `langdb_params`.
 For example, to use Anthropic's Claude-3.7-Sonnet model, 
-set `chat_model="langdb/anthropic/claude-3.7-sonnet":
+set `chat_model="langdb/anthropic/claude-3.7-sonnet", as shown below. 
+You can entirely omit the `langdb_params` field if you have already set up 
+the fields as environment variables in your `.env` file, e.g. the `api_key`
+and `project_id` are read from the environment variables 
+`LANGDB_API_KEY` and `LANGDB_PROJECT_ID` respectively, and similarly for
+the other fields (which are optional).
 
 ```python
 import os
@@ -38,7 +43,10 @@ run_id = str(uuid.uuid4())
 
 # Configure LLM
 llm_config = OpenAIGPTConfig(
-    chat_model="langdb/openai/gpt-4",  # LangDB model prefix
+    chat_model="langdb/anthropic/claude-3.7-sonnet",
+    # omit the langdb_params field if you're not using custom tracking,
+    # or if all its fields are provided in env vars, like
+    # LANGDB_API_KEY, LANGDB_PROJECT_ID, LANGDB_RUN_ID, LANGDB_THREAD_ID, etc.
     langdb_params=LangDBParams(
         label='my-app',
         thread_id=thread_id,
@@ -52,7 +60,9 @@ llm_config = OpenAIGPTConfig(
 Similarly, you can configure the embeddings using `OpenAIEmbeddingsConfig`,
 which also has a `langdb_params` field that works the same way as 
 in `OpenAIGPTConfig` (i.e. it uses the API key and project ID from the environment
-if provided, otherwise uses the default values in `langdb_params`):
+if provided, otherwise uses the default values in `langdb_params`). Again the
+`langdb_params` does not need to be specified explicitly, if you've already
+set up the environment variables in your `.env` file.
 
 ```python
 # Configure embeddings
