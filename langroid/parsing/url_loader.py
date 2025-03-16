@@ -270,19 +270,24 @@ class FirecrawlCrawler(BaseCrawler):
 
         if self.mode == "scrape":
             for url in urls:
-                result = app.scrape_url(
-                    url, params=params
-                )  # Pass the params dictionary
-                if result["metadata"]["statusCode"] == 200:
-                    docs.append(
-                        Document(
-                            content=result["markdown"], metadata=DocMetaData(source=url)
+                try:
+                    result = app.scrape_url(url, params=params)
+                    metadata = result.get(
+                        "metadata", {}
+                    )  # Default to empty dict if missing
+                    status_code = metadata.get("statusCode")
+
+                    if status_code == 200:
+                        docs.append(
+                            Document(
+                                content=result["markdown"],
+                                metadata=DocMetaData(source=url),
+                            )
                         )
-                    )
-                else:
+                except Exception as e:
                     logging.warning(
-                        f"Firecrawl exited with error {result} "
-                        f" while retrieving content from {url}"
+                        f"Firecrawl encountered an error for {url}: {e}. "
+                        "Skipping but continuing."
                     )
         elif self.mode == "crawl":
             if not isinstance(urls, list) or len(urls) != 1:

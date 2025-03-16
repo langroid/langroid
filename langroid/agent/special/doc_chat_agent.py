@@ -471,6 +471,11 @@ class DocChatAgent(ChatAgent):
         docs = docs[: self.config.parsing.max_chunks]
         # vecdb should take care of adding docs in batches;
         # batching can be controlled via vecdb.config.batch_size
+        if not docs:
+            logging.warning(
+                "No documents to ingest after processing. Skipping VecDB addition."
+            )
+            return 0  # Return 0 since no documents were added
         self.vecdb.add_documents(docs)
         self.original_docs_length = self.doc_length(docs)
         self.setup_documents(docs, filter=self.config.filter)
