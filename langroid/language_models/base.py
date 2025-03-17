@@ -22,9 +22,6 @@ from typing import (
 
 from langroid.cachedb.base import CacheDB, CacheDBConfig
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
-from langroid.language_models.anthropic import (
-    AnthropicToolCall,
-)
 from langroid.language_models.model_info import (
     AnthropicModel,
     ModelInfo,
@@ -251,6 +248,51 @@ class AnthropicToolSpec(BaseModel):
     description: str | None = ""
     cache_control: AnthropicSystemCacheControl | None = None
     type: str | None = "custom"
+
+
+class AnthropicToolCall(BaseModel):
+    id: str
+    name: str
+
+
+class AnthropicCitationBase(BaseModel):
+    cited_text: str
+    document_index: int
+    document_title: str
+
+
+class AnthropicCitationRequestCharLocation(AnthropicCitationBase):
+    end_char_index: int
+    start_char_index: int
+    type: str = "char_location"
+
+
+class AnthropicRequestPageLocation(AnthropicCitationBase):
+    end_page_number: int
+    start_page_number: int
+    type: str = "page_location"
+
+
+class AnthropicRequestContentBlockLocation(AnthropicCitationBase):
+    end_block_index: int
+    start_block_index: int
+    type: str = "content_block_location"
+
+
+class AnthropicSystemMessage(BaseModel):
+    type: str = "text"
+    text: str = "You are a helpful assistant."
+    cache_control: Optional[AnthropicSystemCacheControl] = None
+    citation: Optional[AnthropicCitationBase] = None
+
+
+class AnthropicSystemConfig(BaseModel):
+    system_prompts: str | List[AnthropicSystemMessage] = "You are a helpful assistant."
+
+    def prepare_system_prompt(self) -> Union[str, list[Dict[str, Any]]]:
+        if isinstance(self.system_prompts, list):
+            return [prompt.dict() for prompt in self.system_prompts]
+        return self.system_prompts
 
 
 class ToolVariantSelector(BaseModel):

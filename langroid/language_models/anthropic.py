@@ -26,25 +26,23 @@ from anthropic.types import (
 from rich import print
 from rich.markup import escape
 
-from langroid.cachedb.base import CacheDB
 from langroid.cachedb.redis_cachedb import RedisCache, RedisCacheConfig
-from langroid.language_models import (
+from langroid.language_models.base import (
+    AnthropicSystemConfig,
+    AnthropicToolCall,
+    AnthropicToolSpec,
+    LanguageModel,
+    LLMCallConfig,
     LLMConfig,
     LLMFunctionSpec,
     LLMMessage,
     LLMResponse,
     LLMTokenUsage,
-    StreamEventType,
-)
-from langroid.language_models.base import (
-    AnthropicSystemCacheControl,
-    AnthropicToolSpec,
-    LanguageModel,
-    LLMCallConfig,
     OpenAIJsonSchemaSpec,
     OpenAIToolSpec,
     PromptVariants,
     Role,
+    StreamEventType,
     ToolChoiceTypes,
     ToolVariantSelector,
     filter_default_model,
@@ -52,7 +50,6 @@ from langroid.language_models.base import (
 from langroid.language_models.model_info import (
     AnthropicModel as AnthropicChatModels,
 )
-from langroid.language_models.openai_gpt import available_models
 from langroid.language_models.utils import (
     async_retry_with_exponential_backoff,
     base_retry_errors,
@@ -74,6 +71,20 @@ anthropic_chat_model_pref_list = [
     AnthropicChatModels.CLAUDE_3_HAIKU,
 ]
 
+if "ANTHROPIC_API_KEY" in os.environ:
+    try:
+        available_models = set(map(lambda m: m.id, Anthropic().models.list()))
+    except AuthenticationError as e:
+        if settings.debug:
+            logger.error(
+                f"""
+                Error while fetching available Anthropic models: {e}.
+                """
+            )
+        raise e
+else:
+    raise ValueError("Environment variable 'ANTHROPIC_API_KEY' was not set.")
+
 default_anthropic_chat_model = filter_default_model(
     anthropic_chat_model_pref_list,
     available_models,
@@ -93,46 +104,6 @@ terminal_anthropic_errors = (
 )
 
 
-class AnthropicCitationBase(BaseModel):
-    cited_text: str
-    document_index: int
-    document_title: str
-
-
-class AnthropicCitationRequestCharLocation(AnthropicCitationBase):
-    end_char_index: int
-    start_char_index: int
-    type: str = "char_location"
-
-
-class AnthropicRequestPageLocation(AnthropicCitationBase):
-    end_page_number: int
-    start_page_number: int
-    type: str = "page_location"
-
-
-class AnthropicRequestContentBlockLocation(AnthropicCitationBase):
-    end_block_index: int
-    start_block_index: int
-    type: str = "content_block_location"
-
-
-class AnthropicSystemMessage(BaseModel):
-    type: str = "text"
-    text: str = "You are a helpful assistant."
-    cache_control: Optional[AnthropicSystemCacheControl] = None
-    citation: Optional[AnthropicCitationBase] = None
-
-
-class AnthropicSystemConfig(BaseModel):
-    system_prompts: str | List[AnthropicSystemMessage] = "You are a helpful assistant."
-
-    def prepare_system_prompt(self) -> Union[str, list[Dict[str, Any]]]:
-        if isinstance(self.system_prompts, list):
-            return [prompt.dict() for prompt in self.system_prompts]
-        return self.system_prompts
-
-
 class AnthropicToolChoice(BaseModel):
     """
     Class defining the tool choice configuration
@@ -143,11 +114,6 @@ class AnthropicToolChoice(BaseModel):
 
     type: str = "auto"
     disable_parallel_tool_use: bool = False
-
-
-class AnthropicToolCall(BaseModel):
-    id: str
-    name: str
 
 
 class AnthropicResponse(BaseModel):
@@ -236,14 +202,14 @@ class AnthropicLLM(LanguageModel):
     """
     Class for Anthropic LLMs.
     Important note: the Anthropic models we list within `AnthropicModel`
-    are all versions 3+. As such, we do not use the legacy
-    `TextCompletion` API for chat completion calls, we instead use
-    the `Messages` API to perform chat and chat completion.
+    from `model_info` are all versions 3+. As such, we do not use
+    the legacy `TextCompletion` API for chat completion calls,
+    instead we use the `Messages` API to perform chat and
+    chat completion.
     """
 
     client: Anthropic | None
     async_client: AsyncAnthropic | None
-    cache: CacheDB | None
 
     def __init__(self, config: AnthropicLLMConfig = AnthropicLLMConfig()):
         config = config.copy()
@@ -321,6 +287,19 @@ class AnthropicLLM(LanguageModel):
                 Valid types are 'momento', 'redis', 'fakeredis', and 'none'
                 """
             )
+
+    def get_stream(self) -> bool:
+        return (
+            self.config.stream
+            and settings.stream
+            and self.info().allows_streaming
+            and not settings.quiet
+        )
+
+    def set_stream(self, stream: bool) -> bool:
+        tmp = self.config.stream
+        self.config.stream = stream
+        return tmp
 
     def generate(
         self,
@@ -413,11 +392,11 @@ class AnthropicLLM(LanguageModel):
         """
 
         if functions or function_call:
-            logging.warning(
-                """You might observe an unexpected answer with function usage
-                as they are unavailable for Anthropic SDK calls."""
+            raise ValueError(
+                """Function call usage is unavailable with Anthropic SDK calls.
+                Please use the tools and tool_choice parameters instead.
+                """
             )
-            logging.warning("Please use the tools and tool_choice parameters instead.")
 
         try:
             return self._chat_helper(
@@ -685,9 +664,8 @@ class AnthropicLLM(LanguageModel):
         if self.config.system_config and self.config.system_config.system_prompts:
             args["system"] = self.config.system_config.prepare_system_prompt()
 
-        args["tool_choice"] = tool_choice
-
-        if tools is not None:
+        if tools:
+            args["tool_choice"] = tool_choice
             args["tools"] = [t.dict() for t in tools]
 
         # Anthropic does not have a response_format object

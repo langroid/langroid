@@ -108,7 +108,7 @@ if "OPENAI_API_KEY" in os.environ:
         available_models = set(map(lambda m: m.id, OpenAI().models.list()))
     except openai.AuthenticationError as e:
         if settings.debug:
-            logging.warning(
+            logger.warning(
                 f"""
             OpenAI Authentication Error: {e}.
             ---
@@ -119,7 +119,7 @@ if "OPENAI_API_KEY" in os.environ:
         available_models = set()
     except Exception as e:
         if settings.debug:
-            logging.warning(
+            logger.warning(
                 f"""
             Error while fetching available OpenAI models: {e}.
             Proceeding with an empty set of available models.
@@ -156,7 +156,7 @@ def gpt_3_5_warning() -> None:
 
 @cache
 def parallel_strict_warning() -> None:
-    logging.warning(
+    logger.warning(
         "OpenAI tool calling in strict mode is not supported when "
         "parallel tool calls are made. Disable parallel tool calling "
         "to ensure correct behavior."
@@ -387,7 +387,7 @@ class OpenAIGPT(LanguageModel):
                 if formatter != "":
                     # e.g. "mistral"
                     self.config.formatter = formatter
-                    logging.warning(
+                    logger.warning(
                         f"""
                         Using completions (not chat) endpoint with HuggingFace 
                         chat_template for {formatter} for 
@@ -760,7 +760,7 @@ class OpenAIGPT(LanguageModel):
                 + ", ".join(filter_names)
                 + "]"
             )
-            logging.warning("LLM API returned content filter error: " + event_text)
+            logger.warning("LLM API returned content filter error: " + event_text)
 
         if event_text:
             completion += event_text
@@ -1175,7 +1175,7 @@ class OpenAIGPT(LanguageModel):
                 )
             args_dict = dict_or_list
         except (SyntaxError, ValueError) as e:
-            logging.warning(
+            logger.warning(
                 f"""
                     Parsing OpenAI function args failed: {args};
                     treating args as normal message. Error detail:
@@ -1316,7 +1316,7 @@ class OpenAIGPT(LanguageModel):
             return self._generate(prompt, max_tokens)
         except Exception as e:
             # log and re-raise exception
-            logging.error(friendly_error(e, "Error in OpenAIGPT.generate: "))
+            logger.error(friendly_error(e, "Error in OpenAIGPT.generate: "))
             raise e
 
     def _generate(self, prompt: str, max_tokens: int) -> LLMResponse:
@@ -1399,7 +1399,7 @@ class OpenAIGPT(LanguageModel):
             return await self._agenerate(prompt, max_tokens)
         except Exception as e:
             # log and re-raise exception
-            logging.error(friendly_error(e, "Error in OpenAIGPT.agenerate: "))
+            logger.error(friendly_error(e, "Error in OpenAIGPT.agenerate: "))
             raise e
 
     async def _agenerate(self, prompt: str, max_tokens: int) -> LLMResponse:
@@ -1521,7 +1521,7 @@ class OpenAIGPT(LanguageModel):
             )
         except Exception as e:
             # log and re-raise exception
-            logging.error(friendly_error(e, "Error in OpenAIGPT.chat: "))
+            logger.error(friendly_error(e, "Error in OpenAIGPT.chat: "))
             raise e
 
     async def achat(
@@ -1588,7 +1588,7 @@ class OpenAIGPT(LanguageModel):
             return result
         except Exception as e:
             # log and re-raise exception
-            logging.error(friendly_error(e, "Error in OpenAIGPT.achat: "))
+            logger.error(friendly_error(e, "Error in OpenAIGPT.achat: "))
             raise e
 
     @retry_with_exponential_backoff()
@@ -1806,7 +1806,7 @@ class OpenAIGPT(LanguageModel):
             try:
                 fun_call = LLMFunctionCall.from_dict(message["function_call"])
             except (ValueError, SyntaxError):
-                logging.warning(
+                logger.warning(
                     "Could not parse function arguments: "
                     f"{message['function_call']['arguments']} "
                     f"for function {message['function_call']['name']} "
@@ -1824,7 +1824,7 @@ class OpenAIGPT(LanguageModel):
                     tool_call = OpenAIToolCall.from_dict(tool_call_dict)
                     oai_tool_calls.append(tool_call)
                 except (ValueError, SyntaxError):
-                    logging.warning(
+                    logger.warning(
                         "Could not parse tool call: "
                         f"{json.dumps(tool_call_dict)} "
                         "treating as normal non-tool message"
