@@ -237,9 +237,7 @@ class DocChatAgent(ChatAgent):
         self.chunked_docs: List[Document] = []
         self.chunked_docs_clean: List[Document] = []
         self.response: None | Document = None
-
-        if len(config.doc_paths) > 0:
-            self.ingest()
+        self.ingest()
 
     def clear(self) -> None:
         """Clear the document collection and the specific collection in vecdb"""

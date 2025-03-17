@@ -252,6 +252,7 @@ def test_lance_doc_chat_agent_df_query_plan(test_settings: Settings):
         and "Alcoona" in result.tools[0].answer
     )
 
+
 @pytest.mark.xfail(
     reason="LanceDB may fail due to unknown flakiness",
     run=True,
