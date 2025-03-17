@@ -1,5 +1,5 @@
 """
-Deprecated: use DocChatAgent instead, with DocChatAgentConfig.retrieve_only=True,
+DEPRECATED: use DocChatAgent instead, with DocChatAgentConfig.retrieve_only=True,
 and if you want to retrieve FULL relevant doc-contents rather than just extracts,
 then set DocChatAgentConfig.extraction_granularity=-1
 
@@ -47,10 +47,11 @@ class RetrieverAgent(DocChatAgent):
         )
 
     def get_records(self) -> Sequence[Document]:
-        raise NotImplementedError
+        # subclasses should override
+        return []
 
     def ingest(self) -> None:
         records = self.get_records()
         if self.vecdb is None:
-            raise ValueError("No vector store specified")
+            logger.warning("Vector store not configured. Cannot ingest records.")
         self.vecdb.add_documents(records)
