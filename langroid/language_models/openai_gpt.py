@@ -48,7 +48,6 @@ from langroid.language_models.base import (
 from langroid.language_models.config import HFPromptFormatterConfig
 from langroid.language_models.model_info import (
     DeepSeekModel,
-    GeminiModel,
     OpenAI_API_ParamInfo,
 )
 from langroid.language_models.model_info import (
@@ -672,10 +671,8 @@ class OpenAIGPT(LanguageModel):
         return self.config.completion_model in openai_completion_models
 
     def is_gemini_model(self) -> bool:
-        gemini_models = [e.value for e in GeminiModel]
-        return self.chat_model_orig in gemini_models or self.chat_model_orig.startswith(
-            "gemini/"
-        )
+        """Are we using the gemini OpenAI-compatible API?"""
+        return self.chat_model_orig.startswith("gemini/")
 
     def is_deepseek_model(self) -> bool:
         deepseek_models = [e.value for e in DeepSeekModel]

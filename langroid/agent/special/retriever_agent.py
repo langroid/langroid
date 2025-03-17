@@ -54,4 +54,5 @@ class RetrieverAgent(DocChatAgent):
         records = self.get_records()
         if self.vecdb is None:
             logger.warning("Vector store not configured. Cannot ingest records.")
-        self.vecdb.add_documents(records)
+        else:
+            self.vecdb.add_documents(records)
