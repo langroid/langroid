@@ -237,9 +237,7 @@ class DocChatAgent(ChatAgent):
         self.chunked_docs: List[Document] = []
         self.chunked_docs_clean: List[Document] = []
         self.response: None | Document = None
-
-        if len(config.doc_paths) > 0:
-            self.ingest()
+        self.ingest()
 
     def clear(self) -> None:
         """Clear the document collection and the specific collection in vecdb"""
@@ -275,8 +273,9 @@ class DocChatAgent(ChatAgent):
             # But let's get all the chunked docs so we can
             # do keyword and other non-vector searches
             if self.vecdb is None:
-                raise ValueError("VecDB not set")
-            self.setup_documents(filter=self.config.filter)
+                logger.warning("VecDB not set: cannot ingest docs.")
+            else:
+                self.setup_documents(filter=self.config.filter)
             return
         self.ingest_doc_paths(self.config.doc_paths)  # type: ignore
 
