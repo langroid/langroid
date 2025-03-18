@@ -301,6 +301,9 @@ class AnthropicLLM(LanguageModel):
         self.config.stream = stream
         return tmp
 
+    def chat_context_length(self) -> int:
+        return self.config.chat_context_length or self.info().context_length
+
     def generate(
         self,
         prompt: str,

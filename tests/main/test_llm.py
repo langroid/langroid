@@ -238,6 +238,23 @@ def test_llm_config_context_length(mdl: str, ctx: int | None):
     assert mdl.chat_context_length() == ctx or mdl.info().context_length
 
 
+@pytest.mark.parametrize(
+    "chat_model",
+    [
+        lm.AnthropicModel.CLAUDE_3_5_HAIKU,
+        lm.AnthropicModel.CLAUDE_3_5_SONNET,
+        lm.AnthropicModel.CLAUDE_3_7_SONNET,
+    ],
+)
+@pytest.mark.parametrize("context_length", [16_000, None])
+def test_anthropic_config_context_length(chat_model: str, context_length: int | None):
+    llm_config = lm.AnthropicLLMConfig(
+        chat_model=chat_model, chat_context_length=context_length
+    )
+    model = lm.AnthropicLLM(config=llm_config)
+    assert model.chat_context_length() == context_length or model.info().context_length
+
+
 def test_model_selection(test_settings: Settings):
     set_global(test_settings)
 
