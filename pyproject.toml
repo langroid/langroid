@@ -1,6 +1,6 @@
 [project]
 name = "langroid"
-version = "0.45.8"
+version = "0.47.2"
 authors = [
     {name = "Prasad Chalasani", email = "pchalasani@gmail.com"},
 ]
@@ -264,6 +264,9 @@ pinecone = [
 ]
 asyncio = [
     "asyncio>=3.4.3",
+]
+firecrawl = [
+    "firecrawl-py>=1.13.5",
 ]
 
 anthropic = [

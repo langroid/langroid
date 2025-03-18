@@ -159,6 +159,7 @@ jobs:
           --extra sql \
           --extra exa \
           --extra tavily \
+          --extra firecrawl \
           --extra fastembed
         
       

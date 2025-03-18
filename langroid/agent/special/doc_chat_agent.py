@@ -50,7 +50,7 @@ from langroid.parsing.search import (
     preprocess_text,
 )
 from langroid.parsing.table_loader import describe_dataframe
-from langroid.parsing.url_loader import URLLoader
+from langroid.parsing.url_loader import BaseCrawlerConfig, TrafilaturaConfig, URLLoader
 from langroid.parsing.urls import get_list_from_user, get_urls_paths_bytes_indices
 from langroid.prompts.prompts_config import PromptsConfig
 from langroid.prompts.templates import SUMMARY_ANSWER_PROMPT_GPT4
@@ -192,6 +192,7 @@ class DocChatAgentConfig(ChatAgentConfig):
             library="pymupdf4llm",
         ),
     )
+    crawler_config: Optional[BaseCrawlerConfig] = TrafilaturaConfig()
 
     # Allow vecdb to be None in case we want to explicitly set it later
     vecdb: Optional[VectorStoreConfig] = QdrantDBConfig(
@@ -236,9 +237,7 @@ class DocChatAgent(ChatAgent):
         self.chunked_docs: List[Document] = []
         self.chunked_docs_clean: List[Document] = []
         self.response: None | Document = None
-
-        if len(config.doc_paths) > 0:
-            self.ingest()
+        self.ingest()
 
     def clear(self) -> None:
         """Clear the document collection and the specific collection in vecdb"""
@@ -274,8 +273,9 @@ class DocChatAgent(ChatAgent):
             # But let's get all the chunked docs so we can
             # do keyword and other non-vector searches
             if self.vecdb is None:
-                raise ValueError("VecDB not set")
-            self.setup_documents(filter=self.config.filter)
+                logger.warning("VecDB not set: cannot ingest docs.")
+            else:
+                self.setup_documents(filter=self.config.filter)
             return
         self.ingest_doc_paths(self.config.doc_paths)  # type: ignore
 
@@ -336,11 +336,15 @@ class DocChatAgent(ChatAgent):
             urls_meta = {u: idx2meta[u] for u in url_idxs}
             paths_meta = {p: idx2meta[p] for p in path_idxs}
         docs: List[Document] = []
-        parser = Parser(self.config.parsing)
+        parser: Parser = Parser(self.config.parsing)
         if len(urls) > 0:
             for ui in url_idxs:
                 meta = urls_meta.get(ui, {})
-                loader = URLLoader(urls=[all_paths[ui]], parser=parser)  # type: ignore
+                loader = URLLoader(
+                    urls=[all_paths[ui]],
+                    parsing_config=self.config.parsing,
+                    crawler_config=self.config.crawler_config,
+                )  # type: ignore
                 url_docs = loader.load()
                 # update metadata of each doc with meta
                 for d in url_docs:
@@ -466,6 +470,11 @@ class DocChatAgent(ChatAgent):
         docs = docs[: self.config.parsing.max_chunks]
         # vecdb should take care of adding docs in batches;
         # batching can be controlled via vecdb.config.batch_size
+        if not docs:
+            logging.warning(
+                "No documents to ingest after processing. Skipping VecDB addition."
+            )
+            return 0  # Return 0 since no documents were added
         self.vecdb.add_documents(docs)
         self.original_docs_length = self.doc_length(docs)
         self.setup_documents(docs, filter=self.config.filter)
