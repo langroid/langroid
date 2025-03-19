@@ -107,7 +107,7 @@ def async_retry_with_exponential_backoff(
 ) -> Callable[..., Any]:
     """Retry a function with exponential backoff."""
 
-    async def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
+    def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         async def wrapper(*args: List[Any], **kwargs: Dict[Any, Any]) -> Any:
             # Initialize variables
             num_retries = 0

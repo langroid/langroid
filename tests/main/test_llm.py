@@ -14,7 +14,6 @@ from langroid.language_models.anthropic import (
     AnthropicLLMConfig,
 )
 from langroid.language_models.base import (
-    AnthropicSystemConfig,
     LLMMessage,
     PromptVariants,
     Role,
@@ -98,20 +97,15 @@ def test_openai_gpt(test_settings: Settings, streaming, country, capital, use_ca
     "streaming, year, recipient, use_cache",
     [
         (False, "2015", "Eddie Murphy", False),
-        (False, "2017", "David Letterman", True),
+        (True, "2017", "David Letterman", True),
         (False, "2015", "Eddie Murphy", False),
-        (False, "2017", "David Letterman", True),
+        (True, "2017", "David Letterman", True),
     ],
 )
-def test_anthropic(streaming, year, recipient, use_cache):
+def test_anthropic(anthropic_system_config, streaming, year, recipient, use_cache):
     test_settings = Settings(chat_model=AnthropicModel.CLAUDE_3_5_HAIKU)
     test_settings.cache = False
     set_global(test_settings)
-
-    # setting up Anthropic system configuration
-    anthropic_system_config = AnthropicSystemConfig(
-        system_prompts="You are a helpful yet concise assistant. Keep answers brief."
-    )
 
     cfg = AnthropicLLMConfig(
         stream=streaming,

@@ -6,6 +6,7 @@ import pytest
 
 from langroid.cachedb.redis_cachedb import RedisCache, RedisCacheConfig
 from langroid.language_models import GeminiModel, OpenAIChatModel
+from langroid.language_models.base import AnthropicSystemConfig
 from langroid.utils.configuration import Settings, set_global
 
 logger = logging.getLogger(__name__)
@@ -183,3 +184,12 @@ def redis_close_connections():
         redis.close_all_connections()
     except Exception:
         pass
+
+
+@pytest.fixture(scope="function")
+def anthropic_system_config():
+    # setting up Anthropic system configuration
+    anthropic_system_config = AnthropicSystemConfig(
+        system_prompts="You are a helpful yet concise assistant. Keep answers brief."
+    )
+    yield anthropic_system_config

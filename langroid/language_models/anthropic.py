@@ -2,7 +2,7 @@ import logging
 import os
 import sys
 from enum import Enum
-from typing import Any, Dict, List, Literal, Optional, Tuple, Union, no_type_check
+from typing import Any, Dict, List, Optional, Tuple, Union, no_type_check
 
 from anthropic import (
     Anthropic,
@@ -18,7 +18,7 @@ from anthropic import (
 from anthropic.types import (
     ContentBlockStopEvent,
     InputJSONDelta,
-    MessageDeltaEvent,
+    RawMessageDeltaEvent,
     TextDelta,
     ThinkingDelta,
     ToolUseBlock,
@@ -151,7 +151,7 @@ class Delta(Enum):
 
 
 class AnthropicStreamDeltaEvent(BaseModel):
-    delta: Optional[Literal[StreamTypes.CONTENT_BLOCK_DELTA]]
+    delta: Dict[Any, Any]
     thinking: str
     text: str
 
@@ -162,6 +162,8 @@ class StreamState(BaseModel):
     for internal stream processing.
     """
 
+    completion: str = ""
+    reasoning: str = ""
     terminal_state: bool
 
 
@@ -426,11 +428,11 @@ class AnthropicLLM(LanguageModel):
         ),
     ) -> LLMResponse:
         if functions or function_call:
-            logging.warning(
-                """You might observe an unexpected answer with function usage
-                as they are unavailable for Anthropic SDK calls."""
+            raise ValueError(
+                """Function call usage is unavailable with Anthropic SDK calls.
+                Please use the tools and tool_choice parameters instead.
+                """
             )
-            logging.warning("Please use the tools and tool_choice parameters instead.")
 
         try:
             result = await self._achat_helper(
@@ -465,7 +467,7 @@ class AnthropicLLM(LanguageModel):
         )
         if self.get_stream() and not cached:
             stream_response: Tuple[LLMResponse, Dict[str, Any]] = (
-                await self._stream_response_async(response, chat=True)
+                await self._stream_response_async(response)
             )
             llm_response, anthropic_response = stream_response
             self.cache_store(hashed_key, anthropic_response, logger)
@@ -522,7 +524,7 @@ class AnthropicLLM(LanguageModel):
         # we need to check if it's a stream response
         if self.get_stream() and not cached:
             stream_response: Tuple[LLMResponse, Dict[str, Any]] = self._stream_response(
-                response=response, chat=True
+                response=response
             )
             llm_response, anthropic_response = stream_response
             self.cache_store(hashed_key, anthropic_response, logger)
@@ -603,8 +605,19 @@ class AnthropicLLM(LanguageModel):
         call response.
         """
         content = response_dict.get("content", [])
-        message = content[0].get("text") if content else ""
-        return message
+
+        nested = content[0] if content else {}
+
+        res = ""
+
+        if nested.get("message"):
+            message = nested.get("message", {})
+            res = message.get("content", "")
+            return res
+
+        res = nested.get("text", "")
+
+        return res
 
     @staticmethod
     def _parse_tool_usage_from_response(
@@ -680,7 +693,7 @@ class AnthropicLLM(LanguageModel):
         terminal_errors=terminal_anthropic_errors,
     )
     def _stream_response(  # type: ignore
-        self, response, chat: bool = False
+        self, response
     ) -> Tuple[LLMResponse, Dict[str, Any]]:
         """
         Grab and print streaming response from Anthropic Messages API
@@ -702,14 +715,17 @@ class AnthropicLLM(LanguageModel):
                     event=event,
                     tool_usage=tool_usage,
                     tool_partials=tool_partials,
-                    chat=chat,
                     completion=completion,
                     reasoning=reasoning,
                 )
+                completion = synchronous_stream.completion
+                reasoning = synchronous_stream.reasoning
                 if synchronous_stream.terminal_state:
                     break
         except Exception:
             pass
+
+        assert True
 
         print("")
 
@@ -722,7 +738,7 @@ class AnthropicLLM(LanguageModel):
         terminal_errors=terminal_anthropic_errors,
     )
     async def _stream_response_async(  # type: ignore
-        self, response, chat: bool = False
+        self, response
     ) -> Tuple[LLMResponse, Dict[str, Any]]:
         completion = ""
         reasoning = ""
@@ -738,10 +754,11 @@ class AnthropicLLM(LanguageModel):
                     event=event,
                     tool_usage=tool_usage,
                     tool_partials=tool_partials,
-                    chat=chat,
                     completion=completion,
                     reasoning=reasoning,
                 )
+                completion = asynchronous_stream.completion
+                reasoning = asynchronous_stream.reasoning
                 if asynchronous_stream.terminal_state:
                     break
         except Exception:
@@ -754,13 +771,15 @@ class AnthropicLLM(LanguageModel):
         )
 
     @staticmethod
-    def _handle_early_stream_terminations(event, tool_usage) -> Optional[StreamState]:  # type: ignore
+    def _handle_early_stream_terminations(  # type: ignore
+        event, tool_usage, completion, reasoning
+    ) -> Optional[StreamState]:
         if event.type in [
             StreamTypes.PING.value,
             StreamTypes.MESSAGE_START.value,
         ]:
             return StreamState(
-                terminal_state=False,
+                terminal_state=False, completion=completion, reasoning=reasoning
             )
 
         # we need a different check for content_block_start
@@ -774,53 +793,55 @@ class AnthropicLLM(LanguageModel):
                     name=event.content_block.name,
                 )
                 return StreamState(
-                    terminal_state=False,
+                    terminal_state=False, completion=completion, reasoning=reasoning
                 )
             else:
                 return StreamState(
-                    terminal_state=False,
+                    terminal_state=False, completion=completion, reasoning=reasoning
                 )
 
         # corresponds to 529 error codes
         if event.type == StreamTypes.ERROR.value:
             logging.warning("Received error payload while streaming messages")
             return StreamState(
-                terminal_state=True,
+                terminal_state=True, completion=completion, reasoning=reasoning
             )
 
         return None
 
     @staticmethod
     def _handle_streaming_delta_event(  # type: ignore
-        event, chat: bool, tool_partials: Dict[int, List[str]]
+        event, tool_partials: Dict[int, List[str]]
     ):
         delta = (
             event.delta if event.type == StreamTypes.CONTENT_BLOCK_DELTA.value else None
         )
         delta_text = ""
         delta_thinking = ""
-        if chat:
-            # Anthropic Messages API stream does not return entire json argument,
-            # it will give it in parts
-            # https://docs.anthropic.com/en/api/messages-streaming#input-json-delta
-            if isinstance(delta, InputJSONDelta):
-                # building tool usage for content index with list
-                # ensure the list exists before we try to append
-                # the partial json string
-                if event.index not in tool_partials:
-                    tool_partials[event.index] = []
 
-                tool_partials[event.index] += delta.partial_json
-            if isinstance(delta, TextDelta):
-                delta_text = event.delta.text
-            if isinstance(delta, ThinkingDelta):
-                delta_thinking = event.delta.thinking
-        else:
-            if isinstance(delta, TextDelta):
-                delta_text = event.delta.text
+        if not delta:
+            return AnthropicStreamDeltaEvent(
+                delta={}, thinking=delta_thinking, text=delta_text
+            )
+
+        # Anthropic Messages API stream does not return entire json argument,
+        # it will give it in parts
+        # https://docs.anthropic.com/en/api/messages-streaming#input-json-delta
+        if isinstance(delta, InputJSONDelta):
+            # building tool usage for content index with list
+            # ensure the list exists before we try to append
+            # the partial json string
+            if event.index not in tool_partials:
+                tool_partials[event.index] = []
+
+            tool_partials[event.index] += delta.partial_json
+        if isinstance(delta, TextDelta):
+            delta_text = event.delta.text
+        if isinstance(delta, ThinkingDelta):
+            delta_thinking = event.delta.thinking
 
         return AnthropicStreamDeltaEvent(
-            delta=delta, thinking=delta_thinking, text=delta_text
+            delta=delta.dict(), thinking=delta_thinking, text=delta_text
         )
 
     @no_type_check
@@ -829,7 +850,6 @@ class AnthropicLLM(LanguageModel):
         event,
         tool_usage: Dict[int, AnthropicToolCall],
         tool_partials: Dict[int, List[str]],
-        chat: bool = False,
         completion: str = "",
         reasoning: str = "",
     ) -> StreamState:
@@ -838,15 +858,12 @@ class AnthropicLLM(LanguageModel):
         Anthropic's Message API with stream = True.
         """
 
-        if early_exit := self._handle_early_stream_terminations(event, tool_usage):
+        if early_exit := self._handle_early_stream_terminations(
+            event, tool_usage, completion, reasoning
+        ):
             return early_exit
 
-        processed_delta = self._handle_streaming_delta_event(event, chat, tool_partials)
-
-        stop_reason = ""
-
-        if isinstance(event, MessageDeltaEvent):
-            stop_reason = event.delta.stop_reason
+        processed_delta = self._handle_streaming_delta_event(event, tool_partials)
 
         if processed_delta.text:
             completion += processed_delta.text
@@ -880,13 +897,18 @@ class AnthropicLLM(LanguageModel):
                 sys.stdout.flush()
                 self.config.streamer(argument, StreamEventType.TOOL_ARGS)
 
+        stop_reason = ""
+
+        if isinstance(event, RawMessageDeltaEvent):
+            stop_reason = event.delta.stop_reason
+
         if stop_reason in ["tool_use", "stop_sequence"]:
             return StreamState(
-                terminal_state=True,
+                terminal_state=True, completion=completion, reasoning=reasoning
             )
 
         return StreamState(
-            terminal_state=False,
+            terminal_state=False, completion=completion, reasoning=reasoning
         )
 
     @no_type_check
@@ -895,7 +917,6 @@ class AnthropicLLM(LanguageModel):
         event,
         tool_usage: Dict[int, AnthropicToolCall],
         tool_partials: Dict[int, List[str]],
-        chat: bool = False,
         completion: str = "",
         reasoning: str = "",
     ) -> StreamState:
@@ -909,12 +930,7 @@ class AnthropicLLM(LanguageModel):
 
         silent = self.config.async_stream_quiet
 
-        processed_delta = self._handle_streaming_delta_event(event, chat, tool_partials)
-
-        stop_reason = ""
-
-        if isinstance(event, MessageDeltaEvent):
-            stop_reason = event.delta.stop_reason
+        processed_delta = self._handle_streaming_delta_event(event, tool_partials)
 
         if processed_delta.text:
             completion += processed_delta.text
@@ -954,13 +970,18 @@ class AnthropicLLM(LanguageModel):
                 sys.stdout.flush()
                 await self.config.streamer_async(argument, StreamEventType.TOOL_ARGS)
 
+        stop_reason = ""
+
+        if isinstance(event, RawMessageDeltaEvent):
+            stop_reason = event.delta.stop_reason
+
         if stop_reason in ["tool_use", "stop_sequence"]:
             return StreamState(
-                terminal_state=True,
+                terminal_state=True, completion=completion, reasoning=reasoning
             )
 
         return StreamState(
-            terminal_state=False,
+            terminal_state=False, completion=completion, reasoning=reasoning
         )
 
     @staticmethod
