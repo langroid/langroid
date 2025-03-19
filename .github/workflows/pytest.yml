@@ -88,6 +88,9 @@ jobs:
       WEAVIATE_API_URL: ${{ secrets.WEAVIATE_API_URL }}
       EXA_API_KEY: ${{ secrets.EXA_API_KEY }}
       TAVILY_API_KEY: ${{ secrets.TAVILY_API_KEY }}
+      LANGDB_API_KEY: ${{ secrets.LANGDB_API_KEY }}
+      OPENROUTER_API_KEY: ${{ secrets.OPENROUTER_API_KEY }}
+      FIRECRAWL_API_KEY: ${{ secrets.FIRECRAWL_API_KEY }}
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: langroid 
