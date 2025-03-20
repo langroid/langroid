@@ -725,8 +725,6 @@ class AnthropicLLM(LanguageModel):
         except Exception:
             pass
 
-        assert True
-
         print("")
 
         return self._create_stream_response(
@@ -925,7 +923,9 @@ class AnthropicLLM(LanguageModel):
         Anthropic's Message API with stream = True.
         """
 
-        if early_exit := self._handle_early_stream_terminations(event, tool_usage):
+        if early_exit := self._handle_early_stream_terminations(
+            event, tool_usage, completion, reasoning
+        ):
             return early_exit
 
         silent = self.config.async_stream_quiet
