@@ -866,24 +866,85 @@ class PythonDocxParser(DocumentParser):
             raise LangroidImportError("python-docx", "docx")
 
         doc = docx.Document(self.doc_bytes)
-        for i, para in enumerate(doc.paragraphs, start=1):
-            yield i, [para]
+        for i, element in enumerate(doc.element.body, start=1):
+            if element.tag.endswith('tbl'):
+                for t in doc.tables:
+                    if t._element == element:
+                        yield i, ('table', t)
+                        break
+            else:
+                for p in doc.paragraphs:
+                    if p._element == element:
+                        yield i, ('paragraph', p)
+                        break
 
-    def get_document_from_page(self, page: Any) -> Document:
+    def convert_to_markdown(self, element_type: str, element: Any) -> str:
+        """
+        Convert element to markdown format.
+        """
+        markdown_content = []
+
+        if element_type == 'table':
+            table_markdown = ""
+            table = element
+            for row_index, row in enumerate(table.rows):
+                row_markdown = "|"
+                for cell in row.cells:
+                    cell_text = cell.text.strip()
+                    row_markdown += f" {cell_text} |"
+                table_markdown += row_markdown + "\n"
+
+                # After the first row (header), add a separator
+                if row_index == 0:
+                    separator_row = "|"
+                    for _ in row.cells:
+                        separator_row += " --- |"
+                    table_markdown += separator_row + "\n"
+            markdown_content.append(table_markdown)
+
+        else:
+            para = element
+
+            m = re.match(r'Heading +(\d+)', para.style.name)
+            if m and para.text:
+                header_level = int(m.group(1))
+                markdown_content.append('#' * header_level + ' ' + para.text)
+
+            elif (para.style.name.startswith('List') or (
+                    para.paragraph_format.left_indent and
+                    para.paragraph_format.first_line_indent)) and para.text:
+                markdown_content.append('* ' + para.text)
+
+            elif para.runs:
+                para_text = ""
+                for run in para.runs:
+                    text = run.text
+                    if run.bold:
+                        text = f"**{text}**"  # Bold text
+                    if run.italic:
+                        text = f"_{text}_"  # Italic text
+                    para_text += text
+                markdown_content.append(para_text)
+            elif para.text:
+                markdown_content.append(para.text)
+
+        return "\n\n".join(markdown_content)
+
+    def get_document_from_page(self, page: Tuple[str, Any]) -> Document:
         """
         Get Document object from a given 'page', which in this case is a single
-        paragraph.
+        paragraph or table.
 
         Args:
-            page (list): A list containing a single Paragraph object.
+            page (Tuple[str, any]): Element type (table/paragraph) + element.
 
         Returns:
             Document: Document object, with content and possible metadata.
         """
-        paragraph = page[0]
+        text = self.convert_to_markdown(page[0], page[1])
         return Document(
-            content=self.fix_text(paragraph.text),
-            metadata=DocMetaData(source=self.source),
+            content=self.fix_text(text),
+            metadata=DocMetaData(source=self.source)
         )
 
 
