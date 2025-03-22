@@ -928,7 +928,7 @@ class PythonDocxParser(DocumentParser):
             elif para.text:
                 markdown_content.append(para.text)
 
-        return "\n\n".join(markdown_content)
+        return "\n\n".join(markdown_content) + "\n\n"
 
     def get_document_from_page(self, page: Tuple[str, Any]) -> Document:
         """
