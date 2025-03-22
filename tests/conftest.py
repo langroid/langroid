@@ -5,7 +5,7 @@ import threading
 import pytest
 
 from langroid.cachedb.redis_cachedb import RedisCache, RedisCacheConfig
-from langroid.language_models import GeminiModel, OpenAIChatModel
+from langroid.language_models import AnthropicModel, GeminiModel, OpenAIChatModel
 from langroid.language_models.base import AnthropicSystemConfig
 from langroid.utils.configuration import Settings, set_global
 
@@ -118,6 +118,9 @@ def test_settings(request):
     else:
         model = request.config.getoption("--m")
         cache = not request.config.getoption("--nc")
+
+    if request.param == "anthropic":
+        model = AnthropicModel.CLAUDE_3_5_HAIKU
 
     yield Settings(**base_settings, chat_model=model, cache=cache)
 

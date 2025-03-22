@@ -158,19 +158,41 @@ async def test_anthropic_async(
         )
 
 
+@pytest.mark.parametrize(
+    "test_settings",
+    [
+        "openai",
+        "anthropic",
+    ],
+    indirect=True,
+)
 @pytest.mark.asyncio
-async def test_llm_async_concurrent(test_settings: Settings):
+async def test_llm_async_concurrent(test_settings: Settings, anthropic_system_config):
     set_global(test_settings)
-    cfg = OpenAIGPTConfig(
-        stream=False,  # use streaming output if enabled globally
-        type="openai",
-        max_output_tokens=100,
-        min_output_tokens=10,
-        completion_model=OpenAICompletionModel.DAVINCI,
-        cache_config=RedisCacheConfig(fake=False),
-    )
 
-    mdl = OpenAIGPT(config=cfg)
+    if test_settings.chat_model == AnthropicModel.CLAUDE_3_5_HAIKU:
+        cfg = AnthropicLLMConfig(
+            stream=False,
+            max_output_tokens=100,
+            min_output_tokens=10,
+            cache_config=RedisCacheConfig(fake=False),
+            system_config=anthropic_system_config,
+        )
+    else:
+        cfg = OpenAIGPTConfig(
+            stream=False,  # use streaming output if enabled globally
+            type="openai",
+            max_output_tokens=100,
+            min_output_tokens=10,
+            completion_model=OpenAICompletionModel.DAVINCI,
+            cache_config=RedisCacheConfig(fake=False),
+        )
+
+    if test_settings.chat_model == AnthropicModel.CLAUDE_3_5_HAIKU:
+        mdl = AnthropicLLM(config=cfg)
+    else:
+        mdl = OpenAIGPT(config=cfg)
+
     N = 5
     questions = ["1+" + str(i) for i in range(N)]
     expected_answers = [str(i + 1) for i in range(N)]

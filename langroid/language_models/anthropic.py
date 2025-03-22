@@ -322,18 +322,25 @@ class AnthropicLLM(LanguageModel):
         """
         try:
             if not prompt_variants.anthropic:
-                raise ValueError("Empty prompt list passed into generate")
+                logging.warning(
+                    "Empty prompt variant passed into generate, using prompt"
+                )
 
-            messages = [
-                LLMMessage.parse_obj(prompt) for prompt in prompt_variants.anthropic
-            ]
+            messages: List[LLMMessage] | str = (
+                [LLMMessage.parse_obj(prompt) for prompt in prompt_variants.anthropic]
+                if prompt_variants.anthropic
+                else prompt
+            )
 
             if settings.debug:
                 # using Claude 3.x+ models, the completion prompt should always be
                 # the last message with a type of "assistant"
-                message: LLMMessage = messages[-1]
-                print(f"[grey37]ROLE: {message.role}[/grey37]")
-                print(f"[grey37]PROMPT: {escape(message.content)}[/grey37]")
+                if isinstance(messages, list):
+                    message: LLMMessage = messages[-1]
+                    print(f"[grey37]ROLE: {message.role}[/grey37]")
+                    print(f"[grey37]PROMPT: {escape(message.content)}[/grey37]")
+                else:
+                    print(f"[grey37]PROMPT: {escape(prompt)}[/grey37]")
 
             return self.chat(messages=messages, max_tokens=max_tokens)
         except Exception as e:
@@ -349,18 +356,25 @@ class AnthropicLLM(LanguageModel):
     ) -> LLMResponse:
         try:
             if not prompt_variants.anthropic:
-                raise ValueError("Empty prompt list passed into agenerate")
+                logging.warning(
+                    "Empty prompt variant passed into agenerate, using prompt"
+                )
 
-            messages = [
-                LLMMessage.parse_obj(prompt) for prompt in prompt_variants.anthropic
-            ]
+            messages: List[LLMMessage] | str = (
+                [LLMMessage.parse_obj(prompt) for prompt in prompt_variants.anthropic]
+                if prompt_variants.anthropic
+                else prompt
+            )
 
             if settings.debug:
                 # using Claude 3.x+ models, the completion prompt should always be
                 # the last message with a type of "assistant"
-                message: LLMMessage = messages[-1]
-                print(f"[grey37]ROLE: {message.role}[/grey37]")
-                print(f"[grey37]PROMPT: {escape(message.content)}[/grey37]")
+                if isinstance(messages, list):
+                    message: LLMMessage = messages[-1]
+                    print(f"[grey37]ROLE: {message.role}[/grey37]")
+                    print(f"[grey37]PROMPT: {escape(message.content)}[/grey37]")
+                else:
+                    print(f"[grey37]PROMPT: {escape(prompt)}[/grey37]")
 
             return await self.achat(messages=messages, max_tokens=max_tokens)
         except Exception as e:
