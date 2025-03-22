@@ -93,10 +93,8 @@ async def test_openai_gpt_async(
 )
 @pytest.mark.parametrize("stream_quiet", [True, False])
 async def test_anthropic_async(
-    anthropic_system_config, streaming, year, recipient, stream_quiet
+    test_settings, anthropic_system_config, streaming, year, recipient, stream_quiet
 ):
-    test_settings = Settings(chat_model=AnthropicModel.CLAUDE_3_5_HAIKU)
-    test_settings.cache = False
     set_global(test_settings)
 
     anthropic_cfg = AnthropicLLMConfig(
@@ -158,27 +156,17 @@ async def test_anthropic_async(
         )
 
 
-@pytest.mark.parametrize(
-    "test_settings",
-    [
-        "openai",
-        "anthropic",
-    ],
-    indirect=True,
-)
+@pytest.mark.parametrize("model_class", [OpenAIGPT, AnthropicLLM])
 @pytest.mark.asyncio
-async def test_llm_async_concurrent(test_settings: Settings, anthropic_system_config):
-    set_global(test_settings)
-
-    if test_settings.chat_model == AnthropicModel.CLAUDE_3_5_HAIKU:
-        cfg = AnthropicLLMConfig(
-            stream=False,
-            max_output_tokens=100,
-            min_output_tokens=10,
-            cache_config=RedisCacheConfig(fake=False),
-            system_config=anthropic_system_config,
-        )
+async def test_llm_async_concurrent(
+    test_settings: Settings, anthropic_system_config, model_class
+):
+    if isinstance(model_class, OpenAIGPT):
+        set_global(test_settings)
     else:
+        set_global(Settings(chat_model=AnthropicModel.CLAUDE_3_5_HAIKU))
+
+    if isinstance(model_class, OpenAIGPT):
         cfg = OpenAIGPTConfig(
             stream=False,  # use streaming output if enabled globally
             type="openai",
@@ -187,11 +175,19 @@ async def test_llm_async_concurrent(test_settings: Settings, anthropic_system_co
             completion_model=OpenAICompletionModel.DAVINCI,
             cache_config=RedisCacheConfig(fake=False),
         )
-
-    if test_settings.chat_model == AnthropicModel.CLAUDE_3_5_HAIKU:
-        mdl = AnthropicLLM(config=cfg)
     else:
+        cfg = AnthropicLLMConfig(
+            stream=False,
+            max_output_tokens=100,
+            min_output_tokens=10,
+            cache_config=RedisCacheConfig(fake=False),
+            system_config=anthropic_system_config,
+        )
+
+    if isinstance(model_class, OpenAIGPT):
         mdl = OpenAIGPT(config=cfg)
+    else:
+        mdl = AnthropicLLM(config=cfg)
 
     N = 5
     questions = ["1+" + str(i) for i in range(N)]

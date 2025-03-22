@@ -119,7 +119,7 @@ def test_settings(request):
         model = request.config.getoption("--m")
         cache = not request.config.getoption("--nc")
 
-    if request.param == "anthropic":
+    if "anthropic" in request.node.originalname:
         model = AnthropicModel.CLAUDE_3_5_HAIKU
 
     yield Settings(**base_settings, chat_model=model, cache=cache)

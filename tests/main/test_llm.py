@@ -8,7 +8,6 @@ import pytest
 import langroid as lr
 import langroid.language_models as lm
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
-from langroid.language_models import AnthropicModel
 from langroid.language_models.anthropic import (
     AnthropicLLM,
     AnthropicLLMConfig,
@@ -102,8 +101,9 @@ def test_openai_gpt(test_settings: Settings, streaming, country, capital, use_ca
         (True, "2017", "David Letterman", True),
     ],
 )
-def test_anthropic(anthropic_system_config, streaming, year, recipient, use_cache):
-    test_settings = Settings(chat_model=AnthropicModel.CLAUDE_3_5_HAIKU)
+def test_anthropic(
+    test_settings, anthropic_system_config, streaming, year, recipient, use_cache
+):
     test_settings.cache = False
     set_global(test_settings)
 
