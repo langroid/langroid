@@ -4,6 +4,7 @@ from . import base
 from . import openai_gpt
 from . import azure_openai
 from . import prompt_formatter
+from . import anthropic
 
 from .base import (
     StreamEventType,
@@ -24,6 +25,7 @@ from .model_info import (
 from .openai_gpt import OpenAIGPTConfig, OpenAIGPT, OpenAICallParams
 from .mock_lm import MockLM, MockLMConfig
 from .azure_openai import AzureConfig, AzureGPT
+from .anthropic import AnthropicLLMConfig, AnthropicCallParams, AnthropicLLM
 
 
 __all__ = [
@@ -53,4 +55,8 @@ __all__ = [
     "AzureGPT",
     "MockLM",
     "MockLMConfig",
+    "anthropic",
+    "AnthropicLLMConfig",
+    "AnthropicCallParams",
+    "AnthropicLLM",
 ]
