@@ -18,6 +18,7 @@ class Splitter(str, Enum):
     TOKENS = "tokens"
     PARA_SENTENCE = "para_sentence"
     SIMPLE = "simple"
+    MARKDOWN = "markdown"
 
 
 class BaseParsingConfig(BaseSettings):
@@ -119,6 +120,9 @@ class ParsingConfig(BaseSettings):
     pptx: MarkitdownPPTXParsingConfig = MarkitdownPPTXParsingConfig()
     xls: MarkitdownXLSParsingConfig = MarkitdownXLSParsingConfig()
     xlsx: MarkitdownXLSXParsingConfig = MarkitdownXLSXParsingConfig()
+
+
+RE_HEADER = re.compile(r"^(#+)\s+(.*)$")
 
 
 class Parser:
@@ -357,6 +361,167 @@ class Parser:
 
         return chunks
 
+    def split_markdown(self, docs: List[Document]) -> List[Document]:
+        final_docs = []
+        for d in docs:
+            chunks = self.chunk_markdown(d.content)
+            # note we are ensuring we COPY the document metadata into each chunk,
+            # which ensures all chunks of a given doc have same metadata
+            # (and in particular same metadata.id, which is important later for
+            # add_window_ids)
+            chunk_docs = [
+                Document(
+                    content=c, metadata=d.metadata.copy(update=dict(is_chunk=True))
+                )
+                for c in chunks
+                if c.strip() != ""
+            ]
+            self.add_window_ids(chunk_docs)
+            final_docs += chunk_docs
+        return final_docs
+
+    def chunk_markdown(self, text: str) -> List[str]:
+        """
+        Split a markdown text into chunks of ~CHUNK_SIZE
+        tokens, based on header, blocks and newline boundaries.
+        """
+        md_tree = self.parse_md(text)
+        self.count_md_tokens(md_tree)
+        chunks = self.split_md(md_tree)
+        return chunks
+
+    def parse_md(self, text: str) -> Dict[str, Any]:
+        """
+        Parse markdown document into a tree-like structure of elements
+        defined by headers. Each element contains a list of blocks, where
+        each block is either some text or a list of other elements.
+        """
+        md_tree: Dict[str, Any] = {
+            'level': 0,
+            'blocks': [],
+            'parent_headings': [],
+            'heading': ''
+        }
+        current_element = md_tree
+        element_stack = [current_element]
+
+        # we want to preserve original document structure even if it doesn't strictly
+        # follow markdown format, therefore we parse lines manually instead of using
+        # markdown parser like mistune or markdown-it-py
+        lines = text.splitlines(keepends=True)
+
+        # if document starts with metadata section (in YAML Front Matter format)
+        # extract 'title' and 'description' from it and use as top-level heading
+        if len(lines) > 3 and lines[0].strip() == '---' and lines:
+            i = 1
+            metadata = []
+            while i < min(10, len(lines)):
+                line = lines[i].strip()
+                i += 1
+                if re.match(r"(title|description):", line):
+                    metadata.append(line)
+                if line.strip() == '---':
+                    current_element['heading'] = f'---\n{"\n".join(metadata)}\n---\n\n'
+                    break
+
+        for line in lines:
+            m = RE_HEADER.match(line)
+            if m:
+                level = min(len(m.group(1)), 6)
+                new_element = {'level': level, 'blocks': []}
+                while element_stack and element_stack[-1]['level'] >= level:
+                    element_stack.pop()
+                new_element['parent_headings'] = \
+                    element_stack[-1]['parent_headings'].copy()
+                if element_stack[-1]['heading']:
+                    new_element['parent_headings'].append(
+                        element_stack[-1]['heading'])  # type: ignore
+                new_element['heading'] = line
+                element_stack[-1]['blocks'].append(new_element)
+                element_stack.append(new_element)
+                current_element = new_element
+
+            if current_element['blocks'] and \
+               isinstance(current_element['blocks'][-1], str):
+                current_element['blocks'][-1] += line
+            else:
+                current_element['blocks'].append(line)
+
+        return md_tree
+
+    def count_md_tokens(self, element: Dict[str, Any]) -> int:
+        """
+        Count the number of tokens in each element.
+        """
+        total_tokens = 0
+
+        for block in element['blocks']:
+            if isinstance(block, dict) and 'blocks' in block:
+                total_tokens += self.count_md_tokens(block)
+            else:
+                total_tokens += self.num_tokens(block)
+
+        element['tokens'] = total_tokens
+        return total_tokens
+
+    def split_md(self, element: Dict[str, Any]) -> List[str]:
+        """
+        Traverse all elements and split them into chunks.
+        The chunk size may vary from (chunk_size * 0.7) to (chunk_size * 1.3).
+        """
+        chunks: List[str] = []
+        current_chunk: List[str] = []
+        current_size = 0
+        last_level = 0
+
+        def add_chunk() -> None:
+            nonlocal current_chunk, current_size
+            if current_chunk:
+                chunks.append(''.join(current_chunk))
+                current_chunk = []
+                current_size = 0
+
+        def append_current_chunk(element: Dict[str, Any], chunk_text: str) -> None:
+            nonlocal current_chunk
+            if not current_chunk and element['parent_headings']:
+                current_chunk.append('\n'.join(element['parent_headings']) + '\n')
+            current_chunk.append(chunk_text)
+
+        def process_element(element: Dict[str, Any]) -> None:
+            nonlocal current_chunk, current_size, last_level
+            for block in element['blocks']:
+                if isinstance(block, dict) and 'blocks' in block:
+                    process_element(block)
+                else:
+                    if element['level'] < last_level and \
+                       current_size >= self.config.chunk_size * 0.7:
+                        add_chunk()
+                    last_level = element['level']
+
+                    tokens = self.tokenizer.encode(block, disallowed_special=())
+                    if current_size + len(tokens) > self.config.chunk_size * 1.3:
+                        while tokens:
+                            chunk_size = self.config.chunk_size - current_size
+                            chunk_tokens = tokens[: chunk_size]
+                            chunk_text = self.tokenizer.decode(chunk_tokens)
+                            append_current_chunk(element, chunk_text)
+                            current_size += chunk_size
+                            tokens = tokens[chunk_size - self.config.overlap :]
+                            if current_size >= self.config.chunk_size:
+                                add_chunk()
+
+                    else:
+                        append_current_chunk(element, block)
+                        current_size += len(tokens)
+                        if current_size >= self.config.chunk_size:
+                            add_chunk()
+
+        process_element(element)
+        # add the last chunk (if any)
+        add_chunk()
+
+        return chunks
+
     def split(self, docs: List[Document]) -> List[Document]:
         if len(docs) == 0:
             return []
@@ -376,6 +541,8 @@ class Parser:
             big_doc_chunks = self.split_chunk_tokens(big_docs)
         elif self.config.splitter == Splitter.SIMPLE:
             big_doc_chunks = self.split_simple(big_docs)
+        elif self.config.splitter == Splitter.MARKDOWN:
+            big_doc_chunks = self.split_markdown(big_docs)
         else:
             raise ValueError(f"Unknown splitter: {self.config.splitter}")
 
