@@ -10,14 +10,15 @@ Run like this: (drop the -m arg to default to GPT4o)
 uv run examples/pdf-json.py -f examples/extract/um-financial-report.pdf \
     -m gemini/gemini-2.0-pro-exp-02-05
 
-Note this script uses the `marker` library for parsing PDF content,
+NOTES:
+- this script uses the `marker` library for parsing PDF content,
 and to get that to work with langroid, install langroid with the `marker-pdf` extra,
 e.g.
-
 uv pip install "langroid[marker-pdf]"
-
 pip install "langroid[marker-pdf]"
 
+- The structured extracted is very simple, consisting of 3 fields: item, year, and value.
+  You may need to adapt it to your needs.
 """
 
 import os
