@@ -290,6 +290,9 @@ class AnthropicLLM(LanguageModel):
                 """
             )
 
+    def is_openai_chat_model(self) -> bool:
+        return False
+
     def get_stream(self) -> bool:
         return (
             self.config.stream
@@ -410,7 +413,7 @@ class AnthropicLLM(LanguageModel):
                 for Anthropic
         """
 
-        if functions or function_call:
+        if functions:
             raise ValueError(
                 """Function call usage is unavailable with Anthropic SDK calls.
                 Please use the tools and tool_choice parameters instead.
@@ -441,7 +444,7 @@ class AnthropicLLM(LanguageModel):
             open_ai=[], anthropic=[]
         ),
     ) -> LLMResponse:
-        if functions or function_call:
+        if functions:
             raise ValueError(
                 """Function call usage is unavailable with Anthropic SDK calls.
                 Please use the tools and tool_choice parameters instead.
@@ -678,12 +681,23 @@ class AnthropicLLM(LanguageModel):
             llm_messages = [LLMMessage(role=Role.USER, content=messages)]
         else:
             llm_messages = messages
+            if not llm_messages:
+                # llm_messages can be an empty list in the use
+                # case of agents if a user does not provide an
+                # initial inquiry
+                llm_messages.append(
+                    LLMMessage(
+                        role=Role.USER, content="Be ready for a followup inquiry"
+                    )
+                )
 
         chat_model = self.config.chat_model
 
+        # messages for Anthropic can only have role and content
+        # key, value pairs
         args: Dict[str, Any] = dict(
             model=chat_model,
-            messages=[m.api_dict(has_system_role=False) for m in llm_messages],
+            messages=[{"role": m.role, "content": m.content} for m in llm_messages],
             max_tokens=max_tokens,
             stream=self.get_stream(),
         )

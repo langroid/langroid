@@ -1,6 +1,7 @@
 import logging
 import os
 import threading
+from enum import Enum
 
 import pytest
 
@@ -10,6 +11,11 @@ from langroid.language_models.base import AnthropicSystemConfig
 from langroid.utils.configuration import Settings, set_global
 
 logger = logging.getLogger(__name__)
+
+
+class ModelVariant(Enum):
+    OPEN_AI = "openai"
+    ANTHROPIC = "anthropic"
 
 
 def pytest_sessionfinish(session, exitstatus):

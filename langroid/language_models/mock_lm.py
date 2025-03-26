@@ -140,3 +140,6 @@ class MockLM(LanguageModel):
 
     def set_stream(self, stream: bool) -> bool:
         return False
+
+    def is_openai_chat_model(self) -> bool:
+        return True

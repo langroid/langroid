@@ -570,6 +570,7 @@ class LanguageModel(ABC):
                 as a specific subclass of LLMConfig, e.g., OpenAIGPTConfig.
                 """
             )
+        from langroid.language_models.anthropic import AnthropicLLM
         from langroid.language_models.azure_openai import AzureGPT
         from langroid.language_models.mock_lm import MockLM, MockLMConfig
         from langroid.language_models.openai_gpt import OpenAIGPT
@@ -580,15 +581,17 @@ class LanguageModel(ABC):
         if config.type == "mock":
             return MockLM(cast(MockLMConfig, config))
 
-        openai: Union[Type[AzureGPT], Type[OpenAIGPT]]
+        model: Union[Type[AzureGPT], Type[OpenAIGPT], Type[AnthropicLLM]]
 
         if config.type == "azure":
-            openai = AzureGPT
+            model = AzureGPT
+        elif config.type == "anthropic":
+            model = AnthropicLLM
         else:
-            openai = OpenAIGPT
+            model = OpenAIGPT
         cls = dict(
-            openai=openai,
-        ).get(config.type, openai)
+            model=model,
+        ).get(config.type, model)
         return cls(config)  # type: ignore
 
     @staticmethod
@@ -899,6 +902,10 @@ class LanguageModel(ABC):
             llm_logger.error(f"Error in {self.__class__.__name__}::cache_lookup: {e}")
             return hashed_key, None
         return hashed_key, cached_val
+
+    @abstractmethod
+    def is_openai_chat_model(self) -> bool:
+        pass
 
 
 class StreamingIfAllowed:

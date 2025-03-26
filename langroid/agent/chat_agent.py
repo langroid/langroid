@@ -20,6 +20,7 @@ from langroid.agent.tool_message import (
 )
 from langroid.agent.xml_tool_message import XMLToolMessage
 from langroid.language_models.base import (
+    AnthropicSystemConfig,
     LLMFunctionCall,
     LLMFunctionSpec,
     LLMMessage,
@@ -562,6 +563,16 @@ class ChatAgent(Agent):
                 self.message_history.pop(i)
                 break
 
+    def _common_system_and_tools_message(self) -> str:
+        content = self.system_message
+        if self.system_tool_instructions != "":
+            content += "\n\n" + self.system_tool_instructions
+        if self.system_tool_format_instructions != "":
+            content += "\n\n" + self.system_tool_format_instructions
+        if self.output_format_instructions != "":
+            content += "\n\n" + self.output_format_instructions
+        return content
+
     def _create_system_and_tools_message(self) -> LLMMessage:
         """
         (Re-)Create the system message for the LLM of the agent,
@@ -577,16 +588,21 @@ class ChatAgent(Agent):
         Returns:
             LLMMessage object
         """
-        content = self.system_message
-        if self.system_tool_instructions != "":
-            content += "\n\n" + self.system_tool_instructions
-        if self.system_tool_format_instructions != "":
-            content += "\n\n" + self.system_tool_format_instructions
-        if self.output_format_instructions != "":
-            content += "\n\n" + self.output_format_instructions
+        content = self._common_system_and_tools_message()
 
         # remove leading and trailing newlines and other whitespace
         return LLMMessage(role=Role.SYSTEM, content=content.strip())
+
+    def _update_system_configuration(self) -> None:
+        """
+        Anthropic system configuration is not passed along
+        on the list of messages, it is instead passed along
+        as a separate key, value pair on the API call
+        """
+        assert self.llm
+        assert self.llm.config.type == "anthropic"
+        content = self._common_system_and_tools_message()
+        self.llm.config.system_config = AnthropicSystemConfig(system_prompts=content)  # type: ignore
 
     def handle_message_fallback(self, msg: str | ChatDocument) -> Any:
         """
@@ -1318,7 +1334,7 @@ class ChatAgent(Agent):
             return result
 
         hist, output_len = self._prep_llm_messages(message)
-        if len(hist) == 0:
+        if self.llm.config.type != "anthropic" and len(hist) == 0:
             return None
         tool_choice = (
             "auto"
@@ -1448,7 +1464,13 @@ class ChatAgent(Agent):
         """
         Initialize the message history with the system message and user message
         """
-        self.message_history = [self._create_system_and_tools_message()]
+        assert self.llm
+        if self.llm.config.type == "anthropic":
+            self._update_system_configuration()
+            self.message_history = []
+        else:
+            self.message_history = [self._create_system_and_tools_message()]
+
         if self.user_message:
             self.message_history.append(
                 LLMMessage(role=Role.USER, content=self.user_message)
@@ -1498,6 +1520,8 @@ class ChatAgent(Agent):
                 [/grey37]
                 """
                 )
+        elif self.llm.config.type == "anthropic":
+            self._update_system_configuration()
         else:
             assert self.message_history[0].role == Role.SYSTEM
             # update the system message with the latest tool instructions
@@ -1506,7 +1530,10 @@ class ChatAgent(Agent):
         if message is not None:
             if (
                 isinstance(message, str)
-                or message.id() != self.message_history[-1].chat_document_id
+                or self.message_history
+                and message.id() != self.message_history[-1].chat_document_id
+                or isinstance(message, ChatDocument)
+                and self.llm.config.type == "anthropic"
             ):
                 # either the message is a str, or it is a fresh ChatDocument
                 # different from the last message in the history
