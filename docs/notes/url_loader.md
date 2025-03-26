@@ -5,8 +5,12 @@
 ## Overview
 *   **`FirecrawlCrawler`**:  Leverages the Firecrawl API for efficient web scraping and crawling. 
 It offers built-in document processing capabilities.
+Requires `FIRECRAWL_API_KEY` environment variable to be set in `.env` file or environment.
 *   **`TrafilaturaCrawler`**: Utilizes the Trafilatura library and Langroid's parsing tools 
-for extracting and processing web content.
+for extracting and processing web content - this is the default crawler, and 
+does not require setting up an external API key.
+*  **`ExaCrawler`**: Integrates with the Exa API for high-quality content extraction.
+  Requires `EXA_API_KEY` environment variable to be set in `.env` file or environment.
 
 ## Installation
 
@@ -17,6 +21,54 @@ To use `FirecrawlCrawler`, install the `firecrawl` extra:
 ```bash
 pip install langroid[firecrawl]
 ```
+
+## Exa Crawler Documentation
+
+### Overview
+
+`ExaCrawler` integrates with Exa API to extract high-quality content from web pages. It provides efficient content extraction with the simplicity of API-based processing.
+
+### Parameters
+
+Obtain an Exa API key from [Exa](https://exa.ai/) and set it in your environment variables, e.g. in your `.env` file as:
+
+```env
+EXA_API_KEY=your_api_key_here
+```
+
+* **config (ExaCrawlerConfig)**: An `ExaCrawlerConfig` object.
+    * **api_key (str)**: Your Exa API key.
+
+### Usage
+
+```python
+from langroid.parsing.url_loader import URLLoader, ExaCrawlerConfig
+
+# Create an ExaCrawlerConfig object
+exa_config = ExaCrawlerConfig(
+    # Typically omitted here as it's loaded from EXA_API_KEY environment variable
+    api_key="your-exa-api-key" 
+)
+
+loader = URLLoader(
+    urls=[
+        "https://pytorch.org",
+        "https://www.tensorflow.org"
+    ],
+    crawler_config=exa_config
+)
+
+docs = loader.load()
+print(docs)
+```
+
+### Benefits
+
+* Simple API integration requiring minimal configuration
+* High-quality content extraction with clean text output -- this is, however, 
+  plain text and not in markdown format like Firecrawl provides.
+* Efficient handling of complex web pages
+* No need for additional parsing as Exa handles document processing
 
 ## Trafilatura Crawler Documentation
 

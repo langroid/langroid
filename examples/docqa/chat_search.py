@@ -44,7 +44,11 @@ from langroid.agent.task import Task
 from langroid.utils.constants import NO_ANSWER
 from langroid.utils.configuration import set_global, Settings
 from fire import Fire
-from langroid.parsing.url_loader import TrafilaturaConfig, FirecrawlConfig
+from langroid.parsing.url_loader import (
+    TrafilaturaConfig,
+    FirecrawlConfig,
+    ExaCrawlerConfig,
+)
 
 
 class RelevantExtractsTool(ToolMessage):
@@ -103,6 +107,8 @@ class SearchDocChatAgent(DocChatAgent):
             self.config.crawler_config = FirecrawlConfig()
         elif crawler == "trafilatura" or crawler is None:
             self.config.crawler_config = TrafilaturaConfig()
+        elif crawler == "exa":
+            self.config.crawler_config = ExaCrawlerConfig()
         else:
             raise ValueError(
                 f"Unsupported crawler {crawler}. Options are: 'trafilatura', 'firecrawl'"
