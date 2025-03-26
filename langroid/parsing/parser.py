@@ -78,7 +78,7 @@ class PdfParsingConfig(BaseParsingConfig):
 
 
 class DocxParsingConfig(BaseSettings):
-    library: Literal["python-docx", "unstructured"] = "unstructured"
+    library: Literal["python-docx", "unstructured", "markitdown-docx"] = "unstructured"
 
 
 class DocParsingConfig(BaseSettings):
