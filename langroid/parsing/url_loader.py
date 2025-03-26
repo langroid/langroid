@@ -368,17 +368,6 @@ class ExaCrawler(BaseCrawler):
             for result in results.results:
                 if result.text:
                     metadata = DocMetaData(source=result.url)
-                    extra_info = {}
-                    if hasattr(result, "title") and result.title:
-                        extra_info["title"] = result.title
-                    if hasattr(result, "author") and result.author:
-                        extra_info["author"] = result.author
-                    if hasattr(result, "published_date") and result.published_date:
-                        extra_info["published_date"] = result.published_date
-
-                    if extra_info:
-                        metadata.extra_info = extra_info
-
                     docs.append(Document(content=result.text, metadata=metadata))
 
         except Exception as e:

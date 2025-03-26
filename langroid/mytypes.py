@@ -48,8 +48,6 @@ class DocMetaData(BaseModel):
     is_chunk: bool = False  # if it is a chunk, don't split
     id: str = Field(default_factory=lambda: str(uuid4()))
     window_ids: List[str] = []  # for RAG: ids of chunks around this one
-    # possible additional info such as title, author, etc.
-    extra_info: Dict[str, Any] = Field(default_factory=dict)
 
     def dict_bool_int(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
         """
