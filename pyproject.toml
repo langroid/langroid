@@ -147,12 +147,16 @@ pdf-parsers = [
     "pymupdf4llm<0.1.0,>=0.0.17",
     "pdf2image<2.0.0,>=1.17.0",
     "pytesseract<0.4.0,>=0.3.10",
-    "markitdown>=0.0.1a3",
+    "markitdown[docx,xlsx,pptx]>=0.0.1a3",
     "marker-pdf",
 ]
 
 docx = [
     "python-docx<2.0.0,>=1.1.0",
+]
+
+markitdown = [
+    "markitdown[docx,xlsx,pptx]>=0.0.1a3",
 ]
 
 marker-pdf = [
@@ -252,7 +256,7 @@ google-generativeai = [
     "google-genai>=1.0.0",
 ]
 doc-parsers = [
-    "markitdown>=0.0.1a3",
+    "markitdown[docx,xlsx,pptx]>=0.0.1a3",
     "openpyxl>=3.1.5",
     "python-docx>=1.1.2",
     "python-pptx>=1.0.2",
