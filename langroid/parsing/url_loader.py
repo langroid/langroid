@@ -48,6 +48,15 @@ class FirecrawlConfig(BaseCrawlerConfig):
         env_prefix = "FIRECRAWL_"
 
 
+class ExaCrawlerConfig(BaseCrawlerConfig):
+    api_key: str = ""
+
+    class Config:
+        # Allow setting of fields via env vars with prefix EXA_
+        # e.g., EXA_API_KEY=your_api_key
+        env_prefix = "EXA_"
+
+
 class BaseCrawler(ABC):
     """Abstract base class for web crawlers."""
 
@@ -150,6 +159,8 @@ class CrawlerFactory:
             return TrafilaturaCrawler(config)
         elif isinstance(config, FirecrawlConfig):
             return FirecrawlCrawler(config)
+        elif isinstance(config, ExaCrawlerConfig):
+            return ExaCrawler(config)
         else:
             raise ValueError(f"Unsupported crawler configuration type: {type(config)}")
 
@@ -308,6 +319,60 @@ class FirecrawlCrawler(BaseCrawler):
 
             # Save results incrementally
             docs = self._return_save_incremental_results(app, crawl_status["id"])
+        return docs
+
+
+class ExaCrawler(BaseCrawler):
+    """Crawler implementation using Exa API."""
+
+    def __init__(self, config: ExaCrawlerConfig) -> None:
+        """Initialize the Exa crawler.
+
+        Args:
+            config: Configuration for the crawler
+        """
+        super().__init__(config)
+        self.config: ExaCrawlerConfig = config
+
+    @property
+    def needs_parser(self) -> bool:
+        return False
+
+    def crawl(self, urls: List[str]) -> List[Document]:
+        """Crawl the given URLs using Exa SDK.
+
+        Args:
+            urls: List of URLs to crawl
+
+        Returns:
+            List of Documents with content extracted from the URLs
+
+        Raises:
+            LangroidImportError: If the exa package is not installed
+            ValueError: If the Exa API key is not set
+        """
+        try:
+            from exa_py import Exa
+        except ImportError:
+            raise LangroidImportError("exa", "exa")
+
+        if not self.config.api_key:
+            raise ValueError("EXA_API_KEY key is required in your env or .env")
+
+        exa = Exa(self.config.api_key)
+        docs = []
+
+        try:
+            results = exa.get_contents(urls, text=True)
+
+            for result in results.results:
+                if result.text:
+                    metadata = DocMetaData(source=result.url)
+                    docs.append(Document(content=result.text, metadata=metadata))
+
+        except Exception as e:
+            logging.error(f"Error retrieving content from Exa API: {e}")
+
         return docs
 
 

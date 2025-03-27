@@ -30,3 +30,17 @@ def test_trafilatura_crawler():
     for doc in docs:
         assert len(doc.content) > 0
         assert re.split(delimiters, doc.metadata.source)[-1] in doc.content.lower()
+
+
+def test_exa_crawler():
+    from langroid.parsing.url_loader import ExaCrawlerConfig, URLLoader
+
+    loader = URLLoader(urls=urls, crawler_config=ExaCrawlerConfig())
+
+    docs = loader.load()
+
+    assert len(docs) == 2
+    delimiters = re.compile(r"[:/?=&.]")
+    for doc in docs:
+        assert len(doc.content) > 0
+        assert re.split(delimiters, doc.metadata.source)[-1] in doc.content.lower()
