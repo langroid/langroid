@@ -258,7 +258,13 @@ class FirecrawlCrawler(BaseCrawler):
                     with open(filename, "w") as f:
                         f.write(content)
                     docs.append(
-                        Document(content=content, metadata=DocMetaData(source=url))
+                        Document(
+                            content=content,
+                            metadata=DocMetaData(
+                                source=url,
+                                title=page["metadata"].get("title", ""),
+                            ),
+                        )
                     )
                     processed_urls.add(url)
                     new_pages += 1
@@ -300,7 +306,10 @@ class FirecrawlCrawler(BaseCrawler):
                         docs.append(
                             Document(
                                 content=result["markdown"],
-                                metadata=DocMetaData(source=url),
+                                metadata=DocMetaData(
+                                    source=url,
+                                    title=metadata.get("title", ""),
+                                ),
                             )
                         )
                 except Exception as e:
@@ -370,13 +379,20 @@ class ExaCrawler(BaseCrawler):
                     continue
                 else:
                     results = exa.get_contents([url], livecrawl="always", text=True)
-                    if results.results[0].text:
+                    result = results.results[0]
+                    if result.text:
                         # append a NON-chunked document
                         # (metadata.is_chunk = False, so will be chunked downstream)
                         docs.append(
                             Document(
-                                content=results.results[0].text,
-                                metadata=DocMetaData(source=url),
+                                content=result.text,
+                                metadata=DocMetaData(
+                                    source=url,
+                                    title=getattr(result, "title", ""),
+                                    published_date=getattr(
+                                        result, "published_date", ""
+                                    ),
+                                ),
                             )
                         )
 
