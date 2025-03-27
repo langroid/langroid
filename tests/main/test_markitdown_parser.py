@@ -12,7 +12,7 @@ def test_markitdown_xls_parser():
     current_dir = os.path.dirname(os.path.abspath(__file__))
     tests_root = os.path.abspath(os.path.join(current_dir, ".."))
 
-    path1 = os.path.join(tests_root, "main", "data", "iris.xls")
+    path1 = os.path.join(tests_root, "main", "data", "sample.xlsx")
 
     # Test XLS parsing
     xls_parser = DocumentParser.create(
