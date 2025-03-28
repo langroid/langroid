@@ -6,10 +6,13 @@ from langroid.agent.base import NO_ANSWER
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
+from langroid.language_models import AnthropicLLMConfig, AnthropicModel
 from langroid.language_models.openai_gpt import OpenAIGPTConfig
 from langroid.mytypes import Entity
+from langroid.prompts.prompts_config import PromptsConfig
 from langroid.utils.configuration import Settings, set_global
 from langroid.vector_store.base import VectorStoreConfig
+from tests.conftest import ModelVariant
 
 
 class _TestChatAgentConfig(ChatAgentConfig):
@@ -20,11 +23,35 @@ class _TestChatAgentConfig(ChatAgentConfig):
     )
 
 
+class _TestChatAgentAnthropicConfig(ChatAgentConfig):
+    max_tokens: int = 200
+    llm: AnthropicLLMConfig = AnthropicLLMConfig(
+        cache_config=RedisCacheConfig(fake=False),
+    )
+    prompts: PromptsConfig = PromptsConfig(max_tokens=200)
+
+
+def _setup_agent_config(
+    test_settings: Settings, model_variant: ModelVariant
+) -> ChatAgentConfig:
+    if model_variant == ModelVariant.ANTHROPIC:
+        test_settings.chat_model = AnthropicModel.CLAUDE_3_5_HAIKU
+        set_global(test_settings)
+        return _TestChatAgentAnthropicConfig()
+
+    set_global(test_settings)
+    return _TestChatAgentConfig()
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize("stream_quiet", [True, False])
-async def test_chat_agent_async(test_settings: Settings, stream_quiet: bool):
-    set_global(test_settings)
-    cfg = _TestChatAgentConfig()
+@pytest.mark.parametrize(
+    "model_variant", [ModelVariant.OPEN_AI, ModelVariant.ANTHROPIC]
+)
+async def test_chat_agent_async(
+    test_settings: Settings, stream_quiet: bool, model_variant: ModelVariant
+):
+    cfg = _setup_agent_config(test_settings, model_variant)
     cfg.llm.async_stream_quiet = stream_quiet
     # just testing that these don't fail
     agent = ChatAgent(cfg)
@@ -33,9 +60,11 @@ async def test_chat_agent_async(test_settings: Settings, stream_quiet: bool):
 
 
 @pytest.mark.asyncio
-async def test_responses_async(test_settings: Settings):
-    set_global(test_settings)
-    cfg = _TestChatAgentConfig()
+@pytest.mark.parametrize(
+    "model_variant", [ModelVariant.OPEN_AI, ModelVariant.ANTHROPIC]
+)
+async def test_responses_async(test_settings: Settings, model_variant: ModelVariant):
+    cfg = _setup_agent_config(test_settings, model_variant)
     agent = ChatAgent(cfg)
 
     # direct LLM response to query
@@ -57,9 +86,11 @@ async def test_responses_async(test_settings: Settings):
 
 
 @pytest.mark.asyncio
-async def test_task_step_async(test_settings: Settings):
-    set_global(test_settings)
-    cfg = _TestChatAgentConfig()
+@pytest.mark.parametrize(
+    "model_variant", [ModelVariant.OPEN_AI, ModelVariant.ANTHROPIC]
+)
+async def test_task_step_async(test_settings: Settings, model_variant: ModelVariant):
+    cfg = _setup_agent_config(test_settings, model_variant)
     agent = ChatAgent(cfg)
     task = Task(
         agent,
@@ -117,9 +148,11 @@ async def test_task_step_async(test_settings: Settings):
 
 
 @pytest.mark.asyncio
-async def test_task(test_settings: Settings):
-    set_global(test_settings)
-    cfg = _TestChatAgentConfig()
+@pytest.mark.parametrize(
+    "model_variant", [ModelVariant.OPEN_AI, ModelVariant.ANTHROPIC]
+)
+async def test_task(test_settings: Settings, model_variant: ModelVariant):
+    cfg = _setup_agent_config(test_settings, model_variant)
     agent = ChatAgent(cfg)
     task = Task(
         agent,
@@ -154,9 +187,13 @@ async def test_task(test_settings: Settings):
 
 
 @pytest.mark.asyncio
-async def test_chat_agent_async_concurrent(test_settings: Settings):
-    set_global(test_settings)
-    cfg = _TestChatAgentConfig()
+@pytest.mark.parametrize(
+    "model_variant", [ModelVariant.OPEN_AI, ModelVariant.ANTHROPIC]
+)
+async def test_chat_agent_async_concurrent(
+    test_settings: Settings, model_variant: ModelVariant
+):
+    cfg = _setup_agent_config(test_settings, model_variant)
 
     async def _run_task(msg: str):
         # each invocation needs to create its own ChatAgent
@@ -173,9 +210,11 @@ async def test_chat_agent_async_concurrent(test_settings: Settings):
 
 
 @pytest.mark.asyncio
-async def test_task_concurrent(test_settings: Settings):
-    set_global(test_settings)
-    cfg = _TestChatAgentConfig()
+@pytest.mark.parametrize(
+    "model_variant", [ModelVariant.OPEN_AI, ModelVariant.ANTHROPIC]
+)
+async def test_task_concurrent(test_settings: Settings, model_variant: ModelVariant):
+    cfg = _setup_agent_config(test_settings, model_variant)
 
     async def _run_task(msg: str):
         # each invocation needs to create its own ChatAgent,

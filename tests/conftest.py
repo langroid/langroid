@@ -1,14 +1,21 @@
 import logging
 import os
 import threading
+from enum import Enum
 
 import pytest
 
 from langroid.cachedb.redis_cachedb import RedisCache, RedisCacheConfig
-from langroid.language_models import GeminiModel, OpenAIChatModel
+from langroid.language_models import AnthropicModel, GeminiModel, OpenAIChatModel
+from langroid.language_models.base import AnthropicSystemConfig
 from langroid.utils.configuration import Settings, set_global
 
 logger = logging.getLogger(__name__)
+
+
+class ModelVariant(Enum):
+    OPEN_AI = "openai"
+    ANTHROPIC = "anthropic"
 
 
 def pytest_sessionfinish(session, exitstatus):
@@ -118,6 +125,9 @@ def test_settings(request):
         model = request.config.getoption("--m")
         cache = not request.config.getoption("--nc")
 
+    if "anthropic" in request.node.originalname:
+        model = AnthropicModel.CLAUDE_3_5_HAIKU
+
     yield Settings(**base_settings, chat_model=model, cache=cache)
 
 
@@ -183,3 +193,12 @@ def redis_close_connections():
         redis.close_all_connections()
     except Exception:
         pass
+
+
+@pytest.fixture(scope="function")
+def anthropic_system_config():
+    # setting up Anthropic system configuration
+    anthropic_system_config = AnthropicSystemConfig(
+        system_prompts="You are a helpful yet concise assistant. Keep answers brief."
+    )
+    yield anthropic_system_config

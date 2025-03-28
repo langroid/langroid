@@ -1,11 +1,15 @@
+import pytest
+
 from langroid.agent.base import NO_ANSWER
 from langroid.agent.chat_agent import ChatAgent, ChatAgentConfig
 from langroid.agent.task import Task
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
+from langroid.language_models import AnthropicLLMConfig, AnthropicModel
 from langroid.language_models.openai_gpt import OpenAIGPTConfig
 from langroid.mytypes import Entity
 from langroid.prompts.prompts_config import PromptsConfig
 from langroid.utils.configuration import Settings, set_global
+from tests.conftest import ModelVariant
 
 
 class _TestChatAgentConfig(ChatAgentConfig):
@@ -19,18 +23,42 @@ class _TestChatAgentConfig(ChatAgentConfig):
     )
 
 
-def test_chat_agent(test_settings: Settings):
+class _TestChatAgentAnthropicConfig(ChatAgentConfig):
+    max_tokens: int = 200
+    llm: AnthropicLLMConfig = AnthropicLLMConfig(
+        cache_config=RedisCacheConfig(fake=False),
+    )
+    prompts: PromptsConfig = PromptsConfig(max_tokens=200)
+
+
+def _setup_agent_config(
+    test_settings: Settings, model_variant: ModelVariant
+) -> ChatAgentConfig:
+    if model_variant == ModelVariant.ANTHROPIC:
+        test_settings.chat_model = AnthropicModel.CLAUDE_3_5_HAIKU
+        set_global(test_settings)
+        return _TestChatAgentAnthropicConfig()
+
     set_global(test_settings)
-    cfg = _TestChatAgentConfig()
+    return _TestChatAgentConfig()
+
+
+@pytest.mark.parametrize(
+    "model_variant", [ModelVariant.OPEN_AI, ModelVariant.ANTHROPIC]
+)
+def test_chat_agent(test_settings: Settings, model_variant: ModelVariant):
+    cfg = _setup_agent_config(test_settings=test_settings, model_variant=model_variant)
     # just testing that these don't fail
     agent = ChatAgent(cfg)
     response = agent.llm_response("what is the capital of France?")
     assert "Paris" in response.content
 
 
-def test_responses(test_settings: Settings):
-    set_global(test_settings)
-    cfg = _TestChatAgentConfig()
+@pytest.mark.parametrize(
+    "model_variant", [ModelVariant.OPEN_AI, ModelVariant.ANTHROPIC]
+)
+def test_responses(test_settings: Settings, model_variant: ModelVariant):
+    cfg = _setup_agent_config(test_settings=test_settings, model_variant=model_variant)
     agent = ChatAgent(cfg)
 
     # direct LLM response to query
@@ -51,9 +79,15 @@ def test_responses(test_settings: Settings):
     assert response is None
 
 
-def test_process_messages(test_settings: Settings):
-    set_global(test_settings)
-    cfg = _TestChatAgentConfig()
+@pytest.mark.parametrize(
+    "model_variant",
+    [
+        # ModelVariant.OPEN_AI,
+        ModelVariant.ANTHROPIC
+    ],
+)
+def test_process_messages(test_settings: Settings, model_variant: ModelVariant):
+    cfg = _setup_agent_config(test_settings=test_settings, model_variant=model_variant)
     agent = ChatAgent(cfg)
     task = Task(
         agent,
@@ -109,9 +143,11 @@ def test_process_messages(test_settings: Settings):
     assert task.pending_message.metadata.sender == Entity.LLM
 
 
-def test_task(test_settings: Settings):
-    set_global(test_settings)
-    cfg = _TestChatAgentConfig()
+@pytest.mark.parametrize(
+    "model_variant", [ModelVariant.OPEN_AI, ModelVariant.ANTHROPIC]
+)
+def test_task(test_settings: Settings, model_variant: ModelVariant):
+    cfg = _setup_agent_config(test_settings=test_settings, model_variant=model_variant)
     agent = ChatAgent(cfg)
     task = Task(agent, name="Test")
     question = "What is the capital of France?"
@@ -142,9 +178,11 @@ def test_task(test_settings: Settings):
     assert "London" in task.pending_message.content
 
 
-def test_simple_task(test_settings: Settings):
-    set_global(test_settings)
-    cfg = _TestChatAgentConfig()
+@pytest.mark.parametrize(
+    "model_variant", [ModelVariant.OPEN_AI, ModelVariant.ANTHROPIC]
+)
+def test_simple_task(test_settings: Settings, model_variant: ModelVariant):
+    cfg = _setup_agent_config(test_settings=test_settings, model_variant=model_variant)
     agent = ChatAgent(cfg)
     task = Task(
         agent,
