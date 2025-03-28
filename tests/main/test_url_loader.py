@@ -14,7 +14,7 @@ urls = [
 
 
 @pytest.mark.xfail(
-    condition=lambda: isinstance(crawler_config, FirecrawlConfig),
+    condition=lambda crawler_config=None: isinstance(crawler_config, FirecrawlConfig),
     reason="Firecrawl may fail due to timeouts",
     run=True,
     strict=False,
