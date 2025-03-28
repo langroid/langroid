@@ -97,7 +97,7 @@ def format_cited_references(
         # source and content for each citation
         full_citations_str = "\n".join(
             [
-                f"[^{c}] {passages[c-1].metadata.source}"
+                f"[^{c}] {str(passages[c-1].metadata)}"
                 f"\n{format_footnote_text(passages[c-1].content)}"
                 for c in good_citations
             ]
@@ -105,6 +105,6 @@ def format_cited_references(
 
         # source for each citation
         citations_str = "\n".join(
-            [f"[^{c}] {passages[c-1].metadata.source}" for c in good_citations]
+            [f"[^{c}] {str(passages[c-1].metadata)}" for c in good_citations]
         )
     return full_citations_str, citations_str

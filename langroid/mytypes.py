@@ -65,6 +65,30 @@ class DocMetaData(BaseModel):
 
         return original_dict
 
+    def __str__(self) -> str:
+        title_str = (
+            ""
+            if "unknown" in self.title.lower() or self.title.strip() == ""
+            else f"Title: {self.title}"
+        )
+        date_str = ""
+        if (
+            "unknown" not in self.published_date.lower()
+            and self.published_date.strip() != ""
+        ):
+            try:
+                from dateutil import parser
+
+                # Try to parse the date string
+                date_obj = parser.parse(self.published_date)
+                # Format to include only the date part (year-month-day)
+                date_only = date_obj.strftime("%Y-%m-%d")
+                date_str = f"Date: {date_only}"
+            except (ValueError, ImportError, TypeError):
+                # If parsing fails, just use the original date
+                date_str = f"Date: {self.published_date}"
+        return f"{self.source} {title_str} {date_str}".strip()
+
     class Config:
         extra = Extra.allow
 
@@ -93,7 +117,7 @@ class Document(BaseModel):
         return dedent(
             f"""
         CONTENT: {self.content}         
-        SOURCE:{self.metadata.source}
+        SOURCE:{str(self.metadata)}
         """
         )
 
