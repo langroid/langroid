@@ -3042,6 +3042,7 @@ dev = [
     { name = "pytest-xdist" },
     { name = "ruff" },
     { name = "types-pillow" },
+    { name = "types-python-dateutil" },
     { name = "types-pyyaml" },
     { name = "types-redis" },
     { name = "types-requests" },
@@ -3237,6 +3238,7 @@ dev = [
     { name = "pytest-xdist", specifier = ">=3.6.1,<4.0.0" },
     { name = "ruff", specifier = ">=0.8.4,<1.0.0" },
     { name = "types-pillow", specifier = ">=10.2.0.20240406,<11.0.0.0" },
+    { name = "types-python-dateutil", specifier = ">=2.8.0" },
     { name = "types-pyyaml", specifier = ">=6.0.12.20240311,<7.0.0.0" },
     { name = "types-redis", specifier = ">=4.5.5.2,<5.0.0.0" },
     { name = "types-requests", specifier = ">=2.31.0.1,<3.0.0.0" },
@@ -8265,6 +8267,15 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/93/29/47a346550fd2020dac9a7a6d033ea03fccb92fa47c726056618cc889745e/types-pyOpenSSL-24.1.0.20240722.tar.gz", hash = "sha256:47913b4678a01d879f503a12044468221ed8576263c1540dcb0484ca21b08c39", size = 8458 }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/98/05/c868a850b6fbb79c26f5f299b768ee0adc1f9816d3461dcf4287916f655b/types_pyOpenSSL-24.1.0.20240722-py3-none-any.whl", hash = "sha256:6a7a5d2ec042537934cfb4c9d4deb0e16c4c6250b09358df1f083682fe6fda54", size = 7499 },
+]
+
+[[package]]
+name = "types-python-dateutil"
+version = "2.9.0.20241206"
+source = { registry = "https://pypi.org/simple" }
+sdist = { url = "https://files.pythonhosted.org/packages/a9/60/47d92293d9bc521cd2301e423a358abfac0ad409b3a1606d8fbae1321961/types_python_dateutil-2.9.0.20241206.tar.gz", hash = "sha256:18f493414c26ffba692a72369fea7a154c502646301ebfe3d56a04b3767284cb", size = 13802 }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/0f/b3/ca41df24db5eb99b00d97f89d7674a90cb6b3134c52fb8121b6d8d30f15c/types_python_dateutil-2.9.0.20241206-py3-none-any.whl", hash = "sha256:e248a4bc70a486d3e3ec84d0dc30eec3a5f979d6e7ee4123ae043eedbb987f53", size = 14384 },
 ]
 
 [[package]]
