@@ -227,6 +227,16 @@ class OpenAICallParams(BaseModel):
         return {k: v for k, v in self.dict().items() if v is not None}
 
 
+class LiteLLMProxyConfig(BaseSettings):
+    """Configuration for LiteLLM proxy connection."""
+
+    api_key: str = ""  # read from env var LITELLM_API_KEY if set
+    api_base: str = ""  # read from env var LITELLM_API_BASE if set
+
+    class Config:
+        env_prefix = "LITELLM_"
+
+
 class OpenAIGPTConfig(LLMConfig):
     """
     Class for any LLM with an OpenAI-like API: besides the OpenAI models this includes:
@@ -250,6 +260,7 @@ class OpenAIGPTConfig(LLMConfig):
     organization: str = ""
     api_base: str | None = None  # used for local or other non-OpenAI models
     litellm: bool = False  # use litellm api?
+    litellm_proxy: LiteLLMProxyConfig = LiteLLMProxyConfig()
     ollama: bool = False  # use ollama's OpenAI-compatible endpoint?
     min_output_tokens: int = 1
     use_chat_for_completion = True  # do not change this, for OpenAI models!
@@ -520,6 +531,7 @@ class OpenAIGPT(LanguageModel):
         self.is_glhf = self.config.chat_model.startswith("glhf/")
         self.is_openrouter = self.config.chat_model.startswith("openrouter/")
         self.is_langdb = self.config.chat_model.startswith("langdb/")
+        self.is_litellm_proxy = self.config.chat_model.startswith("litellm-proxy/")
 
         if self.is_groq:
             # use groq-specific client
@@ -546,7 +558,14 @@ class OpenAIGPT(LanguageModel):
             )
         else:
             # in these cases, there's no specific client: OpenAI python client suffices
-            if self.is_gemini:
+            if self.is_litellm_proxy:
+                self.config.chat_model = self.config.chat_model.replace(
+                    "litellm-proxy/", ""
+                )
+                if self.api_key == OPENAI_API_KEY:
+                    self.api_key = self.config.litellm_proxy.api_key or self.api_key
+                self.api_base = self.config.litellm_proxy.api_base or self.api_base
+            elif self.is_gemini:
                 self.config.chat_model = self.config.chat_model.replace("gemini/", "")
                 if self.api_key == OPENAI_API_KEY:
                     self.api_key = os.getenv("GEMINI_API_KEY", DUMMY_API_KEY)
