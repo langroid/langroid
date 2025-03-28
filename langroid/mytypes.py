@@ -3,7 +3,7 @@ from textwrap import dedent
 from typing import Any, Callable, Dict, List, Union
 from uuid import uuid4
 
-from langroid.pydantic_v1 import BaseModel, Extra, Field
+from langroid.pydantic_v1 import BaseModel, Extra, Field, validator
 
 Number = Union[int, float]
 Embedding = List[Number]
@@ -45,11 +45,18 @@ class DocMetaData(BaseModel):
 
     source: str = "context"  # just reference
     source_content: str = "context"  # reference and content
-    title: str = "unknown"
-    published_date: str = "unknown"
+    title: str = "Unknown Title"
+    published_date: str = "Unknown Date"
     is_chunk: bool = False  # if it is a chunk, don't split
     id: str = Field(default_factory=lambda: str(uuid4()))
     window_ids: List[str] = []  # for RAG: ids of chunks around this one
+
+    @validator('source', 'source_content', 'id', 'title', 'published_date')
+    def ensure_not_empty(cls, v: str) -> str:
+        """Ensure required string fields are not empty."""
+        if not v:
+            raise ValueError("Field cannot be empty")
+        return v
 
     def dict_bool_int(self, *args: Any, **kwargs: Any) -> Dict[str, Any]:
         """
