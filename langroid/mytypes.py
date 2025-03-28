@@ -51,7 +51,7 @@ class DocMetaData(BaseModel):
     id: str = Field(default_factory=lambda: str(uuid4()))
     window_ids: List[str] = []  # for RAG: ids of chunks around this one
 
-    @validator('source', 'source_content', 'id', 'title', 'published_date')
+    @validator("source", "source_content", "id", "title", "published_date")
     def ensure_not_empty(cls, v: str) -> str:
         """Ensure required string fields are not empty."""
         if not v:
