@@ -45,6 +45,8 @@ class DocMetaData(BaseModel):
 
     source: str = "context"  # just reference
     source_content: str = "context"  # reference and content
+    title: str = "Unknown Title"
+    published_date: str = "Unknown Date"
     is_chunk: bool = False  # if it is a chunk, don't split
     id: str = Field(default_factory=lambda: str(uuid4()))
     window_ids: List[str] = []  # for RAG: ids of chunks around this one

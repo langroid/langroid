@@ -118,6 +118,7 @@ class SearchDocChatAgent(DocChatAgent):
         self,
         message: None | str | ChatDocument = None,
     ) -> ChatDocument | None:
+        # override llm_response of DocChatAgent to allow use of the tools.
         return ChatAgent.llm_response(self, message)
 
     def handle_message_fallback(self, msg: str | ChatDocument) -> Any:
@@ -253,8 +254,12 @@ def main(
     )
 
     agent = SearchDocChatAgent(config, crawler=crawler)
-    agent.enable_message(RelevantExtractsTool)
-    agent.enable_message(RelevantSearchExtractsTool)
+    agent.enable_message(
+        [
+            RelevantExtractsTool,
+            RelevantSearchExtractsTool,
+        ]
+    )
     collection_name = Prompt.ask(
         "Name a collection to use",
         default="docqa-chat-search",

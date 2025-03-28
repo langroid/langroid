@@ -258,7 +258,13 @@ class FirecrawlCrawler(BaseCrawler):
                     with open(filename, "w") as f:
                         f.write(content)
                     docs.append(
-                        Document(content=content, metadata=DocMetaData(source=url))
+                        Document(
+                            content=content,
+                            metadata=DocMetaData(
+                                source=url,
+                                title=page["metadata"].get("title", "Unknown Title"),
+                            ),
+                        )
                     )
                     processed_urls.add(url)
                     new_pages += 1
@@ -300,7 +306,10 @@ class FirecrawlCrawler(BaseCrawler):
                         docs.append(
                             Document(
                                 content=result["markdown"],
-                                metadata=DocMetaData(source=url),
+                                metadata=DocMetaData(
+                                    source=url,
+                                    title=metadata.get("title", "Unknown Title"),
+                                ),
                             )
                         )
                 except Exception as e:
@@ -336,7 +345,7 @@ class ExaCrawler(BaseCrawler):
 
     @property
     def needs_parser(self) -> bool:
-        return False
+        return True
 
     def crawl(self, urls: List[str]) -> List[Document]:
         """Crawl the given URLs using Exa SDK.
@@ -363,12 +372,29 @@ class ExaCrawler(BaseCrawler):
         docs = []
 
         try:
-            results = exa.get_contents(urls, text=True)
-
-            for result in results.results:
-                if result.text:
-                    metadata = DocMetaData(source=result.url)
-                    docs.append(Document(content=result.text, metadata=metadata))
+            for url in urls:
+                parsed_doc_chunks = self._process_document(url)
+                if parsed_doc_chunks:
+                    docs.extend(parsed_doc_chunks)
+                    continue
+                else:
+                    results = exa.get_contents([url], livecrawl="always", text=True)
+                    result = results.results[0]
+                    if result.text:
+                        # append a NON-chunked document
+                        # (metadata.is_chunk = False, so will be chunked downstream)
+                        docs.append(
+                            Document(
+                                content=result.text,
+                                metadata=DocMetaData(
+                                    source=url,
+                                    title=getattr(result, "title", "Unknown Title"),
+                                    published_date=getattr(
+                                        result, "published_date", "Unknown Date"
+                                    ),
+                                ),
+                            )
+                        )
 
         except Exception as e:
             logging.error(f"Error retrieving content from Exa API: {e}")
@@ -399,6 +425,8 @@ class URLLoader:
             crawler_config = TrafilaturaConfig(parser=Parser(parsing_config))
 
         self.crawler = CrawlerFactory.create_crawler(crawler_config)
+        if self.crawler.needs_parser:
+            self.crawler.parser = Parser(parsing_config)
 
     def load(self) -> List[Document]:
         """Load the URLs using the specified crawler."""
