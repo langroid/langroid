@@ -262,7 +262,7 @@ class FirecrawlCrawler(BaseCrawler):
                             content=content,
                             metadata=DocMetaData(
                                 source=url,
-                                title=page["metadata"].get("title", ""),
+                                title=page["metadata"].get("title", "Unknown Title"),
                             ),
                         )
                     )
@@ -308,7 +308,7 @@ class FirecrawlCrawler(BaseCrawler):
                                 content=result["markdown"],
                                 metadata=DocMetaData(
                                     source=url,
-                                    title=metadata.get("title", ""),
+                                    title=metadata.get("title", "Unknown Title"),
                                 ),
                             )
                         )
@@ -388,9 +388,9 @@ class ExaCrawler(BaseCrawler):
                                 content=result.text,
                                 metadata=DocMetaData(
                                     source=url,
-                                    title=getattr(result, "title", ""),
+                                    title=getattr(result, "title", "Unknown Title"),
                                     published_date=getattr(
-                                        result, "published_date", ""
+                                        result, "published_date", "Unknown Date"
                                     ),
                                 ),
                             )

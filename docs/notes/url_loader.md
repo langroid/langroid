@@ -184,7 +184,7 @@ from langroid.parsing.url_loader import URLLoader, FirecrawlConfig
 
 # create a FirecrawlConfig object
 firecrawl_config = FirecrawlConfig(
-    timeout=10000,  # 10 sec per page
+    timeout=30000,  # 10 sec per page
     mode="crawl",
     params={
         "limit": 5,
