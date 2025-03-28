@@ -1059,8 +1059,8 @@ class OpenAIGPT(LanguageModel):
                 )
                 if is_break:
                     break
-        except Exception:
-            pass
+        except Exception as e:
+            logging.warning("Error while processing stream response: %s", str(e))
 
         print("")
         # TODO- get usage info in stream mode (?)
@@ -1121,8 +1121,8 @@ class OpenAIGPT(LanguageModel):
                 )
                 if is_break:
                     break
-        except Exception:
-            pass
+        except Exception as e:
+            logging.warning("Error while processing stream response: %s", str(e))
 
         print("")
         # TODO- get usage info in stream mode (?)
@@ -1703,11 +1703,32 @@ class OpenAIGPT(LanguageModel):
             if self.config.litellm and settings.debug:
                 kwargs["logger_fn"] = litellm_logging_fn
             result = completion_call(**kwargs)
-            if not self.get_stream():
-                # if streaming, cannot cache result
+
+            if self.get_stream():
+                # If streaming, cannot cache result
                 # since it is a generator. Instead,
                 # we hold on to the hashed_key and
                 # cache the result later
+
+                # Test if this is a stream with an exception by
+                # trying to get first chunk: Some providers like LiteLLM
+                # produce a valid stream object `result` instead of throwing a
+                # rate-limit error, and if we don't catch it here,
+                # we end up returning an empty response and not
+                # using the retry mechanism in the decorator.
+                try:
+                    # try to get the first chunk to check for errors
+                    test_iter = iter(result)
+                    first_chunk = next(test_iter)
+                    # If we get here without error, recreate the stream
+                    result = chain([first_chunk], test_iter)
+                except StopIteration:
+                    # Empty stream is fine
+                    pass
+                except Exception as e:
+                    # Propagate any errors in the stream
+                    raise e
+            else:
                 self._cache_store(hashed_key, result.model_dump())
         return cached, hashed_key, result
 
@@ -1734,7 +1755,26 @@ class OpenAIGPT(LanguageModel):
                 kwargs["logger_fn"] = litellm_logging_fn
             # If it's not in the cache, call the API
             result = await acompletion_call(**kwargs)
-            if not self.get_stream():
+            if self.get_stream():
+                # Test if this is a stream with an exception by
+                # trying to get first chunk: Some providers like LiteLLM
+                # produce a valid stream object `result` instead of throwing a
+                # rate-limit error, and if we don't catch it here,
+                # we end up returning an empty response and not
+                # using the retry mechanism in the decorator.
+                try:
+                    # try to get the first chunk to check for errors
+                    test_iter = iter(result)
+                    first_chunk = next(test_iter)
+                    # If we get here without error, recreate the stream
+                    result = chain([first_chunk], test_iter)
+                except StopIteration:
+                    # Empty stream is fine
+                    pass
+                except Exception as e:
+                    # Propagate any errors in the stream
+                    raise e
+            else:
                 self._cache_store(hashed_key, result.model_dump())
         return cached, hashed_key, result
 
