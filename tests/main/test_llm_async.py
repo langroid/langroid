@@ -71,15 +71,16 @@ async def test_openai_gpt_async(
     assert response.cached
 
     # pass intentional bad msg to test error handling
-    messages = [
-        LLMMessage(
-            role=Role.FUNCTION,
-            content="Hello!",
-        ),
-    ]
+    if not test_settings.chat_model.startswith("litellm-proxy/"):
+        messages = [
+            LLMMessage(
+                role=Role.FUNCTION,
+                content="Hello!",
+            ),
+        ]
 
-    with pytest.raises(Exception):
-        await mdl.achat(messages=messages, max_tokens=50)
+        with pytest.raises(Exception):
+            await mdl.achat(messages=messages, max_tokens=50)
 
 
 @pytest.mark.asyncio

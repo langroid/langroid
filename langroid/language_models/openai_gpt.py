@@ -1755,7 +1755,35 @@ class OpenAIGPT(LanguageModel):
                 kwargs["logger_fn"] = litellm_logging_fn
             # If it's not in the cache, call the API
             result = await acompletion_call(**kwargs)
-            if not self.get_stream():
+            if self.get_stream():
+                try:
+                    # Try to peek at the first chunk to immediately catch any errors
+                    # Store the original result (the stream)
+                    original_stream = result
+
+                    # Manually create and advance the iterator to check for errors
+                    stream_iter = original_stream.__aiter__()
+                    try:
+                        # This will raise an exception if the stream is invalid
+                        first_chunk = await anext(stream_iter)
+
+                        # If we reach here, the stream started successfully
+                        # Now recreate a fresh stream from the original API result
+                        # Otherwise, return a new stream that yields the first chunk
+                        # and remaining items
+                        async def combined_stream():  # type: ignore
+                            yield first_chunk
+                            async for chunk in stream_iter:
+                                yield chunk
+
+                        result = combined_stream()  # type: ignore
+                    except StopAsyncIteration:
+                        # Empty stream is normal - nothing to do
+                        pass
+                except Exception as e:
+                    # Any exception here should be raised to trigger the retry mechanism
+                    raise e
+            else:
                 self._cache_store(hashed_key, result.model_dump())
         return cached, hashed_key, result
 
