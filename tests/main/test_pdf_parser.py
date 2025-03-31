@@ -57,11 +57,11 @@ def test_get_pdf_doc_url(source, pdflib: str):
 
 @pytest.mark.parametrize("source", ["path", "bytes"])
 @pytest.mark.parametrize(
-    "pdflib", ["unstructured", "docling", "fitz", "pypdf", "pymupdf4llm", "marker"]
+    "pdflib", ["marker", "unstructured", "docling", "fitz", "pypdf", "pymupdf4llm"]
 )
 def test_get_pdf_doc_path(source, pdflib: str):
     if pdflib == "marker":
-        pytest.xfail(reason="Marker may timeout", strict=False)
+        pytest.mark.xfail(reason="Marker may timeout", strict=False)
     current_dir = os.path.dirname(os.path.abspath(__file__))
     tests_root = os.path.abspath(os.path.join(current_dir, ".."))
     path = os.path.join(tests_root, "main", "data", "dummy.pdf")
