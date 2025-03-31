@@ -6,6 +6,11 @@ from typing import Any, Dict, List, Literal, Optional
 import tiktoken
 
 from langroid.mytypes import Document
+from langroid.parsing.md_parser import (
+    MarkdownChunkConfig,
+    chunk_markdown,
+    count_words,
+)
 from langroid.parsing.para_sentence_split import create_chunks, remove_extra_whitespace
 from langroid.pydantic_v1 import BaseSettings, root_validator
 from langroid.utils.object_registry import ObjectRegistry
@@ -18,6 +23,8 @@ class Splitter(str, Enum):
     TOKENS = "tokens"
     PARA_SENTENCE = "para_sentence"
     SIMPLE = "simple"
+    # "structure-aware" splitting with chunks enriched by header info
+    MARKDOWN = "markdown"
 
 
 class BaseParsingConfig(BaseSettings):
@@ -98,9 +105,10 @@ class MarkitdownXLSParsingConfig(BaseSettings):
 
 
 class ParsingConfig(BaseSettings):
-    splitter: str = Splitter.TOKENS
+    splitter: str = Splitter.MARKDOWN
     chunk_by_page: bool = False  # split by page?
     chunk_size: int = 200  # aim for this many tokens per chunk
+    chunk_size_variation: float = 0.30  # max variation from chunk_size
     overlap: int = 50  # overlap between chunks
     max_chunks: int = 10_000
     # offset to subtract from page numbers:
@@ -130,6 +138,8 @@ class Parser:
             self.tokenizer = tiktoken.encoding_for_model("text-embedding-3-small")
 
     def num_tokens(self, text: str) -> int:
+        if self.config.splitter == Splitter.MARKDOWN:
+            return count_words(text)  # simple count based on whitespace-split
         tokens = self.tokenizer.encode(text, allowed_special={"<|endoftext|>"})
         return len(tokens)
 
@@ -254,7 +264,20 @@ class Parser:
     def split_chunk_tokens(self, docs: List[Document]) -> List[Document]:
         final_docs = []
         for d in docs:
-            chunks = self.chunk_tokens(d.content)
+            if self.config.splitter == Splitter.MARKDOWN:
+                chunks = chunk_markdown(
+                    d.content,
+                    MarkdownChunkConfig(
+                        # apply rough adjustment factor to convert from tokens to words,
+                        # which is what the markdown chunker uses
+                        chunk_size=int(self.config.chunk_size * 0.75),
+                        overlap_tokens=int(self.config.overlap * 0.75),
+                        variation_percent=self.config.chunk_size_variation,
+                        rollup=True,
+                    ),
+                )
+            else:
+                chunks = self.chunk_tokens(d.content)
             # note we are ensuring we COPY the document metadata into each chunk,
             # which ensures all chunks of a given doc have same metadata
             # (and in particular same metadata.id, which is important later for
@@ -370,13 +393,14 @@ class Parser:
         big_docs = [d for d in docs if not d.metadata.is_chunk]
         if len(big_docs) == 0:
             return chunked_docs
-        if self.config.splitter == Splitter.PARA_SENTENCE:
-            big_doc_chunks = self.split_para_sentence(big_docs)
-        elif self.config.splitter == Splitter.TOKENS:
-            big_doc_chunks = self.split_chunk_tokens(big_docs)
-        elif self.config.splitter == Splitter.SIMPLE:
-            big_doc_chunks = self.split_simple(big_docs)
-        else:
-            raise ValueError(f"Unknown splitter: {self.config.splitter}")
+        match self.config.splitter:
+            case Splitter.MARKDOWN | Splitter.TOKENS:
+                big_doc_chunks = self.split_chunk_tokens(big_docs)
+            case Splitter.PARA_SENTENCE:
+                big_doc_chunks = self.split_para_sentence(big_docs)
+            case Splitter.SIMPLE:
+                big_doc_chunks = self.split_simple(big_docs)
+            case _:
+                raise ValueError(f"Unknown splitter: {self.config.splitter}")
 
         return chunked_docs + big_doc_chunks

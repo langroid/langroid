@@ -27,6 +27,7 @@ def test_parser(
     cfg = ParsingConfig(
         splitter=splitter,
         n_neighbor_ids=2,
+        chunk_size_variation=0.2,
         chunk_size=chunk_size,
         max_chunks=max_chunks,
         separators=["."],
@@ -43,7 +44,14 @@ def test_parser(
 
     split_docs = parser.split(docs)
 
-    assert all(parser.num_tokens(d.content) <= chunk_size + 5 for d in split_docs)
+    chunk_size_upper_bound = (
+        chunk_size * (1 + cfg.chunk_size_variation)
+        if splitter == Splitter.MARKDOWN
+        else chunk_size + 5
+    )
+    assert all(
+        parser.num_tokens(d.content) <= chunk_size_upper_bound for d in split_docs
+    )
     assert len(split_docs) <= max_chunks * len(docs)
     assert all(len(d.content) >= discard_chunk_chars for d in split_docs)
     assert all(d.metadata.is_chunk for d in split_docs)
