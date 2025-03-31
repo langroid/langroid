@@ -188,172 +188,167 @@ def count_words(text: str) -> int:
 
 def recursive_chunk(text: str, config: MarkdownChunkConfig) -> List[str]:
     """
-    Improved chunker that:
-      1. Splits by paragraph as the top boundary if possible.
-      2. Otherwise, splits the paragraph by sentences (never mid-sentence).
-      3. Accepts going over the upper bound if a single sentence is that large.
-      4. Overlaps only once between consecutive chunks (the overlap
-         from chunk1 is not duplicated again in chunk3).
-      5. Preserves all original formatting (including \n\n).
-      6. Avoids placing "PARA1 PARA2" or similar leftover tokens in the same chunk.
+    Enhanced chunker that:
+      1. Splits by paragraph (top-level).
+      2. Splits paragraphs by sentences if needed (never mid-sentence unless huge).
+      3. Allows going over the upper bound rather than splitting a single sentence.
+      4. Overlaps only once between consecutive chunks.
+      5. Looks ahead to avoid a "dangling" final chunk below the lower bound.
+      6. Preserves \n\n (and other original spacing) as best as possible.
     """
 
+    # -------------------------------------------------
+    # Helpers
+    # -------------------------------------------------
     def count_words(text_block: str) -> int:
         return len(text_block.split())
 
     lower_bound = int(config.chunk_size * (1 - config.variation_percent))
     upper_bound = int(config.chunk_size * (1 + config.variation_percent))
 
-    # Quick check: if the entire text is short enough, return as-is
+    # Quick check: if the entire text is short enough, return as-is.
     if count_words(text) <= upper_bound:
         return [text.strip()]
 
-    # --- STEP 1: Split into paragraphs (with their trailing newlines if present).
-    # We'll preserve the exact \n\n so that we maintain formatting in the final chunks.
-    # A simple approach is to do split on '\n\n', then re-append '\n\n' to each piece.
+    # Split into paragraphs, preserving \n\n if it's there.
     raw_paragraphs = text.split("\n\n")
-
     paragraphs = []
     for i, p in enumerate(raw_paragraphs):
         if p.strip():
-            # Re-append the double-newline if it existed in the original text
-            # (unless it's the very last paragraph without trailing \n\n).
-            # This helps keep the formatting intact.
+            # Re-append the double-newline if not the last piece
             if i < len(raw_paragraphs) - 1:
                 paragraphs.append(p + "\n\n")
             else:
                 paragraphs.append(p)
 
-    # A helper to split a paragraph into sentences (and preserve spacing/periods).
+    # Split paragraphs into "segments": each segment is either
+    # a full short paragraph or (if too big) a list of sentences.
     sentence_regex = r"(?<=[.!?])\s+"
 
     def split_paragraph_into_sentences(paragraph: str) -> List[str]:
-        # If paragraph is short enough, return it as a single "sentence-chunk".
+        """
+        Return a list of sentence-sized segments. If a single sentence
+        is bigger than upper_bound, do a word-level fallback.
+        """
         if count_words(paragraph) <= upper_bound:
             return [paragraph]
 
-        # Otherwise, do a sentence split:
-        # keep the original spacing after each period by capturing the delimiter.
         sentences = re.split(sentence_regex, paragraph)
-        # Re-insert the needed whitespace, if any was stripped by the split
-        # so that each sentence retains punctuation. We'll handle the trailing
-        # space by just storing them as separate items.
-        # This might cause slight changes in whitespace, but you can refine if needed.
+        # Clean up stray whitespace
         sentences = [s.strip() for s in sentences if s.strip()]
 
-        # Now each item in `sentences` is presumably 1 or more sentences if
-        # original text had multiple punctuation marks.
-        # We'll check each chunk; if it's bigger than upper_bound, we may do word-split.
-        expanded_sentences = []
+        expanded = []
         for s in sentences:
             if count_words(s) > upper_bound:
-                # As a last resort, do a word-based split:
-                expanded_sentences.extend(_fallback_word_split(s, config))
+                expanded.extend(_fallback_word_split(s, config))
             else:
-                expanded_sentences.append(s)
-        return expanded_sentences
+                expanded.append(s)
+        return expanded
 
     def _fallback_word_split(long_text: str, cfg: MarkdownChunkConfig) -> List[str]:
-        """Split extremely large 'sentence' by words if we must."""
+        """
+        As a last resort, split extremely large 'sentence' by words.
+        """
         words = long_text.split()
         pieces = []
         start = 0
         while start < len(words):
-            # We'll take up to chunk_size words
-            # (over-bound is allowed if there's a single chunk).
             end = start + cfg.chunk_size
             chunk_words = words[start:end]
             pieces.append(" ".join(chunk_words))
             start = end
         return pieces
 
-    # We'll transform the paragraphs into a list of "segments":
-    # either an entire paragraph (if short) or a list of sentence-sized strings.
-    # That way we can unify the chunking logic: accumulate these segments until
-    # we exceed the limit.
+    # Build a list of segments
     segments = []
     for para in paragraphs:
         if count_words(para) > upper_bound:
-            # Split by sentences
+            # split into sentences
             segs = split_paragraph_into_sentences(para)
             segments.extend(segs)
         else:
-            # The entire paragraph is one segment
             segments.append(para)
 
-    # --- STEP 2: Accumulate segments into final chunks
+    # -------------------------------------------------
+    # Accumulate segments into final chunks
+    # -------------------------------------------------
     chunks = []
     current_chunk = ""
     current_count = 0
 
     def flush_chunk() -> None:
-        """Flush the current chunk into chunks list (if not empty) and reset."""
         nonlocal current_chunk, current_count
-        trimmed = current_chunk.rstrip()
+        trimmed = current_chunk.strip()
         if trimmed:
             chunks.append(trimmed)
         current_chunk = ""
         current_count = 0
 
-    def add_with_overlap(segment: str) -> None:
-        """
-        Attempt to add `segment` to current_chunk. If it exceeds the upper bound,
-        and current_chunk >= lower_bound, flush the chunk. Then create a new chunk
-        that begins with the overlap from the old chunk + segment.
+    def remaining_tokens_in_future(all_segments: List[str], current_index: int) -> int:
+        """Sum of word counts from current_index onward."""
+        return sum(count_words(s) for s in all_segments[current_index:])
 
-        Note: Because we do NOT want to chop a sentence mid-way, if the segment
-        alone is bigger than upper_bound, we accept it in one piece anyway
-        (the user said "I’m okay with exceeding the upper bound for a single sentence").
-        """
-        nonlocal current_chunk, current_count
-
-        seg_count = count_words(segment)
-        # If adding this segment would exceed upper_bound,
-        # and the current chunk is >= lower_bound, then we flush.
-        # But if the current chunk is still < lower_bound, we keep going.
-        if (current_count + seg_count > upper_bound) and (current_count >= lower_bound):
-            # finalize chunk with overlap for next
-            old_chunk = current_chunk
-            flush_chunk()
-            # Overlap: only take the last N tokens from old_chunk
-            if old_chunk.strip():
-                overlap_tokens_list = old_chunk.split()[-config.overlap_tokens :]
-                overlap_str = " ".join(overlap_tokens_list)
-                # Carefully preserve the exact trailing format from those tokens if
-                # desired. You could do something more advanced here if you want
-                # perfect whitespace preservation. For simplicity, we'll just re-join.
-                current_chunk = overlap_str + " " + segment
-            else:
-                current_chunk = segment
-            current_count = count_words(current_chunk)
-        else:
-            # Just accumulate
-            if current_chunk:
-                current_chunk += (
-                    segment if segment.startswith("\n\n") else (" " + segment)
-                )
-            else:
-                current_chunk = segment
-            current_count = count_words(current_chunk)
-
-    for seg in segments:
+    for i, seg in enumerate(segments):
         seg_count = count_words(seg)
-        # If this single segment alone exceeds the upper_bound,
-        # but we said we are OK with big single segments, just add it fresh as a chunk.
+
+        # If this single segment alone exceeds upper_bound, we accept it as a big chunk.
         if seg_count > upper_bound:
-            # If there's anything in current_chunk, flush it first
+            # If we have something in the current chunk, flush it first
             flush_chunk()
-            # This segment alone is a chunk
+            # Then store this large segment as its own chunk
             chunks.append(seg.strip())
             continue
 
-        # Otherwise, try to add it
-        add_with_overlap(seg)
+        # Attempt to add seg to the current chunk
+        if (current_count + seg_count) > upper_bound and (current_count >= lower_bound):
+            # We would normally flush here, but let's see if we are nearing the end:
+            # If the remaining tokens (including this one) is < lower_bound,
+            # we just add it anyway to avoid creating a tiny final chunk.
+            future_tokens = remaining_tokens_in_future(segments, i)
+            if future_tokens < lower_bound:
+                # Just add it (allowing to exceed upper bound)
+                if current_chunk:
+                    # Add space or preserve newline carefully
+                    # We'll do a basic approach here:
+                    if seg.startswith("\n\n"):
+                        current_chunk += seg  # preserve double new line
+                    else:
+                        current_chunk += " " + seg
+                    current_count = count_words(current_chunk)
+                else:
+                    current_chunk = seg
+                    current_count = seg_count
+            else:
+                # Normal flush
+                old_chunk = current_chunk
+                flush_chunk()
+                # Overlap from old_chunk
+                overlap_tokens_list = (
+                    old_chunk.split()[-config.overlap_tokens :] if old_chunk else []
+                )
+                overlap_str = (
+                    " ".join(overlap_tokens_list) if overlap_tokens_list else ""
+                )
+                if overlap_str:
+                    current_chunk = overlap_str + " " + seg
+                else:
+                    current_chunk = seg
+                current_count = count_words(current_chunk)
+        else:
+            # Just accumulate
+            if current_chunk:
+                if seg.startswith("\n\n"):
+                    current_chunk += seg
+                else:
+                    current_chunk += " " + seg
+            else:
+                current_chunk = seg
+            current_count = count_words(current_chunk)
 
-    # Flush any leftover
+    # Flush leftover
     flush_chunk()
 
-    # --- STEP 3: Return non-empty chunks
+    # Return non-empty
     return [c for c in chunks if c.strip()]
 
 
