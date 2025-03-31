@@ -610,7 +610,7 @@ class AnthropicLLM(LanguageModel):
             )
         return LLMResponse(
             message=message,
-            anthropic_tool_calls=ant_tool_calls or None,
+            ant_tool_calls=ant_tool_calls or None,
             usage=usage,
             cached=cached,
         )
@@ -1037,7 +1037,7 @@ class AnthropicLLM(LanguageModel):
                 message=completion,
                 reasoning=reasoning,
                 cached=False,
-                anthropic_tool_calls=list(tool_usage.values()) if tool_usage else None,
+                ant_tool_calls=list(tool_usage.values()) if tool_usage else None,
             ),
             anthropic_response.dict(),
         )

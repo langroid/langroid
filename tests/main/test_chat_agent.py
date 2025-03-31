@@ -81,10 +81,7 @@ def test_responses(test_settings: Settings, model_variant: ModelVariant):
 
 @pytest.mark.parametrize(
     "model_variant",
-    [
-        # ModelVariant.OPEN_AI,
-        ModelVariant.ANTHROPIC
-    ],
+    [ModelVariant.OPEN_AI, ModelVariant.ANTHROPIC],
 )
 def test_process_messages(test_settings: Settings, model_variant: ModelVariant):
     cfg = _setup_agent_config(test_settings=test_settings, model_variant=model_variant)

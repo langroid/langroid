@@ -20,7 +20,6 @@ from langroid.agent.tool_message import (
 )
 from langroid.agent.xml_tool_message import XMLToolMessage
 from langroid.language_models.base import (
-    AnthropicSystemConfig,
     LLMFunctionCall,
     LLMFunctionSpec,
     LLMMessage,
@@ -593,16 +592,21 @@ class ChatAgent(Agent):
         # remove leading and trailing newlines and other whitespace
         return LLMMessage(role=Role.SYSTEM, content=content.strip())
 
-    def _update_system_configuration(self) -> None:
+    def _update_system_configuration(self) -> LLMMessage:
         """
-        Anthropic system configuration is not passed along
-        on the list of messages, it is instead passed along
-        as a separate key, value pair on the API call
+        For Anthropic's LLMs, the prescribed method for passing
+        instructions is to give a description using the User role.
+        The system configuration describes background on what context
+        the system is intended to respond in.
         """
         assert self.llm
         assert self.llm.config.type == "anthropic"
         content = self._common_system_and_tools_message()
-        self.llm.config.system_config = AnthropicSystemConfig(system_prompts=content)  # type: ignore
+        if content:
+            return LLMMessage(role=Role.USER, content=content.strip())
+        return LLMMessage(
+            role=Role.USER, content="Please respond in a succinct manner."
+        )
 
     def handle_message_fallback(self, msg: str | ChatDocument) -> Any:
         """
@@ -1466,8 +1470,7 @@ class ChatAgent(Agent):
         """
         assert self.llm
         if self.llm.config.type == "anthropic":
-            self._update_system_configuration()
-            self.message_history = []
+            self.message_history = [self._update_system_configuration()]
         else:
             self.message_history = [self._create_system_and_tools_message()]
 
@@ -1537,7 +1540,14 @@ class ChatAgent(Agent):
             ):
                 # either the message is a str, or it is a fresh ChatDocument
                 # different from the last message in the history
-                llm_msgs = ChatDocument.to_LLMMessage(message, self.oai_tool_calls)
+                if self.llm.config.type == "anthropic":
+                    llm_msgs = ChatDocument.to_LLMMessage(
+                        message, anthropic_tools=self.ant_tool_calls
+                    )
+                else:
+                    llm_msgs = ChatDocument.to_LLMMessage(
+                        message, oai_tools=self.oai_tool_calls
+                    )
                 # LLM only responds to the content, so only those msgs with
                 # non-empty content should be kept
                 llm_msgs = [m for m in llm_msgs if m.content.strip() != ""]
@@ -1547,6 +1557,9 @@ class ChatAgent(Agent):
                 done_tools = [m.tool_call_id for m in llm_msgs if m.role == Role.TOOL]
                 self.oai_tool_calls = [
                     t for t in self.oai_tool_calls if t.id not in done_tools
+                ]
+                self.ant_tool_calls = [
+                    t for t in self.ant_tool_calls if t.id not in done_tools
                 ]
                 self.message_history.extend(llm_msgs)
 
@@ -1788,6 +1801,8 @@ class ChatAgent(Agent):
         self.oai_tool_id2call.update(
             {t.id: t for t in self.oai_tool_calls if t.id is not None}
         )
+        self.ant_tool_calls = response.ant_tool_calls or []
+        self.ant_tool_id2call.update({t.id: t for t in self.ant_tool_calls if t.id})
 
         # If using strict output format, parse the output JSON
         self._load_output_format(chat_doc)

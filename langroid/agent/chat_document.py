@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Optional, Union, cast
 from langroid.agent.tool_message import ToolMessage
 from langroid.agent.xml_tool_message import XMLToolMessage
 from langroid.language_models.base import (
+    AnthropicToolCall,
     LLMFunctionCall,
     LLMMessage,
     LLMResponse,
@@ -123,6 +124,8 @@ class ChatDocument(Document):
     oai_tool_id2result: Optional[OrderedDict[str, str]] = None
     oai_tool_choice: ToolChoiceTypes | Dict[str, Dict[str, str] | str] = "auto"
     function_call: Optional[LLMFunctionCall] = None
+    ant_tool_calls: Optional[List[AnthropicToolCall]] = None
+    ant_tool_id2result: Optional[OrderedDict[str, str]] = None
     # tools that are explicitly added by agent response/handler,
     # or tools recognized in the ChatDocument as handle-able tools
     tool_messages: List[ToolMessage] = []
@@ -296,12 +299,16 @@ class ChatDocument(Document):
             # there must be at least one if it's not None
             for oai_tc in response.oai_tool_calls:
                 ChatDocument._clean_fn_call(oai_tc.function)
+        if response.ant_tool_calls:
+            for ant_tc in response.ant_tool_calls:
+                ChatDocument._clean_fn_call(ant_tc.function)
         return ChatDocument(
             content=message,
             reasoning=response.reasoning,
             content_any=message,
             oai_tool_calls=response.oai_tool_calls,
             function_call=response.function_call,
+            ant_tool_calls=response.ant_tool_calls,
             metadata=ChatDocMetaData(
                 source=Entity.LLM,
                 sender=Entity.LLM,
@@ -334,6 +341,7 @@ class ChatDocument(Document):
     def to_LLMMessage(
         message: Union[str, "ChatDocument"],
         oai_tools: Optional[List[OpenAIToolCall]] = None,
+        anthropic_tools: Optional[List[AnthropicToolCall]] = None,
     ) -> List[LLMMessage]:
         """
         Convert to list of LLMMessage, to incorporate into msg-history sent to LLM API.
@@ -352,12 +360,14 @@ class ChatDocument(Document):
         sender_role = Role.USER
         fun_call = None
         oai_tool_calls = None
+        ant_tool_calls = None
         tool_id = ""  # for OpenAI Assistant
         chat_document_id: str = ""
         if isinstance(message, ChatDocument):
             content = message.content or to_string(message.content_any) or ""
             fun_call = message.function_call
             oai_tool_calls = message.oai_tool_calls
+            ant_tool_calls = message.ant_tool_calls
             if message.metadata.sender == Entity.USER and fun_call is not None:
                 # This may happen when a (parent agent's) LLM generates a
                 # a Function-call, and it ends up being sent to the current task's
@@ -372,6 +382,9 @@ class ChatDocument(Document):
                 # same reasoning as for function-call above
                 content += " " + "\n\n".join(str(tc) for tc in oai_tool_calls)
                 oai_tool_calls = None
+            if message.metadata.sender == Entity.USER and ant_tool_calls is not None:
+                content += " " + "\n\n".join(str(tc) for tc in ant_tool_calls)
+                ant_tool_calls = None
             sender_name = message.metadata.sender_name
             tool_ids = message.metadata.tool_ids
             tool_id = tool_ids[-1] if len(tool_ids) > 0 else ""
@@ -445,7 +458,7 @@ class ChatDocument(Document):
                 tool_id=tool_id,  # for OpenAI Assistant
                 content=content,
                 function_call=fun_call,
-                tool_calls=oai_tool_calls,
+                tool_calls=oai_tool_calls if oai_tool_calls else ant_tool_calls,
                 name=sender_name,
                 chat_document_id=chat_document_id,
             )

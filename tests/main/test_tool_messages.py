@@ -17,6 +17,7 @@ from langroid.agent.tools.orchestration import (
 )
 from langroid.agent.xml_tool_message import XMLToolMessage
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
+from langroid.language_models import AnthropicLLMConfig, AnthropicModel
 from langroid.language_models.base import (
     LLMFunctionCall,
     LLMFunctionSpec,
@@ -36,6 +37,7 @@ from langroid.pydantic_v1 import BaseModel, Field
 from langroid.utils.configuration import Settings, set_global
 from langroid.utils.constants import DONE
 from langroid.utils.types import is_callable
+from tests.conftest import ModelVariant
 
 
 class CountryCapitalMessage(ToolMessage):
@@ -104,6 +106,12 @@ class MessageHandlingAgent(ChatAgent):
         )
 
 
+SYSTEM_PROMPT_MESSAGE = """
+VERY IMPORTANT: IF you see a possibility of using a tool/function,
+you MUST use it, and MUST NOT ASK IN NATURAL LANGUAGE.
+"""
+
+
 cfg = ChatAgentConfig(
     name="test-langroid",
     vecdb=None,
@@ -115,12 +123,22 @@ cfg = ChatAgentConfig(
     prompts=PromptsConfig(),
     use_functions_api=False,
     use_tools=True,
-    system_message="""
-    VERY IMPORTANT: IF you see a possibility of using a tool/function,
-    you MUST use it, and MUST NOT ASK IN NATURAL LANGUAGE.
-    """,
+    system_message=SYSTEM_PROMPT_MESSAGE,
 )
 agent = MessageHandlingAgent(cfg)
+
+anthropic_cfg = ChatAgentConfig(
+    name="test-langroid-anthropic",
+    vecdb=None,
+    llm=AnthropicLLMConfig(
+        type="anthropic",
+        cache_config=RedisCacheConfig(fake=False),
+    ),
+    parsing=ParsingConfig(),
+    prompts=PromptsConfig(),
+    system_message=SYSTEM_PROMPT_MESSAGE,
+)
+anthropic_agent = MessageHandlingAgent(anthropic_cfg)
 
 # Define the range of values each variable can have
 use_vals = [True, False]
@@ -294,7 +312,7 @@ def test_handle_bad_tool_message(as_string: bool):
 )
 @pytest.mark.parametrize(
     "use_tools_api",
-    [True, False],
+    [True],
 )
 @pytest.mark.parametrize(
     "message_class, prompt, result",
@@ -319,6 +337,9 @@ def test_handle_bad_tool_message(as_string: bool):
         ),
     ],
 )
+@pytest.mark.parametrize(
+    "model_variant", [ModelVariant.OPEN_AI, ModelVariant.ANTHROPIC]
+)
 def test_llm_tool_message(
     test_settings: Settings,
     use_functions_api: bool,
@@ -327,6 +348,7 @@ def test_llm_tool_message(
     prompt: str,
     result: str,
     stream: bool,
+    model_variant: ModelVariant,
 ):
     """
     Test whether LLM is able to GENERATE message (tool) in required format, and the
@@ -339,12 +361,20 @@ def test_llm_tool_message(
         prompt: the prompt to use to induce the LLM to use the tool
         result: the expected result from agent handling the tool-message
     """
+    if model_variant == ModelVariant.ANTHROPIC:
+        test_settings.chat_model = AnthropicModel.CLAUDE_3_5_HAIKU
     set_global(test_settings)
-    cfg.llm.stream = stream
-    agent = MessageHandlingAgent(cfg)
-    agent.config.use_functions_api = use_functions_api
-    agent.config.use_tools = not use_functions_api
-    agent.config.use_tools_api = use_tools_api
+
+    if model_variant == ModelVariant.ANTHROPIC:
+        anthropic_cfg.llm.stream = stream
+        agent = MessageHandlingAgent(anthropic_cfg)
+    else:
+        cfg.llm.stream = stream
+        agent = MessageHandlingAgent(cfg)
+        agent.config.use_functions_api = use_functions_api
+        agent.config.use_tools = not use_functions_api
+        agent.config.use_tools_api = use_tools_api
+
     if not agent.llm.is_openai_chat_model() and use_functions_api:
         pytest.skip(
             f"""

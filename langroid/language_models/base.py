@@ -253,6 +253,7 @@ class AnthropicToolSpec(BaseModel):
 class AnthropicToolCall(BaseModel):
     id: str
     name: str
+    function: LLMFunctionCall | None = None
 
 
 class AnthropicCitationBase(BaseModel):
@@ -385,7 +386,7 @@ class LLMMessage(BaseModel):
     tool_id: str = ""  # used by OpenAIAssistant
     content: str
     function_call: Optional[LLMFunctionCall] = None
-    tool_calls: Optional[List[OpenAIToolCall]] = None
+    tool_calls: Optional[List[OpenAIToolCall] | List[AnthropicToolCall]] = None
     timestamp: datetime = Field(default_factory=datetime.utcnow)
     # link to corresponding chat document, for provenance/rewind purposes
     chat_document_id: str = ""
@@ -454,7 +455,7 @@ class LLMResponse(BaseModel):
     # TODO tool_id needs to generalize to multi-tool calls
     tool_id: str = ""  # used by OpenAIAssistant
     oai_tool_calls: Optional[List[OpenAIToolCall]] = None
-    anthropic_tool_calls: Optional[List[AnthropicToolCall]] = None
+    ant_tool_calls: Optional[List[AnthropicToolCall]] = None
     function_call: Optional[LLMFunctionCall] = None
     usage: Optional[LLMTokenUsage] = None
     cached: bool = False
