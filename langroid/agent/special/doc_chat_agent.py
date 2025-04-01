@@ -174,7 +174,7 @@ class DocChatAgentConfig(ChatAgentConfig):
         "https://ai.googleblog.com/2022/11/characterizing-emergent-phenomena-in.html",
     ]
     parsing: ParsingConfig = ParsingConfig(  # modify as needed
-        splitter=Splitter.TOKENS,
+        splitter=Splitter.MARKDOWN,
         chunk_size=1000,  # aim for this many tokens per chunk
         overlap=100,  # overlap between chunks
         max_chunks=10_000,

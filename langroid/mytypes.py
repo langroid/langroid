@@ -87,7 +87,10 @@ class DocMetaData(BaseModel):
             except (ValueError, ImportError, TypeError):
                 # If parsing fails, just use the original date
                 date_str = f"Date: {self.published_date}"
-        return f"{self.source} {title_str} {date_str}".strip()
+        components = [self.source] + (
+            [] if title_str + date_str == "" else [title_str, date_str]
+        )
+        return ", ".join(components)
 
     class Config:
         extra = Extra.allow

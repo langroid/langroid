@@ -4,6 +4,7 @@ from abc import ABC, abstractmethod
 from tempfile import NamedTemporaryFile
 from typing import TYPE_CHECKING, Any, Dict, List, Optional
 
+import markdownify as md
 from dotenv import load_dotenv
 
 from langroid.exceptions import LangroidImportError
@@ -31,6 +32,7 @@ class TrafilaturaConfig(BaseCrawlerConfig):
     """Configuration for Trafilatura crawler."""
 
     threads: int = 4
+    format: str = "markdown"  # or "xml" or "txt"
 
 
 class FirecrawlConfig(BaseCrawlerConfig):
@@ -200,8 +202,16 @@ class TrafilaturaCrawler(BaseCrawler):
                     docs.extend(parsed_doc)
                 else:
                     text = trafilatura.extract(
-                        result, no_fallback=False, favor_recall=True
+                        result,
+                        no_fallback=False,
+                        favor_recall=True,
+                        include_formatting=True,
+                        output_format=self.config.format,
+                        with_metadata=True,  # Title, date, author... at start of text
                     )
+                    if self.config.format in ["xml", "html"]:
+                        # heading_style="ATX" for markdown headings, i.e. #, ##, etc.
+                        text = md.markdownify(text, heading_style="ATX")
                     if text is None and result is not None and isinstance(result, str):
                         text = result
                     if text:
@@ -378,14 +388,21 @@ class ExaCrawler(BaseCrawler):
                     docs.extend(parsed_doc_chunks)
                     continue
                 else:
-                    results = exa.get_contents([url], livecrawl="always", text=True)
+                    results = exa.get_contents(
+                        [url],
+                        livecrawl="always",
+                        text={
+                            "include_html_tags": True,
+                        },
+                    )
                     result = results.results[0]
                     if result.text:
+                        md_text = md.markdownify(result.text, heading_style="ATX")
                         # append a NON-chunked document
                         # (metadata.is_chunk = False, so will be chunked downstream)
                         docs.append(
                             Document(
-                                content=result.text,
+                                content=md_text,
                                 metadata=DocMetaData(
                                     source=url,
                                     title=getattr(result, "title", "Unknown Title"),

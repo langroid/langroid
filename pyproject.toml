@@ -30,6 +30,7 @@ dependencies = [
     "jinja2<4.0.0,>=3.1.2",
     "json-repair<1.0.0,>=0.29.9",
     "lxml<5.0.0,>=4.9.3",
+    "markdownify>=0.13.1",
     "nest-asyncio<2.0.0,>=1.6.0",
     "nltk<4.0.0,>=3.8.2",
     "onnxruntime<2.0.0,>=1.16.1",
