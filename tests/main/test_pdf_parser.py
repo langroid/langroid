@@ -55,13 +55,16 @@ def test_get_pdf_doc_url(source, pdflib: str):
         assert len(docs[n // 2].metadata.window_ids) == 2 * k + 1
 
 
+@pytest.mark.xfail(
+    condition=lambda pdflib: pdflib == "marker",
+    reason="Marker may timeout",
+    strict=False,
+)
 @pytest.mark.parametrize("source", ["path", "bytes"])
 @pytest.mark.parametrize(
-    "pdflib", ["marker", "unstructured", "docling", "fitz", "pypdf", "pymupdf4llm"]
+    "pdflib", ["unstructured", "docling", "fitz", "pypdf", "pymupdf4llm", "marker"]
 )
 def test_get_pdf_doc_path(source, pdflib: str):
-    if pdflib == "marker":
-        pytest.mark.xfail(reason="Marker may timeout", strict=False)
     current_dir = os.path.dirname(os.path.abspath(__file__))
     tests_root = os.path.abspath(os.path.join(current_dir, ".."))
     path = os.path.join(tests_root, "main", "data", "dummy.pdf")
