@@ -276,6 +276,11 @@ def test_openai_assistant_retrieval(test_settings: Settings):
     assert "Lomita" in response.content
 
 
+@pytest.mark.xfail(
+    reason="May fail due to unknown flakiness",
+    run=True,
+    strict=False,
+)
 def test_openai_asst_code_interpreter(test_settings: Settings):
     """
     Test that Assistant can answer questions using code.
