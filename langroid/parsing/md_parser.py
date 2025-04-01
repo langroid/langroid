@@ -497,7 +497,7 @@ def rollup_chunk_node(
         # Note: if this node is heading-only but has NO children,
         # it will still land here
         # (because is_heading_only_with_children was False due to zero children).
-        if node_content and node_content != node.path[-1].strip():
+        if node_content and (not node.path or node_content != node.path[-1].strip()):
             # The node is actual content (not purely heading).
             # We'll chunk it in paragraphs/sentences with the prefix.
             content_chunks = recursive_chunk(node_content, config)
@@ -532,6 +532,10 @@ def rollup_chunk_tree(
 
 def chunk_markdown(markdown_text: str, config: MarkdownChunkConfig) -> List[str]:
     tree = parse_markdown_headings(markdown_text)
+    if len(tree) == 1 and len(tree[0].children) == 0:
+        # Pure text, no hierarchy, so just use recursive_chunk
+        text_chunks = recursive_chunk(markdown_text, config)
+        return [_cleanup_text(chunk) for chunk in text_chunks]
     if config.rollup:
         chunks = rollup_chunk_tree(tree, config)
     else:

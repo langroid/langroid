@@ -8,7 +8,6 @@ from langroid.parsing.md_parser import (
     MarkdownChunkConfig,
     Node,
     chunk_markdown,
-    chunk_tree,
     count_words,
     parse_markdown_headings,
     recursive_chunk,
@@ -436,57 +435,6 @@ def smart_tokenize(text: str) -> list:
     return fixed.split()
 
 
-def test_degenerate_markdown_parsing_and_chunking():
-    # A degenerate Markdown document: plain text without any Markdown formatting.
-    plain_text = """
-    Lorem ipsum dolor sit amet, consectetur adipiscing elit.
-    Integer nec odio. Praesent libero. Sed cursus ante dapibus diam.
-    Sed nisi. Nulla quis sem at nibh elementum imperdiet. Duis sagittis ipsum.
-    """
-    plain_text = plain_text.strip()
-
-    # Parse the plain text using our Markdown parser.
-    tree = parse_markdown_headings(plain_text)
-
-    # For plain text, we expect a single node.
-    assert len(tree) == 1, "Expected one node for plain text"
-    node = tree[0]
-
-    # Use smart_tokenize to account for missing spaces at line joins.
-    expected_tokens = set(smart_tokenize(plain_text))
-    actual_tokens = set(smart_tokenize(node.content))
-    assert (
-        expected_tokens == actual_tokens
-    ), "Distinct word sets from node content and original plain text do not match"
-
-    # Plain text should not have header enrichment.
-    assert node.path == [] or node.path == [""], "Plain text should have no header path"
-    assert node.children == [], "Plain text should not produce any children nodes"
-
-    # Set up a chunking configuration.
-    config = MarkdownChunkConfig(
-        desired_chunk_tokens=50,  # high enough to avoid splitting for this test
-        overlap_tokens=5,
-        variation_percent=0.2,
-    )
-
-    # Generate chunks from the parsed tree.
-    chunks = chunk_tree(tree, config)
-
-    # Collect distinct words from the chunks.
-    chunk_word_set = set()
-    for chunk in chunks:
-        # Since there is no header enrichment (no headers in plain text),
-        # we can tokenize directly.
-        chunk_word_set.update(smart_tokenize(chunk.text))
-
-    original_word_set = set(smart_tokenize(plain_text))
-    assert chunk_word_set == original_word_set, (
-        f"Word sets do not match between chunks and original text.\n"
-        f"Expected: {original_word_set}\nGot: {chunk_word_set}"
-    )
-
-
 def generate_sentence(word_count: int, sentence_id: int) -> str:
     """
     Generate a dummy sentence with `word_count` words and a trailing period.
@@ -515,6 +463,68 @@ def generate_paragraph(
     # Add a sentinel "PARA{ID}" at the end to visually check paragraph boundaries.
     para_str = " ".join(sentences) + f" PARA{paragraph_id}"
     return para_str
+
+
+@pytest.mark.parametrize("chunk_size_factor", [0.5, 1, 1.5])
+@pytest.mark.parametrize("rollup", [False, True])
+def test_degenerate_markdown_parsing_and_chunking(
+    chunk_size_factor: float,
+    rollup: bool,
+):
+    # A degenerate Markdown document: plain text without any Markdown formatting.
+
+    paragraph1 = generate_paragraph(
+        sentence_count=10, words_per_sentence=50, paragraph_id=1
+    )
+    paragraph2 = generate_paragraph(
+        sentence_count=10, words_per_sentence=50, paragraph_id=2
+    )
+
+    # Combine paragraphs with a double-newline
+    plain_text = paragraph1 + "\n\n" + paragraph2
+    plain_text = plain_text.strip()
+
+    # Parse the plain text using our Markdown parser.
+    tree = parse_markdown_headings(plain_text)
+
+    # For plain text, we expect a single node.
+    assert len(tree) == 1, "Expected one node for plain text"
+    node = tree[0]
+
+    # Use smart_tokenize to account for missing spaces at line joins.
+    expected_tokens = set(smart_tokenize(plain_text))
+    actual_tokens = set(smart_tokenize(node.content))
+    assert (
+        expected_tokens == actual_tokens
+    ), "Distinct word sets from node content and original plain text do not match"
+
+    # Plain text should not have header enrichment.
+    assert node.path == [] or node.path == [""], "Plain text should have no header path"
+    assert node.children == [], "Plain text should not produce any children nodes"
+
+    # Set up a chunking configuration.
+    config = MarkdownChunkConfig(
+        desired_chunk_tokens=50,  # high enough to avoid splitting for this test
+        overlap_tokens=5,
+        variation_percent=0.2,
+        rollup=rollup,
+    )
+
+    # Generate chunks from the parsed tree.
+    chunks = chunk_markdown(plain_text, config)
+
+    # Collect distinct words from the chunks.
+    chunk_word_set = set()
+    for chunk in chunks:
+        # Since there is no header enrichment (no headers in plain text),
+        # we can tokenize directly.
+        chunk_word_set.update(smart_tokenize(chunk))
+
+    original_word_set = set(smart_tokenize(plain_text))
+    assert chunk_word_set == original_word_set, (
+        f"Word sets do not match between chunks and original text.\n"
+        f"Expected: {original_word_set}\nGot: {chunk_word_set}"
+    )
 
 
 def condensed_chunk_view(chunks: List[str], max_words: int = 5) -> str:

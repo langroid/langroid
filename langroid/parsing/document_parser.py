@@ -380,9 +380,6 @@ class DocumentParser(Parser):
         Get document chunks from a pdf source,
         with page references in the document metadata.
 
-        Adapted from
-        https://github.com/whitead/paper-qa/blob/main/paperqa/readers.py
-
         Returns:
             List[Document]: a list of `Document` objects,
                 each containing a chunk of text
