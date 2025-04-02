@@ -125,6 +125,7 @@ nav:
       - LangDB AI Gateway: notes/langdb.md
       - Markitdown Parsers: notes/markitdown.md
       - LiteLLM Proxy: notes/litellm-proxy.md
+      - Chunking: notes/chunking.md
 
   - Examples:
     - Guide: examples/guide.md

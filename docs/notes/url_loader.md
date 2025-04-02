@@ -4,13 +4,17 @@
 
 ## Overview
 *   **`FirecrawlCrawler`**:  Leverages the Firecrawl API for efficient web scraping and crawling. 
-It offers built-in document processing capabilities.
+It offers built-in document processing capabilities, and 
+**produces non-chunked markdown output** from web-page content.
 Requires `FIRECRAWL_API_KEY` environment variable to be set in `.env` file or environment.
 *   **`TrafilaturaCrawler`**: Utilizes the Trafilatura library and Langroid's parsing tools 
 for extracting and processing web content - this is the default crawler, and 
-does not require setting up an external API key.
+does not require setting up an external API key. Also produces 
+**chuked markdown output** from web-page content.
 *  **`ExaCrawler`**: Integrates with the Exa API for high-quality content extraction.
   Requires `EXA_API_KEY` environment variable to be set in `.env` file or environment.
+This crawler also produces **chunked markdown output** from web-page content.
+
 
 ## Installation
 
@@ -26,11 +30,13 @@ pip install langroid[firecrawl]
 
 ### Overview
 
-`ExaCrawler` integrates with Exa API to extract high-quality content from web pages. It provides efficient content extraction with the simplicity of API-based processing.
+`ExaCrawler` integrates with Exa API to extract high-quality content from web pages. 
+It provides efficient content extraction with the simplicity of API-based processing.
 
 ### Parameters
 
-Obtain an Exa API key from [Exa](https://exa.ai/) and set it in your environment variables, e.g. in your `.env` file as:
+Obtain an Exa API key from [Exa](https://exa.ai/) and set it in your environment variables, 
+e.g. in your `.env` file as:
 
 ```env
 EXA_API_KEY=your_api_key_here
@@ -65,10 +71,14 @@ print(docs)
 ### Benefits
 
 * Simple API integration requiring minimal configuration
-* High-quality content extraction with clean text output -- this is, however, 
-  plain text and not in markdown format like Firecrawl provides.
 * Efficient handling of complex web pages
-* No need for additional parsing as Exa handles document processing
+* For plain html content, the `exa` api produces high-quality content extraction with 
+clean text output with html tags, which we then convert to markdown using the `markdownify` library.
+* For "document" content (e.g., `pdf`, `doc`, `docx`), 
+the content is downloaded via the `exa` API and langroid's document-processing 
+tools are used to produce **chunked output** in a format controlled by the `Parser` configuration
+  (defaults to markdown in most cases).
+
 
 ## Trafilatura Crawler Documentation
 
@@ -76,13 +86,29 @@ print(docs)
 
 `TrafilaturaCrawler` is a web crawler that uses the Trafilatura library for content extraction 
 and Langroid's parsing capabilities for further processing. 
-This crawler is useful when you need more control over the parsing process and 
-want to leverage Langroid's document processing tools.
+
 
 ### Parameters
 
-*   **config (TrafilaturaConfig)**: A `TrafilaturaConfig` object that defines how to process the extracted text. 
-    *   `threads` (int): The number of threads to use for downloading web pages.
+*   **config (TrafilaturaConfig)**: A `TrafilaturaConfig` object that specifies
+    parameters related to scraping or output format.
+    * `threads` (int): The number of threads to use for downloading web pages.
+    * `format` (str): one of `"markdown"` (default), `"xml"` or `"txt"`; in case of `xml`, 
+    the output is in html format.
+
+Similar to the `ExaCrawler`, the `TrafilaturaCrawler` works differently depending on 
+the type of web-page content:
+- for "document" content (e.g., `pdf`, `doc`, `docx`), the content is downloaded
+  and parsed with Langroid's document-processing tools are used to produce **chunked output** 
+  in a format controlled by the `Parser` configuration (defaults to markdown in most cases).
+- for plain-html content, the output format is based on the `format` parameter; 
+  - if this parameter is `markdown` (default), the library extracts content in 
+    markdown format, and the final output is a list of chunked markdown documents.
+  - if this parameter is `xml`, content is extracted in `html` format, which 
+    langroid then converts to markdown using the `markdownify` library, and the final
+    output is a list of chunked markdown documents.
+  - if this parameter is `txt`, the content is extracted in plain text format, and the final
+    output is a list of plain text documents.
 
 ### Usage
 
@@ -110,7 +136,8 @@ print(docs)
 ### Langroid Parser Integration
 
 `TrafilaturaCrawler` relies on a Langroid `Parser` to handle document processing. 
-The `Parser` uses the default parsing methods or with a configuration that can be adjust to more suit the current use case.
+The `Parser` uses the default parsing methods or with a configuration that 
+can be adjusted to suit the current use case.
 
 ## Firecrawl Crawler Documentation
 
@@ -213,14 +240,22 @@ Results are stored in the `firecrawl_output` directory.
 
 ### Firecrawl's Built-In Document Processing
 
-`FirecrawlCrawler` benefits from Firecrawl's built-in document processing, which automatically extracts and structures content from web pages (including pdf,doc,docx). 
+`FirecrawlCrawler` benefits from Firecrawl's built-in document processing, 
+which automatically extracts and structures content from web pages (including pdf,doc,docx). 
 This reduces the need for complex parsing logic within Langroid.
+Unlike the `Exa` and `Trafilatura` crawlers, the resulting documents are 
+*non-chunked* markdown documents. 
 
 ## Choosing a Crawler
 
 *   Use `FirecrawlCrawler` when you need efficient, API-driven scraping with built-in document processing. 
-This is often the simplest and most effective choice.
-*   Use `TrafilaturaCrawler` when you want local non API based scraping (less accurate ) .
+This is often the simplest and most effective choice, but incurs a cost due to 
+the paid API. 
+*   Use `TrafilaturaCrawler` when you want local non API based scraping (less accurate ).
+*   Use `ExaCrawlwer` as a sort of middle-ground between the two, 
+    with high-quality content extraction for plain html content, but rely on 
+    Langroid's document processing tools for document content. This will cost
+    significantly less than Firecrawl.
 
 ## Example script
 
