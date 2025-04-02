@@ -247,6 +247,11 @@ def test_vector_stores_search(
     assert set(results).issubset(set(matching_docs))
 
 
+@pytest.mark.xfail(
+    reason="QdrantDB may fail saying `not ready`",
+    run=True,
+    strict=False,
+)
 @pytest.mark.parametrize(
     "query,results,exceptions",
     [
