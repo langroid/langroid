@@ -137,7 +137,6 @@ def main(
         case "lance" | "lancedb":
             config.vecdb = lr.vector_store.LanceDBConfig(
                 collection_name="doc-chat-lancedb",
-                replace_collection=True,
                 storage_path=".lancedb/data/",
                 embedding=embed_cfg,
             )
