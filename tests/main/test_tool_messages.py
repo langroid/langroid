@@ -1,7 +1,7 @@
 import itertools
 import json
 import random
-from typing import Any, List, Literal, Optional
+from typing import Any, Callable, List, Literal, Optional
 
 import pytest
 
@@ -19,6 +19,8 @@ from langroid.agent.xml_tool_message import XMLToolMessage
 from langroid.cachedb.redis_cachedb import RedisCacheConfig
 from langroid.language_models import AnthropicLLMConfig, AnthropicModel
 from langroid.language_models.base import (
+    AnthropicSystemConfig,
+    AnthropicToolCall,
     LLMFunctionCall,
     LLMFunctionSpec,
     LLMMessage,
@@ -607,20 +609,39 @@ def test_agent_infer_tool(
 
 @pytest.mark.parametrize("use_tools_api", [True, False])
 @pytest.mark.parametrize("use_functions_api", [True, False])
+@pytest.mark.parametrize(
+    "model_variant", [ModelVariant.OPEN_AI, ModelVariant.ANTHROPIC]
+)
 def test_tool_no_llm_response(
     test_settings: Settings,
     use_functions_api: bool,
     use_tools_api: bool,
+    model_variant: ModelVariant,
 ):
     """Test that agent.llm_response does not respond to tool messages."""
+    if model_variant == ModelVariant.ANTHROPIC:
+        test_settings.chat_model = AnthropicModel.CLAUDE_3_5_HAIKU
 
     set_global(test_settings)
     cfg = ChatAgentConfig(
         use_tools=not use_functions_api,
         use_functions_api=use_functions_api,
         use_tools_api=use_tools_api,
+        llm=(
+            AnthropicLLMConfig()
+            if model_variant == ModelVariant.ANTHROPIC
+            else OpenAIGPTConfig()
+        ),
     )
     agent = ChatAgent(cfg)
+
+    if model_variant == ModelVariant.ANTHROPIC and use_functions_api:
+        pytest.skip(
+            f"""
+            Function Calling not available for {agent.config.llm.chat_model}: skipping
+            """
+        )
+
     agent.enable_message(NabroskiTool)
     nabroski_tool = NabroskiTool(num_pair=NumPair(xval=1, yval=2)).to_json()
     response = agent.llm_response(nabroski_tool)
@@ -1314,6 +1335,94 @@ def test_agent_respond_only_tools(tool: str):
             assert bob_task.n_stalled_steps == 0
 
 
+def call_common_recovery_assertions(
+    simulate_failed_call: Callable[[str | ChatDocument], str],
+    to_attempt: Callable[[LLMFunctionCall], str | ChatDocument],
+):
+    # The name of the function is incorrect:
+    # The LLM should correct the request to "nabroski" in recovery
+    assert (
+        simulate_failed_call(
+            to_attempt(
+                LLMFunctionCall(
+                    name="__nabroski__",
+                    arguments={
+                        "xval": 1,
+                        "yval": 3,
+                    },
+                )
+            )
+        )
+        == "6"
+    )
+    # The LLM should correct the request to "nabroski" in recovery
+    assert (
+        simulate_failed_call(
+            to_attempt(
+                LLMFunctionCall(
+                    name="Nabroski-function",
+                    arguments={
+                        "xval": 2,
+                        "yval": 3,
+                    },
+                )
+            )
+        )
+        == "9"
+    )
+    # Strict fallback disables the default arguments, but the LLM
+    # should infer from context. In addition, the name of the
+    # function is incorrect (the LLM should infer "coriolis" in
+    # recovery) and the JSON output is malformed
+
+    # Note here we intentionally use "catss" as the arg to ensure that
+    # the tool-name inference doesn't work (see `maybe_parse` agent/base.py,
+    # there's a mechanism that infers the intended tool if the arguments are
+    # unambiguously for a specific tool) -- here since we use `catss` that
+    # mechanism fails, and we can do this test properly to focus on structured
+    # recovery. But `catss' is sufficiently similar to 'cats' that the
+    # intent-based recovery should work.
+    assert (
+        simulate_failed_call(
+            """
+        request ":coriolis"
+        arguments {"catss": 1} 
+        """
+        )
+        == "8"
+    )
+    # The LLM should correct the request to "coriolis" in recovery
+    # The LLM should infer the default argument from context
+    assert (
+        simulate_failed_call(
+            to_attempt(
+                LLMFunctionCall(
+                    name="Coriolis",
+                    arguments={
+                        "cats": 1,
+                    },
+                )
+            )
+        )
+        == "8"
+    )
+    # The LLM should infer "euler" in recovery
+    assert (
+        simulate_failed_call(
+            to_attempt(
+                LLMFunctionCall(
+                    name="EulerTool",
+                    arguments={
+                        "pears": 6,
+                        "apples": 4,
+                    },
+                )
+            )
+        )
+        == "8"
+    )
+
+
 @pytest.mark.parametrize("use_fn_api", [True, False])
 @pytest.mark.parametrize("use_tools_api", [True, False])
 def test_structured_recovery(
@@ -1427,88 +1536,89 @@ def test_structured_recovery(
             function_call=attempt,
         )
 
-    # The name of the function is incorrect:
-    # The LLM should correct the request to "nabroski" in recovery
-    assert (
-        simulate_failed_call(
-            to_attempt(
-                LLMFunctionCall(
-                    name="__nabroski__",
-                    arguments={
-                        "xval": 1,
-                        "yval": 3,
-                    },
-                )
-            )
-        )
-        == "6"
-    )
-    # The LLM should correct the request to "nabroski" in recovery
-    assert (
-        simulate_failed_call(
-            to_attempt(
-                LLMFunctionCall(
-                    name="Nabroski-function",
-                    arguments={
-                        "xval": 2,
-                        "yval": 3,
-                    },
-                )
-            )
-        )
-        == "9"
-    )
-    # Strict fallback disables the default arguments, but the LLM
-    # should infer from context. In addition, the name of the
-    # function is incorrect (the LLM should infer "coriolis" in
-    # recovery) and the JSON output is malformed
+    call_common_recovery_assertions(simulate_failed_call, to_attempt)
 
-    # Note here we intentionally use "catss" as the arg to ensure that
-    # the tool-name inference doesn't work (see `maybe_parse` agent/base.py,
-    # there's a mechanism that infers the intended tool if the arguments are
-    # unambiguously for a specific tool) -- here since we use `catss` that
-    # mechanism fails, and we can do this test properly to focus on structured
-    # recovery. But `catss' is sufficiently similar to 'cats' that the
-    # intent-based recovery should work.
-    assert (
-        simulate_failed_call(
+
+@pytest.mark.parametrize("use_tools_api", [True, False])
+def test_structured_recovery_anthropic(test_settings: Settings, use_tools_api: bool):
+    test_settings.chat_model = AnthropicModel.CLAUDE_3_5_HAIKU
+
+    def simulate_failed_call(attempt: str | ChatDocument) -> str:
+        agent = ChatAgent(
+            ChatAgentConfig(
+                use_tools_api=use_tools_api,
+                use_tools=True,
+                strict_recovery=True,
+                llm=AnthropicLLMConfig(
+                    system_config=AnthropicSystemConfig(
+                        system_prompts="You are a helpful assistant."
+                    ),
+                ),
+            )
+        )
+        agent.enable_message(
+            [
+                NabroskiTool,
+                CoriolisTool,
+                EulerTool,
+            ]
+        )
+        agent.message_history = [
+            # set agent response configuration
+            agent._update_anthropic_configuration(),
+            LLMMessage(
+                role=Role.USER,
+                content="""
+                Please give me an example of a Nabroski, Coriolis, or Euler call.
+                """,
+            ),
+            LLMMessage(
+                role=Role.ASSISTANT,
+                content=attempt if isinstance(attempt, str) else attempt.content,
+                tool_calls=None if isinstance(attempt, str) else attempt.ant_tool_calls,
+                function_call=(
+                    None if isinstance(attempt, str) else attempt.function_call
+                ),
+            ),
+        ]
+
+        agent.handle_message(attempt)
+        assert agent.tool_error
+        response = agent.llm_response(
             """
-        request ":coriolis"
-        arguments {"catss": 1} 
-        """
+            There was an error in your attempted tool call. Please correct it.
+            You must re-use the values from your attempted tool call.
+            """
         )
-        == "8"
-    )
-    # The LLM should correct the request to "coriolis" in recovery
-    # The LLM should infer the default argument from context
-    assert (
-        simulate_failed_call(
-            to_attempt(
-                LLMFunctionCall(
-                    name="Coriolis",
-                    arguments={
-                        "cats": 1,
-                    },
-                )
+        assert response
+        result = agent.handle_message(response)
+        assert result
+        if isinstance(result, ChatDocument):
+            return result.content
+        return result
+
+    def to_attempt(attempt: LLMFunctionCall) -> str | ChatDocument:
+        if use_tools_api:
+            return ChatDocument(
+                content=f"""
+                {json.dumps(attempt.arguments)}
+                """,
+                metadata=ChatDocMetaData(sender=Entity.LLM),
+                ant_tool_calls=[
+                    AnthropicToolCall(
+                        id="call-1234567", name=attempt.name, function=attempt
+                    )
+                ],
             )
+        return ChatDocument(
+            content=f"""
+            {json.dumps(attempt.arguments)}
+            """,
+            metadata=ChatDocMetaData(sender=Entity.LLM),
+            function_call=attempt,
         )
-        == "8"
-    )
-    # The LLM should infer "euler" in recovery
-    assert (
-        simulate_failed_call(
-            to_attempt(
-                LLMFunctionCall(
-                    name="EulerTool",
-                    arguments={
-                        "pears": 6,
-                        "apples": 4,
-                    },
-                )
-            )
-        )
-        == "8"
-    )
+
+    call_common_recovery_assertions(simulate_failed_call, to_attempt)
 
 
 @pytest.mark.parametrize("use_fn_api", [True, False])

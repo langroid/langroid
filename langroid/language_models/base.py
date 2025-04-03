@@ -386,7 +386,9 @@ class LLMMessage(BaseModel):
     tool_id: str = ""  # used by OpenAIAssistant
     content: str
     function_call: Optional[LLMFunctionCall] = None
-    tool_calls: Optional[List[OpenAIToolCall] | List[AnthropicToolCall]] = None
+    tool_calls: Union[
+        Optional[List[OpenAIToolCall]], Optional[List[AnthropicToolCall]]
+    ] = None
     timestamp: datetime = Field(default_factory=datetime.utcnow)
     # link to corresponding chat document, for provenance/rewind purposes
     chat_document_id: str = ""

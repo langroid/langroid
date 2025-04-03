@@ -1173,7 +1173,6 @@ class Agent(ABC):
             msg.content != ""
             and msg.oai_tool_calls is None
             and msg.function_call is None
-            or msg.content != ""
             and msg.ant_tool_calls is None
         ):
 
@@ -1191,7 +1190,7 @@ class Agent(ABC):
                 return my_tools
 
         # otherwise, we look for `tool_calls` (possibly multiple)
-        tools = self.get_oai_tool_calls_classes(msg)
+        tools = self.get_tool_calls_classes(msg)
         msg.all_tool_messages = tools
         my_tools = [t for t in tools if self._tool_recipient_match(t)]
         msg.tool_messages = my_tools
@@ -1277,17 +1276,22 @@ class Agent(ABC):
         tool = tool_class.parse_obj(tool_msg)
         return tool
 
-    def get_oai_tool_calls_classes(self, msg: ChatDocument) -> List[ToolMessage]:
+    def get_tool_calls_classes(self, msg: ChatDocument) -> List[ToolMessage]:
         """
         From ChatDocument (constructed from an LLM Response), get
          a list of ToolMessages corresponding to the `tool_calls`, if any.
         """
 
-        if msg.oai_tool_calls is None:
+        if msg.oai_tool_calls is None and msg.ant_tool_calls is None:
             return []
         tools = []
         all_errors = True
-        for tc in msg.oai_tool_calls:
+
+        tools_to_iterate = (
+            msg.oai_tool_calls if msg.oai_tool_calls else msg.ant_tool_calls
+        ) or []
+
+        for tc in tools_to_iterate:
             if tc.function is None:
                 continue
             tool_name = tc.function.name

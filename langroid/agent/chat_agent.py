@@ -592,20 +592,20 @@ class ChatAgent(Agent):
         # remove leading and trailing newlines and other whitespace
         return LLMMessage(role=Role.SYSTEM, content=content.strip())
 
-    def _update_system_configuration(self) -> LLMMessage:
+    def _update_anthropic_configuration(self) -> LLMMessage:
         """
         For Anthropic's LLMs, the prescribed method for passing
         instructions is to give a description using the User role.
         The system configuration describes background on what context
         the system is intended to respond in.
         """
-        assert self.llm
-        assert self.llm.config.type == "anthropic"
+        assert self.llm and self.llm.config.type == "anthropic"
         content = self._common_system_and_tools_message()
-        if content:
-            return LLMMessage(role=Role.USER, content=content.strip())
         return LLMMessage(
-            role=Role.USER, content="Please respond in a succinct manner."
+            role=Role.USER,
+            content=(
+                content.strip() if content else "Please respond in a succinct manner."
+            ),
         )
 
     def handle_message_fallback(self, msg: str | ChatDocument) -> Any:
@@ -1304,6 +1304,9 @@ class ChatAgent(Agent):
             and self.output_format is None
             and self._json_schema_available()
             and self.config.strict_recovery
+            or self.tool_error
+            and self.output_format is None
+            and self.config.strict_recovery
         ):
             self.tool_error = False
             AnyTool = self._get_any_tool_message()
@@ -1338,7 +1341,7 @@ class ChatAgent(Agent):
             return result
 
         hist, output_len = self._prep_llm_messages(message)
-        if self.llm.config.type != "anthropic" and len(hist) == 0:
+        if len(hist) == 0:
             return None
         tool_choice = (
             "auto"
@@ -1470,7 +1473,7 @@ class ChatAgent(Agent):
         """
         assert self.llm
         if self.llm.config.type == "anthropic":
-            self.message_history = [self._update_system_configuration()]
+            self.message_history = [self._update_anthropic_configuration()]
         else:
             self.message_history = [self._create_system_and_tools_message()]
 
@@ -1524,7 +1527,8 @@ class ChatAgent(Agent):
                 """
                 )
         elif self.llm.config.type == "anthropic":
-            self._update_system_configuration()
+            assert self.message_history[0].role == Role.USER
+            self.message_history[0] = self._update_anthropic_configuration()
         else:
             assert self.message_history[0].role == Role.SYSTEM
             # update the system message with the latest tool instructions
