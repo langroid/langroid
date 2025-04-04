@@ -25,6 +25,27 @@ def extract_markdown_references(md_string: str) -> List[int]:
     return sorted(set(int(match) for match in matches))
 
 
+def invalid_markdown_citations(md_string: str) -> List[str]:
+    """
+    Finds non-numeric markdown citations (e.g., [^a], [^xyz]) in a string.
+
+    Args:
+        md_string (str): The markdown string to search for invalid citations.
+
+    Returns:
+        List[str]: List of invalid citation strings (without brackets/caret).
+    """
+    import re
+
+    # Find all citation references first
+    matches = re.findall(r"\[\^([^\]\s]+)\]", md_string)
+
+    # Filter out purely numeric citations
+    invalid_citations = [match for match in matches if not match.isdigit()]
+
+    return sorted(set(invalid_citations))
+
+
 def format_footnote_text(content: str, width: int = 0) -> str:
     """
     Formats the content so that each original line is individually processed.
