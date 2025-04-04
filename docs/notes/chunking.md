@@ -8,6 +8,7 @@ provides several document chunking strategies through the `Splitter` enum:
 **Purpose**: Structure-aware splitting that preserves markdown formatting.
 
 **How it works**:
+
 - Preserves document hierarchy (headers and sections)
 - Enriches chunks with header information
 - Uses word count instead of token count (with adjustment factor)
@@ -19,6 +20,7 @@ provides several document chunking strategies through the `Splitter` enum:
 **Purpose**: Creates chunks of approximately equal token size.
 
 **How it works**:
+
 - Tokenizes the text using tiktoken
 - Aims for chunks of size `chunk_size` tokens (default: 200)
 - Looks for natural breakpoints like punctuation or newlines
@@ -30,6 +32,7 @@ provides several document chunking strategies through the `Splitter` enum:
 **Purpose**: Splits documents respecting paragraph and sentence boundaries.
 
 **How it works**:
+
 - Recursively splits documents until chunks are below 1.3× the target size
 - Maintains document structure by preserving natural paragraph breaks
 - Adjusts chunk boundaries to avoid cutting in the middle of sentences
@@ -40,6 +43,7 @@ provides several document chunking strategies through the `Splitter` enum:
 **Purpose**: Basic splitting using predefined separators.
 
 **How it works**:
+
 - Uses a list of separators to split text (default: `["\n\n", "\n", " ", ""]`)
 - Splits on the first separator in the list
 - Doesn't attempt to balance chunk sizes
