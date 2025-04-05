@@ -1948,7 +1948,7 @@ class Agent(ABC):
         if response is None or self.llm is None:
             return
 
-        no_usage_info = response.usage is not None and response.usage.prompt_tokens == 0
+        no_usage_info = response.usage is None or response.usage.prompt_tokens == 0
         # Note: If response was not streamed, then
         # `response.usage` would already have been set by the API,
         # so we only need to update in the stream case.
