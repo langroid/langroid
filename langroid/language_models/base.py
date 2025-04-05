@@ -216,7 +216,7 @@ class LLMTokenUsage(BaseModel):
     prompt_tokens: int = 0
     completion_tokens: int = 0
     cost: float = 0.0
-    calls: int = 0  # how many API calls
+    calls: int = 0  # how many API calls - not used as of 2025-04-04
 
     def reset(self) -> None:
         self.prompt_tokens = 0
