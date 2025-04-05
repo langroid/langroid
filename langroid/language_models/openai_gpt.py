@@ -797,8 +797,13 @@ class OpenAIGPT(LanguageModel):
             event = event.model_dump()
 
         usage = event.get("usage", {}) or {}
-        if len(usage) > 0:
-            # we just got the last "usage" chunk, so we're done
+        choices = event.get("choices", [{}])
+        if choices is None or len(choices) == 0:
+            choices = [{}]
+        if len(usage) > 0 and len(choices[0]) == 0:
+            # we have a "usage" chunk, and empty choices, so we're done
+            # ASSUMPTION: a usage chunk ONLY arrives AFTER all normal completion text!
+            # If any API does not follow this, we need to change this code.
             return (
                 True,
                 has_function,
@@ -808,9 +813,6 @@ class OpenAIGPT(LanguageModel):
                 reasoning,
                 usage,
             )
-        choices = event.get("choices", [{}])
-        if len(choices) == 0:
-            choices = [{}]
         event_args = ""
         event_fn_name = ""
         event_tool_deltas: Optional[List[Dict[str, Any]]] = None
@@ -937,8 +939,11 @@ class OpenAIGPT(LanguageModel):
             event = event.model_dump()
 
         usage = event.get("usage", {}) or {}
-        if len(usage) > 0:
-            # we just got the last "usage" chunk, so we're done
+        choices = event.get("choices", [{}])
+        if len(choices) == 0:
+            choices = [{}]
+        if len(usage) > 0 and len(choices[0]) == 0:
+            # we got usage chunk, and empty choices, so we're done
             return (
                 True,
                 has_function,
@@ -948,9 +953,6 @@ class OpenAIGPT(LanguageModel):
                 reasoning,
                 usage,
             )
-        choices = event.get("choices", [{}])
-        if len(choices) == 0:
-            choices = [{}]
         event_args = ""
         event_fn_name = ""
         event_tool_deltas: Optional[List[Dict[str, Any]]] = None
