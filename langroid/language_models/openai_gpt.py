@@ -798,7 +798,7 @@ class OpenAIGPT(LanguageModel):
         event_args = ""
         event_fn_name = ""
         event_tool_deltas: Optional[List[Dict[str, Any]]] = None
-        silent = self.config.async_stream_quiet or settings.silent
+        silent = self.config.async_stream_quiet or settings.quiet
         # The first two events in the stream of Azure OpenAI is useless.
         # In the 1st: choices list is empty, in the 2nd: the dict delta has null content
         if chat:
@@ -930,7 +930,7 @@ class OpenAIGPT(LanguageModel):
         event_args = ""
         event_fn_name = ""
         event_tool_deltas: Optional[List[Dict[str, Any]]] = None
-        silent = self.config.async_stream_quiet or settings.silent
+        silent = self.config.async_stream_quiet or settings.quiet
         # The first two events in the stream of Azure OpenAI is useless.
         # In the 1st: choices list is empty, in the 2nd: the dict delta has null content
         if chat:
@@ -1070,7 +1070,8 @@ class OpenAIGPT(LanguageModel):
         except Exception as e:
             logging.warning("Error while processing stream response: %s", str(e))
 
-        print("")
+        if not settings.quiet:
+            print("")
         # TODO- get usage info in stream mode (?)
 
         return self._create_stream_response(
@@ -1132,7 +1133,8 @@ class OpenAIGPT(LanguageModel):
         except Exception as e:
             logging.warning("Error while processing stream response: %s", str(e))
 
-        print("")
+        if not settings.quiet:
+            print("")
         # TODO- get usage info in stream mode (?)
 
         return self._create_stream_response(
