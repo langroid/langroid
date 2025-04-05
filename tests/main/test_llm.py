@@ -50,6 +50,7 @@ def test_openai_gpt(test_settings: Settings, streaming, country, capital, use_ca
     cfg.use_chat_for_completion = True
     # check that "generate" works when "use_chat_for_completion" is True
     response = mdl.generate(prompt=question, max_tokens=800)
+    assert response.usage is not None and response.usage.total_tokens > 0
     assert capital in response.message
     assert not response.cached
 
@@ -62,6 +63,7 @@ def test_openai_gpt(test_settings: Settings, streaming, country, capital, use_ca
         LLMMessage(role=Role.USER, content=question),
     ]
     response = mdl.chat(messages=messages, max_tokens=500)
+    assert response.usage is not None and response.usage.total_tokens > 0
     assert capital in response.message
     assert not response.cached
 
@@ -69,6 +71,12 @@ def test_openai_gpt(test_settings: Settings, streaming, country, capital, use_ca
     set_global(test_settings)
     # should be from cache this time, Provided config.cache_config is not None
     response = mdl.chat(messages=messages, max_tokens=500)
+    assert response.usage is not None
+    if use_cache:
+        response.usage.total_tokens == 0
+    else:
+        response.usage.total_tokens > 0
+
     assert capital in response.message
     assert response.cached == use_cache
 
@@ -284,6 +292,10 @@ def test_llm_langdb(model: str):
     llm = lm.OpenAIGPT(config=llm_config_langdb)
     result = llm.chat("what is 3+4?")
     assert "7" in result.message
+    if result.cached:
+        assert result.usage.total_tokens == 0
+    else:
+        assert result.usage.total_tokens > 0
 
 
 @pytest.mark.parametrize(
@@ -301,3 +313,7 @@ def test_llm_openrouter(model: str):
     llm = lm.OpenAIGPT(config=llm_config)
     result = llm.chat("what is 3+4?")
     assert "7" in result.message
+    if result.cached:
+        assert result.usage.total_tokens == 0
+    else:
+        assert result.usage.total_tokens > 0
