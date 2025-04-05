@@ -1719,6 +1719,7 @@ def test_structured_recovery_anthropic(test_settings: Settings, use_tools_api: b
         if use_tools_api:
             return ChatDocument(
                 content=f"""
+                {attempt.name}:
                 {json.dumps(attempt.arguments)}
                 """,
                 metadata=ChatDocMetaData(sender=Entity.LLM),
@@ -1730,6 +1731,7 @@ def test_structured_recovery_anthropic(test_settings: Settings, use_tools_api: b
             )
         return ChatDocument(
             content=f"""
+            {attempt.name}:
             {json.dumps(attempt.arguments)}
             """,
             metadata=ChatDocMetaData(sender=Entity.LLM),

@@ -1427,7 +1427,7 @@ class ChatAgent(Agent):
             return result
 
         hist, output_len = self._prep_llm_messages(message)
-        if self.llm.config.type != "anthropic" and len(hist) == 0:
+        if len(hist) == 0:
             return None
         tool_choice = (
             "auto"
